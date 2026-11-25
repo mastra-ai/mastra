@@ -2,9 +2,9 @@
  * Token usage of a recovered run that had suspended.
  *
  * Each suspension records the model calls made so far on its MODEL_GENERATION span, which is where
- * token and cost metrics come from. A run that suspends on two steps, is approved twice, and whose
- * process stops inside the second approved tool is then recovered: the recovered part must record
- * only the model call it makes itself.
+ * token and cost metrics come from. A run that suspends on two steps, and whose process stops inside
+ * an approved tool, is then recovered: the recovered part must record only the model calls it makes
+ * itself.
  */
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -52,17 +52,29 @@ describe('token usage of a recovered run that had suspended', () => {
   let stop: (() => Promise<void>) | undefined;
   afterEach(() => stop?.());
 
-  for (const kind of ['durable', 'evented'] as const) {
-    it(`[${kind}] records each model call once after a crash that follows a second approval`, async () => {
-      const runId = `recover-suspended-usage-${kind}`;
+  const cases = [
+    { kind: 'durable', crashIn: 'call-1', recovery: 'auto' },
+    { kind: 'evented', crashIn: 'call-1', recovery: 'auto' },
+    // Without checkpoints the saved run is still the suspended one, and the recovered run asks again.
+    { kind: 'durable', crashIn: 'call-0', recovery: 'off' },
+    { kind: 'durable', crashIn: 'call-1', recovery: 'off' },
+  ] as const;
+  for (const { kind, crashIn, recovery } of cases) {
+    it(`[${kind}] records each model call once after a crash in ${crashIn}, recovery ${recovery}`, async () => {
+      const runId = `recover-suspended-usage-${kind}-${crashIn}-${recovery}`;
       const gate = createGate();
       const captures: Array<ReturnType<typeof captureOutcomeEvents>> = [];
       const scenario = createRestartScenario({
         kind,
         runId,
+        recovery,
         observability: () => {
           captures.push(captureOutcomeEvents());
           return captures.at(-1)!.observability;
+        },
+        onRecoveredChunk: (chunk, { agent }) => {
+          if (chunk.type === 'tool-call-approval')
+            void agent.approveToolCall({ runId, toolCallId: chunk.payload.toolCallId });
         },
         build: ({ core, generation }) =>
           new core.Agent({
@@ -77,8 +89,8 @@ describe('token usage of a recovered run that had suspended', () => {
                 inputSchema: z.object({}),
                 requireApproval: true,
                 execute: async (_input: unknown, context: any) => {
-                  // The first process stops inside the second approved tool.
-                  if (generation === 1 && context?.agent?.toolCallId === 'call-1') await gate.wait();
+                  // The first process stops inside this approved tool.
+                  if (generation === 1 && context?.agent?.toolCallId === crashIn) await gate.wait();
                   return { ok: true };
                 },
               }),
@@ -92,8 +104,9 @@ describe('token usage of a recovered run that had suspended', () => {
 
       const original = await scenario.start(async ({ agent }) => {
         await untilApprovalNeeded((await agent.stream('go', { runId })).fullStream);
-        await untilApprovalNeeded((await agent.approveToolCall({ runId, toolCallId: 'call-0' })).fullStream);
-        void agent.approveToolCall({ runId, toolCallId: 'call-1' });
+        if (crashIn === 'call-1')
+          await untilApprovalNeeded((await agent.approveToolCall({ runId, toolCallId: 'call-0' })).fullStream);
+        void agent.approveToolCall({ runId, toolCallId: crashIn });
       });
       await gate.reached;
       const recovered = await scenario.restart(await original.checkpoint());
@@ -102,7 +115,8 @@ describe('token usage of a recovered run that had suspended', () => {
       const recordedInputTokens = () =>
         captures
           .flatMap(capture => capture.ended(SpanType.MODEL_GENERATION))
-          .map(span => span.attributes?.usage?.inputTokens ?? 0);
+          .map(span => span.attributes?.usage?.inputTokens ?? 0)
+          .filter(tokens => tokens > 0);
       await expect.poll(recordedInputTokens).toEqual(INPUT_TOKENS);
     }, 30_000);
   }

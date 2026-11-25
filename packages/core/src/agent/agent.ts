@@ -262,7 +262,7 @@ import {
   markResumeInFlight,
   deleteRunRegistryEntry,
 } from './durable/run-registry';
-import { carrySegmentSpans, openedSegment, openStepsOfCrashedSegment } from './durable/segment-spans';
+import { carrySegmentSpans, openedSegment } from './durable/segment-spans';
 import type { SegmentSpanData } from './durable/segment-spans';
 import type { DurableStreamAdapterResult, DurableStreamAdapterOptions } from './durable/stream-adapter';
 import {
@@ -14143,7 +14143,7 @@ export class Agent<
         abortController,
         executionFence,
         originalSpansEnded: loaded.originalSpansEnded,
-        openStepsOf: openStepsOfCrashedSegment(loaded.snapshot.requestContext, runId),
+        openStepsOf: loaded.openStepsOf,
         latestMessageListState: await this.loadLatestMessageListState(workflowsStore, runId, loaded.snapshot),
       });
       // Memory is resolved from the rehydrated context; rehydration does not write to it.
