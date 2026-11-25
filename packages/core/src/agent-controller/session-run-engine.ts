@@ -1169,7 +1169,8 @@ export class SessionRunEngine {
                 threadId: suspThreadId,
                 resourceId: suspResourceId,
               },
-              runScope?.get(SUSPENDED_RUN_AGENT_KEY) ?? agent,
+              // The thread subscription can replay a suspension from another mode's agent.
+              runScope?.get(SUSPENDED_RUN_AGENT_KEY),
             );
           }
         }
