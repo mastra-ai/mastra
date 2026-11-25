@@ -190,6 +190,21 @@ describe('PlatformFactorySandbox', () => {
     expect(withSetting.definition).not.toEqual(withDefaults.definition);
   });
 
+  it.each([
+    [3, 2],
+    [7, 6],
+    [12, 8],
+    [64, 8],
+  ])('builds a saved CPU count of %i, which is not offered, as %i', async (saved, used) => {
+    const ctx = listContext();
+    const sandbox = new PlatformFactorySandbox();
+    const fromSetting = await identity(sandbox.template(ctx, { cpuCount: saved }));
+    const fromDefault = await identity(new PlatformFactorySandbox({ defaults: { cpuCount: saved } }).template(ctx, {}));
+    const explicit = await identity(createRepoTemplate({ ...ctx, cpuCount: used, memoryMB: 1024 }));
+    expect(fromSetting.definition).toEqual(explicit.definition);
+    expect(fromDefault.definition).toEqual(explicit.definition);
+  });
+
   it('adds a docker operation only when the docker setting is on', async () => {
     const sandbox = new PlatformFactorySandbox({});
     for (const ctx of [listContext(), singleContext(), { sessionId: 's', getRepositoryAccess: undefined }]) {

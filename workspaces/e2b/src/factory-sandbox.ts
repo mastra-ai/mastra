@@ -36,6 +36,15 @@ const DEFAULT_SETTINGS = { cpuCount: 2, memoryMb: 1024, idleTimeoutMinutes: 5 } 
  */
 const CPU_COUNTS = [1, ...Array.from({ length: 32 }, (_, index) => (index + 1) * 2)];
 
+/**
+ * The largest offered count that does not exceed `count`. A count saved before
+ * the list existed, or passed as a default, may not be on it; the sandbox gets
+ * the nearest one below so it can still be created.
+ */
+function offeredCpuCount(count: number): number {
+  return CPU_COUNTS.findLast(offered => offered <= count) ?? CPU_COUNTS[0]!;
+}
+
 const SETTINGS_SCHEMA = {
   type: 'object',
   properties: {
@@ -176,7 +185,7 @@ export class E2BFactorySandbox extends FactorySandbox<E2BFactorySandboxSettings>
     return {
       ...rest,
       ...(buildEnvRevision ? { buildEnvRevision, ...(buildEnv ? { buildEnv } : {}) } : {}),
-      cpuCount: settings.cpuCount ?? defaults?.cpuCount ?? DEFAULT_SETTINGS.cpuCount,
+      cpuCount: offeredCpuCount(settings.cpuCount ?? defaults?.cpuCount ?? DEFAULT_SETTINGS.cpuCount),
       memoryMB: settings.memoryMb ?? defaults?.memoryMb ?? DEFAULT_SETTINGS.memoryMb,
     };
   }

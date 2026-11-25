@@ -140,6 +140,17 @@ describe('E2BFactorySandbox', () => {
     expect((await createRepoTemplate({ ...ctx, cpuCount: 2, memoryMB: 4096 })!.resolveSpec()).ref).toBe(expected);
   });
 
+  it.each([
+    [3, 2],
+    [7, 6],
+    [65, 64],
+  ])('builds a saved CPU count of %i, which is not offered, as %i', async (saved, used) => {
+    const ctx = context();
+    const expected = repoTemplateRef({ cloneUrl: CLONE_URL, setupCommand: SETUP, sha: SHA, cpuCount: used });
+    const fromSetting = new E2BFactorySandbox().template(ctx, { cpuCount: saved })!;
+    expect((await fromSetting.resolveSpec()).ref).toBe(expected);
+  });
+
   it('creates an E2BSandbox keyed by the session with the sandbox id and template', () => {
     const created = new E2BFactorySandbox({ apiKey: 'e2b_test', timeout: 1234 }).create(
       { ...context(), workingDirectory: '/home/user/repos' },

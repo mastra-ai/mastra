@@ -31,6 +31,15 @@ export interface PlatformFactorySandboxSettings extends Record<string, unknown> 
 /** vCPU counts a sandbox can be created with: one, or an even number up to 8. Any other count fails at creation. */
 const CPU_COUNTS = [1, 2, 4, 6, 8];
 
+/**
+ * The largest offered count that does not exceed `count`. A count saved before
+ * the list existed, or passed as a default, may not be on it; the sandbox gets
+ * the nearest one below so it can still be created.
+ */
+function offeredCpuCount(count: number): number {
+  return CPU_COUNTS.findLast(offered => offered <= count) ?? CPU_COUNTS[0]!;
+}
+
 /** Applied when neither the environment setting nor a host default is set. */
 const DEFAULT_SETTINGS = {
   cpuCount: 2,
@@ -178,7 +187,7 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
       ...rest,
       ...(Object.keys(mergedBuildEnv).length > 0 ? { buildEnv: mergedBuildEnv } : {}),
       ...(buildEnvRevision ? { buildEnvRevision } : {}),
-      cpuCount: settings.cpuCount ?? defaults?.cpuCount ?? DEFAULT_SETTINGS.cpuCount,
+      cpuCount: offeredCpuCount(settings.cpuCount ?? defaults?.cpuCount ?? DEFAULT_SETTINGS.cpuCount),
       memoryMB: settings.memoryMb ?? defaults?.memoryMb ?? DEFAULT_SETTINGS.memoryMb,
       docker: settings.docker ?? defaults?.docker ?? DEFAULT_SETTINGS.docker,
     });
