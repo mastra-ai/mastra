@@ -5,6 +5,7 @@ import type { WorkflowsStorage } from '../../storage/domains/workflows/base';
 const DOCS_URL = 'https://mastra.ai/docs/server/pubsub#evented-workflows-and-agents';
 
 const warnedHosts = new WeakSet<Mastra>();
+const warnedSignalHosts = new WeakSet<Mastra>();
 
 /**
  * Evented runs spread over several processes need a pubsub that hands a stopped
@@ -38,5 +39,31 @@ export function warnUnsupportedEventedSetup(mastra: Mastra, workflowsStore?: Wor
     .getLogger()
     ?.warn(
       `Evented workflows and agents aren't supported on several processes with this setup: ${missing}. See ${DOCS_URL}`,
+    );
+}
+
+/**
+ * Signals sent to a running evented agent reach steps in another process only
+ * through storage that every process shares. Logs once per Mastra instance,
+ * apart from {@link warnUnsupportedEventedSetup} so that one does not hide
+ * this, when the pubsub reaches other processes and the storage keeps no agent
+ * signals or keeps them per process. Without that, a signal only reaches the
+ * run when the process holding it runs the step.
+ */
+export function warnUnsharedAgentSignals(mastra: Mastra): void {
+  if (warnedSignalHosts.has(mastra) || process.env.MASTRA_DISABLE_EVENTED_SETUP_WARNING === 'true') return;
+  if (!reachesOtherProcesses(mastra.pubsub)) return;
+
+  const signals = mastra.getStorage()?.stores?.agentSignals;
+  if (signals?.sharedAcrossProcesses) return;
+  const missing = signals
+    ? `the storage keeps agent signals in this process only`
+    : `the storage has no agentSignals domain`;
+
+  warnedSignalHosts.add(mastra);
+  mastra
+    .getLogger()
+    ?.warn(
+      `Signals sent to running evented agents aren't supported on several processes with this setup: ${missing}. See ${DOCS_URL}`,
     );
 }
