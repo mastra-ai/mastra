@@ -25,6 +25,7 @@ export const instanceStatusQueryKey = ['mastra-instance-status'];
 
 const DEFAULT_API_PREFIX = '/api';
 const MAX_RETRY_DELAY = 5000;
+const CORS_CHECK_TIMEOUT = 3000;
 // Client errors a server can stop giving on its own.
 const TEMPORARY_CLIENT_ERRORS = [408, 425, 429];
 
@@ -73,7 +74,7 @@ const requestStatus = async (url: string, headers: Record<string, string>): Prom
 
 // The browser reports a refused connection and a CORS block as the same error, but lets a `no-cors` request through.
 const answersWithoutCors = (url: string): Promise<boolean> =>
-  fetch(url, { mode: 'no-cors', credentials: 'omit' }).then(
+  fetch(url, { mode: 'no-cors', credentials: 'omit', signal: AbortSignal.timeout(CORS_CHECK_TIMEOUT) }).then(
     () => true,
     () => false,
   );
