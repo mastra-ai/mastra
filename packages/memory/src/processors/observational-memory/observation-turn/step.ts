@@ -371,7 +371,9 @@ export class ObservationStep {
           // resolves to 0 for sync-only, resource-scope, and explicit `bufferActivation: 1` configs,
           // so it cannot be relied on to keep them). Once the model has answered, the observed request
           // itself is not kept: the observations stand in for it, even mid-task.
-          const observedIds = obsResult.cleanupMessageIds;
+          // Messages an earlier cleanup kept for the floor are observed too: this cleanup decides
+          // again which of them stay, so the floor is re-applied over all of them.
+          const observedIds = [...new Set([...(this.turn.floorRetained?.ids ?? []), ...obsResult.cleanupMessageIds])];
           const minRemaining = resolveRetentionFloor(
             om.getObservationConfig().bufferActivation ?? 1,
             statusSnapshot.threshold,

@@ -30,7 +30,7 @@ const textStream = (text: string) =>
     finish('stop'),
   ]);
 
-async function runLookups(observation: Record<string, unknown>) {
+async function runLookups(observation: Record<string, unknown>, toolCalls = TOOL_CALLS, shortFrom = SHORT_FROM) {
   let observerCalls = 0;
   const observerText = () => `<observations>\nDate: Nov 11, 2026\n* 🟡 (10:00) Agent ran a lookup.\n</observations>`;
   const observer = new MockLanguageModelV3({
@@ -58,7 +58,7 @@ async function runLookups(observation: Record<string, unknown>) {
         results: [...new Set([...rawText.matchAll(/RESULT-(\d+)/g)].map(m => Number(m[1])))],
         observerCalls,
       });
-      if (step < TOOL_CALLS) {
+      if (step < toolCalls) {
         return streamOf([
           {
             type: 'tool-call',
@@ -81,7 +81,7 @@ async function runLookups(observation: Record<string, unknown>) {
     execute: async ({ n }) => {
       // Let the fire-and-forget buffer call store its chunk before the next step.
       await new Promise(resolve => setTimeout(resolve, 300));
-      return n >= SHORT_FROM ? `RESULT-${n} ok` : `RESULT-${n} ${filler}`;
+      return n >= shortFrom ? `RESULT-${n} ok` : `RESULT-${n} ${filler}`;
     },
   });
 
@@ -100,7 +100,7 @@ async function runLookups(observation: Record<string, unknown>) {
 
   const output = await agent.stream('USER-REQUEST: look up the items one by one.', {
     memory: { thread: 'thread-1', resource: 'resource-1' },
-    maxSteps: TOOL_CALLS + 2,
+    maxSteps: toolCalls + 2,
   });
   const activatedBeforeRequest = new Set<number>();
   for await (const chunk of output.fullStream as any) {
@@ -112,21 +112,32 @@ async function runLookups(observation: Record<string, unknown>) {
 }
 
 describe('retention floor after a mid-turn activation (#30079)', () => {
-  it('keeps the floor-retained tail on the step after cleanup', async () => {
-    const { requests, activatedBeforeRequest } = await runLookups({ messageTokens: MESSAGE_TOKENS });
+  it.each([
+    { activations: 1, toolCalls: TOOL_CALLS, shortFrom: SHORT_FROM },
+    { activations: 2, toolCalls: 22, shortFrom: 21 },
+  ])(
+    'keeps the floor-retained tail after $activations mid-turn activation(s)',
+    async ({ activations, toolCalls, shortFrom }) => {
+      const { requests, activatedBeforeRequest } = await runLookups(
+        { messageTokens: MESSAGE_TOKENS },
+        toolCalls,
+        shortFrom,
+      );
 
-    expect(activatedBeforeRequest.size).toBeGreaterThan(0);
+      expect(activatedBeforeRequest.size).toBeGreaterThanOrEqual(activations);
 
-    // Between two model calls with no activation and no observer call, nothing the model already
-    // saw may leave the prompt: the retention floor that cleanup honoured must still hold.
-    for (let i = 1; i < requests.length; i++) {
-      const prev = requests[i - 1]!;
-      const cur = requests[i]!;
-      if (activatedBeforeRequest.has(i) || cur.observerCalls !== prev.observerCalls) continue;
-      const dropped = prev.results.filter(n => !cur.results.includes(n));
-      expect({ request: i, dropped }).toEqual({ request: i, dropped: [] });
-    }
-  }, 60_000);
+      // Between two model calls with no activation and no observer call, nothing the model already
+      // saw may leave the prompt: the retention floor that cleanup honoured must still hold.
+      for (let i = 1; i < requests.length; i++) {
+        const prev = requests[i - 1]!;
+        const cur = requests[i]!;
+        if (activatedBeforeRequest.has(i) || cur.observerCalls !== prev.observerCalls) continue;
+        const dropped = prev.results.filter(n => !cur.results.includes(n));
+        expect({ request: i, dropped }).toEqual({ request: i, dropped: [] });
+      }
+    },
+    60_000,
+  );
 
   it('still drops observed messages the model already read when there is no floor', async () => {
     const { requests } = await runLookups({ messageTokens: 3_000, bufferTokens: false });
