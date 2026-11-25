@@ -3,7 +3,7 @@ import { Agent } from '@mastra/core/agent';
 import { ProcessorStepSchema } from '@mastra/core/processors';
 import type { ProcessorWorkflow } from '@mastra/core/processors';
 import { InMemoryStore } from '@mastra/core/storage';
-import { createStep, createWorkflow } from '@mastra/core/workflows';
+import { cloneStep, createStep, createWorkflow } from '@mastra/core/workflows';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ObservationalMemoryProcessor } from './processors/observational-memory';
@@ -86,6 +86,10 @@ const graphs: Record<string, GraphBuilder> = {
       .map(async ({ inputData }) => inputData[0])
       .commit() as ProcessorWorkflow,
   'after sleep': om => processorWorkflow('after-sleep').sleep(1).then(createStep(om)).commit() as ProcessorWorkflow,
+  'renamed with cloneStep': om =>
+    processorWorkflow('cloned')
+      .then(cloneStep(createStep(om), { id: 'my-om-step' }))
+      .commit() as ProcessorWorkflow,
   nested: om =>
     processorWorkflow('outer')
       .then(processorWorkflow('inner').then(createStep(om)).commit())

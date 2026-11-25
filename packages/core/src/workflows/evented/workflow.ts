@@ -161,6 +161,7 @@ export function cloneStep<TStepId extends string>(
     scorers: step.scorers,
     metadata: step.metadata,
     component: step.component,
+    processorId: step.processorId,
   };
 }
 
