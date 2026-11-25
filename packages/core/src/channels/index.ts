@@ -82,3 +82,5 @@ export type {
 
 // Re-export Chat SDK types for convenience
 export type { ActionEvent, ChatConfig, SlashCommandEvent } from 'chat';
+export { ChannelThreadLinkProcessor, markNewChannelThread, NEW_CHANNEL_THREAD_KEY } from './thread-link-processor';
+export type { ChannelThreadLinkProcessorOptions, ChannelThreadLinkTarget } from './thread-link-processor';

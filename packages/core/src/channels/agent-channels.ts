@@ -70,6 +70,7 @@ import {
   messageText,
 } from './thread-history';
 import type { ThreadHistoryLogContext, ThreadHistoryWindow } from './thread-history';
+import { markNewChannelThread } from './thread-link-processor';
 import type {
   ChannelAdapterConfig,
   ChannelConfig,
@@ -1740,6 +1741,7 @@ export class AgentChannels {
               requestContext,
             })
         : undefined,
+      onCreate: () => markNewChannelThread(requestContext),
       mastra,
     });
 
@@ -2844,6 +2846,7 @@ export class AgentChannels {
     platform,
     resourceId,
     threadId,
+    onCreate,
     mastra,
   }: {
     externalThreadId: string;
@@ -2861,6 +2864,8 @@ export class AgentChannels {
      * Omitted: a random UUID.
      */
     threadId?: (resolvedResourceId: string, defaultThreadId: string) => string | Promise<string>;
+    /** Called once when a new thread is created, never when one is reused. */
+    onCreate?: () => void;
     mastra: Mastra;
   }): Promise<StorageThreadType> {
     const {
@@ -2874,6 +2879,7 @@ export class AgentChannels {
       mastra,
     });
     if (existingThread) return existingThread;
+    onCreate?.();
 
     const resolvedResourceId = typeof resourceId === 'function' ? await resourceId() : resourceId;
     const defaultThreadId = crypto.randomUUID();
