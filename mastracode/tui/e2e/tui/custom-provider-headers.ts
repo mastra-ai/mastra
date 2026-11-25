@@ -3,9 +3,22 @@ import { join } from 'node:path';
 import type { McE2eScenario, McE2eScenarioRuntime, McE2eTerminal } from './types.js';
 
 const secretValue = 'org-secret-e2e-value';
-/** The provider URL `prepare` saves. `run` needs it to move the provider to another origin. */
-let savedUrl = '';
 const down = (count: number) => '\x1b[B'.repeat(count);
+
+/**
+ * The saved provider URL, read back from settings.json. The runner sets
+ * MASTRA_APP_DATA_DIR for the in-process app while the scenario runs.
+ */
+function savedProviderUrl(): string {
+  const appDataDir = process.env.MASTRA_APP_DATA_DIR;
+  if (!appDataDir) throw new Error('Expected MASTRA_APP_DATA_DIR while the scenario runs');
+  const settings = JSON.parse(readFileSync(join(appDataDir, 'settings.json'), 'utf8')) as {
+    customProviders: Array<{ url: string }>;
+  };
+  const url = settings.customProviders[0]?.url;
+  if (!url) throw new Error('Expected a saved custom provider URL');
+  return url;
+}
 
 /**
  * Open the manage menu of the only saved provider and pick the item `steps`
@@ -48,19 +61,18 @@ async function addHeader(
 export const customProviderHeadersScenario = {
   name: 'custom-provider-headers',
   description:
-    'adds secret and plain headers, switches the auth scheme and moves the URL to another origin through the real TUI',
+    'adds and removes headers, switches the auth scheme and moves the URL to another origin through the real TUI',
   testName: 'sends custom headers with an x-api-key and drops the secret header when the URL changes origin',
   useOpenAIModel: true,
-  aimockFixture: 'custom-provider-endpoint-checks.json',
+  aimockFixture: 'custom-provider-headers.json',
   prepare({ appDataDir, aimockUrl }) {
     if (!aimockUrl) throw new Error('custom-provider-headers needs the AIMock URL');
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
-    savedUrl = `${aimockUrl}/v1`;
     settings.customProviders = [
       {
         name: 'Header Endpoint',
-        url: savedUrl,
+        url: `${aimockUrl}/v1`,
         apiKey: 'sk-headers-e2e',
         models: ['gpt-4o'],
       },
@@ -100,8 +112,8 @@ export const customProviderHeadersScenario = {
     runtime.printScreen('headers listed', terminal);
     terminal.write('\x1b');
     await runtime.waitForScreenTextAbsent(/Headers for Header Endpoint/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Added header X-Org-Secret to Header Endpoint\./i, terminal, 8_000);
-    await runtime.waitForScreenText(/Added header X-Region to Header Endpoint\./i, terminal, 8_000);
+    await runtime.waitForScreenText(/Added header: X-Org-Secret/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Added header: X-Region/i, terminal, 8_000);
 
     await openManageItem(terminal, runtime, 8);
     await runtime.waitForScreenText(/Auth scheme for Header Endpoint/i, terminal, 8_000);
@@ -120,6 +132,7 @@ export const customProviderHeadersScenario = {
     submitOverDefault('Header Endpoint');
     await runtime.waitForScreenText(/Base URL/i, terminal, 8_000);
     // localhost and 127.0.0.1 are different origins, even on the same port.
+    const savedUrl = savedProviderUrl();
     const movedUrl = savedUrl.replace('//127.0.0.1:', '//localhost:');
     if (movedUrl === savedUrl) throw new Error(`Expected AIMock on 127.0.0.1, got ${savedUrl}`);
     submitOverDefault(movedUrl);
@@ -127,7 +140,7 @@ export const customProviderHeadersScenario = {
     submitOverDefault('sk-headers-e2e');
     await runtime.waitForScreenText(/Updated custom provider: Header Endpoint/i, terminal, 8_000);
     await runtime.waitForScreenText(
-      /Removed secret headers because the URL moved to another origin: X-Org-Secret\. Add them again under "Headers"\./i,
+      /Removed secret header X-Org-Secret because the base URL moved to another origin\. Add it again under Headers\./i,
       terminal,
       8_000,
     );
@@ -137,6 +150,18 @@ export const customProviderHeadersScenario = {
     await runtime.waitForScreenText(/X-Region\s+eu-west/, terminal, 8_000);
     await runtime.waitForScreenTextAbsent(/X-Org-Secret\s+••••/, terminal, 8_000);
     runtime.printScreen('secret header dropped', terminal);
+
+    // Rows: Add header, X-Region.
+    terminal.write(down(1));
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Remove the X-Region header\?/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Stop sending X-Region to Header Endpoint/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Headers for Header Endpoint/i, terminal, 8_000);
+    await runtime.waitForScreenTextAbsent(/X-Region\s+eu-west/, terminal, 8_000);
+    terminal.write('\x1b');
+    await runtime.waitForScreenTextAbsent(/Headers for Header Endpoint/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Removed header: X-Region/i, terminal, 8_000);
 
     terminal.keyCtrlC();
   },

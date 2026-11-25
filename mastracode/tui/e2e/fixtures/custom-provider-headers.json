@@ -1,0 +1,13 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Reply with the single word \"yes\".",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "yes"
+      }
+    }
+  ]
+}
