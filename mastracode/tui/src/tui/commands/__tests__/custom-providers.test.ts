@@ -180,6 +180,8 @@ describe('custom provider model mutations', () => {
 
     expect(added).toBe(2);
     expect(settings.customProviders[0]?.models).toEqual(['acme-1', 'acme-2', 'acme-3']);
+    expect(addModelsToCustomProviderInSettings(settings, 'acme', ['acme-2'])).toBe(0);
+    expect(addModelsToCustomProviderInSettings(settings, 'renamed', ['acme-4'])).toBe(0);
   });
 });
 
@@ -208,6 +210,7 @@ describe('custom provider headers and auth scheme', () => {
 
   it.each([
     { case: 'the header that carries the API key', header: { name: 'authorization', value: 'Basic abc' } },
+    { case: 'a saved name in another case', header: { name: 'x-org', value: 'org-2' } },
     { case: 'a value that is blank once trimmed', header: { name: 'X-Team', value: '  ' } },
   ])('refuses $case and leaves the saved headers alone', ({ header }) => {
     const saved = [{ name: 'X-Org', value: 'org-1', secret: true }];
