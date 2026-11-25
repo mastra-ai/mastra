@@ -48,6 +48,8 @@ class RecordingHost implements KnowledgeImporterHost {
   /** Fail the next n flush attempts with this, before or after committing. */
   failures: Array<{ error: Error; afterCommit?: boolean }> = [];
 
+  /** Sent with a started run as the host's flush limit. */
+  maxFlushBytes?: unknown;
   /** startRun never answers: a hung host. */
   hangStart = false;
   startCalls = 0;
@@ -58,7 +60,15 @@ class RecordingHost implements KnowledgeImporterHost {
   async startRun() {
     this.startCalls++;
     if (this.hangStart) return new Promise<never>(() => {});
-    return { status: 'started' as const, runId: 'run-1', generation: 1, state: { ...this.state }, lastSeq: 0, binding };
+    return {
+      status: 'started' as const,
+      runId: 'run-1',
+      generation: 1,
+      state: { ...this.state },
+      lastSeq: 0,
+      binding,
+      ...(this.maxFlushBytes !== undefined && { maxFlushBytes: this.maxFlushBytes as number }),
+    };
   }
   /** Flush attempts that never answer: a hung host. */
   hangFlushes = false;
@@ -232,6 +242,30 @@ describe('runKnowledgeImport', () => {
       expect(host.state).toEqual({ cursor: 'c10' });
       // The cursor lands with or after the last item, never before it.
       expect(host.flushes.at(-1)!.state).toEqual({ cursor: 'c10' });
+    });
+
+    it("keeps under the host's limit from the start, and under the lower of it and the option", async () => {
+      const run = async (hostLimit: unknown, own?: number) => {
+        const host = new RecordingHost();
+        host.maxFlushBytes = hostLimit;
+        const receipt = await runKnowledgeImport({
+          importers: [
+            importer(async ctx => {
+              for (let i = 1; i <= 10; i++) await ctx.items.upsert(big(i, 3_000));
+            }),
+          ],
+          host,
+          bindingId: 'b1',
+          ...(own !== undefined && { maxFlushBytes: own }),
+        });
+        expect(receipt).toMatchObject({ outcome: 'succeeded' });
+        return Math.max(...host.attempts.map(bytes));
+      };
+      expect(await run(10_000)).toBeLessThanOrEqual(10_000);
+      expect(await run(10_000, 7_000)).toBeLessThanOrEqual(7_000);
+      expect(await run(7_000, 10_000)).toBeLessThanOrEqual(7_000);
+      // Not a positive whole number: ignored, so the run is unbounded as before.
+      for (const ignored of [0, -1, 1.5, '10000', null]) expect(await run(ignored)).toBeGreaterThan(10_000);
     });
 
     it('packs each request as full as the bound allows, counting every byte of the request', async () => {

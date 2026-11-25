@@ -45,8 +45,9 @@ export interface RunKnowledgeImportOptions {
    * anything more is sent, and so does any request that would still be over it when sent. With a
    * limit, each pushed op is copied through JSON when handed over, so later changes to it are not
    * sent and values JSON can't carry arrive as JSON makes them. A host that
-   * wraps the request, or limits its whole HTTP body, sets this a little under its limit. A positive
-   * whole number. Default no limit.
+   * wraps the request, or limits its whole HTTP body, sets this a little under its limit. A host
+   * can also give a limit when the run starts; the lower of the two applies. A positive whole
+   * number. Default no limit.
    */
   maxFlushBytes?: number;
   /**
@@ -140,7 +141,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     graceMs = 3 * 60_000,
     maxPasses = 200,
     bufferSize = 200,
-    maxFlushBytes = Infinity,
+    maxFlushBytes: ownMaxFlushBytes = Infinity,
     flushAfterMs = 30_000,
     heartbeatMs = 30_000,
     maxRetries = 8,
@@ -152,8 +153,8 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     throw new TypeError(`flushAfterMs must be a positive number of milliseconds up to 2147483647, got ${flushAfterMs}`);
   }
 
-  if (maxFlushBytes !== Infinity && !(Number.isInteger(maxFlushBytes) && maxFlushBytes > 0)) {
-    throw new TypeError(`maxFlushBytes must be a positive whole number of bytes, got ${maxFlushBytes}`);
+  if (ownMaxFlushBytes !== Infinity && !(Number.isInteger(ownMaxFlushBytes) && ownMaxFlushBytes > 0)) {
+    throw new TypeError(`maxFlushBytes must be a positive whole number of bytes, got ${ownMaxFlushBytes}`);
   }
 
   // Bounded but never resent: a start that timed out may have opened a run, which the host's
@@ -165,6 +166,12 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
   );
   if (started.status === 'skipped') return started;
   const { runId, generation } = started;
+  // The host's limit, when it gives one, bounds requests as well as the option does.
+  const hostMaxFlushBytes = started.maxFlushBytes;
+  const maxFlushBytes =
+    typeof hostMaxFlushBytes === 'number' && Number.isInteger(hostMaxFlushBytes) && hostMaxFlushBytes > 0
+      ? Math.min(ownMaxFlushBytes, hostMaxFlushBytes)
+      : ownMaxFlushBytes;
   const startedAt = Date.now();
 
   let lastSeq = started.lastSeq;

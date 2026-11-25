@@ -8,4 +8,6 @@
 await runKnowledgeImport({ importers, host, bindingId, maxFlushBytes: 8 * 1024 * 1024 });
 ```
 
-Without the option nothing changes: a flush holds up to `bufferSize` items whatever their size. Set it when the host limits request size, so a batch of large items is sent in parts instead of failing the run at the same items each time.
+A host can also send its limit with a started run, as `maxFlushBytes` on the start result. The runner then keeps under the lower of the two, so an app doesn't have to hard-code its host's limit.
+
+Without either limit nothing changes: a flush holds up to `bufferSize` items whatever their size. Set it when the host limits request size, so a batch of large items is sent in parts instead of failing the run at the same items each time.
