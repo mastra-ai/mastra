@@ -1,4 +1,5 @@
 import { IntakeIcon } from './intake-icon';
+import type { BadgeVariant } from '@/ds/components/Badge';
 import { IconCircleCheck } from '@/ds/icons/central/IconCircleCheck';
 import { IconCircleDashed } from '@/ds/icons/central/IconCircleDashed';
 import { IconCircleX } from '@/ds/icons/central/IconCircleX';
@@ -28,16 +29,20 @@ const STAGE_TONES = {
   'pr-review': 'green',
   done: 'purple',
   canceled: 'destructive',
-} as const satisfies Record<BuiltinStageId, string>;
+} as const satisfies Record<BuiltinStageId, BadgeVariant>;
 
-type BoardTone = (typeof STAGE_TONES)[BuiltinStageId] | 'success';
+export type StageTone = (typeof STAGE_TONES)[BuiltinStageId];
+
+type BoardTone = StageTone | 'success';
 
 function boardStage(stage: string): BuiltinStageId | undefined {
   return WORK_STAGES.find(builtin => builtin === stage);
 }
 
-function stageTone(stage: BuiltinStageId): BoardTone {
-  return STAGE_TONES[stage];
+// eslint-disable-next-line react-refresh/only-export-components -- helper intentionally co-located with the components that use it
+export function stageTone(stage: string): StageTone {
+  const builtin = boardStage(stage);
+  return builtin ? STAGE_TONES[builtin] : 'neutral';
 }
 
 const PHASE_KIND_TONES: Record<BoardPhaseKind, BoardTone> = {
@@ -153,7 +158,7 @@ export function phaseIconKind(boardId: string, kind: BoardPhaseKind): BoardPhase
 
 function stageToneFor(stage: string, kind?: BoardPhaseKind): BoardTone {
   const builtin = builtinStageFor(stage, kind);
-  return builtin ? stageTone(builtin) : PHASE_KIND_TONES[kind ?? 'resting'];
+  return builtin ? STAGE_TONES[builtin] : PHASE_KIND_TONES[kind ?? 'resting'];
 }
 
 function StageArt({ stage, kind, className }: { stage: string; kind?: BoardPhaseKind; className: string }) {
