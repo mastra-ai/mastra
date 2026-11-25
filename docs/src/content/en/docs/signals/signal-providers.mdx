@@ -268,6 +268,19 @@ Call `webhooks.handleWebhook({ body, headers })` from your route. The provider m
 
 Without `extractResourceId`, it reads `resource` or `externalResourceId` from the payload. Without `buildNotification`, it sends a `webhook-event` notification at `medium` priority.
 
+### Connect event signal provider
+
+To notify an agent of webhooks from a project's [Connect](/docs/mastra-platform/connect) connections, use [`ConnectEventSignals`](/reference/connect/event-signals) from `@mastra/connect`. Choose the providers and event types that reach the agent, and the thread each event goes to:
+
+```typescript title="src/mastra/index.ts"
+import { ConnectEventSignals } from '@mastra/connect'
+
+const connectEvents = new ConnectEventSignals({
+  events: { github: ['pull_request.opened'], linear: true },
+  target: { resourceId: 'team-ops', threadId: 'ops' },
+})
+```
+
 ## Production checklist
 
 Before deploying:

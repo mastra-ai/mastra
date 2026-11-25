@@ -1,0 +1,120 @@
+---
+title: 'Reference: ConnectEventSignals | Connect'
+description: 'API reference for ConnectEventSignals in @mastra/connect: send provider webhook events from a project’s connections to an agent as notification signals, filtered by provider and event type.'
+packages:
+  - '@mastra/connect'
+  - '@mastra/core'
+---
+
+# ConnectEventSignals
+
+A [signal provider](/docs/signals/signal-providers) that sends provider events from a project's connections to an agent as notification signals, such as a GitHub pull request opening or a Linear issue changing. Pass it to `Agent({ signals: [...] })`. It subscribes with [`ConnectEvents`](/reference/connect/events) when the agent is created.
+
+## Usage example
+
+```typescript title="src/mastra/agents/ops-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { ConnectEventSignals } from '@mastra/connect'
+
+const signals = new ConnectEventSignals({
+  events: {
+    github: ['pull_request.opened', 'pull_request.closed'],
+    linear: true,
+  },
+  target: event => ({
+    threadId: `${event.provider}:${event.connectionId}`,
+    resourceId: 'team-ops',
+  }),
+  notification: event =>
+    event.provider === 'github'
+      ? {
+          summary: `PR ${event.payload.action}: ${event.payload.pull_request.title}`,
+          priority: 'high',
+        }
+      : undefined,
+})
+
+export const opsAgent = new Agent({
+  id: 'ops-agent',
+  name: 'Ops Agent',
+  instructions: 'Triage pull requests and issues as they change.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  signals: [signals],
+})
+```
+
+The agent needs a `Mastra` instance with `storage`, where notifications are stored. A thread that's idle wakes to handle the notification unless the target sets `ifIdle`.
+
+## Constructor parameters
+
+`ConnectEventSignals` takes one options object. It also accepts every [`ConnectEvents`](/reference/connect/events#constructor-parameters) option, such as `projectId`, `cursorStore` and `onGap`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'target',
+    type: 'SignalProviderTarget | ((event) => SignalProviderTarget | undefined)',
+    description:
+      'The thread each event goes to: one thread for every event, or a function that picks a thread per event. Return `undefined` to drop the event.',
+  },
+  {
+    name: 'events',
+    type: 'Record<string, true | string[]>',
+    description:
+      'Which providers and event types reach the agent: `true` for every event of a provider, or a list of its event types. Providers you leave out are dropped. Omit it to send every event. Listing event types also drops events whose payload wasn’t JSON.',
+    isOptional: true,
+  },
+  {
+    name: 'notification',
+    type: '(event) => Partial<SendNotificationSignalInput> | undefined',
+    description:
+      'Overrides fields of the default notification, such as `summary` and `priority`. Return `undefined` to keep the default.',
+    isOptional: true,
+  },
+  {
+    name: 'includeUnverified',
+    type: 'boolean',
+    description:
+      'Deliver events whose signature the platform couldn’t verify. Their payloads may be forged; their notification summary ends in `(unverified)`.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+]}
+/>
+
+### Typed events
+
+The `target` and `notification` functions receive the events `events` selects. For a provider with [typed payloads](/reference/connect/events#typed-payloads), listing its event types gives the payload its provider's type, so checking `event.provider` and `event.eventType` narrows `event.payload`. With `true`, the provider may send event types without typed payloads, so narrow the event with [`isConnectEvent()`](/reference/connect/events#isconnectevent). With `includeUnverified`, check `event.unverified` before trusting the payload.
+
+An event type that the provider doesn't send is a compile error.
+
+### Default notification
+
+| Field | Value |
+| - | - |
+| `source` | `connect` |
+| `kind` | The provider and event type, such as `github:pull_request.opened` |
+| `summary` | The provider and event type, such as `github pull_request.opened` |
+| `payload` | The provider's payload |
+| `dedupeKey` | The provider and its delivery id, so a redelivered webhook doesn't notify twice |
+| `metadata` | `connectionId`, `eventId`, `provider`, `eventType`, and `unverified` when set |
+
+## Methods
+
+### `start()`
+
+Subscribes to the project's events. The agent calls it when it's created, so you only call it after `stop()`. When the subscription can't start, for example without platform credentials, it logs the error and the agent runs without events.
+
+### `stop()`
+
+Ends the subscription. Call it when your app stops, because the agent doesn't call it on shutdown.
+
+## Delivery
+
+Events reach the agent in order. An event whose target or notification function throws, or whose notification can't be stored, is logged and skipped, and later events are still delivered. Without a `cursorStore`, the subscription starts at the newest event each time it starts.
+
+## Related
+
+- [ConnectEvents](/reference/connect/events)
+- [Signal providers](/docs/signals/signal-providers)
+- [Connect](/docs/mastra-platform/connect)
