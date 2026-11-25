@@ -687,6 +687,11 @@ const CUSTOM_PROVIDER_REFUSALS = {
     message: 'A provider with this name already exists here. Choose another name.',
   },
   not_found: { status: 404, error: 'custom_provider_not_found', message: 'This provider no longer exists.' },
+  changed: {
+    status: 409,
+    error: 'custom_provider_changed',
+    message: 'This provider changed while it was being tested. Try again.',
+  },
   api_key_required: {
     status: 400,
     error: 'api_key_required',

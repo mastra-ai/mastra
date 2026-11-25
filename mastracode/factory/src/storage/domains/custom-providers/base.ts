@@ -95,11 +95,12 @@ export type CustomProviderSettingsRefusal =
  * The outcome of a create or an edit. A refusal leaves storage unchanged:
  * - `name_taken`: the owner already has a provider with this id.
  * - `not_found`: the provider being edited no longer exists.
+ * - `changed`: the provider was edited after the row a save's test used.
  * - any {@link CustomProviderSettingsRefusal}.
  */
 export type CustomProviderWrite =
   | { saved: CustomProviderRecord }
-  | { refused: 'name_taken' | 'not_found' }
+  | { refused: 'name_taken' | 'not_found' | 'changed' }
   | CustomProviderSettingsRefusal;
 
 /** The settings that decide what a call to an endpoint sends, and where. */
@@ -417,9 +418,9 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
    * differs from `providerId`. One atomic write, so kept secrets come from the
    * row as it is at that moment (see {@link resolveCustomProviderSettings}).
    *
-   * `checked` is the row a passing `input.lastCheck` was measured against. When
-   * another edit landed since, the kept secrets may differ from the ones that
-   * were tested, so the result is not recorded and the keep rule applies instead.
+   * `checked` is the row the save's connection test resolved its kept secrets
+   * from. When another edit landed since, this write would keep secrets that
+   * were never tested, so it is refused with `changed` and nothing is written.
    */
   async update({
     owner,
@@ -433,25 +434,26 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
     checked?: CustomProviderRecord;
   }): Promise<CustomProviderWrite> {
     const rows = ownerRows(owner);
-    let refusal: CustomProviderSettingsRefusal | undefined;
+    let refusal: CustomProviderSettingsRefusal | { refused: 'changed' } | undefined;
     try {
       const row = await this.#db.updateAtomic<CustomProviderDbRow>(
         rows.collection,
         { ...rows.where, provider_id: providerId },
         async current => {
+          if (checked && checked.updatedAt.getTime() !== current.updated_at.getTime()) {
+            refusal = { refused: 'changed' };
+            return null;
+          }
           const before = await this.#callSettings(current);
           const settings = resolveCustomProviderSettings(before, input);
           if ('refused' in settings) {
             refusal = settings;
             return null;
           }
-          const checkStillApplies =
-            input.lastCheck !== undefined &&
-            (checked === undefined || checked.updatedAt.getTime() === current.updated_at.getTime());
           // A result describes the settings it was measured with. It survives an
           // edit that changes none of them (a rename, the model list), and
           // goes as soon as any of them changes.
-          const lastCheck = checkStillApplies
+          const lastCheck = input.lastCheck
             ? input.lastCheck
             : sameCallSettings(before, settings.resolved)
               ? current.last_check
