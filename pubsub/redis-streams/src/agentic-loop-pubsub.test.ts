@@ -6,7 +6,7 @@ import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { RedisStreamsPubSub } from './index';
 
@@ -48,7 +48,7 @@ describe('AIMock loop scenario: evented + RedisStreamsPubSub', () => {
   });
 
   // COR-1659: the producer registers its loop when it starts the run, but the pull worker never calls the agent.
-  it.each(['before', 'after'] as const)(
+  it.each(['before', 'during', 'during lazy', 'after'] as const)(
     'runs a native evented agent registered %s pull worker startup',
     async timing => {
       if (!mock) throw new Error('AIMock server is not running');
@@ -78,7 +78,22 @@ describe('AIMock loop scenario: evented + RedisStreamsPubSub', () => {
       const worker = new Mastra({ storage, pubsub: workerPubsub });
       try {
         if (timing === 'before') worker.addAgent(makeAgent(), 'support');
-        await worker.startWorkers();
+        if (timing === 'during' || timing === 'during lazy') {
+          // Pull subscription starts after the initial registration pass, but before startup completes.
+          const subscribe = workerPubsub.subscribe.bind(workerPubsub);
+          const subscription = vi.spyOn(workerPubsub, 'subscribe').mockImplementation((topic, cb, options) => {
+            if (topic === 'workflows') {
+              subscription.mockRestore();
+              worker.addAgent(makeAgent(), 'support');
+            }
+            return subscribe(topic, cb, options);
+          });
+        }
+        if (timing === 'during lazy') {
+          await worker.__ensureExecutionWorkersStarted();
+        } else {
+          await worker.startWorkers();
+        }
         if (timing === 'after') worker.addAgent(makeAgent(), 'support');
 
         const output = await apiAgent.stream('Where is my order?');

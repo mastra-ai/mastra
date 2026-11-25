@@ -1201,6 +1201,7 @@ export class Mastra<
    * `startWorkers()` path will pick it up.
    */
   #workersStarted = false;
+  #durableAgentsInitialized = false;
   /**
    * Set when something has signalled that the scheduler is needed at runtime
    * (e.g. an agent schedule was registered via `__ensureScheduleRuntimeReady()`).
@@ -3290,11 +3291,8 @@ export class Mastra<
     });
 
     mastraAgent.__registerExecutionEnginePolicy?.(this.#durable);
-    // Pull workers resolve the loop from the local registry without starting the agent.
-    if (
-      (this.#workersStarted || this.#executionWorkersStarted) &&
-      mastraAgent.__getExecutionEnginePolicy() === 'evented'
-    ) {
+    // Pull workers can consume events before startup finishes, once the initial registration pass has run.
+    if (this.#durableAgentsInitialized && mastraAgent.__getExecutionEnginePolicy() === 'evented') {
       mastraAgent.__initializeDurableExecution();
     }
     agents[agentKey] = mastraAgent;
@@ -8008,6 +8006,7 @@ export class Mastra<
     for (const agent of Object.values(this.#agents ?? {})) {
       if (hasDurableExecution(agent) && !isDurableAgentLike(agent)) agent.__initializeDurableExecution();
     }
+    this.#durableAgentsInitialized = true;
   }
 
   /**
