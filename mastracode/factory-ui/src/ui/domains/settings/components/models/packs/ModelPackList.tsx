@@ -10,6 +10,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/pla
 import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
 import { useRef, useState } from 'react';
 
@@ -19,6 +20,7 @@ import { withPackRemoved, withPackSaved } from '../../../services/modelPackSet';
 import { ModelPackEditor } from './ModelPackEditor';
 import { ModelPackHeader } from './ModelPackHeader';
 import { ModelPackTimeline } from './ModelPackTimeline';
+import { PACK_CARD_CLASS, PACK_HEADER_CLASS, PACK_LIST_CLASS } from './packLayout';
 
 function emptyPacksNote(startModelId: string | null | undefined): string {
   if (startModelId)
@@ -93,9 +95,9 @@ export function ModelPackList({
             row.focus();
           }
         }}
-        className="group/pack bg-nested flex min-w-0 flex-col rounded-lg p-2"
+        className={cn('group/pack', PACK_CARD_CLASS)}
       >
-        <div className="min-h-control-sm flex min-w-0 items-center justify-between gap-1">
+        <div className={PACK_HEADER_CLASS}>
           <ModelPackHeader
             pack={pack}
             packSet={packSet}
@@ -119,7 +121,7 @@ export function ModelPackList({
   };
 
   return (
-    <div role="group" aria-label={label} className="flex min-w-0 flex-col gap-1">
+    <div role="group" aria-label={label} className={PACK_LIST_CLASS}>
       <ListHeading label="Model packs">
         {!readOnly && !creating && packs.length > 0 && (
           <Button

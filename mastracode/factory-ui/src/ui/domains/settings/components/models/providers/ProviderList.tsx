@@ -105,11 +105,13 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
     if (flow) cancelOAuthMutation.mutate({ provider: flow.provider, sessionId: flow.session.sessionId });
   };
 
-  if (providersQuery.isPending || customProvidersQuery.isPending) return <ProviderRowsSkeleton />;
+  const audience = requestScope === 'org' && !readOnly ? ORG_SCOPE_AUDIENCE : undefined;
+  if (providersQuery.isPending || customProvidersQuery.isPending)
+    return <ProviderRowsSkeleton description={audience} />;
 
   return (
     <div className="flex flex-col gap-1">
-      <ListHeading label="Providers" description={requestScope === 'org' && !readOnly ? ORG_SCOPE_AUDIENCE : undefined}>
+      <ListHeading label="Providers" description={audience}>
         <Button
           size="icon-sm"
           variant="ghost"

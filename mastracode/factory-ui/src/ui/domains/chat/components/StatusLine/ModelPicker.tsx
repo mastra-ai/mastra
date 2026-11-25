@@ -211,8 +211,8 @@ export function ModelPicker() {
   if (!activeModelId && (isLoading || status === 'connecting')) {
     return (
       <div role="status" aria-label="Loading model" className="flex items-center gap-1.5">
-        <Skeleton className="size-4 rounded-full" />
-        <Skeleton data-composer-line-hidden className="h-3.5 w-20" />
+        <Skeleton className="size-4 rounded-full motion-reduce:before:animate-none" />
+        <Skeleton data-composer-line-hidden className="h-3.5 w-20 motion-reduce:before:animate-none" />
       </div>
     );
   }

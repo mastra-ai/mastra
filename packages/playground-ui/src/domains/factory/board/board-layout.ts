@@ -30,5 +30,9 @@ export const BOARD_CARD_LAYOUT_CLASS =
 export const BOARD_LIST_ROW_LAYOUT_CLASS =
   'grid min-h-10 grid-cols-[2.375rem_minmax(0,1fr)_var(--spacing-avatar-sm)_2.625rem] items-center gap-x-3 rounded-lg px-3 py-1 max-sm:grid-cols-[2.375rem_minmax(0,1fr)_auto] max-sm:gap-y-1 max-sm:py-2';
 
+export const BOARD_LIST_GROUP_HEADER_LAYOUT_CLASS = 'mb-1 flex min-h-9 items-center gap-2 rounded-lg py-1 pr-1 pl-3';
+
+export const BOARD_LIST_GROUP_HEADER_SURFACE_CLASS = 'bg-fill-subtle dark:bg-card';
+
 export const BOARD_SCROLL_SURFACE_CLASS =
   '[container-type:inline-size] m-px min-h-0 min-w-0 flex-1 [scrollbar-gutter:stable] overflow-auto overscroll-x-contain rounded-[calc(var(--studio-frame-radius,1.5rem)-1px)] lg:overscroll-x-auto';

@@ -1,15 +1,15 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 
 function LoadingSessionsRow() {
   return (
-    <div role="status" aria-label="Loading sessions" className="flex items-center gap-3 py-2">
-      <Skeleton className="size-8 shrink-0" />
-      <div className="flex flex-1 flex-col gap-1.5">
-        <Skeleton className="h-3 w-40" />
-        <Skeleton className="h-2.5 w-64 max-w-full" />
+    <div role="status" aria-label="Loading sessions" className="flex items-start gap-3 px-2.25 py-1.75">
+      <Skeleton className="mt-0.5 size-4 shrink-0 motion-reduce:before:animate-none" />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <SkeletonText line="text-label" className="h-3 w-40 max-w-full motion-reduce:before:animate-none" />
+        <SkeletonText line="text-meta" className="h-2.5 w-64 max-w-full motion-reduce:before:animate-none" />
       </div>
       <Txt as="span" variant="meta" className="sr-only">
         Loading sessions
@@ -30,20 +30,22 @@ export function GlobalSearchSessionsStatus({
   if (!pending && !failed) return null;
 
   return (
-    <div className="flex flex-col gap-2 px-3 py-2">
+    <>
       {pending && <LoadingSessionsRow />}
       {failed && (
-        <Notice
-          variant="destructive"
-          action={
-            <Notice.Button onClick={onRetry}>
-              Retry <IconArrowRotateClockwise />
-            </Notice.Button>
-          }
-        >
-          Sessions could not be loaded.
-        </Notice>
+        <div className="px-3 py-2">
+          <Notice
+            variant="destructive"
+            action={
+              <Notice.Button onClick={onRetry}>
+                Retry <IconArrowRotateClockwise />
+              </Notice.Button>
+            }
+          >
+            Sessions could not be loaded.
+          </Notice>
+        </div>
       )}
-    </div>
+    </>
   );
 }
