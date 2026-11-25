@@ -134,6 +134,7 @@ describe('retention floor after a mid-turn activation (#30079)', () => {
     // yet. Once read, it leaves the prompt on the next call like the rest of the observed messages.
     const observedAt = requests.findIndex((r, i) => i > 0 && r.observerCalls > requests[i - 1]!.observerCalls);
     expect(observedAt).toBeGreaterThan(0);
+    expect(observedAt).toBeLessThan(requests.length - 1);
     const readInFlight = Math.max(...requests[observedAt]!.results);
     expect(requests[observedAt + 1]!.results).not.toContain(readInFlight);
   }, 60_000);
