@@ -339,7 +339,8 @@ function upstreamDetail(
     const cut = trimmed.length > DETAIL_SCAN_CHARS;
     if (contentType?.toLowerCase().includes('text/html') || /^<(!doctype html|html)\b/i.test(head)) {
       // An encoded secret cut by the scan limit decodes to a piece that neither full form matches.
-      return dropCutSecretStart(htmlDetail(head, summaryOnly, secrets) ?? '', secrets, cut) || undefined;
+      const html = cut ? withoutTrailingPartialEntity(head) : head;
+      return dropCutSecretStart(htmlDetail(html, summaryOnly, secrets) ?? '', secrets, cut) || undefined;
     }
     return summaryOnly ? undefined : dropCutSecretStart(oneLine(head), secrets, cut) || undefined;
   } catch {
@@ -826,6 +827,19 @@ const REPLY_CONTROL_CHARACTERS = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g;
 function safeReply(reply: string, secrets: SentSecrets, cut: boolean): string {
   const kept = dropCutSecretStart(redact(reply, secrets).slice(0, MAX_REPLY_CHARS), secrets, cut);
   return kept.replace(REPLY_CONTROL_CHARACTERS, ' ').trim();
+}
+
+/**
+ * `html` without an entity that the scan limit cut before its `;`, such as
+ * `tenant&#`. Left in place it is never decoded, so the decoded text would
+ * end in a piece of an encoded secret that no secret form begins with.
+ * Removing it lets {@link dropCutSecretStart} see the decoded start that
+ * remains. Only the last `&` is examined, so the work stays constant.
+ */
+function withoutTrailingPartialEntity(html: string): string {
+  const ampersand = html.lastIndexOf('&');
+  if (ampersand < 0 || html.length - ampersand > 12) return html;
+  return /^&(#x?[0-9a-f]*|[a-z]*)$/i.test(html.slice(ampersand)) ? html.slice(0, ampersand) : html;
 }
 
 /**
