@@ -585,9 +585,13 @@ function parseConnectionFields(b: Record<string, unknown>): CustomProviderSettin
       value: typeof value === 'string' ? value.trim() : value,
     };
   });
-  // The storage checks the final list again against the scheme it ends up with,
-  // since an edit may keep the saved scheme or saved headers.
-  const problem = customProviderHeaderProblem(trimmed as Array<{ name: unknown; value?: unknown }>, authScheme);
+  // Without a scheme an edit keeps the saved one, which is unknown here, so only
+  // a header both schemes refuse fails now. The storage and the draft check test
+  // the final list against the scheme it ends up with.
+  const entriesToCheck = trimmed as Array<{ name: unknown; value?: unknown }>;
+  const problem = authScheme
+    ? customProviderHeaderProblem(entriesToCheck, authScheme)
+    : customProviderHeaderProblem(entriesToCheck, 'bearer') && customProviderHeaderProblem(entriesToCheck, 'x-api-key');
   if (problem) return { error: 'header_refused', message: problem };
   const entries = trimmed as Array<{ name: string; value?: string; secret?: unknown }>;
   // Reading a malformed flag as "omitted" would make the header secret or keep
