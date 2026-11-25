@@ -234,40 +234,6 @@ describe('MastraCompositeStore — disabled domains (`false` override)', () => {
     expect(await composite.getStore('threadState')).toBeDefined();
   });
 
-  it('has no agentSignals store when no source provides one', async () => {
-    const inner = new InMemoryStore({ id: 'inner' });
-
-    const composite = new MastraCompositeStore({
-      id: 'outer',
-      domains: { memory: inner.stores.memory },
-    });
-
-    expect(await composite.getStore('agentSignals')).toBeUndefined();
-  });
-
-  it('inherits agentSignals from the default store', async () => {
-    const inner = new InMemoryStore({ id: 'inner' });
-
-    const composite = new MastraCompositeStore({
-      id: 'outer',
-      default: inner,
-    });
-
-    expect(await composite.getStore('agentSignals')).toBe(inner.stores.agentSignals);
-  });
-
-  it('disables agentSignals via `false`', async () => {
-    const inner = new InMemoryStore({ id: 'inner' });
-
-    const composite = new MastraCompositeStore({
-      id: 'outer',
-      default: inner,
-      domains: { agentSignals: false },
-    });
-
-    expect(await composite.getStore('agentSignals')).toBeUndefined();
-  });
-
   it('does not count `false` overrides as a storage source', () => {
     expect(
       () =>

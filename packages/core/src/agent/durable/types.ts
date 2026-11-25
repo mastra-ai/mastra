@@ -61,6 +61,7 @@ import type { AIV5ResponseMessage, MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
 import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
+import type { ThreadSignalsStore } from '../stored-signals';
 import type { AgentStreamsConfig } from '../streams/types';
 import type { TripwireData } from '../trip-wire';
 import type { AgentMethodType, GoalConfig, StructuredOutputOptions, ToolsInput } from '../types';
@@ -351,10 +352,10 @@ export interface DurableAgenticWorkflowInput {
   /** Agent name for logging/tracing */
   agentName?: string;
   /**
-   * Whether signals sent to this run are kept in the host's `agentSignals`
-   * storage rather than in the starting process's memory. Decided once when the
-   * run is prepared, so every process that executes its steps reads the same
-   * place senders write to. Absent on runs that keep them in memory.
+   * Whether signals sent to this run are kept in the messages table of its
+   * memory storage rather than in the starting process's memory. Decided once
+   * when the run is prepared, so every process that executes its steps reads
+   * the same place senders write to. Absent on runs that keep them in memory.
    * @internal
    */
   signalsStored?: boolean;
@@ -1017,12 +1018,12 @@ export interface RunRegistryEntry {
    */
   interruptStepForSignals?: PendingSignalListener;
   /**
-   * Hears `signal-available` hints for the latest LLM step of a run that keeps
-   * its signals in storage, from whichever process stored them. Cleared when
-   * that step ends.
+   * Where this process reads and settles the signals of a run that keeps them
+   * in memory storage, once resolved: set by preparation, or by the first
+   * resolution that succeeded. See `durableRunSignalsStore`.
    * @internal
    */
-  onSignalAvailable?: (signalId: string) => void;
+  pendingSignalsStore?: ThreadSignalsStore;
   /**
    * Thread title generation closure — mirrors the non-durable `#executeOnFinish`
    * title-generation branch, which was never ported to the durable finish step

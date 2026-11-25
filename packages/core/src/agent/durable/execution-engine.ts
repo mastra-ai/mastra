@@ -6,7 +6,7 @@ import type { Mastra } from '../../mastra';
 import type { ObservabilityContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
-import { warnUnsharedAgentSignals, warnUnsupportedEventedSetup } from '../../workflows/evented/setup-warning';
+import { warnUnsupportedEventedSetup } from '../../workflows/evented/setup-warning';
 import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import {
@@ -1083,17 +1083,15 @@ export class EventedAgentExecutionEngine extends DefaultAgentExecutionEngine {
   }
 
   override closeParkedRunSignals(runId: string): Promise<void> | undefined {
-    if (!this.mastra?.getStorage()?.stores?.agentSignals) return undefined;
     return this.#closeParkedRunSignals(runId);
   }
 
   /**
    * Closes the run with what it consumed, read from its latest committed
    * state. When that state can't be determined the run is left open: closing
-   * it with a guessed set would hand a signal it already took to the next
-   * turn. The thread's end-of-run check then starts a follow-up for the rows
-   * it never took, and that follow-up's takeover claim closes the run and
-   * deletes the rows it had taken.
+   * it with a guessed set would delete a signal it took and saved, or give it
+   * to the next run again. Its claimed rows then stay hidden and its pending
+   * rows wait for the thread's next run.
    */
   async #closeParkedRunSignals(runId: string): Promise<void> {
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
@@ -1109,7 +1107,6 @@ export class EventedAgentExecutionEngine extends DefaultAgentExecutionEngine {
       mastra: this.mastra,
       runId,
       input: context.input,
-      claim: undefined,
       state: committed.state,
     });
   }
@@ -1162,7 +1159,6 @@ export class EventedAgentExecutionEngine extends DefaultAgentExecutionEngine {
         .catch(() => undefined)
         .then(store => warnUnsupportedEventedSetup(mastra, store))
         .catch(() => {});
-      warnUnsharedAgentSignals(mastra);
     }
     const sharedExecution = sharedTransport && fence?.generation !== undefined;
     if (sharedTransport && !sharedExecution && !this.#warnedUnfencedSharedExecution) {

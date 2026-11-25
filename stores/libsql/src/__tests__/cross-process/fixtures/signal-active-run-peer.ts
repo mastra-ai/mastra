@@ -1,7 +1,8 @@
 /**
- * Worker for xproc-signal-active-run.test.ts: executes the evented agent's steps
- * for runs another process starts. The step tool parks until the test sends
- * `release`, and every model call's prompt is reported to the test.
+ * Worker for xproc-signal-active-run.test.ts and xproc-signal-failed-run.test.ts:
+ * executes the evented agent's steps for runs another process starts. The step
+ * tool parks until the test sends `release`, and every model call's prompt is
+ * reported to the test.
  */
 import { createEventedAgent } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
@@ -14,8 +15,14 @@ import { createStepAgent, gate } from '../step-agent';
 
 export interface SignalActiveRunPeerArgs {
   agentId: string;
-  /** The first model call thinks until it is cut short, instead of calling the tool. */
-  reasoning?: boolean;
+  /**
+   * Fail this run here after its second model call: that call answers only once
+   * the test sends `answer`, and every write of a step result that holds its
+   * answer fails, as with a workflows store that lost its database for good.
+   */
+  failRunId?: string;
+  /** The agent's memory uses this database instead of the Mastra instance's storage. */
+  memoryDbUrl?: string;
 }
 
 export interface ModelCallReport {
@@ -24,39 +31,61 @@ export interface ModelCallReport {
   prompt: unknown;
 }
 
+const FINAL_TEXT = 'worker answered';
+
+/** Fails the workflows store's step result writes of `runId` that hold `text`. Other writes go through. */
+async function failStepResultWrites(storage: LibSQLStore, runId: string, text: string) {
+  const workflows = (await storage.getStore('workflows'))!;
+  const fails = (args: { runId: string }) => args.runId === runId && JSON.stringify(args).includes(text);
+  const updateWorkflowResults = workflows.updateWorkflowResults.bind(workflows);
+  workflows.updateWorkflowResults = async args => {
+    if (fails(args)) throw new Error(`The workflows store refused a step result of run ${runId}`);
+    return updateWorkflowResults(args);
+  };
+  const appendWorkflowRunEntries = workflows.appendWorkflowRunEntries.bind(workflows);
+  workflows.appendWorkflowRunEntries = async args => {
+    if (fails(args)) throw new Error(`The workflows store refused a step result of run ${runId}`);
+    return appendWorkflowRunEntries(args);
+  };
+}
+
 runPeer<SignalActiveRunPeerArgs>(async peer => {
-  const { agentId, reasoning = false } = peer.args;
+  const { agentId, failRunId, memoryDbUrl } = peer.args;
   const storage = new LibSQLStore({ id: `signal-active-run-worker-${process.pid}`, url: peer.dbUrl });
+  const memoryStorage = memoryDbUrl
+    ? new LibSQLStore({ id: `signal-active-run-worker-memory-${process.pid}`, url: memoryDbUrl })
+    : storage;
+  if (failRunId) await failStepResultWrites(storage, failRunId, FINAL_TEXT);
   const release = gate();
+  const answer = gate();
   // Installed before the tool can report that it parked: the test may release at once.
   // A release that never comes leaves the tool parked; the test's own hang guard reports it.
   void peer.waitFor('release').then(
     () => release.resolve(),
     () => {},
   );
+  if (failRunId) {
+    void peer.waitFor('answer').then(
+      () => answer.resolve(),
+      () => {},
+    );
+  }
   const memory = new MockMemory();
-  memory.setStorage(storage);
+  memory.setStorage(memoryStorage);
   const { agent } = createStepAgent({
     id: agentId,
-    steps: reasoning ? 0 : 1,
+    steps: 1,
     blockAt: 1,
     release: release.promise,
-    finalText: 'worker answered',
+    finalText: FINAL_TEXT,
     memory,
     onToolEvent: event => {
       if (event.event === 'reached') void peer.signal('tool-reached', { pid: process.pid });
     },
-    ...(reasoning
-      ? {
-          reasoningAt: 1,
-          onReasoning: ({ aborted }: { aborted: boolean }) => {
-            void peer.signal(aborted ? 'reasoning-cut-short' : 'reasoning-reached', { pid: process.pid });
-          },
-        }
-      : {}),
     onModelPrompt: (call, prompt) => {
       void peer.signal(`model-call-${call}`, { pid: process.pid, call, prompt } satisfies ModelCallReport);
     },
+    holdModelCall: call => (failRunId && call === 2 ? answer.promise : undefined),
   });
   const runner = createEventedAgent({ agent });
   const mastra = new Mastra({
@@ -73,5 +102,6 @@ runPeer<SignalActiveRunPeerArgs>(async peer => {
   } finally {
     await mastra.shutdown();
     await storage.close();
+    if (memoryStorage !== storage) await memoryStorage.close();
   }
 });

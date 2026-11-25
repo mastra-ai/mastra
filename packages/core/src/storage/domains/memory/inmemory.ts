@@ -41,6 +41,7 @@ import {
 } from '../../utils';
 import type { InMemoryDB } from '../inmemory-db';
 import { MemoryStorage } from './base';
+import type { PendingSignalEnqueueResult } from './base';
 import {
   assertActiveObservationsApplied,
   compareObservationalMemoryHeadOrder,
@@ -51,10 +52,39 @@ import {
   planReflectionGenerationText,
 } from './observational-memory-lifecycle';
 
+type MessageRow = InMemoryDB['messages'] extends Map<string, infer Row> ? Row : never;
+
+/**
+ * A row with a signal status is a pending agent signal, not a message yet. A
+ * missing status (rows written before the field existed) counts as none.
+ */
+function isSignalRow(row: MessageRow): boolean {
+  return row.signalStatus != null;
+}
+
+function compareSignalRows(a: MessageRow, b: MessageRow): number {
+  const byCreatedAt = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  if (byCreatedAt !== 0) return byCreatedAt;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+function toStorageMessage(message: MastraDBMessage): StorageMessageType {
+  return {
+    id: message.id,
+    thread_id: message.threadId || '',
+    content: JSON.stringify(message.content),
+    role: message.role || 'user',
+    type: message.type || 'text',
+    createdAt: message.createdAt,
+    resourceId: message.resourceId || null,
+  };
+}
+
 export class InMemoryMemory extends MemoryStorage {
   override readonly supportsPartialThreadUpdate: boolean = true;
   readonly supportsObservationalMemory = true;
   readonly supportsObservationalMemoryHistorySearch = true;
+  override readonly supportsPendingSignals: boolean = true;
   private db: InMemoryDB;
 
   constructor({ db }: { db: InMemoryDB }) {
@@ -62,9 +92,14 @@ export class InMemoryMemory extends MemoryStorage {
     this.db = db;
   }
 
+  override get pendingSignalsSharedAcrossProcesses(): boolean {
+    return false;
+  }
+
   async dangerouslyClearAll(): Promise<void> {
     this.db.threads.clear();
     this.db.messages.clear();
+    this.db.signalRunIds.clear();
     this.db.resources.clear();
     this.db.observationalMemory.clear();
     this.db.runFences.clear();
@@ -146,6 +181,7 @@ export class InMemoryMemory extends MemoryStorage {
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     this.db.threads.delete(threadId);
+    this.db.signalRunIds.delete(threadId);
 
     this.db.messages.forEach((msg, key) => {
       if (msg.thread_id === threadId) {
@@ -197,7 +233,8 @@ export class InMemoryMemory extends MemoryStorage {
     }
 
     // Step 1: Get messages matching threadId(s) and optionally resourceId
-    let threadMessages = Array.from(this.db.messages.values()).filter((msg: any) => {
+    let threadMessages = Array.from(this.db.messages.values()).filter(msg => {
+      if (isSignalRow(msg)) return false;
       // Message must be in one of the specified threads
       if (threadIdSet && !threadIdSet.has(msg.thread_id)) return false;
       // If optionalResourceId provided, message must match it
@@ -315,12 +352,15 @@ export class InMemoryMemory extends MemoryStorage {
 
     for (const includeItem of include) {
       const targetMessage = this.db.messages.get(includeItem.id);
-      if (!targetMessage) continue;
+      if (!targetMessage || isSignalRow(targetMessage)) continue;
       if (hasResourceScope && targetMessage.resourceId !== resourceId) continue;
 
       const contextWindow = Array.from(this.db.messages.values())
         .filter(
-          msg => msg.thread_id === targetMessage.thread_id && (!hasResourceScope || msg.resourceId === resourceId),
+          msg =>
+            !isSignalRow(msg) &&
+            msg.thread_id === targetMessage.thread_id &&
+            (!hasResourceScope || msg.resourceId === resourceId),
         )
         .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
@@ -367,7 +407,9 @@ export class InMemoryMemory extends MemoryStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     // Get all messages matching the resourceId (across all threads)
-    let messages = Array.from(this.db.messages.values()).filter((msg: any) => msg.resourceId === resourceId);
+    let messages = Array.from(this.db.messages.values()).filter(
+      msg => !isSignalRow(msg) && msg.resourceId === resourceId,
+    );
 
     // Apply date filtering
     messages = filterByDateRange(messages, (msg: any) => new Date(msg.createdAt), filter?.dateRange);
@@ -432,7 +474,15 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   protected parseStoredMessage(message: StorageMessageType): MastraDBMessage {
-    const { resourceId, content, role, thread_id, ...rest } = message;
+    const {
+      resourceId,
+      content,
+      role,
+      thread_id,
+      signalStatus: _signalStatus,
+      signalClaimedBy: _signalClaimedBy,
+      ...rest
+    } = message as MessageRow;
 
     // Parse content using safelyParseJSON utility
     let parsedContent = safelyParseJSON(content);
@@ -456,7 +506,9 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
-    const rawMessages = messageIds.map(id => this.db.messages.get(id)).filter(message => !!message);
+    const rawMessages = messageIds
+      .map(id => this.db.messages.get(id))
+      .filter((message): message is MessageRow => !!message && !isSignalRow(message));
 
     const list = new MessageList().add(
       rawMessages.map(m => this.parseStoredMessage(m)),
@@ -486,18 +538,16 @@ export class InMemoryMemory extends MemoryStorage {
     }
 
     for (const message of messages) {
-      const key = message.id;
-      // Convert MastraDBMessage to StorageMessageType
-      const storageMessage: StorageMessageType = {
-        id: message.id,
-        thread_id: message.threadId || '',
-        content: JSON.stringify(message.content),
-        role: message.role || 'user',
-        type: message.type || 'text',
-        createdAt: message.createdAt,
-        resourceId: message.resourceId || null,
-      };
-      this.db.messages.set(key, storageMessage);
+      // Saving a pending signal's row turns it into a message. The claimant stays until
+      // the run that claimed it closes, so a redelivered step can claim the row again.
+      // A pending signal never leaves its thread through a save.
+      const existing = this.db.messages.get(message.id);
+      if (existing && isSignalRow(existing) && existing.thread_id !== (message.threadId || '')) continue;
+      this.db.messages.set(message.id, {
+        ...toStorageMessage(message),
+        signalStatus: null,
+        signalClaimedBy: existing?.signalClaimedBy ?? null,
+      });
     }
 
     const list = new MessageList().add(messages, 'memory');
@@ -512,7 +562,7 @@ export class InMemoryMemory extends MemoryStorage {
     const updatedMessages: MastraDBMessage[] = [];
     for (const update of args.messages) {
       const storageMsg = this.db.messages.get(update.id);
-      if (!storageMsg) continue;
+      if (!storageMsg || isSignalRow(storageMsg)) continue;
 
       // Track old threadId for possible move
       const oldThreadId = storageMsg.thread_id;
@@ -731,7 +781,7 @@ export class InMemoryMemory extends MemoryStorage {
 
     // Get messages from the source thread
     let sourceMessages = Array.from(this.db.messages.values())
-      .filter((msg: StorageMessageType) => msg.thread_id === sourceThreadId)
+      .filter(msg => msg.thread_id === sourceThreadId && !isSignalRow(msg))
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
     // Apply message filters if provided
@@ -799,10 +849,137 @@ export class InMemoryMemory extends MemoryStorage {
         type: sourceMsg.type,
         createdAt: sourceMsg.createdAt,
         resourceId: resourceId || sourceMsg.resourceId,
+        signalStatus: null,
+        signalClaimedBy: null,
       });
     }
 
     return { thread: newThread, messageIdMap };
+  }
+
+  // The base implementation moves messages through `listMessages`, which skips
+  // pending signal rows, so those rows are moved here.
+  override async updateThreadResourceId({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId: string;
+  }): Promise<StorageThreadType> {
+    const previousResourceId = this.db.threads.get(threadId)?.resourceId;
+    const thread = await super.updateThreadResourceId({ threadId, resourceId });
+    if (previousResourceId !== resourceId) {
+      for (const row of this.db.messages.values()) {
+        if (row.thread_id === threadId && isSignalRow(row)) row.resourceId = resourceId;
+      }
+    }
+    return thread;
+  }
+
+  // ============================================
+  // Pending Agent Signals
+  // Each method checks and writes without awaiting in between, so concurrent
+  // calls are serialized on the single JS thread.
+  // ============================================
+
+  async setSignalRun({ threadId, runId }: { threadId: string; runId: string }): Promise<void> {
+    if (this.db.threads.has(threadId)) this.db.signalRunIds.set(threadId, runId);
+  }
+
+  async getSignalRun({ threadId }: { threadId: string }): Promise<string | null> {
+    if (!this.db.threads.has(threadId)) return null;
+    return this.db.signalRunIds.get(threadId) ?? null;
+  }
+
+  async enqueuePendingSignal({
+    message,
+    toRunId,
+  }: {
+    message: MastraDBMessage;
+    toRunId?: string;
+  }): Promise<PendingSignalEnqueueResult> {
+    if (!message.threadId) throw new Error('Thread ID is required');
+    if (!message.resourceId) throw new Error('Resource ID is required');
+
+    if (toRunId !== undefined) {
+      const thread = this.db.threads.get(message.threadId);
+      if (!thread || thread.resourceId !== message.resourceId) return 'thread-not-found';
+      if (this.db.signalRunIds.get(message.threadId) !== toRunId) return 'run-closed';
+    }
+    if (this.db.messages.has(message.id)) return 'accepted';
+
+    this.db.messages.set(message.id, { ...toStorageMessage(message), signalStatus: 'pending', signalClaimedBy: null });
+    return 'accepted';
+  }
+
+  async claimPendingSignals({
+    threadId,
+    runId,
+    consumedIds,
+  }: {
+    threadId: string;
+    runId: string;
+    consumedIds: string[];
+  }): Promise<MastraDBMessage[]> {
+    if (!this.db.threads.has(threadId) || this.db.signalRunIds.get(threadId) !== runId) return [];
+
+    const consumed = new Set(consumedIds);
+    const claimed: MessageRow[] = [];
+    for (const row of this.threadRowsOf(threadId)) {
+      if (row.signalStatus === 'pending') {
+        row.signalStatus = 'claimed';
+        row.signalClaimedBy = runId;
+      }
+      if (row.signalClaimedBy === runId && !consumed.has(row.id)) claimed.push(row);
+    }
+    return claimed.sort(compareSignalRows).map(row => this.parseStoredMessage(row));
+  }
+
+  async closeSignalRun({
+    threadId,
+    runId,
+    consumedIds,
+  }: {
+    threadId: string;
+    runId: string;
+    consumedIds: string[];
+  }): Promise<void> {
+    const consumed = new Set(consumedIds);
+    for (const row of this.threadRowsOf(threadId)) {
+      if (row.signalClaimedBy !== runId) continue;
+      if (!isSignalRow(row)) {
+        row.signalClaimedBy = null;
+      } else if (consumed.has(row.id)) {
+        this.db.messages.delete(row.id);
+      } else {
+        row.signalStatus = 'pending';
+        row.signalClaimedBy = null;
+      }
+    }
+    if (this.db.signalRunIds.get(threadId) === runId) this.db.signalRunIds.delete(threadId);
+  }
+
+  async cancelPendingSignals({ threadId, ids }: { threadId: string; ids: string[] }): Promise<string[]> {
+    const cancelled: string[] = [];
+    for (const id of ids) {
+      const row = this.db.messages.get(id);
+      if (row?.thread_id !== threadId || row.signalStatus !== 'pending') continue;
+      this.db.messages.delete(id);
+      cancelled.push(id);
+    }
+    return cancelled;
+  }
+
+  async listPendingSignals({ threadId }: { threadId: string }): Promise<MastraDBMessage[]> {
+    return this.threadRowsOf(threadId)
+      .filter(row => row.signalStatus === 'pending')
+      .sort(compareSignalRows)
+      .map(row => this.parseStoredMessage(row));
+  }
+
+  /** Every row of the thread, pending signals included. */
+  private threadRowsOf(threadId: string): MessageRow[] {
+    return Array.from(this.db.messages.values()).filter(row => row.thread_id === threadId);
   }
 
   private sortThreads(threads: any[], field: ThreadOrderBy, direction: ThreadSortDirection): any[] {

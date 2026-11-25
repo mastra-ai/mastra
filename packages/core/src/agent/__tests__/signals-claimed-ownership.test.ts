@@ -1138,10 +1138,12 @@ describe('Agent signals: claimed thread ownership', () => {
       );
       await pubsub.flush();
       expect(
-        agentThreadStreamRuntime.cancelQueuedMessages(
-          ownerAgent,
-          { ...target, signalIds: [cancelledInput.signal.id] },
-          pubsub,
+        (
+          await agentThreadStreamRuntime.cancelQueuedMessages(
+            ownerAgent,
+            { ...target, signalIds: [cancelledInput.signal.id] },
+            pubsub,
+          )
         ).cancelledSignalIds,
       ).toEqual([cancelledInput.signal.id]);
       releaseLease();
@@ -1370,7 +1372,7 @@ describe('Agent signals: claimed thread ownership', () => {
         await pubsub.flush();
 
         // The queued wake is cancelled while its reservation is still being admitted.
-        agentThreadStreamRuntime.cancelQueuedMessages(
+        await agentThreadStreamRuntime.cancelQueuedMessages(
           ownerAgent,
           { ...target, signalIds: [`wake-cancel-queued-${kind}`] },
           pubsub,
@@ -1879,7 +1881,7 @@ describe('Agent signals: claimed thread ownership', () => {
       await expect(queuedSignal.accepted).resolves.toMatchObject({ action: 'deliver' });
       expect(getStreamCount()).toBe(1);
 
-      const cancelled = ownerRuntime.cancelQueuedMessages(
+      const cancelled = await ownerRuntime.cancelQueuedMessages(
         ownerAgent,
         { ...target, signalIds: [queuedSignal.signal.id] },
         pubsub,
@@ -1966,7 +1968,7 @@ describe('Agent signals: claimed thread ownership', () => {
 
       // The input cuts the held request short, and the request's abort cancels the input at once,
       // before its delivery has finished.
-      let cancelledIds: string[] | undefined;
+      let cancelledIds: Promise<{ cancelledSignalIds: string[] }> | undefined;
       const queued = sendRemote('cancel me as I arrive', attributes);
       cancelOnAbort = () => {
         cancelOnAbort = undefined;
@@ -1974,10 +1976,10 @@ describe('Agent signals: claimed thread ownership', () => {
           ownerAgent,
           { ...target, signalIds: [queued.signal.id] },
           pubsub,
-        ).cancelledSignalIds;
+        );
       };
       await expect(queued.accepted).resolves.toMatchObject({ action: 'deliver' });
-      expect(cancelledIds).toEqual([queued.signal.id]);
+      expect(await cancelledIds).toEqual({ cancelledSignalIds: [queued.signal.id] });
 
       const retry = sendRemote('cancel me as I arrive', attributes);
       await expect(retry.accepted).rejects.toThrow('cancelled before it ran');
@@ -2052,7 +2054,7 @@ describe('Agent signals: claimed thread ownership', () => {
       await expect(queuedA.accepted).resolves.toMatchObject({ action: 'deliver' });
       await expect(queuedB.accepted).resolves.toMatchObject({ action: 'deliver' });
 
-      const cancelled = ownerRuntime.cancelQueuedMessages(
+      const cancelled = await ownerRuntime.cancelQueuedMessages(
         a.agent,
         { ...a.target, signalIds: ['shared-signal-id'] },
         pubsub,
@@ -2479,7 +2481,8 @@ describe('Agent signals: claimed thread ownership', () => {
       // start and then loses the lease. Only a SYNCHRONOUS throw reaches the
       // drain's catch, so the cancellation must land synchronously with it.
       vi.spyOn(pubsub, 'transferLease').mockImplementationOnce(() => {
-        ownerRuntime.cancelQueuedMessages(
+        // The queued part of the cancellation is synchronous; nothing waits on storage here.
+        void ownerRuntime.cancelQueuedMessages(
           ownerAgent,
           { resourceId: target.resourceId, threadId: target.threadId, signalIds: [queuedSignal.signal.id] },
           pubsub,
@@ -2649,7 +2652,7 @@ describe('Agent signals: claimed thread ownership', () => {
       await expect(first.accepted).rejects.toThrow('Claimed thread owner was released');
       // A released owner sends no reply, so the sender is refused when its acceptance window ends.
       await expect(queued.accepted).rejects.toThrow('Claimed thread owner did not accept signal');
-      expect(agent.cancelQueuedMessages({ ...scope, signalIds: [queued.signal.id] })).toEqual({
+      expect(await agent.cancelQueuedMessages({ ...scope, signalIds: [queued.signal.id] })).toEqual({
         cancelledSignalIds: [],
       });
       await vi.waitFor(() => expect(pubsub.subscriberCount(topic)).toBe(0));
@@ -2690,7 +2693,7 @@ describe('Agent signals: claimed thread ownership', () => {
       });
       await pubsub.flush();
       await nextTick();
-      expect(agent.cancelQueuedMessages({ ...scope, signalIds: [queued.signal.id] })).toEqual({
+      expect(await agent.cancelQueuedMessages({ ...scope, signalIds: [queued.signal.id] })).toEqual({
         cancelledSignalIds: [],
       });
       releaseFirst();

@@ -218,7 +218,7 @@ describe('Agent signals: steer shown to subscribers on accept', () => {
       ),
     );
 
-    const result = agent.cancelQueuedMessages({
+    const result = await agent.cancelQueuedMessages({
       resourceId: 'user',
       threadId: 'cancel-queue-thread',
       signalIds: [queued.signal.id],
@@ -268,9 +268,11 @@ describe('Agent signals: steer shown to subscribers on accept', () => {
           );
         }
         // This request receiver owns no queue: only the execution owner can confirm removal.
-        expect(follower.cancelQueuedMessages(agent, { ...scope, signalIds: [result.signal.id] }, pubsub)).toEqual({
-          cancelledSignalIds: [],
-        });
+        expect(await follower.cancelQueuedMessages(agent, { ...scope, signalIds: [result.signal.id] }, pubsub)).toEqual(
+          {
+            cancelledSignalIds: [],
+          },
+        );
         for (const read of [ownRead, remoteRead]) {
           await waitForCondition(() =>
             read.parts.some(part => isUserMessageCancelledChunk(part) && part.data.id === result.signal.id),
@@ -321,7 +323,7 @@ describe('Agent signals: steer shown to subscribers on accept', () => {
           ).toEqual([steer.signal.id, queued.signal.id].sort());
         } else {
           expect(read.parts.filter(isUserMessageCancelledChunk)).toEqual([]);
-          agent.cancelQueuedMessages({ ...scope, signalIds: [steer.signal.id, queued.signal.id] });
+          await agent.cancelQueuedMessages({ ...scope, signalIds: [steer.signal.id, queued.signal.id] });
         }
         releaseFirst();
         await first.text.catch(() => {});

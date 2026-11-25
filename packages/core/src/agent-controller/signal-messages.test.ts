@@ -659,7 +659,7 @@ describe('AgentController signal messages', () => {
       accepted: Promise.resolve({ action: 'deliver', runId: 'queued-run-id' }),
       signal: createSignal({ type: 'user', contents: 'queued follow-up' }),
     } as any);
-    const cancelQueuedMessages = vi.spyOn(agent, 'cancelQueuedMessages').mockReturnValue({ cancelledSignalIds: [] });
+    const cancelQueuedMessages = vi.spyOn(agent, 'cancelQueuedMessages').mockResolvedValue({ cancelledSignalIds: [] });
     await session.thread.create({ id: 'old-thread' });
     session.run.ensureAbortController();
     await session.followUp({ content: 'queued follow-up' });
@@ -684,7 +684,7 @@ describe('AgentController signal messages', () => {
       accepted: Promise.resolve({ action: 'deliver', runId: 'queued-run-id' }),
       signal: createSignal({ type: 'user', contents: 'queued follow-up' }),
     } as any);
-    vi.spyOn(agent, 'cancelQueuedMessages').mockReturnValue({ cancelledSignalIds: [] });
+    vi.spyOn(agent, 'cancelQueuedMessages').mockResolvedValue({ cancelledSignalIds: [] });
     await session.thread.create({ id: 'first-thread' });
     session.run.ensureAbortController();
     await session.followUp({ content: 'first queued follow-up' });

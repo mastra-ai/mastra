@@ -10,7 +10,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { TABLE_THREADS } from '@mastra/core/storage';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { Pool } from 'pg';
-import { describe, it, expect, vi } from 'vitest';
+import { afterAll, describe, it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 
 import { DatasetsPG } from './domains/datasets';
@@ -23,10 +23,23 @@ import { PostgresStore } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
-createTestSuite(new PostgresStore(TEST_CONFIG));
-createTestSuite(new PostgresStore({ ...TEST_CONFIG, schemaName: 'my_schema' }));
+// Each suite gets a second store on the same database and schema, with its own pool, standing in
+// for another process in the races of the pending-signal tests.
+const peers: PostgresStore[] = [];
+const withPeer = (config: typeof TEST_CONFIG, name: string) => {
+  const peerStorage = new PostgresStore({ ...config, id: `${config.id}-${name}-peer` });
+  peers.push(peerStorage);
+  createTestSuite(new PostgresStore(config), {}, { peerStorage });
+};
+
+withPeer(TEST_CONFIG, 'public');
+withPeer({ ...TEST_CONFIG, schemaName: 'my_schema' }, 'my-schema');
 // Schema names that are only valid when quoted, e.g. one schema per tenant (#24790)
-createTestSuite(new PostgresStore({ ...TEST_CONFIG, schemaName: 'my-tenant' }));
+withPeer({ ...TEST_CONFIG, schemaName: 'my-tenant' }, 'my-tenant');
+
+afterAll(async () => {
+  await Promise.all(peers.map(peer => peer.close()));
+});
 
 describe('agent persistence', () => {
   it('persists a sparse model-only agent override', async () => {
