@@ -1,4 +1,6 @@
+import type { FactorySandbox } from '@mastra/core/workspace';
 import { isFactoryPrincipalId } from '../storage/domains/projects/base.js';
+import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import { sandboxHostMayUseCredentialVault } from './vault-host.js';
 
 /** Card sessions delegate only to their durably recorded human starter. */
@@ -36,13 +38,17 @@ export function sandboxGithubAuth(sandbox: object): SandboxGithubAuth {
 
 /**
  * Read the mode, first asking the platform when the provider has not recorded
- * one yet. A failed request rejects rather than falling back to token mode,
- * since it cannot tell a vault sandbox apart.
+ * one yet. Optional discovery failures preserve prior Factory behavior;
+ * Platform's per-command credential guard still requires a confirmed token VM.
  */
 export async function learnSandboxGithubAuth(sandbox: object): Promise<SandboxGithubAuth> {
   const reporting = sandbox as VaultReportingSandbox;
   if ('vault' in sandbox && reporting.vault === undefined && typeof reporting.refreshVault === 'function') {
-    await reporting.refreshVault();
+    try {
+      await reporting.refreshVault();
+    } catch {
+      // Only a positive provider report changes the prior token behavior.
+    }
   }
   return sandboxGithubAuth(sandbox);
 }
@@ -73,11 +79,10 @@ export function sandboxOwner(sandbox: object, fallback: string | null | undefine
 
 /**
  * Refuse `callerId` a credential-vault sandbox bound to its owner (the user it
- * was built for, else `ownerId`) unless the
- * mode is known to be token. A vault sandbox acts with its owner's vault grant,
- * so nobody else may start or run commands in it. Learning the mode never
- * starts the sandbox: `refreshVault()` asks the platform about an existing VM
- * and is a no-op before one exists, so an unknown or unreadable mode refuses.
+ * was built for, else `ownerId`) when the platform positively reports vault.
+ * Learning the mode never starts the sandbox: `refreshVault()` asks the
+ * platform about an existing VM and is a no-op before one exists. Unknown
+ * mode alone does not add vault-only owner restrictions.
  */
 export async function assertVaultSandboxCaller(
   sandbox: object,
@@ -103,14 +108,40 @@ export async function assertVaultSandboxCaller(
     try {
       await reporting.refreshVault();
     } catch {
-      // An unreadable mode stays unknown and refuses below.
+      // Mode discovery is optional; only a confirmed vault adds owner restrictions.
     }
   }
-  if (reporting.vault !== false) throw vaultOwnerRefusal(sessionId);
+  if (reporting.vault === true) throw vaultOwnerRefusal(sessionId);
 }
 
 export function vaultOwnerRefusal(sessionId: string): Error {
   return new Error(
     `Factory session ${sessionId} uses its owner's credential vault and is not available to the current user`,
   );
+}
+
+/** Discover legacy VM mode without starting a VM or changing its credential actor. */
+export async function sessionSandboxCredentialMode(
+  session: SourceControlSession,
+  provider?: FactorySandbox,
+): Promise<SandboxGithubAuth | null> {
+  if (session.sandboxCredentialMode) return session.sandboxCredentialMode;
+  if (!session.sandboxId || !provider) return null;
+  const sandbox = provider.create(
+    {
+      sessionId: session.id,
+      sandboxId: session.sandboxId,
+      userId: sessionSandboxUser(session),
+      getRepositoryAccess: undefined,
+    },
+    {},
+  ) as VaultReportingSandbox;
+  try {
+    await sandbox.refreshVault?.();
+  } catch {
+    return null;
+  }
+  if (sandbox.vault === undefined) return null;
+  const mode = sandbox.vault ? 'vault' : 'token';
+  return mode;
 }

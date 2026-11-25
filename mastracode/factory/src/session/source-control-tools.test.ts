@@ -710,8 +710,6 @@ describe('createSourceControlTools', () => {
       const refused = /uses its owner's credential vault and is not available to the current user/;
 
       it.each([
-        ['no VM exists yet', undefined, undefined],
-        ["the platform can't report the mode", undefined, new Error('proxy unavailable')],
         ['the mode is vault', true, undefined],
         ['the platform reports vault', undefined, true],
       ] as const)(
@@ -730,16 +728,22 @@ describe('createSourceControlTools', () => {
         },
       );
 
-      it('lets a non-owner push a token-mode session', async () => {
-        const setup = await fixture();
-        const built = await asMember(setup);
-        const { sandbox, pushes } = vaultSandbox(false);
+      it.each([false, undefined, new Error('proxy unavailable')])(
+        'lets a non-owner push without a positive vault report (%s)',
+        async mode => {
+          const setup = await fixture();
+          const built = await asMember(setup);
+          const { sandbox, pushes } = vaultSandbox(
+            mode instanceof Error ? undefined : mode,
+            mode instanceof Error ? mode : undefined,
+          );
 
-        await expect(
-          (built.source_control_push_branch!.execute as any)({}, { workspace: { sandbox } }),
-        ).resolves.toMatchObject({ pushed: true, branch: 'factory/issue-1' });
-        expect(pushes()).toHaveLength(1);
-      });
+          await expect(
+            (built.source_control_push_branch!.execute as any)({}, { workspace: { sandbox } }),
+          ).resolves.toMatchObject({ pushed: true, branch: 'factory/issue-1' });
+          expect(pushes()).toHaveLength(1);
+        },
+      );
 
       it('lets the owner push their own vault session', async () => {
         const setup = await fixture();

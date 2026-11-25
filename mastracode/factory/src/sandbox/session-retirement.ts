@@ -16,7 +16,7 @@ import type {
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { requireExec } from './materialization.js';
 import { clearFailedSetupCommands, evictSessionSandbox, peekSessionSandbox } from './session-sandbox.js';
-import { sandboxOwner } from './vault.js';
+import { sandboxOwner, sessionSandboxCredentialMode } from './vault.js';
 
 type WarningLogger = (message: string, details: Record<string, unknown>) => void;
 
@@ -142,6 +142,11 @@ export class SessionRetirementCoordinator {
       // Read before invalidating, which drops the memo: the instance is destroyed itself, not by identity.
       const memo = peekSessionSandbox(session.id)?.sandbox;
       const previous = memo && sandboxOwner(memo, input.previousOwnerId) === input.previousOwnerId ? memo : undefined;
+      const mode = await sessionSandboxCredentialMode(
+        { ...session, userId: input.previousOwnerId, sandboxId: input.sandboxId },
+        this.#sandbox,
+      );
+      if (mode !== 'vault' && (!previous || !('vault' in previous) || previous.vault !== true)) return;
       // Fences an in-flight start of the previous owner's instance.
       await this.#invalidate(session);
       if (previous) evictSessionSandbox(session.id);

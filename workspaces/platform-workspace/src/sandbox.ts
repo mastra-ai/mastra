@@ -1052,11 +1052,8 @@ export class PlatformSandbox extends MastraSandbox {
     this._sandboxId = json.id;
     this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
     this.templatePending = json.templatePending;
-    // A reattach by recovery id confirms the mode from the sandbox record
-    // before anyone hands the sandbox credentials. Until then a reattached
-    // sandbox is not known to be non-vault, and a failed read fails the start.
-    this.vault = json.vault === true ? true : json.reattached ? undefined : false;
-    if (json.reattached) await this.refreshVault();
+    // Provision and recovery reattach both report the stored VM's credential mode.
+    this.vault = json.vault === true;
     this._populateAddressFromResponse(json);
     this._logStartComplete(json.id, startedAt, requestMs, 'provision');
     return { outcome: 'created' };

@@ -985,7 +985,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           // (e.g. local) persist nothing: a logical id handed back as a
           // `sandboxId` hint is unknown to the provider and breaks resume.
           sandboxId: target.sandboxId ?? null,
-          sandboxCredentialMode,
+          ...('vault' in args.sandbox && args.sandbox.vault === undefined ? {} : { sandboxCredentialMode }),
           // D2: a list session's working directory is the workspace root,
           // the repositories sit beneath it; a single-repository session
           // keeps its checkout as before.

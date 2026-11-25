@@ -11,6 +11,7 @@ import { TITLE_PINNED_THREAD_METADATA_KEY, isThreadTitlePinned } from '@mastra/c
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { Workspace } from '@mastra/core/workspace';
+import { PlatformFactorySandbox } from '@mastra/platform-workspace';
 import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
@@ -1638,6 +1639,7 @@ describe('session sandbox recreate', () => {
       sessionRetirement?: SessionRetirementCoordinator;
       sandboxRecreateSupported?: boolean;
       vaultSandboxes?: boolean;
+      sandbox?: RouteOptions['sandbox'];
       isOrganizationAdmin?: (orgId: string, userId: string) => Promise<boolean>;
       controller?: RouteOptions['controller'];
       abortSettleTimeoutMs?: number;
@@ -1662,6 +1664,7 @@ describe('session sandbox recreate', () => {
         ...(options.workItems ? { workItems: options.workItems } : {}),
         ...(options.sessionRetirement ? { sessionRetirement: options.sessionRetirement } : {}),
         sandboxRecreateSupported: options.sandboxRecreateSupported ?? true,
+        ...(options.sandbox ? { sandbox: options.sandbox } : {}),
         ...(options.vaultSandboxes !== undefined ? { vaultSandboxes: options.vaultSandboxes } : {}),
         ...(options.abortSettleTimeoutMs !== undefined ? { abortSettleTimeoutMs: options.abortSettleTimeoutMs } : {}),
       }),
@@ -1765,8 +1768,7 @@ describe('session sandbox recreate', () => {
 
       it.each([
         ['the mode is vault', true, undefined],
-        ['no VM exists yet', undefined, undefined],
-        ["the platform can't report the mode", undefined, new Error('proxy unavailable')],
+
         ['the platform reports vault', undefined, true],
       ] as const)('refuses to start it when %s', async (_name, vault, refresh) => {
         const { seed, sourceControl, session } = await seedRecreateSession('user-1');
@@ -1785,7 +1787,7 @@ describe('session sandbox recreate', () => {
         expect(sandbox.start).not.toHaveBeenCalled();
       });
 
-      it('refuses to bring an offline session online as its owner', async () => {
+      it('keeps prior offline startup behavior until vault mode is confirmed', async () => {
         const { seed, sourceControl, session } = await seedRecreateSession('user-1');
         const sandbox = vaultSandbox(undefined);
         const controller = fakeController(null, { getWorkspace: () => ({ sandbox }) });
@@ -1798,9 +1800,9 @@ describe('session sandbox recreate', () => {
 
         const response = await app.request(startPath(session.sessionId), { method: 'POST' });
 
-        expect(response.status).toBe(403);
-        expect(controller.createSession).not.toHaveBeenCalled();
-        expect(sandbox.start).not.toHaveBeenCalled();
+        expect(response.status).toBe(200);
+        expect(controller.createSession).toHaveBeenCalledTimes(1);
+        expect(sandbox.start).toHaveBeenCalledTimes(1);
       });
 
       it('starts a session the platform confirms is token mode', async () => {
@@ -1820,7 +1822,7 @@ describe('session sandbox recreate', () => {
         expect(sandbox.start).toHaveBeenCalledTimes(1);
       });
 
-      it('refuses an offline custom-callback sandbox, which can still attach the owner vault', async () => {
+      it('keeps prior offline custom-callback startup behavior without a positive vault report', async () => {
         const { seed, sourceControl, session } = await seedRecreateSession('user-1');
         const start = vi.fn(async () => {});
         const controller = fakeController(null, { getWorkspace: () => ({ sandbox: { start } }) });
@@ -1833,9 +1835,9 @@ describe('session sandbox recreate', () => {
 
         const response = await app.request(startPath(session.sessionId), { method: 'POST' });
 
-        expect(response.status).toBe(403);
-        expect(controller.createSession).not.toHaveBeenCalled();
-        expect(start).not.toHaveBeenCalled();
+        expect(response.status).toBe(200);
+        expect(controller.createSession).toHaveBeenCalledTimes(1);
+        expect(start).toHaveBeenCalledTimes(1);
       });
 
       it('lets an admin bring an offline e2b sandbox online', async () => {
@@ -1937,6 +1939,55 @@ describe('session sandbox recreate', () => {
       return seeded;
     }
 
+    it.each([false, true])('keeps a legacy Platform token VM after ownership transfer (cold=%s)', async cold => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      onTestFinished(() => vi.unstubAllEnvs());
+      const { seed, sourceControl, session } = await materialized();
+      const requests: string[] = [];
+      const sandbox = new PlatformFactorySandbox({
+        accessToken: 'test-platform-token',
+        projectId: 'project-1',
+        environmentId: 'env-1',
+        fetch: async (url, init) => {
+          requests.push((init?.method ?? 'GET') + ' ' + String(url));
+          return Response.json({ id: 'vm-1', vault: false });
+        },
+      });
+      if (!cold) {
+        getSessionSandbox(session.id, 'acme/repo', () =>
+          sandbox.create(
+            {
+              sessionId: session.id,
+              orgId: session.orgId,
+              userId: session.userId,
+              sandboxId: 'vm-1',
+              getRepositoryAccess: undefined,
+            },
+            {},
+          ),
+        );
+        onTestFinished(() => evictSessionSandbox(session.id));
+      }
+      const sessionRetirement = new SessionRetirementCoordinator({ sandbox });
+      const release = vi.spyOn(sessionRetirement, 'releasePreviousOwnerSandbox');
+      const app = buildRecreateApp(seed, sourceControl, {
+        caller: taker,
+        vaultSandboxes: true,
+        sandbox,
+        workItems: noRuns,
+        sessionRetirement,
+      });
+      expect((await takeOwnership(app, session.sessionId, 'user-1')).status).toBe(200);
+      expect(release).not.toHaveBeenCalled();
+      await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+        userId: 'user-2',
+        sandboxId: 'vm-1',
+        branch: session.branch,
+      });
+      expect(requests.some(request => request.startsWith('DELETE '))).toBe(false);
+      expect(requests.some(request => request.startsWith('POST '))).toBe(false);
+    });
+
     it("destroys the previous owner's vault sandbox and clears its id", async () => {
       const { seed, sourceControl, session } = await materialized();
       const sandbox = heldSandbox(session.id, true);
@@ -2005,7 +2056,7 @@ describe('session sandbox recreate', () => {
       expect(sandbox.destroy).toHaveBeenCalledTimes(1);
     });
 
-    it('releases a VM this process holds no instance for, since its mode is unknown', async () => {
+    it('keeps a detached VM without a positive vault report', async () => {
       const { seed, sourceControl, session } = await materialized();
       const sessionRetirement = new SessionRetirementCoordinator();
       const release = vi.spyOn(sessionRetirement, 'releasePreviousOwnerSandbox').mockResolvedValue();
@@ -2019,16 +2070,10 @@ describe('session sandbox recreate', () => {
       const response = await takeOwnership(app, session.sessionId, 'user-1');
 
       expect(response.status).toBe(200);
-      expect(release).toHaveBeenCalledWith({
-        sourceControl,
-        orgId: 'org-1',
-        sessionId: session.sessionId,
-        previousOwnerId: 'user-1',
-        sandboxId: 'vm-1',
-      });
+      expect(release).not.toHaveBeenCalled();
       await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
         userId: 'user-2',
-        sandboxId: null,
+        sandboxId: 'vm-1',
       });
     });
 

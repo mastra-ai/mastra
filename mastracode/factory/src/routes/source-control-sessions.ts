@@ -5,6 +5,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import { createSignal } from '@mastra/core/signals';
 import { UniqueViolationError } from '@mastra/core/storage';
+import type { FactorySandbox } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 import { z } from 'zod';
 
@@ -12,7 +13,7 @@ import { reclaimDeletedSessionSandbox } from '../integrations/github/sandbox-rel
 import { isValidGitRef } from '../sandbox/git-ref.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import { peekSessionSandbox } from '../sandbox/session-sandbox.js';
-import { assertVaultSandboxCaller, vaultOwnerRefusal } from '../sandbox/vault.js';
+import { assertVaultSandboxCaller, sessionSandboxCredentialMode, vaultOwnerRefusal } from '../sandbox/vault.js';
 import { seedSessionOrg } from '../session/org-seed.js';
 import {
   isRunBound,
@@ -63,9 +64,10 @@ export interface SourceControlSessionRoutesOptions {
   sandboxRecreateSupported?: boolean;
   /**
    * Whether this host's sandboxes can act with their owner's credential vault (the platform provider). The
-   * Files-tab start then refuses a non-owner whose session has no sandbox yet to confirm token mode.
+   * Files-tab start restricts non-owners only when the sandbox is positively known to use the vault.
    */
   vaultSandboxes?: boolean;
+  sandbox?: FactorySandbox;
   /** How long recreate waits for an aborted run to settle before destroying. */
   abortSettleTimeoutMs?: number;
   workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'hasRunBindingForSession'> &
@@ -128,9 +130,7 @@ async function followsCard(
 }
 
 /**
- * Whether the session's sandbox may act with its previous owner's credential vault. Only on hosts whose
- * sandboxes can use the vault; a sandbox the platform confirms is token mode is kept, and an unknown mode
- * (including a VM this process holds no instance for, or one an in-flight start is about to record) counts as vault.
+ * Release only a positively identified vault sandbox. Token and unknown-mode VMs retain their prior lifecycle.
  */
 async function sandboxBoundToPreviousOwner(
   options: SourceControlSessionRoutesOptions,
@@ -138,8 +138,11 @@ async function sandboxBoundToPreviousOwner(
   newOwnerId: string,
 ): Promise<boolean> {
   if (!options.vaultSandboxes) return false;
+  if (session.sandboxCredentialMode) return session.sandboxCredentialMode === 'vault' && session.userId !== newOwnerId;
+  const mode = await sessionSandboxCredentialMode(session, options.sandbox);
+  if (mode) return mode === 'vault' && session.userId !== newOwnerId;
   const existing = peekSessionSandbox(session.id)?.sandbox;
-  if (!existing) return true;
+  if (!existing) return false;
   return assertVaultSandboxCaller(existing, {
     ownerId: session.userId,
     callerId: newOwnerId,
@@ -682,8 +685,8 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
 
         // A vault sandbox acts with the credential vault of the user it was built for, so only that user may
         // start it. Anyone else (an org admin, or a new owner before the previous owner's sandbox is released)
-        // needs a sandbox the platform confirms is token mode; learning the mode never starts it, and an unknown
-        // mode, or an offline session a non-owner asks for on a host whose sandboxes can use the vault, is refused.
+        // is refused only after a positive vault report. Read-only discovery never starts a sandbox;
+        // token and unknown-mode sessions retain their prior startup behavior.
         {
           const online = await controller.getSession(session.sessionId);
           const existing = peekSessionSandbox(session.id)?.sandbox ?? online?.getWorkspace()?.sandbox;
@@ -696,7 +699,9 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
                 () => undefined,
                 (error: unknown) => error,
               )
-            : options.vaultSandboxes && resolved.tenant.userId !== session.userId
+            : options.vaultSandboxes &&
+                (await sessionSandboxCredentialMode(session, options.sandbox)) === 'vault' &&
+                resolved.tenant.userId !== session.userId
               ? vaultOwnerRefusal(session.sessionId)
               : undefined;
           if (refusal) {

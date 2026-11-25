@@ -871,6 +871,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           // callback (`provider: 'custom'`) and anything unrecognized can still
           // return a vault sandbox.
           vaultSandboxes: sandboxHostMayUseCredentialVault(deps.sandbox?.provider),
+          sandbox: deps.sandbox,
           ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
           ...(deps.moveThread ? { moveThread: deps.moveThread } : {}),
           ...(deps.renameThread ? { renameThread: deps.renameThread } : {}),
@@ -911,6 +912,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         { projects: deps.domains.projects, modelDefaults: deps.domains.modelDefaults },
         deps.boardRegistry,
         deps.sandbox?.provider,
+        deps.sandbox,
       )
     : undefined;
   if (transitionService && startCoordinator) {

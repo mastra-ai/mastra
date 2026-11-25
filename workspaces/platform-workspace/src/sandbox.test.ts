@@ -795,11 +795,8 @@ describe('PlatformSandbox', () => {
       expect(sandbox.vault).toBe(false);
     });
 
-    it('learns vault from the sandbox record after a recovery-id reattach', async () => {
-      const sandbox = create({ id: 'sbx_1', reattached: true, instanceUrl: null }, undefined, {
-        id: 'sbx_1',
-        vault: true,
-      });
+    it('learns vault from the recovery POST response', async () => {
+      const sandbox = create({ id: 'sbx_1', reattached: true, instanceUrl: null, vault: true });
       await sandbox._start();
       expect(sandbox.vault).toBe(true);
     });
@@ -845,9 +842,10 @@ describe('PlatformSandbox', () => {
           .mockResolvedValueOnce(json({ id: 'sbx_1', vault: true }))
           .mockResolvedValueOnce(leaseResponse());
         const sandbox = sandboxWith(fetchMock);
-        const started = sandbox.start();
+        await sandbox.start();
+        const refreshed = sandbox.refreshVault();
         await vi.runAllTimersAsync();
-        await started;
+        await refreshed;
         expect(vaultReads(fetchMock)).toBe(2);
         expect(sandbox.vault).toBe(true);
         vi.useRealTimers();
@@ -862,60 +860,64 @@ describe('PlatformSandbox', () => {
           .mockResolvedValueOnce(json({ id: 'sbx_1' }))
           .mockResolvedValueOnce(leaseResponse());
         const sandbox = sandboxWith(fetchMock);
-        const started = sandbox.start();
+        await sandbox.start();
+        const refreshed = sandbox.refreshVault();
         await vi.runAllTimersAsync();
-        await started;
+        await refreshed;
         expect(vaultReads(fetchMock)).toBe(2);
         expect(sandbox.vault).toBe(false);
         vi.useRealTimers();
         expect(await execEnv(sandbox)).toEqual({ GH_TOKEN: 'ghs_real', A: '1' });
       });
 
-      it('fails the start after the retries run out, and the next command asks again', async () => {
-        const fetchMock = vi.fn().mockResolvedValueOnce(reattached()).mockResolvedValue(boom(502));
-        const sandbox = sandboxWith(fetchMock);
-        const started = sandbox.start();
-        const failed = expect(started).rejects.toThrow();
-        await vi.runAllTimersAsync();
-        await failed;
-        expect(vaultReads(fetchMock)).toBe(4);
-        expect(sandbox.vault).toBeUndefined();
-        expect(sockets).toHaveLength(0);
+      it.each([true, false, undefined])(
+        'uses the recovery POST mode (%s) without an extra GET before credential dispatch',
+        async vault => {
+          const fetchMock = vi.fn(async (url, init) => {
+            if (String(url).endsWith('/exec-lease')) return leaseResponse();
+            if (init?.method === 'POST')
+              return json({ id: 'sbx_1', reattached: true, ...(vault === undefined ? {} : { vault }) });
+            return boom(502);
+          });
+          const sandbox = sandboxWith(fetchMock);
+          const started = sandbox.start();
+          await vi.runAllTimersAsync();
+          await started;
+          expect(sandbox.vault).toBe(vault === true);
+          expect(vaultReads(fetchMock)).toBe(0);
+          vi.useRealTimers();
+          expect(await execEnv(sandbox)).toEqual(vault === true ? { A: '1' } : { GH_TOKEN: 'ghs_real', A: '1' });
+        },
+      );
 
-        // No cached failure: the next command starts again, reads the record, and only then decides.
-        vi.useRealTimers();
-        fetchMock
-          .mockReset()
-          .mockResolvedValueOnce(json({ id: 'sbx_1', destroyedAt: null, vault: true }))
-          .mockResolvedValueOnce(leaseResponse());
-        expect(await execEnv(sandbox)).toEqual({ A: '1' });
-        expect(vaultReads(fetchMock)).toBe(1);
-        expect(sandbox.vault).toBe(true);
-      });
-
-      it('lets a later start succeed after an earlier one ran out of retries', async () => {
-        const fetchMock = vi.fn().mockResolvedValueOnce(reattached()).mockResolvedValue(boom(503));
+      it('does not change the reported token mode when a later read is unavailable', async () => {
+        const fetchMock = vi
+          .fn()
+          .mockResolvedValueOnce(reattached())
+          .mockImplementation(async () => boom(502));
         const sandbox = sandboxWith(fetchMock);
-        const failed = expect(sandbox.start()).rejects.toThrow();
-        await vi.runAllTimersAsync();
-        await failed;
-        fetchMock.mockReset().mockResolvedValueOnce(json({ id: 'sbx_1', destroyedAt: null }));
         await sandbox.start();
+        const refreshed = expect(sandbox.refreshVault()).rejects.toThrow('boom');
+        await vi.runAllTimersAsync();
+        await refreshed;
         expect(sandbox.vault).toBe(false);
+        expect(vaultReads(fetchMock)).toBe(4);
       });
 
-      it('does not retry a 400', async () => {
-        const fetchMock = vi.fn().mockResolvedValueOnce(reattached()).mockResolvedValue(boom(400));
+      it('does not retry a mode read returning 400', async () => {
+        const fetchMock = vi.fn().mockResolvedValueOnce(reattached()).mockResolvedValueOnce(boom(400));
         const sandbox = sandboxWith(fetchMock);
-        await expect(sandbox.start()).rejects.toThrow();
+        await sandbox.start();
+        await expect(sandbox.refreshVault()).rejects.toThrow('boom');
         expect(vaultReads(fetchMock)).toBe(1);
-        expect(sandbox.vault).toBeUndefined();
+        expect(sandbox.vault).toBe(false);
       });
 
       it('treats a 404 as a gone sandbox, so the next start provisions', async () => {
         const fetchMock = vi.fn().mockResolvedValueOnce(reattached()).mockResolvedValueOnce(boom(404));
         const sandbox = sandboxWith(fetchMock);
-        await expect(sandbox.start()).rejects.toThrow();
+        await sandbox.start();
+        await expect(sandbox.refreshVault()).rejects.toThrow();
         expect(vaultReads(fetchMock)).toBe(1);
         expect(sandbox.vault).toBeUndefined();
         expect((sandbox as unknown as { _sandboxId?: string })._sandboxId).toBeUndefined();

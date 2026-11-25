@@ -327,11 +327,12 @@ describe('prepareFactoryRuleBinding', () => {
         return workspace.sandbox!.executeCommand('pwd');
       };
       if (!sandboxUserId) {
-        await expect(invoke()).rejects.toThrow('credential vault');
-        expect(requests).toEqual([]);
+        await expect(invoke()).rejects.toThrow('vault_user_not_member');
+        expect(requests.every(request => request.actor === null)).toBe(true);
         // Even bypassing Factory's guard, the provider must not borrow the deployment identity.
         await expect(workspace.sandbox.start()).rejects.toThrow('vault_user_not_member');
-        expect(requests).toEqual([expect.objectContaining({ actor: null })]);
+        expect(requests.length).toBeGreaterThan(0);
+        expect(requests.every(request => request.actor === null)).toBe(true);
         // A legacy vault VM without an authenticated actor also refuses automation -> automation.
         await sourceControl.sessions.setSandbox({
           id: storedSession.id,
@@ -368,6 +369,10 @@ describe('prepareFactoryRuleBinding', () => {
       expect(requests.filter(request => request.path.endsWith('/exec-lease'))).toHaveLength(2);
       expect(requests.every(request => request.actor === sandboxUserId)).toBe(true);
 
+      if (mode === 'legacy-token') {
+        await sourceControl.sessions.setSandbox({ id: reloaded.id, sandboxId: null });
+        await sourceControl.sessions.setSandbox({ id: reloaded.id, sandboxId: reloaded.sandboxId });
+      }
       if (cold) __clearSessionSandboxesForTests();
       coordinator = new FactoryStartCoordinator(
         controller,
@@ -378,6 +383,7 @@ describe('prepareFactoryRuleBinding', () => {
         undefined,
         undefined,
         provider,
+        sandbox,
       );
       const restartInput = {
         ...input,
