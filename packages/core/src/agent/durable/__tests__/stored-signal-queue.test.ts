@@ -1258,6 +1258,64 @@ describe('a parked run that is aborted', () => {
   });
 });
 
+describe('a parked run resumed in the process that parked it', () => {
+  it.each([
+    ['a pubsub inside the process', () => new EventEmitterPubSub()],
+    ['a pubsub that reaches other processes', () => new BrokerLikePubSub()],
+  ])('is closed once with the signal it took when it fails after the resume (%s)', async (_case, createPubSub) => {
+    const memoryStore = new ObservedMemory();
+    let failAfterResume = false;
+    const { agent, mastra, scope, prompts, toolGate, start, afterFollowUps, savedMessages } = setup({
+      memoryStore,
+      pubsub: createPubSub(),
+      park: true,
+      stopWhen: () => {
+        if (failAfterResume) throw new Error('stop condition failed after the resume');
+        return false;
+      },
+    });
+    const suspended = gate();
+    let runId: string | undefined;
+    await mastra.pubsub.subscribe('workflows', event => {
+      if (event.type === 'workflow.suspend' && event.runId === runId) suspended.release();
+    });
+    const { stream, done } = await start();
+    runId = stream.runId;
+    toolGate.release();
+    await stream.output.suspendPayload;
+    await suspended.promise;
+
+    // Pending while the run is parked; the resumed run's drain after the approved tool takes it, then it fails.
+    const sent = agent.sendSignal({ type: 'user', contents: 'TAKEN_BY_THE_RESUMED_RUN' }, scope);
+    await expect(sent.accepted).resolves.toEqual({ action: 'deliver', runId });
+    failAfterResume = true;
+    const resumed = await agent.approveToolCall({ runId, toolCallId: 'call-confirm' });
+    await expect(
+      (async () => {
+        for await (const chunk of resumed.fullStream) {
+          if (chunk.type === 'error') throw (chunk as { payload?: { error?: unknown } }).payload?.error;
+        }
+      })(),
+    ).rejects.toThrow('stop condition failed after the resume');
+    // The run's first stream continues across the suspension and reports the failure too.
+    await expect(done).rejects.toThrow('stop condition failed after the resume');
+    await afterFollowUps();
+
+    expect(memoryStore.claimsOf(sent.signal.id).map(claim => claim.runId)).toEqual([runId]);
+    expect(memoryStore.calls.filter(call => call.op === 'close' && call.runId === runId)).toEqual([
+      { op: 'close', runId, consumedIds: [sent.signal.id] },
+    ]);
+    // Never saved, so the close deleted its row: no later turn repeats it.
+    expect(
+      prompts
+        .filter(prompt => !textOf(prompt).includes(BARRIER))
+        .some(prompt => textOf(prompt).includes('TAKEN_BY_THE_RESUMED_RUN')),
+    ).toBe(false);
+    expect((await savedMessages()).some(message => message.id === sent.signal.id)).toBe(false);
+    expect(await memoryStore.getSignalRun({ threadId: scope.threadId })).not.toBe(runId);
+  });
+});
+
 describe('a parked run resumed in another process', () => {
   it('receives a signal sent after its first resolution of the memory storage failed, and is closed', async () => {
     const memoryStore = new ObservedMemory();
