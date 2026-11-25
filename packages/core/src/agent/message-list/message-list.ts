@@ -785,13 +785,13 @@ export class MessageList {
     output: Set<string>;
     context: Set<string>;
     getSource: (message: MastraDBMessage) => MessageSource | null;
-    /** Serialized `data-*` parts of each message at the time the checker was made, keyed by message id. */
-    dataParts: Map<string, string[]>;
+    /** The `data-*` parts each message held when the checker was made, keyed by message id. */
+    dataParts?: Map<string, Set<MastraDBMessage['content']['parts'][number]>>;
   } {
     const dataParts = new Map(
       this.messages.map(message => [
         message.id,
-        message.content.parts.flatMap(part => (part.type.startsWith('data-') ? [JSON.stringify(part)] : [])),
+        new Set(message.content.parts.filter(part => part.type.startsWith('data-'))),
       ]),
     );
     return { ...this.stateManager.createSourceChecker(), dataParts };

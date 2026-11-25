@@ -113,4 +113,39 @@ describe('output processor writer.custom() parts survive a returned message arra
     expect(saved).not.toContain('data-stale');
     expect(saved).toContain('text');
   });
+
+  it('a part rewritten by id during the call replaces the copy instead of being stored twice', async () => {
+    const first: OutputProcessor = {
+      id: 'writes-v1',
+      processOutputResult: async ({ messageList, writer }) => {
+        await writer?.custom({ type: 'data-progress', id: 'p', data: { v: 1 } } as any);
+        return messageList;
+      },
+    };
+    const second: OutputProcessor = {
+      id: 'rewrites-v2',
+      processOutputResult: async ({ messages, writer }) => {
+        const copies = structuredClone(messages);
+        await writer?.custom({ type: 'data-progress', id: 'p', data: { v: 2 } } as any);
+        return copies;
+      },
+    };
+    const memory = new MockMemory();
+    const agent = new Agent({
+      id: 'rewrite',
+      name: 'rewrite',
+      instructions: 'x',
+      model: model(),
+      memory,
+      outputProcessors: [first, second],
+    });
+    const stream = await agent.stream('hi', { memory: { thread: 'rewrite', resource: 'r' } });
+    await stream.consumeStream();
+    const { messages } = await memory.recall({ threadId: 'rewrite', resourceId: 'r' });
+    const progress = messages
+      .filter(m => m.role === 'assistant')
+      .flatMap(m => m.content.parts)
+      .filter(p => p.type === 'data-progress');
+    expect(progress).toEqual([expect.objectContaining({ type: 'data-progress', id: 'p', data: { v: 2 } })]);
+  });
 });

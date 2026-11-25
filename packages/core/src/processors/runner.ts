@@ -2,7 +2,7 @@ import type { LanguageModelV2Prompt, LanguageModelV2CallWarning } from '@ai-sdk/
 import type { StepResult } from '@internal/ai-sdk-v5';
 import type { Agent } from '../agent';
 import type { MastraDBMessage, MessageInput } from '../agent/message-list';
-import { MessageList, messagesAreEqual } from '../agent/message-list';
+import { CacheKeyGenerator, MessageList, messagesAreEqual } from '../agent/message-list';
 import type { AgentStateSignalInput } from '../agent/signals';
 import { applyStateSignal, getStateSignalsMetadata, resolveStateSignalHistory } from '../agent/state-signals';
 import { TripWire } from '../agent/trip-wire';
@@ -82,29 +82,32 @@ async function invokeOnViolation(processor: Processor, error: TripWire): Promise
 }
 
 /**
- * The message a processor returned, plus any `data-*` parts the live message gained while the processor ran
+ * The message a processor returned, plus the `data-*` parts the live message gained while the processor ran
  * (`writer.custom()` merges its part into the list during the call) that the returned copy does not have.
- * Parts the message already held before the call follow the processor's result, so it can still remove them.
+ * A written part with an id replaces the returned part with that id, the way the merge that stored it did.
+ * Parts the message held before the call follow the processor's result, so it can still remove them.
  */
 function withDataPartsWrittenDuringCall(
   returned: MastraDBMessage,
   current: MastraDBMessage | undefined,
-  dataPartsBefore: Map<string, string[]>,
+  dataPartsBefore: Map<string, Set<MastraDBMessage['content']['parts'][number]>> | undefined,
 ): MastraDBMessage {
-  if (!current || returned.role !== 'assistant') return returned;
-  const accounted = [
-    ...(dataPartsBefore.get(returned.id) ?? []),
-    ...returned.content.parts.flatMap(part => (part.type.startsWith('data-') ? [JSON.stringify(part)] : [])),
-  ];
-  const written = current.content.parts.filter(part => {
-    if (!part.type.startsWith('data-')) return false;
-    const index = accounted.indexOf(JSON.stringify(part));
-    if (index === -1) return true;
-    accounted.splice(index, 1);
-    return false;
-  });
+  if (!current || !dataPartsBefore || returned.role !== 'assistant') return returned;
+  const before = dataPartsBefore.get(returned.id);
+  const written = current.content.parts.filter(part => part.type.startsWith('data-') && !before?.has(part));
   if (!written.length) return returned;
-  return { ...returned, content: { ...returned.content, parts: [...returned.content.parts, ...written] } };
+  const parts = [...returned.content.parts];
+  for (const part of written) {
+    const id = 'id' in part && typeof part.id === 'string' ? part.id : undefined;
+    const sameId = id === undefined ? -1 : parts.findIndex(p => p.type === part.type && 'id' in p && p.id === id);
+    if (sameId !== -1) {
+      parts[sameId] = part;
+      continue;
+    }
+    const key = CacheKeyGenerator.fromDBParts([part]);
+    if (!parts.some(p => p.type === part.type && CacheKeyGenerator.fromDBParts([p]) === key)) parts.push(part);
+  }
+  return { ...returned, content: { ...returned.content, parts } };
 }
 
 function getProcessableResponseMessages(messageList: MessageList): MastraDBMessage[] {
