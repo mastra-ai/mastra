@@ -6,11 +6,6 @@ import type { PendingModelFallback } from './model-fallback.js';
 import { THINKING_LEVEL_VALUES } from './thinking.js';
 import type { ThinkingLevelSetting } from './thinking.js';
 
-export type {
-  /** @deprecated Import from `@mastra/code-sdk/model-fallback`. */
-  PendingModelFallback,
-} from './model-fallback.js';
-
 export type PermissionPolicy = 'allow' | 'ask' | 'deny';
 
 export type MastraCodeSessionState = {

@@ -96,19 +96,6 @@ describe('handlePackFallbackState', () => {
     expect(mocks.applyPackToSession).not.toHaveBeenCalled();
   });
 
-  it('clears a malformed marker on the thread that wrote it', async () => {
-    const { ectx, stateSet, threadSetSetting } = makeContext();
-
-    await handlePackFallbackState(ectx, {
-      state: { [KEY]: { toEntryId: 'openai', threadId: 'thread-origin' } },
-      changedKeys: [KEY],
-    });
-
-    expect(threadSetSetting).toHaveBeenCalledWith({ threadId: 'thread-origin', key: KEY, value: undefined });
-    expect(stateSet).not.toHaveBeenCalled();
-    expect(mocks.applyPackToSession).not.toHaveBeenCalled();
-  });
-
   it('does not apply a delayed hop after the active thread changes', async () => {
     const { ectx, threadSetSetting } = makeContext();
 

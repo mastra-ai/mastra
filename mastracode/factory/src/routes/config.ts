@@ -1074,13 +1074,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         personalThinkingLevel = ownerDefaults?.thinkingLevel ?? null;
       }
       const credentialTenant: CredentialTenant = { orgId, userId: policy.tenant.userId, credentialScope: modelScope };
-      return {
-        tenantCredentials,
-        modelScope,
-        defaultModelId,
-        personalThinkingLevel,
-        credentialTenant,
-      };
+      return { tenantCredentials, modelScope, defaultModelId, personalThinkingLevel, credentialTenant };
     };
 
     const resolveOMResponseContext = async (
