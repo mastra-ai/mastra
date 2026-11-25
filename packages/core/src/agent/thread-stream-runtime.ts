@@ -707,8 +707,6 @@ type ForwardedIdleLeaseEpisode = {
    * a message queued again and re-forwarded under the same id is a new forward this episode does not cover.
    */
   entries: Set<ForwardedIdleSignal>;
-  /** The thread's active stream when the lease was read at the start of the episode. */
-  streamBeforeRead: string | undefined;
   /** The lease check that published the latest probe, or `undefined` until one publishes. */
   publishedAtCheck: number | undefined;
   /** Probes published so far; carried on each probe for tracing. */
@@ -3584,7 +3582,8 @@ export class AgentThreadStreamRuntime {
    * id is not the current episode's is ignored, and an episode covers only the forwards it started with, so a
    * message queued again and re-forwarded since is not one of them. The episode ends when a check sees the lease
    * name a covered run again, or when the forwards stop being tracked; a later loss starts a new episode with a new
-   * id. A failed publish leaves the episode as it was. A run that regains the lease, admits a forward and lets go
+   * id. A failed publish leaves the episode as it was. When a probe comes back the lease is read once more, and the
+   * forwards of a covered run it names again stay held. A run that regains the lease, admits a forward and lets go
    * again between two checks is not seen, so a probe published before that admission can still queue the forward a
    * second time.
    */
@@ -3597,7 +3596,6 @@ export class AgentThreadStreamRuntime {
     const checkLease = async () => {
       const forwarded = state.forwardedIdleSignalsByThread.get(key);
       if (!forwarded) return;
-      const streamBeforeRead = state.activeThreadStreamIds.get(key);
       // Bounded, so a read that never returns frees the in-flight guard and the next tick retries.
       const owner = await this.#readLeaseOwnerInTime(provider, key);
       // The forwards stopped being tracked (or were tracked again under a new watcher) while the lease was read.
@@ -3609,7 +3607,7 @@ export class AgentThreadStreamRuntime {
       const holder = owner === undefined ? undefined : forwardedSignalRunId(owner);
       checks++;
       const episode = state.forwardedIdleLeaseEpisodes.get(key);
-      const ended = new Set<string>();
+      const ended = new Set<ForwardedIdleSignal>();
       for (const entry of forwarded.values()) {
         if (entry.runId === holder) {
           entry.leaseGone = false;
@@ -3618,7 +3616,7 @@ export class AgentThreadStreamRuntime {
           if (episode?.entries.has(entry) && state.forwardedIdleLeaseEpisodes.get(key) === episode) {
             state.forwardedIdleLeaseEpisodes.delete(key);
           }
-        } else if (entry.leaseGone) ended.add(entry.runId);
+        } else if (entry.leaseGone) ended.add(entry);
         else entry.leaseGone = true;
       }
       if (ended.size === 0) return;
@@ -3632,19 +3630,25 @@ export class AgentThreadStreamRuntime {
       if (!current) {
         current = {
           id: globalThis.crypto.randomUUID(),
-          entries: new Set([...forwarded.values()].filter(entry => ended.has(entry.runId))),
-          streamBeforeRead,
+          entries: ended,
           publishedAtCheck: undefined,
           seq: 0,
         };
         state.forwardedIdleLeaseEpisodes.set(key, current);
       }
+      const episodeNow = current;
       const seq = ++current.seq;
       // Bounded like the lease read, so a publish that never settles frees the in-flight guard. Running out counts as
       // a failed publish: the episode stays as it was and a later check publishes again.
       let giveUp: ReturnType<typeof setTimeout> | undefined;
       await Promise.race([
-        this.#publishAndWait(pubsub, key, { type: 'forwarded-lease-probe', episodeId: current.id, seq }),
+        // An attempt that ran out waiting behind an earlier append and was followed by a newer one is not sent.
+        this.#publishAndWait(
+          pubsub,
+          key,
+          { type: 'forwarded-lease-probe', episodeId: current.id, seq },
+          () => state.forwardedIdleLeaseEpisodes.get(key) === episodeNow && episodeNow.seq === seq,
+        ),
         new Promise<never>((_, reject) => {
           giveUp = setTimeout(
             () => reject(new Error('Thread pubsub did not publish the lease probe')),
@@ -3680,9 +3684,22 @@ export class AgentThreadStreamRuntime {
     key: string,
     episode: ForwardedIdleLeaseEpisode,
   ) {
+    const covered = new Set(
+      [...(state.forwardedIdleSignalsByThread.get(key)?.values() ?? [])]
+        .filter(entry => episode.entries.has(entry) && entry.leaseGone)
+        .map(entry => entry.runId),
+    );
+    // The episode started from lease checks that may be many ticks old; what the lease says now decides. A run it
+    // names again holds the thread and may still admit its forwards, so those stay held.
+    const gone = new Set<string>();
+    for (const runId of covered) {
+      if (!(await this.#leaseMayStillName(pubsub, key, runId))) gone.add(runId);
+    }
     const forwarded = state.forwardedIdleSignalsByThread.get(key);
     if (!forwarded) return;
-    const lapsed = [...forwarded].filter(([, entry]) => episode.entries.has(entry) && entry.leaseGone);
+    const lapsed = [...forwarded].filter(
+      ([, entry]) => episode.entries.has(entry) && entry.leaseGone && gone.has(entry.runId),
+    );
     if (lapsed.length === 0) return;
     for (const [signalId] of lapsed) forwarded.delete(signalId);
     if (forwarded.size === 0) this.#stopTrackingForwards(state, key);
@@ -3691,19 +3708,16 @@ export class AgentThreadStreamRuntime {
       ...(state.pendingIdleSignalsByThread.get(key) ?? []),
     ]);
     for (const runId of new Set(lapsed.map(([, entry]) => entry.runId))) {
-      // The lease has dropped that run, so a remote run this runtime saw register but never saw end (its observer
-      // unsubscribed) no longer holds the thread; left marked active, it would keep the drain waiting. A run that
-      // registered here, or a stream that took the slot since the episode's first lease read, is not that remote run.
-      // The drain still runs either way: it waits while any run holds the thread.
-      if (
-        !state.threadRunsById.has(runId) &&
-        state.activeThreadStreamIds.get(key) === episode.streamBeforeRead &&
-        state.activeThreadRunIds.get(key) === runId
-      ) {
+      // The lease no longer names that run, so a remote run this runtime saw register but never saw end (its observer
+      // unsubscribed) no longer holds the thread, whichever of its streams took the slot; left marked active, it would
+      // keep the drain waiting. A run that registered here is not that remote run. The drain still runs either way:
+      // it waits while any run holds the thread. It acquires the lease rather than taking it over from that run,
+      // which this runtime never held.
+      if (!state.threadRunsById.has(runId) && state.activeThreadRunIds.get(key) === runId) {
         state.activeThreadRunIds.delete(key);
         state.activeThreadStreamIds.delete(key);
       }
-      await this.#drainPendingIdleSignals(state, pubsub, key, runId);
+      await this.#drainPendingIdleSignals(state, pubsub, key);
     }
   }
 
@@ -3766,13 +3780,24 @@ export class AgentThreadStreamRuntime {
     void this.#publishAndWait(pubsub, key, event).catch(() => {});
   }
 
-  async #publishAndWait(pubsub: PubSub | undefined, key: string, event: AgentThreadStreamRuntimeEvent) {
+  /**
+   * Publish `event` to the thread topic after any admission or pending announcement still in flight there. When
+   * given, `stillWanted` is asked once that wait is over, at the moment the event would leave; returning false skips
+   * the publish, for callers whose reason to send can lapse during the wait.
+   */
+  async #publishAndWait(
+    pubsub: PubSub | undefined,
+    key: string,
+    event: AgentThreadStreamRuntimeEvent,
+    stillWanted?: () => boolean,
+  ) {
     const resolvedPubSub = this.#getPubSub(pubsub);
     const topic = this.#threadTopic(key);
     let ordered = this.#orderedPublishesByPubSub.get(resolvedPubSub);
     const previous = ordered?.get(topic);
     const published = (async () => {
       if (previous) await previous;
+      if (stillWanted && !stillWanted()) return;
       await resolvedPubSub.publish(topic, {
         type: event.type,
         // Events tied to a run carry its ID so that run's trim removes them; thread-scoped
@@ -3863,19 +3888,26 @@ export class AgentThreadStreamRuntime {
             releaseReplyTopic(pubsub, replyTopic, onReply);
             return;
           }
-          return this.#publishAndWait(pubsub, key, {
-            type: 'idle-signal-enqueued',
-            runId,
-            signal: this.#serializeSignal(signal),
-            sourceId: this.#getSourceId(),
-            requestId,
-            replyTopic,
-            targetSourceId,
-            expiresAt,
-            ...(waitForIdle ? {} : { joinActiveRun: true }),
-            ...(!waitForIdle && joinSignal ? { joinSignal: this.#serializeSignal(joinSignal) } : {}),
-            ...(requestContextEntries ? { requestContextEntries } : {}),
-          });
+          return this.#publishAndWait(
+            pubsub,
+            key,
+            {
+              type: 'idle-signal-enqueued',
+              runId,
+              signal: this.#serializeSignal(signal),
+              sourceId: this.#getSourceId(),
+              requestId,
+              replyTopic,
+              targetSourceId,
+              expiresAt,
+              ...(waitForIdle ? {} : { joinActiveRun: true }),
+              ...(!waitForIdle && joinSignal ? { joinSignal: this.#serializeSignal(joinSignal) } : {}),
+              ...(requestContextEntries ? { requestContextEntries } : {}),
+            },
+            // The publish can wait behind an admission still being appended; if the acceptance timeout settled the
+            // request meanwhile, the caller already has its error, so the request must not go out.
+            () => !settled,
+          );
         })
         .catch(error => finish({ error: getErrorFromUnknown(error) }));
     });

@@ -74,7 +74,7 @@ class LaggingReaderPubSub extends LeasePubSub {
  * The owner admits and runs a forward while the forwarder's reader lags, then trims the run and lets go of the lease.
  * `leaseChecks` forwarder lease checks run before the lagging reader catches up.
  */
-async function forwardWhileLagging(leaseChecks: number, { delayFirstAdmissionMs = 0 } = {}) {
+async function forwardWhileLagging(leaseChecks: number, { holdFirstAdmission = false } = {}) {
   const scope = { resourceId: 'forward-admission-user', threadId: 'forward-admission-thread' };
   const pubsub = new LaggingReaderPubSub();
   pubsub.retain = true;
@@ -91,14 +91,31 @@ async function forwardWhileLagging(leaseChecks: number, { delayFirstAdmissionMs 
     return getLeaseOwner(key);
   };
   const publish = pubsub.publish.bind(pubsub);
-  let admissionDelayed = false;
+  let admissionHeld = false;
+  let releaseAdmission!: () => void;
+  const admissionReleased = new Promise<void>(resolve => {
+    releaseAdmission = resolve;
+  });
+  let admissionReached!: () => void;
+  const admissionAppending = new Promise<void>(resolve => {
+    admissionReached = resolve;
+  });
+  /** What reached the broker, in append order. */
+  const appended: string[] = [];
   pubsub.publish = async (topic: string, event: any) => {
-    if (event.type === 'run-completed') completed.push(event.runId);
-    if (delayFirstAdmissionMs > 0 && event.data?.type === 'user-message-admitted' && !admissionDelayed) {
-      // The first append fails transiently and the backend retries it after a delay, as Redis Streams' publish does.
-      admissionDelayed = true;
-      await new Promise(resolve => setTimeout(resolve, delayFirstAdmissionMs));
+    if (holdFirstAdmission && event.data?.type === 'user-message-admitted' && !admissionHeld) {
+      // The first append fails transiently and the backend retries it until the test lets it land, as Redis Streams'
+      // publish does.
+      admissionHeld = true;
+      admissionReached();
+      await admissionReleased;
     }
+    if (event.type === 'run-completed') completed.push(event.runId);
+    appended.push(
+      event.data?.type === 'user-message-presentation'
+        ? `presentation:${event.data.chunk.data.metadata?.status}:${JSON.stringify(event.data.chunk).includes('idle B') ? 'B' : 'other'}`
+        : event.data?.type,
+    );
     await publish(topic, event);
     // The forwarder falls behind right after sending its forward.
     if (event.data?.type === 'signal-enqueued' && JSON.stringify(event.data.signal).includes('idle B')) {
@@ -161,6 +178,15 @@ async function forwardWhileLagging(leaseChecks: number, { delayFirstAdmissionMs 
     expect(ownerSubscription.abort()).toBe(true);
     releaseFirst();
     await stream.text;
+    if (holdFirstAdmission) {
+      await admissionAppending;
+      // The run goes on and has more to publish to the thread; none of it may reach the broker ahead of the admission.
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(appended).not.toContain('user-message-admitted');
+      expect(appended).not.toContain('presentation:pending:B');
+      expect(completed).toHaveLength(1);
+      releaseAdmission();
+    }
     await forwardAdmitted;
 
     // The owner admits and runs the forward, and its runs end and are trimmed while the forwarder lags.
@@ -187,6 +213,8 @@ async function forwardWhileLagging(leaseChecks: number, { delayFirstAdmissionMs 
     await pubsub.caughtUp();
     await vi.waitFor(() => expect(pubsub.owners.size).toBe(0));
     expect(idleBRuns()).toBe(1);
+    expect(appended.indexOf('user-message-admitted')).toBeGreaterThan(-1);
+    expect(appended.indexOf('user-message-admitted')).toBeLessThan(appended.lastIndexOf('presentation:pending:B'));
     // The checks ran: the watcher kept the copy held through them instead of queueing it again.
     expect(forwarderLeaseChecks).toBeGreaterThanOrEqual(leaseChecks);
     if (leaseChecks >= 2) {
@@ -198,6 +226,7 @@ async function forwardWhileLagging(leaseChecks: number, { delayFirstAdmissionMs 
       expect(handled.indexOf('user-message-admitted')).toBeLessThan(handled.indexOf('forwarded-lease-probe'));
     }
   } finally {
+    releaseAdmission();
     admitted();
     releaseFirst();
     ownerSubscription.unsubscribe();
@@ -221,5 +250,5 @@ describe('forwarded user message admission', () => {
     forwardWhileLagging(3));
 
   it('runs a forwarded message once when the owner retries a failed admission append while its run goes on', () =>
-    forwardWhileLagging(0, { delayFirstAdmissionMs: 300 }));
+    forwardWhileLagging(0, { holdFirstAdmission: true }));
 });

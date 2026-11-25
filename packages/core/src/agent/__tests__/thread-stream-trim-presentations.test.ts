@@ -14,21 +14,31 @@ import { LeasePubSub } from './thread-stream-test-utils';
 
 const resourceId = 'presentation-trim-user';
 
-function setup(threadId: string, { delayFirstPresentationMs = 0 } = {}) {
+function setup(threadId: string, { holdFirstPresentation = false } = {}) {
   const pubsub = new LeasePubSub();
   pubsub.retain = true;
   const topics = new Set<string>();
   const completed: string[] = [];
   const publish = pubsub.publish.bind(pubsub);
-  let presentationDelayed = false;
+  let presentationHeld = false;
+  let releasePresentation!: () => void;
+  const presentationReleased = new Promise<void>(resolve => {
+    releasePresentation = resolve;
+  });
+  let presentationReached!: () => void;
+  const presentationAppending = new Promise<void>(resolve => {
+    presentationReached = resolve;
+  });
   pubsub.publish = async (topic: string, event: any) => {
     topics.add(topic);
-    if (event.type === 'run-completed') completed.push(event.runId);
-    if (delayFirstPresentationMs > 0 && event.type === 'user-message-presentation' && !presentationDelayed) {
-      // The first append fails transiently and the backend retries it after a delay, as Redis Streams' publish does.
-      presentationDelayed = true;
-      await new Promise(resolve => setTimeout(resolve, delayFirstPresentationMs));
+    if (holdFirstPresentation && event.type === 'user-message-presentation' && !presentationHeld) {
+      // The first append fails transiently and the backend retries it until the test lets it land, as Redis Streams'
+      // publish does.
+      presentationHeld = true;
+      presentationReached();
+      await presentationReleased;
     }
+    if (event.type === 'run-completed') completed.push(event.runId);
     return publish(topic, event);
   };
   const { model, releaseFirst } = createBlockingFirstTextStreamModel('first response', 'later response');
@@ -41,7 +51,14 @@ function setup(threadId: string, { delayFirstPresentationMs = 0 } = {}) {
   });
   const mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false, pubsub });
   const retained = () => [...topics].flatMap(topic => pubsub.retainedEvents(topic));
-  return { agent: mastra.getAgent('agent'), releaseFirst, completed, retained };
+  return {
+    agent: mastra.getAgent('agent'),
+    releaseFirst,
+    completed,
+    retained,
+    presentationAppending,
+    releasePresentation,
+  };
 }
 
 async function replayedPending(agent: Agent<any, any, any, any>, threadId: string) {
@@ -106,25 +123,36 @@ describe('user message presentation trim', () => {
 
   it('removes a queued message announcement whose append is retried while the run it waited on completes', async () => {
     const threadId = 'presentation-trim-retried';
-    const { agent, releaseFirst, completed, retained } = setup(threadId, { delayFirstPresentationMs: 300 });
+    const { agent, releaseFirst, completed, retained, presentationAppending, releasePresentation } = setup(threadId, {
+      holdFirstPresentation: true,
+    });
     const watcher = await agent.subscribeToThread({ threadId, resourceId });
     void (async () => {
       for await (const _ of watcher.stream);
     })();
+    try {
+      const stream = await agent.stream('Hello', { memory: { thread: threadId, resource: resourceId } });
+      await waitForActiveRun(watcher);
+      await waitForCondition(() => stream._getImmediateText() === 'first response');
+      const queued = agent.queueMessage({ contents: 'then summarise' }, { resourceId, threadId });
+      await queued.accepted;
+      await presentationAppending;
 
-    const stream = await agent.stream('Hello', { memory: { thread: threadId, resource: resourceId } });
-    await waitForActiveRun(watcher);
-    await waitForCondition(() => stream._getImmediateText() === 'first response');
-    const queued = agent.queueMessage({ contents: 'then summarise' }, { resourceId, threadId });
-    await queued.accepted;
+      // The run finishes locally while the announcement's append is still retrying; its end, and so its trim, must
+      // not reach the broker ahead of the announcement.
+      releaseFirst();
+      await stream.text;
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(completed).toEqual([]);
+      expect(retained().some(event => event.type === 'user-message-presentation')).toBe(false);
 
-    releaseFirst();
-    await stream.text;
-    await waitForCondition(() => completed.length === 2, 2_000);
-    // Past the retry, so an announcement appended after its run's trim would be in the stream by now.
-    await new Promise(resolve => setTimeout(resolve, 400));
-    expect(retained().some(event => event.type === 'user-message-presentation')).toBe(false);
-    watcher.unsubscribe();
+      releasePresentation();
+      await waitForCondition(() => completed.length === 2, 2_000);
+      await waitForCondition(() => !retained().some(event => event.type === 'user-message-presentation'), 2_000);
+    } finally {
+      releasePresentation();
+      watcher.unsubscribe();
+    }
 
     expect(await replayedPending(agent, threadId)).toEqual([]);
   });
