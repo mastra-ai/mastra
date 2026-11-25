@@ -574,7 +574,7 @@ const render = createStep({
 })
 ```
 
-If the work has to block, split it into several steps that each block for less than the lease, and start each step with `await new Promise(resolve => setImmediate(resolve))`. The engine moves from one step to the next without giving the event loop a turn, unless the run's save between them waits on I/O, such as a database over the network. Without either, the renewal can't run between the steps.
+If the work has to block, split it into several steps that each block for well under half the lease, for example a third of it. On Postgres, two blocks can pass between renewals. Start each blocking step with `await new Promise(resolve => setImmediate(resolve))` too, because stores that don't wait on the network, such as the in-memory store or a local LibSQL file, give the renewal no other chance to run between steps.
 
 Raise the lease only when neither is possible. Set `leaseTtlMs` on the workflow, or on one run:
 
@@ -591,7 +591,7 @@ const run = await report.createRun({ leaseTtlMs: 120_000 })
 
 A longer lease delays the recovery of an instance that crashed by the same amount. A run's own `leaseTtlMs` isn't saved with the run, so another instance that restarts it uses the workflow's.
 
-When a restart takes over a run whose lease lapsed, it doubles the length of that lease, up to 8 times the run's `leaseTtlMs`, and logs a warning with the run ID and both lengths. A process whose renewals ran late enough to lose its leases logs one warning per stall with how long its event loop was blocked. Either warning means a step can run again on another instance, so keep steps idempotent.
+When a restart takes over a run whose lease lapsed, it logs a warning and doubles the length of that lease, up to 8 times the run's `leaseTtlMs`. Doubling needs a storage adapter that reports when the lease last changed: the in-memory store, `@mastra/pg` and `@mastra/libsql` today. On other adapters with run-ownership support, the restart uses the base length. A process that went a whole lease without renewing, found by its next renewal or when the run ends, logs one warning per stall with how long that took. Either warning means a step can run again on another instance, so keep steps idempotent.
 
 ### Restarting an active workflow run with `restart()`
 
