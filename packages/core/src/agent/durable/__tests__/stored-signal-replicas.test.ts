@@ -348,6 +348,35 @@ describe('an agent whose memory is a function of the request context', () => {
 });
 
 describe('a cancel from a replica that does not hold the run', () => {
+  it('lists the cancelled id when the memory is a fixed instance, and the run never receives the signal', async () => {
+    const storage = new InMemoryStore();
+    const memoryStore = new SharedMemory();
+    storage.stores.memory = memoryStore;
+    const { scope, prompts, toolGate, replica, startRun } = replicas(storage);
+    const holder = replica({ memory: new MockMemory({ storage }) });
+    const canceller = replica({ memory: new MockMemory({ storage }), workers: false });
+    // The canceller watches the thread, so it knows the run keeps its signals in the shared store.
+    const observer = await canceller.agent.subscribeToThread(scope);
+    const observedRun = observer.stream[Symbol.asyncIterator]().next();
+    const { runId, done } = await startRun(holder);
+    await observedRun;
+    const sent = holder.agent.sendSignal({ type: 'user-message', contents: 'CANCELLED_FROM_ANOTHER_REPLICA' }, scope);
+    await expect(sent.accepted).resolves.toEqual({ action: 'deliver', runId });
+
+    await expect(canceller.agent.cancelQueuedMessages({ ...scope, signalIds: [sent.signal.id] })).resolves.toEqual({
+      cancelledSignalIds: [sent.signal.id],
+    });
+    expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
+    toolGate.release();
+    await done;
+    observer.unsubscribe();
+
+    expect(prompts).toHaveLength(2);
+    expect(prompts.some(prompt => occurrences(prompt, 'CANCELLED_FROM_ANOTHER_REPLICA') > 0)).toBe(false);
+    const saved = (await memoryStore.listMessages({ threadId: scope.threadId, perPage: false })).messages;
+    expect(saved.some(message => message.id === sent.signal.id)).toBe(false);
+  });
+
   it('leaves the row to the replica holding the run when the memory is a function of the request context', async () => {
     const { scope, prompts, toolGate, replica, startRun, admittedBy } = replicas(new InMemoryStore());
     const tenantStorage = new InMemoryStore();
