@@ -43,15 +43,32 @@ export const isMastraTextStreamChunk = (chunk: any): chunk is ChunkType<OutputSc
   );
 };
 
-// Fields on AI SDK error classes (APICallError, InvalidPromptError,
-// InvalidResponseDataError, ...) that can carry the request/response payload.
-// The most dangerous is APICallError.requestBodyValues, which holds the full
-// request body sent to the provider — including the agent's system prompt.
-// These get stripped from the default error serialization so an unhandled
-// LLM failure can't leak the system prompt back to the chat client. Callers
-// that want richer diagnostics should pass their own `onError` to chatRoute /
-// handleChatStream and serialize as they see fit.
-const REDACTED_ERROR_FIELDS = new Set(['requestBodyValues', 'responseBody', 'responseHeaders', 'data', 'prompt']);
+// The default error serialization streamed to chat clients is an allow-list:
+// only these fields, and only when they hold primitive values, reach the
+// client. Everything else on an error stays on the server — `stack` (absolute
+// file paths, usernames, code layout), APICallError.requestBodyValues (the
+// agent's system prompt), response bodies/headers, `url`, and any field a
+// provider or library adds later. Callers that want richer diagnostics should
+// pass their own `onError` to chatRoute / handleChatStream, which receives the
+// original error unchanged.
+const SAFE_ERROR_FIELDS = ['name', 'message', 'code', 'id', 'domain', 'category', 'statusCode', 'isRetryable'] as const;
+const MAX_CAUSE_DEPTH = 3;
+
+function pickSafeErrorFields(error: object, depth: number): Record<string, unknown> {
+  const safe: Record<string, unknown> = {};
+  for (const field of SAFE_ERROR_FIELDS) {
+    const value = (error as Record<string, unknown>)[field];
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      safe[field] = value;
+    }
+  }
+  const cause = (error as { cause?: unknown }).cause;
+  if (typeof cause === 'object' && cause !== null && depth < MAX_CAUSE_DEPTH) {
+    const safeCause = pickSafeErrorFields(cause, depth + 1);
+    if (Object.keys(safeCause).length > 0) safe.cause = safeCause;
+  }
+  return safe;
+}
 
 export function safeParseErrorObject(obj: unknown): string {
   if (typeof obj !== 'object' || obj === null) {
@@ -59,15 +76,15 @@ export function safeParseErrorObject(obj: unknown): string {
   }
 
   try {
-    const stringified = JSON.stringify(obj, (key, value) => (REDACTED_ERROR_FIELDS.has(key) ? undefined : value));
-    // If JSON.stringify returns "{}", fall back to String() for better representation
-    if (stringified === '{}' || stringified === undefined) {
-      return String(obj);
+    // A bare Error (no serializable fields of its own) keeps its familiar
+    // `Name: message` rendering.
+    if (obj instanceof Error && Object.keys(obj).length === 0 && typeof (obj as any).toJSON !== 'function') {
+      return `${obj.name}: ${obj.message}`;
     }
-    return stringified;
+    const safe = pickSafeErrorFields(obj, 0);
+    return Object.keys(safe).length > 0 ? JSON.stringify(safe) : 'Unknown error';
   } catch {
-    // Fallback to String() if JSON.stringify fails (e.g., circular references)
-    return String(obj);
+    return 'Unknown error';
   }
 }
 

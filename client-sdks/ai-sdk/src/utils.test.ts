@@ -46,10 +46,49 @@ describe('safeParseErrorObject', () => {
     expect(serialized).not.toContain('responseBody');
     expect(serialized).not.toContain('responseHeaders');
 
-    // Diagnostics that don't carry payload data are still preserved
-    const parsed = JSON.parse(serialized);
-    expect(parsed.url).toBe('https://api.example.com/v1/messages');
-    expect(parsed.statusCode).toBe(400);
+    // Only allow-listed client-safe fields survive; the provider URL is server config.
+    expect(JSON.parse(serialized)).toEqual({
+      name: 'AI_APICallError',
+      message: 'duplicate reasoning id',
+      statusCode: 400,
+      isRetryable: false,
+    });
+  });
+
+  it('drops stack traces, including nested cause stacks (#3922)', () => {
+    const inner = new APICallError({
+      message: 'upstream 529 overloaded',
+      url: 'https://api.example.com/v1/messages',
+      requestBodyValues: {},
+      statusCode: 529,
+      isRetryable: true,
+    });
+    // Mastra core attaches a toJSON that serializes `stack` (getErrorFromUnknown).
+    const err = Object.assign(new Error('stream failed', { cause: inner }), {
+      toJSON() {
+        return { message: this.message, name: this.name, stack: this.stack, cause: inner };
+      },
+    });
+
+    const serialized = safeParseErrorObject(err);
+
+    expect(serialized).not.toContain('stack');
+    expect(serialized).not.toContain('    at ');
+    expect(JSON.parse(serialized)).toEqual({
+      name: 'Error',
+      message: 'stream failed',
+      cause: { name: 'AI_APICallError', message: 'upstream 529 overloaded', statusCode: 529, isRetryable: true },
+    });
+  });
+
+  it('drops a stack carried as a plain field on a serialized error object', () => {
+    const serialized = safeParseErrorObject({
+      name: 'Error',
+      message: 'boom',
+      stack: 'Error: boom\n    at start (file:///Users/someone/app/.mastra/output/index.mjs:127:32)',
+    });
+
+    expect(JSON.parse(serialized)).toEqual({ name: 'Error', message: 'boom' });
   });
 
   it('redacts nested requestBodyValues carried on cause', () => {
