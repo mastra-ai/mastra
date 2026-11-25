@@ -30,6 +30,7 @@ export const MASTRA_DURABLE_SEGMENTS_KEY = 'mastra__durableSegments';
  */
 export function snapshotRequestContextEntries(
   requestContext: RequestContext | undefined,
+  onEntryOmitted?: () => void,
 ): Record<string, unknown> | undefined {
   if (!requestContext) return undefined;
   const out: Record<string, unknown> = {};
@@ -65,7 +66,10 @@ export function snapshotRequestContextEntries(
     // budget) are skipped — they wouldn't survive the wire on cross-process
     // engines anyway.
     const json = boundedStringify(value);
-    if (json === undefined) continue;
+    if (json === undefined) {
+      onEntryOmitted?.();
+      continue;
+    }
     out[key as string] = JSON.parse(json);
     any = true;
   }

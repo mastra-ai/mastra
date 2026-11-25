@@ -45,10 +45,10 @@ export function DisconnectChannelContent({ platform, agentId, onCancel, onClose 
         </Button>
         <DialogAction
           onConfirm={handleConfirm}
-          disabled={isPending}
           data-testid={`publish-channel-dialog-${platform.id}-disconnect-confirm`}
+          loading={isPending}
         >
-          {isPending ? 'Disconnecting…' : 'Confirm'}
+          Confirm
         </DialogAction>
       </DialogFooter>
     </>

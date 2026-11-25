@@ -89,7 +89,7 @@ function ConfirmationExample({
           <DialogFooter>
             <DialogCancel size={buttonSize}>{cancelLabel}</DialogCancel>
             <DialogAction holdSeconds={holdSeconds} size={buttonSize} confirmation={confirmation} onConfirm={confirm}>
-              {pending ? 'Working…' : actionLabel}
+              {actionLabel}
             </DialogAction>
           </DialogFooter>
         </DialogContent>
@@ -109,7 +109,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'A confirmation is a `size="sm"` Dialog with `DialogCancel` and `DialogAction` in the footer. Intent belongs to the root; `confirmation="hold"` belongs to the action. Actions never close automatically: the caller owns pending, errors, and closing after success. `pending` blocks every dismissal and disables Cancel, Close, and the action. `intent="destructive"` renders an alertdialog that ignores outside clicks and focuses Close first. Hold supports primary pointer, Space, and Enter; releasing, leaving, blur, and hiding the tab cancel it.',
+          'A confirmation is a `size="sm"` Dialog with `DialogCancel` and `DialogAction` in the footer. Intent belongs to the root; `confirmation="hold"` belongs to the action. Actions never close automatically: the caller owns pending, errors, and closing after success. `pending` blocks every dismissal and disables Cancel and Close, and shows the action as loading. `intent="destructive"` renders an alertdialog that ignores outside clicks and focuses Close first. Hold supports primary pointer, Space, and Enter; releasing, leaving, blur, and hiding the tab cancel it.',
       },
     },
   },

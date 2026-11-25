@@ -1,5 +1,105 @@
 # @mastra/playground-ui
 
+## 71.0.0-alpha.13
+
+### Minor Changes
+
+- Added a `fill` prop to `BrandLoader` that centers it in a page that hasn't shown yet. `fill="screen"` covers the window. ([#31225](https://github.com/mastra-ai/mastra/pull/31225))
+
+  ```tsx
+  // Before
+  <div className="flex h-full items-center justify-center">
+    <BrandLoader />
+  </div>
+
+  // After
+  <BrandLoader fill />
+  ```
+
+  Directly inside `PageLayout` it centers on the whole page, where the route's loader sits, so one follows the other without a jump.
+
+- Added `LogView`, a shared log viewer for plain log lines such as sandbox and deploy output. It is built from parts, so a page keeps only what it needs and fetches its own data. ([#31332](https://github.com/mastra-ai/mastra/pull/31332))
+
+  ```tsx
+  <LogView>
+    <LogView.Header>
+      <LogView.Title />
+      <LogView.LevelToggles levels={levels} value={shown} onValueChange={setShown} />
+      <LogView.Filters logs={logs} value={filters} onValueChange={setFilters} fieldChips={false} />
+      <LogView.Refresh onRefresh={refetch} refreshing={isFetching} />
+    </LogView.Header>
+    <LogView.List
+      logs={lines}
+      logIdMap={logIdMap}
+      order="oldest-first"
+      wrap={false}
+      hasNextPage={hasNextPage}
+      onFetchNextPage={fetchNextPage}
+      onLogClick={openLog}
+    />
+  </LogView>
+  ```
+
+  `LogView.List` shows time, level and message with a level bar and a red tint on errors. JSON messages show as fields and stack traces collapse to three lines. `order` is `oldest-first` (terminal) or `newest-first` (audit log), older logs load when that end scrolls into view, `wrap={false}` keeps each line on one row and scrolls sideways, and leaving out `onLogClick` makes lines read-only. `LogView.Filters` offers search and chips for any log field; turn either off with `search={false}` or `fieldChips={false}`, or leave the part out. `filterLogsByFields` and `logViewSearchText` apply the chips.
+
+  `LogView.List` is built on the new `LogStream` component (`@mastra/playground-ui/components/LogStream`): an outlined, sunken log list with 24px rows, a Time, Level and Message header, a level bar and error tint per line, and clickable or read-only rows. Use it directly for a custom log list. `LogDataPanel` now groups a log into Details, Message and Fields sections and pretty-prints JSON and nested metadata.
+
+- Added a `loading` prop to Button, `Notice.Button` and `AlertDialog.Action`. The loader takes the place of the button's icon, or goes on the left when there is none. The label, colors and focus stay, and clicks do nothing until the action is done. `DialogAction` is loading on its own while its Dialog is `pending`. ([#31240](https://github.com/mastra-ai/mastra/pull/31240))
+
+  ```tsx
+  // Before
+  <Button disabled={create.isPending}>
+    {create.isPending ? <Spinner /> : <IconPlusMedium />}
+    Create project
+  </Button>
+
+  // After
+  <Button icon={<IconPlusMedium />} loading={create.isPending}>
+    Create project
+  </Button>
+  ```
+
+  Fixed a Spinner inside a button or link showing in the page's text color instead of the button's, which made it nearly invisible on a primary button.
+
+- Pages share one spacing rhythm. `PageLayout` puts 16px under the page header and 48px at the end of every scrolling page. Settings and form pages keep 24px above the title and 32px under it, and space their sections 24px apart (was 28px). ([#31190](https://github.com/mastra-ai/mastra/pull/31190))
+
+  Text sits on whole-pixel lines on the 4px grid: 12px roles (`caption`, `eyebrow`, `column`) use a 16px line, 13px roles (`label`, `body-sm`, `card-title`) and 14px roles (`body`, `subheading`) a 20px line, `title` a 24px line, `display` a 28px line, and `display-lg` a 36px line.
+
+  Added the `playground-ui/no-page-spacing` lint rule to the `recommended` preset. It flags margins and padding on the elements a page hands to `PageLayout`, and section gaps other than 24px, so pages stop setting a spacing rhythm of their own:
+
+  ```tsx
+  // Before
+  <PageLayout variant="page" header={header}>
+    <div className="mt-6 flex flex-col gap-10 pb-16">{sections}</div>
+  </PageLayout>
+
+  // After
+  <PageLayout variant="page" header={header}>
+    <div className="flex flex-col gap-6">{sections}</div>
+  </PageLayout>
+  ```
+
+- Added seven EmptyStateArt drawings for states that had no drawing yet: `requests`, `no-charges`, `disconnected`, `locked`, `rate-limited`, `server-error` and `not-a-member`. Each one rests still, plays on hover or while working, and shows its own failure. The radar dish, padlock, hourglass and turnstile turn in true 3D while they play, and stay still when reduced motion is on. ([#31340](https://github.com/mastra-ai/mastra/pull/31340))
+
+  ```tsx
+  <EmptyStateArt name="disconnected" state="failed" />
+  ```
+
+### Patch Changes
+
+- The ask_user card now shows a **Recommended** tag on the option the agent marks as the one it would pick. Nothing is selected for the user; they still choose. ([#31251](https://github.com/mastra-ai/mastra/pull/31251))
+
+- Fixed controls losing their hover highlight while their tooltip or hover card is open, for example a default `Button` with a `tooltip`. A menu or popover trigger with a tooltip no longer looks open when only its tooltip shows. ([#31333](https://github.com/mastra-ai/mastra/pull/31333))
+
+- The Knowledge graph no longer drops root scopes. With nothing focused it now draws up to 24 scopes as circles. Any more go in a "+N more scopes" circle, which draws the next batch when clicked and fetches more scopes from the server while the server still has some. Scopes that hold pages come first, then the most recently changed, so a scope that was just created still gets a circle. Root scopes past the first page of results now load when asked for, which they didn't before. ([#31100](https://github.com/mastra-ai/mastra/pull/31100))
+
+- Updated dependencies [[`0b89469`](https://github.com/mastra-ai/mastra/commit/0b89469a5e4061b352b0408d2339966e8e38ffb8), [`fac783c`](https://github.com/mastra-ai/mastra/commit/fac783cfa8b3109b21acc970ea2015f826523993), [`a331da2`](https://github.com/mastra-ai/mastra/commit/a331da2b2354aa6fedc01651c39545fb7db82ebc), [`70947c4`](https://github.com/mastra-ai/mastra/commit/70947c4a6eaf470823a62fdd603e44a47ed000c7), [`5da059e`](https://github.com/mastra-ai/mastra/commit/5da059edbb8b9ec2ede0f3e9ca2227f87c650841), [`1ecb70b`](https://github.com/mastra-ai/mastra/commit/1ecb70b19d147189deab144108cd2fcc97b1dec8), [`6b862fb`](https://github.com/mastra-ai/mastra/commit/6b862fbb9513200c8607c35c1d2894ac75d3b6c8), [`a2ae8a2`](https://github.com/mastra-ai/mastra/commit/a2ae8a26a4928724afc7fccbe4a26e8c75c157b2), [`b758985`](https://github.com/mastra-ai/mastra/commit/b7589855bc3463bf57e6a79f0945d1bfe3135a0d), [`7fd3ce8`](https://github.com/mastra-ai/mastra/commit/7fd3ce86639e6e02a2c284c5715eed5db1a04f64), [`7fd3ce8`](https://github.com/mastra-ai/mastra/commit/7fd3ce86639e6e02a2c284c5715eed5db1a04f64), [`7fd3ce8`](https://github.com/mastra-ai/mastra/commit/7fd3ce86639e6e02a2c284c5715eed5db1a04f64), [`7fd3ce8`](https://github.com/mastra-ai/mastra/commit/7fd3ce86639e6e02a2c284c5715eed5db1a04f64), [`7fd3ce8`](https://github.com/mastra-ai/mastra/commit/7fd3ce86639e6e02a2c284c5715eed5db1a04f64), [`1ecb70b`](https://github.com/mastra-ai/mastra/commit/1ecb70b19d147189deab144108cd2fcc97b1dec8), [`bff16da`](https://github.com/mastra-ai/mastra/commit/bff16dab4cea3236a9ef50b53286065d5a8d31cf), [`0b89469`](https://github.com/mastra-ai/mastra/commit/0b89469a5e4061b352b0408d2339966e8e38ffb8), [`0b89469`](https://github.com/mastra-ai/mastra/commit/0b89469a5e4061b352b0408d2339966e8e38ffb8), [`389f3cd`](https://github.com/mastra-ai/mastra/commit/389f3cdf5c8117a674c0ca14363a4f19f4abb769), [`537db2e`](https://github.com/mastra-ai/mastra/commit/537db2eb061006191283d0473a85472b87d201b3), [`827b54a`](https://github.com/mastra-ai/mastra/commit/827b54a6b566665bd283b88920436f59718e054a), [`dc2df74`](https://github.com/mastra-ai/mastra/commit/dc2df747b7274f8b96e132c3b121ec2707d5a895), [`fcf9c18`](https://github.com/mastra-ai/mastra/commit/fcf9c1897ad3eac3ceb66e43b97e60812712866a), [`464299b`](https://github.com/mastra-ai/mastra/commit/464299bcacd7c94203af3345bcbcd1614b207e38), [`fe0b7e0`](https://github.com/mastra-ai/mastra/commit/fe0b7e081ca4edee13d330da5b2749086f105154), [`16c44e8`](https://github.com/mastra-ai/mastra/commit/16c44e81c52768f4a82b6a400971361d84f1deb7), [`a2ae8a2`](https://github.com/mastra-ai/mastra/commit/a2ae8a26a4928724afc7fccbe4a26e8c75c157b2), [`dc2df74`](https://github.com/mastra-ai/mastra/commit/dc2df747b7274f8b96e132c3b121ec2707d5a895)]:
+  - @mastra/core@1.86.0-alpha.9
+  - @mastra/memory@1.41.3-alpha.5
+  - @mastra/client-js@1.62.0-alpha.9
+  - @mastra/ai-sdk@1.12.1-alpha.0
+  - @mastra/react@1.16.0-alpha.9
+
 ## 71.0.0-alpha.12
 
 ### Minor Changes

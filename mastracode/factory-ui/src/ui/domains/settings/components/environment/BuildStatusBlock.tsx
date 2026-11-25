@@ -63,8 +63,8 @@ export function BuildStatusBlock({
             )}
           </span>
         ) : null}
-        <Button size="sm" variant="primary" disabled={requesting || active} onClick={onBuildNow}>
-          {active ? 'Building...' : 'Build now'}
+        <Button size="sm" variant="primary" onClick={onBuildNow} loading={requesting || active}>
+          Build now
         </Button>
       </div>
       {build?.error && (

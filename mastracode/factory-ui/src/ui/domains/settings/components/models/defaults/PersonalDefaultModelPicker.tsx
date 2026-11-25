@@ -62,10 +62,21 @@ export function PersonalDefaultModelPicker({
         <PersonalThinkingControl savedModelId={savedModelId} savedThinkingLevel={savedThinkingLevel} saving={busy} />
       </ButtonsGroup>
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" disabled={busy || !savedModelId} onClick={() => applyDefaultModel.mutate()}>
+        <Button
+          size="sm"
+          disabled={busy || !savedModelId}
+          loading={applyDefaultModel.isPending}
+          onClick={() => applyDefaultModel.mutate()}
+        >
           Apply to my running chats
         </Button>
-        <Button size="sm" variant="ghost" disabled={busy || !savedModelId} onClick={clearDefault}>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={busy || !savedModelId}
+          loading={clearDefaultModel.isPending}
+          onClick={clearDefault}
+        >
           Clear
         </Button>
       </div>

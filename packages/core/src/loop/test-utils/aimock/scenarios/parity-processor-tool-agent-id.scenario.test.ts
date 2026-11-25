@@ -52,7 +52,14 @@ describeParity('processor-tool-agent-id parity', target => {
         : engine === 'evented'
           ? createEventedAgent({ agent, pubsub })
           : undefined;
-    const host = new Mastra({ agents: { [AGENT_ID]: wrapper ?? agent }, storage: new InMemoryStore(), logger: false });
+    const executionEngine =
+      engine === 'native-default' ? 'default' : engine === 'native-evented' ? 'evented' : undefined;
+    const host = new Mastra({
+      agents: { [AGENT_ID]: wrapper ?? agent },
+      storage: new InMemoryStore(),
+      logger: false,
+      durable: { executionEngine },
+    });
     const registered = host.getAgent(AGENT_ID) as unknown as {
       stream: (messages: string, options: Record<string, unknown>) => Promise<unknown>;
     };
@@ -62,7 +69,7 @@ describeParity('processor-tool-agent-id parity', target => {
       fullStream?: AsyncIterable<unknown>;
       cleanup?: () => void | Promise<void>;
     };
-    const output = engine === 'plain' ? result : result.output!;
+    const output = result.output ?? result;
 
     try {
       for await (const _chunk of output.fullStream!) {

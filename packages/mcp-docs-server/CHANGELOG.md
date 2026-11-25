@@ -1,5 +1,12 @@
 # @mastra/mcp-docs-server
 
+## 1.3.16-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [[`0b89469`](https://github.com/mastra-ai/mastra/commit/0b89469a5e4061b352b0408d2339966e8e38ffb8), [`fac783c`](https://github.com/mastra-ai/mastra/commit/fac783cfa8b3109b21acc970ea2015f826523993), [`a331da2`](https://github.com/mastra-ai/mastra/commit/a331da2b2354aa6fedc01651c39545fb7db82ebc), [`70947c4`](https://github.com/mastra-ai/mastra/commit/70947c4a6eaf470823a62fdd603e44a47ed000c7), [`5da059e`](https://github.com/mastra-ai/mastra/commit/5da059edbb8b9ec2ede0f3e9ca2227f87c650841), [`1ecb70b`](https://github.com/mastra-ai/mastra/commit/1ecb70b19d147189deab144108cd2fcc97b1dec8), [`6b862fb`](https://github.com/mastra-ai/mastra/commit/6b862fbb9513200c8607c35c1d2894ac75d3b6c8), [`a2ae8a2`](https://github.com/mastra-ai/mastra/commit/a2ae8a26a4928724afc7fccbe4a26e8c75c157b2), [`b758985`](https://github.com/mastra-ai/mastra/commit/b7589855bc3463bf57e6a79f0945d1bfe3135a0d), [`7fd3ce8`](https://github.com/mastra-ai/mastra/commit/7fd3ce86639e6e02a2c284c5715eed5db1a04f64), [`7fd3ce8`](https://github.com/mastra-ai/mastra/commit/7fd3ce86639e6e02a2c284c5715eed5db1a04f64), [`7fd3ce8`](https://github.com/mastra-ai/mastra/commit/7fd3ce86639e6e02a2c284c5715eed5db1a04f64), [`7fd3ce8`](https://github.com/mastra-ai/mastra/commit/7fd3ce86639e6e02a2c284c5715eed5db1a04f64), [`7fd3ce8`](https://github.com/mastra-ai/mastra/commit/7fd3ce86639e6e02a2c284c5715eed5db1a04f64), [`bff16da`](https://github.com/mastra-ai/mastra/commit/bff16dab4cea3236a9ef50b53286065d5a8d31cf), [`389f3cd`](https://github.com/mastra-ai/mastra/commit/389f3cdf5c8117a674c0ca14363a4f19f4abb769), [`537db2e`](https://github.com/mastra-ai/mastra/commit/537db2eb061006191283d0473a85472b87d201b3), [`827b54a`](https://github.com/mastra-ai/mastra/commit/827b54a6b566665bd283b88920436f59718e054a), [`dc2df74`](https://github.com/mastra-ai/mastra/commit/dc2df747b7274f8b96e132c3b121ec2707d5a895), [`fcf9c18`](https://github.com/mastra-ai/mastra/commit/fcf9c1897ad3eac3ceb66e43b97e60812712866a), [`464299b`](https://github.com/mastra-ai/mastra/commit/464299bcacd7c94203af3345bcbcd1614b207e38), [`fe0b7e0`](https://github.com/mastra-ai/mastra/commit/fe0b7e081ca4edee13d330da5b2749086f105154), [`16c44e8`](https://github.com/mastra-ai/mastra/commit/16c44e81c52768f4a82b6a400971361d84f1deb7)]:
+  - @mastra/core@1.86.0-alpha.9
+
 ## 1.3.16-alpha.10
 
 ### Patch Changes

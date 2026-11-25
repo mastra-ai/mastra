@@ -214,10 +214,31 @@ describe('native Agent stored-registration policy', () => {
       host.addAgent(agent);
       const messages = warn.mock.calls.map(([message]) => String(message));
       expect(messages.filter(message => message.includes('does not support eagerToolExecution'))).toHaveLength(1);
-      expect(messages.filter(message => message.includes('does not support stopWhen'))).toHaveLength(
+      expect(messages.filter(message => message.includes('does not carry stopWhen to another process'))).toHaveLength(
         executionEngine === 'evented' ? 1 : 0,
       );
       expect(messages.every(message => !message.includes('activation is deferred'))).toBe(true);
+    },
+  );
+
+  it.each(['default', 'evented'] as const)(
+    'warns about per-call options on inherited %s runs',
+    async executionEngine => {
+      const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
+      const agent = new Agent(config);
+      new Mastra({ agents: { policy: agent }, durable: { executionEngine } });
+
+      for (const method of ['stream', 'generate'] as const) {
+        await expect(agent[method]('hello', { eagerToolExecution: true, stopWhen: () => true })).rejects.toThrow(
+          'eagerToolExecution is not supported by durable agents',
+        );
+      }
+
+      const messages = warn.mock.calls.map(([message]) => String(message));
+      expect(messages.filter(message => message.includes('does not support eagerToolExecution'))).toHaveLength(1);
+      expect(
+        messages.filter(message => message.includes('stopWhen') && message.includes('another process')),
+      ).toHaveLength(executionEngine === 'evented' ? 1 : 0);
     },
   );
 
@@ -249,7 +270,9 @@ describe('native Agent stored-registration policy', () => {
       await expect(agent.stream('hello', { requestContext })).rejects.toThrow('Request context validation failed');
       const messages = warn.mock.calls.map(([message]) => String(message));
       expect(messages.filter(message => message.includes('does not support eagerToolExecution'))).toHaveLength(0);
-      expect(messages.filter(message => message.includes('does not support stopWhen'))).toHaveLength(0);
+      expect(messages.filter(message => message.includes('does not carry stopWhen to another process'))).toHaveLength(
+        0,
+      );
     },
   );
 });

@@ -330,9 +330,10 @@ export function SaveAsDatasetItemDialog({
               icon={<IconCheckmark2Medium />}
               type="submit"
               variant="default"
-              disabled={addItem.isPending || trajectoryLoading || !isSelectedDatasetListed}
+              disabled={!isSelectedDatasetListed}
+              loading={addItem.isPending || trajectoryLoading}
             >
-              {addItem.isPending ? 'Saving...' : trajectoryLoading ? 'Loading...' : 'Save item'}
+              Save item
             </Button>
           </div>
         </Form>

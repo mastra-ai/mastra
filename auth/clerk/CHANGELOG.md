@@ -1,5 +1,11 @@
 # @mastra/auth-clerk
 
+## 1.4.1-alpha.1
+
+### Patch Changes
+
+- Fixed Clerk Studio sign-in for OAuth applications that require PKCE, while preserving stateless and concurrent login support. ([#24328](https://github.com/mastra-ai/mastra/pull/24328))
+
 ## 1.4.1-alpha.0
 
 ### Patch Changes

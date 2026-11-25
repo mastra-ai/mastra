@@ -27,13 +27,13 @@ const ENVELOPE_TYPES = new Set(['error', 'response.failed']);
 const SYMBOLIC_STATUS = /^[A-Z][A-Z0-9_]+$/;
 
 const BILLING_EXHAUSTED =
-  /insufficient[_ ]quota|insufficient (?:balance|credits?)|credits? exhausted|credit[_ ]balance|payment required|spend[_ ]limit/i;
+  /insufficient[_ ]quota|insufficient (?:balance|credits?)|credits? exhausted|credit[_ ]balance|no credits remaining|payment required|spend[_ ]limit/i;
 const USAGE_CAPPED =
   /usage[_ ](?:limit|cap)|quota (?:exceeded|exhausted|reached)|exceeded (?:your )?current quota|weekly limit|monthly limit/i;
 // A cap that refills within the hour is a rate limit, whatever the provider calls it.
 const RENEWS_WITHIN_THE_HOUR = /per[_ -]?(?:second|minute|hour|min|sec)\b|\b[rt]pm\b/i;
 const RENEWS_AFTER_THE_HOUR = /per[_ -]?(?:day|week|month)|\b(?:daily|weekly|monthly)\b/i;
-const RETRY_HINT = /\bretry in (\d+(?:\.\d+)?)\s*(ms|s|seconds?|minutes?)\b/i;
+const RETRY_HINT = /\b(?:retry|try again) in (\d+(?:\.\d+)?)\s*(ms|s|sec|seconds?|m|min|minutes?)\b/i;
 const HOUR_MS = 3_600_000;
 const ACCESS_DENIED_WORDING =
   /invalid[_ ]api[_ ]key|incorrect api key|api key not valid|authentication[_ ]error|permission_?(?:denied|error)|access[_ ]?denied/i;
@@ -192,7 +192,7 @@ function renewsWithinTheHour(evidence: string): boolean {
 
 function retryHintMs(amount: number, unit: string): number {
   if (unit === 'ms') return amount;
-  return unit.startsWith('min') ? amount * 60_000 : amount * 1000;
+  return unit.startsWith('m') ? amount * 60_000 : amount * 1000;
 }
 
 function terminalKindFromWording(evidence: string): ProviderFailureKind | undefined {
