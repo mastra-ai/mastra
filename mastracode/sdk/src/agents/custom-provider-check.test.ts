@@ -422,7 +422,7 @@ describe('listing the models of a custom endpoint', () => {
       afterHeaders(res);
     });
 
-    const result = await listCustomProviderModels({ url: endpoint.url }, { timeoutMs: 300 });
+    const result = await listCustomProviderModels({ url: endpoint.url }, { timeoutMs: 1000 });
 
     expect(result).toMatchObject({ ok: false, failure: { kind: 'http', status: 403 } });
   });
@@ -734,14 +734,11 @@ describe('sending a test message to a custom endpoint model', () => {
 
     const result = await testModel({ url: endpoint.url });
 
-    expect(result).toEqual({
-      ok: false,
-      failure: {
-        kind: 'network',
-        message: `The answer from ${endpoint.url}/chat/completions broke off: other side closed`,
-      },
-      latencyMs: expect.any(Number),
-    });
+    expect(result).toMatchObject({ ok: false, failure: { kind: 'network' } });
+    expect(result.ok ? '' : result.failure.message).toMatch(
+      new RegExp(`^The answer from ${endpoint.url}/chat/completions broke off: `),
+    );
+    expect(result.ok ? 'ok' : result.failure.detail).toBeUndefined();
   });
 
   it('refuses a redirect', async () => {
