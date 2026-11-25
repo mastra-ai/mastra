@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LogStream } from './index';
+import { TooltipProvider } from '@/ds/components/Tooltip';
 
 afterEach(cleanup);
 
@@ -85,5 +86,44 @@ describe('LogStream', () => {
     );
     expect(screen.queryByText('+2 more lines')).toBeNull();
     expect(screen.getByText(/at d \(d\.js:4:4\)/)).toBeTruthy();
+  });
+
+  it('shows build output without a time or level, with labels and terminal colors', () => {
+    const esc = String.fromCharCode(27);
+    render(
+      <LogStream>
+        <LogStream.Row>
+          <LogStream.Line message={`${esc}[32mCompiled successfully${esc}[0m`} labels={[{ text: 'build' }]} />
+        </LogStream.Row>
+      </LogStream>,
+    );
+
+    expect(screen.queryByText((_, element) => element?.tagName === 'TIME')).toBeNull();
+    expect(screen.getByText('build')).toBeTruthy();
+    const colored = screen.getByText('Compiled successfully');
+    expect(colored.textContent).not.toContain(esc);
+  });
+
+  it('explains a time like RelativeTimestamp, with each zone to the hundredth of a second', async () => {
+    render(
+      <TooltipProvider delay={0}>
+        <LogStream>
+          <LogStream.Row level="info">
+            <LogStream.Line timestamp="2026-11-24T09:31:07.956Z" level="info" message="Process.Start stream ended" />
+          </LogStream.Row>
+        </LogStream>
+      </TooltipProvider>,
+    );
+
+    const time = screen.getByText((_, element) => element?.tagName === 'TIME');
+    fireEvent.pointerEnter(time);
+    fireEvent.mouseEnter(time);
+    fireEvent.pointerMove(time);
+    fireEvent.mouseMove(time);
+
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip.textContent).toContain('UTC');
+    expect(tooltip.textContent).toMatch(/9:31:07\.95/);
+    expect(tooltip.textContent).not.toMatch(/\.956/);
   });
 });

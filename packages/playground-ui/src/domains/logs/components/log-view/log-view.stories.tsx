@@ -1,9 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { fn } from 'storybook/test';
-import type { LogLevel, LogRecord } from '../../types';
+import type { LogLevel, LogRecord, LogViewLine } from '../../types';
 import type { LogViewOrder } from '../log-view-list';
 import { LogView, filterLogsByFields } from './index';
+import type { LogViewHeight } from './index';
 import type { FilterBarItem } from '@/ds/components/FilterBar';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 
@@ -62,11 +63,12 @@ interface CompositionProps {
   onFetchNextPage?: () => void;
   onRefresh: () => void;
   onLogClick?: (log: LogRecord) => void;
+  height?: LogViewHeight;
 }
 
 type CompositionBodyProps = Omit<
   CompositionProps,
-  'logs' | 'filters' | 'search' | 'fieldChips' | 'initialFilters' | 'onRefresh'
+  'logs' | 'filters' | 'search' | 'fieldChips' | 'initialFilters' | 'onRefresh' | 'height'
 > & {
   lines: LogRecord[];
   logIdMap: Map<LogRecord, string>;
@@ -85,6 +87,7 @@ function Composition({
   fieldChips,
   initialFilters = [],
   onRefresh,
+  height,
   ...listProps
 }: CompositionProps) {
   const [levels, setLevels] = useState<LogLevel[]>(LEVELS);
@@ -101,7 +104,7 @@ function Composition({
   };
 
   return (
-    <LogView>
+    <LogView height={height}>
       <LogView.Header>
         <LogView.Title />
         <LogView.LevelToggles size="sm" levels={LEVELS} value={levels} onValueChange={setLevels} />
@@ -114,7 +117,10 @@ function Composition({
             fieldChips={fieldChips}
           />
         )}
-        <LogView.Refresh onRefresh={onRefresh} />
+        <LogView.Actions>
+          <LogView.Count count={lines.length} />
+          <LogView.Refresh onRefresh={onRefresh} />
+        </LogView.Actions>
       </LogView.Header>
       <CompositionBody
         lines={lines}
@@ -205,4 +211,64 @@ export const FieldChipsOnly: Story = {
 export const NoFilters: Story = {
   args: { filters: false },
   parameters: describe('Leave LogView.Filters out to drop filtering entirely.'),
+};
+
+const ESC = String.fromCharCode(27);
+
+const buildOutput: LogViewLine[] = [
+  { message: 'Cloning github.com/acme/agent-app (branch: main)', labels: [{ text: 'build' }] },
+  { message: `${ESC}[1mmastra build${ESC}[0m`, labels: [{ text: 'build' }] },
+  { message: `${ESC}[90mResolving dependencies${ESC}[0m`, labels: [{ text: 'build' }] },
+  {
+    message: `${ESC}[33mwarn${ESC}[0m deprecated inflight@1.0.6: This module is not supported`,
+    labels: [{ text: 'build' }],
+  },
+  {
+    message: `${ESC}[32m✓${ESC}[0m Bundled 42 modules in ${ESC}[1m1.8s${ESC}[0m`,
+    labels: [{ text: 'build' }, { text: 'success', variant: 'success' }],
+  },
+  {
+    timestamp: '2026-11-24T09:36:01.956Z',
+    level: 'info',
+    message: 'Server listening on :4111',
+    labels: [{ text: 'runtime' }],
+  },
+  {
+    timestamp: '2026-11-24T09:36:04.103Z',
+    level: 'error',
+    message: `${ESC}[31mError: connect ECONNREFUSED 127.0.0.1:5432${ESC}[0m`,
+    labels: [{ text: 'runtime' }, { text: 'error', variant: 'destructive' }],
+  },
+];
+
+const buildIds = new Map(buildOutput.map((line, index) => [line, `build-${index}`]));
+
+export const BuildOutput: Story = {
+  render: () => (
+    <LogView>
+      <LogView.Header>
+        <LogView.Title>Build logs</LogView.Title>
+        <LogView.Actions>
+          <LogView.Count count={buildOutput.length} />
+          <LogView.Copy content={buildOutput.map(line => line.message).join('\n')} />
+        </LogView.Actions>
+      </LogView.Header>
+      <LogView.List logs={buildOutput} logIdMap={buildIds} order="oldest-first" />
+    </LogView>
+  ),
+  parameters: describe(
+    'Deploy output: lines without a time or level, terminal colors, labels for the log source, and the line count and copy in the header.',
+  ),
+};
+
+export const FullHeight: Story = {
+  args: { height: 'fill' },
+  decorators: [
+    Story => (
+      <div className="h-160">
+        <Story />
+      </div>
+    ),
+  ],
+  parameters: describe('height="fill" makes the panel fill its container, for a page that is only logs.'),
 };

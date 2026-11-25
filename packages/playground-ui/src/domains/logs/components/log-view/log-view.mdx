@@ -25,17 +25,20 @@ import {
 
 `LogView` is built from parts. Keep the ones the page needs and leave the rest out. Nothing in it fetches: the page loads the logs, keeps the filter state, and passes both in.
 
-| Part                   | What it is                                                                           | Props                                                                                                                                   |
-| ---------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `LogView`              | The card. 36rem tall, so the page doesn't jump between loading, lines and empty.     | `label` names the region for screen readers (default `Logs`). `className` sets the height or width.                                     |
-| `LogView.Header`       | The row above the list. Lays out whatever you put in it and wraps on narrow screens. | `children`                                                                                                                              |
-| `LogView.Title`        | The panel's heading.                                                                 | `children` (default `Logs`)                                                                                                             |
-| `LogView.LevelToggles` | One toggle per level, all on by default.                                             | `levels`, `value`, `onValueChange`                                                                                                      |
-| `LogView.Filters`      | A filter bar for text search and chips built from the logs' fields.                  | `logs`, `value`, `onValueChange`, `search`, `fieldChips`                                                                                |
-| `LogView.Refresh`      | An icon button that spins while refreshing.                                          | `onRefresh`, `refreshing`                                                                                                               |
-| `LogView.List`         | The lines, in a sunken frame with a Time, Level and Message header.                  | `logs`, `logIdMap`, `order`, `wrap`, `onLogClick`, `featuredLogId`, `isLoading`, `hasNextPage`, `isFetchingNextPage`, `onFetchNextPage` |
-| `LogView.Empty`        | The empty state, in the same frame as the list.                                      | `onClearFilters`                                                                                                                        |
-| `LogView.Fill`         | The same frame with nothing in it, for your own state, such as a load error.         | `children`                                                                                                                              |
+| Part                   | What it is                                                                           | Props                                                                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LogView`              | The card. 36rem tall, so the page doesn't jump between loading, lines and empty.     | `label` names the region for screen readers (default `Logs`). `height="fill"` fills the container instead.                                     |
+| `LogView.Header`       | The row above the list. Lays out whatever you put in it and wraps on narrow screens. | `children`                                                                                                                                     |
+| `LogView.Title`        | The panel's heading.                                                                 | `children` (default `Logs`)                                                                                                                    |
+| `LogView.LevelToggles` | One toggle per level, all on by default.                                             | `levels`, `value`, `onValueChange`                                                                                                             |
+| `LogView.Filters`      | A filter bar for text search and chips built from the logs' fields.                  | `logs`, `value`, `onValueChange`, `search`, `fieldChips`                                                                                       |
+| `LogView.Actions`      | Groups the header's trailing controls at the right edge.                             | `children`                                                                                                                                     |
+| `LogView.Count`        | The number of lines, as "1,204 lines".                                               | `count`                                                                                                                                        |
+| `LogView.Copy`         | An icon button that copies every line.                                               | `content`                                                                                                                                      |
+| `LogView.Refresh`      | An icon button that spins while refreshing.                                          | `onRefresh`, `refreshing`                                                                                                                      |
+| `LogView.List`         | The lines, in a sunken frame with a Time, Level and Message header.                  | `logs`, `logIdMap`, `order`, `wrap`, `onLogClick`, `featuredLogId`, `isLoading`, `hasNextPage`, `isFetchingNextPage`, `onFetchNextPage`, `ref` |
+| `LogView.Empty`        | The empty state, in the same frame as the list.                                      | `onClearFilters`                                                                                                                               |
+| `LogView.Fill`         | The same frame with nothing in it, for your own state, such as a load error.         | `children`                                                                                                                                     |
 
 ## A full panel
 
@@ -98,7 +101,10 @@ function SandboxLogs({ sandboxId }: { sandboxId: string }) {
         <LogView.Title />
         <LogView.LevelToggles size="sm" levels={LEVELS} value={levels} onValueChange={setLevels} />
         <LogView.Filters logs={loaded} value={filters} onValueChange={setFilters} />
-        <LogView.Refresh onRefresh={logs.refetch} refreshing={logs.isFetching} />
+        <LogView.Actions>
+          <LogView.Count count={lines.length} />
+          <LogView.Refresh onRefresh={logs.refetch} refreshing={logs.isFetching} />
+        </LogView.Actions>
       </LogView.Header>
 
       <SandboxLogsBody
@@ -124,6 +130,32 @@ function SandboxLogs({ sandboxId }: { sandboxId: string }) {
 A log is a `LogRecord`. Only `timestamp`, `level` and `message` are required. Whatever is in `data` shows after the message as `key: value` fields, and becomes a filter chip.
 
 Keep the empty check tied to `hasNextPage`. While older pages are left, render `LogView.List` even with no lines, so it can keep loading pages until filters find a match.
+
+## Lines
+
+A line is a `LogViewLine`. Only `message` is required, so build output with no time or level still lines up in the same columns; its level bar is neutral. An Observe `LogRecord` is a `LogViewLine` too.
+
+| Field       | Shows                                                                                                                                                     |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `message`   | The text. Terminal color and bold codes render with theme colors; other escape codes are dropped.                                                         |
+| `timestamp` | The time to the hundredth of a second; `timeFractionDigits` on `LogView.List` changes the digits. Hover it for the date and time in your zone and in UTC. |
+| `level`     | The level word in its color, and the color of the bar.                                                                                                    |
+| `labels`    | Small badges before the message, such as the log source (`build`, `runtime`) or the agent's name. Each takes a badge `variant`.                           |
+| `data`      | `key: value` fields after the message, which also become filter chips.                                                                                    |
+
+<Canvas of={LogViewStories.BuildOutput} />
+
+## Jumping to a line
+
+Pass a ref to `LogView.List` and call `scrollToLog(id)` with an id from `logIdMap` to bring that line into view, for example the line that matches a deploy error.
+
+```tsx
+const list = useRef<LogViewListHandle>(null);
+
+<LogView.List ref={list} logs={lines} logIdMap={logIdMap} />;
+
+list.current?.scrollToLog(errorLineId);
+```
 
 ## Order and loading older logs
 
@@ -172,6 +204,10 @@ Turn either off: `search={false}` for chips only, or `fieldChips={false}` for se
 <Canvas of={LogViewStories.SearchOnly} />
 
 Pass all loaded logs to `LogView.Filters`, not the filtered lines. It lists fields and values from what you pass, so passing the filtered lines would hide every other value once a chip is set.
+
+## Header actions
+
+Put `LogView.Count`, `LogView.Copy` and `LogView.Refresh` inside `LogView.Actions` so they sit together at the right edge of the header, after the toggles and filters.
 
 ## Empty, loading and error
 

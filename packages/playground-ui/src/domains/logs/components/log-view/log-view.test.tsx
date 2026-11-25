@@ -118,3 +118,23 @@ describe('LogView empty state', () => {
     expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull();
   });
 });
+
+describe('LogView header parts', () => {
+  it('counts lines and copies all of them', () => {
+    render(
+      <TooltipProvider>
+        <LogView>
+          <LogView.Header>
+            <LogView.Actions>
+              <LogView.Count count={1204} />
+              <LogView.Copy content={'line one\nline two'} />
+            </LogView.Actions>
+          </LogView.Header>
+        </LogView>
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByText('1,204 lines')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /copy/i }).getAttribute('type')).toBe('button');
+  });
+});
