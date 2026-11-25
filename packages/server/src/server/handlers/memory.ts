@@ -383,20 +383,22 @@ async function authorizeResourceMemoryAccess({
   memory: MastraMemory;
   resourceId: string;
 }): Promise<void> {
-  if (!shouldFilterThreadsWithFGA(mastra, requestContext)) {
-    // Without per-user FGA every thread listed here is owned by resourceId and its lineage stays in
-    // that resource, so a per-thread check cannot deny; only the FGA existence check needs a read.
-    if (mastra.getServer()?.fga) {
-      const { threads } = await memory.listThreads({ filter: { resourceId }, page: 0, perPage: 1 });
-      if (threads.length === 0) throwThreadBranchNotFound();
-    }
+  const { threads: firstPage } = await memory.listThreads({ filter: { resourceId }, page: 0, perPage: 1 });
+  if (firstPage.length === 0) {
+    if (mastra.getServer()?.fga) throwThreadBranchNotFound();
     return;
+  }
+
+  // Every thread listed here is owned by resourceId and its lineage stays in that resource, so
+  // without an FGA provider a per-thread check cannot deny.
+  if (!getHandlerFGAProvider(mastra, requestContext)) return;
+  if (!hasFGAUser(requestContext)) {
+    throw new HTTPException(403, { message: 'FGA authorization denied: authenticated user is required' });
   }
 
   // Per-user FGA must clear every thread in the resource. Offset pages can skip rows whose sort keys
   // tie, so this reads the whole resource, as listing threads with FGA already does.
   const { threads } = await memory.listThreads({ filter: { resourceId }, perPage: false });
-  if (threads.length === 0) throwThreadBranchNotFound();
   for (const thread of threads) {
     await authorizeMemoryThreadAccess({
       mastra,
