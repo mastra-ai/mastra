@@ -58,6 +58,29 @@ export interface ChannelAdapterBaseConfig {
   gateway?: boolean;
 
   /**
+   * Message deduplication window for this platform, in milliseconds.
+   *
+   * Overrides the instance-wide {@link ChannelConfig.chatOptions}`.dedupeTtlMs`
+   * for this platform only; platforms that don't set it keep the instance-wide
+   * value (the Chat SDK's 10-minute default when `chatOptions.dedupeTtlMs` is
+   * unset).
+   */
+  dedupeTtlMs?: number;
+
+  /**
+   * Thread context options for this platform.
+   */
+  threadContext?: {
+    /**
+     * How many platform messages are saved to memory on first mention for this
+     * platform. Overrides the instance-wide
+     * {@link ChannelConfig.threadContext}`.maxMessages` for this platform only.
+     * Set to `0` to disable the history fetch for this platform.
+     */
+    maxMessages?: number;
+  };
+
+  /**
    * Override how errors are rendered in the chat.
    * Return a user-friendly message instead of exposing the raw error.
    * `context.requestContext` is the failed run's request context, so a host can

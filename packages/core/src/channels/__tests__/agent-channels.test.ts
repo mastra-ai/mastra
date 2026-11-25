@@ -23,6 +23,7 @@ import { AgentChannels } from '../agent-channels';
 import { getChatModule } from '../chat-lazy';
 import { ChannelSessionRejectedError } from '../errors';
 import { matchesDomain, extractUrls } from '../inline-media';
+import { MastraStateAdapter } from '../state-adapter';
 import type { ChannelAdapterBaseConfig, ChannelContext, ChannelHandler, ResolveResourceId } from '../types';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
@@ -3576,7 +3577,15 @@ describe('thread history', () => {
     metadata: { dateSent: new Date(BASE_TIME + 100_000), edited: false },
   });
 
-  async function setup(options: { agent?: any; threadContext?: Record<string, unknown>; spyHook?: boolean } = {}) {
+  async function setup(
+    options: {
+      agent?: any;
+      threadContext?: Record<string, unknown>;
+      /** Per-platform options for the `slack` adapter entry. */
+      slackAdapterConfig?: Record<string, unknown>;
+      spyHook?: boolean;
+    } = {},
+  ) {
     const chatMod = await getChatModule();
     let wrapper: ((...args: any[]) => unknown) | undefined;
     vi.spyOn(chatMod.Chat.prototype as any, 'onNewMention').mockImplementation((handler: any) => {
@@ -3585,7 +3594,11 @@ describe('thread history', () => {
     const agent = options.agent ?? createMockAgent();
     const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const channels = new AgentChannels({
-      adapters: { slack: createMockAdapter('slack') },
+      adapters: {
+        slack: options.slackAdapterConfig
+          ? { adapter: createMockAdapter('slack'), ...options.slackAdapterConfig }
+          : createMockAdapter('slack'),
+      },
       ...(options.threadContext ? { threadContext: options.threadContext } : {}),
     });
     channels.__setAgent(agent);
@@ -3669,6 +3682,64 @@ describe('thread history', () => {
     expect(serialized).not.toContain('[Thread context');
     expect(serialized).not.toContain('message 0');
     expect(serialized).toContain('hi there');
+  });
+
+  it('uses the per-platform maxMessages over the instance-wide one', async () => {
+    const t = await setup({
+      threadContext: { maxMessages: 10 },
+      slackAdapterConfig: { threadContext: { maxMessages: 3 } },
+    });
+    const history = Array.from({ length: 15 }, (_, i) => historyMessage(i));
+    await t.run(makeChatThread(history));
+
+    const signals = t.signals();
+    const mastraThreadId = t.dispatches[0].thread.id;
+    expect(signals.map(s => s.contents)).toEqual([
+      'message 0',
+      '[… 12 earlier Slack messages omitted]',
+      'message 13',
+      'message 14',
+    ]);
+    expect(signals.map(s => s.id)).toEqual([
+      `thread-history:${mastraThreadId}:h0`,
+      `thread-history:${mastraThreadId}:gap`,
+      `thread-history:${mastraThreadId}:h13`,
+      `thread-history:${mastraThreadId}:h14`,
+    ]);
+    expect(signals[1].attributes).toEqual({
+      platform: 'slack',
+      source: 'thread-history',
+      kind: 'gap',
+      omitted: '12',
+    });
+    expect(t.dispatches).toHaveLength(1);
+  });
+
+  it('disables the history fetch for one platform without touching the instance-wide window', async () => {
+    const t = await setup({
+      threadContext: { maxMessages: 10 },
+      slackAdapterConfig: { threadContext: { maxMessages: 0 } },
+    });
+    await t.run(makeChatThread(Array.from({ length: 15 }, (_, i) => historyMessage(i))));
+
+    expect(t.hook).not.toHaveBeenCalled();
+    expect(t.signals()).toHaveLength(0);
+    expect(t.dispatches).toHaveLength(1);
+  });
+
+  it('falls back to the instance-wide maxMessages when a platform sets none', async () => {
+    const t = await setup({
+      threadContext: { maxMessages: 3 },
+      slackAdapterConfig: { toolDisplay: 'text' },
+    });
+    await t.run(makeChatThread(Array.from({ length: 15 }, (_, i) => historyMessage(i))));
+
+    expect(t.signals().map(s => s.contents)).toEqual([
+      'message 0',
+      '[… 12 earlier Slack messages omitted]',
+      'message 13',
+      'message 14',
+    ]);
   });
 
   it('includes Slack layout-block text in history rows without repeating the fallback', async () => {
@@ -4937,5 +5008,83 @@ describe('per-sender handler runs end to end', () => {
       expect(userTurn).toContain(`[Attached file: report.zip (application/zip) — ${privateUrl('report.zip')}]`);
       expect(await readdir(dir)).toEqual([]);
     });
+  });
+});
+
+describe('per-platform dedupe window', () => {
+  const author: Author = { userId: 'U1', userName: 'alice', fullName: 'Alice', isBot: false, isMe: false };
+
+  async function setup() {
+    const db = new InMemoryDB();
+    const memoryStore = new InMemoryMemory({ db });
+    const state = new MastraStateAdapter(memoryStore);
+    // Calls through: the spy records the window the state adapter was asked for.
+    const setIfNotExists = vi.spyOn(state, 'setIfNotExists');
+
+    const slack = createMockAdapter('slack');
+    const discord = createMockAdapter('discord');
+    const channels = new AgentChannels({
+      adapters: {
+        slack: { adapter: slack, dedupeTtlMs: 1_000 },
+        discord: { adapter: discord },
+      },
+      chatOptions: { dedupeTtlMs: 600_000 },
+      state,
+    });
+    await channels.initialize({
+      getStorage: () => ({ getStore: () => memoryStore }),
+      getServer: () => null,
+      getLogger: () => noopLogger,
+    } as any);
+
+    return { channels, slack, discord, setIfNotExists };
+  }
+
+  it('uses the window the platform asked for and the instance-wide one elsewhere', async () => {
+    const { channels, slack, discord, setIfNotExists } = await setup();
+
+    // This pins the Chat SDK's dedupe key shape: `<platform>` between the
+    // `dedupe:` prefix and the message id. If the SDK ever changes it, the
+    // per-platform override stops matching, and this test fails loudly.
+    await (channels.sdk as any).processMessage(
+      slack,
+      'C1:t1',
+      makeMessage({ id: 'm-slack', threadId: 'C1:t1', author }),
+    );
+    await (channels.sdk as any).processMessage(
+      discord,
+      'D1:t1',
+      makeMessage({ id: 'm-discord', threadId: 'D1:t1', author }),
+    );
+
+    expect(setIfNotExists).toHaveBeenCalledWith('dedupe:slack:m-slack', true, 1_000);
+    expect(setIfNotExists).toHaveBeenCalledWith('dedupe:discord:m-discord', true, 600_000);
+  });
+
+  it('keeps the Chat-wide window when no platform declares one', async () => {
+    const db = new InMemoryDB();
+    const memoryStore = new InMemoryMemory({ db });
+    const state = new MastraStateAdapter(memoryStore);
+    const setIfNotExists = vi.spyOn(state, 'setIfNotExists');
+
+    const slack = createMockAdapter('slack');
+    const channels = new AgentChannels({
+      adapters: { slack },
+      chatOptions: { dedupeTtlMs: 600_000 },
+      state,
+    });
+    await channels.initialize({
+      getStorage: () => ({ getStore: () => memoryStore }),
+      getServer: () => null,
+      getLogger: () => noopLogger,
+    } as any);
+
+    await (channels.sdk as any).processMessage(
+      slack,
+      'C1:t1',
+      makeMessage({ id: 'm-slack', threadId: 'C1:t1', author }),
+    );
+
+    expect(setIfNotExists).toHaveBeenCalledWith('dedupe:slack:m-slack', true, 600_000);
   });
 });
