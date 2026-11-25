@@ -126,15 +126,16 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     this.#pins = copy.pins;
     this.#activity = copy.activity;
     this.#bodyLinks = copy.bodyLinks;
-    // Events from a snapshot taken before positions existed get the next ones, in stored order.
+    // A snapshot where any event lacks a position (taken before positions existed) gets every event
+    // renumbered in stored order, past every position issued so far: a held position then rereads
+    // events instead of skipping them, and the feed's order matches the stored order.
+    const positioned = (event: KnowledgePageActivityEvent) =>
+      Number.isSafeInteger(event.position === undefined ? NaN : Number(event.position));
     for (const event of this.#activity) {
-      const n = event.position === undefined ? NaN : Number(event.position);
-      if (Number.isSafeInteger(n)) this.#activitySeq = Math.max(this.#activitySeq, n);
+      if (positioned(event)) this.#activitySeq = Math.max(this.#activitySeq, Number(event.position));
     }
-    for (const event of this.#activity) {
-      if (!Number.isSafeInteger(event.position === undefined ? NaN : Number(event.position))) {
-        event.position = String(++this.#activitySeq);
-      }
+    if (!this.#activity.every(positioned)) {
+      for (const event of this.#activity) event.position = String(++this.#activitySeq);
     }
   }
 
