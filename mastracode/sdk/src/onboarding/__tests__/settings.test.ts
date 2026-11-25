@@ -1160,6 +1160,45 @@ describe('customProviders parsing/persistence', () => {
       ]);
     });
   });
+
+  it('keeps the auth scheme and valid headers, and drops an unknown scheme and each bad header', () => {
+    const saved: CustomProviderSetting = {
+      name: 'Gateway',
+      url: 'https://gateway.example.com/v1',
+      authScheme: 'x-api-key',
+      headers: [
+        { name: 'X-Org-Id', value: 'org-1', secret: false },
+        { name: 'X-Tenant-Token', value: 'tenant-secret', secret: true },
+      ],
+      models: ['model-1'],
+    };
+
+    const providers = parseCustomProviders([
+      JSON.parse(JSON.stringify(saved)),
+      {
+        name: 'Hand Edited',
+        url: 'https://edited.example.com/v1',
+        authScheme: 'basic',
+        headers: [
+          { name: 'Authorization', value: 'Basic abc' },
+          { name: 'X-Split', value: 'a\nInjected: 1' },
+          { name: 'X-No-Value' },
+          { name: 'X-Kept', value: 'kept' },
+        ],
+        models: ['model-1'],
+      },
+    ]);
+
+    expect(providers).toEqual([
+      saved,
+      {
+        name: 'Hand Edited',
+        url: 'https://edited.example.com/v1',
+        headers: [{ name: 'X-Kept', value: 'kept' }],
+        models: ['model-1'],
+      },
+    ]);
+  });
 });
 
 describe('parseThreadSettings', () => {

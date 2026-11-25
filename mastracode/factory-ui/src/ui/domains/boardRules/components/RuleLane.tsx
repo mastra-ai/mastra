@@ -46,6 +46,38 @@ const DROP_LINE = cn(
   'data-[drop=before]:before:-top-1 data-[drop=before]:before:block data-[drop=after]:before:-bottom-1 data-[drop=after]:before:block',
 );
 
+export const RULE_LANE = 'flex flex-col gap-3 rounded-xl border border-border bg-card p-4';
+
+export function RuleLaneHeader({ event }: { event: RuleEvent }) {
+  const text = laneText(event);
+  const Icon = text.icon;
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="flex items-center gap-1.5">
+        <Icon className="text-badge-amber-indicator size-3.5 shrink-0" aria-hidden />
+        <Txt as="h3" variant="label" tone="ink">
+          {text.label}
+        </Txt>
+        {text.githubOnly && <GithubOnlyBadge />}
+      </span>
+      {text.description && (
+        <Txt as="p" variant="caption" tone="muted">
+          {text.description}
+        </Txt>
+      )}
+    </div>
+  );
+}
+
+export function RuleLaneFallback({ children }: { children: ReactNode }) {
+  return (
+    <Txt as="span" variant="caption" tone="muted" className="flex flex-1 items-center gap-2.5 px-3 py-1.5">
+      <CircleDashed className="size-icon-md shrink-0" aria-hidden />
+      {children}
+    </Txt>
+  );
+}
+
 /**
  * One trigger's rules, checked top to bottom: the first match moves the card, otherwise the next rule is tried. A rule
  * below one that takes every card is never reached.
@@ -91,7 +123,6 @@ export function RuleLane({
   onUngate: (rule: IntakeRouteInfo) => void;
 }) {
   const text = laneText(event);
-  const Icon = text.icon;
   const catchAll = catchAllIndex(rules, event);
   const opened = isOpenedLane(event);
   const everything = everythingOn(event);
@@ -108,25 +139,9 @@ export function RuleLane({
   return (
     <section
       aria-label={text.label}
-      className={cn(
-        'flex flex-col gap-3 rounded-xl border border-border bg-card p-4',
-        !rules.length && !incoming && 'opacity-60 focus-within:opacity-100 hover:opacity-100',
-      )}
+      className={cn(RULE_LANE, !rules.length && !incoming && 'opacity-60 focus-within:opacity-100 hover:opacity-100')}
     >
-      <div className="flex flex-col gap-1">
-        <span className="flex items-center gap-1.5">
-          <Icon className="text-badge-amber-indicator size-3.5 shrink-0" aria-hidden />
-          <Txt as="h3" variant="label" tone="ink">
-            {text.label}
-          </Txt>
-          {text.githubOnly && <GithubOnlyBadge />}
-        </span>
-        {text.description && (
-          <Txt as="p" variant="caption" tone="muted">
-            {text.description}
-          </Txt>
-        )}
-      </div>
+      <RuleLaneHeader event={event} />
 
       <div className="flex min-w-0 flex-col">
         <ol aria-label={`${text.label} rules`} className="flex min-w-0 flex-col">
@@ -342,12 +357,7 @@ export function RuleLane({
 
           {!only && (
             <li className="flex flex-wrap items-center gap-3">
-              {catchAll < 0 && (
-                <Txt as="span" variant="caption" tone="muted" className="flex flex-1 items-center gap-2.5 px-3 py-1.5">
-                  <CircleDashed className="size-icon-md shrink-0" aria-hidden />
-                  {fallback}
-                </Txt>
-              )}
+              {catchAll < 0 && <RuleLaneFallback>{fallback}</RuleLaneFallback>}
               {canEdit && (
                 <Button variant="ghost" size="sm" icon={<Plus />} onClick={onAdd}>
                   Add rule

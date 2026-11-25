@@ -19,7 +19,7 @@ export function SessionPanelOverview({ workspace }: { workspace: WorkspaceSlot |
 
   // All at once: a section arriving late would push down the ones under it.
   if (card.loading || session.loading || links.pending || (card.item && card.boardsLoading)) {
-    return <OverviewSkeleton />;
+    return <OverviewSkeleton workspace={workspace !== undefined} />;
   }
 
   if (card.failed || !card.item || !factoryId) {

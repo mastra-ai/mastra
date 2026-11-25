@@ -23,7 +23,7 @@ function delivery(
     id,
     timestamp: 1_700_000_000_000,
     connectionId: 'conn-1',
-    integrationId: 'gitlab',
+    provider: 'gitlab',
     eventType: 'Issue Hook',
     sourceEventId: null,
     payload,

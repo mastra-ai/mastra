@@ -10,6 +10,7 @@
 
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
+import type { IncomingHttpHeaders } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { RequestContext } from '@mastra/core/request-context';
@@ -49,6 +50,8 @@ interface Endpoint {
   origin: string;
   /** The `Authorization` header of every request received, in order. */
   authorizations: Array<string | undefined>;
+  /** All headers of every request received, in order. */
+  headers: IncomingHttpHeaders[];
   /** The `model` field of every request body received, in order. */
   models: unknown[];
   close(): Promise<void>;
@@ -59,9 +62,11 @@ const endpoints: Endpoint[] = [];
 /** An endpoint answering every request with a chat completion, or with a redirect to `redirectTo`'s origin. */
 async function startEndpoint(redirectTo?: Endpoint): Promise<Endpoint> {
   const authorizations: Array<string | undefined> = [];
+  const headers: IncomingHttpHeaders[] = [];
   const models: unknown[] = [];
   const server = createServer((req, res) => {
     authorizations.push(req.headers.authorization);
+    headers.push(req.headers);
     let body = '';
     req.on('data', chunk => (body += chunk));
     req.on('end', () => {
@@ -81,6 +86,7 @@ async function startEndpoint(redirectTo?: Endpoint): Promise<Endpoint> {
     url: `${origin}/v1`,
     origin,
     authorizations,
+    headers,
     models,
     close: () =>
       new Promise(resolve => {
@@ -307,6 +313,36 @@ describe('custom provider credentials', () => {
       await sendPrompt('openai/gpt-test');
 
       expect(endpoint.authorizations).toEqual(['Bearer proxy-secret']);
+    });
+  });
+
+  describe('an endpoint with the x-api-key scheme and custom headers', () => {
+    it('receives its key in x-api-key and its headers on a session call', async () => {
+      const endpoint = await startEndpoint();
+      writeSettings({
+        customProviders: [
+          {
+            name: 'Acme',
+            url: endpoint.url,
+            apiKey: 'acme-secret',
+            authScheme: 'x-api-key',
+            headers: [
+              { name: 'X-Org-Id', value: 'org-1', secret: false },
+              { name: 'X-Tenant-Token', value: 'tenant-secret', secret: true },
+            ],
+            models: ['model-x'],
+          },
+        ],
+      });
+
+      await sendPrompt('acme/model-x');
+
+      expect(endpoint.headers[0]).toMatchObject({
+        'x-api-key': 'acme-secret',
+        'x-org-id': 'org-1',
+        'x-tenant-token': 'tenant-secret',
+      });
+      expect(endpoint.authorizations).toEqual([undefined]);
     });
   });
 
