@@ -6,6 +6,12 @@ import * as coreKnowledge from '@mastra/core/knowledge';
 export const IMPORTER_RUN_PATH = '/_mastra/knowledge-importers/run';
 /** Where the app talks to its run on the Knowledge API, authorized by the run token alone. */
 const SESSIONS_PATH = '/v1/knowledge-importer-sessions';
+/** The app's own Mastra credentials. An importer never gets them, whatever Platform names. */
+const PLATFORM_CREDENTIAL_ENV = [
+  'MASTRA_KNOWLEDGE_ACCESS_TOKEN',
+  'MASTRA_PLATFORM_ACCESS_TOKEN',
+  'MASTRA_PLATFORM_SECRET_KEY',
+];
 
 /** What a run token says about its run. Read without verifying: the claim verifies it. */
 export interface ImporterRunTokenClaims {
@@ -32,6 +38,10 @@ export interface ImporterSessionHostOptions {
   token: string;
   /** Where credential env var names are looked up. Default `process.env`. */
   env?: Record<string, string | undefined>;
+  /** More env var names an importer may never read, on top of the app's own Mastra credentials. */
+  deniedCredentialEnv?: readonly string[];
+  /** Told the name of each denied env var Platform asked for. Its value is never read. */
+  onDeniedCredential?: (name: string) => void;
   fetch?: typeof fetch;
 }
 
@@ -46,6 +56,7 @@ export function createImporterSessionHost(options: ImporterSessionHostOptions) {
   const { KnowledgeImporterHostConflictError: ConflictError, KnowledgeImporterHostError: HostError } = coreKnowledge;
   const base = `${options.apiUrl.replace(/\/$/, '')}${SESSIONS_PATH}/${encodeURIComponent(options.instanceId)}`;
   const env = options.env ?? process.env;
+  const denied = new Set([...PLATFORM_CREDENTIAL_ENV, ...(options.deniedCredentialEnv ?? [])]);
   const send = options.fetch ?? fetch;
 
   const call = async (op: string, body: unknown): Promise<any> => {
@@ -76,7 +87,13 @@ export function createImporterSessionHost(options: ImporterSessionHostOptions) {
       if (started?.status !== 'started' || !started.binding) return started;
       const credentials: Record<string, string> = {};
       for (const [slot, name] of Object.entries((started.binding.credentials ?? {}) as Record<string, unknown>)) {
-        const value = typeof name === 'string' ? env[name] : undefined;
+        if (typeof name !== 'string') continue;
+        if (denied.has(name)) {
+          // Left out, so the runner ends the run credential_missing.
+          options.onDeniedCredential?.(name);
+          continue;
+        }
+        const value = env[name];
         if (value !== undefined) credentials[slot] = value;
       }
       return { ...started, binding: { ...started.binding, credentials } };
@@ -92,6 +109,8 @@ export interface ImporterRunTarget {
   instanceId: string;
   importers: readonly unknown[];
   env?: Record<string, string | undefined>;
+  deniedCredentialEnv?: readonly string[];
+  onDeniedCredential?: (name: string) => void;
   fetch?: typeof fetch;
   /** Told how a run started from a request ended. */
   onEnd?: (result: object) => void;

@@ -49,6 +49,14 @@ export interface PlatformKnowledgeOptions extends Omit<
    * @experimental
    */
   importers?: readonly PlatformKnowledgeImporterClass[];
+  /**
+   * Env var names an importer may never read, even if Platform names one for a credential. The app's
+   * own `MASTRA_KNOWLEDGE_ACCESS_TOKEN`, `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PLATFORM_SECRET_KEY`
+   * are always denied.
+   *
+   * @experimental
+   */
+  deniedCredentialEnv?: readonly string[];
 }
 
 // These are the schema-v4 page-store methods, not arbitrary object properties or storage lifecycle methods.
@@ -253,6 +261,7 @@ const DEFAULT_API_URL = 'https://knowledge-api.mastra.ai';
 
 export class PlatformKnowledge extends Knowledge {
   readonly #importerClasses: readonly PlatformKnowledgeImporterClass[];
+  readonly #deniedCredentialEnv: readonly string[];
   #importerWarnings: string[] = [];
   readonly #apiUrl: string;
   readonly #instanceId: string;
@@ -283,6 +292,7 @@ export class PlatformKnowledge extends Knowledge {
       instanceId: _instanceId,
       apiUrl: _apiUrl,
       importers = [],
+      deniedCredentialEnv = [],
       ...config
     } = options;
     const endpoint = `${apiUrl.replace(/\/$/, '')}/v1/knowledge/${encodeURIComponent(instanceId)}`;
@@ -331,6 +341,7 @@ export class PlatformKnowledge extends Knowledge {
       classes.push(importer);
     }
     this.#importerClasses = Object.freeze(classes);
+    this.#deniedCredentialEnv = Object.freeze([...deniedCredentialEnv]);
   }
 
   // The logger a Knowledge starts with drops warnings, so they wait for the first one the app's Mastra
@@ -364,6 +375,9 @@ export class PlatformKnowledge extends Knowledge {
       apiUrl: this.#apiUrl,
       instanceId: this.#instanceId,
       importers: this.#importerClasses,
+      deniedCredentialEnv: this.#deniedCredentialEnv,
+      onDeniedCredential: name =>
+        this.logger.warn(`Knowledge importer run asked for ${name}, which importers may not read`),
       onError: error => this.logger.error('Knowledge importer run failed', { error }),
     });
   }

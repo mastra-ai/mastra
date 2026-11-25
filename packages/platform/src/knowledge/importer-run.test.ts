@@ -3,6 +3,7 @@ import type { KnowledgeImporterContext } from '@mastra/core/knowledge';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 import { IMPORTER_RUN_PATH, createImporterSessionHost, handleImporterRun } from './importer-run';
+import type { ImporterRunTarget } from './importer-run';
 
 const API = 'http://knowledge.test';
 const INSTANCE = 'kinst_1';
@@ -81,7 +82,11 @@ const trigger = (token?: string, method = 'POST') =>
     body: method === 'POST' ? JSON.stringify({ bindingId: 'not-used', apiUrl: 'http://evil.test' }) : undefined,
   });
 
-async function runToEnd(api: ReturnType<typeof knowledgeApi>, env: Record<string, string | undefined>) {
+async function runToEnd(
+  api: ReturnType<typeof knowledgeApi>,
+  env: Record<string, string | undefined>,
+  extra: Partial<ImporterRunTarget> = {},
+) {
   let end!: (r: unknown) => void;
   const ended = new Promise(resolve => (end = resolve));
   const res = await handleImporterRun(trigger(TOKEN), {
@@ -91,6 +96,7 @@ async function runToEnd(api: ReturnType<typeof knowledgeApi>, env: Record<string
     env,
     fetch: api.fetch,
     onEnd: end,
+    ...extra,
   });
   return { res, result: (await ended) as any };
 }
@@ -120,6 +126,37 @@ describe('handleImporterRun', () => {
     expect(seen).toEqual([]);
     expect(result).toMatchObject({ outcome: 'failed', error: { code: 'credential_missing' } });
     expect(await pageBody(api.knowledge, 'tickets/t1')).toBeUndefined();
+  });
+
+  it.each(['MASTRA_KNOWLEDGE_ACCESS_TOKEN', 'MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_PLATFORM_SECRET_KEY'])(
+    'never reads %s for an importer, even when Platform names it',
+    async name => {
+      seen = [];
+      const denied: string[] = [];
+      const api = knowledgeApi({ bindingCredentials: { apiToken: name } });
+      const { result } = await runToEnd(
+        api,
+        { [name]: 'platform-secret' },
+        { onDeniedCredential: n => denied.push(n) },
+      );
+
+      expect(seen).toEqual([]);
+      expect(denied).toEqual([name]);
+      expect(result).toMatchObject({ outcome: 'failed', error: { code: 'credential_missing' } });
+    },
+  );
+
+  it('never reads a variable the app denies', async () => {
+    seen = [];
+    const api = knowledgeApi({ bindingCredentials: { apiToken: 'DATABASE_URL' } });
+    const { result } = await runToEnd(
+      api,
+      { DATABASE_URL: 'postgres://secret' },
+      { deniedCredentialEnv: ['DATABASE_URL'] },
+    );
+
+    expect(seen).toEqual([]);
+    expect(result).toMatchObject({ outcome: 'failed', error: { code: 'credential_missing' } });
   });
 
   it('resends a flush the API answered with a 5xx', async () => {
@@ -232,6 +269,33 @@ describe('PlatformKnowledge.handleImporterRun', () => {
 
       const other = runToken({ instanceId: 'kinst_other', bindingId: 'b1' });
       expect((await knowledge.handleImporterRun(trigger(other))).status).toBe(404);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("passes the app's denied names through and warns with the name, never the value", async () => {
+    const { PlatformKnowledge } = await import('./index');
+    seen = [];
+    const api = knowledgeApi({ bindingCredentials: { apiToken: 'DATABASE_URL' } });
+    vi.stubGlobal('fetch', api.fetch);
+    vi.stubEnv('DATABASE_URL', 'postgres://secret');
+    try {
+      const knowledge = new PlatformKnowledge({
+        accessToken: 'knowledge-token',
+        instanceId: INSTANCE,
+        apiUrl: API,
+        importers: [TicketsImporter],
+        deniedCredentialEnv: ['DATABASE_URL'],
+      });
+      const warn = vi.spyOn(knowledge.logger, 'warn');
+
+      expect((await knowledge.handleImporterRun(trigger(TOKEN))).status).toBe(202);
+      await vi.waitFor(() => expect(api.calls.at(-1)).toBe('finish'));
+      expect(seen).toEqual([]);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('DATABASE_URL'));
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('postgres://secret');
     } finally {
       vi.unstubAllGlobals();
       vi.unstubAllEnvs();
