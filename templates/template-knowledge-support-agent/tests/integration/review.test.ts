@@ -93,6 +93,7 @@ async function fixture(preload?: URL) {
       if (curator) {
         const definitions = body.tools as Array<{ function: { name: string } }>;
         assert.deepEqual(definitions.map(tool => tool.function.name).sort(), [
+          'knowledge_activity',
           'knowledge_list',
           'knowledge_read',
           'knowledge_search',

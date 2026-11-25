@@ -28,16 +28,16 @@
     "@mastra/pg": "latest",
     "@mastra/server": "latest",
     "mdast-util-from-markdown": "^2.1.0",
-    "mdast-util-gfm-autolink-literal": "^2.1.0",
+    "mdast-util-gfm-autolink-literal": "^2.1.2",
     "micromark-extension-gfm-autolink-literal": "^2.1.0",
     "pg": "^8.23.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
+    "@types/node": "^24.19.3",
     "@types/pg": "^8.23.1",
     "mastra": "latest",
-    "oxfmt": "0.59.0",
-    "typescript": "^5.9.3"
+    "oxfmt": "0.80.0",
+    "typescript": "^7.0.2"
   }
 }
