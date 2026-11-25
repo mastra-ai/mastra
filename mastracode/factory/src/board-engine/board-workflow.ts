@@ -21,6 +21,7 @@ export type FactoryCardInput =
 export interface FactoryCardInputError {
   name: string;
   message: string;
+  stack?: string;
   code?: string;
   settled?: boolean;
 }
@@ -53,6 +54,7 @@ function inputError(error: unknown): FactoryCardInputError {
   return {
     name: error.name,
     message: error.message,
+    ...(error.stack ? { stack: error.stack } : {}),
     ...(typeof fields.code === 'string' ? { code: fields.code } : {}),
     ...(typeof fields.settled === 'boolean' ? { settled: fields.settled } : {}),
   };

@@ -3,18 +3,18 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
 import { Mastra } from '@mastra/core/mastra';
 import type { FactoryStorage } from '@mastra/core/storage';
-
 import { LocalFilesystem, MastraSandbox } from '@mastra/core/workspace';
 import type { ProviderStatus } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage, PostgresStore } from '@mastra/pg';
 import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
+
 import type { FactoryBoardEngineFactory } from '../board-engine/engine.js';
 import { createWorkflowBoardEngine } from '../board-engine/workflow-engine.js';
-
 import { MastraFactory } from '../factory.js';
 import { resolveGithubRules } from '../integrations/github/default-rules.js';
 import { GithubIntegration } from '../integrations/github/integration.js';
@@ -703,104 +703,103 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         return requests.filter(body => body.includes(`<skill name=\\"${skill}\\">`) && body.includes(title));
       }
 
-      it.each([
-        ['dispatcher', undefined],
-        ['workflow', createWorkflowBoardEngine],
-      ] as const)(
-        "runs Shipyard's configuration on the %s engine: edited phases and its intake route change what Factory runs",
-        async (_engine, boardEngine) => {
-          const requests = stubModel(shipyardAgent);
-          const orgId = `org-${randomUUID()}`;
-          const replica = await boot(database(), orgId, boardEngine ? { boardEngine } : {});
-          const projectId = await runnableProject(replica, orgId);
-          await configureShipyard(replica, projectId);
-          // The plan the auto-approved submission names has to be readable when the plan run submits it.
-          seedPlan(replica, 'acme/shipyard');
+      /** Shipyard's edited phases and intake route change what Factory runs. */
+      async function runShipyard(boardEngine?: FactoryBoardEngineFactory) {
+        const requests = stubModel(shipyardAgent);
+        const orgId = `org-${randomUUID()}`;
+        const replica = await boot(database(), orgId, boardEngine ? { boardEngine } : {});
+        const projectId = await runnableProject(replica, orgId);
+        await configureShipyard(replica, projectId);
+        // The plan the auto-approved submission names has to be readable when the plan run submits it.
+        seedPlan(replica, 'acme/shipyard');
 
-          const decisionsFor = async (card: { id: string }) =>
-            await replica.workItems.listDeferredDecisions(orgId, projectId, { workItemId: card.id });
-          const stagesOf = async (card: { id: string }) =>
-            (await replica.workItems.get({ orgId, id: card.id }))!.stages;
-          const startOf = async (card: { id: string }, skillName: string) =>
-            (await decisionsFor(card)).find(
-              record => record.decision.type === 'invokeSkill' && record.decision.skillName === skillName,
-            );
-
-          // The intake route: trusted issues land in Triage, an outside author's waits in Intake.
-          const quick = await githubIssue(replica, projectId, 'Quick fix', { trusted: true, labels: ['effort:low'] });
-          const large = await githubIssue(replica, projectId, 'Large rewrite', { trusted: true, labels: [] });
-          const outside = await githubIssue(replica, projectId, 'Outside report', { trusted: false, labels: [] });
-          expect([quick.stages, large.stages, outside.stages]).toEqual([['triage'], ['triage'], ['intake']]);
-
-          // Triage starts on its own, and its edited instructions reach the run its code handler starts,
-          // beside the triage skill.
-          await vi.waitFor(() => expect(runsOf(requests, 'factory-triage', 'Quick fix')).not.toEqual([]), {
-            timeout: 20_000,
-          });
-          expect(runsOf(requests, 'factory-triage', 'Quick fix')[0]).toContain(TRIAGE_NOTE);
-          await vi.waitFor(async () => expect((await startOf(large, 'factory-triage'))?.status).toBe('succeeded'), {
-            timeout: 20_000,
-          });
-
-          // A board rule moves both cards to Planning. Planning starts on its own for the effort:low
-          // card, and its plan is approved for it: the card moves on to Building.
-          await ruleMoves(replica, orgId, projectId, quick, 'planning');
-          await ruleMoves(replica, orgId, projectId, large, 'planning');
-          // Building's run reports `done`, and Factory moves the card there once that run ends. No session
-          // was offered, or called, a tool that moves the card: every move came from a reported outcome.
-          await vi.waitFor(async () => expect(await stagesOf(quick)).toEqual(['done']), { timeout: 30_000 });
-          expect(runsOf(requests, 'factory-plan', 'Quick fix')[0]).toContain(PLAN_NOTE);
-          expect(runsOf(requests, 'factory-build', 'Quick fix')).not.toEqual([]);
-          const history = (await replica.workItems.get({ orgId, id: quick.id }))!.stageHistory.map(
-            entry => entry.stage,
+        const decisionsFor = async (card: { id: string }) =>
+          await replica.workItems.listDeferredDecisions(orgId, projectId, { workItemId: card.id });
+        const stagesOf = async (card: { id: string }) => (await replica.workItems.get({ orgId, id: card.id }))!.stages;
+        const startOf = async (card: { id: string }, skillName: string) =>
+          (await decisionsFor(card)).find(
+            record => record.decision.type === 'invokeSkill' && record.decision.skillName === skillName,
           );
-          expect(history.slice(-3)).toEqual(['planning', 'execute', 'done']);
-          expect(requests.some(body => body.includes('factory_transition_work_item'))).toBe(false);
 
-          // The unlabelled card's plan run waits for a person.
-          expect(await stagesOf(large)).toEqual(['planning']);
-          const largePlan = (await startOf(large, 'factory-plan'))!;
-          expect(largePlan.status).toBe('proposed');
-          expect(runsOf(requests, 'factory-plan', 'Large rewrite')).toEqual([]);
+        // The intake route: trusted issues land in Triage, an outside author's waits in Intake.
+        const quick = await githubIssue(replica, projectId, 'Quick fix', { trusted: true, labels: ['effort:low'] });
+        const large = await githubIssue(replica, projectId, 'Large rewrite', { trusted: true, labels: [] });
+        const outside = await githubIssue(replica, projectId, 'Outside report', { trusted: false, labels: [] });
+        expect([quick.stages, large.stages, outside.stages]).toEqual([['triage'], ['triage'], ['intake']]);
 
-          // Once a person starts it, its plan is not approved for it: the card stays in Planning.
-          const approved = await replica.send(
-            'POST',
-            `/web/factory/projects/${projectId}/decisions/${largePlan.id}/approve`,
-          );
-          expect(approved.status, JSON.stringify(approved.json)).toBe(200);
-          await vi.waitFor(() => expect(runsOf(requests, 'factory-plan', 'Large rewrite')).not.toEqual([]), {
-            timeout: 20_000,
-          });
-          // Long enough for an auto-approval to have moved the card, as it did the labelled one.
-          await new Promise(resolve => setTimeout(resolve, 3_000));
-          expect(await stagesOf(large)).toEqual(['planning']);
+        // Triage starts on its own, and its edited instructions reach the run its code handler starts,
+        // beside the triage skill.
+        await vi.waitFor(() => expect(runsOf(requests, 'factory-triage', 'Quick fix')).not.toEqual([]), {
+          timeout: 20_000,
+        });
+        expect(runsOf(requests, 'factory-triage', 'Quick fix')[0]).toContain(TRIAGE_NOTE);
+        await vi.waitFor(async () => expect((await startOf(large, 'factory-triage'))?.status).toBe('succeeded'), {
+          timeout: 20_000,
+        });
 
-          // PR review starts its review on its own when a rule moves a pull request card into it.
-          const { item: pullRequest } = await replica.workItems.upsert({
-            orgId,
-            userId: 'admin-user',
-            factoryProjectId: projectId,
-            input: {
-              board: 'work',
-              title: 'Add rate limiting',
-              externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:42' },
-              metadata: { authorTrusted: true, headBranch: 'rate-limiting' },
-            },
-          });
-          expect(pullRequest.stages).toEqual(['intake']);
-          await ruleMoves(replica, orgId, projectId, pullRequest, 'pr-review');
-          await vi.waitFor(
-            async () => {
-              const review = (await decisionsFor(pullRequest)).find(record => record.decision.type === 'invokeSkill');
-              expect(review).toMatchObject({ status: 'succeeded', decision: { role: 'review' } });
-            },
-            { timeout: 20_000 },
-          );
-          expect(runsOf(requests, 'factory-review', 'Add rate limiting')).not.toEqual([]);
-        },
-        120_000,
-      );
+        // A board rule moves both cards to Planning. Planning starts on its own for the effort:low
+        // card, and its plan is approved for it: the card moves on to Building.
+        await ruleMoves(replica, orgId, projectId, quick, 'planning');
+        await ruleMoves(replica, orgId, projectId, large, 'planning');
+        // Building's run reports `done`, and Factory moves the card there once that run ends. No session
+        // was offered, or called, a tool that moves the card: every move came from a reported outcome.
+        await vi.waitFor(async () => expect(await stagesOf(quick)).toEqual(['done']), { timeout: 30_000 });
+        expect(runsOf(requests, 'factory-plan', 'Quick fix')[0]).toContain(PLAN_NOTE);
+        expect(runsOf(requests, 'factory-build', 'Quick fix')).not.toEqual([]);
+        const history = (await replica.workItems.get({ orgId, id: quick.id }))!.stageHistory.map(entry => entry.stage);
+        expect(history.slice(-3)).toEqual(['planning', 'execute', 'done']);
+        expect(requests.some(body => body.includes('factory_transition_work_item'))).toBe(false);
+
+        // The unlabelled card's plan run waits for a person.
+        expect(await stagesOf(large)).toEqual(['planning']);
+        const largePlan = (await startOf(large, 'factory-plan'))!;
+        expect(largePlan.status).toBe('proposed');
+        expect(runsOf(requests, 'factory-plan', 'Large rewrite')).toEqual([]);
+
+        // Once a person starts it, its plan is not approved for it: the card stays in Planning.
+        const approved = await replica.send(
+          'POST',
+          `/web/factory/projects/${projectId}/decisions/${largePlan.id}/approve`,
+        );
+        expect(approved.status, JSON.stringify(approved.json)).toBe(200);
+        await vi.waitFor(() => expect(runsOf(requests, 'factory-plan', 'Large rewrite')).not.toEqual([]), {
+          timeout: 20_000,
+        });
+        // Long enough for an auto-approval to have moved the card, as it did the labelled one.
+        await new Promise(resolve => setTimeout(resolve, 3_000));
+        expect(await stagesOf(large)).toEqual(['planning']);
+
+        // PR review starts its review on its own when a rule moves a pull request card into it.
+        const { item: pullRequest } = await replica.workItems.upsert({
+          orgId,
+          userId: 'admin-user',
+          factoryProjectId: projectId,
+          input: {
+            board: 'work',
+            title: 'Add rate limiting',
+            externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:42' },
+            metadata: { authorTrusted: true, headBranch: 'rate-limiting' },
+          },
+        });
+        expect(pullRequest.stages).toEqual(['intake']);
+        await ruleMoves(replica, orgId, projectId, pullRequest, 'pr-review');
+        await vi.waitFor(
+          async () => {
+            const review = (await decisionsFor(pullRequest)).find(record => record.decision.type === 'invokeSkill');
+            expect(review).toMatchObject({ status: 'succeeded', decision: { role: 'review' } });
+          },
+          { timeout: 20_000 },
+        );
+        expect(runsOf(requests, 'factory-review', 'Add rate limiting')).not.toEqual([]);
+      }
+
+      it("runs Shipyard's configuration: edited phases and its intake route change what Factory runs", async () => {
+        await runShipyard();
+      }, 120_000);
+
+      it("runs Shipyard's configuration on the workflow board engine", async () => {
+        await runShipyard(createWorkflowBoardEngine);
+      }, 120_000);
 
       it("moves a card through a new project's Work, which has no Triage, starting Planning's run from Intake", async () => {
         const requests = stubModel();

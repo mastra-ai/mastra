@@ -1,4 +1,5 @@
-import { runOutsideRunFenceScope } from '@mastra/core/storage';
+import { isRunFenceConflictError, runOutsideRunFenceScope } from '@mastra/core/storage';
+
 import { moveCardToBoard } from '../boards/relocate.js';
 import { FactoryRuleRejectedError } from '../rules/dispatch-errors.js';
 import { applyPhaseOutcome } from '../rules/phase-outcome-move.js';
@@ -20,9 +21,17 @@ import type {
   FactoryRunEndedBinding,
 } from './engine.js';
 
-/** How often an input waits for a card's run that another caller is driving, and for how long each time. */
-const RUN_BUSY_ATTEMPTS = 50;
-const RUN_BUSY_WAIT_MS = 100;
+/**
+ * How long an input waits for a card's run that another process is driving. Longer than a
+ * transition can take (its hooks run for up to 30s); past it, the run is restarted if no live
+ * process holds its lease.
+ */
+const RUN_BUSY_DEADLINE_MS = 60_000;
+const RUN_BUSY_MAX_WAIT_MS = 1_000;
+/** A run in one of these took its last input; the card's next input starts it over. */
+const ENDED_RUN_STATUSES = new Set(['success', 'failed', 'canceled', 'bailed', 'tripwire']);
+/** Errors from `resume()` when another caller resumed the run first. */
+const RUN_TAKEN_ERROR_IDS = new Set(['WORKFLOW_RUN_NOT_SUSPENDED', 'WORKFLOW_RESUME_ALREADY_CLAIMED']);
 
 type CardRef = Pick<FactoryTransitionRequest, 'orgId' | 'factoryProjectId' | 'workItemId'>;
 
@@ -36,7 +45,7 @@ function rethrow(error: FactoryCardInputError): never {
       error.settled ?? false,
     );
   }
-  throw Object.assign(new Error(error.message), { name: error.name });
+  throw Object.assign(new Error(error.message), { name: error.name, ...(error.stack ? { stack: error.stack } : {}) });
 }
 
 /**
@@ -44,6 +53,9 @@ function rethrow(error: FactoryCardInputError): never {
  * asked of the card, one input at a time: a move request, and the end of a run of the card's
  * session. The run checks and commits each move through the transition service, so every board
  * check, hook and phase start stays as it is.
+ *
+ * A card's inputs wait for the one before them, so nothing a move runs may wait on another move
+ * of the same card; work it starts in the background, like the phase's session, can ask freely.
  *
  * Its workflow must be registered with the host's Mastra (`MastraFactory` does this), which
  * gives the runs their storage. A card's run starts on the first input asked of it.
@@ -121,13 +133,13 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
       throw new Error('The board workflow is not registered with Mastra, so cards have no runs to move them.');
     }
     const runId = boardRunId(card.workItemId);
-    for (let attempt = 1; ; attempt++) {
+    const deadline = Date.now() + RUN_BUSY_DEADLINE_MS;
+    for (let wait = 50; ; wait = Math.min(wait * 2, RUN_BUSY_MAX_WAIT_MS)) {
       const stored = await this.workflow.getWorkflowRunById(runId, { withNestedWorkflows: false });
-      if (!stored) {
-        const run = await this.workflow.createRun({ runId });
-        await run.start({
-          inputData: { orgId: card.orgId, factoryProjectId: card.factoryProjectId, workItemId: card.workItemId },
-        });
+      if (!stored || ENDED_RUN_STATUSES.has(stored.status)) {
+        // An ended run keeps nothing the card needs; its next input runs a new one under the same id.
+        if (stored) await this.workflow.deleteWorkflowRunById(runId);
+        await this.#start(card, runId);
         continue;
       }
       if (stored.status === 'suspended') {
@@ -141,24 +153,35 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
           if (answer?.inputId !== input.inputId) throw new Error("The card's board run did not answer the input.");
           return answer;
         } catch (error) {
-          // Another process resumed the run first; wait for it to suspend again.
-          if (!isNotSuspended(error) || attempt >= RUN_BUSY_ATTEMPTS) throw error;
+          // Another caller resumed the run first; wait for it to suspend again.
+          if (!RUN_TAKEN_ERROR_IDS.has((error as { id?: unknown } | null)?.id as string)) throw error;
         }
-      } else if (stored.status !== 'running' && stored.status !== 'pending') {
-        throw new Error(`The card's board run is ${stored.status}, so it takes no more inputs.`);
+      } else if (Date.now() >= deadline) {
+        // A run still busy this long lost its process; restart() refuses while a live process holds its lease.
+        await (await this.workflow.createRun({ runId })).restart().catch((error: unknown) => {
+          if ((error as { id?: unknown } | null)?.id !== 'WORKFLOW_RESTART_RUN_OWNED') throw error;
+        });
       }
-      if (attempt >= RUN_BUSY_ATTEMPTS) throw new Error("The card's board run stayed busy; try again.");
-      await new Promise(resolve => setTimeout(resolve, RUN_BUSY_WAIT_MS));
+      if (Date.now() >= deadline + RUN_BUSY_DEADLINE_MS)
+        throw new Error("The card's board run stayed busy; try again.");
+      await new Promise(resolve => setTimeout(resolve, wait));
     }
   }
-}
 
-function isNotSuspended(error: unknown): boolean {
-  const fields = error as { id?: unknown; message?: unknown } | null;
-  return (
-    fields?.id === 'WORKFLOW_RUN_NOT_SUSPENDED' ||
-    (typeof fields?.message === 'string' && /not suspended/i.test(fields.message))
-  );
+  /** Starts the card's run, which waits for its first input; a start another process won is left to it. */
+  async #start(card: CardRef, runId: string): Promise<void> {
+    const run = await this.workflow.createRun({ runId });
+    try {
+      const result = await run.start({
+        inputData: { orgId: card.orgId, factoryProjectId: card.factoryProjectId, workItemId: card.workItemId },
+      });
+      if (result.status !== 'suspended') {
+        throw new Error(`The card's board run ended ${result.status} instead of waiting for its first input.`);
+      }
+    } catch (error) {
+      if (!isRunFenceConflictError(error)) throw error;
+    }
+  }
 }
 
 export const createWorkflowBoardEngine: FactoryBoardEngineFactory = context => new WorkflowBoardEngine(context);

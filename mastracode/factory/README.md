@@ -435,6 +435,8 @@ const factory = new MastraFactory({
 });
 ```
 
+A card's run stores the last move or run end it applied (the full request, with its actor) in its workflow snapshot, so whoever can read the host's workflow runs can read those. A move must not wait on another move of the same card, since that card's inputs are applied one at a time.
+
 A custom engine that runs on workflows of its own lists them under `workflows`, and `MastraFactory` registers them the same way.
 
 ### Board tool-result rules

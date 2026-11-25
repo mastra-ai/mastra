@@ -1,6 +1,11 @@
+import { randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
-import { describe, expect, it, onTestFinished } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { createBoardRegistry } from '../boards/index.js';
 import { PHASE_EXIT_METADATA_KEY } from '../boards/phase-automation.js';
@@ -15,18 +20,31 @@ import { WorkflowBoardEngine } from './workflow-engine.js';
 const ORG = 'org-1';
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 
-/** A Work card in Planning with a bound planning session, and an engine whose workflow Mastra runs. */
-async function setup() {
-  const storage = (await createFactoryStorageForTests()).workItems;
+/** One process: an engine on the card storage, its workflow run by a Mastra on the shared run storage. */
+function replica(storage: WorkItemsStorage, runsUrl: string, before?: () => Promise<void>) {
   const boards = createBoardRegistry();
   const transitionService = new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards });
-  const engine = new WorkflowBoardEngine({ transitionService, workItems: storage, boards });
+  const transition = async (request: FactoryTransitionRequest) => {
+    await before?.();
+    return transitionService.transition(request);
+  };
+  const engine = new WorkflowBoardEngine({ transitionService: { transition }, workItems: storage, boards });
   const mastra = new Mastra({
-    storage: new LibSQLStore({ id: 'board-runs', url: ':memory:' }),
+    storage: new LibSQLStore({ id: `board-runs-${randomUUID()}`, url: runsUrl }),
     workflows: engine.workflows,
     logger: false,
   });
   onTestFinished(() => mastra.shutdown().catch(() => undefined));
+  return { engine, mastra };
+}
+
+/** A Work card in Planning with a bound planning session, and an engine whose workflow Mastra runs. */
+async function setup() {
+  const storage = (await createFactoryStorageForTests()).workItems;
+  const dir = mkdtempSync(join(tmpdir(), 'factory-board-runs-'));
+  onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
+  const runsUrl = `file:${join(dir, 'runs.db')}`;
+  const { engine, mastra } = replica(storage, runsUrl);
   const prepared = await storage.prepareRunStart({
     orgId: ORG,
     userId: 'user-1',
@@ -47,7 +65,7 @@ async function setup() {
     kickoffMessage: null,
   });
   await storage.update({ orgId: ORG, id: prepared.item.id, userId: 'user-1', patch: { stages: ['planning'] } });
-  return { storage, engine, mastra, ...prepared };
+  return { storage, engine, mastra, runsUrl, ...prepared };
 }
 
 function personMove(storage: WorkItemsStorage, id: string, stage: string, identity: string) {
@@ -160,6 +178,89 @@ describe('the workflow board engine', () => {
 
     await expect(engine.runEnded(binding)).resolves.toBe(false);
     expect((await storage.get({ orgId: ORG, id: item.id }))!.stages).toEqual(['planning']);
+  });
+
+  it('waits its turn when another process resumed the same card first', async () => {
+    const { storage, engine, runsUrl, item } = await setup();
+    await engine.requestMove(await personMove(storage, item.id, 'intake', 'drag-0')());
+    let entered!: () => void;
+    const inStep = new Promise<void>(resolve => (entered = resolve));
+    let release!: () => void;
+    const released = new Promise<void>(resolve => (release = resolve));
+    let gated = true;
+    const slow = replica(storage, runsUrl, async () => {
+      if (!gated) return;
+      gated = false;
+      entered();
+      await released;
+    }).engine;
+    const other = replica(storage, runsUrl).engine;
+    // The other process read the run while it was still suspended, so it resumes it too.
+    const suspended = await other.workflow.getWorkflowRunById(boardRunId(item.id));
+    vi.spyOn(other.workflow, 'getWorkflowRunById').mockResolvedValueOnce(suspended);
+    const toDone = await personMove(storage, item.id, 'done', 'drag-1')();
+    const toCanceled = await personMove(storage, item.id, 'canceled', 'drag-2')();
+
+    const first = slow.requestMove(toDone);
+    await inStep;
+    const second = other.requestMove(toCanceled);
+    await new Promise(resolve => setTimeout(resolve, 200));
+    release();
+
+    await expect(first).resolves.toMatchObject({ status: 'accepted', stage: 'done' });
+    // Applied once the first input's step suspended, as stale since both were made against one revision.
+    await expect(second).resolves.toMatchObject({ status: 'rejected', code: 'stale' });
+  });
+
+  it('tries again when another caller claimed the suspended run between its read and its resume', async () => {
+    const { storage, engine, item } = await setup();
+    await engine.requestMove(await personMove(storage, item.id, 'intake', 'drag-0')());
+    // Core's answer to the resume that lost the compare-and-set on a suspended run.
+    const createRun = engine.workflow.createRun.bind(engine.workflow);
+    vi.spyOn(engine.workflow, 'createRun').mockImplementationOnce(async options => {
+      const run = await createRun(options);
+      vi.spyOn(run, 'resume').mockRejectedValueOnce(
+        Object.assign(new Error('This suspended workflow run was already resumed by another caller.'), {
+          id: 'WORKFLOW_RESUME_ALREADY_CLAIMED',
+        }),
+      );
+      return run;
+    });
+
+    await expect(engine.requestMove(await personMove(storage, item.id, 'done', 'drag-1')())).resolves.toMatchObject({
+      status: 'accepted',
+      stage: 'done',
+    });
+  });
+
+  it("starts the card's run over when its last run ended", async () => {
+    const { storage, engine, mastra, item } = await setup();
+    await engine.requestMove(await personMove(storage, item.id, 'intake', 'drag-1')());
+    const workflow = mastra.getWorkflow('factory-board');
+    await (await workflow.createRun({ runId: boardRunId(item.id) })).cancel();
+    expect((await workflow.getWorkflowRunById(boardRunId(item.id)))?.status).toBe('canceled');
+
+    await expect(engine.requestMove(await personMove(storage, item.id, 'done', 'drag-2')())).resolves.toMatchObject({
+      status: 'accepted',
+      stage: 'done',
+    });
+    expect((await workflow.getWorkflowRunById(boardRunId(item.id)))?.status).toBe('suspended');
+  });
+
+  it("claims the card's run afresh when asked from work that carries an older claim on it", async () => {
+    const { storage, engine, item, binding } = await setup();
+    await engine.requestMove(await personMove(storage, item.id, 'intake', 'drag-1')());
+    await engine.requestMove(await personMove(storage, item.id, 'planning', 'drag-2')());
+    // What a session a step of this run started still carries: the claim that step held, since replaced.
+    const context = (globalThis as Record<symbol, { run<T>(scope: unknown, fn: () => T): T } | undefined>)[
+      Symbol.for('mastra.storage.runFenceContext')
+    ]!;
+    const staleClaim = {
+      fenceFor: (_store: object, runId?: string) =>
+        runId ? { runId, generation: 1, ownerId: 'finished-step' } : undefined,
+    };
+
+    await expect(context.run(staleClaim, () => engine.runEnded(binding))).resolves.toBe(false);
   });
 
   it('refuses inputs while its workflow is not registered with Mastra', async () => {
