@@ -29,13 +29,13 @@
     "text-standard"
   ],
   "reasoning": {
-    "agent-standard": [
+    "agent-prime": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "code-standard": [
+    "deepseek-pro-latest": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -50,25 +50,10 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "text-prime": [
+    "gemini-pro-latest": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "bytedance-pro-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "code-max": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "minimax-latest": [
@@ -77,13 +62,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "kimi-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "gpt-sol-latest": [
+    "code-prime": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -95,19 +74,13 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "agent-prime": [
+    "code-standard": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "glm-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-pro-latest": [
+    "text-prime": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -122,7 +95,19 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "code-prime": [
+    "gpt-sol-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "glm-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "agent-standard": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -137,10 +122,25 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gemini-pro-latest": [
+    "bytedance-pro-latest": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "kimi-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "code-max": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

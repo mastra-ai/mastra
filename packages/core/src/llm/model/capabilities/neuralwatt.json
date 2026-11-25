@@ -69,25 +69,7 @@
     "qwen3.6-35b-flex"
   ],
   "reasoning": {
-    "nw-flash-flex": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "xhigh", "max"]
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "deepseek-v4.1-flash-speed": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "xhigh", "max"]
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen-3.8-27b": [
+    "qwen-3.8-27b-flex": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "xhigh"]
@@ -96,10 +78,37 @@
         "type": "budget_tokens"
       }
     ],
-    "nw-large-flex": [
+    "qwen3.6-35b": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "nw-large": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh", "max"]
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "nw-small-flex": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
       },
       {
         "type": "budget_tokens"
@@ -114,7 +123,16 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen-3.8-27b-flex": [
+    "qwen3.6-35b-flex": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen-3.8-27b": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "xhigh"]
@@ -132,7 +150,7 @@
         "type": "budget_tokens"
       }
     ],
-    "nw-flash": [
+    "deepseek-v4.1-flash-flex": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "xhigh", "max"]
@@ -141,10 +159,28 @@
         "type": "budget_tokens"
       }
     ],
-    "kimi-k3.1-pro": [
+    "nw-large-flex": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "kimi-k3.1-pro-flex": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "nw-small": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
       },
       {
         "type": "budget_tokens"
@@ -159,19 +195,19 @@
         "type": "budget_tokens"
       }
     ],
-    "glm-5.3-flash": [
+    "deepseek-v4.1-flash-speed": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "xhigh", "max"]
       },
       {
         "type": "budget_tokens"
       }
     ],
-    "qwen3.6-35b": [
+    "glm-5.3-flash": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["low", "high", "max"]
       },
       {
         "type": "budget_tokens"
@@ -195,10 +231,19 @@
         "type": "budget_tokens"
       }
     ],
-    "nw-large": [
+    "kimi-k3.1-pro": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "nw-flash-flex": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh", "max"]
       },
       {
         "type": "budget_tokens"
@@ -210,55 +255,10 @@
         "values": ["none", "max"]
       }
     ],
-    "kimi-k3.1-pro-flex": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "nw-small": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "deepseek-v4.1-flash": [
+    "nw-flash": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "xhigh", "max"]
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "deepseek-v4.1-flash-flex": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "xhigh", "max"]
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "nw-small-flex": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen3.6-35b-flex": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
       },
       {
         "type": "budget_tokens"

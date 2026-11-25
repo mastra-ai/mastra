@@ -11,6 +11,15 @@
   ],
   "structuredOutput": ["qwen3-80b", "qwen3-vl", "qwen3.8-27b"],
   "reasoning": {
+    "deepseek-v4.1-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "glm-5.3": [
       {
         "type": "effort",
@@ -31,24 +40,15 @@
         "type": "toggle"
       }
     ],
+    "qwen3-vl": [
+      {
+        "type": "toggle"
+      }
+    ],
     "gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "deepseek-v4.1-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "qwen3-vl": [
-      {
-        "type": "toggle"
       }
     ]
   }
