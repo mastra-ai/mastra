@@ -310,6 +310,8 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
         description: input.description ?? null,
         default_model_id: input.defaultModelId ?? null,
         model_scope: input.modelScope ?? 'hybrid',
+        // Written here because a database created earlier keeps its old column default.
+        build_push_debounce_minutes: DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES,
         created_at: now,
         updated_at: now,
       });
