@@ -109,6 +109,7 @@ async function writeDataset(
   reportRetention: boolean,
   context: WriterContext,
   database: SeedLinkDatabase,
+  initialize = false,
 ) {
   const storage = await knowledge.getStorage();
   const author = `seed:${dataset.id}`;
@@ -133,11 +134,17 @@ async function writeDataset(
   const ordered = [...dataset.pages].sort((a, b) => a.path.split('/').length - b.path.split('/').length);
   for (const wanted of ordered) {
     const { scope, path, name, description, body } = wanted;
+    const existing = scanned.get(wanted) ?? null;
+    if (initialize && wanted.requiredPolicyFile && existing?.body && existing.body !== body) {
+      // Preserve policy revisions deployed before the initialization marker was introduced.
+      written.set(`${scope}#${path}`, { status: 'unchanged', page: existing });
+      continue;
+    }
     const result = await upsertPageAtRevision(
       knowledge,
       storage,
       { scope, path, name, description, body, author },
-      scanned.get(wanted)!,
+      existing,
       undefined,
       context.postgres,
     );
@@ -157,6 +164,7 @@ async function writeDataset(
   // Verify managed links after all their destinations exist. Repair only the seed's own pages.
   for (const wanted of dataset.pages) {
     const { page: current } = written.get(`${wanted.scope}#${wanted.path}`)!;
+    if (initialize && wanted.requiredPolicyFile && current.body !== wanted.body) continue;
     const links = [...wanted.links].map(([ref, count]) => ({
       ref: knowledgeLinkRefKey(ref),
       toPageId: written.get(ref)!.page.id,
@@ -213,18 +221,41 @@ async function writeDataset(
   report.retained = await reportRetainedSeedRecords(storage, dataset.id, selectedNotes, context);
 }
 
-/** CLI and deterministic checks use this same path. Validation and dry-run never initialize storage. */
-export async function seedDataset(config: DatasetConfiguration, options: SeedOptions = {}): Promise<SeedReport> {
-  const dataset = await prepareDataset(config, policyReference, options.policyApprovalFile);
-  const report: SeedReport = {
+function seedReport(dataset: PreparedDataset, dryRun = false): SeedReport {
+  return {
     dataset: dataset.id,
     version: dataset.version,
-    dryRun: !!options.dryRun,
+    dryRun,
     pages: [],
     notes: [],
     retained: [],
     repairedLinks: false,
   };
+}
+
+async function withSeedDatabase<T>(
+  context: WriterContext,
+  operation: (knowledge: Knowledge, database: SeedLinkDatabase) => Promise<T>,
+): Promise<T> {
+  const { libsql, postgres } = context;
+  if (postgres) return operation(createPostgresWriterKnowledge(postgres, true), { postgres });
+  const store = createStore('knowledge-seed', libsql);
+  try {
+    const client = createClient({ url: libsql.url, authToken: libsql.authToken });
+    try {
+      return await operation(createKnowledge(store), { libsql: client });
+    } finally {
+      client.close();
+    }
+  } finally {
+    await store.close();
+  }
+}
+
+/** CLI and deterministic checks use this same path. Validation and dry-run never initialize storage. */
+export async function seedDataset(config: DatasetConfiguration, options: SeedOptions = {}): Promise<SeedReport> {
+  const dataset = await prepareDataset(config, policyReference, options.policyApprovalFile);
+  const report = seedReport(dataset, options.dryRun);
   if (options.dryRun) {
     report.pages = dataset.pages.map(page => ({
       key: page.key,
@@ -238,31 +269,48 @@ export async function seedDataset(config: DatasetConfiguration, options: SeedOpt
   }
   return withWriterLock(async context => {
     await validatePreparedPolicies(dataset, options.policyApprovalFile);
-    const { libsql, postgres } = context;
-    if (postgres) {
-      await writeDataset(
-        createPostgresWriterKnowledge(postgres, true),
-        dataset,
-        report,
-        options.reportRetention ?? true,
-        context,
-        { postgres },
-      );
-      return report;
-    }
-    const store = createStore('knowledge-seed', libsql);
-    try {
-      const client = createClient({ url: libsql.url, authToken: libsql.authToken });
-      try {
-        await writeDataset(createKnowledge(store), dataset, report, options.reportRetention ?? true, context, {
-          libsql: client,
-        });
-        return report;
-      } finally {
-        client.close();
-      }
-    } finally {
-      await store.close();
-    }
+    await withSeedDatabase(context, (knowledge, database) =>
+      writeDataset(knowledge, dataset, report, options.reportRetention ?? true, context, database),
+    );
+    return report;
   }, options.databaseUrl);
+}
+
+async function hasSeedInitialization(database: SeedLinkDatabase, id: string) {
+  const table = 'support_seed_initializations';
+  if ('postgres' in database) {
+    await database.postgres.none(`CREATE TABLE IF NOT EXISTS public.${table} (dataset_id TEXT PRIMARY KEY)`);
+    return !!(await database.postgres.oneOrNone(`SELECT dataset_id FROM public.${table} WHERE dataset_id = $1`, [id]));
+  }
+  await database.libsql.execute(`CREATE TABLE IF NOT EXISTS ${table} (dataset_id TEXT PRIMARY KEY)`);
+  const { rows } = await database.libsql.execute({
+    sql: `SELECT dataset_id FROM ${table} WHERE dataset_id = ?`,
+    args: [id],
+  });
+  return rows.length > 0;
+}
+
+/** Run the bundled seed only until initialization succeeds for this database and dataset. */
+export async function seedDatasetOnce(
+  config: DatasetConfiguration,
+  options: Pick<SeedOptions, 'databaseUrl' | 'policyApprovalFile'> = {},
+) {
+  await withWriterLock(
+    context =>
+      withSeedDatabase(context, async (knowledge, database) => {
+        if (await hasSeedInitialization(database, config.id)) return;
+        const dataset = await prepareDataset(config, policyReference, options.policyApprovalFile);
+        await writeDataset(knowledge, dataset, seedReport(dataset), false, context, database, true);
+        if ('postgres' in database)
+          await database.postgres.none('INSERT INTO public.support_seed_initializations (dataset_id) VALUES ($1)', [
+            config.id,
+          ]);
+        else
+          await database.libsql.execute({
+            sql: 'INSERT INTO support_seed_initializations (dataset_id) VALUES (?)',
+            args: [config.id],
+          });
+      }),
+    options.databaseUrl,
+  );
 }

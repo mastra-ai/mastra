@@ -11,7 +11,7 @@ import { KnowledgeLibSQL, LibSQLStore } from '@mastra/libsql';
 import type { Knowledge, KnowledgeStorage } from '@mastra/core/knowledge';
 import { createKnowledge } from '../../src/mastra/knowledge/index.ts';
 import { acquireWriterLock } from '../../src/mastra/knowledge/writer-lock.ts';
-import { seedDataset, type SeedReport } from '../../src/mastra/knowledge/seed.ts';
+import { seedDataset, seedDatasetOnce, type SeedReport } from '../../src/mastra/knowledge/seed.ts';
 import { datasets } from '../../src/examples/datasets.ts';
 import { principals } from '../../src/mastra/identity.ts';
 import { exampleProfiles } from '../../src/examples/retail-pos/profiles.ts';
@@ -157,6 +157,42 @@ async function fixture() {
 }
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
+
+test('startup retries an incomplete seed and preserves a later policy revision', async () => {
+  const f = await fixture();
+  try {
+    const config = { ...datasets['retail-pos']!, directory: dirname(f.manifestFile) };
+    const options = { databaseUrl: f.url };
+    const missingManifest = { ...config, manifestFile: 'absent.json' };
+    await assert.rejects(seedDatasetOnce(missingManifest, options), { code: 'ENOENT' });
+    await seedDatasetOnce(config, options);
+    const scope = 'tenant:north';
+    const path = 'policies/safe-changes';
+    const current = async () =>
+      f.knowledge(async (_, storage) => {
+        const [home] = await storage.getScopesByAddress([scope]);
+        const policy = home && (await storage.getPageByPath({ scopeId: home.id, path: path.split('/'), read: 'all' }));
+        assert.ok(policy?.body, 'First successful startup must publish the policy');
+        return policy;
+      });
+    const original = await current();
+    const body = original.body! + '\n\nReview approved by the local operations lead.\n';
+    await approvePolicyRevision(f.environment.SUPPORT_POLICY_APPROVAL_FILE, `${scope}#${path}`, body);
+    await f.knowledge(async knowledge => {
+      await knowledge.upsertPage({ scope, path, name: original.name, body, author: 'operator' });
+    });
+    const revised = await current();
+    assert.equal(revised.version, original.version + 1);
+    await seedDatasetOnce(missingManifest, options);
+    assert.deepEqual(await current(), revised);
+    await f.sql('DELETE FROM support_seed_initializations');
+    await seedDatasetOnce(config, options);
+    assert.deepEqual(await current(), revised);
+  } finally {
+    await f.close();
+  }
+});
+
 async function notes(storage: KnowledgeStorage, pageId: string) {
   const result = [];
   let cursor: string | undefined;
