@@ -24,6 +24,7 @@
 // with a leak probe that diffs worker state between files.
 export const isolatedTestFiles = [
   'src/agent-controller/__tests__/session-message-after-swept-prompt.test.ts', // env
+  'src/agent-controller/__tests__/session-pending-user-messages.test.ts', // vi.mock
   'src/agent-controller/fork-clone-metadata.test.ts', // vi.mock
   'src/agent-controller/lease-lost-abort-reason.test.ts', // env
   'src/agent-controller/list-available-models.test.ts', // global

@@ -385,8 +385,8 @@ describe('a sent message is pending until stored, then stored', () => {
     void h.session.sendMessage({ content: 'first message' }).catch(() => {});
     await first.reached;
     await h.session.followUp({ content: 'and then this' });
-    // The listener starts once the follow-up is handed to its run, which can take a while on a loaded CI runner.
-    await vi.waitFor(() => expect(saveListeners.live).toBeGreaterThan(0), { timeout: 10_000 });
+    // The listener starts once the follow-up is handed to its run.
+    await vi.waitFor(() => expect(saveListeners.live).toBeGreaterThan(0));
     const watching = saveListeners.live;
 
     await h.session.thread.loadMetadata();
