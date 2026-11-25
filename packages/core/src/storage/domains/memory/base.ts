@@ -321,8 +321,9 @@ export abstract class MemoryStorage extends StorageDomain {
   // Rules for the existing methods:
   // - `saveMessages` on an existing id: a row with a status loses the status,
   //   keeps its claimant and takes the saved message's `createdAt`. A row
-  //   without a status is saved as before and keeps its claimant. A row with
-  //   a status is never saved under another thread.
+  //   without a status is saved as before and keeps its claimant. When the
+  //   saved message names another thread than a row with a status, the store
+  //   leaves that row unchanged and saves the rest of the batch as usual.
   // - Every message read, including include windows and their neighbor
   //   counts, skips rows with a status.
   // - `updateMessages` treats a row with a status as a missing id.
