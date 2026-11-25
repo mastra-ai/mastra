@@ -75,22 +75,28 @@ describe('AIMock loop scenario: evented + RedisStreamsPubSub', () => {
       ],
     });
     const schemaName = `live_context_${randomUUID().replaceAll('-', '')}`;
-    const storage = new PostgresStore({
-      id: schemaName,
-      schemaName,
-      connectionString:
-        process.env.POSTGRES_CONNECTION_STRING ?? 'postgres://postgres:postgres@localhost:5436/postgres',
-    });
+    const connectionString =
+      process.env.POSTGRES_CONNECTION_STRING ?? 'postgres://postgres:postgres@localhost:5436/postgres';
+    const storage = new PostgresStore({ id: schemaName, schemaName, connectionString });
+    let mastra: Mastra | undefined;
     try {
-      const mastra = new Mastra({ agents: { agent }, logger: false, storage, pubsub });
+      mastra = new Mastra({ agents: { agent }, logger: false, storage, pubsub });
       const output = await mastra.getAgent('agent').stream('Read the live state.', { requestContext });
       await output.consumeStream();
       expect(observed).toEqual(['live-controller-state']);
       expect(await output.text).toBe('Processed on the owning worker.');
     } finally {
-      await pubsub.close();
-      await storage.db.none(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
-      await storage.close();
+      try {
+        await mastra?.shutdown();
+      } finally {
+        // Mastra shuts down its own Postgres pool before the schema can be dropped.
+        const cleanup = mastra ? new PostgresStore({ id: `${schemaName}_cleanup`, connectionString }) : storage;
+        try {
+          await cleanup.db.none(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+        } finally {
+          await cleanup.close();
+        }
+      }
     }
   });
 
