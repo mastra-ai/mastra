@@ -601,7 +601,7 @@ async function verifyPostgresCommitState(db, env) {
     ]);
     assert.equal(notice.channel, channel);
     downstream.destroy();
-    const [code] = await proc.exited;
+    const [code] = await waitForExit(proc);
     assert.equal(code, 0, proc.output());
   } finally {
     await Promise.all([proxy.close(), observer.end(), proc && stop(proc)]);
