@@ -1,6 +1,10 @@
+import { addAbortListener } from 'node:events';
+import type { PlatformAccessToken } from '@mastra/platform-workspace';
+
 export interface PlatformMemoryClientOptions {
   /** Platform access token. Falls back to `MASTRA_PLATFORM_ACCESS_TOKEN`, then `MASTRA_PLATFORM_SECRET_KEY`. */
-  accessToken?: string;
+  /** A token, or a function called before every request so long-lived clients never hold an expired one. */
+  accessToken?: PlatformAccessToken;
   /** Memory instance id. Falls back to `MASTRA_MEMORY_INSTANCE_ID`. */
   instanceId?: string;
   /** Falls back to `MASTRA_PROJECT_ID`. Sent as a hint; ownership is enforced server-side from the token. */
@@ -64,10 +68,33 @@ export interface MemoryContext {
   observedAt: string | null;
 }
 
+/** One observational-memory generation. Timestamps are ISO strings. */
 export interface MemoryObservationRecord {
+  id: string;
+  scope: 'thread' | 'resource';
+  threadId: string | null;
+  resourceId: string;
+  originType: 'initial' | 'reflection';
+  generationCount: number;
+  createdAt: string;
+  updatedAt: string;
   activeObservations: string | null;
   lastObservedAt: string | null;
+  observationTokenCount: number;
+  totalTokensObserved: number;
+  pendingMessageTokens: number;
+  isObserving: boolean;
+  isReflecting: boolean;
+  isBufferingObservation: boolean;
+  isBufferingReflection: boolean;
   [key: string]: unknown;
+}
+
+export interface MemoryObservationRecords {
+  /** Null before the first observation. */
+  record: MemoryObservationRecord | null;
+  /** Past generations, newest first. Empty unless `historyLimit` was set. */
+  history: MemoryObservationRecord[];
 }
 
 type SerializedMessageList = ReturnType<import('@mastra/core/agent').MessageList['serialize']>;
@@ -129,7 +156,7 @@ function env(name: string): string | undefined {
   return process.env[name]?.trim() || undefined;
 }
 
-function required(value: string | undefined, name: string): string {
+function required<T>(value: T | undefined, name: string): T {
   if (!value) throw new Error(`PlatformMemory: ${name} is required`);
   return value;
 }
@@ -217,21 +244,10 @@ export class PlatformMemoryClient {
     });
   }
 
-  getContext(threadId: string, resourceId: string, opts: { workingMemory?: 'readonly' | 'tool' | 'off' } = {}) {
+  getContext(threadId: string, resourceId: string) {
     return this.request<MemoryContext>('GET', `/threads/${encodeURIComponent(threadId)}/context`, {
-      query: { resourceId, ...(opts.workingMemory ? { workingMemory: opts.workingMemory } : {}) },
-    });
-  }
-
-  async getWorkingMemory(resourceId: string): Promise<string | null> {
-    const res = await this.request<{ workingMemory: string | null }>('GET', '/working-memory', {
       query: { resourceId },
     });
-    return res.workingMemory;
-  }
-
-  async updateWorkingMemory(resourceId: string, workingMemory: string): Promise<void> {
-    await this.request('PUT', '/working-memory', { body: { resourceId, workingMemory } });
   }
 
   /** Omit resourceId to search the instance's most recently active threads. */
@@ -247,6 +263,34 @@ export class PlatformMemoryClient {
       `/threads/${encodeURIComponent(threadId)}/observations`,
     );
     return res.record;
+  }
+
+  /**
+   * Current observational-memory record for the thread plus up to `historyLimit` (1-50) past
+   * generations, newest first.
+   */
+  async getObservationRecords(
+    threadId: string,
+    options: { historyLimit?: number; from?: string; to?: string; offset?: number } = {},
+  ): Promise<MemoryObservationRecords> {
+    const res = await this.request<{ record: MemoryObservationRecord | null; history?: MemoryObservationRecord[] }>(
+      'GET',
+      `/threads/${encodeURIComponent(threadId)}/observations`,
+      { query: options },
+    );
+    return { record: res.record, history: res.history ?? [] };
+  }
+
+  async waitForBuffering(threadId: string): Promise<'idle' | 'completed'> {
+    const result = await this.request<{ status: unknown }>(
+      'GET',
+      `/threads/${encodeURIComponent(threadId)}/observations/buffer-status`,
+      { timeoutMs: 35_000 },
+    );
+    if (result.status !== 'idle' && result.status !== 'completed') {
+      throw new PlatformMemoryApiError(503, 'Hosted buffering returned an invalid status');
+    }
+    return result.status;
   }
 
   /** Runs the instance's memory processors for one agent phase on a serialized message list. */
@@ -266,6 +310,11 @@ export class PlatformMemoryClient {
   /** Effective observation thresholds for the thread and which ones it overrides. */
   getThreadConfig(threadId: string) {
     return this.request<MemoryThreadConfig>('GET', `/threads/${encodeURIComponent(threadId)}/config`);
+  }
+
+  /** The instance's observation thresholds, before any thread overrides. */
+  getInstanceConfig() {
+    return this.request<MemoryThreadConfig>('GET', '/config');
   }
 
   /** Overrides thresholds for one thread. Pass `null` to fall back to the instance value. */
@@ -297,11 +346,10 @@ export class PlatformMemoryClient {
     return res.deleted;
   }
 
-  /** Everything stored for one resource (user): working memory and threads. */
+  /** Threads stored for one resource (user). */
   getResource(resourceId: string, query: { page?: number; perPage?: number } = {}) {
     return this.request<{
       resourceId: string;
-      workingMemory: string | null;
       threads: MemoryThread[];
       totalThreads: number;
       hasMore: boolean;
@@ -316,7 +364,7 @@ export class PlatformMemoryClient {
     }>('GET', '/resources', { query });
   }
 
-  /** Deletes every thread, message, observation and the working memory for a resource. */
+  /** Deletes every thread, message and observation for a resource. */
   async deleteResource(resourceId: string): Promise<number> {
     const res = await this.request<{ deletedThreads: number }>(
       'DELETE',
@@ -338,18 +386,35 @@ export class PlatformMemoryClient {
     for (const [key, value] of Object.entries(init.query ?? {})) {
       if (value !== undefined) url.searchParams.set(key, String(value));
     }
-    const headers: Record<string, string> = { authorization: `Bearer ${this.opts.accessToken}` };
+    const deadline = AbortSignal.timeout(init.timeoutMs ?? REQUEST_TIMEOUT_MS);
+    const signal = init.signal ? AbortSignal.any([init.signal, deadline]) : deadline;
+    signal.throwIfAborted();
+
+    const getToken = this.opts.accessToken;
+    let token = getToken;
+    if (typeof getToken === 'function') {
+      let listener: ReturnType<typeof addAbortListener> | undefined;
+      const aborted = new Promise<never>((_, reject) => {
+        listener = addAbortListener(signal, () => reject(signal.reason));
+      });
+      try {
+        token = await Promise.race([aborted, new Promise<string>(resolve => resolve(getToken.call(this.opts)))]);
+      } finally {
+        listener?.[Symbol.dispose]();
+      }
+      signal.throwIfAborted();
+    }
+    const headers: Record<string, string> = { authorization: `Bearer ${token}` };
     if (this.opts.actingUserId) headers['x-acting-user-id'] = this.opts.actingUserId;
     if (this.opts.projectId) headers['x-mastra-project-id'] = this.opts.projectId;
     if (this.opts.environmentId) headers['x-mastra-environment-id'] = this.opts.environmentId;
     if (init.body !== undefined) headers['content-type'] = 'application/json';
 
-    const deadline = AbortSignal.timeout(init.timeoutMs ?? REQUEST_TIMEOUT_MS);
     const res = await this.opts.fetch(url, {
       method,
       headers,
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
-      signal: init.signal ? AbortSignal.any([init.signal, deadline]) : deadline,
+      signal,
     });
     if (!res.ok) throw new PlatformMemoryApiError(res.status, await res.text().catch(() => ''));
     if (res.status === 204) return undefined as T;

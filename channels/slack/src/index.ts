@@ -31,6 +31,7 @@
  */
 
 export { SlackProvider } from './provider';
+export { createSlackTools } from './tools';
 export { SlackManifestClient } from './client';
 export { verifySlackRequest, parseSlackFormBody } from './crypto';
 export { buildManifest, DEFAULT_BOT_SCOPES, DEFAULT_BOT_EVENTS } from './manifest';

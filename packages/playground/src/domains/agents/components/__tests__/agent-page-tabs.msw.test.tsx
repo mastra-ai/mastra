@@ -102,7 +102,11 @@ describe('AgentLayout tool tabs', () => {
 
       await waitFor(() => expect(queryClient.getQueryState(['mastra-packages'])?.status).toBe('success'));
       const editor = screen.getByRole('button', { name: 'Editor' });
-      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Chat']);
+      expect(
+        within(screen.getByRole('navigation', { name: 'Agent views' }))
+          .getAllByRole('link')
+          .map(tab => tab.textContent),
+      ).toEqual(['Chat']);
       expect(editor.getAttribute('aria-disabled')).toBe('true');
       fireEvent.click(editor);
       expect(navigateSpy).not.toHaveBeenCalled();
@@ -138,7 +142,11 @@ describe('AgentLayout tool tabs', () => {
       const { queryClient } = renderLayout();
 
       await waitFor(() => expect(queryClient.getQueryState(['mastra-packages'])?.status).toBe('success'));
-      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Chat', 'Editor']);
+      expect(
+        within(screen.getByRole('navigation', { name: 'Agent views' }))
+          .getAllByRole('link')
+          .map(tab => tab.textContent),
+      ).toEqual(['Chat', 'Editor']);
       expect(screen.getByRole('button', { name: 'Traces' }).getAttribute('aria-disabled')).toBe('true');
     });
 
@@ -158,11 +166,15 @@ describe('AgentLayout tool tabs', () => {
     it('renders the selected Editor after Chat and Traces', async () => {
       server.use(...commonHandlers(enabledPackages));
       renderLayout('/agents/agent-1/editor');
-      const editor = await screen.findByRole('tab', { name: 'Editor' });
-      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Chat', 'Traces', 'Editor']);
-      expect(editor.getAttribute('aria-selected')).toBe('true');
+      const editor = await screen.findByRole('link', { name: 'Editor' });
+      expect(
+        within(screen.getByRole('navigation', { name: 'Agent views' }))
+          .getAllByRole('link')
+          .map(tab => tab.textContent),
+      ).toEqual(['Chat', 'Traces', 'Editor']);
+      expect(editor.getAttribute('aria-current')).toBe('page');
       await waitFor(() =>
-        expect(screen.getByRole('tab', { name: 'Editor' }).getAttribute('aria-disabled')).not.toBe('true'),
+        expect(screen.getByRole('link', { name: 'Editor' }).getAttribute('aria-disabled')).not.toBe('true'),
       );
     });
 
@@ -170,10 +182,7 @@ describe('AgentLayout tool tabs', () => {
       server.use(...commonHandlers(enabledPackages));
       renderLayout();
 
-      await screen.findByRole('tab', { name: 'Editor' });
-      fireEvent.click(screen.getByRole('tab', { name: 'Editor' }));
-
-      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/editor');
+      expect((await screen.findByRole('link', { name: 'Editor' })).getAttribute('href')).toBe('/agents/agent-1/editor');
     });
   });
 
@@ -182,9 +191,9 @@ describe('AgentLayout tool tabs', () => {
       server.use(...commonHandlers(enabledPackages));
       renderLayout('/agents/agent-1/threads/thread-1');
 
-      fireEvent.click(await screen.findByRole('tab', { name: 'Traces' }));
-
-      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/traces?filterThreadId=thread-1');
+      expect((await screen.findByRole('link', { name: 'Traces' })).getAttribute('href')).toBe(
+        '/agents/agent-1/traces?filterThreadId=thread-1',
+      );
     });
   });
 
@@ -193,9 +202,7 @@ describe('AgentLayout tool tabs', () => {
       server.use(...commonHandlers(enabledPackages));
       renderLayout('/agents/agent-1/threads/new');
 
-      fireEvent.click(await screen.findByRole('tab', { name: 'Traces' }));
-
-      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/traces');
+      expect((await screen.findByRole('link', { name: 'Traces' })).getAttribute('href')).toBe('/agents/agent-1/traces');
     });
   });
 
@@ -204,9 +211,9 @@ describe('AgentLayout tool tabs', () => {
       server.use(...commonHandlers(enabledPackages));
       renderLayout('/agents/agent-1/traces?filterThreadId=thread-1');
 
-      fireEvent.click(await screen.findByRole('tab', { name: 'Chat' }));
-
-      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/threads/thread-1');
+      expect((await screen.findByRole('link', { name: 'Chat' })).getAttribute('href')).toBe(
+        '/agents/agent-1/threads/thread-1',
+      );
     });
   });
 
@@ -215,9 +222,9 @@ describe('AgentLayout tool tabs', () => {
       server.use(...commonHandlers(enabledPackages));
       renderLayout('/agents/agent-1/traces?filterThreadId=thread-1&filterThreadId.op=isNot');
 
-      fireEvent.click(await screen.findByRole('tab', { name: 'Chat' }));
-
-      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/threads/new');
+      expect((await screen.findByRole('link', { name: 'Chat' })).getAttribute('href')).toBe(
+        '/agents/agent-1/threads/new',
+      );
     });
   });
 
@@ -226,9 +233,9 @@ describe('AgentLayout tool tabs', () => {
       server.use(...commonHandlers(enabledPackages));
       renderLayout('/agents/agent-1/traces');
 
-      fireEvent.click(await screen.findByRole('tab', { name: 'Chat' }));
-
-      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/threads/new');
+      expect((await screen.findByRole('link', { name: 'Chat' })).getAttribute('href')).toBe(
+        '/agents/agent-1/threads/new',
+      );
     });
   });
 
@@ -237,8 +244,8 @@ describe('AgentLayout tool tabs', () => {
 
     renderLayout('/agents/agent-1/threads/new');
 
-    const chatTab = await screen.findByRole('tab', { name: 'Chat' });
-    expect(chatTab.getAttribute('aria-selected')).toBe('true');
+    const chatTab = await screen.findByRole('link', { name: 'Chat' });
+    expect(chatTab.getAttribute('aria-current')).toBe('page');
     expect(screen.getByRole('button', { name: 'Traces' }).getAttribute('aria-disabled')).toBe('true');
   });
 });

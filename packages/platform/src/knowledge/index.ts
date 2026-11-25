@@ -4,17 +4,21 @@ import {
   MastraCompositeStore,
   KnowledgeStorage,
   KnowledgeConflictError,
+  KnowledgeMoveTooLargeError,
   KnowledgeNotFoundError,
+  KnowledgePageDepthError,
   KnowledgePageHasChildrenError,
   KnowledgePageKeyConflictError,
 } from '@mastra/core/storage';
 import type { KnowledgePageStore } from '@mastra/core/storage';
+import type { PlatformAccessToken } from '@mastra/platform-workspace';
 
 export interface PlatformKnowledgeOptions extends Omit<
   KnowledgeConfig,
   'storage' | 'vector' | 'embedder' | 'embedderOptions' | 'scopes'
 > {
-  accessToken?: string;
+  /** A token, or a function called before every request so long-lived clients never hold an expired one. */
+  accessToken?: PlatformAccessToken;
   projectId?: string;
   instanceId?: string;
   /**
@@ -91,7 +95,7 @@ function decode<T>(text: string): T {
 class RemoteKnowledgeStorage extends KnowledgeStorage {
   constructor(
     private readonly endpoint: string,
-    private readonly token: string,
+    private readonly token: PlatformAccessToken,
   ) {
     super({ storageIsolationKey: endpoint });
     return new Proxy(this, {
@@ -106,10 +110,11 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
   }
 
   private async request(operation: string, input?: unknown): Promise<unknown> {
+    const token = typeof this.token === 'function' ? await this.token() : this.token;
     const response = await fetch(`${this.endpoint}/operations/${operation}`, {
       method: 'POST',
       headers: {
-        authorization: `Bearer ${this.token}`,
+        authorization: `Bearer ${token}`,
         'content-type': 'application/json',
         // This client merges the instance's scope declarations (`getScopeDeclarations`) into its own, so
         // the service leaves its read views as they are rather than widening them for older clients.
@@ -120,7 +125,16 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
     });
     const text = await response.text();
     if (!response.ok) {
-      let body: { name?: string; detail?: string; title?: string; error?: { name?: string; message?: string } } = {};
+      let body: {
+        name?: string;
+        detail?: string;
+        title?: string;
+        error?: { name?: string; message?: string };
+        key?: unknown;
+        parentId?: unknown;
+        pageId?: unknown;
+        pages?: unknown;
+      } = {};
       try {
         const parsed: unknown = JSON.parse(text);
         if (parsed && typeof parsed === 'object') body = parsed;
@@ -146,7 +160,9 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
         throw error;
       }
       if (name === 'KnowledgePageKeyConflictError') {
-        const error = new KnowledgePageKeyConflictError('', '');
+        const key = typeof body.key === 'string' ? body.key : '';
+        const parentId = typeof body.parentId === 'string' ? body.parentId : '';
+        const error = new KnowledgePageKeyConflictError(key, parentId);
         error.message = message;
         throw error;
       }
@@ -154,6 +170,18 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
         const error = new KnowledgePageHasChildrenError('');
         error.message = message;
         throw error;
+      }
+      if (name === 'KnowledgePageDepthError') {
+        const error = new KnowledgePageDepthError('');
+        error.message = message;
+        throw Object.assign(error, { status: response.status });
+      }
+      if (name === 'KnowledgeMoveTooLargeError') {
+        const pageId = typeof body.pageId === 'string' ? body.pageId : '';
+        const pages = typeof body.pages === 'number' ? body.pages : 0;
+        const error = new KnowledgeMoveTooLargeError(pageId, pages);
+        error.message = message;
+        throw Object.assign(error, { status: response.status });
       }
       throw Object.assign(new Error(message), { status: response.status });
     }

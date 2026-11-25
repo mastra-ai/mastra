@@ -35,8 +35,8 @@ export function SessionExpired({ variant }: SessionExpiredProps) {
       titleSlot="Session Expired"
       descriptionSlot="Your session has expired. Please log in again to continue."
       actionSlot={
-        <Button icon={<IconArrowBoxRight />} variant="default" onClick={logIn} disabled={isRedirecting}>
-          {isRedirecting ? 'Redirecting...' : 'Log in'}
+        <Button icon={<IconArrowBoxRight />} variant="default" onClick={logIn} loading={isRedirecting}>
+          Log in
         </Button>
       }
     />

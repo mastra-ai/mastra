@@ -41,10 +41,22 @@
         "type": "budget_tokens"
       }
     ],
-    "zenifra/kimi-k3": [
+    "zenifra/deepseek-v4-pro": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "zenifra/glm-5.2": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ],
     "zenifra/qwen3.6-flash": [
@@ -58,6 +70,14 @@
     "zenifra/glm-5.1": [
       {
         "type": "toggle"
+      }
+    ],
+    "zenifra/qwen3.6-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
       }
     ],
     "zenifra/qwen3.7-plus": [
@@ -80,6 +100,12 @@
         "type": "budget_tokens"
       }
     ],
+    "zenifra/kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "zenifra/deepseek-v4-flash-0731": [
       {
         "type": "toggle"
@@ -87,29 +113,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "zenifra/deepseek-v4-pro": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zenifra/kimi-k2.5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zenifra/glm-5.2": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["high", "max"]
       }
     ],
     "zenifra/qwen3.8-flash": [
@@ -124,12 +127,9 @@
         "type": "budget_tokens"
       }
     ],
-    "zenifra/qwen3.6-plus": [
+    "zenifra/kimi-k2.5": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
       }
     ]
   }

@@ -2,7 +2,14 @@ import { BOARD_PERSON_FIELDS } from '@mastra/factory/work-items/card-people';
 import type { FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
 
 /** Every board filter, in menu order. Each id is also its query parameter and its saved-view item's `fieldId`. */
-export const BOARD_FILTER_FIELDS = ['source', 'linearProject', ...BOARD_PERSON_FIELDS, 'label'] as const;
+export const BOARD_FILTER_FIELDS = [
+  'source',
+  'linearProject',
+  'pullRequest',
+  'trust',
+  ...BOARD_PERSON_FIELDS,
+  'label',
+] as const;
 export type BoardFilterFieldId = (typeof BOARD_FILTER_FIELDS)[number];
 
 /** The values picked per filter. An empty set narrows nothing; filters combine with AND. */
@@ -18,6 +25,8 @@ function boardFilterState(reviewsPullRequests: boolean, valuesOf: (fieldId: Boar
   const state: Record<BoardFilterFieldId, ReadonlySet<string>> = {
     source: new Set(),
     linearProject: new Set(),
+    pullRequest: new Set(),
+    trust: new Set(),
     teammate: new Set(),
     author: new Set(),
     assignee: new Set(),

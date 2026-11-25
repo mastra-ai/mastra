@@ -610,7 +610,9 @@ export function createDurableLLMMappingStep() {
               mastra: mastra as Mastra,
               runId: _runId,
               agentId: _agentId,
+              agentVersionId: getInitData<DurableAgenticWorkflowInput>()?.agentVersionId,
               state,
+              options: (getInitData?.() as DurableAgenticWorkflowInput | undefined)?.options,
               requestContext,
             });
             saveQueueManager = rebuilt?.saveQueueManager;

@@ -11,7 +11,7 @@ import {
   emitSuspendedEvent,
   emitAbortEvent,
 } from '../stream-adapter';
-import type { DurableAgentStreamResult } from '../stream-adapter';
+import type { DurableStreamAdapterResult } from '../stream-adapter';
 
 /**
  * Idle / liveness timeout for `createDurableAgentStream` (and therefore
@@ -90,7 +90,7 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
       messageId: `msg-${runId}`,
       model: { modelId: 'test', provider: 'test', version: 'v3' },
       ...extra,
-    }) as DurableAgentStreamResult<any>;
+    }) as DurableStreamAdapterResult<any>;
 
   it.each(['finish', 'abort', 'error'] as const)(
     'still times out after rejecting a superseded %s terminal',

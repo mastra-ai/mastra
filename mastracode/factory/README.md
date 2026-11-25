@@ -762,6 +762,27 @@ Change the timeout and check interval with `idleSessionUnload`. `idleMs: 0` turn
 const factory = new MastraFactory({ storage, idleSessionUnload: { idleMs: 60 * 60_000, sweepIntervalMs: 5 * 60_000 } });
 ```
 
+### Recall embedder
+
+With a `vector` store, agent memory embeds thread text for recall search. By default it embeds locally with fastembed (bge-small, 384 dimensions) in a worker process on the Factory host, so it shares the host's CPU with the server. Set `embedder` to embed with a hosted model instead:
+
+```ts
+const factory = new MastraFactory({
+  storage,
+  vector,
+  // Reads OPENAI_API_KEY
+  embedder: 'openai/text-embedding-3-small',
+});
+```
+
+`embedder` takes any `provider/model` embedding id the model router knows, such as `openai/text-embedding-3-small` or `google/gemini-embedding-001`, which reads that provider's key from the server environment. A Mastra gateway id such as `mastra/openai/text-embedding-3-small` reads `MASTRA_GATEWAY_API_KEY`. Any AI SDK embedding model also works. To pass a key directly, use `new ModelRouterEmbeddingModel({ id, apiKey })` from `@mastra/core/llm`. `embedderOptions` is passed to every embedding call.
+
+- **One model per deployment.** Every agent's memory in the deployment uses this embedder, because all tenants share one vector index.
+- **Whose key it is.** The embedder runs on the operator's key, outside tenant credential resolution. Accounts never use the server's provider keys, but a server `MASTRA_GATEWAY_API_KEY` also lets every account without its own gateway key run `mastra/` chat models on your credits. Use a provider id to keep the embedding key out of chat.
+- **Checked at startup.** `new MastraFactory()` throws when `embedder` is set without `vector`, or when a router string's provider key is missing.
+- **Thread text leaves the host.** A hosted embedder sends thread text to that provider. Tenants that need a different provider need their own deployment and vector store.
+- **Switching models.** Vector indexes are named by dimension, so a model with a different dimension starts an empty index, and recall doesn't find content observed before the switch. Earlier content isn't re-embedded. Don't switch between two models with the same dimension on one vector store, including from the default fastembed to a 384-dimension model: their vectors would share an index, can't be compared, and recall would return wrong results without an error.
+
 ### The `factory-work-item` signal
 
 Every session bound to a card gets a `<factory-work-item>` state signal describing it, re-rendered only when the card, its sources or the binding change. It carries the card's key, title, URL, board and phase, next phases, labels, author and whether they're trusted, and the session's branch; its sources (issue and each pull or merge request, with state, head commit, a head branch that passes Factory's branch-name check, and the tool to fetch details); and Factory's state: whether the plan was approved, self-review rounds used, the last self-review and PR review verdicts with the commits they covered and findings, and the card's open change request. The session that reviews a pull request also gets the procedure to follow, the checkout steps and the pull request head to review. The source description is included, inside an `<untrusted-source-description>` block when an outside author wrote it. Comment threads are not included.

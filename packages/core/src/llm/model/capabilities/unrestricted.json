@@ -12,16 +12,10 @@
     "qwen3.8-27b-uncensored"
   ],
   "reasoning": {
-    "deepseek-v4.1-flash-uncensored": [
+    "qwen3.8-27b-uncensored": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "mimo-v2.6-flash-uncensored": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
     "glm-5.3-flash-uncensored": [
@@ -30,10 +24,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "qwen3.8-27b-uncensored": [
+    "mimo-v2.6-flash-uncensored": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "deepseek-v4.1-flash-uncensored": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ]
   }

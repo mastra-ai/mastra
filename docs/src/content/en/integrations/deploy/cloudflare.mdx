@@ -8,7 +8,7 @@ import StepItem from "@site/src/components/StepItem";
 
 # Cloudflare
 
-Use `@mastra/deployer-cloudflare` to deploy your Mastra server to Cloudflare Workers. The deployer bundles your code and generates a `wrangler.jsonc` file conforming to Cloudflare's [wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/), ready to deploy with no additional configuration.
+Use `@mastra/deployer-cloudflare` to deploy your Mastra server to Cloudflare Workers. The deployer bundles your code and generates a `wrangler.jsonc` file conforming to Cloudflare's [wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/), ready to deploy with no additional configuration. The generated configuration minifies the Worker, and Wrangler 4.150 and later upload source maps by default, see [Minification and source maps](/reference/deployer/cloudflare#minification-and-source-maps).
 
 :::note
 

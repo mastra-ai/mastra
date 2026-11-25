@@ -7,7 +7,7 @@ description: "Browse Google model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/google.svg" alt="Google logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Google
 
-Access 39 Google models through Mastra's model router. Authentication is handled automatically using one of the following environment variables: `GOOGLE_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`.
+Access 36 Google models through Mastra's model router. Authentication is handled automatically using one of the following environment variables: `GOOGLE_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`.
 
 Learn more in the [Google documentation](https://ai.google.dev/gemini-api/docs/models).
 
@@ -65,30 +65,6 @@ for await (const chunk of stream) {
     "outputCost": 12
   },
   {
-    "model": "google/gemini-2.5-computer-use-preview-10-2025",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 64000,
-    "inputCost": 1.25,
-    "outputCost": 10
-  },
-  {
-    "model": "google/gemini-2.5-flash",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 0.3,
-    "outputCost": 2.5
-  },
-  {
     "model": "google/gemini-2.5-flash-lite",
     "imageInput": true,
     "audioInput": true,
@@ -99,42 +75,6 @@ for await (const chunk of stream) {
     "maxOutput": 65536,
     "inputCost": 0.1,
     "outputCost": 0.4
-  },
-  {
-    "model": "google/gemini-2.5-flash-preview-tts",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 8192,
-    "maxOutput": 16384,
-    "inputCost": 0.5,
-    "outputCost": 10
-  },
-  {
-    "model": "google/gemini-2.5-pro",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 1.25,
-    "outputCost": 10
-  },
-  {
-    "model": "google/gemini-2.5-pro-preview-tts",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 8192,
-    "maxOutput": 16384,
-    "inputCost": 1,
-    "outputCost": 20
   },
   {
     "model": "google/gemini-3-flash-preview",
@@ -161,34 +101,10 @@ for await (const chunk of stream) {
     "outputCost": 12
   },
   {
-    "model": "google/gemini-3.1-flash-image",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": false,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 32768,
-    "inputCost": 0.5,
-    "outputCost": 3
-  },
-  {
-    "model": "google/gemini-3.1-flash-lite",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 0.25,
-    "outputCost": 1.5
-  },
-  {
     "model": "google/gemini-3.1-flash-lite-image",
     "imageInput": true,
     "audioInput": false,
-    "videoInput": false,
+    "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 65536,
@@ -207,18 +123,6 @@ for await (const chunk of stream) {
     "maxOutput": 65536,
     "inputCost": 0.75,
     "outputCost": 4.5
-  },
-  {
-    "model": "google/gemini-3.1-flash-tts-preview",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": true,
-    "contextWindow": 8192,
-    "maxOutput": 16384,
-    "inputCost": 1,
-    "outputCost": 20
   },
   {
     "model": "google/gemini-3.1-pro-preview",
@@ -243,18 +147,6 @@ for await (const chunk of stream) {
     "maxOutput": 65536,
     "inputCost": 2,
     "outputCost": 12
-  },
-  {
-    "model": "google/gemini-3.5-flash",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 1.5,
-    "outputCost": 9
   },
   {
     "model": "google/gemini-3.5-flash-lite",
@@ -282,18 +174,6 @@ for await (const chunk of stream) {
   },
   {
     "model": "google/gemini-3.6-flash",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 0.75,
-    "outputCost": 3.75
-  },
-  {
-    "model": "google/gemini-3.7-flash",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
@@ -365,18 +245,6 @@ for await (const chunk of stream) {
     "outputCost": 15
   },
   {
-    "model": "google/gemini-embedding-001",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 2048,
-    "maxOutput": 1,
-    "inputCost": 0.15,
-    "outputCost": null
-  },
-  {
     "model": "google/gemini-embedding-2",
     "imageInput": true,
     "audioInput": true,
@@ -411,18 +279,6 @@ for await (const chunk of stream) {
     "maxOutput": 65536,
     "inputCost": 0.3,
     "outputCost": 2.5
-  },
-  {
-    "model": "google/gemini-omni-flash-preview",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": false,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 65536,
-    "inputCost": 1.5,
-    "outputCost": 17.5
   },
   {
     "model": "google/gemini-pro-latest",
@@ -467,7 +323,7 @@ for await (const chunk of stream) {
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 1048576,
+    "contextWindow": 131072,
     "maxOutput": 65536,
     "inputCost": null,
     "outputCost": null
@@ -479,7 +335,7 @@ for await (const chunk of stream) {
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 1048576,
+    "contextWindow": 131072,
     "maxOutput": 65536,
     "inputCost": null,
     "outputCost": null

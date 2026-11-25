@@ -25,21 +25,9 @@
         "type": "toggle"
       }
     ],
-    "MiniMaxAI/MiniMax-M3": [
+    "Qwen/Qwen3.8-Flash": [
       {
         "type": "toggle"
-      }
-    ],
-    "zai-org/GLM-5.3-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/GLM-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
     "openai/gpt-oss-20b": [
@@ -81,9 +69,21 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "Qwen/Qwen3.8-Flash": [
+    "MiniMaxAI/MiniMax-M3": [
       {
         "type": "toggle"
+      }
+    ],
+    "zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

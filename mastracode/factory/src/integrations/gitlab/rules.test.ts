@@ -10,6 +10,9 @@ import { FACTORY_GITLAB_EVENTS } from '../../rules/types.js';
 import type { FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryRuleItemContext } from '../../rules/types.js';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../../storage/test-utils.js';
+import { closingLinksIn } from '../../work-items/closing-pull-requests.js';
+import { relatedCardsIn } from '../../work-items/list-related-cards.js';
+import { matchesSearch, searchTerms } from '../../work-items/search-terms.js';
 import { resolveGitLabRules } from './default-rules.js';
 import type { GitLabRuleOverrides } from './default-rules.js';
 import { encodeIssueReference, encodeSourceId } from './integration.js';
@@ -1837,7 +1840,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       };
       const cards = () => base.seeded.workItems.list({ orgId: 'org-1', factoryProjectId: base.project.id });
       const decisions = () => base.seeded.workItems.listDeferredDecisions('org-1', base.project.id);
-      const issueCard = async (stage: string) =>
+      const issueCard = async (stage: string, issueIid = 42) =>
         (
           await base.seeded.workItems.upsert({
             orgId: 'org-1',
@@ -1848,10 +1851,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
               externalSource: {
                 integrationId: 'gitlab',
                 type: 'issue',
-                externalId: encodeIssueReference({ host: 'gitlab.example.com', projectId: PROJECT_ID, issueIid: 42 }),
-                url: 'https://gitlab.example.com/acme/app/-/issues/42',
+                externalId: encodeIssueReference({ host: 'gitlab.example.com', projectId: PROJECT_ID, issueIid }),
+                url: `https://gitlab.example.com/acme/app/-/issues/${issueIid}`,
               },
-              title: 'Issue 42',
+              title: `Issue ${issueIid}`,
               stages: [stage],
               sessions: {},
               metadata: { authorTrusted: true, state: 'opened' },
@@ -1905,6 +1908,26 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect((await h.decisions()).map(entry => entry.decision)).toContainEqual(
         expect.objectContaining({ type: 'invokeSkill', role: 'review' }),
       );
+    });
+
+    it("files a merge request closing two issues on the first one's card and links the other card to it", async () => {
+      const h = await harness();
+      const first = await h.issueCard('intake', 42);
+      const second = await h.issueCard('intake', 43);
+
+      await h.ingest(mergeRequest(17, 'Closes #42\nCloses #43'));
+
+      const cards = await h.cards();
+      const holder = cards.find(card => card.id === first.id)!;
+      const linked = cards.find(card => card.id === second.id)!;
+      expect(sourceTypes(holder)).toEqual(['issue', 'pull-request']);
+      expect(holder.workItem.sources[1]!.metadata).toMatchObject({ closesWorkItemIds: [second.id] });
+      expect(sourceTypes(linked)).toEqual(['issue']);
+      const closing = closingLinksIn(cards);
+      expect(closing.hasPullRequest(linked)).toBe(true);
+      expect(matchesSearch(closing.search(linked), searchTerms('17'))).toBe(true);
+      expect(relatedCardsIn(cards)(linked).map(card => card.id)).toEqual([first.id]);
+      expect(relatedCardsIn(cards)(holder).map(card => card.id)).toEqual([second.id]);
     });
 
     it("binds a reviewer to the merge request's iid, on its own card and on the issue card it joined", async () => {

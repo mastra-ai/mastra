@@ -75,7 +75,7 @@ export const knowledge = new Knowledge({
     name: 'tools',
     type: 'boolean | { read?: boolean | { maxTokens?: number }; write?: boolean }',
     description:
-      'Tools an attached agent gets. `true` gives all five: `knowledge_list`, `knowledge_search`, `knowledge_read`, `knowledge_page` and `knowledge_note`. `{ read: true }` gives the first three. `{ write: true }` gives the last two. `{ read: { maxTokens } }` turns on read and caps each `knowledge_read` body or `match` result, and each `knowledge_list` result, at `maxTokens`: 1,000 by default, at least 100. See [Read pages](/docs/knowledge/agents-and-tools#read-pages).',
+      'Tools an attached agent gets. `true` gives all six: `knowledge_list`, `knowledge_search`, `knowledge_read`, `knowledge_activity`, `knowledge_page` and `knowledge_note`. `{ read: true }` gives the first four. `{ write: true }` gives the last two. `{ read: { maxTokens } }` turns on read and caps each `knowledge_read` body or `match` result, each `knowledge_list` result, and each `knowledge_activity` result, at `maxTokens`: 1,000 by default, at least 100. See [Read pages](/docs/knowledge/agents-and-tools#read-pages).',
     isOptional: true,
     defaultValue: 'false',
   },
@@ -130,14 +130,41 @@ Knowledge needs `scopes`: declare the scopes its runs hold, e.g. `scopes: { ...k
 #### `createTools()`
 
 ```typescript oxfmt:false
-createTools(options?: { read?: boolean; write?: boolean; pinnedContext?: boolean }): Record<string, Tool>
+createTools(options?: {
+  read?: boolean; write?: boolean; pinnedContext?: boolean;
+  principals?: readonly string[]; author?: string;
+}): Record<string, Tool>
 ```
 
-Returns the Knowledge tools for explicit wiring, such as an agent that isn't attached with `knowledge`. Each option overrides the matching group set on the instance, and an omitted option keeps it. On an instance with `pinnedContext` on, `createTools({ write: false })` also returns `knowledge_pin`. See [Knowledge tools](/reference/knowledge/knowledge-tools).
+Returns the Knowledge tools for explicit wiring, such as an agent that isn't attached with `knowledge`. Each group option overrides the matching group set on the instance, and an omitted option keeps it. On an instance with `pinnedContext` on, `createTools({ write: false })` also returns `knowledge_pin`. See [Knowledge tools](/reference/knowledge/knowledge-tools).
 
 ```typescript
 const tools = knowledge.createTools({ write: false })
-// knowledge_list, knowledge_search, knowledge_read
+// knowledge_list, knowledge_search, knowledge_read, knowledge_activity
+```
+
+`principals` fixes the scope addresses every call acts as, for a host that runs the tools outside an agent run, such as an MCP server acting for an external agent. Each address must match a declared scope type, the store's declarations included. A call made with one that doesn't is refused. `createTools()` throws only for an empty list. The call's own run scopes are then ignored, and access follows the scope rules for these principals. Set them from the host's own authentication, never from the request. `author` is recorded on writes made through these tools.
+
+```typescript
+const tools = knowledge.createTools({
+  read: true,
+  write: true,
+  principals: ['agent:claude-code'],
+  author: 'user:123 via mcp:claude-code',
+})
+```
+
+#### `getPinnedContext()`
+
+```typescript oxfmt:false
+getPinnedContext(options: { principals: readonly string[]; read?: boolean }): Promise<KnowledgePinnedEntry[]>
+```
+
+Returns the pinned pages a caller holding `principals` receives, rendered as an agent run receives them: only pages it can read, within the instance's pin budget. Use it beside `createTools({ principals })` when a host serves Knowledge outside an agent run, and pass the same `read` as that call (default: the instance's `tools.read`) so entries point at `knowledge_read` and `knowledge_list` only when the caller has them. Throws for an empty list or an undeclared principal.
+
+```typescript
+const pins = await knowledge.getPinnedContext({ principals: ['agent:claude-code'], read: true })
+// [{ id, text, name, scope }]
 ```
 
 #### `getInstructions()`
@@ -270,10 +297,17 @@ Creates or updates the page at `path` (keys joined by `/`, such as `guides/insta
 #### `removePage()`
 
 ```typescript oxfmt:false
-removePage(input: { scope: string; path: string; author?: string }): Promise<KnowledgePage | null>
+removePage(input: {
+  scope: string
+  path: string
+  author?: string
+  expected?: { id: string; version: number }
+}): Promise<KnowledgePage | null>
 ```
 
 Removes the page at `path` and resolves to it, or to `null` when no page is there. Throws `"<scope>#<path>" has child pages; remove them first.` for a page with children, and `"<scope>#<path>" is declared in config; change the scope's pages to remove it.` for a template page. Throws without retrying when another write changed the page first.
+
+Pass `expected`, the page's `id` and `version` as you read it, to remove only that page. If the page at `path` is a different page or another version, or nothing is there, the call throws `KnowledgeConflictError` and removes nothing. The same applies when another write changes or removes the page during the call.
 
 #### `movePage()`
 

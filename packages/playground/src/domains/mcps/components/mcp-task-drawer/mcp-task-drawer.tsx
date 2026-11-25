@@ -128,7 +128,7 @@ function McpTaskDrawerBody({ serverId, task }: { serverId: string; task: McpServ
           <Button
             variant="destructive-ghost"
             className="self-start"
-            disabled={cancel.isPending}
+            loading={cancel.isPending}
             onClick={() => cancel.mutate(task.taskKey)}
           >
             Cancel task

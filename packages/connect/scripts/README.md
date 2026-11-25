@@ -57,6 +57,12 @@ The command writes:
 
 Actions that need runtime helpers the platform proxy context doesn't implement, or contain unsupported top-level statements, are skipped with a per-action reason printed and recorded in the manifest.
 
+### Hand-written tools
+
+Generate the provider before adding hand-written files: the generator tells its own files from yours by the manifest it writes, so it refuses to regenerate a provider directory that has no readable `.manifest.json`. Then add a tool no template covers as `src/providers/<localId>/tools/<slug>.ts`, exporting `<camelSlug>Tool(proxy)` (declared there or re-exported), and regenerate to register it.
+
+Any file the generator did not write survives regeneration and is listed under `handwrittenFiles` in the manifest. Each hand-written `tools/<slug>.ts` is registered as `<local_id>_<snake_slug>`, where hyphens in both the local ID and the slug become underscores, so Zendesk's `delete-ticket.ts` becomes `zendesk_delete_ticket` and Google Analytics' `run-report.ts` becomes `google_analytics_run_report`. Files in `tools/` that start with `_` are helpers and are not registered. A hand-written tool whose key or factory name matches a generated tool is an error, as is a hand-written file that appears while regeneration runs. `pnpm remove-provider` lists the hand-written files it would delete before asking.
+
 Treat generated source as untrusted vendored code. Every template SHA update and generated diff requires security review before commit; passing automated checks is not sufficient.
 
 Provider responses that carry credentials an agent never needs, such as webhook signing secrets, are listed per action in `OUTPUT_SECRET_FIELDS` in `generate-provider.ts`. The generated tool removes those fields from its result and, when its output schema declares them, omits them from the schema too, and `src/__tests__/provider-actions.test.ts` covers the redaction.

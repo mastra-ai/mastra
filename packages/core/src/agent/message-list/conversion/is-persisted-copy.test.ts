@@ -133,4 +133,54 @@ describe('isPersistedCopy', () => {
     expect(() => isPersistedCopy(live, stored)).not.toThrow();
     expect(isPersistedCopy(live, stored)).toBe(true);
   });
+
+  // Token counts are written onto stored parts after the live message exists. They must stay
+  // invisible to the key, or every counted stored copy would look like new content.
+  it('matches a stored copy whose only difference is a token estimate', () => {
+    const live = assistant([reasoning('rs_example'), { type: 'text', text: 'hello' }]);
+    const stored = assistant([
+      reasoning('rs_example'),
+      {
+        type: 'text',
+        text: 'hello',
+        providerMetadata: {
+          mastra: { tokenEstimate: { v: 8, source: 'v8:tokenx', key: 'text:abc', tokens: 2 } },
+        },
+      } as MastraMessagePart,
+    ]);
+
+    expect(isPersistedCopy(live, stored)).toBe(true);
+  });
+
+  // Observational memory writes its markers onto the stored copy only.
+  it('matches a stored copy that gained an observation marker', () => {
+    const live = assistant([reasoning('rs_example'), { type: 'text', text: 'hello' }]);
+    const stored = assistant([
+      reasoning('rs_example'),
+      { type: 'text', text: 'hello' },
+      { type: 'data-om-observation-end', data: { cycleId: 'cycle-1', operationType: 'observation' } },
+    ] as MastraMessagePart[]);
+
+    expect(isPersistedCopy(live, stored)).toBe(true);
+  });
+
+  it('matches when only the live copy holds the marker', () => {
+    const live = assistant([
+      { type: 'text', text: 'hello' },
+      { type: 'data-om-status', data: { windows: {} } },
+    ] as MastraMessagePart[]);
+    const stored = assistant([{ type: 'text', text: 'hello' }]);
+
+    expect(isPersistedCopy(live, stored)).toBe(true);
+  });
+
+  it('does not treat other data parts as markers', () => {
+    const live = assistant([{ type: 'text', text: 'hello' }]);
+    const stored = assistant([
+      { type: 'text', text: 'hello' },
+      { type: 'data-weather', data: { city: 'Oslo' } },
+    ] as MastraMessagePart[]);
+
+    expect(isPersistedCopy(live, stored)).toBe(false);
+  });
 });

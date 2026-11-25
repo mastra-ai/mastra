@@ -23,6 +23,8 @@ Configuring authentication locks down two things:
 
 By default, the provider you set in `server.auth` protects both. To give Studio its own provider, also set `studio.auth`. Requests from Studio, including its calls to API routes, then use `studio.auth` exclusively. All other requests keep using `server.auth`.
 
+A Studio login screen doesn't secure an otherwise public API. If you set only `studio.auth`, ordinary API requests remain unauthenticated. See [Separate Studio and API authentication](/docs/studio/auth#separate-studio-and-api-authentication) for the routing behavior and security implications.
+
 Authentication is optional. If no auth is configured, all routes and Studio are publicly accessible. Public access can be enabled on individual custom routes using `requiresAuth: false`.
 
 See [Custom API Routes](/docs/server/custom-api-routes#authentication) for controlling authentication on custom endpoints. Visit the [Studio Auth docs](/docs/studio/auth) for more on securing your Studio deployment.
@@ -33,7 +35,7 @@ The default auth configuration protects `/api/*` and treats `/api`, `/api/auth/*
 
 :::note
 
-Authentication for Studio is currently supported by the following providers: Simple Auth, JWT, WorkOS, Better Auth, and Google.
+Authentication for Studio is supported by Simple Auth, JWT, WorkOS, Better Auth, Google, and Clerk. Available login methods and required configuration depend on the provider. See the provider's guide for Studio single sign-on (SSO) setup, which can require credentials beyond those used for API token verification.
 
 :::
 

@@ -4,7 +4,6 @@ import { TooltipProvider } from '../Tooltip';
 import type { SchemaField } from './types';
 import { createField } from './types';
 import { JSONSchemaForm } from './index';
-import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import type { JsonSchema } from '@/lib/json-schema';
 
 const meta: Meta<typeof JSONSchemaForm.Root> = {
@@ -72,10 +71,7 @@ function RecursiveFieldRenderer({
             />
           )}
         </JSONSchemaForm.FieldList>
-        <JSONSchemaForm.AddField className="mt-2">
-          <IconPlusMedium />
-          Add nested property
-        </JSONSchemaForm.AddField>
+        <JSONSchemaForm.AddField className="mt-2">Add nested property</JSONSchemaForm.AddField>
       </JSONSchemaForm.NestedFields>
     </JSONSchemaForm.Field>
   );
@@ -93,10 +89,7 @@ export const Default: Story = {
               <RecursiveFieldRenderer key={field.id} field={field} parentPath={parentPath} depth={depth} />
             )}
           </JSONSchemaForm.FieldList>
-          <JSONSchemaForm.AddField className="mt-4">
-            <IconPlusMedium className="mr-2 size-4" />
-            Add property
-          </JSONSchemaForm.AddField>
+          <JSONSchemaForm.AddField className="mt-4">Add property</JSONSchemaForm.AddField>
         </JSONSchemaForm.Root>
         <JSONSchemaPreview schema={schema} />
       </div>
@@ -138,10 +131,7 @@ export const WithDefaultValues: Story = {
               </JSONSchemaForm.Field>
             )}
           </JSONSchemaForm.FieldList>
-          <JSONSchemaForm.AddField className="mt-4">
-            <IconPlusMedium />
-            Add property
-          </JSONSchemaForm.AddField>
+          <JSONSchemaForm.AddField className="mt-4">Add property</JSONSchemaForm.AddField>
         </JSONSchemaForm.Root>
         <JSONSchemaPreview schema={schema} />
       </div>
@@ -209,10 +199,7 @@ export const NestedObjects: Story = {
               <RecursiveFieldRenderer key={field.id} field={field} parentPath={parentPath} depth={depth} />
             )}
           </JSONSchemaForm.FieldList>
-          <JSONSchemaForm.AddField className="mt-4">
-            <IconPlusMedium />
-            Add property
-          </JSONSchemaForm.AddField>
+          <JSONSchemaForm.AddField className="mt-4">Add property</JSONSchemaForm.AddField>
         </JSONSchemaForm.Root>
         <JSONSchemaPreview schema={schema} />
       </div>
@@ -256,7 +243,6 @@ export const CustomStyling: Story = {
             )}
           </JSONSchemaForm.FieldList>
           <JSONSchemaForm.AddField variant="primary" size="lg" className="w-full">
-            <IconPlusMedium className="mr-2 size-4" />
             Add New Property
           </JSONSchemaForm.AddField>
         </JSONSchemaForm.Root>

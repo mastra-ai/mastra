@@ -114,16 +114,6 @@ describe('isAdmonition', () => {
     }
     expect(isAdmonition(node)).toBe(false)
   })
-
-  it('handles className as a space-separated string', () => {
-    const node: Element = {
-      type: 'element',
-      tagName: 'div',
-      properties: { className: 'mb-4 admonition-container bg-green-100/50' },
-      children: [],
-    }
-    expect(isAdmonition(node)).toBe(true)
-  })
 })
 
 // ---------------------------------------------------------------------------

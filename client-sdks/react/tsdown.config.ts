@@ -45,7 +45,6 @@ export default defineConfig(options => ({
   clean: !options.watch,
   dts: false,
   treeshake: true,
-  sourcemap: true,
   deps: {
     neverBundle: [/^@mastra\/core/, /^@tanstack\/react-query/],
   },

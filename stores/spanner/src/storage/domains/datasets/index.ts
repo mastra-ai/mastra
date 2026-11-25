@@ -1069,6 +1069,10 @@ export class DatasetsSpanner extends DatasetsStorage {
         return { items: [], pagination: { total: 0, page, perPage: perPageForResponse, hasMore: false } };
       }
 
+      if (perPage === 0) {
+        return { items: [], pagination: { total, page, perPage: perPageForResponse, hasMore: true } };
+      }
+
       const limit = perPageInput === false ? total : perPage;
       const [rows] = await this.database.run({
         sql: `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableName} ${whereSql}

@@ -1,0 +1,494 @@
+---
+title: 'MastraFactory API | Reference'
+description: Constructor, lifecycle, session sandbox callback, integration, and customization reference for MastraFactory.
+packages:
+  - '@mastra/factory'
+---
+
+# MastraFactory
+
+`MastraFactory` assembles Factory storage domains, integrations, boards, sessions, and background work into a Mastra application.
+
+Use [Get started](/) for the complete generated server. The example below demonstrates the constructor and lifecycle with local storage and local execution.
+
+## Usage example
+
+```typescript title="src/mastra/index.ts"
+import { join } from 'node:path'
+import { Mastra } from '@mastra/core'
+import { LocalSandbox } from '@mastra/core/workspace'
+import { MastraFactory } from '@mastra/factory'
+import { LibSQLFactoryStorage } from '@mastra/libsql'
+
+const factory = new MastraFactory({
+  storage: new LibSQLFactoryStorage({
+    id: 'factory-storage',
+    url: 'file:./factory.db',
+  }),
+  sandbox: ({ sessionId }) =>
+    new LocalSandbox({ workingDirectory: join(process.cwd(), 'sandboxes', sessionId) }),
+})
+
+export const mastra = new Mastra(await factory.prepare())
+await factory.finalize()
+```
+
+Factory defaults to Mastra platform authentication when you omit `auth`. To use another provider, pass one that supports both Server and Studio authentication. See [Auth](/configure/auth) for provider configuration.
+
+Connect [GitHub](/configure/github) and a [model provider](/configure/models) to start repository work.
+
+## Constructor parameters
+
+The constructor takes one `MastraFactoryConfig` object. Import the type from `@mastra/factory` to type a configuration you build outside the constructor call.
+
+<PropertiesTable
+  content={[
+    {
+      name: 'storage',
+      type: 'FactoryStorage',
+      isRequired: true,
+      description:
+        'Application and agent storage. Use PgFactoryStorage for Postgres or LibSQLFactoryStorage for local storage.',
+    },
+    {
+      name: 'auth',
+      type: 'IMastraAuthProvider | null',
+      isOptional: true,
+      description:
+        'Authentication provider with Server and Studio support. Defaults to Mastra platform authentication. Pass null to disable authentication for local development.',
+    },
+    {
+      name: 'scorers',
+      type: "MastraCodeConfig['scorers']",
+      isOptional: true,
+      description: 'Scorers for the Factory code agent. None run when omitted.',
+    },
+    {
+      name: 'disableScoreStorage',
+      type: 'boolean',
+      isOptional: true,
+      defaultValue: 'true',
+      description: 'Whether to skip storing detailed scorer results. Set false to store them.',
+    },
+    {
+      name: 'coAuthor',
+      type: '{ name?: string; email?: string }',
+      isOptional: true,
+      defaultValue: "{ name: 'mastra-platform[bot]' }",
+      description:
+        'Identity for the Co-Authored-By trailer in the commit guidance every Factory session receives. Fields you omit keep the SDK defaults, so setting only name keeps the default email.',
+    },
+    {
+      name: 'vector',
+      type: 'MastraVector',
+      isOptional: true,
+      description: 'Vector store for recall search. When omitted, the SDK mount resolves its default.',
+    },
+    {
+      name: 'knowledge',
+      type: '{ key: string; instance: Knowledge }',
+      isOptional: true,
+      description:
+        'Knowledge runtime owned by your application. Factory registers instance under key and reads through that key. Knowledge is off when omitted.',
+    },
+    {
+      name: 'pubsub',
+      type: 'PubSub',
+      isOptional: true,
+      description: 'Distributed event bus. Omitted uses the in-process default.',
+    },
+    {
+      name: 'metrics',
+      type: "{ groups: MetricGroup[] | 'all'; intervalMs?: number; maxRecordsPerMinute?: number }",
+      isOptional: true,
+      description:
+        "Health metrics sent through the Mastra instance's observability exporter. Off when omitted. groups selects any of process, postgres, redis, sandbox, session, and intake. intervalMs defaults to 60000 with a minimum of 15000. maxRecordsPerMinute defaults to 500 per process. The FACTORY_METRICS environment variables override these values. See Health metrics.",
+    },
+    {
+      name: 'publicUrl',
+      type: 'string',
+      isOptional: true,
+      defaultValue: 'http://localhost:4111',
+      description:
+        'Public origin used for integration and authentication callbacks. Configure it to match the server topology.',
+    },
+    {
+      name: 'mcp',
+      type: 'false | { enabled?: boolean; authorizationServers?: string[] }',
+      isOptional: true,
+      description:
+        'Factory MCP server at /web/factory/projects/:projectId/mcp, which lets MCP clients use Factory tools as the signed-in user. Served only with an auth provider and at least one OAuth authorization server. authorizationServers defaults to the MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER environment variable, then to the Mastra platform authorization server when Factory uses Mastra platform authentication. Pass false or { enabled: false } to turn it off.',
+    },
+    {
+      name: 'allowedOrigins',
+      type: 'string[]',
+      isOptional: true,
+      description: 'Additional origins permitted for credentialed UI requests when the UI is served separately.',
+    },
+    {
+      name: 'sandbox',
+      type: 'FactorySandbox | ((ctx: FactorySandboxContext) => MastraSandbox)',
+      isOptional: true,
+      description:
+        'Session sandbox provider: a FactorySandbox instance, or a callback that constructs a sandbox for a session. Omitted with Platform credentials, Factory installs a local sandbox under mastra dev and a Platform sandbox in built deployments. Omitted without Platform credentials disables repository sandboxes.',
+    },
+    {
+      name: 'browser',
+      type: 'MastraBrowser',
+      isOptional: true,
+      description: 'Browser automation provider for Factory agent sessions.',
+    },
+    {
+      name: 'sandboxStart',
+      type: "'lazy' | 'eager'",
+      isOptional: true,
+      defaultValue: 'lazy',
+      description: 'Start on the first command, or when the session workspace is first resolved.',
+    },
+    {
+      name: 'idleSessionUnload',
+      type: 'false | { idleMs?: number; sweepIntervalMs?: number }',
+      isOptional: true,
+      description:
+        "Unloads agent sessions from server memory when Factory stops or releases a session's sandbox, and after idleMs without activity (default 30 minutes), checked every sweepIntervalMs (default 1 minute). idleMs: 0 turns off the idle check only. Unloading keeps the thread, messages, session record, and sandbox. The next message, run, or wake loads the session again. Sessions that are running, waiting on an approval or answer, or open in a browser tab stay loaded. Pass false to keep sessions loaded.",
+    },
+    {
+      name: 'disableBuiltinTools',
+      type: 'BuiltinToolId[]',
+      isOptional: true,
+      description:
+        "Built-in agent tools to remove from every Factory session, along with their prompt guidance. Accepts ask_user, submit_plan, task_write, task_update, task_complete, task_check, and subagent. For example, remove submit_plan when a custom board gates planning with a phase transition, so in-session plan approval can't bypass it.",
+    },
+    {
+      name: 'tools',
+      type: 'IntegrationTools | ((args: { requestContext: RequestContext }) => IntegrationTools | Promise<IntegrationTools>)',
+      isOptional: true,
+      description:
+        "Tools offered to every Factory session, such as an MCP server's tools. Credentials in these tools are shared by every user. Pass a function to resolve tools per run. When a name matches a tool Factory already provides, Factory keeps its own tool and logs a warning. With Platform credentials and MASTRA_PROJECT_ID, defaults to the Mastra Connect tools of the project's connections, excluding delete, archive, GitHub, and GitLab tools. Pass {} to offer none.",
+    },
+    {
+      name: 'dispatcher',
+      type: 'MastraFactoryDispatcherConfig',
+      isOptional: true,
+      description: 'Background dispatch configuration. maxInFlight is a per-replica concurrency budget.',
+    },
+    {
+      name: 'stateSecret',
+      type: 'string',
+      isOptional: true,
+      description:
+        'Stable integration OAuth state-signing secret. Omitted generates a temporary secret, rejected by integrations requiring a stable signer.',
+    },
+    {
+      name: 'secretEncryption',
+      type: 'FactorySecretEncryption',
+      isOptional: true,
+      description:
+        'Encrypts persisted credentials and integration settings. Omitted enables plaintext compatibility and warns when auth is enabled.',
+    },
+    {
+      name: 'deploymentModelProviders',
+      type: 'readonly string[]',
+      isOptional: true,
+      defaultValue: '[]',
+      description:
+        "Model providers that use the server process's own credentials instead of per-account keys. Every signed-in account can then run these models on the deployment's credentials. With auth enabled, these providers are only available when listed here. Supported: amazon-bedrock (AWS_BEARER_TOKEN_BEDROCK or the standard AWS credential chain) and google-vertex (Application Default Credentials plus GOOGLE_VERTEX_PROJECT and GOOGLE_VERTEX_LOCATION). Factory ignores other values with a warning.",
+    },
+    {
+      name: 'integrations',
+      type: 'FactoryIntegration[]',
+      isOptional: true,
+      description:
+        'Explicit integrations. Integration IDs must be unique. With Platform credentials, Factory adds Platform-backed GitHub, GitLab, Linear, Jira, incident.io, and Vanta integrations for any of those IDs you leave out.',
+    },
+    {
+      name: 'configVersion',
+      type: 'string',
+      isOptional: true,
+      defaultValue: 'factory-config-v1',
+      description: 'Configuration version recorded in audit entries. Does not change rule behavior.',
+    },
+    {
+      name: 'boards',
+      type: 'readonly InstalledBoard[]',
+      isOptional: true,
+      description:
+        "Deprecated. Additional board definitions, stored once in every project. Still works; store board definitions in projects with factory.upsertBoard() or the boards API instead. IDs must be unique. The work ID belongs to Factory's Work board; to replace it, store your board under work with factory.upsertBoard(board, { projects: 'all' }).",
+    },
+    {
+      name: 'skills',
+      type: 'readonly InlineSkill[]',
+      isOptional: true,
+      description:
+        'Skills defined in code with createSkill() from @mastra/core/skills. Every Factory session can load them, and a board phase can run one through runner.skill. A skill here takes precedence over a factory-skills/ folder skill or bundled skill with the same name. Names must be unique.',
+    },
+    {
+      name: 'includeDefaultBoards',
+      type: 'boolean',
+      isOptional: true,
+      description:
+        "Deprecated and ignored. Factory logs a warning when it's set. Every project without boards gets the Work board, and a project with boards keeps them.",
+    },
+    {
+      name: 'platform',
+      type: '{ githubAppSlug?: string; github?: { rules?: GithubRuleOverrides; slug?: string } }',
+      isOptional: true,
+      description:
+        "Platform-specific settings. githubAppSlug identifies the deployment's GitHub App so its own webhook writes don't retrigger triage. github configures the Platform GitHub integration Factory installs itself: rules replaces event handlers or disables them with null, and slug overrides githubAppSlug. github has no effect when integrations includes a github integration, and Factory logs a warning.",
+    },
+  ]}
+/>
+
+## Methods
+
+### `prepare()`
+
+Assemble configuration before constructing `Mastra`. Call once per Factory instance. A second call throws.
+
+```typescript
+const mastraOptions = await factory.prepare()
+```
+
+Returns: `Promise<MastraArgs>`, the constructor configuration for `Mastra`, including assembled controllers, server routes, authentication, storage, and workers. Export a `new Mastra(...)` instance from the entry file as shown in the usage example.
+
+### `finalize()`
+
+Initialize the controller and start Factory work after the `Mastra` instance has been constructed.
+
+```typescript
+await factory.finalize()
+```
+
+Returns: `Promise<void>`. Calling before preparation throws.
+
+### `shutdown()`
+
+Stop background dispatch owned by the Factory runtime during server shutdown.
+
+```typescript
+await factory.shutdown()
+```
+
+Returns: `Promise<void>`. The server remains responsible for the Mastra instance and its other workers.
+
+### `upsertBoard()`
+
+Write a board definition into projects. A project without that board key gets the board. A project that already has the key has it replaced at the next revision. With `projects: 'all'`, the board is also stored for projects created while this process runs, so call it after `prepare()`.
+
+```typescript
+const { inserted, updated, unchanged } = await factory.upsertBoard(
+  {
+    key: 'bugs',
+    name: 'Bugs',
+    phases: [
+      { key: 'reported', name: 'Reported', kind: 'resting', nextPhases: ['fixing'] },
+      {
+        key: 'fixing',
+        name: 'Fixing',
+        kind: 'working',
+        runner: { context: 'work' },
+        nextPhases: ['fixed'],
+      },
+      { key: 'fixed', name: 'Fixed', kind: 'terminal' },
+    ],
+  },
+  { projects: 'all' },
+)
+```
+
+`projects` takes `'all'` or a list of `{ orgId, factoryProjectId }` scopes. With `'all'`, a project created later gets the board on its first load, before Factory adds its own boards. A key that belongs to a Factory board or an app board keeps that board's code behavior. New keys get none. A runner can use a skill the project created only when `projects` lists that project, while a board for every project can use only the app's skills. Each write is audited as `factory.board.created` or `factory.board.updated`.
+
+Returns: `Promise<{ inserted, updated, unchanged }>`, each a list of project scopes. Refused writes throw a `BoardWriteError` with a code such as `invalid_board`, `unknown_skill`, `code_behaviour`, `phase_in_use`, `board_in_use`, or `project_not_found`. Projects written before the refusal keep the board.
+
+### `reviewedChangeRequest()`
+
+Read the pull request or merge request the current session reviews. Use it from an app tool that needs to inspect the change or publish a commit check.
+
+```typescript
+const change = await factory.reviewedChangeRequest(requestContext)
+```
+
+Returns: `Promise<ReviewedChangeRequest | undefined>`, with `provider`, `repository`, `changeRequestId`, `headSha`, `headBranch`, and `publishCommitCheck()`. The publish call is refused, with nothing published, when the change request is no longer open, `headSha` is no longer its head, or the provider can't publish commit checks. The result is `undefined` when the session isn't a Review run with a change request bound, such as a run started from a Work item. Available after `prepare()`.
+
+### `sandboxDescription`
+
+Read the host sandbox's provider, settings schema, and capabilities, as the environment route reports them.
+
+```typescript
+const description = factory.sandboxDescription
+```
+
+Returns: `FactorySandboxDescription | undefined`. The value is `undefined` before `prepare()` and when sandboxes are disabled.
+
+## Lifecycle
+
+1. Construct `MastraFactory` with storage and the capabilities your server needs.
+1. Call `prepare()` once.
+1. Construct and export `Mastra` using the returned configuration.
+1. Call `finalize()`.
+1. Call `shutdown()` as part of server shutdown.
+
+<span id="mastrafactorysandboxconfig" />
+
+## Sandbox configuration
+
+`MastraFactorySandboxConfig` is a function from session context to `MastraSandbox`. Return the sandbox instance without starting it. Factory manages startup and repository setup.
+
+| Context field | Type | Meaning |
+| - | - | - |
+| `sessionId` | `string` | Stable session identity. Use it for the provider's sandbox identity or local session directory. |
+| `repoFullName` | `string \| undefined` | Repository owner and name when the session is repository-backed. |
+| `setupCommand` | `string \| undefined` | Configured repository setup command, also part of template identity. |
+| `getRepositoryAccess` | Function or `undefined` | Resolves repository access with a fresh short-lived credential. Use it when preparing private repository templates. |
+
+Local sandboxes should use a per-session directory. Remote providers should honor the session ID when creating or resuming a sandbox. Return a `MastraSandbox` subclass so Factory can use its startup lifecycle. Implementing only `WorkspaceSandbox` is insufficient.
+
+The previous configuration object with `machine`, `workdir`, and `maxSandboxes` is obsolete. `prepare()` no longer creates the documented sandbox fleet. See [Sandboxes](/configure/sandboxes) for generated-server provider selection.
+
+## Integrations
+
+Pass `FactoryIntegration` implementations in `integrations`. Integrations can contribute routes, intake, version control, agent and session tools, workers, channels, diagnostics, and audit behavior. Each integration needs a unique ID.
+
+Import built-in integrations from these package subpaths:
+
+| Import under `@mastra/factory` | Export | Main configuration |
+| - | - | - |
+| `/integrations/github/integration` | `GithubIntegration` | GitHub App credentials, optional webhook secret and event rules. |
+| `/integrations/gitlab/integration` | `GitLabIntegration` | GitLab base URL and access token, optional webhook secret and event rules. |
+| `/integrations/jira/integration` | `JiraIntegration` | Jira base URL, account email, and API token. |
+| `/integrations/linear/integration` | `LinearIntegration` | OAuth client credentials and optional event rules. |
+| `/integrations/incidentio/integration` | `IncidentioIntegration` | incident.io API key and follow-up source selection. |
+| `/integrations/slack/integration` | `SlackIntegration` | Signing secret, bot token, account-linking credentials, and public origins. |
+| `/integrations/platform/github/integration` | `PlatformGithubIntegration` | Platform configuration from the environment. |
+| `/integrations/platform/gitlab/integration` | `PlatformGitLabIntegration` | Platform configuration from the environment. |
+| `/integrations/platform/jira/integration` | `PlatformJiraIntegration` | Platform configuration from the environment. |
+| `/integrations/platform/linear/integration` | `PlatformLinearIntegration` | Platform configuration from the environment. |
+| `/integrations/platform/incidentio/integration` | `PlatformIncidentioIntegration` | Platform configuration from the environment. |
+| `/integrations/platform/vanta/integration` | `PlatformVantaIntegration` | Platform configuration from the environment, for Vanta compliance events. |
+| `/integrations/workos/integration` | `WorkOSAuditIntegration` | WorkOS client and return URL for audit integration. |
+
+When `MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_PLATFORM_SECRET_KEY` is present, `prepare()` fills missing `github`, `gitlab`, `linear`, `jira`, `incidentio`, and `vanta` integration IDs with Platform implementations. Explicit integrations take precedence for their IDs. This condition differs from [Platform sandbox selection](/configure/sandboxes#check-the-selected-provider).
+
+## Board definitions
+
+Boards live in each Factory project's storage, so the UI is the usual place to manage them. Write them from code with [`upsertBoard()`](#upsertboard) when every project needs the same boards. The `defineBoard()` helper and the constructor's `boards` array are deprecated: they seed a project that stores no boards yet. See [Boards and rules](/configure/boards-and-rules) for a walkthrough.
+
+| Field | Required | Description |
+| - | - | - |
+| `key` | Yes | Board identifier. A key Factory defines in code can't be created over, and the Work board can't be deleted. |
+| `name` | Yes | Display name in the UI. |
+| `description` | No | Text shown with the board. |
+| `phases` | Yes | Ordered list of phases. The first phase is where cards start. |
+| `sourceClosed` | No | Phases a card moves to when its source closes: `{ completed, canceled }`. Without it, a closed source leaves the card in place. |
+
+A board with a key that has no code definition gets no code behavior, which means its tool results and integration events have no handlers.
+
+Factory installs a Work board in every project, and that board also reviews pull requests. A project that stores no boards gets the Work board, and `includeDefaultBoards` is ignored.
+
+### Phase fields
+
+| Field | Required | Description |
+| - | - | - |
+| `key` | Yes | Phase identifier, which is also the stage a card is in. |
+| `name` | Yes | Phase display name. |
+| `kind` | Yes | `resting`, `working`, or `terminal`. |
+| `description` | No | Text shown with the phase. |
+| `runner` | No | Working-phase run settings: `skill`, `context`, `instructions`, and `goal`. |
+| `nextPhases` | No | Phases a card may move to from here. |
+| `autoStart` | No | Start the phase's run without anyone approving it. |
+| `autoStartWhen` | No | With `autoStart`, a condition that limits which cards start on their own. |
+| `exitTool` | No | The tool whose successful call ends the phase, with optional `autoApprove` and `autoApproveWhen`. |
+| `tools` | No | Factory tools the session working the card gets: `factory_record_review_verdict` and `factory_review_source`. |
+
+Resting phases wait for a person or an event, and terminal phases mark work as finished, so Factory stops the card's sessions and releases what they held. A working phase starts a run only when `runner.skill` is set; `runner.context` picks the session, which defaults to `work`, and phases that name the same context share one session per card. `runner.goal` pursues an `objective` until the objective is met, with an optional `maxRuns` limit.
+
+An unset `nextPhases` on a resting or working phase allows every other phase, and `[]` allows none. Every destination must reference an existing phase. These fields declare allowed moves without performing them. The returned definition exposes `allowsTransition(from, to)` to check whether a move is declared.
+
+Deprecated fields still parse, but they no longer change behavior: `title` (use `name`), `role` (use `runner.context`), `next` (use `nextPhases`), `onEnter` and `onExit` (a phase starts its run from `runner.skill`), and `outcomes` (its targets count as allowed next phases). `transitionPolicy` remains in effect when set.
+
+### Board event overrides
+
+A board definition can answer an integration event for its own cards. The handler runs after any handler the deployment set explicitly on the integration and before the integration's default, so `null` switches that event off for cards on this board only.
+
+```typescript oxfmt:false
+events: {
+  github: {
+    'pull_request.synchronized': null,
+  }
+},
+```
+
+Keys are integration IDs: `github`, `gitlab`, `linear`, `jira`, and `incidentio`. Deprecated `defineBoard()` definitions still declare this field, and boards stored from the UI configure the same behavior through their **Rules** page.
+
+## Rules
+
+Rules decide where arriving work goes and how cards react to events. Boards configure them per lane in the UI, where Factory applies the first rule that matches. Code definitions add tool-result handlers on the board's `tools` and per-board event overrides on `events`.
+
+The former `defaultFactoryRules()` API and `MastraFactory.rules` constructor option are no longer supported.
+
+### Rule handlers
+
+A handler receives a read-only context and returns one decision or `undefined`, synchronously or through a promise. Common context fields include `tenant`, `actor`, `ingress`, `cause`, `causalChain`, and `configVersion`. Board-bound contexts also include `item`, `board`, and `itemRevision`.
+
+Tool-result handlers add `toolName`, `threadId`, `assistantMessageId`, `toolCallId`, and `result`. Event handlers add `boardEvent`, and, when the event concerns a card, `item`, `board`, `itemRevision`, `flow`, `phase`, and `boardClosure`.
+
+| Decision type | Effect |
+| - | - |
+| `transition` | Move the card to a `board` and `stage`. Optional `message` tells the card's session, and `reenter` runs the destination phase's work again when the card is already there. |
+| `routeEvent` | Hand a status event on an existing card to its board's routes, where the first route that specifies the event and matches moves the card. |
+| `signalActivity` | Tell the card's live session that its source saw activity, carrying pointers rather than provider text. |
+| `invokeSkill` | Start an agent run with a `skillName`, or with a plain `prompt` when no handoff contract is needed. `role` names the session the run joins, such as a phase's `runner.context`. |
+| `upsertLinkedWorkItem` | Create a card for an external record, or move the card that holds it. `skipRules` files it without running arrival rules, and `attachTo` or `closesIssue` files a pull request on an existing card. |
+| `sendMessage` | Send a message to a session. |
+| `notify` | Send a notification to the bound session, with `title`, optional `body`, and optional `level`. |
+| `dismissStaleReviews` | Dismiss change requests an approval has superseded on a GitHub pull request. |
+| `reject` | Reject the operation with a `code` and `reason`. |
+
+Action decisions require an `idempotencyKey`, except for `reject`. Use a stable key derived from the event ID and action so a duplicate event doesn't repeat the action, since direct external calls inside handlers don't receive that protection.
+
+### Tool results
+
+Declare handlers as `tools: { toolName: { onResult: handler } }` on a code board definition. A handler receives `FactoryToolResultRuleContext`, which adds these fields to the common context:
+
+| Field | Description |
+| - | - |
+| `toolName` | Name of the completed tool. |
+| `threadId` | Thread in which the tool ran. |
+| `assistantMessageId` | Assistant message associated with the call. |
+| `toolCallId` | Identifier of the tool call. |
+| `result.status` | `success` or `error`. |
+| `result.value` | JSON-compatible result whose structure depends on the tool. |
+
+Tool-result handlers return the decision types listed above. A handler reacts to an available tool but doesn't add that tool to the agent. If the board has no handler for a tool result, Factory doesn't produce a rule decision.
+
+The built-in Work board handles approved `submit_plan` results from a planning agent, a handler that custom boards don't inherit or override. A board stored from the UI keeps the code behavior of its key, so a board with a new key has no tool-result handlers.
+
+### Transition policy
+
+`transitionPolicy` is deprecated. Express the flow with each phase's `nextPhases` and `exitTool` instead. Factory still enforces a policy when a board sets one.
+
+`transitionPolicy(context)` returns one of the following, synchronously or through a promise:
+
+- `undefined`: Apply Factory's remaining checks without an additional policy decision.
+- `{ type: 'allow' }`: Allow the move subject to remaining checks. Factory ignores the deprecated `triageType` and `accept` fields on an allow result.
+- `{ type: 'reject', code, reason }`: Reject the move with an explanation.
+
+The immutable context includes `fromStage`, `toStage`, `isHumanTransition`, `initialEntry`, `reenter`, and the work item. Policies can't authorize undeclared moves or bypass Factory's other checks.
+
+For example, this deprecated property alongside `phases` in a [code board definition](/configure/boards-and-rules#manage-boards-from-code) requires a person to move the card to Done:
+
+```typescript
+transitionPolicy: context => {
+  if (context.toStage === 'done' && !context.isHumanTransition) {
+    return {
+      type: 'reject',
+      code: 'approval_required',
+      reason: 'A person must approve the quality check.',
+    }
+  }
+}
+```
+
+### Configuration version
+
+Set `configVersion` on `MastraFactory` to identify the deployed configuration in audit records and rule context. The default is `factory-config-v1`, and changing it doesn't change which handlers run.

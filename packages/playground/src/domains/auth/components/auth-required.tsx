@@ -96,7 +96,7 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
           <p className="max-w-sm text-muted-foreground">You need to sign in to access this page.</p>
         </div>
         {capabilities.login.description && (
-          <div className="flex items-start gap-2.5 rounded-md border border-border bg-background p-3 text-left">
+          <div className="flex items-start gap-2.5 rounded-md bg-nested p-3 text-left">
             <IconLock className="mt-0.5 size-icon-md shrink-0 text-muted-foreground" />
             <Txt tone="muted" className="max-w-sm">
               {capabilities.login.description}

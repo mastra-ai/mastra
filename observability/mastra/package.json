@@ -1,12 +1,13 @@
 {
   "name": "@mastra/observability",
-  "version": "1.24.2",
+  "version": "1.24.3",
   "description": "Core observability package for Mastra - includes tracing and scoring features",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "exports": {
     ".": {

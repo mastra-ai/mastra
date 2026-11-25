@@ -1,12 +1,13 @@
 {
   "name": "@mastra/voice-aws-nova-sonic",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Mastra AWS Nova 2 Sonic voice integration",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "exports": {
     ".": {

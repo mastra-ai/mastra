@@ -105,6 +105,7 @@ export async function loadGraph() {
     { releaseRunMessageRefs },
     workflows,
     eventedWorkflows,
+    { MockMemory },
   ] = await Promise.all([
     import('../../../mastra'),
     import('../../../storage'),
@@ -117,6 +118,7 @@ export async function loadGraph() {
     import('../run-message-refs'),
     import('../../../workflows'),
     import('../../../workflows/evented'),
+    import('../../../memory/mock'),
   ]);
   return {
     Mastra,
@@ -134,6 +136,7 @@ export async function loadGraph() {
     createStep: workflows.createStep,
     createEventedWorkflow: eventedWorkflows.createWorkflow,
     createEventedStep: eventedWorkflows.createStep,
+    MockMemory,
   };
 }
 
@@ -186,7 +189,7 @@ export function createGate() {
 
 export type Gate = ReturnType<typeof createGate>;
 
-type BuildContext = { core: CoreGraph; generation: number };
+type BuildContext = { core: CoreGraph; generation: number; storage: any };
 
 type AgentBuild = (ctx: BuildContext) => Agent<any, any, any>;
 type WorkflowBuild = (ctx: BuildContext) => any;
@@ -247,7 +250,7 @@ async function buildGraph<K extends RestartKind>(options: ScenarioOptions<K>, ge
     options.storageMode === 'serializing'
       ? (await import('../../../storage/domains/workflows/serializing-store.test-utils')).createSerializingStore().store
       : new core.InMemoryStore();
-  const built = options.build({ core, generation } as BuildContext);
+  const built = options.build({ core, generation, storage } as BuildContext);
   let mastra: any;
   try {
     if (options.kind === 'workflow') {

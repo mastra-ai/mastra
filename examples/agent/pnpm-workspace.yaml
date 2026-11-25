@@ -30,7 +30,7 @@ overrides:
   better-auth: ^1.7.22
   '@better-auth/drizzle-adapter@<1.7.7': 1.7.22
   '@modelcontextprotocol/sdk@>=1.0.0 <1.32.0': 1.32.1
-  '@ai-sdk/provider-utils@>=3.0.0 <3.0.38': 3.0.45
+  '@ai-sdk/provider-utils@>=3.0.0 <3.0.38': 3.0.46
   es-toolkit@<1.52.0: 1.52.0
   fast-copy@<4.1.1: 4.1.1
   ioredis@>=5.0.0 <6.0.0: 6.0.0
@@ -38,7 +38,7 @@ overrides:
   # Vanta 2026-09-28: nested-lock security floors
   'shell-quote@<1.11.0': 1.11.0
   'jsondiffpatch@<0.7.6': 0.7.6
-  '@hono/node-server@<1.19.15': 1.19.15
+  '@hono/node-server@<2.1.6': 2.1.6
   '@noble/hashes@>=2.0.0 <2.4.0': 2.4.0
   # Vanta 2026-10-02: force fixed majors for findings whose parents have no release on them yet.
   'undici@<8.12.4': 8.12.4
