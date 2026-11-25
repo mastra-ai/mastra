@@ -1078,6 +1078,111 @@ describe('BackgroundTaskManager: a running task whose worker dies after startup'
 // The process that dispatched a task records its open request on the tool call through
 // its task context. Another process can cancel that task, so the owner has to hear about
 // it to drop the request. (#28986)
+describe('BackgroundTaskManager: reporting a task it fails because its worker is gone (#28331)', () => {
+  const TERMINATED = 'Worker process terminated before task completed';
+
+  async function seed(id: string, overrides: Partial<BackgroundTask> = {}) {
+    const store = (await storage.getStore('backgroundTasks'))!;
+    await store.createTask({
+      ...foreignRunningRow(id),
+      toolName: 'tool',
+      agentId: 'agent-1',
+      ownerId: 'dead-worker',
+      leaseExpiresAt: new Date(Date.now() - 1_000),
+      ...overrides,
+    });
+  }
+
+  function recovering(onTaskFailed = vi.fn(), pubsub = new EventEmitterPubSub()) {
+    return makeManager({ leaseDurationMs: LEASE_MS, recoverStaleTasksOnStart: true, onTaskFailed }, pubsub);
+  }
+
+  it('reports a task the startup scan fails', async () => {
+    await seed('crashed');
+    const onTaskFailed = vi.fn();
+    await recovering(onTaskFailed);
+
+    await vi.waitFor(() => expect(onTaskFailed).toHaveBeenCalledTimes(1));
+    expect(onTaskFailed.mock.calls[0]![0]).toMatchObject({
+      id: 'crashed',
+      status: 'failed',
+      error: { message: TERMINATED },
+    });
+  });
+
+  it('reports a task a later sweep fails to callbacks and stream subscribers', async () => {
+    const onTaskFailed = vi.fn();
+    const mgr = await recovering(onTaskFailed);
+    const chunks: any[] = [];
+    const stop = new AbortController();
+    const consumer = (async () => {
+      for await (const chunk of mgr.stream({ abortSignal: stop.signal }) as any) chunks.push(chunk);
+    })();
+    await seed('crashed');
+
+    try {
+      await vi.waitFor(() => expect(onTaskFailed).toHaveBeenCalledTimes(1), { timeout: 5_000, interval: 50 });
+      await vi.waitFor(() =>
+        expect(chunks.filter(c => c.type === 'background-task-failed').map(c => c.payload.taskId)).toEqual(['crashed']),
+      );
+    } finally {
+      stop.abort();
+      await consumer;
+    }
+  });
+
+  it('reports a pinned task whose owner died once it is out of retries', async () => {
+    await seed('pinned', { status: 'pending', startedAt: undefined });
+    const onTaskFailed = vi.fn();
+    await recovering(onTaskFailed);
+
+    await vi.waitFor(() => expect(onTaskFailed).toHaveBeenCalledTimes(1));
+    expect(onTaskFailed.mock.calls[0]![0]).toMatchObject({
+      id: 'pinned',
+      status: 'failed',
+      error: { message: TERMINATED },
+    });
+  });
+
+  it('reports each failure once when two workers recover the same task', async () => {
+    await seed('crashed');
+    const pubsub = new EventEmitterPubSub();
+    const publish = vi.spyOn(pubsub, 'publish');
+    await Promise.all([recovering(vi.fn(), pubsub), recovering(vi.fn(), pubsub)]);
+
+    await vi.waitFor(async () =>
+      expect((await storage.getStore('backgroundTasks'))!.getTask('crashed')).resolves.toMatchObject({
+        status: 'failed',
+      }),
+    );
+    await new Promise(resolve => setTimeout(resolve, LEASE_MS));
+    const failedEvents = publish.mock.calls.filter(([, event]) => event.type === 'task.failed');
+    expect(failedEvents.map(([, event]) => event.data.taskId)).toEqual(['crashed']);
+  });
+
+  it('keeps recovering when reporting one failure fails', async () => {
+    await seed('crashed-a');
+    await seed('crashed-b');
+    const pubsub = new EventEmitterPubSub();
+    const publish = pubsub.publish.bind(pubsub);
+    let rejected = false;
+    vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event) => {
+      if (!rejected && event.type === 'task.failed') {
+        rejected = true;
+        throw new Error('broker unavailable');
+      }
+      return publish(topic, event);
+    });
+    const onTaskFailed = vi.fn();
+    const mgr = await recovering(onTaskFailed, pubsub);
+
+    await vi.waitFor(() => expect(onTaskFailed).toHaveBeenCalledTimes(1));
+    expect(rejected).toBe(true);
+    expect((await mgr.getTask('crashed-a'))?.status).toBe('failed');
+    expect((await mgr.getTask('crashed-b'))?.status).toBe('failed');
+  });
+});
+
 describe('BackgroundTaskManager: cancelling a suspended task from another process', () => {
   it("runs the owner's execution hook so it can drop the open request", async () => {
     const pubsub = new EventEmitterPubSub();

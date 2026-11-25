@@ -289,6 +289,58 @@ describe('BackgroundTaskManager lifecycle', () => {
     await expect(shutdownPromise).resolves.toBeUndefined();
   });
 
+  it('fails a running task without retries on shutdown, the way a crash would, instead of cancelling it (#31306)', async () => {
+    const onTaskFailed = vi.fn();
+    const onTaskCancelled = vi.fn();
+    const store = new MockStore();
+    const mastra = new Mastra({
+      logger: false,
+      storage: store,
+      backgroundTasks: { enabled: true, onTaskFailed, onTaskCancelled },
+    });
+    const manager = mastra.backgroundTaskManager!;
+    const started = Promise.withResolvers<void>();
+    manager.registerStaticExecutor('wait', {
+      execute: (args: unknown, options: { abortSignal?: AbortSignal }) => {
+        started.resolve();
+        return waitUntilAborted(args, options);
+      },
+    });
+    const chunks: any[] = [];
+    const stop = new AbortController();
+    const consumer = (async () => {
+      for await (const chunk of manager.stream({ abortSignal: stop.signal }) as any) chunks.push(chunk);
+    })();
+
+    try {
+      const { task } = await manager.enqueue({
+        runId: 'run-1',
+        toolName: 'wait',
+        toolCallId: 'call-1',
+        args: {},
+        agentId: 'agent-1',
+        maxRetries: 0,
+      });
+      await started.promise;
+
+      await manager.shutdown();
+
+      expect(await (await store.getStore('backgroundTasks'))!.getTask(task.id)).toMatchObject({
+        status: 'failed',
+        error: { message: 'Worker process terminated before task completed' },
+        ownerId: undefined,
+      });
+      await vi.waitFor(() => expect(onTaskFailed).toHaveBeenCalledTimes(1));
+      expect(onTaskCancelled).not.toHaveBeenCalled();
+      expect(chunks.map(c => c.type)).toContain('background-task-failed');
+      expect(chunks.map(c => c.type)).not.toContain('background-task-cancelled');
+    } finally {
+      stop.abort();
+      await consumer;
+      mastra.__unregisterHooks();
+    }
+  });
+
   it('logs task cancellation failures during shutdown', async () => {
     const mastra = new Mastra({ logger: false, storage: new MockStore(), workers: false });
     const warn = vi.spyOn(mastra.getLogger(), 'warn');
@@ -298,7 +350,7 @@ describe('BackgroundTaskManager lifecycle', () => {
     await storage.createTask(makeRunningTask({ maxRetries: 0 }));
     manager.activeAbortControllers.set('task-1', new AbortController());
     const error = new Error('storage unavailable');
-    vi.spyOn(manager, 'cancel').mockRejectedValue(error);
+    vi.spyOn(storage, 'updateTask').mockRejectedValue(error);
 
     try {
       await manager.shutdown();

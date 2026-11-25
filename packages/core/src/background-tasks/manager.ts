@@ -14,6 +14,7 @@ import type {
   TaskListResult,
   ToolExecutor,
   BackgroundTaskEvent,
+  UpdateBackgroundTaskOptions,
 } from './types';
 import { BACKGROUND_TASK_WORKFLOW_ID } from './workflow-id';
 
@@ -22,6 +23,7 @@ const TOPIC_RESULT = 'background-tasks-result';
 const WORKER_GROUP = 'background-task-workers';
 const SHUTDOWN_GRACE_PERIOD_MS = 5_000;
 const SHUTDOWN_ABORT_MESSAGE = 'Background task manager is shutting down';
+const WORKER_TERMINATED_MESSAGE = 'Worker process terminated before task completed';
 const TASK_OWNERSHIP_LOST_MESSAGE = 'Background task execution ownership was taken over by another worker';
 
 function workflowRunError(result: { status: string; error?: unknown; tripwire?: { reason?: string } }): unknown {
@@ -349,13 +351,6 @@ export class BackgroundTaskManager {
         ]);
         return;
       }
-
-      if (this.config.recoverStaleTasksOnStart) {
-        // Recover stale tasks from a previous process — only workers should
-        // attempt recovery since they own execution.
-        await this.recoverStaleTasks();
-        this.#startPinSweep();
-      }
     }
 
     await this.pubsub.subscribe(TOPIC_RESULT, this.resultCallback);
@@ -370,6 +365,15 @@ export class BackgroundTaskManager {
       lateSubscriptions.push([TOPIC_RESULT, this.resultCallback]);
       await this.#releaseLateInitSubscriptions(lateSubscriptions);
       return;
+    }
+
+    if (!isProducerOnly && this.config.recoverStaleTasksOnStart) {
+      // Recover stale tasks from a previous process — only workers should
+      // attempt recovery since they own execution. This runs after the result
+      // subscription so this process's own `onTaskFailed` and stream
+      // subscribers hear about the tasks recovery fails.
+      await this.recoverStaleTasks();
+      this.#startPinSweep();
     }
 
     // Start periodic cleanup if configured
@@ -612,17 +616,7 @@ export class BackgroundTaskManager {
       }
 
       if (previousStatus === 'running' || previousStatus === 'suspended') {
-        // Cancel the workflow run so workflow storage reflects the
-        // cancellation and any stored suspended snapshot is cleaned up.
-        if (this.#mastra) {
-          try {
-            const workflow = this.#mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID);
-            const wrapper = await workflow.createRun({ runId: taskId });
-            await wrapper.cancel();
-          } catch (err) {
-            this.#mastra?.getLogger?.()?.warn(`background-task workflow cancel failed for ${taskId}:`, err as any);
-          }
-        }
+        await this.#cancelWorkflowRun(taskId);
       }
 
       const cancelledTask = await storage.getTask(taskId);
@@ -1311,8 +1305,33 @@ export class BackgroundTaskManager {
   async #cancelTaskForShutdown(taskId: string): Promise<void> {
     const storage = await this.getStorage();
     const task = await storage.getTask(taskId);
-    if (task?.status === 'running' && task.maxRetries > 0) return;
-    await this.cancel(taskId);
+    if (task?.status !== 'running') {
+      await this.cancel(taskId);
+      return;
+    }
+    // A task with retries is handed back for the next process to resume.
+    if (task.maxRetries > 0) return;
+    // Without retries the task can't run again. Shutdown didn't cancel it, so
+    // it ends the way a crash ends it rather than looking like a user cancel.
+    if (await this.#failTerminated(storage, taskId, { expectedStatus: 'running', expectedOwnerId: this.workerId })) {
+      this.ownedLeases.delete(taskId);
+      await this.#cancelWorkflowRun(taskId);
+    }
+  }
+
+  /**
+   * Cancels a task's background-task workflow run, so workflow storage
+   * reflects the task's end and any stored suspended snapshot is cleaned up.
+   */
+  async #cancelWorkflowRun(taskId: string): Promise<void> {
+    if (!this.#mastra) return;
+    try {
+      const workflow = this.#mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID);
+      const wrapper = await workflow.createRun({ runId: taskId });
+      await wrapper.cancel();
+    } catch (err) {
+      this.#mastra?.getLogger?.()?.warn(`background-task workflow cancel failed for ${taskId}:`, err as any);
+    }
   }
 
   #abortActiveControllers(): void {
@@ -2411,18 +2430,41 @@ export class BackgroundTaskManager {
       );
       return Boolean(requeued);
     }
-    await storage.updateTask(
-      task.id,
+    await this.#failTerminated(storage, task.id, fence);
+    return false;
+  }
+
+  /**
+   * Fails a task whose worker is gone and reports it with `task.failed`, so
+   * `onTaskFailed` and stream subscribers hear about it like any other failure.
+   * Only the caller whose fenced write lands publishes, so peers racing on the
+   * same row stay quiet. A failed publish is logged, not thrown, so a sweep
+   * still reaches the rows after this one. Returns whether the write landed.
+   */
+  async #failTerminated(
+    storage: Awaited<ReturnType<BackgroundTaskManager['getStorage']>>,
+    taskId: string,
+    fence: UpdateBackgroundTaskOptions,
+  ): Promise<boolean> {
+    const failed = await storage.updateTask(
+      taskId,
       {
         status: 'failed',
-        error: { message: 'Worker process terminated before task completed' },
+        error: { message: WORKER_TERMINATED_MESSAGE },
         completedAt: new Date(),
         ownerId: undefined,
         leaseExpiresAt: undefined,
       },
       fence,
     );
-    return false;
+    if (!failed) return false;
+    try {
+      const failedTask = await storage.getTask(taskId);
+      if (failedTask?.status === 'failed') await this.publishLifecycleEvent('task.failed', failedTask);
+    } catch (error) {
+      this.#mastra?.getLogger?.()?.warn(`Failed to report background task ${taskId} as failed:`, error as any);
+    }
+    return true;
   }
 
   /**
@@ -2451,17 +2493,7 @@ export class BackgroundTaskManager {
           { retryCount: task.retryCount + 1, ownerId: undefined, leaseExpiresAt: undefined },
           fence,
         )
-      : await storage.updateTask(
-          task.id,
-          {
-            status: 'failed',
-            error: { message: 'Worker process terminated before task completed' },
-            completedAt: new Date(),
-            ownerId: undefined,
-            leaseExpiresAt: undefined,
-          },
-          fence,
-        );
+      : await this.#failTerminated(storage, task.id, fence);
     if (recovered) {
       // The lapse only proves the owner stopped renewing. Its adopted work may
       // still be running, which is why pinned work must be idempotent.
