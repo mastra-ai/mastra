@@ -6,12 +6,13 @@ import { useMemoryFeatureFlags } from './use-memory-feature-flags';
 import { useMemorySidebarTab } from './use-memory-sidebar-tab';
 import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 import { Button } from '@/ds/components/Button';
-import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 import { IconChatBubble7 } from '@/ds/icons/central/IconChatBubble7';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
+import { IconChevronTopMedium } from '@/ds/icons/central/IconChevronTopMedium';
 import { IconEyeOpen } from '@/ds/icons/central/IconEyeOpen';
 import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
@@ -184,7 +185,11 @@ export function AgentThreadSidebar({
           </Txt>
         </span>
         {canExpand ? (
-          <DisclosureChevron direction="up" open={showMemory} className="size-icon-md text-muted-foreground" />
+          showMemory ? (
+            <IconChevronDownMedium className="size-icon-md shrink-0 text-muted-foreground" />
+          ) : (
+            <IconChevronTopMedium className="size-icon-md shrink-0 text-muted-foreground" />
+          )
         ) : undefined}
       </span>
 

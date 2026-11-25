@@ -1,10 +1,11 @@
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useLayoutEffect, useRef, useState } from 'react';
-import { DisclosureChevron } from '../../../ds/components/DisclosureChevron';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../../ds/components/Tooltip';
 import { Txt } from '../../../ds/components/Txt';
 import { IconChatBubble7 } from '../../../ds/icons/central/IconChatBubble7';
+import { IconChevronDownMedium } from '../../../ds/icons/central/IconChevronDownMedium';
+import { IconChevronTopMedium } from '../../../ds/icons/central/IconChevronTopMedium';
 import { IconEyeOpen } from '../../../ds/icons/central/IconEyeOpen';
 import { IconMagnifyingGlass } from '../../../ds/icons/central/IconMagnifyingGlass';
 import { IconWrite } from '../../../ds/icons/central/IconWrite';
@@ -161,7 +162,11 @@ export function MemorySidebarView({
                     Memory
                   </Txt>
                 </span>
-                <DisclosureChevron direction="up" open={showMemory} className="size-icon-md text-muted-foreground" />
+                {showMemory ? (
+                  <IconChevronDownMedium className="size-icon-md shrink-0 text-muted-foreground" />
+                ) : (
+                  <IconChevronTopMedium className="size-icon-md shrink-0 text-muted-foreground" />
+                )}
               </span>
 
               {!showMemory ? (
