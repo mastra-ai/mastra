@@ -957,6 +957,46 @@ describe('Custom endpoint form', () => {
     expect(await screen.findByRole('option', { name: 'gpt-a' })).toBeInTheDocument();
   });
 
+  it('stops offering the listed models in bulk once the URL changes and the new one fails its test', async () => {
+    server.use(
+      http.post(CHECK_URL, async ({ request }) => {
+        const body = await request.json();
+        const fromA = body && typeof body === 'object' && 'url' in body && body.url === 'https://a.example/v1';
+        const response: CustomProviderCheckResponse = fromA
+          ? { ok: true, check: { models: { ok: true, models: ['a-1', 'a-2', 'a-3'], latencyMs: 20 } } }
+          : {
+              ok: true,
+              check: {
+                models: {
+                  ok: false,
+                  latencyMs: 30,
+                  failure: {
+                    kind: 'http',
+                    status: 401,
+                    message: 'HTTP 401 Unauthorized from https://b.example/v1/models',
+                  },
+                },
+              },
+            };
+        return HttpResponse.json(response);
+      }),
+    );
+    const { user, form } = await openNewEndpointForm();
+    const url = within(form).getByPlaceholderText('https://api.example.com/v1');
+
+    await user.type(url, 'https://a.example/v1');
+    await user.click(within(form).getByRole('button', { name: 'Test' }));
+    expect(await within(form).findByRole('button', { name: 'Add all 3 listed models' })).toBeInTheDocument();
+
+    await user.clear(url);
+    await user.type(url, 'https://b.example/v1');
+    await user.click(within(form).getByRole('button', { name: 'Test' }));
+
+    expect(await within(form).findByRole('alert')).toHaveTextContent('HTTP 401 Unauthorized from https://b.example/v1');
+    expect(within(form).queryByRole('button', { name: /listed model/ })).not.toBeInTheDocument();
+    expect(within(form).getByText("Run Test to list the endpoint's models, or type an ID.")).toBeInTheDocument();
+  });
+
   it('marks the empty required fields and focuses the first of them', async () => {
     const saves = recordSaves();
     const { user, form } = await openNewEndpointForm();

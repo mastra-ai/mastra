@@ -130,10 +130,11 @@ export function CustomProviderForm({
   const signature = connectionSignature(draft);
   const connectionOutdated = connection !== undefined && connection.signature !== signature;
   const listedModels = listing?.result;
-  // An outdated listing still offers its IDs, but says nothing about what the endpoint lists now.
+  // An outdated listing still offers its IDs as options, but may come from another URL or key, so it neither
+  // flags picks as unlisted nor adds its IDs in bulk.
   const listingCurrent = listing !== undefined && listing.signature === signature;
   const unlistedPicks = listedModels && listingCurrent ? draft.models.filter(id => !listedModels.includes(id)) : [];
-  const unpickedListed = (listedModels ?? []).filter(id => !draft.models.includes(id));
+  const unpickedListed = listedModels && listingCurrent ? listedModels.filter(id => !draft.models.includes(id)) : [];
   const testModel = chosenTestModel && draft.models.includes(chosenTestModel) ? chosenTestModel : draft.models[0];
   // A reply belongs to the model it came from; picking another one hides it.
   const shownModelTest = modelTest && modelTest.model === testModel ? modelTest : undefined;
@@ -350,7 +351,7 @@ export function CustomProviderForm({
           {unlistedPicks.length > 0 && (
             <FieldDescription>Not listed by the endpoint: {unlistedPicks.join(', ')}.</FieldDescription>
           )}
-          {listedModels === undefined && (
+          {!listingCurrent && (
             <FieldDescription>Run Test to list the endpoint's models, or type an ID.</FieldDescription>
           )}
           {unpickedListed.length > 0 && (
