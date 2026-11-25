@@ -111,9 +111,8 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     canonicalPage: 'other/figma.mdx',
     ownership: 'generated-page',
     category: 'Other providers',
-    summary:
-      'read files, versions, components, and styles, render images, manage comments and dev resources, and read and update variables',
-    note: "Figma only lets full members of Enterprise organizations use the variable tools, and updating variables also needs edit access to the file. On other plans, Figma refuses those calls. Node IDs work in either the `1:2` form the API uses or the `1-2` form in Figma URLs. The toolset can't list a team's projects or files, so give the agent a file key or file URL.",
+    summary: 'read files, versions, components, and styles, render images, and manage comments and dev resources',
+    note: "Dev resource tools need Dev Mode, which needs a paid Figma plan and a Full or Dev seat. Node IDs work in either the `1:2` form the API uses or the `1-2` form in Figma URLs. The toolset can't list a team's projects or files, so give the agent a file key or file URL.",
     emit: true,
   },
   fireflies: {

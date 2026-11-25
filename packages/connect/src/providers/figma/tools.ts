@@ -16,8 +16,6 @@ import { getFileComponentSetsTool } from './tools/get-file-component-sets.js';
 import { getFileComponentsTool } from './tools/get-file-components.js';
 import { getFileNodeTool } from './tools/get-file-node.js';
 import { getFileStylesTool } from './tools/get-file-styles.js';
-import { getLocalVariablesTool } from './tools/get-local-variables.js';
-import { getPublishedVariablesTool } from './tools/get-published-variables.js';
 import { getStyleTool } from './tools/get-style.js';
 import { getVersionTool } from './tools/get-version.js';
 import { listCommentReactionsTool } from './tools/list-comment-reactions.js';
@@ -30,7 +28,6 @@ import { listStylesTool } from './tools/list-styles.js';
 import { listVersionsTool } from './tools/list-versions.js';
 import { renderImagesTool } from './tools/render-images.js';
 import { updateDevResourcesTool } from './tools/update-dev-resources.js';
-import { updateVariablesTool } from './tools/update-variables.js';
 
 export function createFigmaTools(options?: ProviderToolsOptions) {
   const platformProxy = createPlatformProxy({ connectionId: options?.connectionId, client: options?.client });
@@ -49,8 +46,6 @@ export function createFigmaTools(options?: ProviderToolsOptions) {
     figma_get_file_components: getFileComponentsTool(platformProxy),
     figma_get_file_node: getFileNodeTool(platformProxy),
     figma_get_file_styles: getFileStylesTool(platformProxy),
-    figma_get_local_variables: getLocalVariablesTool(platformProxy),
-    figma_get_published_variables: getPublishedVariablesTool(platformProxy),
     figma_get_style: getStyleTool(platformProxy),
     figma_get_version: getVersionTool(platformProxy),
     figma_list_comment_reactions: listCommentReactionsTool(platformProxy),
@@ -63,7 +58,6 @@ export function createFigmaTools(options?: ProviderToolsOptions) {
     figma_list_versions: listVersionsTool(platformProxy),
     figma_render_images: renderImagesTool(platformProxy),
     figma_update_dev_resources: updateDevResourcesTool(platformProxy),
-    figma_update_variables: updateVariablesTool(platformProxy),
   };
   return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
 }

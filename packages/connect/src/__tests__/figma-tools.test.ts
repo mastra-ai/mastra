@@ -162,11 +162,6 @@ describe('Figma tools', () => {
         { dev_resources: [{ name: 'Ticket', url: 'https://example.com/1', file_key: 'FILE', node_id: '1:2' }] },
         'POST',
       ],
-      [
-        'figma_update_variables',
-        { file_key: 'FILE', variableCollections: [{ action: 'CREATE', name: 'Tokens' }] },
-        'POST',
-      ],
       ['figma_create_comment', { file_key: 'FILE', message: 'Hi' }, 'POST'],
     ])('%s does not replay a write after a transient 5xx', async (toolId, input, method) => {
       answer = () => ({ status: 502, body: { error: 'bad gateway' } });
@@ -485,34 +480,6 @@ describe('Figma tools', () => {
       });
 
       expect(result).toEqual({ links_created: [], errors: [{ error: 'rate limited' }] });
-    });
-  });
-
-  describe('variables', () => {
-    it.each([
-      ['a bound opacity', { color: { r: 1, g: 0, b: 0 }, opacity: { type: 'VARIABLE_ALIAS', id: 'VariableID:1:4' } }],
-      ['a bound color', { color: { type: 'VARIABLE_ALIAS', id: 'VariableID:1:3' }, opacity: 50 }],
-    ])('sets a composed color with %s', async (_case, value) => {
-      answer = () => ({ status: 200, body: { status: 200, error: false, meta: { tempIdToRealId: {} } } });
-
-      await run('figma_update_variables', {
-        file_key: 'FILE',
-        variableModeValues: [{ variableId: 'VariableID:1:2', modeId: '1:0', value }],
-      });
-
-      expect(requests[0]!.body).toMatchObject({ variableModeValues: [{ value }] });
-    });
-
-    it('refuses a composed color with nothing bound to a variable', async () => {
-      await expect(
-        run('figma_update_variables', {
-          file_key: 'FILE',
-          variableModeValues: [
-            { variableId: 'VariableID:1:2', modeId: '1:0', value: { color: { r: 1, g: 0, b: 0 }, opacity: 50 } },
-          ],
-        }),
-      ).rejects.toThrow(/failed validation/);
-      expect(requests).toEqual([]);
     });
   });
 });

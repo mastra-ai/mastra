@@ -21,8 +21,6 @@ const TOOL_IDS = [
   'get_file_components',
   'get_file_node',
   'get_file_styles',
-  'get_local_variables',
-  'get_published_variables',
   'get_style',
   'get_version',
   'list_comment_reactions',
@@ -35,7 +33,6 @@ const TOOL_IDS = [
   'list_versions',
   'render_images',
   'update_dev_resources',
-  'update_variables',
 ].map(id => `figma_${id}`);
 
 const RESPONSES: Record<string, unknown> = {
@@ -55,17 +52,14 @@ const RESPONSES: Record<string, unknown> = {
   figma_create_dev_resources: { links_created: [{ id: 'dr_1' }] },
   figma_list_dev_resources: { dev_resources: [{ id: 'dr_1' }] },
   figma_update_dev_resources: { links_updated: ['dr_1'] },
-  figma_update_variables: { meta: { tempIdToRealId: { smoke_collection: 'VariableCollectionId:9:9' } } },
 };
 
 async function runScenario({
   fail = {},
   responses = {},
-  failIf,
 }: {
   fail?: Record<string, string>;
   responses?: Record<string, unknown>;
-  failIf?: (toolId: string, input: Record<string, unknown>) => string | undefined;
 } = {}) {
   const calls: Array<{ toolId: string; input: Record<string, unknown> }> = [];
   const errors: string[] = [];
@@ -78,7 +72,7 @@ async function runScenario({
     log: { info() {}, warn() {}, error: (message: string) => errors.push(message) },
     call: async <T>(toolId: string, input: Record<string, unknown>): Promise<T> => {
       calls.push({ toolId, input });
-      const failure = fail[toolId] ?? failIf?.(toolId, input);
+      const failure = fail[toolId];
       if (failure) throw new Error(failure);
       return (responses[toolId] ?? RESPONSES[toolId] ?? {}) as T;
     },
@@ -107,10 +101,6 @@ describe('Figma smoke scenario', () => {
       '100',
       '100',
     ]);
-    expect(calls).toContainEqual({
-      toolId: 'figma_update_variables',
-      input: { file_key: 'FILE', variableCollections: [{ action: 'DELETE', id: 'VariableCollectionId:9:9' }] },
-    });
     expect(calls).toContainEqual({
       toolId: 'figma_delete_dev_resource',
       input: { file_key: 'FILE', dev_resource_id: 'dr_1' },
@@ -144,40 +134,6 @@ describe('Figma smoke scenario', () => {
     expect(steps).toContainEqual(expect.objectContaining({ toolId: 'figma_list_styles', status: 'skip' }));
   });
 
-  it('never creates a variable collection outside an Enterprise organization', async () => {
-    const forbidden = 'figma_get_local_variables failed: status=403 Limited by Figma plan';
-
-    const { steps, calls } = await runScenario({
-      fail: { figma_get_local_variables: forbidden, figma_get_published_variables: forbidden },
-    });
-
-    const writes = calls.filter(call => call.toolId === 'figma_update_variables');
-    expect(writes).toEqual([
-      {
-        toolId: 'figma_update_variables',
-        input: { file_key: 'FILE', variableCollections: [{ action: 'DELETE', id: 'VariableCollectionId:0:0' }] },
-      },
-    ]);
-    expect(steps.filter(step => step.toolId?.includes('variables')).every(step => step.status === 'pass')).toBe(true);
-  });
-
-  it.each([
-    'status=403 Invalid scope(s): file_comments:read. This endpoint requires the file_variables:read scope',
-    'status=403 Invalid token',
-  ])('counts a variables 403 that is not the plan gate as a failure: %s', async message => {
-    const { steps } = await runScenario({ fail: { figma_get_local_variables: message } });
-
-    expect(steps).toContainEqual(expect.objectContaining({ toolId: 'figma_get_local_variables', status: 'fail' }));
-  });
-
-  it('counts a Platform refusal of variables as a failure, not the Enterprise gate', async () => {
-    const { steps } = await runScenario({
-      fail: { figma_get_local_variables: 'figma_get_local_variables failed: status=403 source=platform' },
-    });
-
-    expect(steps).toContainEqual(expect.objectContaining({ toolId: 'figma_get_local_variables', status: 'fail' }));
-  });
-
   it('logs and fails a comment it could not delete', async () => {
     const { steps, errors } = await runScenario({ fail: { figma_delete_comment: 'status=500' } });
 
@@ -191,6 +147,50 @@ describe('Figma smoke scenario', () => {
     expect(calls).toContainEqual(
       expect.objectContaining({ toolId: 'figma_render_images', input: expect.objectContaining({ node_ids: ['1-2'] }) }),
     );
+  });
+
+  it('probes a made-up version when the file has none', async () => {
+    const { steps, calls } = await runScenario({
+      responses: { figma_list_versions: { versions: [] } },
+      fail: { figma_get_version: 'Version 1 not found for file FILE.' },
+    });
+
+    expect(steps.filter(step => step.status === 'fail')).toEqual([]);
+    expect(calls).toContainEqual({ toolId: 'figma_get_version', input: { file_key: 'FILE', version_id: '1' } });
+  });
+
+  describe('a file without Dev Mode', () => {
+    const notFound = 'Provider request failed (404): File not found [status=404, code=proxy_error]';
+    const noDevMode = {
+      responses: {
+        figma_create_dev_resources: { links_created: [], errors: [{ error: 'File not found' }] },
+        figma_update_dev_resources: { links_updated: [], errors: [{ error: 'Dev resource not found' }] },
+      },
+      fail: { figma_list_dev_resources: notFound, figma_delete_dev_resource: notFound },
+    };
+
+    it('passes every dev resource tool, creates nothing, and touches no real record', async () => {
+      const { steps, calls, errors } = await runScenario(noDevMode);
+
+      expect(steps.filter(step => step.status !== 'pass')).toEqual([]);
+      expect(new Set(steps.map(step => step.toolId))).toEqual(new Set(TOOL_IDS));
+      expect(errors).toEqual([]);
+      expect(calls.filter(call => call.toolId === 'figma_create_dev_resources')).toHaveLength(1);
+      expect(calls).toContainEqual({
+        toolId: 'figma_delete_dev_resource',
+        input: { file_key: 'FILE', dev_resource_id: '9007199254740991' },
+      });
+    });
+
+    it('still fails when the other file reads failed too', async () => {
+      const { steps } = await runScenario({
+        ...noDevMode,
+        fail: { ...noDevMode.fail, figma_list_comments: notFound },
+      });
+
+      expect(steps).toContainEqual(expect.objectContaining({ toolId: 'figma_list_dev_resources', status: 'fail' }));
+      expect(steps).toContainEqual(expect.objectContaining({ name: 'attach dev resource', status: 'fail' }));
+    });
   });
 
   describe('a create whose outcome is unknown', () => {
@@ -214,34 +214,11 @@ describe('Figma smoke scenario', () => {
         { figma_list_dev_resources: { dev_resources: [{ id: 'dr_9', name: 'mastra-smoke-run-1' }] } },
         { toolId: 'figma_delete_dev_resource', input: { file_key: 'FILE', dev_resource_id: 'dr_9' } },
       ],
-      [
-        'variable collection',
-        'figma_update_variables',
-        {
-          figma_get_local_variables: {
-            meta: { variableCollections: { a: { id: 'VariableCollectionId:7:7', name: 'mastra-smoke-run-1' } } },
-          },
-        },
-        {
-          toolId: 'figma_update_variables',
-          input: { file_key: 'FILE', variableCollections: [{ action: 'DELETE', id: 'VariableCollectionId:7:7' }] },
-        },
-      ],
     ])('deletes a %s Figma kept without repeating the create', async (_what, createTool, responses, removal) => {
-      // Fail only the create: deletes go through figma_update_variables too.
-      const { steps, calls, errors } = await runScenario({
-        responses,
-        failIf: (toolId, input) =>
-          toolId === createTool && !JSON.stringify(input).includes('DELETE') ? 'socket hang up' : undefined,
-      });
+      const { steps, calls, errors } = await runScenario({ responses, fail: { [createTool]: 'socket hang up' } });
 
       expect(calls).toContainEqual(removal);
-      const creates = calls.filter(
-        call =>
-          call.toolId === createTool &&
-          !(createTool === 'figma_update_variables' && JSON.stringify(call.input).includes('DELETE')),
-      );
-      expect(creates).toHaveLength(1);
+      expect(calls.filter(call => call.toolId === createTool)).toHaveLength(1);
       expect(errors).toEqual([]);
       expect(steps).toContainEqual(expect.objectContaining({ name: `delete kept ${_what}`, status: 'pass' }));
     });

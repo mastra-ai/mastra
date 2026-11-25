@@ -1,6 +1,6 @@
 ---
 title: "Figma | Other providers"
-description: "Give Mastra agents Figma tools through Mastra Connect to read files, versions, components, and styles, render images, manage comments and dev resources, and read and update variables."
+description: "Give Mastra agents Figma tools through Mastra Connect to read files, versions, components, and styles, render images, and manage comments and dev resources."
 packages:
   - "@mastra/connect"
 ---
@@ -9,7 +9,7 @@ packages:
 
 # Figma
 
-Give agents tools to read files, versions, components, and styles, render images, manage comments and dev resources, and read and update variables in Figma through Mastra Connect. Each tool call goes through the Mastra platform, which adds the connection's credential. Your application never stores Figma credentials.
+Give agents tools to read files, versions, components, and styles, render images, and manage comments and dev resources in Figma through Mastra Connect. Each tool call goes through the Mastra platform, which adds the connection's credential. Your application never stores Figma credentials.
 
 ## Connect
 
@@ -17,7 +17,7 @@ Before you start, complete the [Connect setup](/docs/mastra-platform/connect#get
 
 :::note
 
-Figma only lets full members of Enterprise organizations use the variable tools, and updating variables also needs edit access to the file. On other plans, Figma refuses those calls. Node IDs work in either the `1:2` form the API uses or the `1-2` form in Figma URLs. The toolset can't list a team's projects or files, so give the agent a file key or file URL.
+Dev resource tools need Dev Mode, which needs a paid Figma plan and a Full or Dev seat. Node IDs work in either the `1:2` form the API uses or the `1-2` form in Figma URLs. The toolset can't list a team's projects or files, so give the agent a file key or file URL.
 
 :::
 
@@ -43,10 +43,10 @@ export const figmaAgent = new Agent({
   id: 'figma-agent',
   name: 'Figma agent',
   instructions:
-    'You help people read files, versions, components, and styles, render images, manage comments and dev resources, and read and update variables in Figma.',
+    'You help people read files, versions, components, and styles, render images, and manage comments and dev resources in Figma.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({ providers: ['figma'] }),
 })
 ```
 
-The agent gets 29 Figma tools, with keys such as `figma_create_comment`. See [Figma tools](/reference/connect/providers#figma) for the full list, and the [`tools()` parameters](/reference/connect/tools#parameters) to restrict tools or require approval before a call runs.
+The agent gets 26 Figma tools, with keys such as `figma_create_comment`. See [Figma tools](/reference/connect/providers#figma) for the full list, and the [`tools()` parameters](/reference/connect/tools#parameters) to restrict tools or require approval before a call runs.
