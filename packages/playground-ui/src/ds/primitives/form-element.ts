@@ -41,11 +41,13 @@ export const controlFocusBorderVisible = `outline-hidden focus-visible:outline-h
 //
 // Caller appends a radius (`rounded-full` for single-line inputs, `rounded-xl` for
 // textareas).
-// `:not([data-popup-open])` because a trigger's open rung is a plain attribute
+// `:not([data-popup-open]…)` because a trigger's open rung is a plain attribute
 // selector and would otherwise lose to this compound one while the pointer is
-// still on the trigger that opened the popup.
+// still on the trigger that opened the popup. `data-popup-open` alone is not enough:
+// Base UI also sets it while a tooltip or hover card is open. A menu, select or popover
+// trigger is `aria-expanded` as well, and a combobox's input group is a `group`.
 const surfaceTintHover =
-  '[&:hover:not(:focus-visible):not(:disabled):not([data-popup-open])]:[--surface-tint:var(--field-hover)]';
+  '[&:hover:not(:focus-visible):not(:disabled):not([data-popup-open]:where([aria-expanded=true],[role=group]))]:[--surface-tint:var(--field-hover)]';
 export const surfaceRimFocus = 'focus-visible:outline-hidden focus-visible:[--surface-rim:var(--border-focus)]';
 
 // The wrapper itself is never `:disabled` — the control it wraps is — so both
@@ -101,7 +103,7 @@ export const inputSurfaceAndFocusWithinStyle =
 // other's specificity: they are both arbitrary property setters, so whichever matched last
 // would otherwise decide the press.
 const controlTintHover =
-  '[&:hover:not(:active):not(:disabled):not([data-popup-open])]:[--surface-tint:var(--field-hover)]';
+  '[&:hover:not(:active):not(:disabled):not([data-popup-open]:where([aria-expanded=true],[role=group]))]:[--surface-tint:var(--field-hover)]';
 const controlTintActive = '[&:active:not(:disabled)]:[--surface-tint:var(--fill)]';
 
 export const raisedControlSurfaceStyle =

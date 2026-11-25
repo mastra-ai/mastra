@@ -172,6 +172,17 @@ function redactBuild<T extends { error?: string; logs?: string[] }>(build: T, bu
   };
 }
 
+let warnedAdditionalProject = false;
+
+/** Warns once per process when an organization that already has a Factory project creates another. */
+function warnAdditionalProject(): void {
+  if (warnedAdditionalProject) return;
+  warnedAdditionalProject = true;
+  console.warn(
+    '[Mastra Factory] Creating more than one Factory project in an organization is deprecated: each organization will have one Factory project. The project is still created; see the README "One project per Factory" section.',
+  );
+}
+
 export class ProjectRoutes extends Route<ProjectRoutesDeps> {
   readonly #versionControlIntegrationIds: Set<string>;
   readonly #environment: ProjectEnvironment;
@@ -430,9 +441,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           if ('response' in tenant) return tenant.response;
           const parsed = FACTORY_ROUTE_CONTRACTS.projectCreate.bodySchema.safeParse(await readJson(context));
           if (!parsed.success) return context.json({ error: 'invalid_project' }, 400);
-          const project = await (
-            await this.#projects()
-          ).create({ orgId: tenant.orgId, userId: tenant.userId, input: parsed.data });
+          const projects = await this.#projects();
+          if ((await projects.list({ orgId: tenant.orgId })).length > 0) warnAdditionalProject();
+          const project = await projects.create({ orgId: tenant.orgId, userId: tenant.userId, input: parsed.data });
           // A new project gets today's Work, without Triage; a project that existed before keeps the
           // Work it had. The project's first board load retries anything this misses, with Work as
           // it was for older projects, as this one can't be told apart from them by then.

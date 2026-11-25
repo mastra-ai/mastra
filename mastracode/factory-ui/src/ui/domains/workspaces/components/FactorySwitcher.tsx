@@ -1,13 +1,11 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Factory as FactoryIcon } from 'lucide-react';
-import { Link, useLocation, useNavigate, useParams } from 'react-router';
+import { Link, useLocation, useParams } from 'react-router';
 import { useFactoriesQuery, useFactoryQuery } from '../../../../hooks/useFactories';
-import { createFactoryPath, factorySwitchPath } from '../services/factoryPaths';
+import { factorySwitchPath } from '../services/factoryPaths';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
-import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 
 export function FactorySwitcher() {
@@ -17,15 +15,6 @@ export function FactorySwitcher() {
   const activeFactoryQuery = useFactoryQuery(factoryId);
   const factories = factoriesQuery.data ?? [];
   const activeFactory = activeFactoryQuery.data;
-  const navigate = useNavigate();
-  const { setOpenMobile } = useSidebar();
-
-  const createFactoryFrom = factoryId ?? factories[0]?.id;
-  const openCreateFactory = () => {
-    if (!createFactoryFrom) return;
-    void navigate(createFactoryPath(createFactoryFrom));
-    setOpenMobile(false);
-  };
 
   return (
     <DropdownMenu>
@@ -61,12 +50,6 @@ export function FactorySwitcher() {
             {factory.id === activeFactory?.id && <IconCheckmark2Medium aria-label="Active factory" />}
           </DropdownMenu.Item>
         ))}
-
-        {factories.length > 0 && <DropdownMenu.Separator />}
-        <DropdownMenu.Item disabled={!createFactoryFrom} onSelect={openCreateFactory}>
-          <IconPlusMedium />
-          <span>Create factory</span>
-        </DropdownMenu.Item>
       </DropdownMenu.Content>
     </DropdownMenu>
   );

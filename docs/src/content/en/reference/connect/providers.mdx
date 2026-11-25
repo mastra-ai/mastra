@@ -11,7 +11,7 @@ import { ProviderLogo } from '@site/src/components/connect/provider-logo';
 
 # Provider toolsets
 
-This page documents generated toolsets for 33 providers (1231 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
+This page documents generated toolsets for 34 providers (1260 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
 
 Tool keys are stable identifiers of the form `<provider>_<action>` and are the values accepted by `allowTools` and `disallowTools`. Toolsets are versioned with the package: the exact list depends on the installed `@mastra/connect` version, and this page reflects the version it was generated from.
 
@@ -23,6 +23,7 @@ MCP providers ([Attio](/integrations/crm/attio), [Canva](/integrations/other/can
 | <ProviderLogo slug="clerk" mono /> [Clerk](#clerk) | `clerk` | 42 |
 | <ProviderLogo slug="discord" /> [Discord](#discord) | `discord` | 34 |
 | <ProviderLogo slug="elevenlabs" mono /> [ElevenLabs](#elevenlabs) | `elevenlabs` | 35 |
+| <ProviderLogo slug="figma" /> [Figma](#figma) | `figma` | 29 |
 | <ProviderLogo src="https://app.nango.dev/images/template-logos/fireflies.svg" /> [Fireflies.ai](#firefliesai) | `fireflies` | 27 |
 | <ProviderLogo slug="github" mono /> [GitHub](#github) | `github` | 49 |
 | <ProviderLogo slug="gitlab" /> [GitLab](#gitlab) | `gitlab` | 44 |
@@ -203,6 +204,48 @@ Provider ID: `elevenlabs` · 35 tools
 | `elevenlabs_speech_to_text` | Transcribe audio or video with ElevenLabs Scribe, from base64 audio or a URL. Can tag sound events and label speakers. Uses transcription credits. |
 | `elevenlabs_text_to_speech` | Convert text to speech with an ElevenLabs voice. Returns the audio base64-encoded; the model only sees a summary of it. Uses character credits. |
 | `elevenlabs_update_agent` | Update a Conversational AI agent |
+
+## Figma
+
+Provider ID: `figma` · 29 tools
+
+:::note
+
+Figma only lets full members of Enterprise organizations use the variable tools, and updating variables also needs edit access to the file. On other plans, Figma refuses those calls. Node IDs work in either the `1:2` form the API uses or the `1-2` form in Figma URLs. The toolset can't list a team's projects or files, so give the agent a file key or file URL.
+
+:::
+
+| Tool | Description |
+| - | - |
+| `figma_create_comment` | Create a comment in Figma. |
+| `figma_create_comment_reaction` | Add a reaction emoji to a comment in Figma. |
+| `figma_create_dev_resources` | Create dev resources linked to Figma nodes |
+| `figma_delete_comment` | Delete a specific comment from a Figma file. Only the author of the comment can delete it. |
+| `figma_delete_comment_reaction` | Remove a reaction from a comment in Figma. |
+| `figma_delete_dev_resource` | Delete a dev resource in Figma |
+| `figma_get_comment` | Retrieve a single comment from Figma. |
+| `figma_get_component` | Retrieve a single component from Figma. |
+| `figma_get_component_set` | Retrieve a single component set from Figma. |
+| `figma_get_current_user` | Fetch the current Figma user. |
+| `figma_get_file_component_sets` | Retrieve all component sets defined within a Figma file. |
+| `figma_get_file_components` | Retrieve all components defined within a Figma file. |
+| `figma_get_file_node` | Retrieve a single file node from Figma |
+| `figma_get_file_styles` | Retrieve all styles defined within a Figma file. |
+| `figma_get_local_variables` | Retrieve all local variables defined in a Figma file. |
+| `figma_get_published_variables` | Retrieve all published variables for a Figma file. |
+| `figma_get_style` | Retrieve a single style from Figma. |
+| `figma_get_version` | Retrieve a single version from Figma by id. Searches the newest 1,000 versions; for an older version, page through figma_list_versions instead. |
+| `figma_list_comment_reactions` | List reactions on a Figma comment. |
+| `figma_list_comments` | List comments from Figma. |
+| `figma_list_component_sets` | List component sets for a Figma team. |
+| `figma_list_components` | List components from Figma. |
+| `figma_list_dev_resources` | List dev resources linked to nodes in a Figma file. |
+| `figma_list_file_nodes` | List file nodes from Figma. |
+| `figma_list_styles` | List styles from Figma. |
+| `figma_list_versions` | List versions from Figma. |
+| `figma_render_images` | Render images for Figma file nodes. |
+| `figma_update_dev_resources` | Update dev resources linked to Figma nodes. |
+| `figma_update_variables` | Create, update, or delete variables and variable collections in a Figma file |
 
 ## Fireflies.ai
 
