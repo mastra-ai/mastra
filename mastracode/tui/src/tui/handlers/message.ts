@@ -9,7 +9,8 @@
  * therefore delegated to `addUserMessage` / `renderSignalMessage`; this file
  * only drives the streaming assistant component and its tool boundaries.
  */
-import { MODEL_FALLBACK_STATE_KEY, parsePendingModelFallback } from '@mastra/code-sdk/model-fallback';
+import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/model-fallback';
+import type { PendingModelFallback } from '@mastra/code-sdk/model-fallback';
 import {
   loadSettings,
   resolveDefaultThinkingLevel,
@@ -309,13 +310,11 @@ export async function handlePackFallbackState(
   event: { state: Record<string, unknown>; changedKeys: string[] },
 ): Promise<void> {
   if (!event.changedKeys.includes(MODEL_FALLBACK_STATE_KEY)) return;
-  const marker = event.state[MODEL_FALLBACK_STATE_KEY];
-  if (marker === null || marker === undefined) return;
-  const pending = parsePendingModelFallback(marker);
-  const markerThreadId = typeof marker === 'object' && 'threadId' in marker ? marker.threadId : undefined;
+  const pending = event.state[MODEL_FALLBACK_STATE_KEY] as PendingModelFallback | null | undefined;
+  if (pending === null || pending === undefined) return;
 
   const entryThreadId = ectx.state.session.thread.getId();
-  const pendingThreadId = typeof markerThreadId === 'string' && markerThreadId ? markerThreadId : entryThreadId;
+  const pendingThreadId = typeof pending.threadId === 'string' ? pending.threadId : entryThreadId;
   const setOriginThreadSetting = async (setting: { key: string; value: unknown }) => {
     if (pendingThreadId) {
       await ectx.state.session.thread.setSettingOn({ threadId: pendingThreadId, ...setting });
@@ -329,7 +328,14 @@ export async function handlePackFallbackState(
     }
   };
 
-  if (!pending) {
+  if (
+    typeof pending.fromEntryId !== 'string' ||
+    typeof pending.toEntryId !== 'string' ||
+    typeof pending.toModelId !== 'string' ||
+    (pending.threadId !== undefined && typeof pending.threadId !== 'string') ||
+    pending.toEntryId.length === 0 ||
+    pending.toModelId.length === 0
+  ) {
     await clearPending();
     return;
   }
