@@ -672,6 +672,13 @@ export interface KnowledgePageActivityInput {
   until?: Date;
   /** Events strictly older than this one in dated `(createdAt, id)` order (dated mode). */
   before?: { createdAt: Date; id: string };
+  /**
+   * `asc` reads oldest first in `(createdAt, id)` order (dated mode, on stores reporting
+   * `supportsActivityAscending`). Defaults to `desc`.
+   */
+  order?: 'desc' | 'asc';
+  /** Events strictly newer than this one in `(createdAt, id)` order. Only with `order: 'asc'`. */
+  after?: { createdAt: Date; id: string };
 }
 
 /** @experimental */
@@ -890,6 +897,12 @@ export interface KnowledgePageStore {
    * first, the bounds apply before the limit, and `before` returns only events strictly older than
    * that event in this order. `before` can't be combined with `cursor`. Without any of them the
    * store's existing order and cursor are unchanged.
+   *
+   * `order: 'asc'`, only on stores reporting `supportsActivityAscending`, reads in dated mode oldest
+   * first: `createdAt` then `id`, both ascending, with `since`/`until` still applying. `after`
+   * returns only events strictly newer than that event in this order, so a reader can continue from
+   * the last event it handled. `after` needs `order: 'asc'` and can't be combined with `cursor`;
+   * `before` can't be used with `order: 'asc'`. Invalid combinations throw a `RangeError`.
    */
   listPageActivity(
     input: KnowledgePageActivityInput,

@@ -1622,10 +1622,10 @@ function activityTool(host: KnowledgePageToolHost) {
   return createTool({
     id: 'knowledge_activity',
     description:
-      'What changed in Knowledge over a period: page creates, edits, moves, merges and deletes, and notes added, restamped, removed or restored, newest first, with who made each change. ' +
+      'What changed in Knowledge over a period: page creates, edits, moves, merges and deletes, and notes added, restamped, removed or restored, newest first (or oldest first with `order: "oldest"`), with who made each change. ' +
       'Give `since` and/or `until` (a date like 2026-07-01, or a date-time with a zone like 2026-07-01T09:30:00Z; at least one); `from` narrows it to one page or scope. ' +
       "A note entry shows the note's current text (marked `current`), not its text when the change happened; a removed note shows no text. " +
-      `One result holds at most \`limit\` changes and about ${maxTokens.toLocaleString('en-US')} tokens of them; when it stops early, \`more\` is true and \`cursor\` continues (pass the same since, until and from).`,
+      `One result holds at most \`limit\` changes and about ${maxTokens.toLocaleString('en-US')} tokens of them; when it stops early, \`more\` is true and \`cursor\` continues (pass the same since, until, from and order).`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -1641,6 +1641,11 @@ function activityTool(host: KnowledgePageToolHost) {
           minLength: 1,
           description: `Only changes to this page or scope. ${pageRefDescription}`,
         },
+        order: {
+          type: 'string',
+          enum: ['newest', 'oldest'],
+          description: 'newest (default) lists the latest changes first; oldest lists them in the order they happened.',
+        },
         limit: {
           type: 'integer',
           minimum: 1,
@@ -1650,13 +1655,22 @@ function activityTool(host: KnowledgePageToolHost) {
         cursor: {
           type: 'string',
           minLength: 1,
-          description: "The previous result's cursor, for the changes after it (pass the same since, until and from).",
+          description:
+            "The previous result's cursor, for the changes after it (pass the same since, until, from and order).",
         },
       },
       additionalProperties: false,
     } satisfies JSONSchema7,
     execute: async (input, context) => {
-      const args = input as { since?: string; until?: string; from?: string; limit?: number; cursor?: string };
+      const args = input as {
+        since?: string;
+        until?: string;
+        from?: string;
+        order?: 'newest' | 'oldest';
+        limit?: number;
+        cursor?: string;
+      };
+      const oldest = args.order === 'oldest';
       if (args.since === undefined && args.until === undefined) {
         throw new Error('knowledge_activity needs since or until, e.g. since: "2026-07-01".');
       }
@@ -1667,8 +1681,12 @@ function activityTool(host: KnowledgePageToolHost) {
       }
       const limit = Math.min(Math.max(args.limit ?? ACTIVITY_DEFAULT_LIMIT, 1), ACTIVITY_MAX_LIMIT);
       // Refused before any listing: an adapter without date support can't serve a dated read or its continuation.
-      if (!(await host.getStorage()).getCapabilities().supportsActivityDateRange) {
+      const capabilities = (await host.getStorage()).getCapabilities();
+      if (!capabilities.supportsActivityDateRange) {
         throw new KnowledgeUnsupportedCapabilityError('listPageActivity date range');
+      }
+      if (oldest && !capabilities.supportsActivityAscending) {
+        throw new KnowledgeUnsupportedCapabilityError('listPageActivity oldest first');
       }
       const cursor = args.cursor === undefined ? undefined : decodeActivityCursor(args.cursor);
 
@@ -1680,10 +1698,12 @@ function activityTool(host: KnowledgePageToolHost) {
         until?.toISOString(),
         'scopeId' in filter ? filter.scopeId : undefined,
         'pageId' in filter ? filter.pageId : undefined,
+        // Only oldest-first cursors carry the order, so newest-first cursors from before it existed still match.
+        ...(oldest ? ['oldest'] : []),
       ]);
       if (cursor && cursor.bind !== bind) {
         throw new Error(
-          'knowledge_activity: this cursor came from a call with different since, until or from. Pass the same ones as the call that returned it.',
+          'knowledge_activity: this cursor came from a call with different since, until, from or order. Pass the same ones as the call that returned it.',
         );
       }
 
@@ -1701,7 +1721,8 @@ function activityTool(host: KnowledgePageToolHost) {
           ...filter,
           ...(since ? { since } : {}),
           ...(until ? { until } : {}),
-          ...(position ? { before: position } : {}),
+          ...(oldest ? { order: 'asc' as const } : {}),
+          ...(position ? (oldest ? { after: position } : { before: position }) : {}),
           limit: limit - entries.length,
         });
         more = batch.nextCursor !== undefined;

@@ -900,6 +900,16 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     if (input.before !== undefined && input.cursor !== undefined) {
       throw new RangeError('Knowledge activity takes either a cursor or a before position, not both');
     }
+    if (input.after !== undefined && input.order !== 'asc') {
+      throw new RangeError('Knowledge activity takes an after position only with order asc');
+    }
+    if (input.after !== undefined && input.cursor !== undefined) {
+      throw new RangeError('Knowledge activity takes either a cursor or an after position, not both');
+    }
+    if (input.before !== undefined && input.order === 'asc') {
+      throw new RangeError('Knowledge activity takes a before position only newest first; use after with order asc');
+    }
+    const ascending = input.order === 'asc';
     const events = this.#activity
       .filter(event => {
         const page = this.#pages.get(event.pageId);
@@ -913,9 +923,10 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
         if (input.since !== undefined && event.createdAt.getTime() < input.since.getTime()) return false;
         if (input.until !== undefined && event.createdAt.getTime() >= input.until.getTime()) return false;
         if (input.before !== undefined && newestFirst(event, input.before) <= 0) return false;
+        if (input.after !== undefined && oldestFirst(event, input.after) <= 0) return false;
         return true;
       })
-      .sort(newestFirst);
+      .sort(ascending ? oldestFirst : newestFirst);
     const { items, nextCursor } = paginate(events, input.cursor, input.limit);
     return { events: items.map(clone), ...(nextCursor ? { nextCursor } : {}) };
   }

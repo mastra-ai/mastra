@@ -184,6 +184,7 @@ export class KnowledgePG extends KnowledgeStorage {
       supportsTransactions: true,
       enforcesTransactionDeadline: true,
       supportsActivityDateRange: true,
+      supportsActivityAscending: true,
     } as const;
   }
 

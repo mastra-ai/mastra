@@ -1483,9 +1483,19 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     const limit = limitOf(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     // Dated mode orders by (createdAt, id) and uses a two-part cursor; the undated id order and
     // one-part cursor stay as they were.
-    const dated = input.since !== undefined || input.until !== undefined || input.before !== undefined;
+    const ascending = input.order === 'asc';
+    const dated = input.since !== undefined || input.until !== undefined || input.before !== undefined || ascending;
     if (input.before !== undefined && input.cursor !== undefined) {
       throw new RangeError('Knowledge activity takes either a cursor or a before position, not both');
+    }
+    if (input.after !== undefined && input.order !== 'asc') {
+      throw new RangeError('Knowledge activity takes an after position only with order asc');
+    }
+    if (input.after !== undefined && input.cursor !== undefined) {
+      throw new RangeError('Knowledge activity takes either a cursor or an after position, not both');
+    }
+    if (input.before !== undefined && input.order === 'asc') {
+      throw new RangeError('Knowledge activity takes a before position only newest first; use after with order asc');
     }
     const cursor = decodeCursor(input.cursor, dated ? 2 : 1);
     const readable = pageReadable('p', input.read);
@@ -1508,13 +1518,11 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
       filters += ` AND e.createdAt < ?`;
       args.push(input.until.toISOString());
     }
-    const position = input.before
-      ? [input.before.createdAt.toISOString(), input.before.id]
-      : dated && cursor
-        ? cursor
-        : undefined;
+    const from = input.before ?? input.after;
+    const position = from ? [from.createdAt.toISOString(), from.id] : dated && cursor ? cursor : undefined;
     if (position) {
-      filters += ` AND (e.createdAt < ? OR (e.createdAt = ? AND e.id < ?))`;
+      const op = ascending ? '>' : '<';
+      filters += ` AND (e.createdAt ${op} ? OR (e.createdAt = ? AND e.id ${op} ?))`;
       args.push(position[0]!, position[0]!, position[1]!);
     } else if (!dated && cursor) {
       filters += ` AND e.id < ?`;
@@ -1523,7 +1531,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     args.push(...noteVisible.args, limit + 1);
     const rows = await this.#query(
       this.#read,
-      `SELECT e.* FROM "${T.activity}" e JOIN "${T.pages}" p ON p.id = e.pageId WHERE ${readable.sql}${filters} AND (e.noteId IS NULL OR EXISTS (SELECT 1 FROM "${T.notes}" n WHERE n.id = e.noteId AND ${noteVisible.sql})) ORDER BY ${dated ? 'e.createdAt DESC, e.id DESC' : 'e.id DESC'} LIMIT ?`,
+      `SELECT e.* FROM "${T.activity}" e JOIN "${T.pages}" p ON p.id = e.pageId WHERE ${readable.sql}${filters} AND (e.noteId IS NULL OR EXISTS (SELECT 1 FROM "${T.notes}" n WHERE n.id = e.noteId AND ${noteVisible.sql})) ORDER BY ${ascending ? 'e.createdAt ASC, e.id ASC' : dated ? 'e.createdAt DESC, e.id DESC' : 'e.id DESC'} LIMIT ?`,
       args,
     );
     const page = rows.slice(0, limit);

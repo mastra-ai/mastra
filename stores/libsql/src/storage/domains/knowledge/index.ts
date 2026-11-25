@@ -132,6 +132,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       supportsPinKinds: true,
       supportsTransactions: true,
       supportsActivityDateRange: true,
+      supportsActivityAscending: true,
     } as const;
   }
 

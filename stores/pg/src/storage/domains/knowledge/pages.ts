@@ -1755,6 +1755,16 @@ export class PgKnowledgePages implements KnowledgePageStore {
     if (input.before !== undefined && input.cursor !== undefined) {
       throw new RangeError('Knowledge activity takes either a cursor or a before position, not both');
     }
+    if (input.after !== undefined && input.order !== 'asc') {
+      throw new RangeError('Knowledge activity takes an after position only with order asc');
+    }
+    if (input.after !== undefined && input.cursor !== undefined) {
+      throw new RangeError('Knowledge activity takes either a cursor or an after position, not both');
+    }
+    if (input.before !== undefined && input.order === 'asc') {
+      throw new RangeError('Knowledge activity takes a before position only newest first; use after with order asc');
+    }
+    const ascending = input.order === 'asc';
     const core = await loadPagesCore();
     const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const params = new Params();
@@ -1764,19 +1774,18 @@ export class PgKnowledgePages implements KnowledgePageStore {
     if (input.pageId) where.push(`a."pageId" = ${params.add(input.pageId)}`);
     if (input.since) where.push(`a."createdAt" >= ${params.add(iso(input.since))}::timestamptz`);
     if (input.until) where.push(`a."createdAt" < ${params.add(iso(input.until))}::timestamptz`);
-    const position = input.before
-      ? [iso(input.before.createdAt), input.before.id]
-      : input.cursor
-        ? decodeCursor(input.cursor, 2)
-        : undefined;
+    const from = input.before ?? input.after;
+    const position = from ? [iso(from.createdAt), from.id] : input.cursor ? decodeCursor(input.cursor, 2) : undefined;
     if (position) {
       const [createdAt, id] = position;
-      where.push(`(a."createdAt", a."id") < (${params.add(createdAt)}::timestamptz, ${params.add(id)})`);
+      where.push(
+        `(a."createdAt", a."id") ${ascending ? '>' : '<'} (${params.add(createdAt)}::timestamptz, ${params.add(id)})`,
+      );
     }
     const rows = await this.#rows(
       this.#client,
       `SELECT a.* FROM ${this.#activity} a JOIN ${this.#pages} p ON p."id" = a."pageId" JOIN ${this.#pages} s ON s."id" = p."scopeId"
-       WHERE ${where.join(' AND ')} ORDER BY a."createdAt" DESC, a."id" DESC LIMIT ${limit + 1}`,
+       WHERE ${where.join(' AND ')} ORDER BY a."createdAt" ${ascending ? 'ASC' : 'DESC'}, a."id" ${ascending ? 'ASC' : 'DESC'} LIMIT ${limit + 1}`,
       params.values,
     );
     const events = rows.slice(0, limit).map(
