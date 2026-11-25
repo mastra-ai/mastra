@@ -1,10 +1,10 @@
 import type { AgentControllerTaskSnapshot } from '@mastra/client-js';
 import type { ReactNode } from 'react';
-
-import { SkeletonRows } from '@/domains/factory/board/skeleton-rows';
 import { TranscriptAnnotations } from '@/ds/components/ai/annotations';
+
 import { TaskList } from '@/ds/components/ai/task-list';
 import { ChatShell } from '@/ds/components/ChatShell';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { Spinner } from '@/ds/components/Spinner';
 import { Sizes } from '@/ds/tokens/sizes';
 import { cn } from '@/utils/cn';
@@ -135,7 +135,11 @@ export function TranscriptHistoryLoader({ loading }: { loading: boolean }) {
 /** Placeholder turns while a thread's first message window loads. */
 export function TranscriptLoading() {
   return (
-    <SkeletonRows label="Loading messages" rows={3} className="w-full gap-6" rowClassName="h-16 w-full rounded-lg" />
+    <div role="status" aria-label="Loading messages" className="flex w-full flex-col gap-6">
+      {[0, 1, 2].map(row => (
+        <Skeleton key={row} aria-hidden className="h-16 w-full rounded-lg motion-reduce:before:animate-none" />
+      ))}
+    </div>
   );
 }
 
