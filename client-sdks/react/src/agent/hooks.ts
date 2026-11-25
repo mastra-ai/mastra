@@ -670,6 +670,9 @@ export const useChat = ({
           _threadSubscriptionRef.current = subscription;
           void subscription
             .processDataStream({
+              // A deploy, a locked phone or a lost network ends or breaks the stream while runs go on: the thread is
+              // followed again, from the stored history.
+              reconnect: { withInitialHistory: withInitialHistory || true },
               onChunk: chunk => {
                 if (chunk.type === 'thread-history') {
                   if (_threadSubscriptionAbortRef.current === subscriptionAbort) {
