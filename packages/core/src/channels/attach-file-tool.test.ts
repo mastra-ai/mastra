@@ -1,8 +1,7 @@
-import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '@mastra/core/channels';
-import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
-
-import { createShareFileTool, SHARE_FILE_MAX_BYTES } from './share-file-tool.js';
+import { RequestContext } from '../request-context';
+import { ATTACH_FILE_MAX_BYTES, createChannelAttachFileTool } from './attach-file-tool';
+import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';
 
 type AttachFile = {
   execute: (input: { path: string }, ctx: Record<string, unknown>) => Promise<unknown>;
@@ -23,7 +22,7 @@ async function setup({
   requestContext.set('channel', { platform: 'slack', isDM: true });
   requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, { platform: 'slack', chatThread: { post } });
   requestContext.set('controller', { workspace: { filesystem: fs } });
-  const tool = (await createShareFileTool(requestContext)).attach_file as AttachFile;
+  const tool = createChannelAttachFileTool(requestContext).attach_file as AttachFile;
   return { tool, post, fs };
 }
 
@@ -58,14 +57,14 @@ describe('attach_file', () => {
     await expect(dir.tool.execute({ path: '/workspace' }, {})).rejects.toThrow(/is a directory/);
     expect(dir.fs.readFile).not.toHaveBeenCalled();
 
-    const big = await setup({ size: SHARE_FILE_MAX_BYTES + 1 });
+    const big = await setup({ size: ATTACH_FILE_MAX_BYTES + 1 });
     await expect(big.tool.execute({ path: '/workspace/huge.bin' }, {})).rejects.toThrow(/limit/);
     expect(big.fs.readFile).not.toHaveBeenCalled();
   });
 
   it('bounds the upload by the bytes actually read, not the earlier stat', async () => {
     // The file grew between stat and read; the stale size must not let it through.
-    const grown = await setup({ size: 12, contents: Buffer.alloc(SHARE_FILE_MAX_BYTES + 1) });
+    const grown = await setup({ size: 12, contents: Buffer.alloc(ATTACH_FILE_MAX_BYTES + 1) });
     await expect(grown.tool.execute({ path: '/workspace/grew.bin' }, {})).rejects.toThrow(/limit/);
     expect(grown.post).not.toHaveBeenCalled();
 
@@ -101,7 +100,7 @@ describe('attach_file', () => {
     const post = vi.fn();
     const requestContext = new RequestContext();
     requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, { chatThread: { post } });
-    const tool = (await createShareFileTool(requestContext)).attach_file as AttachFile;
+    const tool = createChannelAttachFileTool(requestContext).attach_file as AttachFile;
     await expect(tool.execute({ path: '/x' }, {})).rejects.toThrow(/No workspace filesystem/);
     expect(post).not.toHaveBeenCalled();
   });

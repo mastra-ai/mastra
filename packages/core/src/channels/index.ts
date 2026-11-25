@@ -88,3 +88,5 @@ export { ChannelThreadLinkProcessor, markNewChannelThread, NEW_CHANNEL_THREAD_KE
 export type { ChannelThreadLinkProcessorOptions, ChannelThreadLinkTarget } from './thread-link-processor';
 export { resolveChannelRenderContext } from './thread-lookup';
 export type { ChannelsSource } from './thread-lookup';
+export { ATTACH_FILE_MAX_BYTES, ATTACH_FILE_TOOL_NAME, createChannelAttachFileTool } from './attach-file-tool';
+export type { ChannelAttachFileOptions } from './attach-file-tool';

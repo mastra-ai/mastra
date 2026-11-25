@@ -18,6 +18,7 @@
  * capabilities by implementing `FactoryIntegration` from outside the package.
  */
 
+import { createChannelAttachFileTool } from '@mastra/core/channels';
 import type { AgentChannels } from '@mastra/core/channels';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
@@ -30,8 +31,8 @@ import { factoryReplyInstructions, SESSION_LINK_LABEL } from './channel-reply-pr
 import { sessionLinkFromRequest } from './channel-session-link-processor.js';
 import { createSlackChatTools } from './chat-tools.js';
 import { createSlackConnectRoutes } from './connect-route.js';
-import { createShareFileTool, isSlackThread, slackThreadOf } from './share-file-tool.js';
-import type { ShareFileToolDeps } from './share-file-tool.js';
+import { isSlackThread, slackThreadOf } from './slack-thread.js';
+import type { SlackThreadDeps } from './slack-thread.js';
 import { createSlackChannelsConfig } from './slack.js';
 import { DEFAULT_SLACK_TOOL_SETTINGS, slackToolSettingsSchema } from './tool-settings.js';
 import type { SlackToolSettings } from './tool-settings.js';
@@ -127,8 +128,8 @@ export class SlackIntegration implements FactoryIntegration {
   readonly #toolSettings: SlackToolSettings;
   readonly #adapterOptions: SlackAdapterChannelConfig;
   /** Bound in `initialize()`; the controller mounts after integrations are built. */
-  #channels: ShareFileToolDeps['channels'];
-  readonly #deps: ShareFileToolDeps = { channels: () => this.#channels?.() };
+  #channels: SlackThreadDeps['channels'];
+  readonly #deps: SlackThreadDeps = { channels: () => this.#channels?.() };
   /**
    * Whether `channels()` found a source-control owner on the context and wired
    * repo-backed sessions. Set at the channels() attach path, which runs once at
@@ -175,7 +176,7 @@ export class SlackIntegration implements FactoryIntegration {
     const chat = this.#channels?.()?.sdk;
     const sessionThreadId = slackThread.threadId;
     return {
-      ...createShareFileTool(requestContext, this.#deps),
+      ...createChannelAttachFileTool(requestContext, this.#deps),
       ...(chat && sessionThreadId
         ? await createSlackChatTools({ chat, sessionThreadId, settings: this.#toolSettings })
         : {}),
