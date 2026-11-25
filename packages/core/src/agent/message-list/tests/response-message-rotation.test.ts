@@ -119,6 +119,7 @@ describe('MessageList response message rotation with an assistant-ending input',
     const prefill = messageList.get.all.db().find(message => message.id === 'prefill');
     expect(prefill?.content.metadata?.mastra).toMatchObject({ responseBoundary: true });
     expect(prefill?.content.parts).toMatchObject([{ type: 'text', text: 'partial answer' }]);
+    expect(messageList.get.response.db().map(message => message.id)).toEqual(['prefill', 'response-1']);
     const recalled = messageList.get.all.db().find(message => message.id === 'recalled-reply');
     expect(recalled?.content.metadata).toBeUndefined();
   });
@@ -143,7 +144,7 @@ describe('MessageList response message rotation with an earlier-turn assistant t
     expect(messageList.get.response.db().map(message => message.id)).toEqual(['response-1']);
   });
 
-  it('Given only a context assistant, When the id rotates without a seal target, Then it is not sealed or moved into the response', () => {
+  it('Given a context assistant and no live assistant, When the id rotates without a seal target, Then it is not sealed or moved into the response', () => {
     const messageList = new MessageList({ threadId: 'thread-1' });
     messageList.add({ ...assistantMessage('context-reply', 'context'), threadId: 'thread-1' }, 'context');
     messageList.add({ role: 'user', content: 'hi' }, 'input');

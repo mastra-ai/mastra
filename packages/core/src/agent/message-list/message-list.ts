@@ -2434,7 +2434,10 @@ export class MessageList {
     if (index !== -1) this.#boundaryFingerprints.set(boundary, { messageId, prefix: prefixFingerprint(parts, index) });
   }
 
-  /** Sealing is not optional: a moved id whose boundary is missing folds the next response into the previous row. Without an id, a memory or context tail is left alone. */
+  /**
+   * Sealing is not optional for this run's messages: a moved id whose boundary is missing folds the next response
+   * into the previous row. A memory or context tail is never sealed, because that would pull an earlier turn into this response.
+   */
   public rotateResponseMessageId(sealMessageId?: string): string {
     if (!this.markResponseMessageBoundary(sealMessageId)) this.markResponseMessageBoundary();
     return this.newMessageId('assistant');
