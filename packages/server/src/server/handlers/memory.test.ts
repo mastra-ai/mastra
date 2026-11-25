@@ -351,7 +351,8 @@ describe('Memory Handlers', () => {
       expect(result.threads).toHaveLength(2);
       expect(spy).toHaveBeenCalledWith({
         filter: undefined,
-        perPage: false,
+        page: 0,
+        perPage: 10,
         orderBy: undefined,
       });
     });
@@ -382,12 +383,13 @@ describe('Memory Handlers', () => {
 
       expect(spy).toBeCalledWith({
         filter: { resourceId: 'test-resource' },
-        perPage: false,
+        page: 0,
+        perPage: 10,
         orderBy: undefined,
       });
     });
 
-    it('should paginate authorized threads when no FGA provider is configured', async () => {
+    it('should preserve storage pagination for authenticated users when no FGA provider is configured', async () => {
       const mastra = new Mastra({
         logger: false,
         agents: { 'test-agent': mockAgent },
@@ -410,7 +412,8 @@ describe('Memory Handlers', () => {
       expect(result.total).toEqual(1);
       expect(spy).toHaveBeenCalledWith({
         filter: { resourceId: 'test-resource' },
-        perPage: false,
+        page: 0,
+        perPage: 10,
         orderBy: undefined,
       });
     });
@@ -438,7 +441,8 @@ describe('Memory Handlers', () => {
       expect(result.threads).toHaveLength(1);
       expect(spy).toHaveBeenCalledWith({
         filter: { resourceId: 'test-resource' },
-        perPage: false,
+        page: 0,
+        perPage: 20,
         orderBy: { field: 'updatedAt', direction: 'ASC' },
       });
     });
@@ -468,7 +472,8 @@ describe('Memory Handlers', () => {
       expect(result.threads).toHaveLength(2);
       expect(spy).toHaveBeenCalledWith({
         filter: { resourceId: 'test-resource' },
-        perPage: false,
+        page: 0,
+        perPage: 10,
         orderBy: { field: 'updatedAt', direction: 'DESC' },
       });
     });
