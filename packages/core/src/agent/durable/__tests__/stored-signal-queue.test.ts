@@ -631,6 +631,68 @@ describe('signals of a running evented agent kept in memory storage', () => {
     expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
   });
 
+  it("keeps a signal sent while stream() has reserved the thread when storing it fails, and the run's end starts a turn with it once", async () => {
+    const memoryStore = new ObservedMemory();
+    const { agent, scope, prompts, toolGate, begin, afterFollowUps } = setup({ memoryStore });
+    const reserved = gate();
+    const named = gate();
+    memoryStore.beforeSetSignalRun = async () => {
+      memoryStore.beforeSetSignalRun = undefined;
+      reserved.release();
+      await named.promise;
+    };
+    const starting = begin();
+    await reserved.promise;
+    const sent = agent.sendSignal({ type: 'user', contents: 'STORE_FAILED_ONCE' }, scope);
+    await expect(sent.accepted).resolves.toMatchObject({ action: 'deliver' });
+    // The run's registration moves the signal into the store, and that insert fails.
+    memoryStore.failNextEnqueue = true;
+    named.release();
+    const { done } = await starting;
+    const followUpsDone = afterFollowUps();
+    toolGate.release();
+    await done;
+    expect(prompts.slice(0, 2).some(prompt => textOf(prompt).includes('STORE_FAILED_ONCE'))).toBe(false);
+
+    // With no other run started, the run's end stores the signal for the thread and starts its next turn.
+    await followUpsDone;
+    const delivered = prompts.slice(2).filter(prompt => !textOf(prompt).includes(BARRIER));
+    expect(delivered).toHaveLength(1);
+    expect(occurrences(delivered[0], 'STORE_FAILED_ONCE')).toBe(1);
+    expect(memoryStore.calls.filter(call => call.op === 'enqueue')).toEqual([{ op: 'enqueue', id: sent.signal.id }]);
+    expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
+  });
+
+  it("starts the thread's next turn with a signal that joined a follow-up turn that failed to start", async () => {
+    const memoryStore = new ObservedMemory();
+    const { agent, scope, prompts, promptsReached, toolGate, start } = setup({ memoryStore });
+    const { stream, done } = await start();
+    // The run closed before this send was stored, so it becomes the thread's next turn.
+    await memoryStore.closeSignalRun({ threadId: scope.threadId, runId: stream.runId, consumedIds: [] });
+    const leftover = agent.sendSignal({ type: 'user', contents: 'LEFT_FOR_THE_NEXT_TURN' }, scope);
+    await expect(leftover.accepted).resolves.toEqual({ action: 'deliver', runId: stream.runId });
+    // The follow-up turn's preparation waits for a signal to join it, then fails.
+    const preparing = gate();
+    const joined = gate();
+    memoryStore.beforeSetSignalRun = async () => {
+      memoryStore.beforeSetSignalRun = undefined;
+      preparing.release();
+      await joined.promise;
+      throw new Error('memory storage unavailable');
+    };
+    toolGate.release();
+    await done;
+    await preparing.promise;
+    const joiner = agent.sendSignal({ type: 'user', contents: 'JOINED_THE_FAILED_TURN' }, scope);
+    await expect(joiner.accepted).resolves.toMatchObject({ action: 'deliver' });
+    joined.release();
+    await promptsReached(3);
+
+    expect(prompts.slice(0, 2).some(prompt => textOf(prompt).includes('JOINED_THE_FAILED_TURN'))).toBe(false);
+    expect(occurrences(prompts[2], 'LEFT_FOR_THE_NEXT_TURN')).toBe(1);
+    expect(occurrences(prompts[2], 'JOINED_THE_FAILED_TURN')).toBe(1);
+  });
+
   it('delivers to the first model request a signal that joined a wake before its run started', async () => {
     const memoryStore = new ObservedMemory();
     const { agent, scope, prompts, toolGate } = setup({ memoryStore });
