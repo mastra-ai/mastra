@@ -17,14 +17,22 @@ function isSystemReminderUIMessage(message: {
     return false;
   }
 
-  // Fall back to text inspection for backward compatibility
+  // Fall back to text inspection for legacy reminders stored without metadata. Those are a whole text wrapped in
+  // <system-reminder ...>...</system-reminder>; user text that merely quotes the tag is not a reminder.
   if (Array.isArray(message.parts)) {
-    return message.parts.some(
-      part => part.type === 'text' && typeof part.text === 'string' && part.text.includes('<system-reminder'),
-    );
+    const textParts = message.parts.filter(part => part.type === 'text');
+    return textParts.length > 0 && textParts.every(part => isStandaloneSystemReminderText(part.text));
   }
 
-  return typeof message.content === 'string' && message.content.includes('<system-reminder');
+  return isStandaloneSystemReminderText(message.content);
+}
+
+function isStandaloneSystemReminderText(text: unknown) {
+  if (typeof text !== 'string') {
+    return false;
+  }
+  const trimmed = text.trim();
+  return trimmed.startsWith('<system-reminder') && trimmed.endsWith('</system-reminder>');
 }
 
 function filterSystemReminderUIMessages<

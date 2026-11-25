@@ -135,6 +135,50 @@ describe('toAISdkFormat', () => {
     });
   });
 
+  describe('legacy system reminders without metadata', () => {
+    const quoted = 'What does <system-reminder mean in the logs?';
+    const userMessage = (parts: Array<{ type: 'text'; text: string }>) => ({
+      id: 'msg-user',
+      role: 'user' as const,
+      content: { format: 2 as const, parts },
+      createdAt: new Date(),
+    });
+
+    it('keeps user text that quotes a system-reminder tag in every version', () => {
+      expect(toAISdkV4Messages(quoted)).toHaveLength(1);
+      expect(toAISdkV5Messages(quoted)).toHaveLength(1);
+      expect(toAISdkMessages(quoted, { version: 'v6' })).toHaveLength(1);
+      expect(toAISdkMessages(quoted, { version: 'v7' })).toHaveLength(1);
+    });
+
+    it('keeps a full reminder block pasted inside a longer user message', () => {
+      const pasted = 'Why did the agent see this?\n<system-reminder>continue</system-reminder>';
+      expect(toAISdkV5Messages([userMessage([{ type: 'text', text: pasted }])])).toHaveLength(1);
+    });
+
+    it('keeps a multi-part user message when only one part quotes the tag', () => {
+      const result = toAISdkV5Messages([
+        userMessage([
+          { type: 'text', text: 'hello' },
+          { type: 'text', text: quoted },
+        ]),
+      ]);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]!.parts.filter(part => part.type === 'text').map(part => part.text)).toEqual(['hello', quoted]);
+    });
+
+    it('still hides standalone legacy reminders that have no metadata', () => {
+      const legacy = userMessage([
+        { type: 'text', text: '<system-reminder type="dynamic-agents-md">ctx</system-reminder>\n' },
+      ]);
+
+      expect(toAISdkV4Messages([legacy])).toEqual([]);
+      expect(toAISdkV5Messages([legacy])).toEqual([]);
+      expect(toAISdkMessages([legacy], { version: 'v6' })).toEqual([]);
+    });
+  });
+
   describe('toAISdkV5Stream error handling', () => {
     it('should preserve error message details when converting agent stream', async () => {
       const errorMessage =
