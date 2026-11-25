@@ -98,7 +98,7 @@ function renderApp(
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:sessionId/permissions`, () => HttpResponse.json({})),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId`, () => HttpResponse.json({ project: listed })),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-      HttpResponse.json({ modelId: null, thinkingLevel: null }),
+      HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({ github: { enabled: true, sourceIds: null }, linear: { enabled: false, sourceIds: [] } }),

@@ -786,6 +786,8 @@ export interface RegistryModelListEntry {
  * Registry entry for a single run's non-serializable state
  */
 export interface RunRegistryEntry {
+  /** MODEL_STEP a tool-calling iteration leaves open until its mapping step, so a failed run can end it. */
+  openStepSpan?: Span<SpanType.MODEL_STEP>;
   /** In-process copy of a tracing fact the iteration state carries across workers; not in the finish payload. */
   tracingTermination?: SpanTermination;
   tracingDelegationFailure?: SpanTermination;

@@ -5005,6 +5005,116 @@ describe('FactoryDecisionDispatcher', () => {
     expect(getAgentEndListenerCount()).toBe(0);
   });
 
+  describe('a run whose session reported its phase outcome', () => {
+    /** What `factory_report_outcome` leaves on the card while the run is still going. */
+    async function reported(storage: WorkItemsStorage, id: string, outcome: string, to: string, reason: string) {
+      await storage.update({
+        orgId: 'org-1',
+        id,
+        userId: 'agent:binding',
+        patch: {
+          metadata: {
+            phaseOutcome: {
+              phase: 'execute',
+              outcome,
+              to,
+              reason,
+              source: 'reported',
+              at: new Date().toISOString(),
+              bindingId: 'binding',
+            },
+          },
+        },
+      });
+    }
+
+    it('moves the card by that outcome through the board engine once the run ends, and the run succeeds', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, {
+        type: 'invokeSkill',
+        role: 'work',
+        skillName: 'factory-build',
+        arguments: 'Continue building',
+        idempotencyKey: 'working-phase-reported-outcome',
+      });
+      const binding = await bindWorkRun(storage, item.id);
+      await reported(storage, item.id, 'replan', 'planning', 'The plan missed the migration.');
+      const requestMove = vi.fn<FactoryBoardEngine['requestMove']>(request => transitionService.transition(request));
+      const { controller, getAgentEndListenerCount } = createSession(undefined, {
+        signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+        emitAgentEndDuringSignal: true,
+        agentEndReason: 'complete',
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        boards: autoStartingBoards(),
+        transitionService,
+        boardEngine: { requestMove, requestPlacement: vi.fn() },
+        storage,
+        ownerId: 'worker-1',
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['planning']);
+      expect(requestMove).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workItemId: item.id,
+          stage: 'planning',
+          actor: { type: 'agent', bindingId: binding.id, role: 'work' },
+          ingress: expect.objectContaining({ identity: expect.stringContaining(`${binding.id}:outcome:execute:`) }),
+          cause: 'The plan proved wrong: The plan missed the migration.',
+        }),
+      );
+      // The outcome is the phase's work: the run is not failed as one that changed nothing.
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+      expect(getAgentEndListenerCount()).toBe(0);
+    });
+
+    it('fails the run for a person, without retrying, when the board engine refuses the outcome', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, {
+        type: 'invokeSkill',
+        role: 'work',
+        skillName: 'factory-build',
+        arguments: 'Continue building',
+        idempotencyKey: 'working-phase-refused-outcome',
+      });
+      await bindWorkRun(storage, item.id);
+      await reported(storage, item.id, 'done', 'done', 'Nothing left to change.');
+      const requestMove = vi.fn<FactoryBoardEngine['requestMove']>(async request => ({
+        status: 'rejected',
+        transitionId: 'refused',
+        itemId: request.workItemId,
+        code: 'forbidden',
+        reason: 'A person closes cards on this board.',
+      }));
+      const { controller, session } = createSession(undefined, {
+        signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+        emitAgentEndDuringSignal: true,
+        agentEndReason: 'complete',
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        boards: autoStartingBoards(),
+        transitionService,
+        boardEngine: { requestMove, requestPlacement: vi.fn() },
+        storage,
+        ownerId: 'worker-1',
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+      await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+      expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['execute']);
+      const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      expect(decision).toMatchObject({ status: 'failed', attempts: 1 });
+      expect(decision?.lastError).toContain('A person closes cards on this board.');
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      expect(requestMove).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('accepts clean completion in a working phase without a goal or exit tool', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {

@@ -773,6 +773,35 @@ describe('shapeTimeseries', () => {
       expect(shaped.total).toBe(3);
     });
   });
+
+  describe('when a span aggregate has buckets nothing happened in', () => {
+    const latency: DashboardQuery = { id: 'latency', source: 'spanAggregate', measures: ['count', 'duration.p95'] };
+    const answer = spans([{ bucket: at, measures: { count: 3, 'duration.p95': 800 } }]);
+    const shape = (measure: string) =>
+      shapeTimeseries({
+        options: {
+          chart: 'line',
+          format: 'count',
+          series: [{ dataKey: 'v', label: 'V', value: { query: 'latency', measure } }],
+        },
+        responses: new Map([['latency', answer]]),
+        queries: [latency],
+        window,
+      });
+
+    it('counts them as 0 for a count or sum', () => {
+      const shaped = shape('count');
+      expect(shaped.data.find(b => b.ts === new Date(at).getTime())?.v).toBe(3);
+      expect(shaped.data.every(b => b.v !== undefined)).toBe(true);
+      expect(shaped.data.filter(b => b.v === 0)).toHaveLength(shaped.data.length - 1);
+    });
+
+    it('leaves them out for a percentile, as the line has no value to draw there', () => {
+      const shaped = shape('duration.p95');
+      expect(shaped.data.find(b => b.ts === new Date(at).getTime())?.v).toBe(800);
+      expect(shaped.data.filter(b => b.v !== undefined)).toHaveLength(1);
+    });
+  });
 });
 
 describe('timeseriesIssues', () => {

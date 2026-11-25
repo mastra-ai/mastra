@@ -7,6 +7,7 @@ import {
   knowledgeImporterFlushDigest,
 } from '@mastra/core/knowledge';
 import type {
+  KnowledgeChangeEvent,
   KnowledgeImporterContext,
   KnowledgeImporterHost,
   KnowledgeImportItem,
@@ -90,6 +91,39 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       const child = await page('notion/p1/c1');
       expect(child?.name).toBe('C1');
       expect(child?.body).toBe('body of c1\n\nLinks:\n- up: [[docs:acme#notion/p1]]');
+    });
+
+    it('tells change listeners about each page an import created, moved, updated or removed', async () => {
+      const { knowledge, run, page } = setup();
+      const events: KnowledgeChangeEvent[] = [];
+      knowledge.onChange(event => events.push(event));
+      const pages = () => events.flatMap(event => (event.kind === 'page' ? [`${event.op} ${event.pageId}`] : []));
+
+      // The child arrives before its parent, so it waits under the target until the parent lands.
+      await run([upsert({ sourceId: 'c1', parent: 'p1' })]);
+      const anchor = (await page('notion'))!;
+      const child = (await page('notion/c1'))!;
+      expect(pages()).toEqual([`create ${anchor.id}`, `create ${child.id}`]);
+      expect(events.filter(event => event.kind === 'page').every(event => event.scopeId === anchor.scopeId)).toBe(true);
+
+      events.length = 0;
+      await run([upsert({ sourceId: 'p1' })]);
+      const parent = (await page('notion/p1'))!;
+      expect(pages()).toEqual([`create ${parent.id}`, `move ${child.id}`]);
+
+      // A refused op reports nothing; only the write that landed beside it does.
+      events.length = 0;
+      const mixed = await run([upsert({ sourceId: 'p1', parent: 'p1' }), upsert({ sourceId: 'p2' })]);
+      expect(mixed).toMatchObject({ counts: { created: 1, refused: 1 } });
+      expect(pages()).toEqual([`create ${(await page('notion/p2'))!.id}`]);
+
+      events.length = 0;
+      await run([upsert({ sourceId: 'p1', body: 'changed' })]);
+      expect(pages()).toEqual([`update ${parent.id}`]);
+
+      events.length = 0;
+      await run([{ op: 'remove', sourceId: 'c1' }]);
+      expect(pages()).toEqual([`delete ${child.id}`]);
     });
 
     it('settles pages whose parent and link targets arrive in a later run, a bounded slice at a time', async () => {

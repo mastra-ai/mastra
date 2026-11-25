@@ -393,6 +393,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         }
       }
 
+      // The previous iteration's step has ended, maybe on another worker.
+      const runEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
+      if (runEntry) runEntry.openStepSpan = undefined;
+
       let request: any = {};
 
       // Emit error + step-finish chunks and return a bail response. This
@@ -3029,6 +3033,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // Don't end the spans yet - they will be ended after tool execution
             const stepSpanData =
               hasToolCalls && !processOutputStepTripwire ? modelSpanTracker?.exportCurrentStep() : undefined;
+            if (registryEntry && stepSpanData) registryEntry.openStepSpan = observability?.rebuildSpan(stepSpanData);
             const stepFinishPayload =
               hasToolCalls && !processOutputStepTripwire ? modelSpanTracker?.getPendingStepFinishPayload() : undefined;
 
@@ -3096,6 +3101,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // If there are tool calls, step span will be ended after tool execution
             // NOTE: We NEVER close the model span here - it stays open for the entire agent run
             // and is closed in map-final-output after the agentic loop completes
+            // The deferred step-finish skips the processors, and the step's tool results can run on another
+            // worker, so the processor spans under this step end with its model stream.
+            if (effectiveOutputProcessors.length > 0 && registryEntry?.processorStates) {
+              getToolResultRunner().endStreamProcessorSpans(registryEntry.processorStates, { stepScopedOnly: true });
+            }
             if (!hasToolCalls || processOutputStepTripwire) {
               // Close the step span with usage/finish info
               const pendingPayload = modelSpanTracker?.getPendingStepFinishPayload() as any;

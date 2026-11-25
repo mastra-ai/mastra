@@ -278,7 +278,7 @@ describe('VoiceInputSettings', () => {
     server.use(
       http.get(SETTINGS_URL, () => HttpResponse.json(modelScope === 'factory' ? factorySettings() : settings())),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: null, thinkingLevel: null }),
+        HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: [] })),
       http.get(factoryUrl, () => HttpResponse.json({ project: { id: FACTORY_ID, name: 'Mastra', modelScope } })),
