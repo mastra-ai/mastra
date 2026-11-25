@@ -898,7 +898,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
               },
               usage,
               // Cost the provider reported itself is used in place of an estimate.
-              stepProviderMetadata: state.accumulatedSteps.map(step => step.providerMetadata),
+              stepProviderMetadata: state.reportedCosts?.map(cost => cost ?? undefined),
             });
           }
 

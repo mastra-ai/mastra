@@ -1337,7 +1337,7 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
                     },
                     usage: usageIncomplete ? calculateObservedUsage(steps) : state.accumulatedUsage,
                     // Cost the provider reported itself is used in place of an estimate.
-                    stepProviderMetadata: storedSteps.map(step => step.providerMetadata),
+                    stepProviderMetadata: state.reportedCosts?.map(cost => cost ?? undefined),
                   });
                 }
                 agentSpan?.end({

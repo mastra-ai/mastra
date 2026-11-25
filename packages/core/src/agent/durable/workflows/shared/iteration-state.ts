@@ -61,7 +61,6 @@ export interface StepRecord {
   usage?: LanguageModelUsage;
   finishReason?: string;
   tripwire?: StepTripwireData;
-  providerMetadata?: Record<string, any>;
 }
 
 /**
@@ -112,7 +111,6 @@ export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput):
     usage: executionOutput.output.usage,
     finishReason: executionOutput.stepResult.reason,
     tripwire: executionOutput.stepResult.tripwire,
-    providerMetadata: executionOutput.response?.providerMetadata,
   };
 }
 
@@ -244,6 +242,14 @@ export function createBaseIterationStateUpdate(
     // The latest iteration's response, even when it has none, as in the main loop: a run
     // whose final step is aborted or rejected mid-stream ends with no response on the span.
     lastResponse: signalPreempted ? currentState.lastResponse : executionOutput.response,
+    // A run that started before this field keeps a blank for each earlier step, so a later cost is
+    // never taken for the whole run.
+    reportedCosts: signalPreempted
+      ? currentState.reportedCosts
+      : [
+          ...previousSteps.map((_, index) => currentState.reportedCosts?.[index] ?? null),
+          executionOutput.response?.reportedCost ?? null,
+        ],
     // Both belong to the iteration whose lastStepResult the final step classifies.
     tracingTermination: executionOutput.tracingTermination,
     tracingDelegationFailure: executionOutput.tracingDelegationFailure,

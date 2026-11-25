@@ -97,6 +97,7 @@ import { createRunMessageList } from '../../utils/run-message-list';
 import { loadAccumulatedSteps } from '../shared/accumulated-steps';
 import { carriedSpanClocks } from '../shared/iteration-state';
 import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
+import { reportedCost } from '../shared/reported-cost';
 import { baseIterationStateSchema, durableOptionsSchema, responseRecordSchema } from '../shared/schemas';
 
 /**
@@ -3069,7 +3070,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     ...(cachedResponse
                       ? {}
                       : { servedBy: { provider: currentModel.provider, modelId: currentModel.modelId } }),
-                    providerMetadata: deferredStepFinishChunk.payload?.metadata?.providerMetadata,
+                    reportedCost: reportedCost(deferredStepFinishChunk.payload?.metadata?.providerMetadata),
                   }
                 : undefined,
               state: typedInput.state,
