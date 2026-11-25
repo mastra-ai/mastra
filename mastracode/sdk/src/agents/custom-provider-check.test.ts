@@ -68,6 +68,7 @@ async function startEndpoint(respond: Respond): Promise<Endpoint> {
   return endpoint;
 }
 
+/** A response with a JSON body. */
 function json(status: number, body: unknown, headers: Record<string, string> = {}): Respond {
   return (_, res) => {
     res.writeHead(status, { 'content-type': 'application/json', ...headers });
@@ -75,6 +76,7 @@ function json(status: number, body: unknown, headers: Record<string, string> = {
   };
 }
 
+/** A response with a text body of the given content type. */
 function text(status: number, body: string, contentType: string): Respond {
   return (_, res) => {
     res.writeHead(status, { 'content-type': contentType });
@@ -278,17 +280,31 @@ describe('listing the models of a custom endpoint', () => {
     });
   });
 
-  it('reports a host that does not resolve as a network failure', async () => {
-    const result = await listCustomProviderModels({ url: 'http://custom-endpoint.invalid/v1' });
+  it('reports a refused connection as a network failure', async () => {
+    const closed = await startEndpoint(() => {});
+    await closed.close();
+
+    const result = await listCustomProviderModels({ url: closed.url });
 
     expect(result).toMatchObject({ ok: false, failure: { kind: 'network' } });
     expect(result.ok ? '' : result.failure.message).toMatch(
-      /^Could not reach http:\/\/custom-endpoint\.invalid\/v1\/models: .*ENOTFOUND/,
+      new RegExp(`^Could not reach ${closed.url}/models: .*ECONNREFUSED`),
+    );
+  });
+
+  // `.invalid` never resolves, but a machine without DNS answers EAI_AGAIN instead of ENOTFOUND.
+  it('reports a host that does not resolve as a network failure', async () => {
+    const result = await listCustomProviderModels({ url: 'http://custom-endpoint.invalid/v1' }, { timeoutMs: 3000 });
+
+    expect(result).toMatchObject({ ok: false, failure: { kind: 'network' } });
+    expect(result.ok ? '' : result.failure.message).toMatch(
+      /^Could not reach http:\/\/custom-endpoint\.invalid\/v1\/models: .*(ENOTFOUND|EAI_AGAIN)/,
     );
   });
 });
 
 describe('sending a test message to a custom endpoint model', () => {
+  /** Run the model test against `model-x` on `connection` with default options. */
   const testModel = (connection: CustomProviderConnection) =>
     testCustomProviderModel({ providerId: 'acme', connection, modelId: 'model-x' });
 
@@ -418,6 +434,7 @@ describe('sending a test message to a custom endpoint model', () => {
 });
 
 describe('the headers of a custom endpoint chat call', () => {
+  /** Make one chat call the way a session does and return the headers the endpoint received. */
   async function sendWith(
     connection: Omit<CustomProviderConnection, 'url'>,
     requestHeaders: Record<string, string>,
@@ -437,7 +454,7 @@ describe('the headers of a custom endpoint chat call', () => {
       modelId: 'model-x',
       requestHeaders,
     });
-    await model.doGenerate({ prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] } as never);
+    await model.doGenerate({ prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] });
     return endpoint.requests[0]!.headers;
   }
 
