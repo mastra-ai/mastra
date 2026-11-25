@@ -90,7 +90,7 @@ describe('useChat once its thread stream broke (a phone locked, the network gone
   });
 
   // A reply under way when the phone locks: the page saw its first word, then lost the stream.
-  async function givenReplyCut(props: Partial<MastraChatProps> = { initialMessages: opened }) {
+  async function givenReplyCut(props: Partial<MastraChatProps> = { initialMessages: opened }, seen = ['Half']) {
     const threads = givenThreadStreams();
     const page = followThread(props);
     unmount = page.unmount;
@@ -99,9 +99,9 @@ describe('useChat once its thread stream broke (a phone locked, the network gone
       0,
       chunk('start', { messageId: 'a1' }),
       chunk('text-start', { id: 't1' }),
-      chunk('text-delta', { id: 't1', text: 'Half' }),
+      ...seen.map(text => chunk('text-delta', { id: 't1', text })),
     );
-    await waitFor(() => expect(texts(page.result.current.messages)).toEqual(['Tell me more', 'Half']));
+    await waitFor(() => expect(texts(page.result.current.messages)).toEqual(['Tell me more', seen.join('')]));
     expect(page.result.current.isRunning).toBe(true);
     threads.breakStream(0);
     await threads.followedAgain(2);
@@ -115,6 +115,41 @@ describe('useChat once its thread stream broke (a phone locked, the network gone
 
     await waitFor(() => expect(texts(page.result.current.messages)).toEqual(['Tell me more', 'Half, then whole.']));
     expect(page.result.current.isRunning).toBe(false);
+  });
+
+  it('goes on with a reply still running and not stored, without writing twice what it had shown', async () => {
+    const { send, page } = await givenReplyCut();
+
+    // Not stored yet: the server sends the reply again, from its start.
+    await send(
+      1,
+      historyOf([question], 'run-1'),
+      chunk('start', { messageId: 'a1' }),
+      chunk('text-start', { id: 't1' }),
+      chunk('text-delta', { id: 't1', text: 'Half' }),
+      chunk('text-delta', { id: 't1', text: ', then whole.' }),
+    );
+
+    await waitFor(() => expect(texts(page.result.current.messages)).toEqual(['Tell me more', 'Half, then whole.']));
+    expect(page.result.current.isRunning).toBe(true);
+    await send(1, chunk('text-end', { id: 't1' }), ended('run-1'));
+    await waitFor(() => expect(page.result.current.isRunning).toBe(false));
+  });
+
+  it('goes on with a reply still running and partly stored, from the part the server stored', async () => {
+    const { send, page } = await givenReplyCut({ initialMessages: opened }, ['Half', ', th']);
+
+    // Stored up to "Half": the server sends the parts newer than that, without the reply's start, though the page
+    // had seen some of them.
+    await send(
+      1,
+      historyOf([question, stored('a1', 'assistant', 'Half')], 'run-1'),
+      chunk('text-delta', { id: 't1', text: ', th' }),
+      chunk('text-delta', { id: 't1', text: 'en whole.' }),
+    );
+
+    await waitFor(() => expect(texts(page.result.current.messages)).toEqual(['Tell me more', 'Half, then whole.']));
+    expect(page.result.current.isRunning).toBe(true);
   });
 
   it('follows the thread no more once the page leaves, though it followed it again before', async () => {
