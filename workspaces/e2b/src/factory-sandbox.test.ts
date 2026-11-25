@@ -140,6 +140,12 @@ describe('E2BFactorySandbox', () => {
     expect((await createRepoTemplate({ ...ctx, cpuCount: 2, memoryMB: 4096 })!.resolveSpec()).ref).toBe(expected);
   });
 
+  it('advertises the CPU default it will use when the configured default is not offered', () => {
+    const cpu = describeFactorySandbox(new E2BFactorySandbox({ apiKey: 'e2b_test', defaults: { cpuCount: 3 } }))
+      .settingsSchema.properties?.cpuCount as { default: number };
+    expect(cpu.default).toBe(2);
+  });
+
   it.each([
     [3, 2],
     [7, 6],

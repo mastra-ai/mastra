@@ -190,6 +190,12 @@ describe('PlatformFactorySandbox', () => {
     expect(withSetting.definition).not.toEqual(withDefaults.definition);
   });
 
+  it('advertises the CPU default it will use when the configured default is not offered', () => {
+    const cpu = describeFactorySandbox(new PlatformFactorySandbox({ defaults: { cpuCount: 3 } })).settingsSchema
+      .properties?.cpuCount as { default: number };
+    expect(cpu.default).toBe(2);
+  });
+
   it.each([
     [3, 2],
     [7, 6],

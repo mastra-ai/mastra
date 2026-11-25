@@ -110,6 +110,7 @@ function settingsSchema(
   defaults: Partial<PlatformFactorySandboxSettings> | undefined,
 ): PublicSchema<PlatformFactorySandboxSettings> {
   const effective = { ...DEFAULT_SETTINGS, ...defaults };
+  effective.cpuCount = offeredCpuCount(effective.cpuCount);
   const properties = Object.fromEntries(
     Object.entries(SETTINGS_SCHEMA.properties).map(([key, property]) => [
       key,
