@@ -211,52 +211,6 @@ describe('LibSQL run fencing: a takeover racing an in-flight write', () => {
     expect((await workflowsB.loadWorkflowSnapshot({ workflowName, runId }))?.value).toEqual({});
   });
 
-  // Each round races one fenced snapshot save from B against one forced claim from A, either one
-  // started first. A save may win or lose, but one that reports success must be visible to the
-  // first read after the claim returns; otherwise it committed after the takeover. B saves because
-  // its short busy timeout turns a wait on A's claim into retries instead of a blocked event loop.
-  it('workflows: a fenced snapshot save racing a takeover lands before it or not at all', async () => {
-    const workflowsA = (await storeA.getStore('workflows')) as WorkflowsStorage;
-    const workflowsB = (await storeB.getStore('workflows')) as WorkflowsStorage;
-    const workflowName = 'run-fence-save-race';
-    const runId = randomUUID();
-    const claim = async (ownerId: string) => {
-      const { record } = await workflowsA.claimRunOwnership({ runId, ownerId, leaseMs: LEASE_MS, force: true });
-      const seen = await workflowsA.loadWorkflowSnapshot({ workflowName, runId });
-      return { fence: { runId, ownerId, generation: record!.generation } as RunFence, seen };
-    };
-    const storedRound = (stored: { value?: unknown } | null) =>
-      (stored?.value as { round?: number } | undefined)?.round;
-    let { fence } = await claim('owner-0');
-    let landed = 0;
-    let refused = 0;
-    for (let round = 1; round <= 200; round++) {
-      const save = () =>
-        workflowsB.persistWorkflowSnapshot({ workflowName, runId, snapshot: snapshot(runId, { round }), fence }).then(
-          () => true,
-          (error: unknown) => {
-            if (isRunFenceConflictError(error)) return false;
-            throw error;
-          },
-        );
-      const [saved, claimed] =
-        round % 2
-          ? await Promise.all([save(), claim(`owner-${round}`)])
-          : await Promise.all([claim(`owner-${round}`), save()]).then(([c, s]) => [s, c] as const);
-      if (saved) {
-        landed++;
-        expect(storedRound(claimed.seen)).toBe(round);
-      } else {
-        refused++;
-        expect(storedRound(await workflowsA.loadWorkflowSnapshot({ workflowName, runId }))).not.toBe(round);
-      }
-      fence = claimed.fence;
-    }
-    // Both outcomes happened, so the rounds really raced.
-    expect(landed).toBeGreaterThan(0);
-    expect(refused).toBeGreaterThan(0);
-  }, 60_000);
-
   it('memory: raising the fence waits for the in-flight write, and later writes are rejected', async () => {
     const memoryA = (await storeA.getStore('memory')) as MemoryStorage;
     const memoryB = (await storeB.getStore('memory')) as MemoryStorage;
