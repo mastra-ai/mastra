@@ -213,6 +213,8 @@ export class CustomEditor extends Editor {
   private lastCursorRow = -1;
   private lastRenderedRowCount = 0;
   private lastAutocompleteStartRow = -1;
+  /** Rows of the last render taken by the suggestions and the blank row above them. */
+  suggestionRows = 0;
   /** Autocomplete list row under the mouse pointer, so hover follows the pointer when the list scrolls. */
   private hoveredAutocompleteRow: number | undefined;
   private inputLayout: InputLayout | undefined;
@@ -420,6 +422,7 @@ export class CustomEditor extends Editor {
       return hasSuggestions && i >= suggestionsStart ? ` ${line}` : `${' '.repeat(promptWidth)}${line}`;
     });
     if (hasSuggestions) rows.splice(suggestionsStart, 0, '');
+    this.suggestionRows = hasSuggestions ? rows.length - suggestionsStart : 0;
     // The shade fades to the terminal background on the right, starting a little darker than the
     // sent-message panel (step 2).
     result.push(...fadePanel(rows, width, 1.5));

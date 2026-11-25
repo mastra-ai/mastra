@@ -344,7 +344,7 @@ export class PromptSlot {
   constructor(
     private readonly ui: TUI,
     private readonly container: Container,
-    private readonly editor: Component,
+    private readonly editor: Component & { suggestionRows?: number },
   ) {}
 
   isOpen(): boolean {
@@ -450,25 +450,27 @@ export class PromptSlot {
   }
 
   /**
-   * Takes the chat rows the open menu pushes off screen out of `lines` (a rendered frame), and returns the
-   * row where the menu starts. The frame keeps the length it has with the prompt, so opening a menu scrolls
-   * nothing into the terminal's scrollback and closing it leaves no blank rows: the rows at the top of the
-   * screen make room for it and come back when it closes.
+   * Takes the chat rows that the open menu, or the prompt's suggestions, push off screen out of `lines` (a
+   * rendered frame), and returns the row where the menu starts. The frame keeps the length it has with the
+   * prompt alone, so neither scrolls anything into the terminal's scrollback nor leaves blank rows when it
+   * closes: the rows at the top of the screen make room for it and come back after.
    */
   fit(lines: string[], width: number): number | undefined {
     const menu = this.mountedMenu();
-    if (!menu || !this.ui.children.includes(this.container)) return undefined;
-    const height = menu instanceof MenuFrame ? menu.renderedRows : menu.render(width).length;
+    const suggestions = this.editor.suggestionRows ?? 0;
+    if ((!menu && !suggestions) || !this.ui.children.includes(this.container)) return undefined;
+    const prompt = this.editor.render(width).length;
+    const height = !menu ? prompt : menu instanceof MenuFrame ? menu.renderedRows : menu.render(width).length;
     const { rows } = this.ui.terminal;
     const { previousViewportTop, previousWidth, previousHeight } = tuiInternals(this.ui);
     const resized = previousWidth !== width || previousHeight !== rows;
-    const withPrompt = lines.length - height + this.editor.render(width).length;
+    const withPrompt = lines.length - height + prompt - suggestions;
     const total = Math.max(withPrompt, rows + (resized ? 0 : previousViewportTop));
     const screenTop = total - rows;
     const below = this.rowsBelow(width);
     const hidden = Math.min(lines.length - total, lines.length - below - height - screenTop);
     if (hidden > 0) lines.splice(screenTop, hidden);
-    return lines.length - below - height;
+    return menu && lines.length - below - height;
   }
 
   private mounted(): Component {

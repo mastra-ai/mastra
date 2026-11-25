@@ -58,6 +58,7 @@ function createApp({ cols = 80, rows = 24, chatLines = 60 } = {}) {
   const line = (row: number) => screen.buffer.active.getLine(row)?.translateToString(true).trimEnd() ?? '';
   return {
     ui,
+    editor,
     say,
     render: async () => {
       (ui as unknown as { doRender(): void }).doRender();
@@ -246,5 +247,55 @@ describe('menus in the prompt slot on screen', () => {
     expect(app.screen().filter(line => line.startsWith('▌'))).toEqual([expect.stringContaining('item-27')]);
     await app.pointer(0, row);
     expect(selected).toEqual(['item-27']);
+  });
+});
+
+describe('command suggestions on screen', () => {
+  const type = async (text: string) => {
+    for (const char of text) app!.send(char);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    await app!.render();
+  };
+
+  const suggest = () =>
+    app!.editor.setAutocompleteProvider({
+      getSuggestions: async (lines: string[]) => ({
+        prefix: lines[0]!,
+        items: Array.from({ length: lines[0]!.length > 1 ? 2 : 5 }, (_, i) => ({ value: `c${i}`, label: `c${i}` })),
+      }),
+      applyCompletion: (lines, cursorLine, cursorCol) => ({ lines, cursorLine, cursorCol }),
+    });
+
+  it('leave the screen and the scrollback as they were when they shrink and close', async () => {
+    app = createApp();
+    suggest();
+    await app.render();
+    const before = { screen: app.screen(), scrollback: app.scrollback() };
+    await type('/');
+    expect(rowWith(app.screen(), 'c4')).toBeGreaterThan(0);
+    expect(app.screen().at(-1)).toContain('status line');
+
+    await type('c');
+    expect(rowWith(app.screen(), 'c4')).toBe(-1);
+    expect(app.screen().at(-1)).toContain('status line');
+
+    app.editor.setText('');
+    await app.render();
+    expect(app.screen()).toEqual(before.screen);
+    expect(app.scrollback()).toEqual(before.scrollback);
+  });
+
+  it('leave no blank rows under the status line once the menu they opened closes', async () => {
+    app = createApp();
+    suggest();
+    await app.render();
+    const before = app.screen();
+    await type('/c');
+    app.editor.setText('');
+    openList(app.ui, 12);
+    await app.render();
+    app.send('\x1b');
+    await app.render();
+    expect(app.screen()).toEqual(before);
   });
 });
