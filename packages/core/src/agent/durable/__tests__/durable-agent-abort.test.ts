@@ -393,7 +393,7 @@ describe('DurableAgent abort signal', () => {
           },
         );
         await new Promise(resolve => setTimeout(resolve, 0));
-        expect(agent.cancelQueuedMessages({ ...scope, signalIds: [removed.signal.id] })).toEqual({
+        expect(await agent.cancelQueuedMessages({ ...scope, signalIds: [removed.signal.id] })).toEqual({
           cancelledSignalIds: [],
         });
         expect(agent.abortThreadStream(scope)).toBe(true);
@@ -457,7 +457,7 @@ describe('DurableAgent abort signal', () => {
       }
       await vi.waitFor(() => expect(aborted).toBe(true));
       await result.output.consumeStream();
-      expect(agent.cancelQueuedMessages({ ...scope, signalIds: [pending.signal.id, idle.signal.id] })).toEqual({
+      expect(await agent.cancelQueuedMessages({ ...scope, signalIds: [pending.signal.id, idle.signal.id] })).toEqual({
         cancelledSignalIds: [],
       });
       expect(model.doStreamCalls).toHaveLength(1);

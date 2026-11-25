@@ -165,7 +165,7 @@ describe('Agent signals: idle and active behaviors', () => {
 
     const queued = runtime.queueMessage(agent, 'separate queued message', { resourceId, threadId });
     await expect(queued.accepted).resolves.toMatchObject({ action: 'deliver' });
-    expect(runtime.cancelQueuedMessages(agent, { resourceId, threadId, signalIds: [queued.signal.id] })).toEqual({
+    expect(await runtime.cancelQueuedMessages(agent, { resourceId, threadId, signalIds: [queued.signal.id] })).toEqual({
       cancelledSignalIds: [queued.signal.id],
     });
 
