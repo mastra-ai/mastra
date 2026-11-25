@@ -94,10 +94,10 @@ export function unwrapKnowledgeStorage(storage: KnowledgeStorage): KnowledgeStor
  * Wraps `storage` so each page-store write in {@link WRITES} calls `emit` after it resolves. Writes
  * on a `transaction` view are held until that transaction commits and dropped if it rolls back; a
  * nested `transaction` hands its writes to the outer one when it succeeds. While a nested
- * transaction is open, writes through the outer view belong to it too (they run inside its
- * savepoint), so they are kept or dropped with it. Each view tracks one open nested transaction,
- * so concurrent nested transactions opened from the same view are not supported: their events
- * would cross. Every other member passes
+ * transaction is open, writes through any view of that transaction chain belong to the innermost
+ * one (they run inside its savepoint), so they are kept or dropped with it. A chain tracks one
+ * innermost transaction, so concurrent nested transactions opened in the same chain are not
+ * supported: their events would cross. Every other member passes
  * through, bound to the real store so adapters' private fields keep working. Nothing extra happens
  * while `listening()` is false. Describing or emitting an event never fails a write that committed:
  * errors go to `onError`.
@@ -107,10 +107,10 @@ export function emitKnowledgeChanges(
   emit: (change: Change) => void,
   listening: () => boolean,
   onError: (error: unknown) => void,
-  inTransaction = false,
+  /** Shared by every view of one top-level transaction: where their writes report now. */
+  chain?: { report: (change: Change) => void },
 ): KnowledgeStorage {
-  /** Where this view's writes report: `emit`, or the innermost nested transaction open on it. */
-  let report = emit;
+  const report = (change: Change) => (chain ? chain.report : emit)(change);
   const view = new Proxy(storage, {
     get(target, property) {
       const value = Reflect.get(target, property, target);
@@ -119,7 +119,8 @@ export function emitKnowledgeChanges(
         return async (operation: (tx: KnowledgeStorage) => Promise<unknown>, ...rest: unknown[]) => {
           let held: Change[] = [];
           const hold = (change: Change) => void held.push(change);
-          const outer = report;
+          const shared = chain ?? { report: hold };
+          const outer = shared.report;
           let result: unknown;
           try {
             result = await value.call(
@@ -127,13 +128,13 @@ export function emitKnowledgeChanges(
               (tx: KnowledgeStorage) => {
                 // A store may retry the operation (LibSQL does on a lock error); only the attempt that commits counts.
                 held = [];
-                if (inTransaction) report = hold;
-                return operation(emitKnowledgeChanges(tx, hold, listening, onError, true));
+                shared.report = hold;
+                return operation(emitKnowledgeChanges(tx, hold, listening, onError, shared));
               },
               ...rest,
             );
           } finally {
-            report = outer;
+            shared.report = outer;
           }
           for (const change of held) {
             try {

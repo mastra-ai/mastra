@@ -147,6 +147,25 @@ describe('Knowledge change events', () => {
     });
     expect(await store.getPage({ id: undoneId, read: 'all' })).toBeNull();
     expect(events.map(event => event.kind === 'page' && event.pageId)).toEqual([keptId, outerAgain.id]);
+
+    // A write through an outer view belongs to the innermost transaction open anywhere in the chain,
+    // including one opened from a nested view.
+    events.length = 0;
+    let deepUndoneId = '';
+    const outerDeep = await store.transaction(async tx => {
+      await tx.transaction(async middle => {
+        await middle
+          .transaction(async () => {
+            deepUndoneId = (await create(tx, 'Undone in the innermost')).id;
+            throw new Error('undo innermost');
+          })
+          .catch(() => {});
+      });
+      return create(tx, 'Outer deep');
+    });
+    expect(deepUndoneId).not.toBe('');
+    expect(await store.getPage({ id: deepUndoneId, read: 'all' })).toBeNull();
+    expect(events.map(event => event.kind === 'page' && event.pageId)).toEqual([outerDeep.id]);
   });
 
   it('reports only the attempt that committed when the store retries a transaction', async () => {
