@@ -90,10 +90,11 @@ interface RunOwnerRow {
   generation: string | number;
   ownerId: string;
   leaseExpiresAt: string | number | null;
+  updatedAt: string | number;
   nowMs: string | number;
 }
 
-const RUN_OWNER_COLUMNS = `generation, "ownerId", "leaseExpiresAt", ${DB_NOW_MS} AS "nowMs"`;
+const RUN_OWNER_COLUMNS = `generation, "ownerId", "leaseExpiresAt", "updatedAt", ${DB_NOW_MS} AS "nowMs"`;
 
 function toRunOwnershipRecord(runId: string, row: RunOwnerRow): RunOwnershipRecord {
   const leaseExpiresAt = row.leaseExpiresAt === null ? null : Number(row.leaseExpiresAt);
@@ -103,6 +104,7 @@ function toRunOwnershipRecord(runId: string, row: RunOwnerRow): RunOwnershipReco
     ownerId: row.ownerId,
     leaseExpiresAt: leaseExpiresAt === null ? null : new Date(leaseExpiresAt),
     live: leaseExpiresAt !== null && leaseExpiresAt > Number(row.nowMs),
+    updatedAt: new Date(Number(row.updatedAt)),
   };
 }
 

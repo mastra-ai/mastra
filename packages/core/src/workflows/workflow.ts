@@ -105,8 +105,10 @@ import {
   claimWorkflowRunOwnership,
   coverNestedWorkflowRun,
   isOwnRunFenceConflict,
+  normalizeLeaseTtlMs,
   runFenceConflictOf,
   UNCLAIMED_WORKFLOW_RUN,
+  WORKFLOW_RUN_LEASE_TTL_MS,
 } from './run-ownership';
 import type { WorkflowRunOwnership } from './run-ownership';
 import { createRunStorage } from './run-storage';
@@ -2284,6 +2286,7 @@ export class Workflow<
       onError: options.onError,
       sharePubsub: options.sharePubsub,
       autoRestartActiveRuns: options.autoRestartActiveRuns,
+      leaseTtlMs: options.leaseTtlMs,
     };
 
     if (!executionEngine) {
@@ -3480,6 +3483,8 @@ export class Workflow<
     shouldPersistSnapshot?: WorkflowOptions['shouldPersistSnapshot'];
     /** Overrides the workflow-wide tracing policy for this run only. */
     tracingPolicy?: TracingPolicy;
+    /** Overrides the workflow's `leaseTtlMs` option for this run only. */
+    leaseTtlMs?: number;
     parentWorkflow?: NestedWorkflowParent;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion>> {
     // Taken before the first await: concurrent parent runs share this workflow
@@ -3534,8 +3539,15 @@ export class Workflow<
         () => run,
         () => this.executionEngine.clearRunPersistenceOverride(runIdToUse),
       );
+      const leaseTtlMs = normalizeLeaseTtlMs(
+        options?.leaseTtlMs,
+        normalizeLeaseTtlMs(this.#options.leaseTtlMs, WORKFLOW_RUN_LEASE_TTL_MS),
+      );
+      const reused = this.liveRun(runIdToUse);
+      // A cached run takes a lease passed here for its next claim; a claim it holds keeps its length.
+      if (reused && options?.leaseTtlMs !== undefined) setRunLeaseTtlMs(reused, leaseTtlMs);
       const run: Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion> =
-        this.liveRun(runIdToUse) ??
+        reused ??
         new Run({
           workflowId: this.id,
           stateSchema: this.stateSchema,
@@ -3561,6 +3573,7 @@ export class Workflow<
           storageVersion,
           recoverable:
             this.engineType === 'default' && this.#options.autoRestartActiveRuns !== false && this.type !== 'processor',
+          leaseTtlMs,
         });
 
       const wasCached = this.runs.get(runIdToUse) === run;
@@ -4401,6 +4414,9 @@ const TERMINAL_WORKFLOW_RUN_STATUSES = new Set<WorkflowRunStatus>([
   'bailed',
 ]);
 
+// Lets `createRun()` change the lease of a run it returns from its cache, without a public setter.
+let setRunLeaseTtlMs: (run: Run<any, any, any, any, any, any, any>, leaseTtlMs: number) => void;
+
 /**
  * Represents a workflow run that can be executed
  */
@@ -4539,6 +4555,14 @@ export class Run<
 
   #recoverable: boolean;
 
+  #leaseTtlMs: number;
+
+  static {
+    setRunLeaseTtlMs = (run, leaseTtlMs) => {
+      run.#leaseTtlMs = leaseTtlMs;
+    };
+  }
+
   get mastra() {
     return this.#mastra;
   }
@@ -4609,6 +4633,8 @@ export class Run<
     storageVersion?: 1 | 2;
     /** Whether the boot-time recovery sweep may restart this run, so it must hold an ownership lease while it executes. */
     recoverable?: boolean;
+    /** The length of that lease, before any backoff. */
+    leaseTtlMs?: number;
   }) {
     this.workflowId = params.workflowId;
     this.runId = params.runId;
@@ -4643,6 +4669,7 @@ export class Run<
       getStore: async () => (this.executionEngine.mastra ?? this.#mastra)?.getStorage()?.getStore('workflows'),
     });
     this.#recoverable = params.recoverable ?? false;
+    this.#leaseTtlMs = params.leaseTtlMs ?? WORKFLOW_RUN_LEASE_TTL_MS;
   }
 
   /**
@@ -5906,6 +5933,8 @@ export class Run<
    * parent's lease unless `nested` is set. The sweep lists `running` and `waiting` runs of registered
    * workflows, so a run that persists neither is never swept. Internal workflows aren't registered,
    * so persisting `waiting` alone doesn't make their runs claim.
+   *
+   * A claim without `force` is a restart's, which backs off from a lease that lapsed.
    */
   async #claimOwnership(
     force: boolean,
@@ -5925,6 +5954,8 @@ export class Run<
       runId: this.runId,
       force,
       logger: this.#mastra?.getLogger(),
+      leaseMs: this.#leaseTtlMs,
+      backOff: !force,
     });
   }
 
