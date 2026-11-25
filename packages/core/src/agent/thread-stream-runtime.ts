@@ -30,6 +30,8 @@ import type {
 } from '../stream/types';
 import { readPositiveIntEnv } from '../utils';
 import type { WorkflowRunStatus } from '../workflows/types';
+import { createActiveRunSignalQueues } from './active-run-signal-queues';
+import type { ActiveRunSignalQueues } from './active-run-signal-queues';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import { DurableStepIds } from './durable/constants';
@@ -710,15 +712,11 @@ type AgentThreadRuntimeState = {
   approvalSuspendedRunIds: Set<string>;
   suspendedRunIds: Set<string>;
   suspensionMetadataByRunId: Map<string, Map<string | undefined, AgentThreadRunSuspension>>;
-  pendingSignalsByThread: Map<string, CreatedAgentSignal[]>;
+  signalQueues: ActiveRunSignalQueues;
   // Signal IDs this runtime queued locally before publishing them, mapped to the owner run they were
   // later forwarded to (if any). Replays of these are echoes, except one addressed to that forwarded owner.
   locallyQueuedSignalIdsByThread: Map<string, Map<string, string | undefined>>;
   pendingSignalListenersByRunId: Map<string, Set<PendingSignalListener>>;
-  // Signals queued for a run that is starting but has not made its first model
-  // request yet. The first LLM step drains these and folds them into that
-  // request; `pendingSignalsByThread` follow-ups instead become their own turn.
-  preRunSignalsByThread: Map<string, CreatedAgentSignal[]>;
   /**
    * Threads whose queued signals belong to a run whose execution here lost it
    * before the run's next execution registered, keyed by thread key to that
@@ -1025,10 +1023,9 @@ function createRuntimeState(): AgentThreadRuntimeState {
     approvalSuspendedRunIds: new Set(),
     suspendedRunIds: new Set(),
     suspensionMetadataByRunId: new Map(),
-    pendingSignalsByThread: new Map(),
+    signalQueues: createActiveRunSignalQueues(),
     locallyQueuedSignalIdsByThread: new Map(),
     pendingSignalListenersByRunId: new Map(),
-    preRunSignalsByThread: new Map(),
     lostRunsByThread: new Map(),
     pendingIdleSignalsByThread: new Map(),
     forwardedIdleSignalsByThread: new Map(),
@@ -2176,8 +2173,8 @@ export class AgentThreadStreamRuntime {
    */
   #hasPendingThreadWork(state: AgentThreadRuntimeState, key: string): boolean {
     return (
-      (state.pendingSignalsByThread.get(key)?.length ?? 0) > 0 ||
-      (state.preRunSignalsByThread.get(key)?.length ?? 0) > 0 ||
+      (state.signalQueues.pendingSignalsByThread.get(key)?.length ?? 0) > 0 ||
+      (state.signalQueues.preRunSignalsByThread.get(key)?.length ?? 0) > 0 ||
       (state.pendingContinuationsByThread.get(key)?.length ?? 0) > 0 ||
       (state.pendingIdleSignalsByThread.get(key)?.length ?? 0) > 0
     );
@@ -2218,10 +2215,12 @@ export class AgentThreadStreamRuntime {
         if (!answersTo(runId)) {
           return;
         }
-        const queues = data.preRun ? state.preRunSignalsByThread : state.pendingSignalsByThread;
+        const queues = data.preRun
+          ? state.signalQueues.preRunSignalsByThread
+          : state.signalQueues.pendingSignalsByThread;
         if (
-          [state.preRunSignalsByThread.get(key), state.pendingSignalsByThread.get(key)].some(queue =>
-            queue?.some(signal => signal.id === data.signal.id),
+          [state.signalQueues.preRunSignalsByThread.get(key), state.signalQueues.pendingSignalsByThread.get(key)].some(
+            queue => queue?.some(signal => signal.id === data.signal.id),
           )
         )
           return;
@@ -3280,9 +3279,9 @@ export class AgentThreadStreamRuntime {
         if (pendingAdmission && pendingAdmission.runId === activeRunId && pendingAdmission.agentId === owner.agent.id) {
           // The owner has reserved the thread for a run that has not started yet. Hand
           // it the input for its first model request, as a local send does.
-          const queue = state.preRunSignalsByThread.get(key) ?? [];
+          const queue = state.signalQueues.preRunSignalsByThread.get(key) ?? [];
           queue.push(joinSignal ?? signal);
-          state.preRunSignalsByThread.set(key, queue);
+          state.signalQueues.preRunSignalsByThread.set(key, queue);
           const queued: ClaimedQueuedMessage = { identity: messageIdentity };
           state.claimedQueuedMessages.set(claimedQueuedMessageKey(key, signal.id), queued);
           this.#recordLocallyQueuedSignal(state, key, signal.id);
@@ -3402,7 +3401,7 @@ export class AgentThreadStreamRuntime {
           // Concurrent senders queued pre-run copies behind this reservation;
           // dropping them keeps a later local run from replaying input this
           // attempt never delivered.
-          state.preRunSignalsByThread.delete(key);
+          state.signalQueues.preRunSignalsByThread.delete(key);
         }
         state.threadKeysByRunId.delete(runId);
         throw error;
@@ -3419,7 +3418,7 @@ export class AgentThreadStreamRuntime {
         // may be discarded — otherwise a later local run replays them.
         if (state.activeThreadRunIds.get(key) === runId) {
           state.activeThreadRunIds.delete(key);
-          state.preRunSignalsByThread.delete(key);
+          state.signalQueues.preRunSignalsByThread.delete(key);
         }
         state.threadKeysByRunId.delete(runId);
         if (!ownerActive || expired) {
@@ -3635,12 +3634,12 @@ export class AgentThreadStreamRuntime {
    * acknowledged-or-rejected copy here so a later run cannot replay it.
    */
   #discardQueuedPreRunSignal(state: AgentThreadRuntimeState, key: string, signalId: string) {
-    const queue = state.preRunSignalsByThread.get(key);
+    const queue = state.signalQueues.preRunSignalsByThread.get(key);
     if (!queue) return;
     const index = queue.findIndex(signal => signal.id === signalId);
     if (index === -1) return;
     queue.splice(index, 1);
-    if (queue.length === 0) state.preRunSignalsByThread.delete(key);
+    if (queue.length === 0) state.signalQueues.preRunSignalsByThread.delete(key);
   }
 
   #isLocalSignalEcho(state: AgentThreadRuntimeState, key: string, signalId: string, runId: string) {
@@ -4657,9 +4656,9 @@ export class AgentThreadStreamRuntime {
     state.approvalSuspendedRunIds.clear();
     state.suspendedRunIds.clear();
     state.suspensionMetadataByRunId.clear();
-    state.pendingSignalsByThread.clear();
+    state.signalQueues.pendingSignalsByThread.clear();
     state.locallyQueuedSignalIdsByThread.clear();
-    state.preRunSignalsByThread.clear();
+    state.signalQueues.preRunSignalsByThread.clear();
     state.lostRunsByThread.clear();
     state.pendingIdleSignalsByThread.clear();
     state.forwardedIdleSignalsByThread.clear();
@@ -4753,9 +4752,9 @@ export class AgentThreadStreamRuntime {
     record: AgentThreadRunRecord<any>,
     signal: CreatedAgentSignal,
   ) {
-    const queue = state.pendingSignalsByThread.get(key) ?? [];
+    const queue = state.signalQueues.pendingSignalsByThread.get(key) ?? [];
     queue.push(signal);
-    state.pendingSignalsByThread.set(key, queue);
+    state.signalQueues.pendingSignalsByThread.set(key, queue);
     this.#recordLocallyQueuedSignal(state, key, signal.id);
     this.#publishPendingUserMessage(pubsub, key, record.runId, signal, 'pending');
     this.#notifyPendingSignals(state, key, signal);
@@ -5612,7 +5611,7 @@ export class AgentThreadStreamRuntime {
       this.#ensureThreadControlSubscription(state, pubsub, key).successorRunIds.set(runId, lostStreamId);
     }
     for (const preRun of [true, false]) {
-      const queues = preRun ? state.preRunSignalsByThread : state.pendingSignalsByThread;
+      const queues = preRun ? state.signalQueues.preRunSignalsByThread : state.signalQueues.pendingSignalsByThread;
       for (const signal of queues.get(key) ?? []) {
         void this.#publishAndWait(pubsub, key, {
           type: 'signal-enqueued',
@@ -5681,13 +5680,16 @@ export class AgentThreadStreamRuntime {
     // A run can finish before its first model request drained its pre-run
     // signals (e.g. it errored early). Don't strand them — fold them into the
     // follow-up queue so the next run still picks them up.
-    const preRunLeftover = state.preRunSignalsByThread.get(key);
+    const preRunLeftover = state.signalQueues.preRunSignalsByThread.get(key);
     if (preRunLeftover?.length) {
-      state.preRunSignalsByThread.delete(key);
-      state.pendingSignalsByThread.set(key, [...preRunLeftover, ...(state.pendingSignalsByThread.get(key) ?? [])]);
+      state.signalQueues.preRunSignalsByThread.delete(key);
+      state.signalQueues.pendingSignalsByThread.set(key, [
+        ...preRunLeftover,
+        ...(state.signalQueues.pendingSignalsByThread.get(key) ?? []),
+      ]);
     }
 
-    const queue = state.pendingSignalsByThread.get(key);
+    const queue = state.signalQueues.pendingSignalsByThread.get(key);
     let signal: CreatedAgentSignal | undefined;
     let nextRunId: string | undefined;
     let draining: { signal: CreatedAgentSignal; cancelled: boolean; handedOff: boolean } | undefined;
@@ -5695,7 +5697,7 @@ export class AgentThreadStreamRuntime {
       signal = queue?.shift();
       if (signal && queue) {
         if (queue.length === 0) {
-          state.pendingSignalsByThread.delete(key);
+          state.signalQueues.pendingSignalsByThread.delete(key);
         }
 
         // Hand the lease from the finished run to this drained run before
@@ -5737,7 +5739,7 @@ export class AgentThreadStreamRuntime {
           state.threadKeysByRunId.delete(nextRunId);
           // Early follow-ups were already published as retained signal-enqueued
           // events, so only discard this runtime's local pre-run copies.
-          state.preRunSignalsByThread.delete(key);
+          state.signalQueues.preRunSignalsByThread.delete(key);
           if (owns.owner && !isRetakeLeaseOwner(owns.owner)) {
             const ownerRunId = threadLeaseRunId(owns.owner);
             // Forwarding is a handoff: the signal is no longer locally cancellable.
@@ -5752,8 +5754,8 @@ export class AgentThreadStreamRuntime {
               sourceId: this.#getSourceId(),
             }).catch(() => {});
           } else {
-            const restored = state.pendingSignalsByThread.get(key) ?? [];
-            state.pendingSignalsByThread.set(key, [signal, ...restored]);
+            const restored = state.signalQueues.pendingSignalsByThread.get(key) ?? [];
+            state.signalQueues.pendingSignalsByThread.set(key, [signal, ...restored]);
           }
           return;
         }
@@ -5762,10 +5764,13 @@ export class AgentThreadStreamRuntime {
         // fold the rest of the queue into this run's first model request instead
         // of starting one run per signal. Read the map, not `queue`: cancellation
         // during the lease await replaces the array.
-        const batched = state.pendingSignalsByThread.get(key) ?? [];
+        const batched = state.signalQueues.pendingSignalsByThread.get(key) ?? [];
         if (batched.length > 0) {
-          state.pendingSignalsByThread.delete(key);
-          state.preRunSignalsByThread.set(key, [...batched, ...(state.preRunSignalsByThread.get(key) ?? [])]);
+          state.signalQueues.pendingSignalsByThread.delete(key);
+          state.signalQueues.preRunSignalsByThread.set(key, [
+            ...batched,
+            ...(state.signalQueues.preRunSignalsByThread.get(key) ?? []),
+          ]);
         }
 
         state.startingQueuedRunIds.add(nextRunId);
@@ -5812,14 +5817,14 @@ export class AgentThreadStreamRuntime {
       // deletes the map entry when it empties the queue, so the local array
       // may be detached from the map by the time we get here. Signals batched
       // into the failed run's pre-run queue go back behind the drained signal.
-      const batchedLeftover = state.preRunSignalsByThread.get(key) ?? [];
-      state.preRunSignalsByThread.delete(key);
+      const batchedLeftover = state.signalQueues.preRunSignalsByThread.get(key) ?? [];
+      state.signalQueues.preRunSignalsByThread.delete(key);
       const restored = [
         ...(signal && !draining?.cancelled ? [signal] : []),
         ...batchedLeftover,
-        ...(state.pendingSignalsByThread.get(key) ?? []),
+        ...(state.signalQueues.pendingSignalsByThread.get(key) ?? []),
       ];
-      if (restored.length > 0) state.pendingSignalsByThread.set(key, restored);
+      if (restored.length > 0) state.signalQueues.pendingSignalsByThread.set(key, restored);
       this.#publish(pubsub, key, {
         type: 'run-failed',
         runId: failedRunId,
@@ -5907,7 +5912,7 @@ export class AgentThreadStreamRuntime {
           state.activeThreadRunIds.delete(key);
         }
         state.threadKeysByRunId.delete(pending.runId);
-        state.preRunSignalsByThread.delete(key);
+        state.signalQueues.preRunSignalsByThread.delete(key);
         const restored = state.pendingContinuationsByThread.get(key) ?? [];
         state.pendingContinuationsByThread.set(key, [pending, ...restored]);
         return false;
@@ -6099,7 +6104,7 @@ export class AgentThreadStreamRuntime {
       }
       state.drainingIdleSignalsByThread.delete(key);
       state.threadKeysByRunId.delete(pendingIdle.runId);
-      state.preRunSignalsByThread.delete(key);
+      state.signalQueues.preRunSignalsByThread.delete(key);
       if (isRetakeLeaseOwner(owns.owner)) {
         // Keep the accepted input for the next natural drain trigger, rather
         // than forwarding to a token that no run can consume.
@@ -6265,7 +6270,8 @@ export class AgentThreadStreamRuntime {
     const key = record ? this.#threadKey(record.resourceId, record.threadId) : state.threadKeysByRunId.get(runId);
     if (!key) return [];
 
-    const signalsByThread = scope === 'pre-run' ? state.preRunSignalsByThread : state.pendingSignalsByThread;
+    const signalsByThread =
+      scope === 'pre-run' ? state.signalQueues.preRunSignalsByThread : state.signalQueues.pendingSignalsByThread;
     const queue = signalsByThread.get(key);
     if (!queue || queue.length === 0) {
       return [];
@@ -7536,7 +7542,10 @@ export class AgentThreadStreamRuntime {
 
     const currentRunId = activeRunId();
     // Pending input is not in saved history or a finished-step stream buffer.
-    for (const queue of [state.preRunSignalsByThread.get(key), state.pendingSignalsByThread.get(key)]) {
+    for (const queue of [
+      state.signalQueues.preRunSignalsByThread.get(key),
+      state.signalQueues.pendingSignalsByThread.get(key),
+    ]) {
       for (const signal of queue ?? []) {
         const chunk = this.#pendingUserMessageChunk(currentRunId ?? '', signal, 'pending');
         if (chunk) enqueuePresentation(chunk);
@@ -7878,7 +7887,7 @@ export class AgentThreadStreamRuntime {
   ): CancelQueuedAgentMessagesResult {
     const matches = (signal: CreatedAgentSignal) => signalIds === undefined || signalIds.has(signal.id);
     const cancelled = new Set<string>();
-    for (const queues of [state.preRunSignalsByThread, state.pendingSignalsByThread]) {
+    for (const queues of [state.signalQueues.preRunSignalsByThread, state.signalQueues.pendingSignalsByThread]) {
       const queue = queues.get(key);
       if (!queue) continue;
       const remaining = queue.filter(signal => {
@@ -8287,9 +8296,9 @@ export class AgentThreadStreamRuntime {
         if (scopeMismatch(runId)) return refuseScopes(runId);
         if (pendingAdmission?.runId === runId) {
           const pendingKey = key;
-          const queue = state.preRunSignalsByThread.get(key) ?? [];
+          const queue = state.signalQueues.preRunSignalsByThread.get(key) ?? [];
           queue.push(signal);
-          state.preRunSignalsByThread.set(key, queue);
+          state.signalQueues.preRunSignalsByThread.set(key, queue);
           this.#recordLocallyQueuedSignal(state, key, signal.id);
           this.#notifyPendingSignals(state, key, signal);
           const accepted = pendingAdmission.outcome.then(async admission => {
@@ -8352,9 +8361,9 @@ export class AgentThreadStreamRuntime {
           return { signal, accepted };
         }
         if (isLocalReservedRun) {
-          const queue = state.preRunSignalsByThread.get(key) ?? [];
+          const queue = state.signalQueues.preRunSignalsByThread.get(key) ?? [];
           queue.push(signal);
-          state.preRunSignalsByThread.set(key, queue);
+          state.signalQueues.preRunSignalsByThread.set(key, queue);
           this.#recordLocallyQueuedSignal(state, key, signal.id);
           this.#publishPendingUserMessage(pubsub, key, runId, signal, 'pending');
           this.#notifyPendingSignals(state, key, signal);
@@ -8565,7 +8574,7 @@ export class AgentThreadStreamRuntime {
           // Only discard the queue while this reservation still owns the slot —
           // a newer reservation's queued input must survive, and this attempt's
           // own senders discard their copies per signal when it settles.
-          state.preRunSignalsByThread.delete(reservedKey);
+          state.signalQueues.preRunSignalsByThread.delete(reservedKey);
         }
         state.threadKeysByRunId.delete(reservedRunId);
 
