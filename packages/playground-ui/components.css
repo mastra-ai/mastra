@@ -139,7 +139,7 @@
   & [stroke-opacity='0.7'] {
     --line-art-ink: color-mix(in srgb, currentColor 70%, var(--background));
   }
-  & [opacity='0.75'] {
+  & :is([stroke-opacity='0.75'], [opacity='0.75']) {
     --line-art-ink: color-mix(in srgb, currentColor 75%, var(--background));
   }
   & [stroke]:is([stroke-opacity], [opacity]) {

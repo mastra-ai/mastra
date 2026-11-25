@@ -17,7 +17,7 @@ const drawings = Object.entries(modules).flatMap(([file, exports]) =>
 );
 
 /** Steps of ink the `line-art` utility paints with an opaque color. */
-const lineArtSteps = ['0.35', '0.5', '0.7', '0.75'];
+const lineArtSteps = { 'stroke-opacity': ['0.35', '0.5', '0.7', '0.75'], opacity: ['0.5', '0.75'] };
 /** The colors `empty-state-art.css` defines, all opaque. */
 const sceneColor = 'var\\(--(?:line|face|detail|hole|packet|logo|smoke|muted|brand)\\)';
 const scenePaint = new RegExp(
@@ -47,8 +47,8 @@ describe('illustration paint', () => {
 
   it.each(drawings.filter(({ scene }) => !scene))('$name dims its lines only in line-art steps', ({ Art }) => {
     for (const shape of paintedShapes(Art)) {
-      for (const attribute of ['opacity', 'stroke-opacity']) {
-        expect([null, ...lineArtSteps], shape.outerHTML).toContain(shape.getAttribute(attribute));
+      for (const [attribute, steps] of Object.entries(lineArtSteps)) {
+        expect([null, ...steps], shape.outerHTML).toContain(shape.getAttribute(attribute));
       }
       expect(shape.getAttribute('fill-opacity'), shape.outerHTML).toBeNull();
     }

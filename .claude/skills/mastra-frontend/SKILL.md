@@ -66,7 +66,7 @@ A row that only shows a value, status or per-item actions is a `SettingsItem`, a
 Never make the lines or fills of a drawing transparent one by one (`stroke-opacity`, `fill-opacity`, `opacity` on a shape, or an alpha color such as `--border`): where two of them cross, meet or run along each other, they add up to a brighter spot. Paint every shape opaque and dim it one of these ways:
 
 - **The surface is known** (the drawing has its own opaque faces): mix the ink into that surface, like `--line` in `empty-state-art.css`: `color-mix(in srgb, oklch(var(--fill-tint) 0 0) var(--border-strong-alpha), <surface>)`.
-- **Line drawing on `fill-background` plates** (`EmptyStateIllustration`): put `line-art` on the `<svg>`. It paints the 0.35, 0.5, 0.7 and 0.75 ink steps opaque.
+- **Line drawing on `fill-background` plates** (`EmptyStateIllustration`): put `line-art` on the `<svg>`. It paints the 0.35, 0.5, 0.7 and 0.75 `stroke-opacity` steps (and `opacity` 0.5 and 0.75 on a shape) opaque.
 - **The surface is unknown** (`BillingIllustration`): draw in opaque grays inside a `<mask>` over one rect, or put one `opacity` on a group whose shapes are all opaque.
 
 A dim line that ends on or runs along a brighter one is drawn before it, or gets `mix-blend-mode: lighten` (`darken` in light). Shadow hatching under an object may stay translucent if its lines never cross. `illustration-paint.test.tsx` checks the Playground UI drawings. In review, zoom in at 2x on every crossing, in dark and light.
