@@ -2350,15 +2350,17 @@ describe('Agent client-side tools', () => {
 
     const resp = await agent.stream('hi');
 
-    // Capture error chunks
+    // Capture error chunks; the error is still delivered to onChunk before processing rejects
     let errorChunk: any = null;
-    await resp.processDataStream({
-      onChunk: async chunk => {
-        if (chunk.type === 'error') {
-          errorChunk = chunk;
-        }
-      },
-    });
+    await expect(
+      resp.processDataStream({
+        onChunk: async chunk => {
+          if (chunk.type === 'error') {
+            errorChunk = chunk;
+          }
+        },
+      }),
+    ).rejects.toThrow('API Error');
 
     // Verify error chunk was received
     expect(errorChunk).not.toBeNull();
