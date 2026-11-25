@@ -2817,6 +2817,16 @@ describe('custom provider routes', () => {
 
       expect(body.provider.lastCheck).toEqual({ at: expect.any(String), ok: true });
       expect((await ownList(userA))[0]!.lastCheck).toEqual(body.provider.lastCheck);
+
+      // A row saved before query strings were refused is never called.
+      const calls = endpoint.requests.length;
+      await seed.storage.ops.updateMany(
+        'user_custom_providers',
+        { provider_id: provider.id },
+        { url: `${endpoint.url}?a=1` },
+      );
+      expect((await postCheck(app, { previousId: provider.id })).status).toBe(400);
+      expect(endpoint.requests).toHaveLength(calls);
     });
 
     it('reuses the saved key and secret headers for a draft on the same origin', async () => {

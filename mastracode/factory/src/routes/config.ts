@@ -552,6 +552,17 @@ interface CustomProviderBodyError {
   message?: string;
 }
 
+const QUERY_OR_FRAGMENT_REFUSED = 'url must not have a query string or fragment';
+
+/**
+ * Whether a base URL carries a query string or fragment. Request paths are
+ * appended to it as text, so `/models` and `/chat/completions` would land
+ * inside the query and call another path.
+ */
+function hasQueryOrFragment(url: string): boolean {
+  return url.includes('?') || url.includes('#');
+}
+
 /** Read `url`, `apiKey`, `authScheme` and `headers` from a save or check body. */
 function parseConnectionFields(b: Record<string, unknown>): CustomProviderSettingsDraft | CustomProviderBodyError {
   const url = typeof b.url === 'string' ? b.url.trim() : '';
@@ -564,9 +575,7 @@ function parseConnectionFields(b: Record<string, unknown>): CustomProviderSettin
   } catch {
     return { error: 'url must be a valid URL' };
   }
-  // Request paths are appended to the base URL as text, so a query string or
-  // fragment would send `/models` and `/chat/completions` somewhere else.
-  if (url.includes('?') || url.includes('#')) return { error: 'url must not have a query string or fragment' };
+  if (hasQueryOrFragment(url)) return { error: QUERY_OR_FRAGMENT_REFUSED };
   const apiKey = typeof b.apiKey === 'string' && b.apiKey.trim() ? b.apiKey.trim() : undefined;
   if (b.authScheme !== undefined && !isCustomProviderAuthScheme(b.authScheme)) {
     return { error: 'authScheme must be "bearer" or "x-api-key"' };
@@ -1766,6 +1775,9 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             // keeps every saved setting. Such a request always names a row,
             // and a missing one was answered with a 404 above.
             const draft = parsed.kind === 'draft' ? parsed.draft : { url: saved!.url };
+            // A row saved before this rule may still hold such a URL. It stays as
+            // saved, but is never called.
+            if (hasQueryOrFragment(draft.url)) return c.json({ error: QUERY_OR_FRAGMENT_REFUSED }, 400);
             const urlProblem = customEndpointUrlProblem(draft.url);
             if (urlProblem) return c.json({ error: 'custom_endpoint_url_refused', message: urlProblem }, 400);
             const resolved = customProviderConnection(saved, draft);
