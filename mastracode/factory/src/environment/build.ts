@@ -210,6 +210,17 @@ export const UNRESOLVED_BUILD_START_TIMEOUT_MS = MAX_BUILD_WAIT_MS;
 /** Tries at recording a started build before the run leaves its lease to lapse. */
 const RECORD_ATTEMPTS = 5;
 
+/** Whether a push or session build already started inside the project's debounce window. */
+export function environmentBuildDebounced(
+  project: Pick<FactoryProject, 'lastPushBuildAt' | 'buildPushDebounceMinutes'>,
+  at: Date,
+): boolean {
+  return (
+    project.lastPushBuildAt !== null &&
+    at.getTime() - project.lastPushBuildAt.getTime() < project.buildPushDebounceMinutes * 60_000
+  );
+}
+
 /**
  * Start a build for `projectId` when `trigger` calls for one. Every trigger
  * takes the project's build-start lease before reading build state and renews
@@ -221,7 +232,8 @@ const RECORD_ATTEMPTS = 5;
  * `manual` otherwise always builds. A `push` that would build then takes the
  * leading-edge debounce claim, so only a push that starts a build opens the
  * window. `session` (a session's sandbox started from the built template)
- * follows the same rules as `push` and shares its window. `settings` (a saved environment change) builds only once the
+ * follows the same rules as `push` and shares its window. `settings` (a
+ * saved environment change) builds only once the
  * project has a template and the template inputs differ from the last
  * build's, whatever the heads; it skips as `no_template` before the first
  * build, and saving the same inputs twice skips as `unchanged`.
@@ -242,17 +254,6 @@ const RECORD_ATTEMPTS = 5;
  * to lapse rather than released, and a run that lost its lease while the
  * provider started yields `failed` (`superseded`); neither is polled or pinned.
  */
-/** Whether a push or session build already started inside the project's debounce window. */
-export function environmentBuildDebounced(
-  project: Pick<FactoryProject, 'lastPushBuildAt' | 'buildPushDebounceMinutes'>,
-  at: Date,
-): boolean {
-  return (
-    project.lastPushBuildAt !== null &&
-    at.getTime() - project.lastPushBuildAt.getTime() < project.buildPushDebounceMinutes * 60_000
-  );
-}
-
 export async function runEnvironmentBuild(
   deps: EnvironmentBuildDeps,
   input: { projectId: string; trigger: EnvironmentBuildTrigger },
