@@ -2,7 +2,7 @@
 // fail the check that every typed event type has a runtime list.
 import { expectTypeOf } from 'vitest';
 
-import { ConnectEvents } from '../../src/index.js';
+import { ConnectEvents, ConnectEventWorker } from '../../src/index.js';
 
 declare module '../../src/event-payloads/index.js' {
   interface ConnectEventPayloads {
@@ -39,3 +39,17 @@ for await (const event of new ConnectEvents({ events: { github: true } })) {
 for await (const event of new ConnectEvents({ events: { github: ['brand_new.created'] } })) {
   expectTypeOf(event.payload.brandNew).toEqualTypeOf<true>();
 }
+
+// The same goes for ConnectEventWorker handlers.
+new ConnectEventWorker({
+  acme: ({ event }) => {
+    expectTypeOf(event.payload).toBeUnknown();
+  },
+});
+new ConnectEventWorker({
+  acme: {
+    'order.created': ({ event }) => {
+      expectTypeOf(event.payload.orderId).toBeString();
+    },
+  },
+});

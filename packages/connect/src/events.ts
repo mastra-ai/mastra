@@ -204,9 +204,9 @@ export type TypedEventsOf<P extends ConnectEventProvider, E> =
 export type KnownConnectEvent = { [P in ConnectEventProvider]: ConnectEventOf<P> }[ConnectEventProvider];
 
 /**
- * A provider event from a project's `connect` topic. `ConnectEvents` and
- * `ConnectEventSignals` deliver the {@link FilteredConnectEvent} their
- * `events` option selects, so checking
+ * A provider event from a project's `connect` topic. `ConnectEvents`,
+ * `ConnectEventSignals` and `ConnectEventWorker` handlers get the
+ * {@link FilteredConnectEvent} their events filter selects, so checking
  * `provider` and `eventType` narrows the payload.
  */
 export type ConnectEvent = KnownConnectEvent | UntypedConnectEvent;
