@@ -51,6 +51,13 @@ describe('illustration paint', () => {
         expect([null, ...steps], shape.outerHTML).toContain(shape.getAttribute(attribute));
       }
       expect(shape.getAttribute('fill-opacity'), shape.outerHTML).toBeNull();
+      // `line-art` repaints only a shape's own stroke or fill, not an inherited one.
+      if (shape.hasAttribute('stroke-opacity')) expect(shape.hasAttribute('stroke'), shape.outerHTML).toBe(true);
+      if (shape.hasAttribute('opacity')) {
+        expect(shape.hasAttribute('stroke') || shape.getAttribute('fill') === 'currentColor', shape.outerHTML).toBe(
+          true,
+        );
+      }
     }
   });
 
