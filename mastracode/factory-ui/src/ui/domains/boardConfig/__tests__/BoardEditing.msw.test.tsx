@@ -437,6 +437,12 @@ describe("Editing a phase's outcomes", () => {
     const label = screen.getByRole('textbox', { name: 'Fixing outcome 2 label' });
     await user.clear(label);
     await user.type(label, 'Fix shipped');
+    // Point the first outcome at Fixed instead, then back, through the target picker.
+    await user.click(screen.getByRole('combobox', { name: 'Fixing outcome reported goes to' }));
+    await user.click(await screen.findByRole('option', { name: 'Fixed' }));
+    expect(screen.getByRole('combobox', { name: 'Fixing outcome reported goes to' })).toHaveTextContent('→ Fixed');
+    await user.click(screen.getByRole('combobox', { name: 'Fixing outcome reported goes to' }));
+    await user.click(await screen.findByRole('option', { name: 'Reported' }));
     // Every move already has an outcome, so a new one reuses the first under a free key; it goes again.
     await user.click(screen.getByRole('button', { name: 'Add outcome' }));
     expect(screen.getByRole('textbox', { name: 'Fixing outcome 3 key' })).toHaveValue('reported-2');
