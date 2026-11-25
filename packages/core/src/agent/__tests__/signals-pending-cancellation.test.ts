@@ -3340,6 +3340,14 @@ describe('Agent signals: pending cancellation', () => {
       });
       let held = false;
       const probeSeqs: number[] = [];
+      const race = Promise.race.bind(Promise);
+      const waits = new Map<unknown, number>();
+      // Counts the awaited promise of each race, not its deadline.
+      const raceSpy = vi.spyOn(Promise, 'race').mockImplementation(((values: Iterable<unknown>) => {
+        const [awaited] = values;
+        waits.set(awaited, (waits.get(awaited) ?? 0) + 1);
+        return race(values);
+      }) as typeof Promise.race);
       try {
         // The follower's own run of a second message keeps the thread; the admission of a third message into it
         // (its pending announcement) retries its append until the test lets it land, and the probes the follower sends meanwhile wait behind it.
@@ -3374,24 +3382,28 @@ describe('Agent signals: pending cancellation', () => {
           .accepted.catch(() => {});
         await vi.waitFor(() => expect(held).toBe(true));
         // Every wait on a promise that has not settled stays attached to it, so count how often each is waited on.
-        const race = Promise.race.bind(Promise);
-        const waits = new Map<unknown, number>();
-        const raceSpy = vi.spyOn(Promise, 'race').mockImplementation(((values: Iterable<unknown>) => {
-          for (const value of values) waits.set(value, (waits.get(value) ?? 0) + 1);
-          return race(values);
-        }) as typeof Promise.race);
         for (let tick = 0; tick < 12; tick++) await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS);
         raceSpy.mockRestore();
         expect(probeSeqs).toEqual([]);
-        // The probe stuck behind the append is waited on once, not again on every retry.
-        expect(Math.max(0, ...waits.values())).toBe(1);
+        // The probe stuck behind the append is the one raced promise still pending; it was waited on once, not again
+        // on every retry.
+        const pending = Symbol('pending');
+        const stillPending: unknown[] = [];
+        for (const value of waits.keys()) {
+          if ((await race([value, Promise.resolve(pending)]).catch(() => undefined)) === pending)
+            stillPending.push(value);
+        }
+        expect(stillPending).toHaveLength(1);
+        expect(waits.get(stillPending[0])).toBe(1);
+        expect(Math.max(...waits.values())).toBe(1);
         releaseAppend();
         await vi.waitFor(() => expect(probeSeqs.length).toBeGreaterThan(0));
         await pubsub.flush();
         await vi.advanceTimersByTimeAsync(0);
-        // Every retry behind the append waited on the one probe already there: one probe left, the first made.
+        // Every retry behind the append joined the one probe already there: one probe left, the first made.
         expect(probeSeqs).toEqual([1]);
       } finally {
+        raceSpy.mockRestore();
         releaseAppend();
         releaseC();
         pubsub.publish = publish;
