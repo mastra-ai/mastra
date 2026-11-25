@@ -390,7 +390,7 @@ describe('memory-recalled messages in durable runs', () => {
       const running = persisted.slice(1).filter(row => row.snapshot.status === 'running');
       expect(copyPaths(persisted[0]!.snapshot, fileData).length).toBeGreaterThan(0);
       expect(running.length).toBeGreaterThan(0);
-      expect(running.some(row => refIds(row.snapshot).includes(inputId!))).toBe(true);
+      expect(running.some(row => refIds(row.snapshot, engine).includes(inputId!))).toBe(true);
       expect(running.flatMap(row => copyPaths(row.snapshot, marker))).toEqual([]);
       expect(running.flatMap(row => copyPaths(row.snapshot, fileData))).toEqual([]);
     },
