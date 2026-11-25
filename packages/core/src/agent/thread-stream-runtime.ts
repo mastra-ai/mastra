@@ -1248,15 +1248,17 @@ export class AgentThreadStreamRuntime {
     const previousOwner = parseThreadLeaseOwner(lease.owner);
     if (
       !lease.acquired &&
-      previousOwner &&
-      previousOwner[0] !== runId &&
-      (previousOwner[1] === 'generation' || previousOwner[1] === 'execution')
+      (lease.owner === undefined ||
+        (previousOwner &&
+          previousOwner[0] !== runId &&
+          (previousOwner[1] === 'generation' || previousOwner[1] === 'execution')))
     ) {
-      // A shared evented worker can publish finish before its terminal delivery releases
-      // the thread. Give that execution time to settle, but don't wait behind a new owner.
+      // A shared evented worker can publish finish before releasing the thread. An
+      // ownerless failure can mean the lease disappeared between the claim and owner lookup.
+      // Retry within the same deadline, but don't wait behind a new owner.
       const blockingOwner = lease.owner;
       const deadline = Date.now() + DURABLE_THREAD_CLAIM_WAIT_MS;
-      while (!lease.acquired && lease.owner === blockingOwner) {
+      while (!lease.acquired && (lease.owner === undefined || lease.owner === blockingOwner)) {
         const remaining = deadline - Date.now();
         if (remaining <= 0) break;
         await new Promise(resolve => setTimeout(resolve, Math.min(remaining, DURABLE_THREAD_CLAIM_POLL_MS)));
