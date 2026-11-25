@@ -3,7 +3,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import type { CustomProviderCheckFailure, CustomProviderModelTestResult } from '../../../../api/types';
 
-/** The last connection test the form ran, from Test or from a refused Test & save. */
+/** The last connection test the form ran, from Test, Send test message or a refused Test & save. */
 export type ConnectionOutcome =
   | { ok: true; models: string[]; latencyMs: number }
   | { ok: false; failure: CustomProviderCheckFailure; refusedSave: boolean };
@@ -23,8 +23,11 @@ function FailureDetail({ detail }: { detail: string | undefined }) {
   );
 }
 
-/** Says a result was produced for settings the user has since changed, instead of showing it as current. */
-function OutdatedResult() {
+/**
+ * Stands in for results produced with settings the user has since changed, instead of showing them as current.
+ * The form renders one, however many results are out of date.
+ */
+export function OutdatedResult() {
   return (
     <Notice variant="note" role="status">
       The settings changed after the last test. Test again to check them.
@@ -32,9 +35,8 @@ function OutdatedResult() {
   );
 }
 
-/** The outcome of the last connection test, or a note when the fields no longer match it. */
-export function ConnectionCheckResult({ outcome, outdated }: { outcome: ConnectionOutcome; outdated: boolean }) {
-  if (outdated) return <OutdatedResult />;
+/** The outcome of the last connection test that still matches the fields. */
+export function ConnectionCheckResult({ outcome }: { outcome: ConnectionOutcome }) {
   if (outcome.ok) {
     const count = outcome.models.length;
     return (
@@ -59,16 +61,7 @@ export function ConnectionCheckResult({ outcome, outdated }: { outcome: Connecti
 }
 
 /** The reply to the test message, or why the model call failed. */
-export function ModelTestResult({
-  model,
-  result,
-  outdated,
-}: {
-  model: string;
-  result: CustomProviderModelTestResult;
-  outdated: boolean;
-}) {
-  if (outdated) return <OutdatedResult />;
+export function ModelTestResult({ model, result }: { model: string; result: CustomProviderModelTestResult }) {
   if (!result.ok) {
     return (
       <div ref={revealResult}>

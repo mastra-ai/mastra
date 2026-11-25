@@ -82,21 +82,57 @@ function isBlankHeader(header: HeaderDraft): boolean {
   return !header.name.trim() && !header.value.trim();
 }
 
+/** A header input, so a problem can move focus to the control it is about. */
+export interface HeaderInputTarget {
+  key: string;
+  input: 'name' | 'value';
+}
+
+/** A header problem: what to tell the user, and the input it is about when one can be named. */
+export interface HeaderProblem {
+  message: string;
+  target?: HeaderInputTarget;
+}
+
+/** The DOM id of a header row's input, shared by the editor that renders it and the form that focuses it. */
+export function headerInputId({ key, input }: HeaderInputTarget): string {
+  return `custom-provider-${key}-${input}`;
+}
+
 /**
  * Why the headers cannot be sent yet, checked before the server would refuse them. Name syntax, reserved names
  * and duplicates are left to the server, which owns those rules.
  */
-export function headerDraftProblem(headers: HeaderDraft[]): string | undefined {
+export function headerDraftProblem(headers: HeaderDraft[]): HeaderProblem | undefined {
   for (const [index, header] of headers.entries()) {
     if (isBlankHeader(header)) continue;
     const name = header.name.trim();
-    if (!name) return `Enter a name for header ${index + 1}.`;
+    if (!name) return { message: `Enter a name for header ${index + 1}.`, target: { key: header.key, input: 'name' } };
     if (header.value.trim() || keepsSavedSecret(header)) continue;
+    const target: HeaderInputTarget = { key: header.key, input: 'value' };
     // The server keeps a saved secret value only while the header stays secret.
-    if (namesSavedSecret(header)) return `Enter a value for ${name} to make it plain.`;
-    return `Enter a value for ${name}.`;
+    if (namesSavedSecret(header)) return { message: `Enter a value for ${name} to make it plain.`, target };
+    return { message: `Enter a value for ${name}.`, target };
   }
   return undefined;
+}
+
+/**
+ * The input a header refusal from the server is about, when the draft lets it be told. A missing value can only
+ * be a row sent without one, which is a kept secret value; a refused header is the row its message names.
+ */
+export function serverHeaderProblemTarget(
+  code: 'header_refused' | 'header_value_required',
+  message: string,
+  headers: HeaderDraft[],
+): HeaderInputTarget | undefined {
+  if (code === 'header_value_required') {
+    const unsent = headers.find(header => header.name.trim() && !header.value.trim());
+    return unsent && { key: unsent.key, input: 'value' };
+  }
+  const lowered = message.toLowerCase();
+  const named = headers.find(header => header.name.trim() && lowered.includes(header.name.trim().toLowerCase()));
+  return named && { key: named.key, input: 'name' };
 }
 
 /**
