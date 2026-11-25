@@ -1365,10 +1365,9 @@ export class SessionThread {
     if (!sourceId) {
       throw new Error('No source thread to branch');
     }
-    // Only allow branching from a source thread this session owns.
-    if (this.#store?.hasStorage()) {
-      await this.#requireOwnedThread({ threadId: sourceId });
-    }
+    // Only allow branching from a source thread this session owns. Ownership falls back to the
+    // caller's memory, so this also holds for memory-only controllers.
+    await this.#requireOwnedThread({ threadId: sourceId });
     return this.#branchThread({ sourceThreadId: sourceId, branchPointMessageId, title, metadata });
   }
 
@@ -1423,10 +1422,8 @@ export class SessionThread {
   async getParent({ threadId }: { threadId?: string } = {}): Promise<AgentControllerThread | null> {
     const targetId = threadId ?? this.#threadId;
     if (!this.#store || !targetId) return null;
-    // Only expose lineage for threads this session owns.
-    if (this.#store.hasStorage()) {
-      await this.#requireOwnedThread({ threadId: targetId });
-    }
+    // Only expose lineage for threads this session owns, with or without controller storage.
+    await this.#requireOwnedThread({ threadId: targetId });
     return this.#store.getThreadParent({ threadId: targetId });
   }
 
@@ -1458,10 +1455,8 @@ export class SessionThread {
     if (!this.#store || !targetId) {
       return { total: 0, page: 0, perPage: false, hasMore: false, branches: [] };
     }
-    // Only expose lineage for threads this session owns.
-    if (this.#store.hasStorage()) {
-      await this.#requireOwnedThread({ threadId: targetId });
-    }
+    // Only expose lineage for threads this session owns, with or without controller storage.
+    await this.#requireOwnedThread({ threadId: targetId });
     return this.#store.listThreadBranches({ threadId: targetId, page, perPage });
   }
 

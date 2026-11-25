@@ -123,6 +123,41 @@ describe('AgentController thread branching', () => {
     expect(branchThread).not.toHaveBeenCalled();
   });
 
+  it("rejects branch and lineage reads on another resource's thread when the controller has only memory", async () => {
+    const memoryStorage = new InMemoryStore();
+    const branchThread = vi.fn();
+    const getThreadParent = vi.fn().mockResolvedValue(null);
+    const listThreadBranches = vi
+      .fn()
+      .mockResolvedValue({ total: 0, page: 0, perPage: false, hasMore: false, branches: [] });
+    const memoryFactory = vi.fn().mockResolvedValue(
+      await mockMemory(memoryStorage, {
+        supportsThreadBranching: true,
+        branchThread,
+        getThreadParent,
+        listThreadBranches,
+      }),
+    );
+    const controller = createController({ memory: memoryFactory });
+
+    await controller.init();
+    await saveThread(memoryStorage, 'foreign-thread-id', 'other-resource');
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+
+    await expect(
+      session.thread.branch({ sourceThreadId: 'foreign-thread-id', branchPointMessageId: 'fork-message-id' }),
+    ).rejects.toThrow('Thread not found: foreign-thread-id');
+    await expect(session.thread.getParent({ threadId: 'foreign-thread-id' })).rejects.toThrow(
+      'Thread not found: foreign-thread-id',
+    );
+    await expect(session.thread.listBranches({ threadId: 'foreign-thread-id' })).rejects.toThrow(
+      'Thread not found: foreign-thread-id',
+    );
+    expect(branchThread).not.toHaveBeenCalled();
+    expect(getThreadParent).not.toHaveBeenCalled();
+    expect(listThreadBranches).not.toHaveBeenCalled();
+  });
+
   it('throws BRANCHING_UNSUPPORTED when the configured memory has no branch support', async () => {
     const storage = new InMemoryStore();
     const memoryFactory = vi.fn().mockResolvedValue(await mockMemory(storage, { cloneThread: vi.fn() }));
