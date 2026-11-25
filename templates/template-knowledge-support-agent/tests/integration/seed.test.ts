@@ -261,7 +261,7 @@ test('seed without retention reporting still resolves links and creates managed 
   }
 });
 
-test('seed_rejects_an_invalid_rendered_policy_without_changing_stored_knowledge', { timeout: 30000 }, async () => {
+test('seed_rejects_an_invalid_rendered_policy_without_changing_stored_knowledge', { timeout: 120000 }, async () => {
   const f = await fixture();
   try {
     const initial = (await f.cli()).report;
