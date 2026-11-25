@@ -6,7 +6,6 @@ import {
   TRACE_AGGREGATE_DEFAULT_LIMIT,
   TRACE_AGGREGATE_MAX_ROWS,
 } from '@mastra/core/storage';
-import type { TraceAggregateInterval } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 import { kpisIssues } from '../kinds/kpis/options';
 import type { KpisOptions } from '../kinds/kpis/options';
@@ -199,7 +198,10 @@ describe('buildRequest', () => {
     const week = { start: new Date('2026-10-21T12:00:00Z'), end: window.end };
     const weekPage: DashboardPageContext = { ...page, window: week, filters: { timestamp: week } };
     const rowsOf = (request: DashboardRequest) => {
-      const { limit, interval } = request.args as { limit?: number; interval?: TraceAggregateInterval };
+      if (request.method !== 'aggregateTraces' && request.method !== 'aggregateSpans') {
+        throw new Error('not a trace or span request');
+      }
+      const { limit, interval } = request.args;
       if (limit === undefined || interval === undefined) throw new Error('no limit or interval');
       return limit * countTraceAggregateBuckets(week.start.getTime(), week.end.getTime(), interval);
     };
