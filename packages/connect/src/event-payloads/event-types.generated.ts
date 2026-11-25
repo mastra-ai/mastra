@@ -491,5 +491,5 @@ export const connectEventTypes = {
     'zen:event-type:user.deleted',
   ],
 } as const satisfies {
-  readonly [P in keyof ConnectEventPayloads]: readonly Extract<keyof ConnectEventPayloads[P], string>[];
+  readonly [P in keyof ConnectEventPayloads]?: readonly Extract<keyof ConnectEventPayloads[P], string>[];
 };

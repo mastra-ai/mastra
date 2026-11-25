@@ -47,8 +47,9 @@ export interface ElevenLabsWebhookCallInitiationFailure {
 export interface ElevenLabsWebhookSipFailure {
   type: 'sip';
   body: {
-    from_number: number;
-    to_number: number;
+    /** Numbers in ElevenLabs' field table; its example sends `+`-prefixed strings. */
+    from_number: string | number;
+    to_number: string | number;
     sip_status_code: number;
     error_reason: string;
     call_sid: string;

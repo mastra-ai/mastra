@@ -126,8 +126,10 @@ export interface GitlabPushHook {
   after: string;
   ref: string;
   ref_protected: boolean;
-  checkout_sha: string;
-  message: string;
+  /** Null when the push deletes the branch. */
+  checkout_sha: string | null;
+  /** Null when GitLab omits the message, as for some generated pushes. */
+  message: string | null;
   user_id: number;
   user_name: string;
   user_username: string;

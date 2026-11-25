@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { resolveClient, stripTrailingSlashes } from './client.js';
 import type { ConnectClientOptions, ResolvedClient } from './client.js';
 import { MastraConnectError, parseRetryAfterMs } from './errors.js';
-import { selectsConnectEvent } from './event-filter.js';
+import { connectEventSelector } from './event-filter.js';
 import type { ConnectEventFilter, ConnectEventFilterOptions, FilteredConnectEvent } from './event-filter.js';
 import type { ConnectEventPayloads } from './event-payloads/index.js';
 
@@ -145,7 +145,10 @@ export interface UntypedConnectEvent extends ConnectEventEnvelope {
   eventType: string;
   /** The raw provider body, parsed from JSON. */
   payload: unknown;
-  /** Set when `payload` was not valid JSON; `payload` is then the raw string. */
+  /**
+   * Set when the payload was missing or not valid JSON; `payload` is then
+   * the raw string, or `null` when missing.
+   */
   payloadParseError?: true;
   /**
    * True when the platform could not verify the provider's signature. Never
@@ -185,7 +188,16 @@ export interface TypedConnectEvent<
  * The typed events of provider `P` and event types `E`, one union member
  * per event type, so checking `eventType` narrows `payload`.
  */
-export type ConnectEventOf<P extends ConnectEventProvider, E extends ConnectEventType<P> = ConnectEventType<P>> =
+export type ConnectEventOf<
+  P extends ConnectEventProvider,
+  E extends AnyEventType<P> = AnyEventType<P>,
+> = P extends ConnectEventProvider ? TypedEventsOf<P, Extract<E, ConnectEventType<P>>> : never;
+
+/** The event types of each provider in `P`. */
+type AnyEventType<P extends ConnectEventProvider> = P extends ConnectEventProvider ? ConnectEventType<P> : never;
+
+/** @internal `ConnectEventOf` for one provider, without checking `E`. */
+export type TypedEventsOf<P extends ConnectEventProvider, E> =
   E extends ConnectEventType<P> ? TypedConnectEvent<P, E> : never;
 
 /** Every typed event, discriminated by `provider` and then `eventType`. */
@@ -692,12 +704,12 @@ export class ConnectEvents<
   U extends boolean = false,
 > implements AsyncIterable<FilteredConnectEvent<F, U>> {
   readonly #subscription: EventSubscription;
-  readonly #filter: ConnectEventFilterOptions<ConnectEventFilter | undefined, boolean>;
+  readonly #select: (event: ConnectEvent) => boolean;
   #iterating = false;
 
   constructor(options: ConnectEventsOptions<F, U> = {}) {
     const { after, afterTimestamp, cursorStore, onGap, signal, events, includeUnverified, ...clientOptions } = options;
-    this.#filter = { events, includeUnverified };
+    this.#select = connectEventSelector({ events, includeUnverified });
     this.#subscription = new EventsClient(clientOptions).subscribe(CONNECT_TOPIC, {
       after,
       afterTimestamp,
@@ -736,10 +748,9 @@ export class ConnectEvents<
       );
     }
     this.#iterating = true;
-    const filter = this.#filter;
-    return mapEvents(this.#subscription[Symbol.asyncIterator](), event =>
-      selectsConnectEvent(filter, event),
-    ) as AsyncIterator<FilteredConnectEvent<F, U>>;
+    return mapEvents(this.#subscription[Symbol.asyncIterator](), this.#select) as AsyncIterator<
+      FilteredConnectEvent<F, U>
+    >;
   }
 }
 
@@ -768,7 +779,8 @@ function toConnectEvent(event: TopicEvent): ConnectEvent {
   const { fields } = event;
   const raw = fields.payload;
   let payload: unknown = null;
-  let payloadParseError = false;
+  // A missing payload isn't valid JSON either, so it isn't delivered as typed.
+  let payloadParseError = raw === undefined;
   if (raw !== undefined) {
     try {
       payload = JSON.parse(raw);

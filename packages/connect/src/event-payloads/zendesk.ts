@@ -31,7 +31,8 @@ export interface ZendeskWebhook<Type extends string, Detail, Event> {
 
 /** Where a ticket event falls among the events of one change. */
 export interface ZendeskEventMeta {
-  sequence: { id: number; position: number };
+  /** Zendesk's field table says number, but its examples send strings too. */
+  sequence: { id: string | number; position: number };
 }
 
 type ZendeskChange<Value> = { current: Value; previous: Value; meta: ZendeskEventMeta };
@@ -96,7 +97,7 @@ export interface ZendeskComment {
 }
 
 type TicketEvent<Type extends string, Event> = ZendeskWebhook<`ticket.${Type}`, ZendeskTicketDetail, Event>;
-type TicketChange<Type extends string> = TicketEvent<Type, ZendeskChange<string | null>>;
+type TicketChange<Type extends string, Value = string | null> = TicketEvent<Type, ZendeskChange<Value>>;
 type Meta = { meta: ZendeskEventMeta };
 
 /** Zendesk webhook payloads by Connect event type: the body's `type`. */
@@ -111,14 +112,15 @@ export interface ZendeskWebhookPayloads {
     ZendeskOrganizationDetail,
     Record<string, never>
   >;
-  'zen:event-type:ticket.agent_assignment_changed': TicketChange<'agent_assignment_changed'>;
+  /** Agent and group ids: numbers in Zendesk's field table, strings in its examples. */
+  'zen:event-type:ticket.agent_assignment_changed': TicketChange<'agent_assignment_changed', string | number | null>;
   'zen:event-type:ticket.comment_added': TicketEvent<'comment_added', Meta & { comment: ZendeskComment }>;
   'zen:event-type:ticket.created': TicketEvent<'created', Meta>;
   'zen:event-type:ticket.custom_status_changed': TicketChange<'custom_status_changed'>;
-  'zen:event-type:ticket.group_assignment_changed': TicketChange<'group_assignment_changed'>;
+  'zen:event-type:ticket.group_assignment_changed': TicketChange<'group_assignment_changed', string | number | null>;
   'zen:event-type:ticket.merged': TicketEvent<
     'merged',
-    Meta & { /** The ticket this one was merged into. */ target_ticket_id: string }
+    Meta & { /** The ticket this one was merged into. */ target_ticket_id: string | number }
   >;
   'zen:event-type:ticket.priority_changed': TicketChange<'priority_changed'>;
   'zen:event-type:ticket.soft_deleted': TicketEvent<'soft_deleted', Meta>;

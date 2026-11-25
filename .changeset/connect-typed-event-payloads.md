@@ -16,7 +16,7 @@ for await (const event of new ConnectEvents({ events: { github: ['pull_request.o
 }
 ```
 
-A provider with typed payloads only delivers the event types Connect has types for, and only payloads that parsed as JSON, so every event it delivers has a typed payload. Unverified events are dropped unless `includeUnverified` is set. To type another provider's events, extend the `ConnectEventPayloads` interface with `declare module '@mastra/connect'`. To type more events of a typed provider, extend its map, such as `SlackWebhookPayloads`, the same way, and list the new event type in `events`.
+A provider with typed payloads only delivers the event types Connect has types for, and only payloads that parsed as JSON, so every event it delivers has a typed payload. Unverified events are dropped unless `includeUnverified` is set. An event with no payload is treated like one that didn't parse. To type another provider's events, extend the `ConnectEventPayloads` interface with `declare module '@mastra/connect'` and list its event types in `events`; `true` delivers all of such a provider's events, untyped. To type more events of a typed provider, extend its map, such as `SlackWebhookPayloads`, the same way, and list the new event type in `events`.
 
 **Breaking:** `ConnectEvents` now drops unverified events unless `includeUnverified` is set, and drops event types of a typed provider that Connect has no type for unless they are listed in `events`. `ConnectEvent`'s `integrationId` field is renamed to `provider`, and the `ConnectEventIntegration` type to `ConnectEventProvider`:
 

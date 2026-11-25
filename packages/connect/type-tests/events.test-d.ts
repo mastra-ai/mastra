@@ -182,3 +182,12 @@ expectTypeOf<'push'>().toExtend<ConnectEventType<'github'>>();
 // A typed event is still an untyped event, so handlers taking the raw shape
 // accept narrowed events.
 expectTypeOf<ConnectEventOf<'linear'>>().toExtend<UntypedConnectEvent>();
+
+// A union of providers gives each provider's events.
+declare const repoEvent: ConnectEventOf<'github' | 'gitlab'>;
+expectTypeOf(repoEvent.provider).toEqualTypeOf<'github' | 'gitlab'>();
+if (repoEvent.provider === 'gitlab' && repoEvent.eventType === 'Push Hook') {
+  expectTypeOf(repoEvent.payload.ref).toBeString();
+}
+// @ts-expect-error -- not a GitHub event type
+type Misspelled = ConnectEventOf<'github', 'pull_request.opend'>;

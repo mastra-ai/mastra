@@ -10,23 +10,25 @@
  * Run it after changing a payload map: `pnpm --filter @mastra/connect generate:event-types`.
  */
 import { spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const PACKAGE_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT_FILE = join(PACKAGE_DIR, 'src/event-payloads/event-types.generated.ts');
-const PROBE_FILE = join(PACKAGE_DIR, 'type-tests/event-types-probe.ts');
-const PROBE_CONFIG = join(PACKAGE_DIR, 'tsconfig.event-types-probe.json');
-
 /** Runs tsc on `source` and returns the keys of each probed object type, by probe name. */
 async function probe(source: string): Promise<Map<string, string[]>> {
-  await writeFile(PROBE_FILE, source);
-  await writeFile(PROBE_CONFIG, JSON.stringify({ extends: './tsconfig.json', include: [], files: [PROBE_FILE] }));
+  // Unique per call, so concurrent runs don't overwrite each other's probe.
+  const id = randomUUID();
+  const probeFile = join(PACKAGE_DIR, `type-tests/event-types-probe-${id}.ts`);
+  const probeConfig = join(PACKAGE_DIR, `tsconfig.event-types-probe-${id}.json`);
   try {
+    await writeFile(probeFile, source);
+    await writeFile(probeConfig, JSON.stringify({ extends: './tsconfig.json', include: [], files: [probeFile] }));
     const result = spawnSync(
       'pnpm',
-      ['exec', 'tsc', '--noEmit', '--noErrorTruncation', '--pretty', 'false', '-p', PROBE_CONFIG],
+      ['exec', 'tsc', '--noEmit', '--noErrorTruncation', '--pretty', 'false', '-p', probeConfig],
       {
         cwd: PACKAGE_DIR,
         encoding: 'utf8',
@@ -50,8 +52,8 @@ async function probe(source: string): Promise<Map<string, string[]>> {
     if (keys.size === 0) throw new Error(`tsc reported no keys:\n${output}`);
     return keys;
   } finally {
-    await rm(PROBE_FILE, { force: true });
-    await rm(PROBE_CONFIG, { force: true });
+    await rm(probeFile, { force: true });
+    await rm(probeConfig, { force: true });
   }
 }
 
@@ -85,7 +87,7 @@ import type { ConnectEventPayloads } from './index.js';
  */
 export const connectEventTypes = {
 ${entries.join('\n')}
-} as const satisfies { readonly [P in keyof ConnectEventPayloads]: readonly Extract<keyof ConnectEventPayloads[P], string>[] };
+} as const satisfies { readonly [P in keyof ConnectEventPayloads]?: readonly Extract<keyof ConnectEventPayloads[P], string>[] };
 `;
   const previous = await readFile(OUT_FILE, 'utf8').catch(() => undefined);
   await writeFile(OUT_FILE, code);

@@ -1096,9 +1096,15 @@ describe('ConnectEvents', () => {
       ['19', 'github', 'ping', { unverified: 'true' }],
       // A provider named like an Object.prototype member is just a provider.
       ['20', 'toString', 'x'],
+      // No payload at all, as from a delivery the platform couldn't read.
+      ['21', 'github', 'pull_request.opened', { payload: undefined }],
+      ['22', 'posthog', '$pageview', { payload: undefined }],
     ];
 
-    async function delivered(options: ConnectEventsOptions<ConnectEventFilter | undefined, boolean>) {
+    async function delivered(
+      options: ConnectEventsOptions<ConnectEventFilter | undefined, boolean>,
+      afterConstruct?: () => void,
+    ) {
       const s = await server([
         (_req, res) => {
           startStream(res);
@@ -1114,14 +1120,16 @@ describe('ConnectEvents', () => {
               }),
             );
           }
-          res.write(event('21', { connectionId: 'conn_1', integrationId: 'end', eventType: 'end', payload: '{}' }));
+          res.write(event('23', { connectionId: 'conn_1', integrationId: 'end', eventType: 'end', payload: '{}' }));
         },
       ]);
       const { saved, store } = memoryStore();
       const ids: string[] = [];
       // Every filter also takes the `end` event, so the loop knows the stream is done.
       const events = options.events && { ...options.events, end: true as const };
-      for await (const e of connectEvents(s.url, { ...options, events, cursorStore: store })) {
+      const subscription = connectEvents(s.url, { ...options, events, cursorStore: store });
+      afterConstruct?.();
+      for await (const e of subscription) {
         if (e.provider === 'end') break;
         ids.push(e.id);
       }
@@ -1130,7 +1138,7 @@ describe('ConnectEvents', () => {
 
     it('takes every verified event without a filter, but only typed events of a typed provider', async () => {
       // GitHub's `ping`, Slack's `channel_rename` and the unparsed GitHub event have no typed payload.
-      expect((await delivered({})).ids).toEqual(['11', '15', '16', '17', '20']);
+      expect((await delivered({})).ids).toEqual(['11', '15', '16', '17', '20', '22']);
     });
 
     it('delivers only typed, parsed events for `true` on a typed provider', async () => {
@@ -1138,7 +1146,30 @@ describe('ConnectEvents', () => {
     });
 
     it('takes every event of a provider without typed payloads for `true`', async () => {
-      expect((await delivered({ events: { posthog: true } })).ids).toEqual(['16', '17']);
+      expect((await delivered({ events: { posthog: true } })).ids).toEqual(['16', '17', '22']);
+    });
+
+    it('marks an event without a payload as unparsed', async () => {
+      const s = await server([
+        (_req, res) => {
+          startStream(res);
+          res.write(ready('10'));
+          res.write(event('11', { connectionId: 'conn_1', integrationId: 'posthog', eventType: '$pageview' }));
+        },
+      ]);
+      const [e] = await take(connectEvents(s.url, { events: { posthog: true } }), 1);
+      expect(e).toMatchObject({ payload: null, payloadParseError: true });
+    });
+
+    it('keeps the filter it was given, even if the caller changes it later', async () => {
+      const github: string[] = ['pull_request.closed'];
+      const filter = { github, posthog: true as boolean };
+      const { ids } = await delivered({ events: filter as ConnectEventFilter }, () => {
+        github.push('pull_request.opened');
+        filter.posthog = false;
+        Object.assign(filter, { slack: true });
+      });
+      expect(ids).toEqual(['15', '16', '17', '22']);
     });
 
     it('delivers only the listed, parsed event types', async () => {
@@ -1161,7 +1192,7 @@ describe('ConnectEvents', () => {
     it('saves skipped events as the cursor moves past them', async () => {
       const { ids, saved } = await delivered({ events: { posthog: ['$pageview'] } });
       expect(ids).toEqual(['16']);
-      expect(saved).toEqual(['11', '12', '13', '14', '15', '16', '17', '18', '19', '20']);
+      expect(saved).toEqual(['11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22']);
     });
   });
 

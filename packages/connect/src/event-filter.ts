@@ -1,12 +1,26 @@
 import { connectEventTypes } from './event-payloads/event-types.generated.js';
 import type {
   ConnectEvent,
-  ConnectEventOf,
   ConnectEventProvider,
   ConnectEventType,
-  KnownConnectEvent,
+  TypedEventsOf,
   UntypedConnectEvent,
 } from './events.js';
+
+type ShippedEventTypes = typeof connectEventTypes;
+
+/**
+ * The providers Connect ships payload types for. Only these are filtered by
+ * event type at runtime: a provider added with `declare module` isn't, so
+ * `true` treats it as untyped.
+ */
+type ShippedProvider = keyof ShippedEventTypes & ConnectEventProvider;
+
+/** The event types `true` delivers for a shipped provider. */
+type ShippedEventType<P extends ShippedProvider> = ShippedEventTypes[P][number];
+
+/** The typed events a provider delivers without listing event types. */
+type ShippedConnectEvent = { [P in ShippedProvider]: TypedEventsOf<P, ShippedEventType<P>> }[ShippedProvider];
 
 /**
  * Which providers' events to take: `true` for every event of a provider, or a
@@ -35,11 +49,11 @@ type UntypedEvent<P extends string, E extends string, U extends boolean> = Untyp
 
 type SelectedEvent<P extends string, S, U extends boolean> = S extends readonly (infer E extends string)[]
   ? P extends ConnectEventProvider
-    ? ConnectEventOf<P, Extract<E, ConnectEventType<P>>> | (U extends true ? UnverifiedEvent<P, E> : never)
+    ? TypedEventsOf<P, E> | (U extends true ? UnverifiedEvent<P, E> : never)
     : UntypedEvent<P, E, U> & { payloadParseError?: undefined }
   : S extends true
-    ? P extends ConnectEventProvider
-      ? ConnectEventOf<P> | (U extends true ? UnverifiedEvent<P, ConnectEventType<P>> : never)
+    ? P extends ShippedProvider
+      ? TypedEventsOf<P, ShippedEventType<P>> | (U extends true ? UnverifiedEvent<P, ShippedEventType<P>> : never)
       : UntypedEvent<P, string, U>
     : never;
 
@@ -59,7 +73,7 @@ export type FilteredConnectEvent<
   ? { [P in keyof F & string]: SelectedEvent<P, Exclude<F[P], undefined>, U> }[keyof F & string]
   : U extends true
     ? ConnectEvent
-    : KnownConnectEvent | (UntypedConnectEvent & { unverified: false });
+    : ShippedConnectEvent | (UntypedConnectEvent & { unverified: false });
 
 /** The filter options shared by `ConnectEvents` and `ConnectEventSignals`. */
 export interface ConnectEventFilterOptions<
@@ -71,7 +85,9 @@ export interface ConnectEventFilterOptions<
    *
    * A provider with typed payloads only delivers the event types Connect has
    * types for, and only payloads that parsed as JSON. To get an event type
-   * you added to `ConnectEventPayloads` yourself, list it.
+   * you added to `ConnectEventPayloads` yourself, list it. A provider you
+   * added yourself isn't filtered by event type, so `true` delivers all of
+   * its events, untyped; list its event types to get typed payloads.
    */
   events?: F;
   /**
@@ -86,15 +102,28 @@ const typedEventTypes = new Map<string, ReadonlySet<string>>(
   Object.entries(connectEventTypes).map(([provider, types]) => [provider, new Set<string>(types)]),
 );
 
-/** Whether `filter` selects `event`. See {@link ConnectEventFilterOptions}. */
-export function selectsConnectEvent(
-  { events: filter, includeUnverified }: ConnectEventFilterOptions<ConnectEventFilter | undefined, boolean>,
-  event: ConnectEvent,
-): boolean {
-  if (event.unverified && !includeUnverified) return false;
-  const selected = !filter ? true : Object.hasOwn(filter, event.provider) ? filter[event.provider] : undefined;
-  if (!selected) return false;
-  if (selected !== true) return !event.payloadParseError && selected.includes(event.eventType);
-  const typed = typedEventTypes.get(event.provider);
-  return !typed || (!event.payloadParseError && typed.has(event.eventType));
+/**
+ * Returns whether the filter options select an event. See
+ * {@link ConnectEventFilterOptions}. The filter is copied, so changing it
+ * afterwards can't deliver events its type doesn't describe.
+ */
+export function connectEventSelector({
+  events,
+  includeUnverified,
+}: ConnectEventFilterOptions<ConnectEventFilter | undefined, boolean>): (event: ConnectEvent) => boolean {
+  const filter =
+    events &&
+    new Map<string, true | ReadonlySet<string>>(
+      Object.entries(events).flatMap(([provider, selected]): [string, true | ReadonlySet<string>][] =>
+        selected === true ? [[provider, true]] : selected ? [[provider, new Set(selected)]] : [],
+      ),
+    );
+  return event => {
+    if (event.unverified && !includeUnverified) return false;
+    const selected = filter ? filter.get(event.provider) : true;
+    if (!selected) return false;
+    if (selected !== true) return !event.payloadParseError && selected.has(event.eventType);
+    const typed = typedEventTypes.get(event.provider);
+    return !typed || (!event.payloadParseError && typed.has(event.eventType));
+  };
 }
