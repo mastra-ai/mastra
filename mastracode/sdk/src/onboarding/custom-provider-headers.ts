@@ -35,11 +35,14 @@ export const REFUSED_CUSTOM_PROVIDER_HEADER_NAMES: readonly string[] = [
 const HEADER_NAME_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 
 /**
- * Characters outside tab, printable ASCII and Latin-1. The HTTP client refuses
- * control characters and anything above 0xFF at call time, so such a value
- * would fail every request instead of failing when it is saved.
+ * Characters outside tab, printable ASCII and printable Latin-1. The HTTP
+ * client refuses ASCII control characters and anything above 0xFF at call
+ * time, so such a value would fail every request instead of failing when it
+ * is saved. The C1 controls (0x80 to 0x9F) are refused too: a plain value is
+ * shown in lists, and U+009B starts an escape sequence on terminals that act
+ * on 8-bit controls.
  */
-const INVALID_HEADER_VALUE_CHARACTER = /[^\t\x20-\x7e\x80-\xff]/;
+const INVALID_HEADER_VALUE_CHARACTER = /[^\t\x20-\x7e\xa0-\xff]/;
 
 /** The longest part of a refused header name repeated in the problem text. */
 const MAX_QUOTED_NAME_LENGTH = 100;

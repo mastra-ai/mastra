@@ -59,6 +59,7 @@ describe('customProviderHeaderProblem', () => {
     ['a value with NUL', [{ name: 'X-A', value: 'a\0b' }], undefined, /printable characters/],
     ['a value with ESC', [{ name: 'X-A', value: 'a\x1b[31m' }], undefined, /printable characters/],
     ['a value with DEL', [{ name: 'X-A', value: 'a\x7f' }], undefined, /printable characters/],
+    ['a value with the 8-bit CSI U+009B', [{ name: 'X-A', value: 'a\u009b2J' }], undefined, /printable characters/],
     ['a value above U+00FF', [{ name: 'X-A', value: 'Ā' }], undefined, /printable characters/],
     ['a value with an emoji', [{ name: 'X-A', value: 'ok 👍' }], undefined, /printable characters/],
     ['an empty value', [{ name: 'X-A', value: '' }], undefined, /no value/],
