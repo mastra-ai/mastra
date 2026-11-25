@@ -669,6 +669,8 @@ Recovery restarts from the persisted `durable-agentic-loop` checkpoint. The nest
 
 Model and tool calls after the checkpoint may run again. Make tool side effects idempotent. Recovery doesn't guarantee exactly-once execution.
 
+When a shared evented worker detects that another run has taken the thread lease, it signals cancellation to in-flight tools. A tool that ignores its abort signal can continue running while the new owner starts work. Cancellation doesn't undo side effects that have already happened.
+
 `recover()` throws for unavailable checkpoints and runs that aren't orphaned:
 
 | Error ID | Thrown when |

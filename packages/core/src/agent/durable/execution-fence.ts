@@ -37,6 +37,7 @@ import { PUBSUB_SYMBOL } from '../../workflows/constants';
 import { MASTRA_DURABLE_EXECUTIONS_KEY } from '../request-context-snapshot';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-ownership';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
+import { DurableStepIds } from './constants';
 import { ExecutionOwnershipGuard } from './execution-ownership-guard';
 import { executionTransport, withExecutionStreamProducer } from './execution-stream-publisher';
 import { currentRunFenceScope, runInRunFenceScope } from './run-fence-scope';
@@ -870,7 +871,8 @@ export class ExecutionFence implements RunFenceScope {
       await executionBackend.verify(claim, details);
       if (participant?.isLost()) throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, details);
     };
-    const checkThread = async (threadLease: NonNullable<typeof lease>) => {
+    const checkThread = async (threadLease: NonNullable<typeof lease>, heartbeatWorker?: ExecutionFence) => {
+      const stopped = () => heartbeatWorker && (!heartbeatWorker.#heartbeat || heartbeatWorker.isLost());
       let timedOut = false;
       let timer: ReturnType<typeof setTimeout> | undefined;
       const check = async () => {
@@ -881,9 +883,10 @@ export class ExecutionFence implements RunFenceScope {
           if (agentThreadStreamRuntime.isThreadLeaseBackendUnavailableToAll(mastra.pubsub, error)) return true;
           throw error;
         }
-        if (renewed || timedOut) return renewed;
+        if (renewed) return true;
+        if (timedOut || stopped()) return undefined;
         await verifyCurrent();
-        if (timedOut) return false;
+        if (timedOut || stopped()) return undefined;
         let acquired: boolean;
         try {
           acquired = await agentThreadStreamRuntime.reclaimDurableThreadLease(...threadLease);
@@ -897,9 +900,29 @@ export class ExecutionFence implements RunFenceScope {
           } catch (error) {
             // Even a late grant must not leave an old generation holding the thread.
             if (error instanceof DurableExecutionFenceError && error.id === EXECUTION_SUPERSEDED_ERROR_ID) {
-              void agentThreadStreamRuntime.releaseDurableThreadLease(...threadLease).catch(() => {});
+              void (async () => {
+                const store = await mastra.getStorage()?.getStore('workflows');
+                const snapshot = await store?.loadWorkflowSnapshot({
+                  workflowName: DurableStepIds.AGENTIC_LOOP,
+                  runId,
+                });
+                // A suspension releases the execution claim but retains its thread lease.
+                const parked = snapshot?.status === 'suspended' || snapshot?.status === 'waiting';
+                if (!parked || (await executionBackend.isSuperseded(claim))) {
+                  await agentThreadStreamRuntime.releaseDurableThreadLease(...threadLease);
+                }
+              })().catch(() => {});
             }
             throw error;
+          }
+        } else if (heartbeatWorker) {
+          if (timedOut || stopped()) return undefined;
+          // A failed reclaim alone does not identify a different run.
+          const [pubsub, , threadId, resourceId] = threadLease;
+          if (
+            !(await agentThreadStreamRuntime.isDurableThreadLeaseHeldByAnotherRun(pubsub, runId, threadId, resourceId))
+          ) {
+            return undefined;
           }
         }
         return acquired;
@@ -956,13 +979,15 @@ export class ExecutionFence implements RunFenceScope {
               throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, details);
             }
           } else if (participant && !heartbeatRenewal) {
-            // The storage heartbeat must not wait for Redis. Only a work boundary may reclaim a missing lease.
-            heartbeatRenewal = agentThreadStreamRuntime
-              .renewDurableThreadLease(...lease)
-              .then(
-                () => {},
-                () => {},
-              )
+            // Use the same bounded reclaim as work admission without delaying the storage heartbeat.
+            const worker = participant;
+            heartbeatRenewal = checkThread(lease, worker)
+              .then(async held => {
+                if (held !== false || !worker.#heartbeat || worker.isLost()) return;
+                worker.#markLost(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, details));
+                await ExecutionFence.releaseSharedClaim(mastra, runId, claim, 'abandoned');
+              })
+              .catch(() => {})
               .finally(() => (heartbeatRenewal = undefined));
           }
         }

@@ -1310,6 +1310,17 @@ export class AgentThreadStreamRuntime {
     return acquired;
   }
 
+  /** @internal Missing ownership is not evidence that another run took the thread. */
+  async isDurableThreadLeaseHeldByAnotherRun(
+    pubsub: PubSub,
+    runId: string,
+    threadId: string,
+    resourceId?: string,
+  ): Promise<boolean> {
+    const owner = await this.#getLeaseProvider(pubsub).getLeaseOwner(this.#threadKey(resourceId, threadId));
+    return owner !== undefined && threadLeaseRunId(owner) !== runId;
+  }
+
   /** @internal Whether `error` from the thread lease backend means it is refusing every client, not just this one. */
   isThreadLeaseBackendUnavailableToAll(pubsub: PubSub, error: unknown): boolean {
     return this.#getLeaseProvider(pubsub).isUnavailableToAll?.(error) === true;
