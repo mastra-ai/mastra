@@ -47,9 +47,9 @@ export function LogStreamLine({
           wrap ? 'wrap-anywhere whitespace-pre-wrap' : 'whitespace-pre',
         )}
       >
-        {labels?.map(label => (
+        {labels?.map((label, index) => (
           <Badge
-            key={label.text}
+            key={`${index}-${label.text}`}
             variant={label.variant}
             emphasis="subtle"
             size="xs"
