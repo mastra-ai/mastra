@@ -417,9 +417,21 @@ With any other workflows store, the claim is a lease on the [PubSub](/docs/serve
 
 A lease only coordinates the processes that share it. `EventEmitterPubSub`, the default, covers one process. `UnixSocketPubSub` covers the processes on one host. `RedisStreamsPubSub` and `ValkeyStreamsPubSub` cover every instance connected to the same server. `GoogleCloudPubSub` doesn't provide leases, so with a store that lacks run fencing every claim succeeds, and recovery can take over a run that's still live.
 
+#### Evented agents on several processes
+
+An evented agent on the [supported multi-process setup](/docs/server/pubsub#evented-workflows-and-agents) claims its run the same way, but nothing renews the claim and it never lapses. The PubSub backend redelivers a stopped worker's unacknowledged events to another worker, and the claim's generation decides which delivery's writes land. This applies when the PubSub backend reaches other processes and redelivers unacknowledged events, and the workflows store supports run fencing and workflow step guards. On every other setup, evented agents keep the renewed claim described above.
+
+On this setup:
+
+- A delivery that runs for longer than the lease TTL, or that a worker picks up long after the run started, still completes.
+- A `stream()` or `resume()` call for a run whose claim wasn't released waits up to 5 seconds, then throws `DURABLE_AGENT_EXECUTION_CONFLICT`, however old the claim is.
+- `recover()` takes the run over with or without `force`, because Mastra can't tell a live run from a stuck one without a lease. It still refuses a run that the same process is executing or recovering.
+- `recoverActiveRuns()` without a `runId` and `mastra.recoverAllDurableAgents()` skip these runs, so recovery doesn't drive a run that the PubSub backend is redelivering.
+- A worker keeps the run's thread lease while it handles a delivery, so the thread doesn't look idle during a long model or tool call.
+
 ### Stop work after ownership loss
 
-Durable and evented agents request cancellation of in-flight tool and model calls when their step detects that it no longer owns the run. Evented workers in another process check ownership at the claim renewal interval without renewing the original execution's claim. By default that's every 5 seconds, a third of `MASTRA_AGENT_THREAD_LEASE_TTL_MS`. Detection depends on backend response time. A step in the process that holds the claim stops when an ownership check fails, or when the claim can't be renewed before it expires. A step that only observes another process's claim also stops when no check succeeds within one lease TTL (15 seconds by default).
+Durable and evented agents request cancellation of in-flight tool and model calls when their step detects that it no longer owns the run. Evented workers in another process check ownership at the claim renewal interval without renewing the original execution's claim. By default that's every 5 seconds, a third of `MASTRA_AGENT_THREAD_LEASE_TTL_MS`. Detection depends on backend response time. A step in the process that holds the claim stops when an ownership check fails, or when the claim can't be renewed before it expires. A step that only observes another process's claim also stops when no check succeeds within one lease TTL (15 seconds by default). On the [evented multi-process setup](#evented-agents-on-several-processes), a step stops only when a check finds that another execution claimed the run or the run was released, never because time passed. When a check at the start or end of a step fails with a storage error, the delivery fails and the PubSub backend redelivers it.
 
 Cancellation is cooperative. Use the tool execution context's `abortSignal` for cancellable operations, and check it before starting another side effect. A tool that ignores the signal can keep running. Work already completed outside Mastra isn't rolled back.
 

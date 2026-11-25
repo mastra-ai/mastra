@@ -120,6 +120,8 @@ Workflows on the [evented execution engine](/docs/workflows/scheduled-workflows#
 
 The backends that redeliver are marked **Yes** in the [Choosing a backend](#choosing-a-backend) table. A backend's reference page says whether redelivery can be turned off. The storage adapters with workflow step guards are `@mastra/pg` and `@mastra/libsql`. With `@mastra/libsql`, see [evented agent worker takeover](/reference/pubsub/redis-streams#evented-agent-worker-takeover) for the database setups that work across machines.
 
+On this setup, the backend decides which worker runs each event, so an evented agent's run claim isn't renewed and automatic recovery leaves its runs to the backend. See [evented agents on several processes](/docs/harness/durable-agents#evented-agents-on-several-processes).
+
 [`EventEmitterPubSub`](/reference/pubsub/event-emitter) and [`UnixSocketPubSub`](/reference/pubsub/unix-socket-pubsub) don't redeliver an event that a stopped process received and never acknowledged. On the default `EventEmitterPubSub`, evented workflows and agents run in one process, which is how you try the evented engine locally and run it in tests. Don't use either backend to run evented workflows or agents on several processes:
 
 - `EventEmitterPubSub` delivers inside one process. An event never reaches another instance, and each instance that boots restarts the active evented workflow runs of the others.

@@ -28,6 +28,7 @@ import {
   EXECUTION_UNVERIFIED_ERROR_ID,
   ExecutionFence,
   fencePubSub,
+  pubsubOwnsEventedRuns,
   readRunGeneration,
   resolveLeaseProvider,
   supportsRunFencing,
@@ -450,9 +451,15 @@ export class DefaultAgentExecutionEngine {
       runId,
       mode,
       untrackedRun,
+      pubsubOwned: await this.pubsubOwnsRuns(logger),
       logger: logger,
     });
     return fence;
+  }
+
+  /** Whether the pubsub, not a renewed run lease, tracks which process drives this agent's runs. */
+  async pubsubOwnsRuns(_logger: IMastraLogger): Promise<boolean> {
+    return false;
   }
 
   async warnIfUnfenced(
@@ -1027,6 +1034,11 @@ export class EventedAgentExecutionEngine extends DefaultAgentExecutionEngine {
   // Read after the run started its local workers, if it has any.
   override get executesStepsLocally(): boolean {
     return this.mastra?.__hasLocalWorkflowExecution() ?? true;
+  }
+
+  override async pubsubOwnsRuns(logger: IMastraLogger): Promise<boolean> {
+    if (!this.mastra || this.resolveWorkflowEngine('evented', logger) !== 'evented') return false;
+    return pubsubOwnsEventedRuns(this.mastra.pubsub, await this.mastra.getStorage()?.getStore('workflows'));
   }
 
   override prepareExecution(

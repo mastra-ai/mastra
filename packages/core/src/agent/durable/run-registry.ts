@@ -240,10 +240,11 @@ export function getActiveDurableAgentWorkflowExecutions(mastra: Mastra): Promise
 
 /**
  * Whether shutdown only detaches `mastra` from this durable-agent execution rather than abandoning it: an evented
- * execution behind a broker, which another process may be executing.
+ * execution behind a broker, which another process may be executing. A recovered pubsub-owned run counts too: no
+ * automatic recovery would restart it once abandoned.
  */
 function detachesOnShutdown(mastra: Mastra, entry: RunRegistryEntry): boolean {
-  return !!entry.eventedExecution && reachesOtherProcesses(mastra.pubsub);
+  return !!entry.executionFence?.pubsubOwned || (!!entry.eventedExecution && reachesOtherProcesses(mastra.pubsub));
 }
 
 export function isDurableAgentExecutionDetached(mastra: Mastra, runId: string): boolean {

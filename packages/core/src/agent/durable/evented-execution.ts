@@ -5,8 +5,10 @@ import { createRunScopeKey } from '../../mastra/run-scope';
 import { unwrapMastraTracingProxy } from '../../observability/context';
 import { RequestContext } from '../../request-context';
 import { matchesRunFence } from '../../storage/run-fencing';
+import { AGENT_LEASE_RENEW_INTERVAL_MS } from '../run-ownership';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { DURABLE_STOP_WHEN_ERROR_ID, DurableStepIds } from './constants';
+import type { DurableExecutionClaim } from './execution-fence';
 import {
   DURABLE_PARTICIPANT_FENCES,
   assertExecutionOwned,
@@ -131,10 +133,49 @@ export async function participateInDurableExecution<T>(
       fence.coverNestedRun(parentRunId, nestedRunId);
       parentRunId = nestedRunId;
     }
-    return await fence.run(execute);
+    const stopThreadLease =
+      claim.pubsubOwned && claim.threadId ? await holdThreadLease(mastra, runId, claim) : undefined;
+    try {
+      return await fence.run(execute);
+    } finally {
+      stopThreadLease?.();
+    }
   } finally {
     mastra.__releaseRunScope(runId);
   }
+}
+
+/**
+ * Keep the run's thread looking busy while this worker handles one of its deliveries, for a claim nothing renews.
+ * Takes the lease back at the start if it lapsed between deliveries, never from another owner. The thread lease
+ * does not fence writes, so failing to hold it never fails the delivery.
+ */
+async function holdThreadLease(mastra: Mastra, runId: string, claim: DurableExecutionClaim): Promise<() => void> {
+  const lease = [mastra.pubsub, runId, claim.threadId!, claim.resourceId, claim.generation, claim.executionId] as const;
+  const warn = (message: string, error?: unknown) =>
+    mastra.getLogger()?.warn(`[DurableAgent] run ${runId}: ${message}`, error === undefined ? undefined : { error });
+  try {
+    if (
+      !(await agentThreadStreamRuntime.renewDurableThreadLease(...lease)) &&
+      !(await agentThreadStreamRuntime.reclaimDurableThreadLease(...lease))
+    ) {
+      warn('another owner holds the thread lease');
+      return () => {};
+    }
+  } catch (error) {
+    warn('failed to take the thread lease', error);
+  }
+  // Renew only: once the run's terminal delivery released the lease, it must stay released.
+  const timer = setInterval(() => {
+    agentThreadStreamRuntime.renewDurableThreadLease(...lease).then(
+      renewed => {
+        if (!renewed) clearInterval(timer);
+      },
+      error => warn('failed to renew the thread lease', error),
+    );
+  }, AGENT_LEASE_RENEW_INTERVAL_MS);
+  timer.unref?.();
+  return () => clearInterval(timer);
 }
 
 /**

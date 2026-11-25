@@ -12,24 +12,31 @@ export class ExecutionOwnershipGuard {
   readonly #observe: () => Promise<void>;
   readonly #details: { agentId: string; runId: string; executionId: string };
   readonly #remote: boolean;
+  readonly #untimed: boolean;
   #disposed = false;
   #pending?: Promise<void>;
   #deadline?: ReturnType<typeof setTimeout>;
   #poll?: ReturnType<typeof setInterval>;
   #unsubscribe?: () => void;
 
+  /**
+   * `untimed`: the claim does not lapse with time. Polls even with `subscribe`, never arms a deadline, and a failed
+   * read at a boundary check is reported as unverified instead of retried until a deadline.
+   */
   constructor(options: {
     observe: () => Promise<void>;
     details: { agentId: string; runId: string; executionId: string };
     subscribe?: (listener: (error: DurableExecutionFenceError) => void) => () => void;
+    untimed?: boolean;
   }) {
     this.#observe = options.observe;
     this.#details = options.details;
-    this.#remote = !options.subscribe;
+    this.#untimed = options.untimed === true;
+    this.#remote = !options.subscribe && !this.#untimed;
     this.#unsubscribe = options.subscribe?.(error => this.#lose(error));
     // A local claim's heartbeat reports its loss through `subscribe`; only a remote observer needs a deadline.
-    if (this.#remote) {
-      this.#armDeadline();
+    if (this.#remote) this.#armDeadline();
+    if (this.#remote || this.#untimed) {
       this.#poll = setInterval(() => {
         if (!this.#pending) void this.check().catch(() => {});
       }, EXECUTION_LEASE_RENEW_INTERVAL_MS);
@@ -113,6 +120,8 @@ export class ExecutionOwnershipGuard {
           this.#lose(error);
           throw error;
         }
+        // A storage failure, not a loss: the caller fails this attempt and the delivery is retried.
+        if (this.#untimed) throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, this.#details, error);
         let timer!: ReturnType<typeof setTimeout>;
         try {
           await this.#bounded(

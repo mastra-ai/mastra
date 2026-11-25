@@ -24,6 +24,7 @@
 import { ErrorCategory, ErrorDomain, MastraError, MastraNonRetryableError } from '../../error';
 import { isLeaseProvider, NoopLeaseProvider } from '../../events/pubsub';
 import type { LeaseProvider, PubSub } from '../../events/pubsub';
+import { reachesOtherProcesses } from '../../events/reach';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import { createRunScope, createRunScopeKey } from '../../mastra/run-scope';
@@ -246,6 +247,24 @@ export async function supportsRunFencing(store: WorkflowsStorage | MemoryStorage
 }
 
 /**
+ * Whether the pubsub, not a renewed run lease, tracks which process drives an evented agent run: the pubsub reaches
+ * other processes and redelivers a dead worker's unacked messages, and the store fences writes and guards steps. Such
+ * a claim is never renewed and never expires; only its generation and whether it was released are read.
+ */
+export async function pubsubOwnsEventedRuns(
+  pubsub: PubSub | undefined,
+  workflowsStore: WorkflowsStorage | undefined,
+): Promise<boolean> {
+  return (
+    !!pubsub &&
+    reachesOtherProcesses(pubsub) &&
+    pubsub.__rawBus().redeliversUnacked &&
+    !!workflowsStore?.supportsWorkflowStepGuards() &&
+    (await supportsRunFencing(workflowsStore))
+  );
+}
+
+/**
  * Generation of the latest storage claim on a run, which is what the claiming
  * execution tags its stream events with. Undefined when storage holds no claim
  * for the run, including runs fenced by a pubsub lease, whose events carry no
@@ -266,6 +285,8 @@ export interface DurableExecutionClaim {
   generation?: number;
   /** Whether the memory store was raised to this claim's generation. */
   memoryFenced?: boolean;
+  /** Set when {@link pubsubOwnsEventedRuns} held at claim time: nothing renews this claim. */
+  pubsubOwned?: boolean;
   /** The existing thread lease to renew with this run's claim. */
   threadId?: string;
   resourceId?: string;
@@ -279,7 +300,7 @@ export function getExecutionClaim(
   if (!executions || typeof executions !== 'object') return undefined;
   const claim = (executions as Record<string, unknown>)[runId];
   if (!claim || typeof claim !== 'object') return undefined;
-  const { executionId, generation, memoryFenced, agentId, threadId, resourceId } =
+  const { executionId, generation, memoryFenced, pubsubOwned, agentId, threadId, resourceId } =
     claim as Partial<DurableExecutionClaim>;
   if (typeof executionId !== 'string') return undefined;
   return {
@@ -289,6 +310,8 @@ export function getExecutionClaim(
     ...(typeof resourceId === 'string' ? { resourceId } : {}),
     ...(typeof generation === 'number' ? { generation } : {}),
     ...(memoryFenced === true ? { memoryFenced } : {}),
+    // Only a storage generation fences without a lease.
+    ...(pubsubOwned === true && typeof generation === 'number' ? { pubsubOwned } : {}),
   };
 }
 
@@ -511,7 +534,11 @@ function leaseBackend(provider: LeaseProvider, agentId: string, runId: string): 
   };
 }
 
-function storageBackend(store: WorkflowsStorage, runId: string): OwnershipBackend {
+/**
+ * With `pubsubOwned`, a claim is never renewed, so its expiry says nothing: a claim that was not released
+ * (`leaseExpiresAt` still set) holds the run however long ago it was made.
+ */
+function storageBackend(store: WorkflowsStorage, runId: string, pubsubOwned = false): OwnershipBackend {
   const fence = (claim: DurableExecutionClaim): RunFence => ({
     runId,
     generation: claim.generation!,
@@ -524,11 +551,23 @@ function storageBackend(store: WorkflowsStorage, runId: string): OwnershipBacken
     leaseExpiresAt: record?.leaseExpiresAt,
   });
   return {
-    expires: true,
+    expires: !pubsubOwned,
     // A release keeps the generation, so a pinned claim only misses when another
     // execution claimed the run in between. That claimant wins; don't supersede it.
     takeoverAttempts: 1,
     async tryAcquire(executionId) {
+      if (pubsubOwned) {
+        const current = await store.getRunOwnership({ runId });
+        if (current && current.leaseExpiresAt !== null) return { claimed: false, holder: current.ownerId };
+        return attempt(
+          await store.claimRunOwnership({
+            runId,
+            ownerId: executionId,
+            leaseMs: EXECUTION_LEASE_TTL_MS,
+            expectedGeneration: current?.generation ?? 0,
+          }),
+        );
+      }
       return attempt(await store.claimRunOwnership({ runId, ownerId: executionId, leaseMs: EXECUTION_LEASE_TTL_MS }));
     },
     async tryTakeover(executionId) {
@@ -571,6 +610,11 @@ function storageBackend(store: WorkflowsStorage, runId: string): OwnershipBacken
       const record = await store.getRunOwnership({ runId });
       if (record && !matchesRunFence(record, fence(claim))) {
         throw new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, details);
+      }
+      // Without renewals only a release or a lost record ends the claim, as for `verify`.
+      if (pubsubOwned) {
+        if (!record?.leaseExpiresAt) throw new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, details);
+        return;
       }
       if (!record?.live) throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, details);
     },
@@ -648,6 +692,8 @@ export class ExecutionFence implements RunFenceScope {
   readonly runId: string;
   /** Storage claim generation. Absent when ownership is a pubsub lease. */
   readonly generation?: number;
+  /** See {@link DurableExecutionClaim.pubsubOwned}. */
+  readonly pubsubOwned: boolean;
   readonly #backend: OwnershipBackend;
   readonly #logger?: IMastraLogger;
   /** The workflows store holding the claim, when ownership lives in storage. */
@@ -699,6 +745,7 @@ export class ExecutionFence implements RunFenceScope {
     runId: string;
     executionId: string;
     generation?: number;
+    pubsubOwned?: boolean;
     leaseExpiresAt: number;
     logger?: IMastraLogger;
   }) {
@@ -708,6 +755,7 @@ export class ExecutionFence implements RunFenceScope {
     this.runId = args.runId;
     this.executionId = args.executionId;
     this.generation = args.generation;
+    this.pubsubOwned = args.pubsubOwned === true && args.generation !== undefined;
     this.#leaseExpiresAt = args.leaseExpiresAt;
     this.#logger = args.logger;
     this.whenSettled = new Promise(resolve => {
@@ -728,6 +776,10 @@ export class ExecutionFence implements RunFenceScope {
    *
    * Ownership lives in `workflowsStore` when it supports run fencing, and in
    * `leaseProvider` otherwise.
+   *
+   * With `pubsubOwned` (see {@link pubsubOwnsEventedRuns}) and a fencing store, the claim is never renewed.
+   * `acquire` conflicts while the previous claim was not released, and `recover` takes the run over: nothing can tell
+   * a live chain of deliveries from a stuck one without a timer.
    */
   static async claim(args: {
     leaseProvider: LeaseProvider;
@@ -736,12 +788,15 @@ export class ExecutionFence implements RunFenceScope {
     runId: string;
     mode: 'acquire' | 'recover' | 'takeover';
     untrackedRun?: UntrackedRunLiveness;
+    pubsubOwned?: boolean;
     logger?: IMastraLogger;
   }): Promise<ExecutionFence> {
-    const { agentId, runId, mode } = args;
+    const { agentId, runId } = args;
     const workflowsStore = (await supportsRunFencing(args.workflowsStore)) ? args.workflowsStore : undefined;
+    const pubsubOwned = args.pubsubOwned === true && workflowsStore !== undefined;
+    const mode = pubsubOwned && args.mode === 'recover' ? 'takeover' : args.mode;
     const backend = workflowsStore
-      ? storageBackend(workflowsStore, runId)
+      ? storageBackend(workflowsStore, runId, pubsubOwned)
       : leaseBackend(args.leaseProvider, agentId, runId);
     const executionId = crypto.randomUUID();
 
@@ -793,6 +848,7 @@ export class ExecutionFence implements RunFenceScope {
       runId,
       executionId,
       generation: attempt.generation,
+      pubsubOwned,
       leaseExpiresAt: attemptStartedAt + EXECUTION_LEASE_TTL_MS,
       logger: args.logger,
     });
@@ -856,6 +912,22 @@ export class ExecutionFence implements RunFenceScope {
     if (!claim.agentId) return undefined;
     const executionBackend = await resolveRemoteBackend(mastra, claim.agentId, runId, claim);
     if (!executionBackend) return undefined;
+    if (claim.pubsubOwned) {
+      // Nothing to renew: each delivery verifies the claim before it runs.
+      const fence = new ExecutionFence({
+        agentId: claim.agentId,
+        runId,
+        executionId: claim.executionId,
+        backend: executionBackend,
+        generation: claim.generation,
+        pubsubOwned: true,
+        workflowsStore: await mastra.getStorage()?.getStore('workflows'),
+        leaseExpiresAt: Date.now() + EXECUTION_LEASE_TTL_MS,
+        logger: mastra.getLogger(),
+      });
+      if (claim.memoryFenced) await fence.coverMemory(await mastra.getStorage()?.getStore('memory'));
+      return fence;
+    }
     // Called only after run ownership was renewed for this claim. For a generation-fenced claim that renewal already
     // excludes any successor, so the thread lease cannot have been handed on: a missing lease lapsed (e.g. Redis
     // restarted) and is taken back unless someone else holds it, and a lease backend refusing every client (so
@@ -964,6 +1036,7 @@ export class ExecutionFence implements RunFenceScope {
       agentId: this.agentId,
       ...(this.generation !== undefined ? { generation: this.generation } : {}),
       ...(this.#memoryStore ? { memoryFenced: true } : {}),
+      ...(this.pubsubOwned ? { pubsubOwned: true } : {}),
     };
   }
 
@@ -1507,7 +1580,7 @@ async function resolveRemoteBackend(
   if (!mastra) return undefined;
   if (claim.generation !== undefined) {
     const store = await mastra.getStorage()?.getStore('workflows');
-    return (await supportsRunFencing(store)) ? storageBackend(store!, runId) : undefined;
+    return (await supportsRunFencing(store)) ? storageBackend(store!, runId, claim.pubsubOwned) : undefined;
   }
   let agentPubsub: PubSub | undefined;
   try {
@@ -1661,6 +1734,18 @@ function createOwnershipGuard(
     args.mastra?.__getRunScope(args.runId)?.get(DURABLE_PARTICIPANT_FENCES)?.get(claim.executionId) ??
     fencesByExecutionId.get(claim.executionId);
   const details = { agentId: args.agentId, runId: args.runId, executionId: claim.executionId };
+  if (claim.pubsubOwned) {
+    // No heartbeat reports a takeover, so poll the claim even beside a local fence. Time alone never loses it.
+    return new ExecutionOwnershipGuard({
+      details,
+      untimed: true,
+      subscribe: local ? listener => local.onLost(listener) : undefined,
+      observe: async () => {
+        const backend = await resolveRemoteBackend(args.mastra, args.agentId, args.runId, claim);
+        if (backend) await backend.observe(claim, details);
+      },
+    });
+  }
   return new ExecutionOwnershipGuard({
     details,
     subscribe: local ? listener => local.onLost(listener) : undefined,

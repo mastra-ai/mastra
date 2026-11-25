@@ -16154,6 +16154,10 @@ export class Agent<
    * another process, `retryAt` says when to check again. A run that finished
    * or suspended before its turn is left out.
    *
+   * Without `runId`, an evented agent whose pubsub redelivers unacknowledged
+   * events, on a store with run fencing and step guards, recovers nothing:
+   * the pubsub hands a dead worker's deliveries to another worker.
+   *
    * @example
    * ```typescript
    * // Recover every orphaned run for this agent (typical boot-time hook).
@@ -16187,6 +16191,9 @@ export class Agent<
       // `running`: a finished run has nothing to recover, and a suspended one
       // waits for resume().
       targetRunIds = (await executionEngine.isRunningSnapshot(runId)) ? [runId] : [];
+    } else if (await executionEngine.pubsubOwnsRuns(this.logger)) {
+      // The pubsub redelivers a dead worker's messages. Restarting the run as well would drive it twice.
+      targetRunIds = [];
     } else {
       const { runs } = await this.listActiveRuns(discoveryOptions);
       targetRunIds = runs.map(r => r.runId);
@@ -16443,6 +16450,13 @@ export class Agent<
         }
         if (!terminal) {
           if (hasHistory || ownership?.live) return false;
+          // A pubsub-owned claim is never renewed: an unreleased one is held however old it is.
+          if (
+            ownership &&
+            ownership.leaseExpiresAt !== null &&
+            (await this.executionEngine.pubsubOwnsRuns(this.logger))
+          )
+            return false;
           if (getRunRegistryEntry(runId, this.#mastra) || this.executionRunRegistry.get(runId)) return false;
           if (await resolveLeaseProvider(pubsub).getLeaseOwner(executionLeaseKey(this.id, runId))) {
             return false;
