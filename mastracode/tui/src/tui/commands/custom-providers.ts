@@ -222,6 +222,12 @@ async function createProviderFlow(ctx: SlashCommandContext): Promise<void> {
   await manageProviderFlow(ctx, providerId);
 }
 
+/**
+ * Rename a provider or change its URL or API key. Secret headers are dropped
+ * when the new URL has another origin, see {@link headersForCustomProviderUrlChange}.
+ * The rule lives here and not in `upsertCustomProviderInSettings`, which other
+ * callers use as a plain upsert.
+ */
 async function editProviderFlow(ctx: SlashCommandContext, providerId: string): Promise<void> {
   const settings = loadSettings();
   const provider = settings.customProviders.find(entry => getCustomProviderId(entry.name) === providerId);
@@ -249,6 +255,7 @@ async function editProviderFlow(ctx: SlashCommandContext, providerId: string): P
   }
 
   const apiKey = await askOptionalText(ctx, 'API key', provider.apiKey);
+  const { kept, removed } = headersForCustomProviderUrlChange(provider.headers ?? [], provider.url, url);
   upsertCustomProviderInSettings(
     settings,
     {
@@ -256,11 +263,18 @@ async function editProviderFlow(ctx: SlashCommandContext, providerId: string): P
       name,
       url,
       apiKey,
+      headers: kept,
     },
     providerId,
   );
   saveSettings(settings);
   ctx.showInfo(`Updated custom provider: ${name}`);
+  if (removed.length > 0) {
+    const names = removed.map(header => header.name).join(', ');
+    ctx.showInfo(
+      `Removed secret headers because the URL moved to another origin: ${names}. Add them again under "Headers".`,
+    );
+  }
 }
 
 async function addProviderModelFlow(ctx: SlashCommandContext, providerId: string): Promise<void> {
@@ -597,6 +611,10 @@ async function authSchemeFlow(ctx: SlashCommandContext, providerId: string): Pro
   ctx.showInfo(`${provider.name} now sends its API key as ${option.header}.`);
 }
 
+/**
+ * The menu for one saved provider. New items are appended at the end so an
+ * existing item keeps its position for anyone who reaches it by arrow count.
+ */
 async function manageProviderFlow(ctx: SlashCommandContext, providerId: string): Promise<void> {
   const settings = loadSettings();
   const provider = settings.customProviders.find(entry => getCustomProviderId(entry.name) === providerId);
