@@ -89,11 +89,19 @@ it('numbers an event written by an older writer that leaves seq empty, after a p
   const x = await at(T, () => a.createPage({ parentId: scope.id, name: 'from new writer', provenance: alex }));
   const held = (await a.listPageActivity({ read, since, order: 'asc' })).events.at(-1)!.position;
 
-  // An older writer's insert: every column but seq, its clock behind.
+  // The insert the pre-position store makes (its exact column list), from a clock behind.
   const raw = createClient({ url });
   await raw.execute({
-    sql: `INSERT INTO mastra_knowledge_activity (id, action, scopeId, pageId, provenance, createdAt) VALUES (?, 'page-updated', ?, ?, ?, ?)`,
-    args: ['01OLDWRITER0000000000000000', scope.id, x.id, JSON.stringify(alex), new Date(T - 50).toISOString()],
+    sql: `INSERT INTO "mastra_knowledge_activity" (id, action, scopeId, pageId, noteId, provenance, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      '01OLDWRITER0000000000000000',
+      'page-updated',
+      scope.id,
+      x.id,
+      null,
+      JSON.stringify(alex),
+      new Date(T - 50).toISOString(),
+    ],
   });
   raw.close();
 
