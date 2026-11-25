@@ -47,6 +47,51 @@ describe('AIMock loop scenario: evented + RedisStreamsPubSub', () => {
     delete process.env.MASTRA_EVENTED_EXECUTION;
   });
 
+  // COR-1659: the producer registers its loop when it starts the run, but the pull worker never calls the agent.
+  it.each(['before', 'after'] as const)(
+    'runs a native evented agent registered %s pull worker startup',
+    async timing => {
+      if (!mock) throw new Error('AIMock server is not running');
+      mock.on({ endpoint: 'chat' }, { content: 'Your order has shipped.' });
+      const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${mock.url}/v1` });
+      const makeAgent = () =>
+        new Agent({
+          id: 'order-support',
+          name: 'Order support',
+          instructions: 'Help with orders.',
+          model: openai(SCENARIO_MODEL_ID),
+          durable: { executionEngine: 'evented' },
+        });
+      const keyPrefix = `aimock-${randomUUID()}`;
+      const apiPubsub = new RedisStreamsPubSub({ url: REDIS_URL, keyPrefix, blockMs: 200 });
+      const workerPubsub = new RedisStreamsPubSub({ url: REDIS_URL, keyPrefix, blockMs: 200 });
+      pubsubs.push(apiPubsub, workerPubsub);
+      const storage = new InMemoryStore();
+      const apiAgent = makeAgent();
+      const api = new Mastra({
+        agents: { support: apiAgent },
+        storage,
+        pubsub: apiPubsub,
+        workers: false,
+        logger: false,
+      });
+      const worker = new Mastra({ storage, pubsub: workerPubsub });
+      try {
+        if (timing === 'before') worker.addAgent(makeAgent(), 'support');
+        await worker.startWorkers();
+        if (timing === 'after') worker.addAgent(makeAgent(), 'support');
+
+        const output = await apiAgent.stream('Where is my order?');
+        await expect(output.text).resolves.toBe('Your order has shipped.');
+        expect(JSON.stringify(mock.getRequests()[0]?.body)).toContain('Where is my order?');
+      } finally {
+        await api.shutdown();
+        await worker.shutdown();
+      }
+    },
+    15_000,
+  );
+
   it('round-trips a tool result containing Date/Map/Error across the evented pubsub', async () => {
     if (!mock) throw new Error('AIMock server is not running');
 

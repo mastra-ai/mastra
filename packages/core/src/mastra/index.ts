@@ -3290,6 +3290,13 @@ export class Mastra<
     });
 
     mastraAgent.__registerExecutionEnginePolicy?.(this.#durable);
+    // Pull workers resolve the loop from the local registry without starting the agent.
+    if (
+      (this.#workersStarted || this.#executionWorkersStarted) &&
+      mastraAgent.__getExecutionEnginePolicy() === 'evented'
+    ) {
+      mastraAgent.__initializeDurableExecution();
+    }
     agents[agentKey] = mastraAgent;
     if (toolLoopInput) {
       let registrations = this.#toolLoopRegistrations.get(toolLoopInput);
