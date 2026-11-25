@@ -2,7 +2,7 @@
 '@mastra/code-sdk': minor
 ---
 
-Added an auth scheme and custom headers to custom OpenAI-compatible providers. Set `authScheme` to `x-api-key` for endpoints that read the key from an `x-api-key` header instead of `Authorization: Bearer`. Headers in `headers` are sent on every call, and the key header always wins over a custom header of the same name.
+Added an auth scheme and custom headers to custom OpenAI-compatible providers. Set `authScheme` to `x-api-key` for endpoints that read the key from an `x-api-key` header instead of `Authorization: Bearer`. Headers in `headers` are sent on every call. A header that would replace the key header (`Authorization` for `bearer`, `x-api-key` for `x-api-key`) or one the HTTP client sets, such as `Host` or `Content-Type`, is ignored.
 
 ```json
 {
@@ -22,4 +22,4 @@ Added an auth scheme and custom headers to custom OpenAI-compatible providers. S
 }
 ```
 
-Added `listCustomProviderModels` and `testCustomProviderModel` in `@mastra/code-sdk/agents/custom-provider-check`. The first lists the models an endpoint serves. The second sends one short message to a model. Both return the upstream status and error text on failure, with the key and secret header values removed.
+Added `listCustomProviderModels`, which lists the models an endpoint serves, and `testCustomProviderModel`, which sends one short message to a model. Both are in `@mastra/code-sdk/agents/custom-provider-check` and return the upstream status and error text on failure, with the key and secret header values removed.
