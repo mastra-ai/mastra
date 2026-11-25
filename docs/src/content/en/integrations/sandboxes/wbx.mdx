@@ -19,6 +19,7 @@ The WBX Sandbox team maintains the `@wbx-sandbox/mastra` package. Report issues 
 
 - A WBX Sandbox account and API key
 - Node.js `v22.13.0` or later
+- `@mastra/core` `v1.80.0` or later
 
 ## Installation
 
@@ -54,12 +55,21 @@ export const agent = new Agent({
 })
 ```
 
-The `id` is the sandbox name. Starting a sandbox with the same `id` reconnects to the existing sandbox and its files instead of creating a new one.
+Ask the agent to run a command in the sandbox:
+
+```typescript
+const response = await agent.generate('Run `node --version`.')
+console.log(response.text)
+```
+
+The response includes the Node.js version installed in the sandbox.
+
+The `id` is the sandbox name. Starting a sandbox with the same `id` reconnects to the existing sandbox and its files instead of creating a new one. Every request that uses this agent shares the same sandbox. To give each user or thread its own sandbox, see [Sandboxes per user or thread](/docs/sandbox/overview#sandboxes-per-user-or-thread).
 
 ## Lifecycle
 
 - `start()` gets the sandbox named `id` or creates it.
-- `stop()` puts the sandbox to sleep. Its files are kept.
+- `stop()` stops background processes and, by default, puts the sandbox to sleep. Its files are kept.
 - `destroy()` deletes the sandbox and its files.
 
 For templates, network rules, checkpoints, desktop access, and all constructor options, see the [WBX Sandbox Mastra guide](https://sandbox.wbx.cz/docs/integrations/mastra).
