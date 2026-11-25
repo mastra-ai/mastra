@@ -77,8 +77,6 @@ export class AsyncCallbackPubSub extends PubSub {
   #subscribers = new Map<string, Set<EventCallback>>();
   #index = 0;
   #pending = new Set<Promise<void>>();
-  /** When true, `publish` waits for every subscriber callback instead of delivering on a later tick. */
-  awaitDelivery = false;
   /** Callback rejections, which a real backend turns into a nack and redelivery. */
   subscriptionFailures: unknown[] = [];
 

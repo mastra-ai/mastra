@@ -3608,6 +3608,9 @@ export class AgentThreadStreamRuntime {
     const checkLease = async () => {
       const forwarded = state.forwardedIdleSignalsByThread.get(key);
       if (!forwarded) return;
+      // The read may sample the lease before a forward held while it is out was sent, so it judges only the forwards
+      // held when it started; a later one is judged by the next check.
+      const sampled = new Set(forwarded.values());
       // Bounded, so a read that never returns frees the in-flight guard and the next tick retries.
       const owner = await this.#readLeaseOwnerInTime(provider, key);
       // The forwards stopped being tracked (or were tracked again under a new watcher) while the lease was read.
@@ -3621,6 +3624,7 @@ export class AgentThreadStreamRuntime {
       const episode = state.forwardedIdleLeaseEpisodes.get(key);
       const ended = new Map<ForwardedIdleSignal, number>();
       for (const entry of forwarded.values()) {
+        if (!sampled.has(entry)) continue;
         if (entry.runId === holder) {
           // Ends the lease loss for every episode that recorded it, including one whose probe is being handled.
           if (entry.leaseGone) entry.regains++;
@@ -3708,8 +3712,12 @@ export class AgentThreadStreamRuntime {
     key: string,
     episode: ForwardedIdleLeaseEpisode,
   ) {
+    // Each forward held when the read starts, with its `regains` then; a forward held later is judged by a later read.
+    const sampled = new Map(
+      [...(state.forwardedIdleSignalsByThread.get(key)?.values() ?? [])].map(entry => [entry, entry.regains]),
+    );
     const covered = new Set(
-      [...(state.forwardedIdleSignalsByThread.get(key)?.values() ?? [])]
+      [...sampled.keys()]
         .filter(entry => episode.entries.get(entry) === entry.regains && entry.leaseGone)
         .map(entry => entry.runId),
     );
@@ -3728,10 +3736,11 @@ export class AgentThreadStreamRuntime {
     const gone = new Set([...covered].filter(runId => runId !== holder));
     const forwarded = state.forwardedIdleSignalsByThread.get(key);
     if (!forwarded) return;
-    // A read that sees a covered run hold the lease again ends that lease loss, as a watcher check would: a later
-    // loss then has to be seen on two checks of its own before it probes.
-    for (const entry of forwarded.values()) {
-      if (entry.runId === holder && entry.leaseGone && episode.entries.get(entry) === entry.regains) {
+    // A read that sees a run hold the lease again ends the lease loss of every forward to it, covered by this episode
+    // or not, as a watcher check would: a later loss then has to be seen on two checks of its own before it probes. A
+    // forward whose loss a newer check already ended is left as that check set it.
+    for (const [entry, regains] of sampled) {
+      if (entry.runId === holder && entry.leaseGone && entry.regains === regains) {
         entry.regains++;
         entry.leaseGone = false;
       }

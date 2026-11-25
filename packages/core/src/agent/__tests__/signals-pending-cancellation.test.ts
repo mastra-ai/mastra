@@ -2568,6 +2568,145 @@ describe('Agent signals: pending cancellation', () => {
     });
 
     /**
+     * A follower on the process runtime that forwards messages to remote runs as earlier runs end. Probes on the
+     * thread topic are held while `holdProbes` is set.
+     */
+    async function heldForwardFixture(name: string) {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      const pubsub = new ControlledLeasePubSub();
+      const scope = { resourceId: name, threadId: name };
+      const key = `${scope.resourceId}\u0000${scope.threadId}`;
+      const topic = agentThreadStreamTopicForKey(key);
+      const model = createTextStreamModel('done');
+      const agent = new Agent({ id: name, name, instructions: 'Test', model, memory: new MockMemory(), pubsub });
+      const probes = { hold: false, held: [] as Array<() => void> };
+      const subscribe = pubsub.subscribe.bind(pubsub);
+      pubsub.subscribe = async (subscribedTopic, cb) =>
+        subscribe(subscribedTopic, event => {
+          if (probes.hold && subscribedTopic === topic && event.data?.type === 'forwarded-lease-probe') {
+            probes.held.push(() => void cb(event));
+            return;
+          }
+          return cb(event);
+        });
+      const follower = agentThreadStreamRuntime;
+      const observer = await follower.subscribeToThread(agent, scope, pubsub);
+      const tick = async () => {
+        await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS);
+        await pubsub.flush();
+        await nextTick();
+      };
+      const forwardOnRunEnd = async (endingRunId: string, contents: string, ownerRunId: string) => {
+        pubsub.owners.set(key, endingRunId);
+        await pubsub.publish(topic, {
+          type: 'agent.thread-stream',
+          runId: endingRunId,
+          data: {
+            type: 'run-registered',
+            runId: endingRunId,
+            streamId: `${endingRunId}-stream`,
+            streamSeq: 1,
+            agentId: agent.id,
+          },
+        });
+        await vi.waitFor(() => expect(observer.activeRunId()).toBe(endingRunId));
+        await follower.queueMessage(agent, contents, scope, pubsub).accepted;
+        pubsub.owners.set(key, ownerRunId);
+        await pubsub.publish(topic, {
+          type: 'agent.thread-stream',
+          runId: endingRunId,
+          data: { type: 'run-completed', runId: endingRunId, streamId: `${endingRunId}-stream` },
+        });
+        await vi.waitFor(() =>
+          expect(
+            pubsub.publishedData.some(
+              data =>
+                data.type === 'signal-enqueued' &&
+                data.runId === ownerRunId &&
+                JSON.stringify(data.signal).includes(contents),
+            ),
+          ).toBe(true),
+        );
+        await pubsub.flush();
+      };
+      const published = () => pubsub.publishedData.filter(data => data.type === 'forwarded-lease-probe').length;
+      const dispose = () => {
+        observer.unsubscribe();
+        follower.resetForTests();
+      };
+      return { pubsub, key, model, probes, tick, forwardOnRunEnd, published, dispose };
+    }
+
+    it('does not count a lease read that started before a forward was held as a miss of that forward', async () => {
+      const { pubsub, key, model, tick, forwardOnRunEnd, published, dispose } =
+        await heldForwardFixture('pre-insertion-sample');
+      try {
+        // The first forward goes to run Q, which holds the lease, so the watcher runs.
+        await forwardOnRunEnd('first-ending-run', 'first message', 'run-q');
+        // The next check samples the lease (Q) and stalls. While it is out, a second message is forwarded to run R.
+        let releaseRead!: () => void;
+        const readHeld = new Promise<void>(resolve => {
+          releaseRead = resolve;
+        });
+        let readStarted = false;
+        const readOwner = pubsub.getLeaseOwner.bind(pubsub);
+        pubsub.getLeaseOwner = async (leaseKey: string) => {
+          const owner = await readOwner(leaseKey);
+          if (readStarted) return owner;
+          readStarted = true;
+          await readHeld;
+          return owner;
+        };
+        await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS);
+        expect(readStarted).toBe(true);
+        await forwardOnRunEnd('second-ending-run', 'second message', 'run-r');
+        pubsub.owners.delete(key);
+        releaseRead();
+        await pubsub.flush();
+        await nextTick();
+        // That read sampled the lease before the second forward existed, so it is no miss of it: one check after it
+        // is its first miss, and one miss does not probe.
+        const before = published();
+        await tick();
+        expect(published()).toBe(before);
+        expect(model.doStreamCalls).toHaveLength(0);
+      } finally {
+        dispose();
+      }
+    });
+
+    it("ends every lease loss of the run the returned probe's read sees holding the lease", async () => {
+      const { pubsub, key, model, probes, tick, forwardOnRunEnd, published, dispose } =
+        await heldForwardFixture('probe-regain-all');
+      try {
+        await forwardOnRunEnd('first-ending-run', 'first message', 'run-r');
+        // Run R misses a check with only the first forward held.
+        pubsub.owners.delete(key);
+        await tick();
+        // A second message goes to R, which lets go again: the first forward misses its second check and probes, the
+        // second only its first. The probe is held.
+        await forwardOnRunEnd('second-ending-run', 'second message', 'run-r');
+        probes.hold = true;
+        pubsub.owners.delete(key);
+        await tick();
+        expect(probes.held.length).toBeGreaterThan(0);
+        // R takes the lease back before the probe returns; only the probe's own read sees it.
+        pubsub.owners.set(key, 'run-r');
+        for (const deliver of probes.held.splice(0)) deliver();
+        await pubsub.flush();
+        await nextTick();
+        // R lets go once more. Both forwards have now missed one check since that read saw R hold, so none probes.
+        pubsub.owners.delete(key);
+        const before = published();
+        await tick();
+        expect(published()).toBe(before);
+        expect(model.doStreamCalls).toHaveLength(0);
+      } finally {
+        dispose();
+      }
+    });
+
+    /**
      * A message forwarded to a run that dies without admitting it, while this runtime's thread reader reads each event,
      * in publish order, `lagChecks` lease checks after it was published, the broker loses the probes `lost` picks
      * (numbered from 0 in publish order), and publishing fails for every probe after the first `publishedProbes`.
