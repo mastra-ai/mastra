@@ -95,8 +95,11 @@ function withDataPartsWrittenDuringCall(
   const before = dataPartsBefore.get(returned.id);
   const written = current.content.parts.filter(part => part.type.startsWith('data-') && !before?.has(part));
   if (!written.length) return returned;
-  const returnedKeys = new Set(returned.content.parts.map(part => CacheKeyGenerator.fromDBParts([part])));
-  const missing = written.filter(part => !returnedKeys.has(CacheKeyGenerator.fromDBParts([part])));
+  // Ids keep otherwise equal data parts apart, as they do when the merge stores them.
+  const keyOf = (part: MastraDBMessage['content']['parts'][number]) =>
+    `${CacheKeyGenerator.fromDBParts([part])}|id:${'id' in part ? JSON.stringify(part.id) : ''}`;
+  const returnedKeys = new Set(returned.content.parts.map(keyOf));
+  const missing = written.filter(part => !returnedKeys.has(keyOf(part)));
   if (!missing.length) return returned;
   const parts = [...returned.content.parts, ...missing];
   return { ...returned, content: { ...returned.content, parts } };
