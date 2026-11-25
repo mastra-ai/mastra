@@ -847,7 +847,7 @@ describe('Custom endpoint form', () => {
     await user.click(within(form).getByRole('button', { name: 'Auth scheme and headers' }));
     await user.click(within(form).getByRole('button', { name: 'Add header' }));
     await user.type(within(form).getByRole('textbox', { name: 'Header 1 name' }), 'X-Org');
-    const secretToggle = within(form).getByRole('button', { name: 'Header 1 is secret' });
+    const secretToggle = within(form).getByRole('button', { name: 'Keep header 1 value secret' });
     expect(secretToggle).toHaveAttribute('aria-pressed', 'true');
     // A secret value is masked while it is typed.
     expect(within(form).getByLabelText('Header 1 value')).toHaveAttribute('type', 'password');
@@ -855,8 +855,11 @@ describe('Custom endpoint form', () => {
     await user.click(within(form).getByRole('button', { name: 'Add header' }));
     await user.type(within(form).getByRole('textbox', { name: 'Header 2 name' }), 'X-Team');
     await user.type(within(form).getByLabelText('Header 2 value'), 'research');
-    await user.click(within(form).getByRole('button', { name: 'Header 2 is secret' }));
-    expect(within(form).getByRole('button', { name: 'Header 2 is secret' })).toHaveAttribute('aria-pressed', 'false');
+    await user.click(within(form).getByRole('button', { name: 'Keep header 2 value secret' }));
+    expect(within(form).getByRole('button', { name: 'Keep header 2 value secret' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
     await user.click(within(form).getByRole('button', { name: 'Test & save' }));
 
     await waitFor(() => expect(saves).toHaveLength(1));
@@ -935,7 +938,7 @@ describe('Custom endpoint form', () => {
 
     await pickCustomRowAction(user, 'my-llm', 'Edit');
     const form = await screen.findByRole('dialog', { name: 'Edit my-llm' });
-    await user.click(within(form).getByRole('button', { name: 'Header 1 is secret' }));
+    await user.click(within(form).getByRole('button', { name: 'Keep header 1 value secret' }));
     await user.click(within(form).getByRole('button', { name: 'Test & save' }));
 
     expect(await within(form).findByRole('alert')).toHaveTextContent('Enter a value for X-Org to make it plain.');
