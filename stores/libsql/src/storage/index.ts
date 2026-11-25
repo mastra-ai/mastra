@@ -9,7 +9,6 @@ import { DEFAULT_CONNECTION_TIMEOUT_MS } from './db';
 import { isRemoteClient } from './db/client';
 import type { SqliteClient as Client } from './db/client';
 import { isTransientNetworkError } from './db/utils';
-import { AgentSignalsLibSQL } from './domains/agent-signals';
 import { AgentsLibSQL } from './domains/agents';
 import { BackgroundTasksLibSQL } from './domains/background-tasks';
 import { BlobsLibSQL } from './domains/blobs';
@@ -40,7 +39,6 @@ const REMOTE_INIT_CONCURRENCY = 5;
 const REMOTE_INIT_MAX_ATTEMPTS = 3;
 
 export {
-  AgentSignalsLibSQL,
   AgentsLibSQL,
   BackgroundTasksLibSQL,
   BlobsLibSQL,
@@ -299,7 +297,6 @@ export class LibSQLStore extends MastraCompositeStore {
     const toolProviderConnections = new ToolProviderConnectionsLibSQL(domainConfig);
     const notifications = new NotificationsLibSQL(domainConfig);
     const threadState = new ThreadStateLibSQL(domainConfig);
-    const agentSignals = new AgentSignalsLibSQL(domainConfig);
 
     this.stores = {
       scores,
@@ -326,7 +323,6 @@ export class LibSQLStore extends MastraCompositeStore {
       toolProviderConnections,
       notifications,
       threadState,
-      agentSignals,
     };
   }
 

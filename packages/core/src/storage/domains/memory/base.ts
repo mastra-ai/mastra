@@ -35,6 +35,12 @@ function isPlainObj(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+export type PendingSignalEnqueueResult = 'accepted' | 'run-closed' | 'thread-not-found';
+
+function pendingSignalsNotSupportedError(adapterName: string): Error {
+  return new Error(`Pending agent signals are not supported by this storage adapter (${adapterName}).`);
+}
+
 // Constants for metadata key validation
 const SAFE_METADATA_KEY_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 const MAX_METADATA_KEY_LENGTH = 128;
@@ -70,6 +76,26 @@ export abstract class MemoryStorage extends StorageDomain {
    * read-merge-write that is safe across processes.
    */
   readonly supportsAtomicWorkingMemoryMerge?: boolean = false;
+
+  /**
+   * Whether this adapter keeps pending agent signals in the messages table and
+   * implements `setSignalRun`, `getSignalRun`, `enqueuePendingSignal`,
+   * `claimPendingSignals`, `closeSignalRun`, `cancelPendingSignals` and
+   * `listPendingSignals`. Adapters that set it must pass the pending-signals
+   * conformance suite.
+   * @experimental
+   */
+  readonly supportsPendingSignals?: boolean = false;
+
+  /**
+   * Whether every process of a deployment reads and writes the same pending
+   * signal rows. Defaults to `supportsPendingSignals`. An adapter whose rows
+   * live in one process must override it to return false.
+   * @experimental
+   */
+  get pendingSignalsSharedAcrossProcesses(): boolean {
+    return !!this.supportsPendingSignals;
+  }
 
   private threadMetadataUpdateQueues = new Map<string, Promise<void>>();
 
@@ -278,6 +304,137 @@ export abstract class MemoryStorage extends StorageDomain {
       `Message deletion is not supported by this storage adapter (${this.constructor.name}). ` +
         `The deleteMessages method needs to be implemented in the storage adapter.`,
     );
+  }
+
+  // ============================================
+  // Pending Agent Signals
+  //
+  // A pending signal is the signal's message row with two extra fields: a
+  // signal status and a claimant run id. Row states:
+  // - pending: status `pending`, no claimant. Not visible as a message.
+  // - claimed: status `claimed`, claimant is the run that claimed it. Not
+  //   visible as a message.
+  // - saved: no status. A normal message, and the claimant is kept until the
+  //   claimant's run closes.
+  // Normal messages have neither field set. The thread row records the
+  // thread's signal run, the only run allowed to insert for a run or claim.
+  // The methods below act on a thread's rows whatever resource they carry.
+  //
+  // Rules for the existing methods:
+  // - `saveMessages` on an existing id: a row with a status loses the status,
+  //   keeps its claimant and takes the saved message's `createdAt`. A row
+  //   without a status is saved as before and keeps its claimant. When the
+  //   saved message names another thread than a row with a status, the store
+  //   leaves that row unchanged and saves the rest of the batch as usual.
+  // - Every message read, including include windows and their neighbor
+  //   counts, skips rows with a status.
+  // - `updateMessages` treats a row with a status as a missing id.
+  // - `copyThread` and `cloneThread` skip rows with a status. The copy has no
+  //   signal run, and its rows have no claimant.
+  // - `updateThreadResourceId` moves rows with a status too.
+  // - `deleteThread` deletes rows with a status and the signal run.
+  // - The signal run survives `saveThread` and `updateThread`.
+  //
+  // None of the methods below changes a thread's `updatedAt`.
+  //
+  // `enqueuePendingSignal` with `toRunId`, `claimPendingSignals` and
+  // `closeSignalRun` are linearizable with respect to the thread's signal run:
+  // each takes effect at one instant between its call and its return. An
+  // insert accepted for a run is visible to every close or list that starts
+  // after the insert or that run's close returned, and a claim never marks
+  // rows for a run whose close has completed.
+  //
+  // Rows are returned ordered by `createdAt`, then by `id` in code unit order,
+  // in the shape message reads return, without the status or claimant.
+  // ============================================
+
+  /**
+   * Record `runId` as the thread's signal run, replacing any previous one.
+   * Changes no message. Records nothing when the thread does not exist.
+   * @experimental
+   */
+  async setSignalRun(_args: { threadId: string; runId: string }): Promise<void> {
+    throw pendingSignalsNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * The thread's signal run, or null when it has none or the thread does not exist.
+   * @experimental
+   */
+  async getSignalRun(_args: { threadId: string }): Promise<string | null> {
+    throw pendingSignalsNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * Insert `message` as a pending row. `message` needs a `threadId` and a
+   * `resourceId`; without either the call rejects.
+   *
+   * With `toRunId`, in this order:
+   * - `thread-not-found` when the thread does not exist or its `resourceId`
+   *   differs from the message's;
+   * - `run-closed` when the thread's signal run is not `toRunId`.
+   *
+   * Without `toRunId` the thread is not read and need not exist. The row
+   * belongs to whichever run becomes the signal run of a thread with that id.
+   *
+   * Then, when a row with the message's id exists in any thread and state,
+   * nothing is written. Otherwise the row is inserted as pending with the
+   * message's `createdAt`. Both cases answer `accepted`.
+   * @experimental
+   */
+  async enqueuePendingSignal(_args: {
+    message: MastraDBMessage;
+    toRunId?: string;
+  }): Promise<PendingSignalEnqueueResult> {
+    throw pendingSignalsNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * When the thread's signal run is `runId`: mark the thread's pending rows as
+   * claimed by `runId`, then return every row of the thread whose claimant is
+   * `runId`, whatever its status, except the ids in `consumedIds`.
+   * Otherwise, including for a missing thread, return nothing and change
+   * nothing. Does not change any `createdAt`.
+   * @experimental
+   */
+  async claimPendingSignals(_args: {
+    threadId: string;
+    runId: string;
+    consumedIds: string[];
+  }): Promise<MastraDBMessage[]> {
+    throw pendingSignalsNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * For each row of the thread whose claimant is `runId`:
+   * - status `claimed`, id in `consumedIds`: delete the row;
+   * - status `claimed`, id not in `consumedIds`: status `pending`, no claimant;
+   * - no status: no claimant.
+   * Then clear the thread's signal run if it is still `runId`. Runs whatever
+   * the thread's signal run is, leaves rows of other claimants and unclaimed
+   * rows untouched, and is idempotent.
+   * @experimental
+   */
+  async closeSignalRun(_args: { threadId: string; runId: string; consumedIds: string[] }): Promise<void> {
+    throw pendingSignalsNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * Delete the rows of the thread named in `ids` whose status is `pending`.
+   * Claimed rows, rows without a status and unknown ids are skipped. Returns
+   * the ids deleted, in the order given.
+   * @experimental
+   */
+  async cancelPendingSignals(_args: { threadId: string; ids: string[] }): Promise<string[]> {
+    throw pendingSignalsNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * The thread's rows whose status is `pending`.
+   * @experimental
+   */
+  async listPendingSignals(_args: { threadId: string }): Promise<MastraDBMessage[]> {
+    throw pendingSignalsNotSupportedError(this.constructor.name);
   }
 
   /**

@@ -84,7 +84,7 @@ describeForAllEngines('AIMock scenario: queueMessage waits for the active run', 
         await waitFor(() =>
           observed.some(part => isUserMessagePendingChunk(part) && part.data.id === cancelled.signal.id),
         );
-        signalAgent.cancelQueuedMessages({ resourceId, threadId, signalIds: [cancelled.signal.id] });
+        await signalAgent.cancelQueuedMessages({ resourceId, threadId, signalIds: [cancelled.signal.id] });
         await waitFor(() =>
           observed.some(part => isUserMessageCancelledChunk(part) && part.data.id === cancelled.signal.id),
         );

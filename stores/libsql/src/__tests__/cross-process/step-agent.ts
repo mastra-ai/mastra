@@ -46,6 +46,8 @@ export interface StepAgentOptions {
    */
   reasoningAt?: number;
   onReasoning?: (event: { call: number; aborted: boolean }) => void;
+  /** Holds a model call's answer until the returned promise resolves. */
+  holdModelCall?: (call: number) => Promise<void> | undefined;
   inputProcessors?: AgentConfig['inputProcessors'];
   outputProcessors?: AgentConfig['outputProcessors'];
 }
@@ -83,6 +85,7 @@ export function createStepAgent({
   onModelPrompt,
   reasoningAt,
   onReasoning,
+  holdModelCall,
   inputProcessors,
   outputProcessors,
 }: StepAgentOptions) {
@@ -92,6 +95,7 @@ export function createStepAgent({
       const call = ++calls;
       onModelCall?.(call);
       onModelPrompt?.(call, prompt);
+      await holdModelCall?.(call);
       const head = [
         { type: 'stream-start', warnings: [] },
         { type: 'response-metadata', id: `resp-${call}`, modelId: 'mock-model-id', timestamp: new Date(0) },

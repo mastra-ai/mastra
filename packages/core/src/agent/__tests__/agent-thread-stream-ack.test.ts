@@ -371,7 +371,7 @@ describe('thread stream subscriber acknowledgements', () => {
       data: { type: 'signals-cancelled', signalIds: [pending.signal.id] },
     });
     await nextTick();
-    expect(runtime.cancelQueuedMessages(agent, { ...scope, signalIds: [pending.signal.id] }, pubsub)).toEqual({
+    expect(await runtime.cancelQueuedMessages(agent, { ...scope, signalIds: [pending.signal.id] }, pubsub)).toEqual({
       cancelledSignalIds: [],
     });
     expect(pubsub.acked.length).toBeGreaterThan(0);

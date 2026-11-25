@@ -62,7 +62,7 @@ describe('Agent signals: cross-runtime routing', () => {
     expect(options.abortSignal?.aborted).toBe(false);
     expect(runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub)).toBe(successorRunId);
     expect(
-      runtime.cancelQueuedMessages(agent, { resourceId, threadId, signalIds: [pending.signal.id] }, pubsub),
+      await runtime.cancelQueuedMessages(agent, { resourceId, threadId, signalIds: [pending.signal.id] }, pubsub),
     ).toEqual({ cancelledSignalIds: [pending.signal.id] });
 
     expect(runtime.abortThread({ resourceId, threadId, expectedRunId: successorRunId }, pubsub)).toBe(true);

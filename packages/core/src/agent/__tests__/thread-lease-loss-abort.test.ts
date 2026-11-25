@@ -2658,8 +2658,6 @@ function threadLeaseLoss(engine: EngineVariant) {
       const shared = new SharedLeases();
       let releaseAcquire!: () => void;
       const acquireGate = new Promise<void>(resolve => (releaseAcquire = resolve));
-      // Evented runs keep their signals in the agents' storage.
-      const storedSignals = engine === 'evented' || engine === 'native-evented';
       class DrainPubSub extends ReplicaPubSub {
         draining = false;
         override async transferLease(leaseKey: string, from: string, to: string) {
@@ -2670,18 +2668,9 @@ function threadLeaseLoss(engine: EngineVariant) {
           }
           return super.transferLease(leaseKey, from, to);
         }
-        /** Acquisitions of the thread's lease that found it free. The first is the run's own. */
-        freeAcquisitions = 0;
         /** The owner the drain asked the lease for. */
         drainOwner: string | undefined;
         override async acquireLease(leaseKey: string, owner: string, ttlMs: number) {
-          if (leaseKey === key && !shared.leases.get(key)) this.freeAcquisitions++;
-          if (storedSignals && leaseKey === key && !this.draining && this.freeAcquisitions > 1) {
-            // A run whose signals are stored releases its lease when it ends, and its follow-up takes the lease
-            // fresh instead of by a transfer.
-            this.draining = true;
-            shared.leases.set(key, { owner: token, expiresAt: Date.now() + 60_000 });
-          }
           if (leaseKey === key && this.draining) {
             this.drainOwner ??= owner;
             await acquireGate;
@@ -2753,11 +2742,9 @@ function threadLeaseLoss(engine: EngineVariant) {
         if (stuck) {
           await new Promise(resolve => setTimeout(resolve, 200));
           expect(forwarded()).toEqual([]);
-          const cancelled = agent.cancelQueuedMessages({ ...target, signalIds: [sent!.signal.id] });
-          expect(cancelled.settled !== undefined).toBe(storedSignals);
-          expect((await cancelled.settled)?.cancelledSignalIds ?? cancelled.cancelledSignalIds).toEqual([
-            sent!.signal.id,
-          ]);
+          expect(await agent.cancelQueuedMessages({ ...target, signalIds: [sent!.signal.id] })).toEqual({
+            cancelledSignalIds: [sent!.signal.id],
+          });
           // A follow-up signal was taken for the run that just finished; an idle message for the wake that drained it.
           await expect(sent!.accepted).resolves.toEqual({
             action: 'deliver',
@@ -3349,8 +3336,8 @@ function threadLeaseLoss(engine: EngineVariant) {
     expect(requests).toHaveLength(1);
     expect(requests[0]).not.toContain(wake);
     expect(requests[0]).not.toContain(joined);
-    const signals = sender.getMastraInstance()?.getStorage()?.stores?.agentSignals;
-    if (signals) expect(await signals.listPending({ threadKey: key })).toEqual([]);
+    const signals = await (await sender.getMemory())?.storage.getStore('memory');
+    if (signals?.supportsPendingSignals) expect(await signals.listPendingSignals({ threadId: thread })).toEqual([]);
   }, 20_000);
 }
 
