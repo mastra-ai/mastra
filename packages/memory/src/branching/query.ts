@@ -3,8 +3,8 @@ import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type { MemoryStorage, StorageListMessagesInput, StorageListMessagesOutput } from '@mastra/core/storage';
 import {
   compareMessageTuples,
-  listOwningResourceThreads,
-  listRawThreads,
+  hasChildThread,
+  resourceHasBranch,
   parseThreadBranchMetadata,
   resolveThreadLineageEntries,
 } from './lineage';
@@ -164,30 +164,24 @@ async function validateBranchPoints(
 export async function getThreadBranchParticipation(
   memoryStore: MemoryStorage,
   threadId: string,
-  allThreads?: StorageThreadType[],
-  options: { ignorePending?: boolean } = {},
+  options: { ignorePending?: boolean; thread?: StorageThreadType | null } = {},
 ): Promise<{ participant: boolean; thread: StorageThreadType | null }> {
-  const threads = allThreads ?? (await listOwningResourceThreads(memoryStore, [threadId]));
-  const thread = threads.find(candidate => candidate.id === threadId) ?? null;
+  const thread = options.thread !== undefined ? options.thread : await memoryStore.getThreadById({ threadId });
   if (!thread) return { participant: false, thread: null };
   const branch = parseThreadBranchMetadata(thread);
   if (branch?.state === 'pending') {
     if (options.ignorePending) return { participant: false, thread };
     throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
   }
-  const hasReadyChild = threads.some(candidate => {
-    const candidateBranch = parseThreadBranchMetadata(candidate);
-    return candidateBranch?.state === 'ready' && candidateBranch.parentThreadId === threadId;
-  });
-  return { participant: branch?.state === 'ready' || hasReadyChild, thread };
+  if (branch?.state === 'ready') return { participant: true, thread };
+  return { participant: await hasChildThread(memoryStore, thread, 'ready'), thread };
 }
 
 export async function resolveThreadBranchSegments(
   memoryStore: MemoryStorage,
   threadId: string,
-  allThreads?: StorageThreadType[],
 ): Promise<{ thread: StorageThreadType; segments: ThreadBranchSegment[] } | null> {
-  const participation = await getThreadBranchParticipation(memoryStore, threadId, allThreads);
+  const participation = await getThreadBranchParticipation(memoryStore, threadId);
   if (!participation.thread) return null;
   if (!participation.participant) {
     return { thread: participation.thread, segments: [{ thread: participation.thread }] };
@@ -408,16 +402,26 @@ export async function queryThreadMessages(
   args: StorageListMessagesInput,
 ): Promise<StorageListMessagesOutput> {
   const requestedThreadIds = Array.isArray(args.threadId) ? args.threadId : [args.threadId];
-  const allThreads = await listOwningResourceThreads(memoryStore, requestedThreadIds);
+  const requestedThreads = new Map<string, StorageThreadType | null>();
+  for (const threadId of new Set(requestedThreadIds)) {
+    requestedThreads.set(threadId, await memoryStore.getThreadById({ threadId }));
+  }
   const pendingThreadIds = new Set(
-    allThreads.flatMap(thread => (parseThreadBranchMetadata(thread)?.state === 'pending' ? [thread.id] : [])),
+    [...requestedThreads.values()].flatMap(thread =>
+      thread && parseThreadBranchMetadata(thread)?.state === 'pending' ? [thread.id] : [],
+    ),
   );
 
   if (Array.isArray(args.threadId)) {
     const visibleThreadIds = args.threadId.filter(threadId => !pendingThreadIds.has(threadId));
     for (const threadId of visibleThreadIds) {
       if (
-        (await getThreadBranchParticipation(memoryStore, threadId, allThreads, { ignorePending: true })).participant
+        (
+          await getThreadBranchParticipation(memoryStore, threadId, {
+            ignorePending: true,
+            thread: requestedThreads.get(threadId) ?? null,
+          })
+        ).participant
       ) {
         throw createThreadBranchError(
           'BRANCH_INVALID_REQUEST',
@@ -436,7 +440,9 @@ export async function queryThreadMessages(
   }
 
   const threadId = args.threadId;
-  const participation = await getThreadBranchParticipation(memoryStore, threadId, allThreads);
+  const participation = await getThreadBranchParticipation(memoryStore, threadId, {
+    thread: requestedThreads.get(threadId) ?? null,
+  });
   if (!participation.thread) return queryPhysicalMessagesExcludingPending(memoryStore, args, pendingThreadIds);
   if (!participation.participant) return queryPhysicalMessagesExcludingPending(memoryStore, args, pendingThreadIds);
   if (args.resourceId && args.resourceId !== participation.thread.resourceId) {
@@ -484,8 +490,7 @@ export async function queryThreadMessages(
 }
 
 export async function assertResourceHasNoReadyBranches(memoryStore: MemoryStorage, resourceId: string): Promise<void> {
-  const threads = await listRawThreads(memoryStore, resourceId);
-  if (threads.some(thread => parseThreadBranchMetadata(thread)?.state === 'ready')) {
+  if (await resourceHasBranch(memoryStore, resourceId, 'ready')) {
     throw createThreadBranchError(
       'BRANCH_INVALID_REQUEST',
       'Resource-wide message reads require a threadId when shared-history branches exist.',

@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { createThreadBranchError, getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
-import type { ThreadOMMetadata } from '@mastra/core/memory';
+import type { StorageThreadType, ThreadOMMetadata } from '@mastra/core/memory';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 import type { ProviderMetadata } from '@mastra/core/stream';
 
@@ -102,17 +102,18 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
   async prepare() {
     const { record, threadId: currentThreadId, messages: currentThreadMessages } = this.opts;
 
-    const { threads: resourceThreads } = await this.storage.listThreads({
-      filter: { resourceId: this.resourceId },
-      perPage: false,
-    });
-    const branchMetadataByThread = new Map(
-      resourceThreads.map(thread => [thread.id, parseThreadBranchMetadata(thread)]),
-    );
     const branchOwned = record.threadId !== null;
-    const allThreads = branchOwned
-      ? resourceThreads.filter(thread => thread.id === currentThreadId)
-      : resourceThreads.filter(thread => !branchMetadataByThread.get(thread.id));
+    let allThreads: StorageThreadType[];
+    if (branchOwned) {
+      const currentThread = await this.storage.getThreadById({ threadId: currentThreadId });
+      allThreads = currentThread?.resourceId === this.resourceId ? [currentThread] : [];
+    } else {
+      const { threads: resourceThreads } = await this.storage.listThreads({
+        filter: { resourceId: this.resourceId },
+        perPage: false,
+      });
+      allThreads = resourceThreads.filter(thread => !parseThreadBranchMetadata(thread));
+    }
     const threadMetadataMap = new Map<string, { lastObservedAt?: string }>();
 
     for (const thread of allThreads) {

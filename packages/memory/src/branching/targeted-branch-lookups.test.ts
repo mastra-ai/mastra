@@ -1,3 +1,4 @@
+import { MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY, MASTRA_THREAD_BRANCH_STATE_METADATA_KEY } from '@mastra/core/memory';
 import type { MastraDBMessage } from '@mastra/core/memory';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MemoryStorage, StorageListThreadsInput } from '@mastra/core/storage';
@@ -21,12 +22,12 @@ function message(id: string, threadId: string, createdAt: Date, owner = resource
   };
 }
 
-// Branch lineage never crosses resources, so branch bookkeeping must only ever list the
-// threads of the resource that owns the requested thread — never every resource's threads.
-describe('branch bookkeeping only lists the owning resource’s threads', () => {
+// Branch bookkeeping finds a thread's branches through the indexed parent/state metadata keys, so
+// it never loads a resource's (or every resource's) thread list to look for them.
+describe('branch bookkeeping uses targeted thread lookups', () => {
   let memory: Memory;
   let store: MemoryStorage;
-  let unscopedListCalls: StorageListThreadsInput[];
+  let untargetedListCalls: StorageListThreadsInput[];
 
   beforeEach(async () => {
     memory = new Memory({ storage: new InMemoryStore() });
@@ -39,53 +40,58 @@ describe('branch bookkeeping only lists the owning resource’s threads', () => 
       messages: [message('foreign-msg', 'foreign', forkTime, otherResourceId)],
     });
 
-    unscopedListCalls = [];
+    untargetedListCalls = [];
     const listThreads = store.listThreads.bind(store);
     vi.spyOn(store, 'listThreads').mockImplementation(async input => {
-      if (input.filter?.resourceId === undefined) unscopedListCalls.push(input);
+      const metadata = input.filter?.metadata ?? {};
+      const targeted =
+        input.filter?.resourceId !== undefined &&
+        input.perPage !== false &&
+        (MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY in metadata || MASTRA_THREAD_BRANCH_STATE_METADATA_KEY in metadata);
+      if (!targeted) untargetedListCalls.push(input);
       return listThreads(input);
     });
   });
 
-  it('recalls an ordinary thread without listing other resources', async () => {
+  it('recalls an ordinary thread without listing threads', async () => {
     await memory.branchThread({ threadId: 'root', branchPointMessageId: 'fork' });
-    unscopedListCalls.length = 0;
+    untargetedListCalls.length = 0;
 
     await memory.recall({ threadId: 'plain', resourceId });
     await memory.recall({ threadId: 'plain' });
 
-    expect(unscopedListCalls).toEqual([]);
+    expect(untargetedListCalls).toEqual([]);
   });
 
-  it('recalls a branch and lists its children without listing other resources', async () => {
+  it('recalls a branch and lists its children without listing threads', async () => {
     const branch = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'fork' });
-    unscopedListCalls.length = 0;
+    untargetedListCalls.length = 0;
 
     const recalled = await memory.recall({ threadId: branch.thread.id });
     const children = await memory.listBranches({ threadId: 'root' });
 
     expect(recalled.messages.map(m => m.id)).toEqual(['fork']);
     expect(children.branches.map(child => child.thread.id)).toEqual([branch.thread.id]);
-    expect(unscopedListCalls).toEqual([]);
+    expect(untargetedListCalls).toEqual([]);
   });
 
-  it('saves, updates, moves and deletes threads without listing other resources', async () => {
+  it('saves, updates, moves and deletes threads without listing threads', async () => {
     await memory.branchThread({ threadId: 'root', branchPointMessageId: 'fork' });
-    unscopedListCalls.length = 0;
+    untargetedListCalls.length = 0;
 
     await memory.saveMessages({ messages: [message('later', 'plain', new Date(forkTime.getTime() + 1))] });
     await memory.updateThread({ id: 'plain', title: 'renamed' });
     await memory.updateThreadResourceId({ threadId: 'plain', resourceId: 'moved-resource' });
     await memory.deleteThread('plain');
 
-    expect(unscopedListCalls).toEqual([]);
+    expect(untargetedListCalls).toEqual([]);
   });
 
   it('still refuses to delete a thread that has branches', async () => {
     await memory.branchThread({ threadId: 'root', branchPointMessageId: 'fork' });
 
     await expect(memory.deleteThread('root')).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });
-    expect(unscopedListCalls).toEqual([]);
+    expect(untargetedListCalls).toEqual([]);
   });
 
   it('still refuses to move a thread with branches to another resource', async () => {
@@ -94,6 +100,37 @@ describe('branch bookkeeping only lists the owning resource’s threads', () => 
     await expect(
       memory.updateThreadResourceId({ threadId: 'root', resourceId: otherResourceId }),
     ).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });
-    expect(unscopedListCalls).toEqual([]);
+    expect(untargetedListCalls).toEqual([]);
+  });
+
+  it('still refuses to delete or rewrite a message a branch shares', async () => {
+    await memory.branchThread({ threadId: 'root', branchPointMessageId: 'fork' });
+    untargetedListCalls.length = 0;
+
+    await expect(memory.deleteMessages(['fork'])).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });
+    await expect(
+      memory.saveMessages({
+        messages: [
+          { ...message('fork', 'root', forkTime), content: { format: 2, parts: [{ type: 'text', text: 'x' }] } },
+        ],
+      }),
+    ).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });
+    expect(untargetedListCalls).toEqual([]);
+  });
+
+  it('stores the indexed keys on branches and strips them from returned threads', async () => {
+    const branch = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'fork' });
+
+    const raw = await store.getThreadById({ threadId: branch.thread.id });
+    expect(raw?.metadata).toMatchObject({
+      [MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY]: 'root',
+      [MASTRA_THREAD_BRANCH_STATE_METADATA_KEY]: 'ready',
+    });
+    const returned = await memory.getThreadById({ threadId: branch.thread.id });
+    expect(Object.keys(returned?.metadata ?? {})).not.toContain(MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY);
+    expect(Object.keys(branch.thread.metadata ?? {})).not.toContain(MASTRA_THREAD_BRANCH_STATE_METADATA_KEY);
+    await expect(
+      memory.listThreads({ filter: { metadata: { [MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY]: 'root' } } }),
+    ).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });
   });
 });
