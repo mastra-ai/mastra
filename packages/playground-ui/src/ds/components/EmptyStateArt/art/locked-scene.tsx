@@ -1,0 +1,241 @@
+import type { SceneProps } from './scene-style';
+
+export function LockedScene({ id }: SceneProps) {
+  return (
+    <>
+      <defs>
+        <pattern id={`${id}-gh`} patternUnits="userSpaceOnUse" width="1.8" height="1.8" patternTransform="rotate(-30)">
+          <line x1="0" y1="0" x2="0" y2="1.8" stroke="var(--detail)" strokeOpacity=".42" strokeWidth=".34" />
+        </pattern>
+        <radialGradient id={`${id}-gg0`} gradientUnits="userSpaceOnUse" cx="8.4" cy="9.1" r="31.5">
+          <stop offset=".2" stopColor="#fff" />
+          <stop offset=".9" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
+        <mask id={`${id}-gm0`} maskUnits="userSpaceOnUse" x="-400" y="-400" width="800" height="800">
+          <rect x="-400" y="-400" width="800" height="800" fill={`url(#${id}-gg0)`} />
+        </mask>
+      </defs>
+      <g className="ground">
+        <path
+          mask={`url(#${id}-gm0)`}
+          d="M-16,4.7C-17.4,2.7 -10.8,2.1 -8.2,0.8C-5.6,-0.6 -2.3,-2.8 -0.4,-3.3C1.5,-3.8 1.8,-2.6 2.9,-2.3C4,-2 2.9,-2.9 6.2,-1.4C9.6,0.2 17.7,4.3 23.2,7.1C28.7,9.9 37.9,13.3 39.3,15.4C40.7,17.4 34.1,18 31.5,19.4C28.9,20.7 25.6,22.9 23.7,23.4C21.8,23.9 21.5,22.8 20.4,22.4C19.3,22.1 20.4,23.1 17.1,21.5C13.7,19.9 5.6,15.8 0.1,13.1C-5.4,10.3 -14.6,6.8 -16,4.7Z"
+          fill={`url(#${id}-gh)`}
+        />
+      </g>
+      <path
+        d="M-9.7,-21.1Q-9.7,-25.1 -6.1,-26.9L-3.6,-28.2Q0,-30 3.6,-28.2L22.9,-18.5Q26.5,-16.7 26.5,-12.7L26.5,9.3Q26.5,13.3 22.9,15L20.4,16.3Q16.8,18.1 13.2,16.3L-6.1,6.7Q-9.7,4.9 -9.7,0.9Z"
+        fill="var(--face)"
+        stroke="var(--line)"
+        strokeWidth="1"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <path
+        d="M24.8,-15.9L18.6,-12.8Q16.8,-11.9 15,-12.8L-8,-24.3"
+        fill="none"
+        stroke="var(--line)"
+        strokeWidth="1"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <path
+        d="M-7.4,1L14.5,12"
+        fill="none"
+        stroke="var(--detail)"
+        strokeWidth="1"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <path
+        d="M24.2,9.4L19.1,12"
+        fill="none"
+        stroke="var(--detail)"
+        strokeWidth="1"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <path
+        d="M-7.4,-4L14.5,7"
+        fill="none"
+        stroke="var(--detail)"
+        strokeWidth="1"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <path
+        d="M24.2,4.4L19.1,7"
+        fill="none"
+        stroke="var(--detail)"
+        strokeWidth="1"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <path
+        d="M-7.4,-9L14.5,2"
+        fill="none"
+        stroke="var(--detail)"
+        strokeWidth="1"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <path
+        d="M24.2,-0.6L19.1,2"
+        fill="none"
+        stroke="var(--detail)"
+        strokeWidth="1"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <path
+        d="M-7.4,-14L14.5,-3"
+        fill="none"
+        stroke="var(--detail)"
+        strokeWidth="1"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <path
+        d="M24.2,-5.6L19.1,-3"
+        fill="none"
+        stroke="var(--detail)"
+        strokeWidth="1"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <path
+        d="M-7.4,-19L14.5,-8"
+        fill="none"
+        stroke="var(--detail)"
+        strokeWidth="1"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <path
+        d="M24.2,-10.6L19.1,-8"
+        fill="none"
+        stroke="var(--detail)"
+        strokeWidth="1"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <ellipse
+        cx="1"
+        cy="-24.7"
+        rx="2.4"
+        ry="1.2"
+        fill="var(--hole)"
+        stroke="var(--line)"
+        strokeWidth="1"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <ellipse
+        cx="15.8"
+        cy="-17.2"
+        rx="2.4"
+        ry="1.2"
+        fill="var(--hole)"
+        stroke="var(--line)"
+        strokeWidth="1"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <g transform="matrix(0.884,0.442,0,1.25,3.5,-2.3)">
+        <circle
+          r="5.4"
+          fill="var(--face)"
+          stroke="var(--line)"
+          strokeWidth="1"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+        />
+        <circle
+          r="4.2"
+          fill="none"
+          stroke="var(--detail)"
+          strokeWidth="1"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+        />
+        <path
+          d="M-1.4,-.3A1.6 1.6 0 1 1 1.4,-.3L.9,3.4L-.9,3.4Z"
+          fill="var(--hole)"
+          stroke="var(--line)"
+          strokeWidth="1"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      </g>
+      <g className="fail">
+        <g className="acc">
+          <g transform="matrix(0.884,0.442,0,1.25,3.5,-2.3)">
+            <circle
+              r="5.4"
+              fill="var(--face)"
+              stroke="var(--line)"
+              strokeWidth="1"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+            />
+            <circle
+              r="4.2"
+              fill="none"
+              stroke="var(--detail)"
+              strokeWidth="1"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+            />
+            <path
+              d="M-1.4,-.3A1.6 1.6 0 1 1 1.4,-.3L.9,3.4L-.9,3.4Z"
+              fill="var(--hole)"
+              stroke="var(--line)"
+              strokeWidth="1"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+            />
+          </g>
+        </g>
+      </g>
+      <g data-rig="padlock">
+        <g className="acc">
+          <path
+            d="M1,-24.7L1,-34.7L1,-36L1.2,-37.2L1.5,-38.4L2,-39.4L2.5,-40.3L3.1,-41L3.9,-41.5L4.7,-41.9L5.6,-42.1L6.5,-42L7.4,-41.8L8.4,-41.4L9.4,-40.9L10.3,-40.1L11.2,-39.2L12.1,-38.2L12.9,-37L13.6,-35.7L14.3,-34.4L14.8,-33L15.3,-31.5L15.6,-30.1L15.8,-28.6L15.8,-27.2L15.8,-17.2"
+            fill="none"
+            stroke="var(--line)"
+            strokeWidth="4.3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M1,-24.7L1,-34.7L1,-36L1.2,-37.2L1.5,-38.4L2,-39.4L2.5,-40.3L3.1,-41L3.9,-41.5L4.7,-41.9L5.6,-42.1L6.5,-42L7.4,-41.8L8.4,-41.4L9.4,-40.9L10.3,-40.1L11.2,-39.2L12.1,-38.2L12.9,-37L13.6,-35.7L14.3,-34.4L14.8,-33L15.3,-31.5L15.6,-30.1L15.8,-28.6L15.8,-27.2L15.8,-17.2"
+            fill="none"
+            stroke="var(--face)"
+            strokeWidth="2.9"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </g>
+      </g>
+    </>
+  );
+}

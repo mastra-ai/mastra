@@ -40,7 +40,7 @@ import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
 import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
 import { IconUserDuo } from '@mastra/playground-ui/icons/central/IconUserDuo';
 import { IconZap } from '@mastra/playground-ui/icons/central/IconZap';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ComponentType, SVGProps } from 'react';
 
 import { andLimits, repositoryHint } from '../services/rules';
@@ -613,25 +613,28 @@ function TextValue({
   many: boolean;
   onChange: (row: Row) => void;
 }) {
-  // What is being typed, until it is saved or put back; the saved value shows otherwise.
+  // What is being typed, shown as typed until the field is left; the value shows otherwise. Each keystroke
+  // reports the value at once, so Save works without leaving the field first: clicking a disabled Save
+  // doesn't move focus, so a value only reported on blur never got saved.
   const [draft, setDraft] = useState<string>();
+  // The value from before this round of typing, which Escape puts back.
+  const before = useRef<Row['value']>(undefined);
   const text = draft ?? textOf(row.value);
-  const commit = () => {
-    if (draft === undefined) return;
-    setDraft(undefined);
-    if (draft === textOf(row.value)) return;
-    if (many) {
-      const parts = draft.split(',').map(part => part.trim());
-      onChange({ ...row, value: parts.filter(part => part !== '') });
-      return;
-    }
-    if (field.type !== 'number') {
-      onChange({ ...row, value: draft.trim() });
-      return;
-    }
+  const valueOf = (typed: string): Row['value'] => {
+    if (many)
+      return typed
+        .split(',')
+        .map(part => part.trim())
+        .filter(part => part !== '');
+    if (field.type !== 'number') return typed.trim();
     // A number left empty or unreadable stays unfinished rather than saving 0 or NaN.
-    const number = Number(draft.trim());
-    onChange({ ...row, value: draft.trim() !== '' && Number.isFinite(number) ? number : undefined });
+    const number = Number(typed.trim());
+    return typed.trim() !== '' && Number.isFinite(number) ? number : undefined;
+  };
+  const type = (typed: string) => {
+    if (draft === undefined) before.current = row.value;
+    setDraft(typed);
+    onChange({ ...row, value: valueOf(typed) });
   };
   return (
     <Input
@@ -641,14 +644,15 @@ function TextValue({
       placeholder={VALUE_PLACEHOLDERS[field.id] ?? (many ? 'Values, comma separated' : 'Value')}
       value={text}
       className="w-48"
-      onChange={event => setDraft(event.target.value)}
-      onBlur={commit}
+      onChange={event => type(event.target.value)}
+      onBlur={() => setDraft(undefined)}
       onKeyDown={event => {
         if (event.key === 'Enter') {
           event.preventDefault();
-          commit();
-        } else if (event.key === 'Escape') {
           setDraft(undefined);
+        } else if (event.key === 'Escape' && draft !== undefined) {
+          setDraft(undefined);
+          onChange({ ...row, value: before.current });
         }
       }}
     />

@@ -1,7 +1,6 @@
 import { it, expect } from 'vitest';
 import { MockMemory } from '../../../../memory/mock';
 import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
-import { isDurableEngineVariant } from '../types';
 
 /**
  * Regression class: where system text comes from and where it ends up.
@@ -61,7 +60,7 @@ describeForAllEngines('AIMock loop scenario: system messages', engine => {
         memory: { thread: threadId, resource: resourceId },
         ...c.options,
       });
-      const output = isDurableEngineVariant(engine) ? result.output : result;
+      const output = result.output ?? result;
       const fullStream = result.fullStream;
       for await (const _ of fullStream) {
         // drain

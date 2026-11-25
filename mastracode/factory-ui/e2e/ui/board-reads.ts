@@ -172,6 +172,8 @@ export function answerBoardPhases(request: Request, project: StubbedProject, boa
     q: url.searchParams.get('q') ?? undefined,
     source: queryValues(url, 'source'),
     linearProject: queryValues(url, 'linearProject'),
+    pullRequest: queryValues(url, 'pullRequest'),
+    trust: queryValues(url, 'trust'),
     label: queryValues(url, 'label'),
     teammate: queryValues(url, 'teammate'),
     author: queryValues(url, 'author'),

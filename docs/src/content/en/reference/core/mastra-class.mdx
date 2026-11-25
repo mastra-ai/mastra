@@ -299,6 +299,13 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     ],
   },
   {
+    name: 'durable',
+    type: 'ExecutionEngineDefaults',
+    isOptional: true,
+    description:
+      'Defaults for native agents registered through `agents` or `addAgent()`. Set `executionEngine` to `"default"` to run in the current process with checkpoint support, `"evented"` to run on workers, or `false` to use the plain agent loop. Agent settings override Mastra defaults field by field. See [native agent execution](/reference/agents/durable-agent#native-agent-execution) and [resumable stream defaults](/docs/agents/resumable-streams#defaults).',
+  },
+  {
     name: 'workers',
     type: 'MastraWorker[] | false',
     description:

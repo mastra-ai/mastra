@@ -32,6 +32,7 @@ import {
   createSharedAgent,
   describeForAllEngines,
   getScenarioEngineHost,
+  isDurableEngineVariant,
   runLoopScenario,
   useLoopScenarioAimock,
 } from '../aimock-scenario';
@@ -40,7 +41,6 @@ import {
   type EngineParityResults,
   type ModelScript,
   type ParityTarget,
-  FAILED_STEP_WARNINGS_DIFFERENCE,
   describeParity,
   expectParity,
 } from '../parity';
@@ -67,8 +67,8 @@ const STREAM_CUT: ModelScript = {
   ],
 };
 
-/** One turn of `input` on plain and `target`. */
-function scenario(target: ParityTarget, model: ModelScript): Omit<EngineParityScenario, 'engines'> {
+/** One turn of `input` with the given model script. */
+function scenario(model: ModelScript): Omit<EngineParityScenario, 'engines'> {
   return {
     model,
     buildAgent: ({ model: recordingModel }) =>
@@ -83,11 +83,6 @@ function scenario(target: ParityTarget, model: ModelScript): Omit<EngineParitySc
       }),
     input: 'Go.',
     options: { memory: { thread: THREAD, resource: RESOURCE } },
-    ...(model === MODEL_4XX
-      ? {
-          differences: { [target]: FAILED_STEP_WARNINGS_DIFFERENCE },
-        }
-      : {}),
   };
 }
 
@@ -179,7 +174,7 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
           });
         }
         const workflows = await result.mastra.getStorage()!.getStore('workflows');
-        const durable = engine === 'durable' || engine === 'evented' || engine === 'inngest';
+        const durable = isDurableEngineVariant(engine);
         const prefix = engine === 'inngest' ? 'inngest:' : '';
         for (const name of durable
           ? ['durable-agentic-loop', 'durable-agentic-execution']
@@ -323,7 +318,6 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
       // The durable engines persist the input through agent memory regardless of the configured
       // MessageHistory or lastMessages, up front. This predates this test and is out of scope here.
-      const durable = engine === 'durable' || engine === 'evented' || engine === 'inngest';
       if (engine === 'inngest') {
         // Inngest stops the courier tool on its worker once the abort grace window passes, so that
         // worker finishes the turn through its normal finish path, the same path that saves a tool that
@@ -348,10 +342,9 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         );
         return;
       }
-      const inputSaved =
-        engine === 'durable' || engine === 'evented'
-          ? !readOnly
-          : !readOnly && !(historyStore && durable) && !((customHistory || historyOff) && !durable);
+      // Inngest returned above. The remaining durable engines save through agent memory, while
+      // the plain loop respects the selected history processor and lastMessages setting.
+      const inputSaved = !readOnly && (isDurableEngineVariant(engine) || !(customHistory || historyOff));
       const { messages } = await historyMemory.recall({ threadId, resourceId });
       const saved = JSON.stringify(messages);
       expect(saved.includes('Look up the order, then check the courier.')).toBe(inputSaved);
@@ -722,7 +715,7 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
 
 describeParity('error-surfaces parity', target => {
   it('model-4xx: an up-front model failure surfaces the same way on every engine', async () => {
-    const results = await expectParity(target, scenario(target, MODEL_4XX));
+    const results = await expectParity(target, scenario(MODEL_4XX));
 
     for (const { engine, turn } of turnsByEngine(target, results)) {
       expect(turn.chunks, `${engine} chunks`).toEqual([
@@ -740,7 +733,7 @@ describeParity('error-surfaces parity', target => {
   });
 
   it('stream-cut: the partial text survives and the failure surfaces the same way on every engine', async () => {
-    const results = await expectParity(target, scenario(target, STREAM_CUT));
+    const results = await expectParity(target, scenario(STREAM_CUT));
 
     for (const { engine, turn } of turnsByEngine(target, results)) {
       // The delta that arrived before the failure is kept, and the failure is

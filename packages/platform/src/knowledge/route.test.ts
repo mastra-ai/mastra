@@ -52,6 +52,27 @@ it('uses the project-scoped operation route with bearer auth', async () => {
   ]);
 });
 
+it('calls an access token getter before every operation', async () => {
+  const auth: (string | null)[] = [];
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+    auth.push(new Headers(init?.headers).get('authorization'));
+    return new Response(JSON.stringify({ result: { pages: [] } }));
+  });
+  let minted = 0;
+  const store = (await new PlatformKnowledge({
+    apiUrl: 'http://localhost',
+    instanceId: 'kn_1',
+    accessToken: async () => `tok_${++minted}`,
+  }).getStorage())!;
+  try {
+    await store.listPages({ read: 'all' });
+    await store.listPages({ read: 'all' });
+    expect(auth).toEqual(['Bearer tok_1', 'Bearer tok_2']);
+  } finally {
+    vi.restoreAllMocks();
+  }
+});
+
 it('asks the hosted store for the scope declarations its instance supplies', async () => {
   const urls: string[] = [];
   const declarations = { 'linear:$account:$connection': { access: [{ principal: 'imports:all', role: 'viewer' }] } };

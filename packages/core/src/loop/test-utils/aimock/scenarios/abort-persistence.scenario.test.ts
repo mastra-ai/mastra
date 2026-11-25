@@ -13,12 +13,7 @@
 
 import { expect, it, vi } from 'vitest';
 import { MockMemory } from '../../../../memory/mock';
-import {
-  createSharedAgent,
-  describeForAllEngines,
-  isDurableEngineVariant,
-  useLoopScenarioAimock,
-} from '../aimock-scenario';
+import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
 
 const REPLY = 'Here is a long answer that the user cancels before it finishes streaming.';
 const slowStream = { chunkSize: 4, latency: 30 };
@@ -52,7 +47,7 @@ describeForAllEngines('AIMock loop scenario: abort persistence', engine => {
       abortSignal: controller.signal,
       onFinish,
     });
-    const output = isDurableEngineVariant(engine) ? result.output : result;
+    const output = result.output ?? result;
     let streamed = '';
     try {
       for await (const chunk of output.fullStream) {
@@ -106,7 +101,7 @@ describeForAllEngines('AIMock loop scenario: abort persistence', engine => {
     const resourceId = 'customer-abort';
 
     const result = await agent.stream('Go', { memory: { thread: threadId, resource: resourceId } });
-    const output = isDurableEngineVariant(engine) ? result.output : result;
+    const output = result.output ?? result;
     let streamed = '';
     let streamError: unknown;
     try {

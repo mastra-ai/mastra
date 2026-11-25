@@ -4,6 +4,7 @@ import { clerkScenario } from './clerk.js';
 import { confluenceScenario } from './confluence.js';
 import { discordScenario } from './discord.js';
 import { elevenlabsScenario } from './elevenlabs.js';
+import { figmaScenario } from './figma.js';
 import { firefliesScenario } from './fireflies.js';
 import { githubScenario } from './github.js';
 import { gitlabScenario } from './gitlab.js';
@@ -48,6 +49,7 @@ export const scenarios: Scenario[] = [
   confluenceScenario,
   discordScenario,
   elevenlabsScenario,
+  figmaScenario,
   firefliesScenario,
   githubScenario,
   gitlabScenario,

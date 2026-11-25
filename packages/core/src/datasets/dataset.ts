@@ -164,6 +164,17 @@ export class Dataset {
     return record;
   }
 
+  /** Counts the items at a dataset version. `perPage: 0` makes storage return the total without any item rows. */
+  async #countItems(version: number): Promise<number> {
+    const store = await this.#getDatasetsStore();
+    const { pagination } = await store.listItems({
+      datasetId: this.id,
+      version,
+      pagination: { page: 0, perPage: 0 },
+    });
+    return pagination.total;
+  }
+
   // ---------------------------------------------------------------------------
   // Dataset metadata
   // ---------------------------------------------------------------------------
@@ -417,11 +428,8 @@ export class Dataset {
 
     // Validate that dataset has items before creating experiment record
     const targetVersion = config.version ?? dataset.version;
-    const items = await datasetsStore.getItemsByVersion({
-      datasetId: this.id,
-      version: targetVersion,
-    });
-    if (items.length === 0) {
+    const totalItems = await this.#countItems(targetVersion);
+    if (totalItems === 0) {
       throw new MastraError({
         id: 'EXPERIMENT_NO_ITEMS',
         text: `Cannot run experiment: dataset "${this.id}" has no items at version ${targetVersion}`,
@@ -439,7 +447,7 @@ export class Dataset {
         datasetVersion: targetVersion,
         targetType: config.targetType ?? 'agent',
         targetId: config.targetId ?? 'inline',
-        totalItems: items.length,
+        totalItems,
         name: config.name,
         description: config.description,
         metadata: withAgentModelMetadata(config.metadata, config.agentModel),
@@ -472,7 +480,7 @@ export class Dataset {
         await experimentsStore?.updateExperiment({ id: experimentId, status: 'failed', completedAt: new Date() });
         throw err;
       }
-      return { experimentId, status: 'pending' as const, totalItems: items.length };
+      return { experimentId, status: 'pending' as const, totalItems };
     }
 
     // Fire-and-forget — runExperiment resolves the applicable run, item, or dataset scorer source
@@ -495,7 +503,7 @@ export class Dataset {
       this.#mastra.getLogger()?.error(`Experiment ${experimentId} failed: ${err?.message ?? err}`);
     });
 
-    return { experimentId, status: 'pending' as const, totalItems: items.length };
+    return { experimentId, status: 'pending' as const, totalItems };
   }
 
   /**
@@ -810,8 +818,8 @@ export class Dataset {
     }
 
     const targetVersion = args?.version ?? dataset.version;
-    const items = await datasetsStore.getItemsByVersion({ datasetId: this.id, version: targetVersion });
-    if (items.length === 0) {
+    const totalItems = await this.#countItems(targetVersion);
+    if (totalItems === 0) {
       throw new MastraError({
         id: 'EXPERIMENT_NO_ITEMS',
         text: `Cannot create experiment: dataset "${this.id}" has no items at version ${targetVersion}`,
@@ -830,7 +838,7 @@ export class Dataset {
         targetType: args?.targetType ?? null,
         targetId: args?.targetId ?? null,
         scorerIds: args?.scorers?.length ? args.scorers : null,
-        totalItems: items.length,
+        totalItems,
         name: args?.name,
         description: args?.description,
         metadata: args?.metadata,
@@ -877,7 +885,7 @@ export class Dataset {
     const startedAt = new Date();
     await experimentsStore.updateExperiment({ id: experimentId, status: 'running', startedAt });
 
-    return { experimentId, status: 'running', totalItems: items.length, datasetVersion: targetVersion, startedAt };
+    return { experimentId, status: 'running', totalItems, datasetVersion: targetVersion, startedAt };
   }
 
   /**

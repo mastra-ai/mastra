@@ -181,7 +181,7 @@ describe('AgentBuilderStarter', () => {
       }),
     );
 
-    const { getByTestId, queryByTestId } = renderStarter();
+    const { getByTestId } = renderStarter();
     const input = getByTestId('agent-builder-starter-input') as HTMLTextAreaElement;
     const submit = getByTestId('agent-builder-starter-submit') as HTMLButtonElement;
 
@@ -191,9 +191,8 @@ describe('AgentBuilderStarter', () => {
     await waitFor(() => expect(submit.disabled).toBe(false));
     fireEvent.click(submit);
 
-    await waitFor(() => expect(submit.disabled).toBe(true));
+    await waitFor(() => expect(submit.getAttribute('aria-busy')).toBe('true'));
     expect(input.disabled).toBe(true);
-    expect(queryByTestId('agent-builder-starter-submit-spinner')).not.toBeNull();
     expect(navigateMock).not.toHaveBeenCalled();
 
     await act(async () => {

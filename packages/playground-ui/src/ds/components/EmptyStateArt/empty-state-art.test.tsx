@@ -82,6 +82,12 @@ describe('EmptyStateArt', () => {
 describe('EmptyState split layout', () => {
   afterEach(cleanup);
 
+  it('puts the text before the art', () => {
+    render(<EmptyState layout="split" titleSlot="No alerts yet" iconSlot={<span data-testid="art" />} />);
+    const title = screen.getByRole('heading', { name: 'No alerts yet' });
+    expect(title.compareDocumentPosition(screen.getByTestId('art')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('renders the status line after the actions', () => {
     render(
       <EmptyState

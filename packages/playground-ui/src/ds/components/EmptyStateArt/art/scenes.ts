@@ -5,6 +5,7 @@ import { ConnectScene } from './connect-scene';
 import { DatabasesScene } from './databases-scene';
 import { DeploysScene } from './deploys-scene';
 import { DestinationsScene } from './destinations-scene';
+import { DisconnectedScene } from './disconnected-scene';
 import { EnvVarsScene } from './env-vars-scene';
 import { EnvironmentsScene } from './environments-scene';
 import { FilesystemsScene } from './filesystems-scene';
@@ -13,13 +14,19 @@ import { GatewayThreadsScene } from './gateway-threads-scene';
 import { ImportersScene } from './importers-scene';
 import { KnowledgeScene } from './knowledge-scene';
 import { LicenseScene } from './license-scene';
+import { LockedScene } from './locked-scene';
 import { LogsScene } from './logs-scene';
 import { MemoryScene } from './memory-scene';
 import { ModelsScene } from './models-scene';
+import { NoChargesScene } from './no-charges-scene';
+import { NotAMemberScene } from './not-a-member-scene';
 import { ProjectsScene } from './projects-scene';
+import { RateLimitedScene } from './rate-limited-scene';
+import { RequestsScene } from './requests-scene';
 import { SandboxesScene } from './sandboxes-scene';
 import type { Scene } from './scene-style';
 import { SecretsScene } from './secrets-scene';
+import { ServerErrorScene } from './server-error-scene';
 import { TracesScene } from './traces-scene';
 import { UpgradeScene } from './upgrade-scene';
 import { VaultScene } from './vault-scene';
@@ -54,7 +61,14 @@ export type EmptyStateArtName =
   | 'license'
   | 'logs'
   | 'gateway-threads'
-  | 'models';
+  | 'models'
+  | 'requests'
+  | 'no-charges'
+  | 'disconnected'
+  | 'locked'
+  | 'rate-limited'
+  | 'server-error'
+  | 'not-a-member';
 
 export const sceneByName: Record<EmptyStateArtName, Scene> = {
   knowledge: { Scene: KnowledgeScene, viewBox: '-39.4 -83.5 94.4 134.8', width: 105.7, height: 151, hue: 'purple' },
@@ -90,4 +104,29 @@ export const sceneByName: Record<EmptyStateArtName, Scene> = {
     hue: 'blue',
   },
   models: { Scene: ModelsScene, viewBox: '-44.7 -56.3 130 108.2', width: 145.6, height: 121.2, hue: 'purple' },
+  requests: { Scene: RequestsScene, viewBox: '-40.3 -15.9 87.1 55.9', width: 97.6, height: 62.6, hue: 'blue' },
+  'no-charges': { Scene: NoChargesScene, viewBox: '-33.2 -30.7 80 67', width: 89.6, height: 75, hue: 'green' },
+  disconnected: {
+    Scene: DisconnectedScene,
+    viewBox: '-41.1 -41.2 79.1 72.1',
+    width: 88.6,
+    height: 80.8,
+    hue: 'orange',
+  },
+  locked: { Scene: LockedScene, viewBox: '-20.2 -46.1 63.7 73.6', width: 71.3, height: 82.4, hue: 'yellow' },
+  'rate-limited': { Scene: RateLimitedScene, viewBox: '-23.4 -44.1 53.3 72.5', width: 59.7, height: 81.2, hue: 'pink' },
+  'server-error': {
+    Scene: ServerErrorScene,
+    viewBox: '-39.5 -21.5 98.9 66.1',
+    width: 110.8,
+    height: 74,
+    hue: 'purple',
+  },
+  'not-a-member': {
+    Scene: NotAMemberScene,
+    viewBox: '-20.9 -38.9 73.9 71.8',
+    width: 82.8,
+    height: 80.4,
+    hue: 'orange',
+  },
 };

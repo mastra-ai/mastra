@@ -60,14 +60,14 @@ const DeleteSkillDialog = ({ open, onOpenChange, skillName, isPending, onConfirm
           icon={<TrashIcon />}
           variant="destructive"
           data-testid="skill-builder-delete-skill-confirm"
-          disabled={isPending}
           onClick={() => {
             // Use a plain button (not AlertDialog.Close) so the dialog stays
             // open while the request is in flight and on error.
             onConfirm();
           }}
+          loading={isPending}
         >
-          {isPending ? 'Deleting…' : 'Delete skill'}
+          Delete skill
         </Button>
       </AlertDialog.Footer>
     </AlertDialog.Content>

@@ -209,11 +209,13 @@ export const FACTORY_API_ROUTE_METADATA = {
       "label",
       "limit",
       "linearProject",
+      "pullRequest",
       "q",
       "reviewer",
       "sort",
       "source",
       "teammate",
+      "trust",
       "window",
       "worked"
     ],
@@ -763,7 +765,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "projectCreate",
     "method": "POST",
     "path": "/web/factory/projects",
-    "description": "Create a Factory project",
+    "description": "Create a Factory project. Creating a second project in an organization is deprecated: each organization will have one Factory project.",
     "pathParams": [],
     "queryParams": [],
     "bodyParams": [
@@ -2599,6 +2601,12 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "$ref": "#/$defs/__schema0"
         },
         "label": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "pullRequest": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "trust": {
           "$ref": "#/$defs/__schema0"
         },
         "teammate": {

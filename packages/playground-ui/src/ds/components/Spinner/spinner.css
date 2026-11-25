@@ -5,6 +5,12 @@
   shape-rendering: geometricprecision;
 }
 
+/* In a button or link the spinner is one of its glyphs: it takes the control's icon colour, else its text's.
+ * Not a utility, because an app with its own Tailwind build emits `text-foreground` after ours. */
+:is(button, a) .spinner {
+  color: var(--control-icon, inherit);
+}
+
 .spinner[data-size='sm'] {
   --spinner-stroke: 2.8;
   --spinner-pulse-ring-stroke: 2.4;

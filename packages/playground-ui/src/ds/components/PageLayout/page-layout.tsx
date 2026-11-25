@@ -40,7 +40,7 @@ export interface PageLayoutSettingsProps {
   action?: ReactNode;
   /** A header of the app's own in place of `title` (a `PageHeader` whose title takes focus), with the same inset. */
   header?: ReactNode;
-  /** `SettingsGroup`s, 28px apart. */
+  /** `SettingsGroup`s, 24px apart. */
   children: ReactNode;
 }
 
@@ -61,7 +61,7 @@ export interface PageLayoutFormProps {
   LinkComponent?: LinkComponent;
   /** A live preview beside the form when the column is wide enough, above the fields otherwise. */
   aside?: ReactNode;
-  /** Sections (`SettingsGroup`s), 28px apart. */
+  /** Sections (`SettingsGroup`s), 24px apart. */
   children: ReactNode;
 }
 

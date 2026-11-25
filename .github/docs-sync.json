@@ -21,6 +21,13 @@
       "branch": "main",
       "dest": "src/reference",
       "routeBasePath": "/reference"
+    },
+    {
+      "name": "factory",
+      "source": "docs/src/factory",
+      "repo": "mastra-ai/softwarefactory-docs",
+      "branch": "main",
+      "dest": "src/docs"
     }
   ]
 }

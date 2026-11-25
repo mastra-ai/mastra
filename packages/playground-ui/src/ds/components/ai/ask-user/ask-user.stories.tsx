@@ -38,6 +38,19 @@ export const SingleSelect: Story = {
   },
 };
 
+export const RecommendedOption: Story = {
+  args: {
+    payload: {
+      question: 'Choose a deployment target',
+      selectionMode: 'single_select',
+      options: [
+        { label: 'Staging', description: 'Validate the release before production.' },
+        { label: 'Production', description: 'Deploy directly to users.', recommended: true },
+      ],
+    },
+  },
+};
+
 export const MultiSelect: Story = {
   args: {
     payload: {

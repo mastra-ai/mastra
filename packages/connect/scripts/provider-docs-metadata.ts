@@ -105,6 +105,17 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
       'convert text to speech, transcribe audio and video, clone voices, compose music, manage conversational AI agents, voices and voice settings, and pronunciation dictionaries, and read and delete history items, dubbing projects, conversations, and knowledge-base documents',
     emit: true,
   },
+  figma: {
+    name: 'Figma',
+    logo: { slug: 'figma' },
+    canonicalPage: 'other/figma.mdx',
+    ownership: 'generated-page',
+    category: 'Other providers',
+    summary:
+      'read files, versions, components, and styles, render images, manage comments and dev resources, and read and update variables',
+    note: "Figma only lets full members of Enterprise organizations use the variable tools, and updating variables also needs edit access to the file. On other plans, Figma refuses those calls. Node IDs work in either the `1:2` form the API uses or the `1-2` form in Figma URLs. The toolset can't list a team's projects or files, so give the agent a file key or file URL.",
+    emit: true,
+  },
   fireflies: {
     name: 'Fireflies.ai',
     logo: { src: 'https://app.nango.dev/images/template-logos/fireflies.svg' },
