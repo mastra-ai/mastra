@@ -17,7 +17,7 @@ import {
 } from './execution-fence';
 import { runInRunFenceScope } from './run-fence-scope';
 import { getRunRegistryEntry } from './run-registry';
-import { endFailedSegmentSpans } from './segment-spans';
+import { carrySegmentSpans, endFailedSegmentSpans, segmentEndedBySuspension, segmentSpanData } from './segment-spans';
 import { emitErrorEvent } from './stream-adapter';
 
 type Participant = { fence: Promise<ExecutionFence | undefined>; stop: (interrupt?: boolean) => Promise<void> };
@@ -128,6 +128,7 @@ export async function participateInDurableExecution<T>(
     const fence = await participant.fence;
     if (!fence) return await execute();
     await fence.verify();
+    carryEndedSegment(event);
     let parentRunId = runId;
     for (const nestedRunId of nestedRunIds) {
       fence.coverNestedRun(parentRunId, nestedRunId);
@@ -188,6 +189,20 @@ export async function retrySettledDurableExecution(mastra: Mastra, event: Event)
   return true;
 }
 
+/**
+ * A suspension beside the failed tool call ended the segment's spans. Only this event shows it, so tell the run's own
+ * failure through the request context it inherits.
+ */
+function carryEndedSegment(event: Event): void {
+  const { workflowId, stepResults, requestContext } = event.data ?? {};
+  const runId = stepResults?.input?.runId;
+  if (event.type !== 'workflow.fail' || workflowId !== DurableStepIds.AGENTIC_EXECUTION || !runId) return;
+  const context = new RequestContext<unknown>(Object.entries(requestContext ?? {}));
+  if (!segmentEndedBySuspension(segmentSpanData(context, runId, stepResults.input), stepResults)) return;
+  event.data.requestContext = { ...requestContext };
+  carrySegmentSpans(event.data.requestContext, runId, null);
+}
+
 function endFailedSpans(mastra: Mastra, event: Event): void {
   const { stepResults, prevResult, requestContext } = event.data ?? {};
   const runId = stepResults?.input?.runId;
@@ -240,7 +255,6 @@ export async function settleEventedDurableExecution(mastra: Mastra, event: Event
     const delivery =
       failure?.code === DURABLE_STOP_WHEN_ERROR_ID || failure?.id === DURABLE_STOP_WHEN_ERROR_ID ? 'reject' : undefined;
     await emitErrorEvent(mastra.pubsub, event.runId, error, claim.generation, delivery);
-    endFailedSpans(mastra, event);
   }
   // Storage-backed deletes are fenced; lease-only stores retain their existing best-effort write guarantees.
   if (event.type !== 'workflow.suspend') {
@@ -250,6 +264,8 @@ export async function settleEventedDurableExecution(mastra: Mastra, event: Event
   }
   // Keep the released generation as the retry barrier before dropping the thread token.
   await ExecutionFence.releaseSharedClaim(mastra, event.runId, claim, 'settled');
+  // After that barrier, so a retry of this delivery cannot end the run's spans twice.
+  if (event.type === 'workflow.fail' && !released) endFailedSpans(mastra, event);
   if (claim.threadId && event.type !== 'workflow.suspend') {
     await agentThreadStreamRuntime.releaseDurableThreadLease(
       mastra.pubsub,

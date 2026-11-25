@@ -275,11 +275,14 @@ export async function abandonDurableAgentExecutions(mastra: Mastra): Promise<voi
  * spans are the active root, so prefer them. Ending an already-ended span is a no-op,
  * so the duplicate error paths (workflow failure + emitError) are safe. Never throws.
  */
-export function endRunSpansWithError(runId: string, error: Error, options: { endSpan?: boolean } = {}): void {
+export function endRunSpansWithError(
+  runId: string,
+  error: Error,
+  options: { endSpan?: boolean; endStep?: boolean } = {},
+): void {
   try {
     const entry = globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined;
-    // Behind a broker another worker may have ended this step already; the worker that settles the failure ends it.
-    if (!entry?.eventedExecution && options.endSpan !== false) {
+    if (options.endStep ?? options.endSpan ?? true) {
       entry?.openStepSpan?.error(stepFailure({ error, ...executionFailureTermination(error), endSpan: true }));
     }
     (entry?.resumeModelSpan ?? entry?.modelSpan)?.error({

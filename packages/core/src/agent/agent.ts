@@ -27,6 +27,7 @@ import { validateScoringPredicate } from '../evals/predicate';
 import { withAck } from '../events/acking-callback';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
+import { reachesOtherProcesses } from '../events/reach';
 import type { Knowledge } from '../knowledge';
 import { KNOWLEDGE_INSTRUCTIONS_PROCESSOR_ID, KnowledgeInstructionsProcessor } from '../knowledge/instructions';
 import { PINNED_KNOWLEDGE_STATE_ID } from '../knowledge/pinned';
@@ -13768,8 +13769,11 @@ export class Agent<
    * @internal
    */
   protected async emitError(runId: string, error: Error, generation?: number): Promise<void> {
-    // End the root spans on error so the trace exports (mirrors the non-durable map-results-step).
-    endRunSpansWithError(runId, error);
+    // End the root spans on error so the trace exports (mirrors the non-durable map-results-step). Behind a broker
+    // another worker may have ended the open step already, so the worker that settles the failure ends it.
+    const bus =
+      this.executionEngine.executionMode === 'background' ? (this.#mastra?.pubsub ?? this.getPubSub()) : undefined;
+    endRunSpansWithError(runId, error, { endStep: !bus || !reachesOtherProcesses(bus) });
     await runOutsideRunFenceScope(() =>
       emitErrorEvent(
         this.#executionStreamBus.forRun(this.__usesSharedRunLog()).pubsub,

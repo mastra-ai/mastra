@@ -281,6 +281,7 @@ export {
   carrySegmentSpans,
   endFailedSegmentSpans,
   liveSegmentSpan,
+  segmentEndedBySuspension,
   segmentSpanData,
   type SegmentSpanData,
 } from './segment-spans';

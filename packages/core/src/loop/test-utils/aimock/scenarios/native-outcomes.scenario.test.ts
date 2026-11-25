@@ -488,6 +488,15 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
 
   it('ends every span once when the run fails after a tool call', async () => {
     const { observability, events, ended } = capture();
+    const tool = (id: string, options = {}) =>
+      createTool({
+        id,
+        description: id,
+        inputSchema: z.object({}),
+        execute: async () => ({ status: 'ok' }),
+        ...options,
+      });
+    const call = (name: string) => ({ toolCalls: [{ id: `${name}-1`, name, arguments: {} }] });
     await runLoopScenario({
       engine,
       llm: getMock(),
@@ -496,24 +505,25 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
       errorProcessors: [],
       maxRetries: 0,
       tools: {
-        lookup: createTool({
-          id: 'lookup',
-          description: 'Look up an order',
-          inputSchema: z.object({}),
-          execute: async () => ({ status: 'shipped' }),
+        lookup: tool('lookup'),
+        refund: tool('refund', {
           toModelOutput: () => {
             throw new Error('tool output mapping failed');
           },
         }),
       },
-      fixtures: llm => llm.on({ endpoint: 'chat' }, { toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }] }),
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat', hasToolResult: false }, call('lookup'));
+        llm.on({ endpoint: 'chat', hasToolResult: true }, call('refund'));
+      },
     });
-    for (const type of [SpanType.AGENT_RUN, SpanType.MODEL_GENERATION, SpanType.MODEL_STEP]) {
-      await expect.poll(() => ended(type)).toMatchObject([{ outcome: 'error', endTime: expect.any(Date) }]);
-    }
+    const failed = { outcome: 'error', endTime: expect.any(Date) };
+    await expect.poll(() => ended()).toMatchObject([failed]);
+    await expect.poll(() => ended(SpanType.MODEL_GENERATION)).toMatchObject([failed]);
+    await expect.poll(() => ended(SpanType.MODEL_STEP)).toMatchObject([{ outcome: 'success' }, failed]);
     const spansOf = (eventType: TracingEventType) =>
       events
-        .filter(event => event.type === eventType)
+        .filter(event => event.type === eventType && !event.exportedSpan.isEvent)
         .map(event => event.exportedSpan.id)
         .sort();
     expect(spansOf(TracingEventType.SPAN_ENDED)).toEqual(spansOf(TracingEventType.SPAN_STARTED));

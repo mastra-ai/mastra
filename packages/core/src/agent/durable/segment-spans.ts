@@ -145,6 +145,24 @@ export function stepFailure<T extends { error: Error }>(failure: T): T {
 }
 
 /**
+ * Whether a tool call that suspended beside the failed one already ended the spans of the segment. Only the failed
+ * iteration's steps show it, so the settling engine takes it to the run's own failure as a carried `null` segment.
+ */
+export function segmentEndedBySuspension(
+  segment: SegmentSpanData & { carried?: boolean },
+  steps: Record<string, any>,
+): boolean {
+  const { output, suspendPayload } = steps[DurableStepIds.TOOL_CALL] ?? {};
+  const calls = [suspendPayload?.__workflow_meta?.foreachOutput, output].flat() as Array<
+    { status?: string } | undefined
+  >;
+  return (
+    calls.some(call => call?.status === 'suspended') &&
+    segmentOwnsStep(segment, steps[DurableStepIds.LLM_EXECUTION]?.output?.stepSpanData)
+  );
+}
+
+/**
  * End what a failed execution left open, from the facts the run carries, where the process that settles the
  * failure may hold none of the run's live spans. An iteration's failure ends its MODEL_STEP; the run's failure
  * ends the MODEL_GENERATION and AGENT_RUN its segment reports under. Never throws.
@@ -162,7 +180,8 @@ export function endFailedSegmentSpans({
   mastra: Mastra | undefined;
   requestContext: RequestContext<any>;
   runId: string;
-  state: { agentSpanData?: unknown; modelSpanData?: unknown };
+  /** An iteration's state counts the iterations; the run's input does not. */
+  state: { agentSpanData?: unknown; modelSpanData?: unknown; iterationCount?: number };
   steps: Record<string, any>;
   error: Error;
   live?: RunRegistryEntry;
@@ -171,15 +190,16 @@ export function endFailedSegmentSpans({
 }): void {
   try {
     const observability = mastra?.observability?.getSelectedInstance({ requestContext });
-    // The finish step ends the pair itself; a later step's failure must not end it again.
-    if (!observability || steps[MAP_FINAL_OUTPUT_STEP_ID]?.status === 'success') return;
+    // The finish step ends the pair itself; a later step's failure must not end it again. An engine that threw
+    // reports no steps, not even its input, so it can have ended the pair too.
+    if (!observability || !('input' in steps) || steps[MAP_FINAL_OUTPUT_STEP_ID]?.status === 'success') return;
     const segment = segmentSpanData(requestContext, runId, state, live);
     const failure = { error, ...executionFailureTermination(error), endSpan: true };
-    if (DurableStepIds.LLM_EXECUTION in steps) {
+    if (state.iterationCount !== undefined) {
       const stepSpanData = steps[DurableStepIds.LLM_EXECUTION]?.output?.stepSpanData;
       // The mapping step ends the step itself.
       if (!stepSpanData || steps[DurableStepIds.LLM_MAPPING]?.status === 'success') return;
-      if (!segmentOwnsStep(segment, stepSpanData)) return;
+      if (!segmentOwnsStep(segment, stepSpanData) || segmentEndedBySuspension(segment, steps)) return;
       (
         liveSegmentSpan<Span<SpanType.MODEL_STEP>>(stepSpanData, live?.openStepSpan) ??
         observability.rebuildSpan<SpanType.MODEL_STEP>(stepSpanData)

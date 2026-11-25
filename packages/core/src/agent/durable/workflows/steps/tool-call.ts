@@ -1858,7 +1858,14 @@ export function createDurableToolCallStep() {
           await publishAfterPersist(() => emitSuspendedEvent(pubsub, runId, suspendedEventData));
         }
 
-        endSpansAsSuspended({ toolCallId, toolName, reason: 'suspension' });
+        // A call that runs beside this one can have failed the run already, which ended its spans.
+        const runFailed =
+          typedInput.sideBySide &&
+          (await assertOwned().then(
+            () => false,
+            error => isExecutionFenceError(error),
+          ));
+        if (!runFailed) endSpansAsSuspended({ toolCallId, toolName, reason: 'suspension' });
 
         return suspend(
           {

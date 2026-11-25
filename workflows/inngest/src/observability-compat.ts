@@ -27,6 +27,11 @@ export function endFailedSegmentSpans(...args: Parameters<typeof coreDurable.end
   if (carriesSegmentSpans()) coreDurable.endFailedSegmentSpans?.(...args);
 }
 
+/** Whether a suspension beside the failed tool call already ended the spans of the segment. */
+export function segmentEndedBySuspension(...args: Parameters<typeof coreDurable.segmentEndedBySuspension>): boolean {
+  return carriesSegmentSpans() && !!coreDurable.segmentEndedBySuspension?.(...args);
+}
+
 export function executionFailureTermination(
   ...args: Parameters<typeof coreObservability.executionFailureTermination>
 ): SpanOutcomeFields {

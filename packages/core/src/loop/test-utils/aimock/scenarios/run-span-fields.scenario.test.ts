@@ -1,10 +1,12 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { setTimeout } from 'node:timers/promises';
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Observability } from '../../../../../../../observability/mastra/src/default';
+import { FGADeniedError } from '../../../../auth/ee';
 import { MockMemory } from '../../../../memory/mock';
 import { InternalSpans, SpanType, TracingEventType } from '../../../../observability';
 import { RequestContext } from '../../../../request-context';
@@ -158,7 +160,7 @@ describe('run and generation span fields on a worker in another process', () => 
   };
 
   /** The process that streams, and the worker process that executes the run. */
-  async function split(agentOptions: Record<string, unknown>) {
+  async function split(agentOptions: Record<string, unknown>, fga?: unknown) {
     const directory = await mkdtemp(join(tmpdir(), 'run-span-fields-'));
     const storage = new InMemoryStore();
     const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${getMock().url}/v1` });
@@ -184,7 +186,15 @@ describe('run and generation span fields on a worker in another process', () => 
         ...captured,
         agent,
         pubsub,
-        mastra: new Mastra({ agents: { agent }, storage, pubsub, observability, logger: false, ...workers }),
+        mastra: new Mastra({
+          agents: { agent },
+          storage,
+          pubsub,
+          observability,
+          logger: false,
+          ...(fga ? { server: { fga: fga as any } } : {}),
+          ...workers,
+        }),
       };
     };
     const api: any = await start(0);
@@ -208,7 +218,7 @@ describe('run and generation span fields on a worker in another process', () => 
         endedTwice: endedIds.filter((id, index) => endedIds.indexOf(id) !== index),
       };
     };
-    return { api, worker, unbalanced };
+    return { api, worker, storage, unbalanced };
   }
 
   it('reports the usage of hidden model spans on the run', async () => {
@@ -234,6 +244,64 @@ describe('run and generation span fields on a worker in another process', () => 
     }
     expect(unbalanced()).toEqual({ open: [], endedTwice: [] });
   }, 15_000);
+
+  it('ends every span once when the cleanup of a failed run is retried', async () => {
+    getMock().on({ endpoint: 'chat' }, { toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }] });
+    const { api, worker, storage, unbalanced } = await split({ tools: { lookup: lookup({ toModelOutput }) } });
+    const store = (await storage.getStore('workflows'))!;
+    const deleteRun = store.deleteWorkflowRunById.bind(store);
+    let rejected = 0;
+    vi.spyOn(store, 'deleteWorkflowRunById').mockImplementation(async args => {
+      if (args.fence && rejected++ === 0) throw new Error('database unavailable');
+      return deleteRun(args);
+    });
+
+    const { fullStream } = await api.agent.stream('Where is my order?');
+    for await (const _ of fullStream);
+
+    await expect.poll(() => worker.ended()).toMatchObject([{ outcome: 'error' }]);
+    await expect.poll(() => rejected).toBeGreaterThan(1);
+    await expect.poll(unbalanced).toEqual({ open: [], endedTwice: [] });
+  }, 15_000);
+
+  it.each([
+    { order: 'before', deniedAfter: 150, suspendsAfter: 0 },
+    { order: 'after', deniedAfter: 0, suspendsAfter: 400 },
+  ])(
+    'ends every span once when a tool call suspends $order another is denied',
+    async times => {
+      const call = (name: string) => ({ id: `${name}-1`, name, arguments: {} });
+      getMock().on({ endpoint: 'chat' }, { toolCalls: [call('pause'), call('lookup')] });
+      const pause = createTool({
+        id: 'pause',
+        description: 'Ask a person.',
+        inputSchema: z.object({}),
+        execute: async (_, context) => {
+          await setTimeout(times.suspendsAfter);
+          return context.agent!.suspend({ why: 'ask' });
+        },
+      });
+      const { api, worker, unbalanced } = await split(
+        { tools: { pause, lookup: lookup() } },
+        {
+          require: async (user: any, { resource, permission }: any) => {
+            if (!resource.id.includes('lookup')) return;
+            await setTimeout(times.deniedAfter);
+            throw new FGADeniedError(user, resource, permission);
+          },
+        },
+      );
+
+      const requestContext = new RequestContext([['user', { id: 'user-1' }]]);
+      const { fullStream } = await api.agent.stream('Where is my order?', { requestContext });
+      for await (const _ of fullStream);
+
+      await setTimeout(1_000);
+      expect(worker.ended()).toHaveLength(1);
+      expect(unbalanced()).toMatchObject({ endedTwice: [] });
+    },
+    15_000,
+  );
 
   it('ends every span once when the run fails after an approval', async () => {
     getMock().on({ endpoint: 'chat' }, { toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }] });
