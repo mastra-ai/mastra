@@ -519,7 +519,7 @@ describe('chat run errors on an account limit', () => {
     stubCredential('organization');
     renderWithProviders(<ErrorSession messages={[rateLimited]} modelId="anthropic/claude-opus-5-5" />);
 
-    await expectCredentialHolder('Shared by the organization');
+    await expectCredentialHolder('Card work uses the organization’s keys');
   });
 
   it('tells the chat owner the limit belongs to their own subscription', async () => {
@@ -547,7 +547,7 @@ describe('chat run errors on an account limit', () => {
     const { rerender } = renderWithProviders(
       <ErrorSession messages={[rateLimited]} modelId="anthropic/claude-opus-5-5" />,
     );
-    await expectCredentialHolder('Shared by the organization');
+    await expectCredentialHolder('Card work uses the organization’s keys');
 
     await user.click(await screen.findByRole('button', { name: 'Change model' }));
     await user.click(await screen.findByRole('option', { name: /gpt-5\.5/i }));
