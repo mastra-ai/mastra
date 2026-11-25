@@ -58,6 +58,7 @@ interface RuntimeOptions {
   modelScript?: ModelScript;
   profiles?: (Profile & { review?: boolean })[];
   syntheticKnowledge?: boolean;
+  preload?: URL;
   example?: 'retail-pos' | 'software-integration' | 'it-helpdesk';
 }
 interface RuntimeProcess {
@@ -222,6 +223,8 @@ async function configureRuntime(
     if (generated === 'empty') launch.SUPPORT_CREDENTIALS_FILE = '';
     else if (generated) delete launch.SUPPORT_CREDENTIALS_FILE;
     if (generated && options.studioRole === undefined) delete launch.SUPPORT_STUDIO_ROLE;
+    if (options.preload)
+      launch.NODE_OPTIONS = [launch.NODE_OPTIONS, `--import=${options.preload.href}`].filter(Boolean).join(' ');
     return launch;
   }
   async function request(path: string, owner = 0, options: RequestInit = {}) {

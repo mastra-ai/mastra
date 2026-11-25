@@ -1,9 +1,9 @@
 import { fromMarkdown } from 'mdast-util-from-markdown';
 
 /** Only a standalone, closed Markdown fence declares a record. */
-export function supportRecordEnvelope(body: string) {
+export function supportRecordEnvelope(body: string, markdown = fromMarkdown(body)) {
   const bomLength = body.startsWith('\uFEFF') ? 1 : 0;
-  const records = fromMarkdown(body).children.filter(node => node.type === 'code' && node.lang === 'support-record');
+  const records = markdown.children.filter(node => node.type === 'code' && node.lang === 'support-record');
   if (records.length > 1) throw new Error('Duplicate support record envelope');
   const node = records[0];
   if (!node || node.type !== 'code') return;

@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { Client, type Pool } from 'pg';
+import { Client, DatabaseError, type Pool } from 'pg';
 import type { DbClient, TxClient } from '@mastra/pg';
 import { canonicalDatabasePath, databaseUrlForPath } from '../database/database-file.ts';
 import { resolveStoreConfiguration, type StoreConfiguration } from '../database/store.ts';
@@ -84,9 +84,12 @@ function writerClient(query: TxClient['query']): DbClient {
 }
 
 export class WriterSessionLostError extends Error {
-  constructor(cause: unknown) {
+  readonly commitState: 'not-committed' | 'unknown';
+
+  constructor(cause: unknown, commitState: 'not-committed' | 'unknown') {
     super('PostgreSQL writer session was lost', { cause });
     this.name = 'WriterSessionLostError';
+    this.commitState = commitState;
   }
 }
 
@@ -97,7 +100,8 @@ async function withPostgresWriter<T>(connectionString: string, operation: (clien
     connectionError ??= error;
   });
   const client = writerClient(async (sql, values) => {
-    if (connectionError) throw new WriterSessionLostError(connectionError);
+    if (connectionError) throw new WriterSessionLostError(connectionError, 'not-committed');
+    const committing = sql === 'COMMIT';
     const deadline = setTimeout(() => {
       connectionError = new Error('PostgreSQL writer query deadline elapsed');
       connection.connection.stream.destroy();
@@ -105,7 +109,11 @@ async function withPostgresWriter<T>(connectionString: string, operation: (clien
     try {
       return await connection.query(sql, values);
     } catch (error) {
-      if (connectionError) throw new WriterSessionLostError(connectionError);
+      if (connectionError) throw new WriterSessionLostError(connectionError, committing ? 'unknown' : 'not-committed');
+      // A server rejection gives a definite result. A fatal protocol or transport failure can
+      // arrive before pg emits its client error event, so treat an in-flight COMMIT as unknown.
+      if (committing && (!(error instanceof DatabaseError) || error.severity === 'FATAL' || error.severity === 'PANIC'))
+        throw new WriterSessionLostError(error, 'unknown');
       throw error;
     } finally {
       clearTimeout(deadline);
@@ -129,7 +137,8 @@ async function withPostgresWriter<T>(connectionString: string, operation: (clien
     if (commit.command !== 'COMMIT') throw new Error('PostgreSQL writer transaction was rolled back');
     return result;
   } catch (error) {
-    if (connected && !connectionError) await client.none('ROLLBACK').catch(() => undefined);
+    if (connected && !connectionError && !(error instanceof WriterSessionLostError))
+      await client.none('ROLLBACK').catch(() => undefined);
     throw error;
   } finally {
     const deadline = setTimeout(() => connection.connection.stream.destroy(), postgresDeadlineMs);

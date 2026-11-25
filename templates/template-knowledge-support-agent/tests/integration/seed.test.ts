@@ -539,12 +539,25 @@ test('seed keeps literal Markdown destination-like text and validates actual lin
     const manifest = await f.readManifest();
     const guideFile = join(dirname(f.manifestFile), manifest.pages[0]!.file);
     const prose = 'The log displays ](panel). [Valid link](https://example.invalid/panel) and ![Image](#diagram).';
-    await writeFile(guideFile, prose);
+    const literal = '```text\n<?example\n```';
+    await writeFile(guideFile, `${prose}\n\n<?example`);
+    assert.match((await f.cli({ args: ['--dry-run'], code: 1 })).output, /Unsupported or reserved Markdown syntax/u);
+    const canonical = manifest.pages[0]!.source!.url;
+    manifest.pages[0]!.source!.url = 'https:example.org';
+    await f.saveManifest(manifest);
+    await writeFile(guideFile, literal);
+    assert.match((await f.cli({ args: ['--dry-run'], code: 1 })).output, /Unsafe source URL/u);
+    manifest.pages[0]!.source!.url = canonical;
+    await f.saveManifest(manifest);
+    await writeFile(guideFile, `${prose}\n\n${literal}`);
     const report = (await f.cli()).report;
     const guide = page(report, 'connection-guide');
     await f.knowledge(async (_, storage) => {
       const stored = await storage.getPage({ id: guide.id!, read: 'all' });
       assert.ok(stored?.body?.includes(prose));
+      assert.ok(stored?.body?.includes(literal));
+      assert.ok(stored?.body?.includes(`(${canonical})`));
+      assert.ok(stored?.body?.includes('<!-- knowledge-seed:source:https -->'));
     });
     for (const markdown of ['[Actual link](panel)', '![Actual image](panel)']) {
       await writeFile(guideFile, markdown);

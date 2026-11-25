@@ -1,13 +1,14 @@
 import { knowledgeScopeAddress, MAX_KNOWLEDGE_PAGE_DEPTH } from '@mastra/core/knowledge';
-import type { Knowledge, KnowledgePage, KnowledgeNote, KnowledgeStorage } from '@mastra/core/knowledge';
+import type { Knowledge, KnowledgeNote, KnowledgeStorage } from '@mastra/core/knowledge';
 import { isCustomerHistoryPath, supportConfiguration } from '../../examples/support.ts';
+import type { OpenHistoryStorage, PageLocation } from '../database/history-storage.ts';
 import type { KnowledgeReadSnapshot } from '../database/knowledge-snapshot.ts';
 import { principals, type Profile } from '../identity.ts';
 import { recordOperation } from '../observability.ts';
 import { MAX_SUPPORT_RECORD_BODY_LENGTH, validateSupportRecord, type SupportRecord } from './seed-manifest.ts';
 import { supportRecordEnvelope } from './support-record-envelope.ts';
 
-// Search prioritizes relevant pages beyond the enumeration window. Neither native search nor
+// Search prioritizes relevant pages beyond the enumeration window. Neither search nor
 // this bounded fallback promises exhaustive ranking across an arbitrarily large history.
 const bounds = {
   batch: 100,
@@ -15,6 +16,7 @@ const bounds = {
   enumeration: 100,
   hits: 100,
   candidates: 300,
+  bodyBytes: 8 * 1024 * 1024,
   queries: 12,
   notes: 100,
   noteConcurrency: 8,
@@ -22,10 +24,12 @@ const bounds = {
   records: 3,
 };
 type Evidence = SupportRecord & { ref: string };
-type PageLocation = Pick<KnowledgePage, 'id' | 'scopeId' | 'isScope' | 'key' | 'parentId' | 'version'>;
 type PageRecord = { parsed?: SupportRecord; invalid?: true };
 type NoteEvidence = { id: string; version: number; listed: boolean; record: Evidence };
-export type HistoryKnowledge = Knowledge & { withReadSnapshot: KnowledgeReadSnapshot };
+export type HistoryKnowledge = Knowledge & {
+  openHistoryStorage: OpenHistoryStorage;
+  withReadSnapshot: KnowledgeReadSnapshot;
+};
 export type History = {
   status: 'ready' | 'empty' | 'no-relevant-records' | 'partial' | 'unavailable';
   records: Evidence[];
@@ -37,11 +41,7 @@ function record(body = ''): SupportRecord | undefined {
   if (envelope) return validateSupportRecord(JSON.parse(envelope.value));
 }
 
-function location({ id, scopeId, isScope, key, parentId, version }: KnowledgePage): PageLocation {
-  return { id, scopeId, isScope, key, parentId, version };
-}
-
-/** Scoped native search, verified canonical ancestry, and a bounded small-corpus fallback. */
+/** Scoped keyword search, verified canonical ancestry, and a bounded small-corpus fallback. */
 export async function prepareHistory(
   knowledge: HistoryKnowledge,
   profile: Profile,
@@ -66,22 +66,24 @@ export async function prepareHistory(
       .filter(([tag, terms]) => words.has(tag) || terms.some(term => words.has(term.normalize('NFC').toLowerCase())))
       .map(([tag]) => tag),
   );
+  let history: ReturnType<OpenHistoryStorage> | undefined;
   try {
     const scope = knowledgeScopeAddress('customer:$tenantId:$customerId', { ...profile });
     const read = await knowledge.readScopeFor(principals(profile));
     const store = await knowledge.getStorage();
     const [customer] = await store.getScopesByAddress([scope]);
     if (!customer) return finish('empty');
+    const historyScope = { scopeId: customer.id, read };
+    history = knowledge.openHistoryStorage();
     let historyReadable = false;
     const candidateIds = new Set<string>();
     const noteHits = new Map<string, Set<string>>();
-    const add = (page: KnowledgePage) => {
-      if (page.scopeId !== customer.id || page.isScope || page.deletedAt) return;
-      if (candidateIds.size >= bounds.candidates && !candidateIds.has(page.id)) {
+    const add = (id: string) => {
+      if (candidateIds.size >= bounds.candidates && !candidateIds.has(id)) {
         partial = true;
         return;
       }
-      candidateIds.add(page.id);
+      candidateIds.add(id);
     };
     // Search tags as well as question words: a tag may be absent from title and prose.
     const queries = [...new Set([...topics, ...words])];
@@ -89,14 +91,14 @@ export async function prepareHistory(
     // its hit limit, or omits queries.
     for (const query of queries.slice(0, bounds.queries)) {
       try {
-        const hits = await store.searchPages({ query, scopeIds: [customer.id], read, limit: bounds.hits });
+        const hits = await history.search(historyScope, query, bounds.hits);
         historyReadable = true;
         for (const hit of hits) {
-          add(hit.page);
-          if (hit.type === 'note' && candidateIds.has(hit.page.id)) {
-            const notes = noteHits.get(hit.page.id) ?? new Set<string>();
-            notes.add(hit.note.id);
-            noteHits.set(hit.page.id, notes);
+          add(hit.pageId);
+          if (hit.noteId && candidateIds.has(hit.pageId)) {
+            const notes = noteHits.get(hit.pageId) ?? new Set<string>();
+            notes.add(hit.noteId);
+            noteHits.set(hit.pageId, notes);
           }
         }
       } catch {
@@ -104,27 +106,12 @@ export async function prepareHistory(
       }
     }
     // Preserve exhaustive behavior for small customer scopes, including note-only matches and
-    // unusual tags. Scope-filtered pagination bounds both calls and returned pages; canonical
-    // ancestry below still excludes pages outside configured customer roots.
-    let enumerated = 0;
-    let cursor: string | undefined;
+    // unusual tags. The extra result signals incomplete enumeration.
     try {
-      do {
-        const batch = await store.listPages({
-          scopeId: customer.id,
-          read,
-          limit: Math.min(bounds.batch, bounds.enumeration - enumerated),
-          cursor,
-        });
-        historyReadable = true;
-        for (const page of batch.pages) add(page);
-        enumerated += batch.pages.length;
-        cursor = batch.nextCursor;
-        if (cursor && enumerated >= bounds.enumeration) {
-          partial = true;
-          break;
-        }
-      } while (cursor);
+      const listed = await history.list(historyScope, bounds.enumeration + 1);
+      historyReadable = true;
+      for (const { id } of listed.slice(0, bounds.enumeration)) add(id);
+      if (listed.length > bounds.enumeration) partial = true;
     } catch {
       partial = true;
     }
@@ -133,15 +120,23 @@ export async function prepareHistory(
     const ids = [...candidateIds];
     const candidateRecords = new Map<string, PageRecord>();
     const pages = new Map<string, PageLocation>();
-    // Adapters return full bodies. Keep only bounded records and locations between requests.
+    // A UTF-16 code unit accounts for at most three UTF-8 bytes. The aggregate limit also
+    // bounds reads when many individually valid pages match.
+    let remainingBytes = bounds.bodyBytes;
     for (let index = 0; index < ids.length; index += bounds.pageBatch) {
       try {
-        const current = await store.getPages({ ids: ids.slice(index, index + bounds.pageBatch), read });
+        const current = await history.candidates(
+          historyScope,
+          ids.slice(index, index + bounds.pageBatch),
+          MAX_SUPPORT_RECORD_BODY_LENGTH * 3,
+          remainingBytes,
+        );
         for (const page of current) {
-          if (page.scopeId !== customer.id || page.isScope || page.deletedAt) continue;
-          pages.set(page.id, location(page));
+          const { body, bodyOmitted, ...location } = page;
+          pages.set(page.id, location);
+          if (body !== null) remainingBytes -= Buffer.byteLength(body);
           try {
-            candidateRecords.set(page.id, { parsed: record(page.body) });
+            candidateRecords.set(page.id, bodyOmitted ? { invalid: true } : { parsed: record(body ?? undefined) });
           } catch {
             candidateRecords.set(page.id, { invalid: true });
           }
@@ -150,7 +145,7 @@ export async function prepareHistory(
         partial = true;
       }
     }
-    // Search hits have no canonical path. Resolve parents in batches using the public store API,
+    // Search hits have no canonical path. Resolve parents in metadata batches,
     // then reject foreign scopes, missing/deleted ancestors, cycles, and paths outside allowed roots.
     for (let depth = 0; depth < MAX_KNOWLEDGE_PAGE_DEPTH; depth++) {
       const missing = [...new Set([...pages.values()].map(page => page.parentId))].filter(
@@ -159,9 +154,8 @@ export async function prepareHistory(
       if (!missing.length) break;
       for (let index = 0; index < missing.length; index += bounds.pageBatch) {
         try {
-          const parents = await store.getPages({ ids: missing.slice(index, index + bounds.pageBatch), read });
-          for (const page of parents)
-            if (page.scopeId === customer.id && !page.deletedAt) pages.set(page.id, location(page));
+          const parents = await history.locations(historyScope, missing.slice(index, index + bounds.pageBatch));
+          for (const page of parents) pages.set(page.id, page);
         } catch {
           partial = true;
         }
@@ -197,19 +191,20 @@ export async function prepareHistory(
     async function inspect(pageId: string, { parsed, invalid }: PageRecord) {
       const path: string[] = [];
       const ancestry = new Map<string, PageLocation>();
+      let reachedScope = false;
       let current = pages.get(pageId);
-      while (current && current.id !== customer.id && path.length < MAX_KNOWLEDGE_PAGE_DEPTH) {
-        if (ancestry.has(current.id) || current.scopeId !== customer.id || current.isScope) break;
+      while (current && path.length < MAX_KNOWLEDGE_PAGE_DEPTH) {
+        if (ancestry.has(current.id)) break;
         if (!current.key) return;
         ancestry.set(current.id, current);
         path.unshift(current.key);
         if (current.parentId === customer.id) {
-          current = customer;
+          reachedScope = true;
           break;
         }
         current = current.parentId ? pages.get(current.parentId) : undefined;
       }
-      if (current?.id !== customer.id) {
+      if (!reachedScope) {
         partial = true;
         return;
       }
@@ -274,8 +269,8 @@ export async function prepareHistory(
         const ancestryIds = [...new Set(batch.flatMap(check => check.ancestry.map(page => page.id)))];
         const currentPages = new Map<string, PageLocation>();
         for (let index = 0; index < ancestryIds.length; index += bounds.pageBatch) {
-          const batch = await snapshot.getPages({ ids: ancestryIds.slice(index, index + bounds.pageBatch), read });
-          for (const current of batch) currentPages.set(current.id, location(current));
+          const batch = await snapshot.locations(historyScope, ancestryIds.slice(index, index + bounds.pageBatch));
+          for (const current of batch) currentPages.set(current.id, current);
         }
         const evidence: Evidence[] = [];
         let incomplete = false;
@@ -284,10 +279,7 @@ export async function prepareHistory(
             !ancestry.every(prior => {
               const current = currentPages.get(prior.id);
               return (
-                current?.scopeId === customer.id &&
-                current.parentId === prior.parentId &&
-                current.key === prior.key &&
-                current.version === prior.version
+                current?.parentId === prior.parentId && current.key === prior.key && current.version === prior.version
               );
             })
           ) {
@@ -340,6 +332,8 @@ export async function prepareHistory(
     await Promise.all(verification);
   } catch {
     return finish('unavailable');
+  } finally {
+    history?.close();
   }
   const ranked = records
     .map(record => ({ record, score: record.topicTags.filter(tag => topics.has(tag) || words.has(tag)).length }))

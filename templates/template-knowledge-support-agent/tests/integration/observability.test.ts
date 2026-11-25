@@ -10,7 +10,7 @@ import { SpanType } from '@mastra/core/observability';
 import { LibSQLStore } from '@mastra/libsql';
 import { observability } from '../../src/mastra/observability.ts';
 
-test('aborted Knowledge tools persist aborted metrics', async () => {
+test('Knowledge tools persist matching trace and metric outcomes without payloads', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'support-aborted-tool-'));
   const cleanups: Array<() => void | Promise<void>> = [() => rm(directory, { recursive: true, force: true })];
   const errors: unknown[] = [];
@@ -25,17 +25,43 @@ test('aborted Knowledge tools persist aborted metrics', async () => {
     assert.ok(instance);
     cleanups.unshift(() => instance.shutdown());
     instance.startSpan({ name: 'knowledge_list', type: SpanType.TOOL_CALL }).end({ outcome: 'abort' });
+    instance
+      .startSpan({ name: 'knowledge_read', type: SpanType.TOOL_CALL })
+      .end({ outcome: 'success', attributes: { success: true }, output: { error: 'PRIVATE_READ_ERROR' } });
+    instance
+      .startSpan({ name: 'knowledge_read', type: SpanType.TOOL_CALL })
+      .end({ outcome: 'success', attributes: { success: true }, output: { page: { body: 'PRIVATE_READ_BODY' } } });
     await instance.flush();
     const { rows } = await client.execute(`
-      SELECT name, outcome, error, json_extract(metadata, '$.labels.status') AS status,
+      SELECT name, outcome, json(error) AS error, json(output) AS output,
+             json_extract(attributes, '$.success') AS success,
+             json_extract(metadata, '$.labels.operation') AS operation,
+             json_extract(metadata, '$.labels.status') AS status,
              json_extract(metadata, '$.value') AS value,
              json_type(metadata, '$.value') AS valueType
       FROM mastra_ai_spans
-      WHERE name = 'knowledge-list' OR json_extract(metadata, '$.labels.operation') = 'knowledge-list'
-      ORDER BY name
+      WHERE name IN ('knowledge-list', 'knowledge-read')
+        OR json_extract(metadata, '$.labels.operation') IN ('knowledge-list', 'knowledge-read')
+      ORDER BY name, status
     `);
     assert.ok(rows.some(row => row.name === 'knowledge-list' && row.outcome === 'abort' && !row.error));
-    const metrics = rows.filter(row => row.status !== null);
+    const reads = rows.filter(row => row.name === 'knowledge-read');
+    assert.equal(reads.length, 2);
+    const failed = reads.find(row => row.outcome === 'error');
+    const succeeded = reads.find(row => row.outcome === 'success');
+    assert.match(String(failed?.error), /Operation failed/u);
+    assert.equal(failed?.success, 0);
+    assert.equal(succeeded?.error, null);
+    assert.equal(succeeded?.success, 1);
+    assert.ok(reads.every(row => row.output === null));
+    assert.doesNotMatch(JSON.stringify(rows), /PRIVATE_READ_/u);
+    assert.deepEqual(
+      rows
+        .filter(row => row.operation === 'knowledge-read' && row.name === 'support_operation_count')
+        .map(row => row.status),
+      ['error', 'success'],
+    );
+    const metrics = rows.filter(row => row.operation === 'knowledge-list');
     assert.deepEqual(
       metrics.map(row => [row.name, row.status]),
       [

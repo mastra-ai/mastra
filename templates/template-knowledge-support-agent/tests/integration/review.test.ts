@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { writeFile } from 'node:fs/promises';
+import { access, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
@@ -78,11 +78,12 @@ async function credentials(f: Fixture, granted = true, otherReviewers: number[] 
     ),
   );
 }
-async function fixture() {
+async function fixture(preload?: URL) {
   let selected = candidate('initial');
   let emitted: Candidate | undefined;
   let sharedRead: string | undefined;
   const f = await runtimeFixture({
+    preload,
     modelScript: body => {
       const list = messages(body);
       const curator = list.some(message =>
@@ -802,7 +803,7 @@ test('review detects exact duplicates and publishes new content in a large scope
 });
 
 test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 240000 }, async () => {
-  const f = await fixture();
+  const f = await fixture(new URL('../fixtures/resume-gate.mjs', import.meta.url));
   try {
     await f.start();
     const input = await confirmation(f);
@@ -1055,20 +1056,32 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
       ).status,
       403,
     );
-    const concurrent = await Promise.all(
-      [0, 1].map(() =>
-        post(f, `/workflows/review/resume-async?runId=${busy.runId}`, {
-          step: ['publish-review'],
-          resumeData: {
-            reason: approval.decision.reason,
-            revision: approval.decision.revision,
-            decision: approval.decision.decision,
-          },
-        }),
-      ),
-    );
-    assert.ok(concurrent.some(response => response.status === 200));
-    await Promise.all(concurrent.map(response => response.text()));
+    const gate = join(f.directory, `resume-${busy.runId}`);
+    await writeFile(gate, '');
+    const retry = () =>
+      post(f, `/workflows/review/resume-async?runId=${busy.runId}`, {
+        step: ['publish-review'],
+        resumeData: approval.decision,
+      });
+    const first = retry();
+    try {
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await access(`${gate}.claimed`);
+          break;
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || attempt === 200) throw error;
+          await setTimeout(25);
+        }
+      }
+      assert.equal((await inspect(f, busy.runId)).status, 'running');
+      const overlapping = await retry();
+      assert.equal(overlapping.status, 403, await overlapping.text());
+    } finally {
+      await writeFile(`${gate}.release`, '');
+      const accepted = await first;
+      assert.equal(accepted.status, 200, await accepted.text());
+    }
     const completed = await inspect(f, busy.runId);
     assert.equal(completed.result.status, 'published', JSON.stringify(completed));
     const effects = (await snapshot(f)).filter(item =>

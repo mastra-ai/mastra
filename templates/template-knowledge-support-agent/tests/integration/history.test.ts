@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { createClient } from '@libsql/client';
 import { prepareHistory } from '../../src/mastra/knowledge/preflight.ts';
+import type { HistoryKnowledge } from '../../src/mastra/knowledge/history.ts';
 import { exampleProfiles } from '../../src/examples/retail-pos/profiles.ts';
 import { datasets } from '../../src/examples/datasets.ts';
 import { seedDataset } from '../../src/mastra/knowledge/seed.ts';
@@ -10,6 +12,13 @@ import { generateHistoryCorpus, historyRecord, reviewedNote } from '../fixtures/
 import { runtimeFixture, syntheticSafetyPolicy } from '../fixtures/runtime.ts';
 
 const profile = exampleProfiles[0]!;
+type Discovery = ReturnType<HistoryKnowledge['openHistoryStorage']>;
+
+function observeDiscovery(knowledge: HistoryKnowledge, observe: (storage: Discovery) => Discovery) {
+  const original = knowledge.openHistoryStorage;
+  knowledge.openHistoryStorage = () => observe(original());
+}
+
 test(
   'large customer histories retain older ranked evidence and isolate malformed entries over HTTP',
   { timeout: 180000 },
@@ -235,6 +244,83 @@ test('a complete fallback finds matches beyond the search query cap', { timeout:
   }
 });
 
+test('history discovery returns metadata and bounds candidate payloads before fetching', async () => {
+  const f = await runtimeFixture({ syntheticKnowledge: false });
+  try {
+    const scope = 'customer:north:store-1';
+    const anchor = 'cases/network-anchor';
+    await f.supportKnowledge.upsertPage({ scope, path: anchor, name: 'Network anchor' });
+    for (let index = 0; index < 35; index++) {
+      await f.supportKnowledge.upsertPage({ scope, path: `cases/large-${index}`, name: `Network case ${index}` });
+    }
+    const { page: oversized } = await f.supportKnowledge.upsertPage({
+      scope,
+      path: 'cases/oversized',
+      name: 'Network connectivity oversized record',
+    });
+    const body = `${historyRecord('LARGE_NETWORK_RECORD')}\n${'é'.repeat(131072)}`;
+    const db = createClient({ url: f.databaseUrl });
+    try {
+      await db.execute({ sql: "UPDATE mastra_knowledge_pages SET body = ? WHERE key GLOB 'large-*'", args: [body] });
+      await db.execute({
+        sql: 'UPDATE mastra_knowledge_pages SET body = ? WHERE id = ?',
+        args: ['漢'.repeat(1_000_001), oversized.id],
+      });
+    } finally {
+      db.close();
+    }
+    const note = await f.supportKnowledge.addNote({
+      scope,
+      path: anchor,
+      text: reviewedNote(historyRecord('APPROVED_SMALL_NOTE', ['connectivity'], '2027-01-01')),
+      author: 'review:synthetic',
+    });
+    let transferred = 0;
+    let omitted = 0;
+    let matchingQueries = 0;
+    let omittedOversized = false;
+    const candidates: string[] = [];
+    const searchFields = new Set<string>();
+    const listingFields = new Set<string>();
+    observeDiscovery(f.supportKnowledge, storage => ({
+      ...storage,
+      async search(...args) {
+        const hits = await storage.search(...args);
+        if (hits.length >= 35) matchingQueries++;
+        for (const hit of hits) for (const field of Object.keys(hit)) searchFields.add(field);
+        return hits;
+      },
+      async list(...args) {
+        const entries = await storage.list(...args);
+        for (const entry of entries) for (const field of Object.keys(entry)) listingFields.add(field);
+        return entries;
+      },
+      async candidates(...args) {
+        const rows = await storage.candidates(...args);
+        for (const row of rows) {
+          candidates.push(row.id);
+          transferred += Buffer.byteLength(row.body ?? '');
+          omitted += row.bodyOmitted;
+          if (row.id === oversized.id) omittedOversized = row.bodyOmitted === 1 && row.body === null;
+        }
+        return rows;
+      },
+    }));
+    const history = await prepareHistory(f.supportKnowledge, profile, 'network connectivity');
+    assert.equal(matchingQueries, 2);
+    assert.deepEqual(searchFields, new Set(['pageId', 'noteId']));
+    assert.deepEqual(listingFields, new Set(['id']));
+    assert.equal(new Set(candidates).size, candidates.length, 'Repeated hits must not reload a candidate body');
+    assert.ok(transferred > 0 && transferred <= 8 * 1024 * 1024, `Candidate bytes transferred: ${transferred}`);
+    assert.ok(omittedOversized, 'The database must withhold an oversized candidate body');
+    assert.ok(omitted > 1, 'The cumulative limit must withhold individually eligible bodies too');
+    assert.equal(history.status, 'partial');
+    assert.ok(history.records.some(record => record.ref === `${scope}#${anchor}?note=${note.id}`));
+  } finally {
+    await f.close();
+  }
+});
+
 test('complete enumeration recovers from saturated history search', { timeout: 30000 }, async () => {
   const f = await runtimeFixture({ syntheticKnowledge: false });
   try {
@@ -259,17 +345,18 @@ test('complete enumeration recovers from saturated history search', { timeout: 3
         '"\\u0063onnectivity"',
       ),
     });
-    const store = await f.supportKnowledge.getStorage();
-    const search = store.searchPages.bind(store);
     const searched = new Map<string, string[]>();
-    store.searchPages = async input => {
-      const hits = await search(input);
-      searched.set(
-        input.query,
-        hits.map(hit => hit.page.id),
-      );
-      return hits;
-    };
+    observeDiscovery(f.supportKnowledge, storage => ({
+      ...storage,
+      async search(scope, query, limit) {
+        const hits = await storage.search(scope, query, limit);
+        searched.set(
+          query,
+          hits.map(hit => hit.pageId),
+        );
+        return hits;
+      },
+    }));
     const history = await prepareHistory(f.supportKnowledge, profile, 'network');
     assert.equal(searched.get('network')?.length, 100);
     assert.ok([...searched.values()].flat().every(id => id !== fallback.id));
@@ -281,7 +368,7 @@ test('complete enumeration recovers from saturated history search', { timeout: 3
   }
 });
 
-test('a page or note removed after native search does not enter scoped history', { timeout: 30000 }, async () => {
+test('a page or note removed after discovery does not enter scoped history', { timeout: 30000 }, async () => {
   const f = await runtimeFixture({ syntheticKnowledge: false });
   try {
     const { supportKnowledge } = f;
@@ -306,22 +393,23 @@ test('a page or note removed after native search does not enter scoped history',
     const baseline = await prepareHistory(supportKnowledge, profile, question);
     assert.ok(baseline.records.some(record => record.ref === noteRef));
     assert.ok(baseline.records.some(record => record.ref === `${scope}#${deletedPath}`));
-    const store = await supportKnowledge.getStorage();
-    const search = store.searchPages.bind(store);
     let noteRemoved = false;
     let pageRemoved = false;
-    store.searchPages = async input => {
-      const hits = await search(input);
-      if (!noteRemoved && hits.some(hit => hit.type === 'note' && hit.note.id === note.id)) {
-        noteRemoved = true;
-        await supportKnowledge.removeNote({ id: note.id, author: 'synthetic-fixture' });
-      }
-      if (!pageRemoved && hits.some(hit => hit.page.id === deleted.id)) {
-        pageRemoved = true;
-        await supportKnowledge.removePage({ scope, path: deletedPath, author: 'synthetic-fixture' });
-      }
-      return hits;
-    };
+    observeDiscovery(supportKnowledge, storage => ({
+      ...storage,
+      async search(...args) {
+        const hits = await storage.search(...args);
+        if (!noteRemoved && hits.some(hit => hit.noteId === note.id)) {
+          noteRemoved = true;
+          await supportKnowledge.removeNote({ id: note.id, author: 'synthetic-fixture' });
+        }
+        if (!pageRemoved && hits.some(hit => hit.pageId === deleted.id)) {
+          pageRemoved = true;
+          await supportKnowledge.removePage({ scope, path: deletedPath, author: 'synthetic-fixture' });
+        }
+        return hits;
+      },
+    }));
     const result = await prepareHistory(supportKnowledge, profile, question);
     assert.ok(noteRemoved && pageRemoved, 'The scoped search returned both deleted entries');
     assert.ok(result.records.some(record => record.summary === 'MATCHING_PAGE'));
@@ -355,7 +443,7 @@ test('history verifies note visibility and case ancestry at the same point in ti
       await supportKnowledge.removeNote({ id: removedBefore.id });
       return withReadSnapshot(async snapshot => {
         // Anchor the read transaction before changing what a live ancestry lookup would see.
-        assert.equal((await snapshot.getPages({ ids: [page.id], read: 'all' })).length, 1);
+        assert.equal((await snapshot.locations({ scopeId: page.scopeId, read: 'all' }, [page.id])).length, 1);
         await supportKnowledge.removeNote({ id: removedDuring.id });
         await supportKnowledge.movePage({ scope, path, parent: 'archive' });
         return read(snapshot);
@@ -485,12 +573,14 @@ test(
         if (input.read !== 'all' && (input.id === note.id || input.id === removed.id)) listedNotePointReads++;
         return getNote(input);
       };
-      const search = store.searchPages.bind(store);
-      store.searchPages = async input => {
-        const hits = await search(input);
-        matchingHits += hits.filter(hit => hit.type === 'note' && hit.note.id === note.id).length;
-        return hits;
-      };
+      observeDiscovery(supportKnowledge, storage => ({
+        ...storage,
+        async search(...args) {
+          const hits = await storage.search(...args);
+          matchingHits += hits.filter(hit => hit.noteId === note.id).length;
+          return hits;
+        },
+      }));
       store.listNotes = async input => {
         if (input.pageId === moving.id && !moved) {
           moved = true;

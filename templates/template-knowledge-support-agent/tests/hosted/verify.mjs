@@ -437,7 +437,7 @@ async function holdWriterLock(env, db) {
   throw new Error(`Writer lock holder failed: ${proc.output()}`);
 }
 
-async function verifyStalledPostgresWriter(db, env) {
+async function postgresProxy(db, onClientData) {
   const destination = new URL(db.url);
   const proxy = createPortServer();
   const pairs = new Map();
@@ -451,12 +451,28 @@ async function verifyStalledPostgresWriter(db, env) {
       downstream.destroy();
       pairs.delete(downstream);
     });
+    if (onClientData) downstream.on('data', chunk => onClientData(downstream, upstream, chunk));
     downstream.pipe(upstream).pipe(downstream);
   });
   proxy.listen(0, host);
   await once(proxy, 'listening');
   const proxyUrl = new URL(destination);
   proxyUrl.port = String(proxy.address().port);
+  return {
+    url: proxyUrl.href,
+    pairs,
+    async close() {
+      for (const [downstream, upstream] of pairs) {
+        downstream.destroy();
+        upstream.destroy();
+      }
+      await new Promise(resolve => proxy.close(resolve));
+    },
+  };
+}
+
+async function verifyStalledPostgresWriter(db, env) {
+  const proxy = await postgresProxy(db);
   const writerName = `support-stalled-writer-${randomUUID()}`;
   const imports = "import { withWriterLock } from './src/mastra/knowledge/writer-lock.ts';";
   const proc = start(
@@ -477,12 +493,13 @@ async function verifyStalledPostgresWriter(db, env) {
         () => assert.fail('The stalled query unexpectedly succeeded'),
         error => {
           assert.equal(error.name, 'WriterSessionLostError');
+          assert.equal(error.commitState, 'not-committed');
           assert.ok(isRetryablePublicationError(error));
         }
       );
       process.disconnect();`,
     ],
-    { ...env, ...databaseEnv({ url: proxyUrl.href }), PGAPPNAME: writerName },
+    { ...env, ...databaseEnv(proxy), PGAPPNAME: writerName },
     template,
     true,
   );
@@ -495,7 +512,7 @@ async function verifyStalledPostgresWriter(db, env) {
     ]);
     assert.equal(message, 'writer-held');
     const observer = new Client({
-      connectionString: proxyUrl.href,
+      connectionString: proxy.url,
       application_name: 'support-proxy-observer',
       connectionTimeoutMillis: 5000,
       query_timeout: 5000,
@@ -506,7 +523,7 @@ async function verifyStalledPostgresWriter(db, env) {
         writerName,
       ]);
       assert.equal(rows.length, 1, 'Identify the PostgreSQL writer session behind the proxy');
-      const upstream = [...pairs.values()].find(socket => socket.localPort === rows[0].client_port);
+      const upstream = [...proxy.pairs.values()].find(socket => socket.localPort === rows[0].client_port);
       assert.ok(upstream, 'The stalled writer must have an open upstream connection');
       // Keep the writer's TCP connection open while suppressing its next PostgreSQL reply.
       upstream.pause();
@@ -528,11 +545,109 @@ async function verifyStalledPostgresWriter(db, env) {
       { cwd: template, env: { ...env, ...databaseEnv(db) }, timeout: 5000 },
     );
   } finally {
-    for (const [downstream, upstream] of pairs) {
-      downstream.destroy();
-      upstream.destroy();
+    await Promise.all([stop(proc), proxy.close()]);
+  }
+}
+
+async function postgresProxyWithheldCommit(db, statement) {
+  const marker = Buffer.from(statement);
+  const commit = Buffer.from([0x51, 0, 0, 0, 11, ...Buffer.from('COMMIT'), 0]);
+  const sockets = new WeakMap();
+  const commitSent = Promise.withResolvers();
+  const proxy = await postgresProxy(db, (downstream, upstream, chunk) => {
+    const state = sockets.get(downstream) ?? { tail: Buffer.alloc(0), matched: false };
+    const bytes = Buffer.concat([state.tail, chunk]);
+    state.matched ||= bytes.includes(marker);
+    state.tail = Buffer.from(bytes.subarray(1 - Math.max(marker.length, commit.length)));
+    sockets.set(downstream, state);
+    if (state.matched && bytes.includes(commit)) {
+      // Forward COMMIT and hold its reply until an independent session confirms it took effect.
+      upstream.pause();
+      commitSent.resolve(downstream);
     }
-    await Promise.all([stop(proc), new Promise(resolve => proxy.close(resolve))]);
+  });
+  return { ...proxy, commitSent: commitSent.promise };
+}
+
+async function verifyPostgresCommitState(db, env) {
+  const channel = 'support_commit_reply';
+  const proxy = await postgresProxyWithheldCommit(db, `NOTIFY ${channel}`);
+  const observer = new Client({ connectionString: db.url, connectionTimeoutMillis: 5000, query_timeout: 5000 });
+  let proc;
+  try {
+    await observer.connect();
+    await observer.query(`LISTEN ${channel}`);
+    const notification = once(observer, 'notification', { signal: AbortSignal.timeout(8000) });
+    proc = start(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        `import assert from 'node:assert/strict';
+        import { withWriterLock } from './src/mastra/knowledge/writer-lock.ts';
+        await assert.rejects(
+          withWriterLock(({ postgres }) => postgres.none('NOTIFY ${channel}')),
+          { name: 'WriterSessionLostError', commitState: 'unknown' }
+        );`,
+      ],
+      { ...env, ...databaseEnv(proxy) },
+    );
+    // PostgreSQL delivers NOTIFY only after the transaction commits.
+    const [downstream, [notice]] = await Promise.race([
+      Promise.all([proxy.commitSent, notification]),
+      proc.exited.then(() => {
+        throw new Error(`Writer exited before the COMMIT reply was withheld: ${proc.output()}`);
+      }),
+    ]);
+    assert.equal(notice.channel, channel);
+    downstream.destroy();
+    const [code] = await proc.exited;
+    assert.equal(code, 0, proc.output());
+  } finally {
+    await Promise.all([proxy.close(), observer.end(), proc && stop(proc)]);
+  }
+}
+
+async function verifyLostPostgresPublicationReply(db, worker, runId, proposal, approval, reference) {
+  const proxy = await postgresProxyWithheldCommit(db, 'INSERT INTO public.support_review_publications');
+  const observer = new Client({ connectionString: db.url, connectionTimeoutMillis: 5000, query_timeout: 5000 });
+  let proxyWorker;
+  let publication;
+  try {
+    await observer.connect();
+    proxyWorker = await worker(proxy);
+    publication = request(proxyWorker, resumeRoute(runId), reviewer, {
+      step: ['publish-review'],
+      resumeData: approval,
+    });
+    const downstream = await Promise.race([
+      proxy.commitSent,
+      publication.then(response => {
+        throw new Error(`Publication returned HTTP ${response.status} before its COMMIT reply was withheld`);
+      }),
+      delay(8000, undefined, { ref: false }).then(() => {
+        throw new Error('Publication did not send COMMIT through the proxy');
+      }),
+    ]);
+    let rows = [];
+    for (let attempt = 0; !rows.length && attempt < 80; attempt++) {
+      ({ rows } = await observer
+        .query('SELECT reference FROM public.support_review_publications WHERE proposal_id = $1 AND revision = $2', [
+          proposal.id,
+          approval.revision,
+        ])
+        .catch(error => {
+          if (error.code === '42P01') return { rows: [] };
+          throw error;
+        }));
+      if (!rows.length) await delay(25);
+    }
+    assert.deepEqual(rows, [{ reference }], 'The receipt must be durable before dropping the reply');
+    downstream.destroy();
+    assert.equal((await json(publication)).status, 'suspended');
+  } finally {
+    await proxy.close();
+    await Promise.allSettled([observer.end(), proxyWorker && stop(proxyWorker.proc), publication]);
   }
 }
 
@@ -881,6 +996,7 @@ try {
     const report = JSON.parse(seeded.stdout.slice(seeded.stdout.indexOf('{')));
     await verifyInterruptedSeed(db, env, report.pages);
     await verifyStalledPostgresWriter(db, env);
+    await verifyPostgresCommitState(db, env);
   }
   const first = bootstrapped ?? (await worker(db));
   const second = await worker(db);
@@ -994,6 +1110,11 @@ try {
   const denied = await request(second, generateRoute, reviewer, firstTurn);
   assert.equal(denied.headers.get('Retry-After'), null);
   assert.equal(denied.status, 403, 'A different technician cannot claim the existing thread');
+  if (backend === 'postgres') {
+    await verifyLostPostgresPublicationReply(db, worker, runId, proposal, approval, reference);
+    const committed = await json(request(second, pageRoute(reference), technician));
+    assert.equal(committed.page.version, 1);
+  }
   const resumed = await json(
     request(second, resumeRoute(runId), reviewer, {
       step: ['publish-review'],
@@ -1015,6 +1136,7 @@ try {
 
   const restarted = await worker(db);
   const published = await json(request(restarted, pageRoute(reference), technician));
+  assert.equal(published.page.version, 1);
   assert.match(JSON.stringify(published), /Three hosted reference checks succeeded/u);
   assert.equal((await request(restarted, pageRoute(reference), outsider)).status, 404);
   const { id: fresh } = await createThread(restarted, technician);

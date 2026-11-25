@@ -2,9 +2,11 @@ import { createClient } from '@libsql/client';
 import type { KnowledgeStorage } from '@mastra/core/knowledge';
 import { KnowledgeLibSQL, type LibSQLStore } from '@mastra/libsql';
 import { KnowledgePG, PostgresStore, type DbClient } from '@mastra/pg';
+import { historyStorage, libsqlQuery, postgresQuery } from './history-storage.ts';
 import type { StoreConfiguration } from './store.ts';
 
-type SnapshotStore = Pick<KnowledgeStorage, 'getPages' | 'listNotes' | 'getNote'>;
+type SnapshotStore = Pick<KnowledgeStorage, 'listNotes' | 'getNote'> &
+  Pick<ReturnType<typeof historyStorage>, 'locations'>;
 export type KnowledgeReadSnapshot = <T>(read: (store: SnapshotStore) => Promise<T>) => Promise<T>;
 
 export function createKnowledgeReadSnapshot(
@@ -33,7 +35,12 @@ export function createKnowledgeReadSnapshot(
           many: tx.many.bind(tx),
           manyOrNone: tx.manyOrNone.bind(tx),
         };
-        return read(new KnowledgePG({ client, schemaName: 'public', storageIsolationKey: tx }));
+        const knowledge = new KnowledgePG({ client, schemaName: 'public', storageIsolationKey: tx });
+        return read({
+          listNotes: knowledge.listNotes.bind(knowledge),
+          getNote: knowledge.getNote.bind(knowledge),
+          locations: historyStorage(postgresQuery(tx), 'postgres').locations,
+        });
       });
   }
   return async read => {
@@ -41,20 +48,23 @@ export function createKnowledgeReadSnapshot(
     try {
       const tx = await client.transaction('read');
       try {
-        return await read(
-          new KnowledgeLibSQL({
-            client: {
-              protocol: client.protocol,
-              get closed() {
-                return tx.closed;
-              },
-              execute: tx.execute.bind(tx),
-              batch: unsupported,
-              transaction: unsupported,
-              close: unsupported,
+        const knowledge = new KnowledgeLibSQL({
+          client: {
+            protocol: client.protocol,
+            get closed() {
+              return tx.closed;
             },
-          }),
-        );
+            execute: tx.execute.bind(tx),
+            batch: unsupported,
+            transaction: unsupported,
+            close: unsupported,
+          },
+        });
+        return await read({
+          listNotes: knowledge.listNotes.bind(knowledge),
+          getNote: knowledge.getNote.bind(knowledge),
+          locations: historyStorage(libsqlQuery(tx), 'libsql').locations,
+        });
       } finally {
         tx.close();
       }

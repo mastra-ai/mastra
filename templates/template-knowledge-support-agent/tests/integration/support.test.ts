@@ -180,7 +180,7 @@ test('preflight_precedes_model_and_distinguishes_history_outcomes', { timeout: 1
   const f = await runtimeFixture({ modelScript: supportScript });
   try {
     await seed(f);
-    // Cross a real pagination boundary; equal dates resolve by canonical key, unrelated text stays out.
+    // Equal dates resolve by canonical key, and unrelated text stays out.
     for (let i = 0; i < 12; i++)
       await casePage(f, `unrelated-${String(i).padStart(2, '0')}`, 'UNRELATED_HISTORY_MARKER', { tags: ['inventory'] });
     await casePage(f, 'z-older', 'Older Ethernet case', { date: '2026-05-01' });
@@ -306,17 +306,21 @@ test('preflight_precedes_model_and_distinguishes_history_outcomes', { timeout: 1
         () => store.listChildPages({ parentId: root!.id, read: scopedRead, limit: 100 }),
         /JSON|Unexpected|property/iu,
       );
-      const unavailable = await thread(f);
-      const unavailableStart = f.model.requests.length;
-      await turn(f, unavailable, 'network connectivity');
-      assert.equal(history(f.model.requests[unavailableStart]!).status, 'partial');
+      const projected = await thread(f);
+      const projectedStart = f.model.requests.length;
+      await turn(f, projected, 'network connectivity');
+      assert.deepEqual(
+        history(f.model.requests[projectedStart]!),
+        history(first),
+        'History metadata reads do not decode unrelated page provenance',
+      );
       await assert.rejects(
         () => store.searchPages({ scopeIds: [scope!.id], read: scopedRead, query: 'decoder' }),
         /JSON|Unexpected|property/iu,
       );
       const requestStart = f.model.requests.length;
-      await turn(f, unavailable, 'decoder');
-      assert.deepEqual(history(f.model.requests[requestStart]!), { status: 'unavailable', records: [] });
+      await turn(f, projected, 'decoder');
+      assert.deepEqual(history(f.model.requests[requestStart]!), { status: 'no-relevant-records', records: [] });
     } finally {
       await sql(f, 'UPDATE mastra_knowledge_pages SET createdBy = ? WHERE id = ?', [original, broken.page.id]);
     }
@@ -571,7 +575,7 @@ test('turns use the delivered policy when an edit lands during preflight', { tim
     context.set('mastra__user', profile);
     const resource = resourceId(profile);
     const store = await f.supportKnowledge.getStorage();
-    const search = store.searchPages.bind(store);
+    const openHistoryStorage = f.supportKnowledge.openHistoryStorage;
     const countNotes = store.countNotes.bind(store);
     const policy = { scope: 'tenant:north', path: 'policies/safe-changes' };
     const [scope] = await store.getScopesByAddress([policy.scope]);
@@ -581,13 +585,19 @@ test('turns use the delivered policy when an edit lands during preflight', { tim
     let verifyMissingCounts = false;
     let countFailures = 0;
     // Commit a real edit after preflight's policy lookup, before the native pin lookup in this turn.
-    store.searchPages = async input => {
-      if (pendingEdit) {
-        const body = pendingEdit;
-        pendingEdit = undefined;
-        await f.supportKnowledge.upsertPage({ ...policy, name: original.name, body, author: 'synthetic-fixture' });
-      }
-      return search(input);
+    f.supportKnowledge.openHistoryStorage = () => {
+      const history = openHistoryStorage();
+      return {
+        ...history,
+        async search(...args) {
+          if (pendingEdit) {
+            const body = pendingEdit;
+            pendingEdit = undefined;
+            await f.supportKnowledge.upsertPage({ ...policy, name: original.name, body, author: 'synthetic-fixture' });
+          }
+          return history.search(...args);
+        },
+      };
     };
     store.countNotes = async input => {
       if (verifyMissingCounts && input.pageIds.includes(original.id)) {

@@ -110,7 +110,7 @@ function url(value: unknown): string {
   const parsed = URL.parse(result);
   if (!parsed) throw new Error('Invalid source URL');
   if (
-    !['https:', 'http:'].includes(parsed.protocol) ||
+    !/^https?:\/\/[^/]/iu.test(result) ||
     !parsed.hostname ||
     parsed.username ||
     parsed.password ||
@@ -243,6 +243,11 @@ type MarkdownNode = {
   children?: MarkdownNode[];
 };
 
+function rejectHtml(node: MarkdownNode) {
+  if (node.type === 'html') throw new Error('Unsupported or reserved Markdown syntax');
+  node.children?.forEach(rejectHtml);
+}
+
 function renderMarkdownLinks(
   body: string,
   resolveAlias: (ref: string) => string,
@@ -258,6 +263,7 @@ function renderMarkdownLinks(
     offset = end;
   }
   function protect(node: MarkdownNode) {
+    if (node.type === 'html') throw new Error('Unsupported or reserved Markdown syntax');
     const parsedStart = node.position?.start.offset;
     const parsedEnd = node.position?.end.offset;
     if (parsedStart === undefined || parsedEnd === undefined) return;
@@ -406,7 +412,9 @@ export async function prepareDataset(
       MAX_SUPPORT_RECORD_BODY_LENGTH,
       true,
     );
-    const envelope = supportRecordEnvelope(markdown);
+    const authored = fromMarkdown(markdown);
+    rejectHtml(authored);
+    const envelope = supportRecordEnvelope(markdown, authored);
     if (envelope && page.input.record !== undefined) throw new Error('Duplicate support record envelope');
     const sourceRecord = envelope
       ? validateSupportRecord(JSON.parse(envelope.value))

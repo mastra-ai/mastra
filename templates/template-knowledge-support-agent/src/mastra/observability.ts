@@ -118,7 +118,15 @@ export class PayloadFreeStorageExporter extends MastraStorageExporter {
             ? output.entries.length
             : undefined;
     const reportedOutcome = SPAN_OUTCOMES.find(outcome => outcome === span.outcome);
-    const outcome = reportedOutcome ?? (span.endTime ? (span.errorInfo ? 'error' : 'unknown') : undefined);
+    const toolOutcome =
+      event.type === TracingEventType.SPAN_ENDED && operation
+        ? span.errorInfo || output.error || attributes.success === false
+          ? 'error'
+          : (reportedOutcome ?? 'success')
+        : undefined;
+    const outcome =
+      toolOutcome ?? reportedOutcome ?? (span.endTime ? (span.errorInfo ? 'error' : 'unknown') : undefined);
+    const success = toolOutcome === 'error' ? false : attributes.success;
     const safe: AnyExportedSpan = {
       id: this.opaque(span.id)!,
       traceId: this.opaque(span.traceId)!,
@@ -134,20 +142,19 @@ export class PayloadFreeStorageExporter extends MastraStorageExporter {
       outcome,
       ...numericFields(span, ['timeToFirstTokenMs', 'errorCount']),
       ...(span.stopReason && Object.hasOwn(SPAN_STOP_REASONS, span.stopReason) ? { stopReason: span.stopReason } : {}),
-      ...(span.errorInfo ? { errorInfo: { message: 'Operation failed' } } : {}),
+      ...(span.errorInfo || toolOutcome === 'error' ? { errorInfo: { message: 'Operation failed' } } : {}),
       attributes: {
         ...(resultCount === undefined ? {} : { resultCount }),
         ...numericFields(attributes, ['messageCount', 'stepCount', 'inputTokens', 'outputTokens']),
-        ...(typeof attributes.success === 'boolean' ? { success: attributes.success } : {}),
+        ...(typeof success === 'boolean' ? { success } : {}),
         ...(attributes.usage ? { usage: safeUsage(attributes.usage) } : {}),
         ...(attributes.internalUsage ? { internalUsage: safeUsage(attributes.internalUsage) } : {}),
       },
     };
-    if (event.type === 'span_ended' && operation) {
+    if (operation && toolOutcome) {
       const instance = observability.getDefaultInstance();
       const metrics = instance?.getMetricsContext?.();
-      const status =
-        span.errorInfo || output.error || attributes.success === false ? 'error' : (reportedOutcome ?? 'success');
+      const status = toolOutcome;
       metrics?.emit('support_operation_count', 1, { operation, status });
       if (resultCount !== undefined) metrics?.emit('support_result_count', resultCount, { operation, status });
       if (resultCount === 0)
