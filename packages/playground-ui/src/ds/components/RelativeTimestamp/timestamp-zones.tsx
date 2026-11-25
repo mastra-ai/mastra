@@ -10,6 +10,7 @@ function zoneName(date: Date, timeZone?: string) {
 function splitFraction(formatter: Intl.DateTimeFormat, date: Date) {
   const parts = formatter.formatToParts(date);
   const fractionAt = parts.findIndex(part => part.type === 'fractionalSecond');
+  if (fractionAt < 0) return { time: formatter.format(date), fraction: '', suffix: '' };
   const join = (from: number, to?: number) =>
     parts
       .slice(from, to)
@@ -33,7 +34,7 @@ function zoneRow(date: Date, timeZone?: string, fractionDigits?: FractionDigits)
   return {
     zone: zoneName(date, timeZone) ?? 'Local',
     day: new Intl.DateTimeFormat(undefined, { timeZone, month: 'short', day: 'numeric', year: 'numeric' }).format(date),
-    ...(fractionDigits ? splitFraction(formatter, date) : { time: formatter.format(date), fraction: '', suffix: '' }),
+    ...splitFraction(formatter, date),
   };
 }
 
