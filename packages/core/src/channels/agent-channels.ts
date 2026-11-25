@@ -73,6 +73,7 @@ import {
 } from './thread-history';
 import type { ThreadHistoryLogContext, ThreadHistoryWindow } from './thread-history';
 import { ChannelThreadLinkProcessor, markNewChannelThread } from './thread-link-processor';
+import { resolveChannelRenderContext } from './thread-lookup';
 import type {
   ChannelAdapterConfig,
   ChannelConfig,
@@ -1369,11 +1370,9 @@ export class AgentChannels {
     const inbound = requestContext?.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
     if (inbound) return inbound;
     if (state && 'render' in state) return (state.render as ChatChannelRenderContext | null) ?? undefined;
-    const controller = requestContext?.get('controller') as { threadId?: string } | undefined;
-    const threadId = controller?.threadId ?? parseMemoryRequestContext(requestContext)?.thread?.id;
-    const render = threadId ? await this.buildRenderContextForThread(threadId) : null;
-    if (state) state.render = render;
-    return render ?? undefined;
+    const render = await resolveChannelRenderContext(requestContext, () => this);
+    if (state) state.render = render ?? null;
+    return render;
   }
 
   /** Whether the Slack adapter opted into `generativeUI` (the only platform it supports). */
