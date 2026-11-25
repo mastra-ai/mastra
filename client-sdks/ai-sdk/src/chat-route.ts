@@ -246,6 +246,33 @@ function resolveAgentVersionFromQuery(
   return versionId ? { versionId } : status ? { status: status as 'draft' | 'published' } : fallback;
 }
 
+// Same message as the agent API's 400 in @mastra/server (requireEffectiveResourceId).
+const MEMORY_RESOURCE_REQUIRED_MESSAGE =
+  'A resource ID is required when using memory. Provide memory.resource in the request body, or configure server auth with mapUserToResourceId to derive it from the authenticated user.';
+
+/**
+ * The agent resolves the resource ID itself (request context, memory.resource, agent defaults)
+ * and fails with AGENT_MEMORY_MISSING_RESOURCE_ID when memory is on but none resolves. Matching that
+ * error keeps chatRoute's check identical to the agent's. The agent wraps it in AGENT_STREAM_FAILED,
+ * and the original arrives as a deserialized cause carrying `code`, so walk the cause chain.
+ * A missing thread with a resource present is a different problem and is left alone.
+ */
+function isMissingMemoryResourceError(error: unknown): boolean {
+  for (let current = error, depth = 0; current && depth < 5; depth++) {
+    const { id, code, details, cause } = current as {
+      id?: unknown;
+      code?: unknown;
+      details?: Record<string, unknown>;
+      cause?: unknown;
+    };
+    if (id === 'AGENT_MEMORY_MISSING_RESOURCE_ID' || code === 'AGENT_MEMORY_MISSING_RESOURCE_ID') {
+      return !details?.resourceId && !!details?.threadId;
+    }
+    current = cause;
+  }
+  return false;
+}
+
 /** Wraps a UI message stream in the response implementation for its AI SDK version. */
 function createChatUIMessageStreamResponse(stream: ReadableStream<any>, version: 'v5' | 'v6' | 'v7'): Response {
   if (version === 'v7') return createUIMessageStreamResponseV7({ stream });
@@ -982,23 +1009,31 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
         onError,
       };
 
-      const uiMessageStream =
-        version === 'v7'
-          ? await handleChatStream({
-              ...handlerOptions,
-              version: 'v7',
-              messageMetadata: messageMetadata as UIMessageStreamOptionsV7<V7UIMessage>['messageMetadata'],
-            })
-          : version === 'v6'
+      let uiMessageStream: ReadableStream<any>;
+      try {
+        uiMessageStream =
+          version === 'v7'
             ? await handleChatStream({
                 ...handlerOptions,
-                version: 'v6',
-                messageMetadata: messageMetadata as UIMessageStreamOptionsV6<V6UIMessage>['messageMetadata'],
+                version: 'v7',
+                messageMetadata: messageMetadata as UIMessageStreamOptionsV7<V7UIMessage>['messageMetadata'],
               })
-            : await handleChatStream({
-                ...handlerOptions,
-                messageMetadata: messageMetadata as UIMessageStreamOptionsV5<V5UIMessage>['messageMetadata'],
-              });
+            : version === 'v6'
+              ? await handleChatStream({
+                  ...handlerOptions,
+                  version: 'v6',
+                  messageMetadata: messageMetadata as UIMessageStreamOptionsV6<V6UIMessage>['messageMetadata'],
+                })
+              : await handleChatStream({
+                  ...handlerOptions,
+                  messageMetadata: messageMetadata as UIMessageStreamOptionsV5<V5UIMessage>['messageMetadata'],
+                });
+      } catch (error) {
+        if (isMissingMemoryResourceError(error)) {
+          return c.json({ error: MEMORY_RESOURCE_REQUIRED_MESSAGE }, 400);
+        }
+        throw error;
+      }
 
       return withSseHeartbeat(createChatUIMessageStreamResponse(uiMessageStream, version), heartbeatMs);
     },
