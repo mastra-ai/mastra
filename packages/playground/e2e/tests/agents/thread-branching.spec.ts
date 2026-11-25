@@ -30,7 +30,7 @@ function assistantReply(page: Page) {
 }
 
 async function sendMessage(page: Page, message: string) {
-  const chatInput = page.getByPlaceholder('Enter your message...');
+  const chatInput = page.getByPlaceholder('Enter your message');
   await chatInput.click();
   await chatInput.pressSequentially(message, { delay: 10 });
   await page.getByRole('button', { name: 'Send' }).click();
@@ -45,7 +45,7 @@ async function branchFromFirstReply(page: Page) {
   await page.goto('/agents/weather-agent/chat/new');
   await sendMessage(page, USER_MESSAGE);
   await expect(assistantReply(page)).toBeVisible({ timeout: 20000 });
-  await expect(page).toHaveURL(/\/agents\/weather-agent\/threads\/[^/]+$/, { timeout: 10000 });
+  await expect(page).toHaveURL(/\/agents\/weather-agent\/threads\/[0-9a-f-]{36}$/, { timeout: 10000 });
   const sourceThreadId = page.url().split('/').pop()!;
 
   // Wait until the reply is persisted server-side — reloading while the stream
@@ -55,12 +55,15 @@ async function branchFromFirstReply(page: Page) {
     .poll(
       async () => {
         const res = await page.request.get(`/api/memory/threads/${sourceThreadId}/messages?agentId=weather-agent`);
-        const data = await res.json();
-        return (data.messages ?? []).filter((m: { role: string }) => m.role === 'assistant').length;
+        const data = res.ok() ? await res.json() : {};
+        const assistantCount = (data.messages ?? []).filter((m: { role: string }) => m.role === 'assistant').length;
+        // Report the status with the count so a failing poll names an error
+        // response instead of looking like a reply that was never persisted.
+        return `${res.status()} ${assistantCount}`;
       },
       { timeout: 20000 },
     )
-    .toBeGreaterThan(0);
+    .toMatch(/^200 [1-9]/);
 
   // Reload so every rendered message carries its persisted id — the live
   // stream tail keeps an in-memory-only id until the next history load.
@@ -73,7 +76,7 @@ async function branchFromFirstReply(page: Page) {
   const replyMessage = assistantReply(page).locator('xpath=ancestor::*[@data-message-id][1]');
   await expect.poll(() => replyMessage.getAttribute('data-message-id'), { timeout: 20000 }).toMatch(/^[0-9a-f-]{36}$/);
   await replyMessage.getByRole('button', { name: 'Branch from here' }).click();
-  await expect(page).not.toHaveURL(new RegExp(`/threads/${sourceThreadId}$`), { timeout: 30000 });
+  await expect(page).toHaveURL(new RegExp(`/threads/(?!${sourceThreadId}$)[0-9a-f-]{36}$`), { timeout: 30000 });
   const branchThreadId = page.url().split('/').pop()!;
   expect(branchThreadId).not.toBe(sourceThreadId);
 
