@@ -50,7 +50,9 @@ export function createContextScrapeTool(config?: ContextClientOptions) {
 
       // A successful HTTP response can still contain a failed Markdown output.
       if (response.markdown.success !== true || !response.markdown.data?.trim()) {
-        throw new Error('Context.dev did not return Markdown for this page.');
+        const code = response.markdown.error_code;
+        const detail = code && /^[A-Z][A-Z0-9_]{0,63}$/.test(code) ? ` Error code: ${code}.` : '';
+        throw new Error(`Context.dev did not return Markdown for this page.${detail}`);
       }
 
       return {

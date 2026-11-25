@@ -1,6 +1,6 @@
 {
   "name": "@mastra/context",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "Context.dev web search and Markdown scraping tools for Mastra agents",
   "type": "module",
   "main": "./dist/index.js",

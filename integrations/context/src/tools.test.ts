@@ -155,23 +155,36 @@ describe('Context.dev native tools over HTTP', () => {
 
   it.each([
     {
-      requested: true,
-      success: false,
-      data: 'Do not treat failed output as content',
-      error_code: 'WEBSITE_BLOCKED',
-      message: 'private remote detail',
+      markdown: {
+        requested: true,
+        success: false,
+        data: 'Do not treat failed output as content',
+        error_code: 'WEBSITE_BLOCKED',
+        message: 'private remote detail: Bearer environment-key',
+      },
+      error: 'Context.dev did not return Markdown for this page. Error code: WEBSITE_BLOCKED.',
     },
-    { requested: false, success: null, data: null },
-    { requested: true, success: true, data: null },
-    { requested: true, success: true, data: '' },
-    { requested: true, success: true, data: '   ' },
-  ] satisfies WebScrapeResponse.Markdown[])(
-    'rejects failed or empty Markdown even when HTTP succeeds: %j',
-    async markdown => {
+    ...[
+      { requested: true, success: false, data: null },
+      { requested: false, success: null, data: null },
+      { requested: true, success: true, data: null },
+      { requested: true, success: true, data: '' },
+      { requested: true, success: true, data: '   ' },
+      { requested: true, success: false, data: null, error_code: '' },
+      { requested: true, success: false, data: null, error_code: 'Bearer environment-key' },
+    ].map(markdown => ({ markdown, error: 'Context.dev did not return Markdown for this page.' })),
+  ] satisfies { markdown: WebScrapeResponse.Markdown; error: string }[])(
+    'rejects failed or empty Markdown with a safe diagnostic: $markdown',
+    async ({ markdown, error }) => {
       reply.body = { ...scrapeResponse, markdown };
-      await expect(createContextScrapeTool().execute!({ url: 'https://mastra.ai/docs' }, {})).rejects.toThrow(
-        'Context.dev did not return Markdown for this page.',
+      const failure = await createContextScrapeTool().execute!({ url: 'https://mastra.ai/docs' }, {}).then(
+        () => undefined,
+        error => error,
       );
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure.message).toBe(error);
+      expect(String(failure)).not.toContain('environment-key');
+      expect(String(failure)).not.toContain('private remote detail');
       expect(requests).toHaveLength(1);
     },
   );
