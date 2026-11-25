@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { authDisabledCapabilities } from '../../context/__tests__/fixtures/capabilities';
@@ -75,6 +75,7 @@ const nextRetry = () => new Promise(resolve => setTimeout(resolve, 1500));
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  vi.restoreAllMocks();
 });
 
 describe('PlaygroundConfigGuard', () => {
@@ -96,6 +97,23 @@ describe('PlaygroundConfigGuard', () => {
       serverUp();
 
       expect(await screen.findByText(`Studio on ${DEFAULT_URL}`)).not.toBeNull();
+    });
+  });
+
+  describe('when the server accepts the request but never answers', () => {
+    it('waits for it instead of loading forever', async () => {
+      const timeout = AbortSignal.timeout.bind(AbortSignal);
+      vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => timeout(50));
+      server.use(
+        http.get(probeUrl(DEFAULT_URL), async () => {
+          await delay('infinite');
+          return new HttpResponse();
+        }),
+      );
+
+      renderApp();
+
+      expect(await screen.findByText(/Nothing answers at http:\/\/localhost:4111 yet/)).not.toBeNull();
     });
   });
 
