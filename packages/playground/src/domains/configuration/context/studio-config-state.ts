@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react';
 
-import type { ConnectionFailure } from '../hooks/use-mastra-instance-status';
+import type { ConnectionFailure, WaitCause } from '../hooks/use-mastra-instance-status';
 import type { StudioConfig } from '../types';
 
 export type StudioConfigContextType = StudioConfig & {
@@ -23,7 +23,7 @@ export const useStudioConfig = () => {
 export type StudioConnection =
   | { status: 'connecting' }
   | { status: 'connected' }
-  | { status: 'waiting'; httpStatus?: number }
+  | { status: 'waiting'; cause: WaitCause }
   | { status: 'failed'; failure: ConnectionFailure };
 
 export type StudioConnectionContextType = {

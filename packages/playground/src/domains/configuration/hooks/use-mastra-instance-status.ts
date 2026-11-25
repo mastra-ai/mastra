@@ -5,16 +5,23 @@ import type { StudioConfig } from '../types';
 /** Why a connection can't work as configured: retrying won't help, changing the connection or the server will. */
 export type ConnectionFailure =
   | { reason: 'invalid-url' }
-  /** The server answers, but not to this origin (CORS). */
-  | { reason: 'blocked' }
   | { reason: 'not-mastra' }
+  | { reason: 'http'; httpStatus: number };
+
+/** Why a connection doesn't work yet: the server can change it without the connection changing. */
+export type WaitCause =
+  | { reason: 'no-answer' }
+  /** The server answers, but not to this origin: CORS, or a proxy's error without CORS headers. */
+  | { reason: 'blocked' }
+  /** An error a starting server can give. */
   | { reason: 'http'; httpStatus: number };
 
 export type MastraInstanceStatus =
   | { status: 'active' }
-  /** Nothing answers yet, or only an error a starting server can give. */
-  | { status: 'waiting'; httpStatus?: number }
+  | { status: 'waiting'; cause: WaitCause }
   | { status: 'failed'; failure: ConnectionFailure };
+
+export const instanceStatusQueryKey = ['mastra-instance-status'];
 
 const DEFAULT_API_PREFIX = '/api';
 const MAX_RETRY_DELAY = 5000;
@@ -57,7 +64,8 @@ const requestStatus = async (url: string, headers: Record<string, string>): Prom
   const response = await fetch(url, { headers, credentials: 'include' });
   const { status: httpStatus } = response;
 
-  if (httpStatus >= 500 || TEMPORARY_CLIENT_ERRORS.includes(httpStatus)) return { status: 'waiting', httpStatus };
+  if (httpStatus >= 500 || TEMPORARY_CLIENT_ERRORS.includes(httpStatus))
+    return { status: 'waiting', cause: { reason: 'http', httpStatus } };
   if (!response.ok) return { status: 'failed', failure: { reason: 'http', httpStatus } };
   if (isCapabilities(parseJson(await response.text()))) return { status: 'active' };
   return { status: 'failed', failure: { reason: 'not-mastra' } };
@@ -82,12 +90,10 @@ const getMastraInstanceStatus = async ({
   try {
     return await requestStatus(url, headers);
   } catch {
-    const sameOrigin = target.origin === window.location.origin;
-    if (sameOrigin || !(await answersWithoutCors(url))) return { status: 'waiting' };
+    const crossOrigin = target.origin !== window.location.origin;
+    const reason = crossOrigin && (await answersWithoutCors(url)) ? 'blocked' : 'no-answer';
+    return { status: 'waiting', cause: { reason } };
   }
-
-  // Reachable: asked again, in case the server came up between the two requests.
-  return requestStatus(url, headers).catch(() => ({ status: 'failed', failure: { reason: 'blocked' } }));
 };
 
 type StatusQuery = Query<MastraInstanceStatus>;
@@ -112,7 +118,7 @@ export const useMastraInstanceStatus = (config: StudioConfig, { revision, paused
   const checksAgain = (query: StatusQuery) => !paused && isWaiting(query);
 
   return useQuery<MastraInstanceStatus>({
-    queryKey: ['mastra-instance-status', config.baseUrl, config.apiPrefix, revision],
+    queryKey: [...instanceStatusQueryKey, config.baseUrl, config.apiPrefix, revision],
     queryFn: () => getMastraInstanceStatus(config),
     retry: false,
     // A connection saved while Studio is connected is checked behind the page that saved it.

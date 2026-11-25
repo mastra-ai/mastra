@@ -1,7 +1,8 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
 import type { MastraInstanceStatus } from '../hooks/use-mastra-instance-status';
-import { useMastraInstanceStatus } from '../hooks/use-mastra-instance-status';
+import { instanceStatusQueryKey, useMastraInstanceStatus } from '../hooks/use-mastra-instance-status';
 import type { StudioConfig } from '../types';
 import type { StudioConnection } from './studio-config-state';
 import { StudioConfigContext, StudioConnectionContext } from './studio-config-state';
@@ -81,7 +82,8 @@ export const StudioConfigProvider = ({
     config: readStoredConfig(defaultConfig) ?? defaultConfig,
     revision: 0,
   }));
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setEditing] = useState(false);
+  const queryClient = useQueryClient();
 
   const statusQuery = useMastraInstanceStatus(config, { revision, paused: isEditing });
   const connection = getConnection(statusQuery);
@@ -97,7 +99,7 @@ export const StudioConfigProvider = ({
 
   const connectTo = (nextConfig: StudioConfig) => {
     setSaved({ config: nextConfig, revision: revision + 1 });
-    setIsEditing(false);
+    setEditing(false);
   };
 
   const setConfig = (partialNewConfig: Partial<StudioConfig>) => {
@@ -111,7 +113,17 @@ export const StudioConfigProvider = ({
     connectTo(defaultConfig);
   };
 
-  const isDefault = config.baseUrl === endpoint && config.apiPrefix === defaultApiPrefix;
+  const setIsEditing = (nextIsEditing: boolean) => {
+    setEditing(nextIsEditing);
+    // A check under way must not connect and close the form with unsaved changes.
+    if (nextIsEditing) void queryClient.cancelQueries({ queryKey: instanceStatusQueryKey });
+    else void statusQuery.refetch();
+  };
+
+  const isDefault =
+    config.baseUrl === endpoint &&
+    config.apiPrefix === defaultApiPrefix &&
+    JSON.stringify(config.headers) === JSON.stringify(urlHeaders);
 
   return (
     <StudioConfigContext.Provider value={{ ...config, isLoading: statusQuery.isPending, setConfig }}>

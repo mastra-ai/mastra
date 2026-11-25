@@ -1,4 +1,3 @@
-import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { useStudioConfig } from '../context/studio-config-state';
 import type { ConnectionFailure } from '../hooks/use-mastra-instance-status';
@@ -8,18 +7,6 @@ const AUTHORIZATION_STATUSES = [401, 403];
 const getFailureMessage = (failure: ConnectionFailure, baseUrl: string, apiPrefix: string) => {
   if (failure.reason === 'invalid-url') {
     return { title: "That URL doesn't work", message: 'Start it with http:// or https://.' };
-  }
-  if (failure.reason === 'blocked') {
-    return {
-      title: 'The server blocks this Studio',
-      message: (
-        <>
-          {baseUrl} is running, but doesn't accept requests from {window.location.origin}. Add that origin to{' '}
-          <InlineCode>server.cors</InlineCode> in your Mastra config, with{' '}
-          <InlineCode className="whitespace-nowrap">credentials: true</InlineCode>.
-        </>
-      ),
-    };
   }
   if (failure.reason === 'not-mastra') {
     return {

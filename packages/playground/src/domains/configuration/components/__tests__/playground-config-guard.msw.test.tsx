@@ -136,6 +136,29 @@ describe('PlaygroundConfigGuard', () => {
       expect(onProbe).toHaveBeenCalledTimes(probes);
     });
 
+    it('keeps the form when a check under way succeeds', async () => {
+      serverDown();
+      renderApp();
+      const edit = await screen.findByRole('button', { name: 'Edit connection' });
+      let answer: () => void = () => {};
+      const answered = new Promise<void>(resolve => (answer = resolve));
+      const onProbe = vi.fn<() => void>();
+      server.use(
+        http.get(probeUrl(DEFAULT_URL), async () => {
+          onProbe();
+          await answered;
+          return HttpResponse.json(authDisabledCapabilities);
+        }),
+      );
+      await waitFor(() => expect(onProbe).toHaveBeenCalled());
+
+      fireEvent.click(edit);
+      answer();
+      await nextRetry();
+
+      expect((await urlField()).value).toBe(DEFAULT_URL);
+    });
+
     it('connects to the saved URL', async () => {
       serverDown();
       serverUp(OTHER_URL);
@@ -205,7 +228,7 @@ describe('PlaygroundConfigGuard', () => {
   });
 
   describe('when the server blocks the request with CORS', () => {
-    it('tells it apart from a server that is down', async () => {
+    it('tells it apart from a server that is down and connects once allowed', async () => {
       // A browser rejects the request, but lets one through that doesn't read the answer.
       server.use(
         http.get(probeUrl(DEFAULT_URL), ({ request }) =>
@@ -216,6 +239,10 @@ describe('PlaygroundConfigGuard', () => {
       renderApp();
 
       expect(await screen.findByText('The server blocks this Studio')).not.toBeNull();
+
+      serverUp();
+
+      expect(await screen.findByText(`Studio on ${DEFAULT_URL}`)).not.toBeNull();
     });
   });
 
@@ -226,6 +253,27 @@ describe('PlaygroundConfigGuard', () => {
       renderApp();
 
       expect(await screen.findByText(/Start it with http/)).not.toBeNull();
+    });
+  });
+
+  describe('when only the stored headers differ from the default connection', () => {
+    it('can go back to the default one', async () => {
+      localStorage.setItem(
+        MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY,
+        JSON.stringify({ baseUrl: DEFAULT_URL, headers: { Authorization: 'Bearer wrong' }, apiPrefix: '/api' }),
+      );
+      server.use(
+        http.get(probeUrl(DEFAULT_URL), ({ request }) =>
+          request.headers.has('Authorization')
+            ? new HttpResponse(null, { status: 401 })
+            : HttpResponse.json(authDisabledCapabilities),
+        ),
+      );
+      renderApp();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Reset to default' }));
+
+      expect(await screen.findByText(`Studio on ${DEFAULT_URL}`)).not.toBeNull();
     });
   });
 
