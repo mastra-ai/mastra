@@ -22,4 +22,4 @@ Added an auth scheme and custom headers to custom OpenAI-compatible providers. S
 }
 ```
 
-Added `listCustomProviderModels`, which lists the models an endpoint serves, and `testCustomProviderModel`, which sends one short message to a model. Both are in `@mastra/code-sdk/agents/custom-provider-check` and return the upstream status and error text on failure, with the key and secret header values removed.
+Added `listCustomProviderModels`, which lists the models an endpoint serves, and `testCustomProviderModel`, which sends one short message to a model. Both are in `@mastra/code-sdk/agents/custom-provider-check` and return the upstream status and error text on failure, with the key and secret header values removed. A reply that repeats the key or a secret header value is redacted the same way.
