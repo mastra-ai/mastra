@@ -1582,6 +1582,23 @@ describe('evented agents whose signals stay in the process that runs them', () =
     await expect(cancelling).resolves.toEqual({ cancelledSignalIds: [] });
   });
 
+  it('reports once a run whose memory storage keeps no pending signals, and warns at each close it cannot make', async () => {
+    const { mastra, scope } = setup({ memoryStore: new NoPendingSignalsMemory() });
+    const error = vi.spyOn(mastra.getLogger(), 'error');
+    const warn = vi.spyOn(mastra.getLogger(), 'warn');
+    const runId = `run-${crypto.randomUUID()}`;
+    const input = { agentId: 'stored-signals', signalsStored: true, state: scope };
+    await closeStoredSignalRun({ mastra, runId, input, state: {} });
+    await closeStoredSignalRun({ mastra, runId, input, state: {} });
+
+    const logged = { runId, agentId: 'stored-signals', threadId: scope.threadId };
+    expect(error.mock.calls).toEqual([[expect.stringContaining('cannot resolve'), logged]]);
+    expect(warn.mock.calls.filter(([message]) => String(message).includes('Could not close'))).toEqual([
+      [expect.any(String), logged],
+      [expect.any(String), logged],
+    ]);
+  });
+
   it('stays quiet with a pubsub inside the process', () => {
     const mastra = new Mastra({ storage: new InMemoryStore(), pubsub: new EventEmitterPubSub(), logger: false });
     const warn = vi.spyOn(mastra.getLogger(), 'warn');
