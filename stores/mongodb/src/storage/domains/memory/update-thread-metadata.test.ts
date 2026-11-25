@@ -89,4 +89,12 @@ describe('MemoryStorageMongoDB.updateThread metadata', () => {
   it('throws not found for a title-only update of a missing thread', async () => {
     await expect(memory.updateThread({ id: 'missing', title: 'x' })).rejects.toThrow('Thread missing not found');
   });
+
+  it('keeps the stored title when a title-only update passes title: null', async () => {
+    await seed('thread-null-title');
+    const updated = await memory.updateThread({ id: 'thread-null-title', title: null as unknown as string });
+
+    expect(updated.title).toBe('Original title');
+    expect((await memory.getThreadById({ threadId: 'thread-null-title' }))?.title).toBe('Original title');
+  });
 });

@@ -1464,7 +1464,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         updated = await withRunFence(this.#connector, check, session =>
           collection.findOneAndUpdate(
             { id },
-            { $set: { ...(title !== undefined ? { title } : {}), updatedAt: now } },
+            { $set: { ...(title != null ? { title } : {}), updatedAt: now } },
             { returnDocument: 'after', session },
           ),
         );

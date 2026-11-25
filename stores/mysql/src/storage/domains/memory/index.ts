@@ -1030,7 +1030,7 @@ export class MemoryMySQL extends MemoryStorage {
           const statement = prepareUpdateStatement({
             tableName: TABLE_THREADS,
             keys: { id },
-            updates: { ...(title !== undefined ? { title } : {}), updatedAt: new Date() },
+            updates: { ...(title != null ? { title } : {}), updatedAt: new Date() },
           });
           await q.execute(statement.sql, statement.args);
           const thread = await this.#readThread(q, id);
