@@ -514,6 +514,13 @@ export async function listCustomProviderModels(
 
 const MODEL_TEST_TIMEOUT_MS = 30_000;
 const MODEL_TEST_PROMPT = 'Reply with the single word "yes".';
+/**
+ * The longest reply the model test keeps. The prompt asks for one word, so a
+ * few thousand characters already prove the model answers, and a model that
+ * keeps going would otherwise hold the check and its memory until the timeout.
+ * A reply cut here is still a working model.
+ */
+const MAX_REPLY_CHARS = 4000;
 
 /** A response header by name, ignoring case, from the plain object the AI SDK keeps on its errors. */
 function headerValue(headers: Record<string, string> | undefined, name: string): string | undefined {
@@ -616,19 +623,29 @@ export async function testCustomProviderModel(
   let finishReason: string | undefined;
   let streamError: unknown;
   let stopped = false;
+  let replyCut = false;
+  const stopReading = new AbortController();
   try {
     const result = streamText({
       model: createCustomProviderChatModel(args),
       prompt: MODEL_TEST_PROMPT,
       maxRetries: 0,
-      abortSignal: signal,
+      abortSignal: AbortSignal.any([signal, stopReading.signal]),
       // In `ai` 7 a provider error arrives as an `error` part on `fullStream`.
       // The default handler would also print it to the console.
       onError: () => {},
     });
     for await (const part of result.fullStream) {
-      if (part.type === 'text-delta') reply += part.text;
-      else if (part.type === 'finish') finishReason = part.finishReason;
+      if (part.type === 'text-delta') {
+        reply += part.text;
+        if (reply.length >= MAX_REPLY_CHARS) {
+          reply = reply.slice(0, MAX_REPLY_CHARS);
+          replyCut = true;
+          // Leaving the loop alone does not close the request, so the stream is aborted too.
+          stopReading.abort();
+          break;
+        }
+      } else if (part.type === 'finish') finishReason = part.finishReason;
       else if (part.type === 'error') {
         streamError = part.error;
         stopped = true;
@@ -646,7 +663,7 @@ export async function testCustomProviderModel(
 
   // A signal that fires between parts can end the stream with neither `abort` nor `finish`.
   // A stream that reached `finish` keeps its result even if the signal fires afterwards.
-  if (stopped || (signal.aborted && finishReason === undefined)) {
+  if (!replyCut && (stopped || (signal.aborted && finishReason === undefined))) {
     const failure = modelTestFailure({
       error: streamError,
       chatUrl,

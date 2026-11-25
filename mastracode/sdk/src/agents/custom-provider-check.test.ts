@@ -509,6 +509,35 @@ describe('sending a test message to a custom endpoint model', () => {
     });
   });
 
+  it('cuts a reply that goes on far past the budget, stops the stream and still passes', async () => {
+    let closed!: () => void;
+    const connectionClosed = new Promise<void>(resolve => (closed = resolve));
+    const endpoint = await startEndpoint((_, res) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.on('close', closed);
+      const chunk = `data: ${JSON.stringify({
+        id: 'chatcmpl-test',
+        object: 'chat.completion.chunk',
+        created: 0,
+        model: 'model-x',
+        choices: [{ index: 0, delta: { content: 'y'.repeat(1000) }, finish_reason: null }],
+      })}\n\n`;
+      // Streams until the client goes away, far past any budget.
+      const pump = () => {
+        if (res.destroyed) return;
+        res.write(chunk);
+        setImmediate(pump);
+      };
+      pump();
+    });
+
+    const result = await testModel({ url: endpoint.url });
+
+    expect(result).toMatchObject({ ok: true, reply: 'y'.repeat(4000) });
+    expect(result.ok ? result.finishReason : 'failed').toBeUndefined();
+    await connectionClosed;
+  }, 3000);
+
   it('does not report a stream that breaks after a 200 as an HTTP error', async () => {
     const endpoint = await startEndpoint((_, res) => {
       res.writeHead(200, { 'content-type': 'text/event-stream' });
