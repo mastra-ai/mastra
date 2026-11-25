@@ -59,9 +59,11 @@ describe('Agent state signals with recalled history (#28565)', () => {
     ).consumeStream();
 
     expect(responseIdsSeen).toHaveLength(2);
-    expect(responseIdsSeen[1]).not.toContain(firstReply!.id);
-
     const stored = await memory.recall({ threadId, resourceId });
+    const secondReply = stored.messages.filter(message => message.role === 'assistant').at(-1);
+    expect(secondReply?.id).not.toBe(firstReply!.id);
+    expect(responseIdsSeen[1]).toEqual([secondReply!.id]);
+
     const storedFirstReply = stored.messages.find(message => message.id === firstReply!.id);
     expect(storedFirstReply?.content.metadata?.mastra).not.toMatchObject({ responseBoundary: true });
     expect(stored.messages.filter(message => message.role === 'assistant').map(message => message.id)).toHaveLength(2);
