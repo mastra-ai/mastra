@@ -10,7 +10,13 @@ export function hasHostedOAuthConfiguration() {
   );
 }
 
-/** RFC 7662 introspection. Tokens exist only in the incoming request and outbound form. */
+/**
+ * The HTTPS RFC 7662 endpoint must respond within five seconds with at most
+ * 64 KiB of JSON. Return active: true, token_use: 'access', an unexpired exp
+ * in Unix seconds, matching iss and aud, and sub, tenant_id, and customer_id
+ * as profile identifiers. If present, nbf must have passed. The space-delimited
+ * scope must contain support:technician or support:reviewer.
+ */
 export function createHostedIdentity() {
   const endpoint = process.env.SUPPORT_OAUTH_INTROSPECTION_URL;
   const serviceToken = process.env.SUPPORT_OAUTH_INTROSPECTION_TOKEN;
