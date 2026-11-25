@@ -199,6 +199,16 @@ describe('Opening Factory', () => {
     await screen.findByRole('navigation', { name: settings ? 'Settings sections' : 'Main' });
     await waitFor(() => expect(screen.queryByLabelText('Loading page')).not.toBeInTheDocument());
     await waitForMutationsIdle(client);
+    // A board without a repository shows how to link one instead of its phases. Its reads left
+    // with the Factory list, before anything could say so, rather than a round trip later on every board.
+    const boardHidden = listed === emptyFactory;
+    const unread = () =>
+      prefetched
+        .filter(query => query.getObserversCount() === 0)
+        .map(query => query.queryHash)
+        .filter(hash => !(boardHidden && /"phases"|"filter-options"|"decisions"/.test(hash)));
+    await waitFor(() => expect(unread(), 'queries started for the page but never read by it').toEqual([]));
+    await waitForMutationsIdle(client);
 
     const startedEarly = new Set(requests.filter(({ afterSignIn }) => !afterSignIn).map(({ url }) => url));
     const late = requests
@@ -216,14 +226,6 @@ describe('Opening Factory', () => {
     ).toEqual([]);
     const aboutCards = (url: string) => url.startsWith(CARDS_URL) || /\/boards\/[^/]+\/phases\b/.test(url);
     expect([...new Set(sent.filter(aboutCards))], 'what the page asks about the cards').toEqual(cards);
-    const unread = prefetched.filter(query => query.getObserversCount() === 0).map(query => query.queryHash);
-    // A board without a repository shows how to link one instead of its phases. Its reads left
-    // with the Factory list, before anything could say so, rather than a round trip later on every board.
-    const boardHidden = listed === emptyFactory;
-    expect(
-      unread.filter(hash => !(boardHidden && /"phases"|"filter-options"|"decisions"/.test(hash))),
-      'queries started for the page but never read by it',
-    ).toEqual([]);
   });
 
   it('loads the Factory list during the sign-in check from a link without a Factory', async () => {

@@ -1,12 +1,9 @@
 import { cardRuleGroupSchema } from '@mastra/factory/rules/rule-group';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '@mastra/factory/rules/validation';
+import { phaseRunFieldsValid } from '@mastra/playground-ui/domains/factory';
 
 import type { StoredBoardInfo, StoredPhaseInfo } from '../../../api/types';
 import { rawRuleProblem, ruleProblem } from '../settings/services/rules';
-
-export const MAX_INSTRUCTIONS = 1000;
-export const MAX_OBJECTIVE = 2000;
-export const MAX_GOAL_RUNS = 50;
 
 export type CardRule = NonNullable<StoredPhaseInfo['autoStartWhen']>;
 export type PhaseKind = StoredPhaseInfo['kind'];
@@ -56,11 +53,6 @@ export type RawRules = Partial<Record<string, string>>;
 
 export const rawRuleKey = (phaseKey: string, field: RuleField) => `${phaseKey}.${field}`;
 
-/** Unset uses Factory's default; otherwise a whole number of runs the server accepts. */
-export function goalRunsValid(maxRuns: number | undefined): boolean {
-  return maxRuns === undefined || (Number.isInteger(maxRuns) && maxRuns >= 1 && maxRuns <= MAX_GOAL_RUNS);
-}
-
 /** A board the server would take: named, with named phases, nothing over its limit and no rule it would refuse. */
 export function draftHasProblem(draft: BoardDraft, rawRules: RawRules = {}): boolean {
   return draft.name.trim() === '' || draft.phases.some(phase => phaseHasProblem(phase, rawRules));
@@ -82,9 +74,7 @@ export function phaseHasProblem(phase: StoredPhaseInfo, rawRules: RawRules = {})
   };
   return (
     phase.name.trim() === '' ||
-    (phase.runner?.instructions?.length ?? 0) > MAX_INSTRUCTIONS ||
-    (goal?.objective.length ?? 0) > MAX_OBJECTIVE ||
-    !goalRunsValid(goal?.maxRuns) ||
+    !phaseRunFieldsValid(phase.runner?.instructions ?? '', goal) ||
     ruleRefused('autoStartWhen', phase.autoStart === true, phase.autoStartWhen) ||
     ruleRefused('autoApproveWhen', phase.exitTool?.autoApprove === true, phase.exitTool?.autoApproveWhen)
   );
