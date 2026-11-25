@@ -2410,10 +2410,19 @@ describe('Agent signals: pending cancellation', () => {
         pubsub.owners.delete(key);
         await tick();
         await vi.waitFor(() => expect(prompts().some(prompt => prompt.includes('first message'))).toBe(true));
-        // A wrongly queued second message drains right behind the first.
-        await new Promise(resolve => setTimeout(resolve, 300));
-        await pubsub.flush();
-        expect(prompts().some(prompt => prompt.includes('second message'))).toBe(false);
+        // The second forward is still held, so the next check, its second miss, probes for it; a wrongly queued copy
+        // would have stopped the watcher instead.
+        const probes = () => pubsub.publishedData.filter(data => data.type === 'forwarded-lease-probe').length;
+        const probesBefore = probes();
+        await tick();
+        expect(probes()).toBeGreaterThan(probesBefore);
+        // The first message ran once and nothing ran the second ahead of its own probe.
+        const turns = (contents: string) =>
+          model.doStreamCalls.filter(call =>
+            JSON.stringify((call.prompt as any[]).filter(message => message.role === 'user').at(-1)).includes(contents),
+          ).length;
+        expect(turns('first message')).toBe(1);
+        expect(turns('second message')).toBe(0);
       } finally {
         observer.unsubscribe();
         follower.resetForTests();

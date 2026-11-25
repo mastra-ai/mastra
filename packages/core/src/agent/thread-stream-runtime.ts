@@ -3691,10 +3691,17 @@ export class AgentThreadStreamRuntime {
     );
     // The episode started from lease checks that may be many ticks old; what the lease says now decides. A run it
     // names again holds the thread and may still admit its forwards, so those stay held.
-    const gone = new Set<string>();
-    for (const runId of covered) {
-      if (!(await this.#leaseMayStillName(pubsub, key, runId))) gone.add(runId);
+    if (covered.size === 0) return;
+    // A thread has one lease, so one read answers for every covered run. A read that fails keeps them all held, and
+    // since their entries stay marked lease-gone, the watcher's next check that reads the lease probes again.
+    let holder: string | undefined;
+    try {
+      const owner = await this.#readLeaseOwnerInTime(this.#resolveLeaseProvider(pubsub).provider, key);
+      holder = owner === undefined ? undefined : forwardedSignalRunId(owner);
+    } catch {
+      return;
     }
+    const gone = new Set([...covered].filter(runId => runId !== holder));
     const forwarded = state.forwardedIdleSignalsByThread.get(key);
     if (!forwarded) return;
     const lapsed = [...forwarded].filter(
