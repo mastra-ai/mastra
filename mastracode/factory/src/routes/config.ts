@@ -406,7 +406,10 @@ export interface CustomProviderInfo {
   scope: StoredCredentialScope;
   /** Why this server refuses to call the endpoint. Its models are not offered until the URL is fixed. */
   urlProblem?: string;
-  /** The last connection test, cleared when the URL, key, auth scheme or headers change. */
+  /**
+   * The last connection test, cleared when the URL, key, auth scheme or headers
+   * change. It records the connection test only, never a test message.
+   */
   lastCheck?: CustomProviderLastCheck;
 }
 
@@ -561,6 +564,9 @@ function parseConnectionFields(b: Record<string, unknown>): CustomProviderSettin
   } catch {
     return { error: 'url must be a valid URL' };
   }
+  // Request paths are appended to the base URL as text, so a query string or
+  // fragment would send `/models` and `/chat/completions` somewhere else.
+  if (url.includes('?') || url.includes('#')) return { error: 'url must not have a query string or fragment' };
   const apiKey = typeof b.apiKey === 'string' && b.apiKey.trim() ? b.apiKey.trim() : undefined;
   if (b.authScheme !== undefined && !isCustomProviderAuthScheme(b.authScheme)) {
     return { error: 'authScheme must be "bearer" or "x-api-key"' };
@@ -705,7 +711,7 @@ const CUSTOM_PROVIDER_REFUSALS = {
     status: 400,
     error: 'header_value_required',
     message:
-      'Enter a value for each header: a saved value is only kept for a header of the same name, and a secret one only while it stays secret and the URL stays on the same host.',
+      'Enter a value for each header: a saved value is only kept for a header of the same name, and a secret one only while it stays secret and the URL keeps the same scheme, host and port.',
   },
   header_refused: { status: 400, error: 'header_refused', message: 'These custom headers cannot be sent.' },
 } as const;
