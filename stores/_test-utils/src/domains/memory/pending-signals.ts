@@ -328,17 +328,30 @@ export function createPendingSignalsTest({ storage, peerStorage }: PendingSignal
       it.each(['pending', 'claimed'] as const)('skip a %s row in every read path', async state => {
         const thread = await newThread();
         const base = Date.now() - 10_000;
-        const before = createSampleMessageV2({ ...scope(thread), createdAt: new Date(base) });
-        const after = createSampleMessageV2({ ...scope(thread), createdAt: new Date(base + 2) });
+        // Every row, hidden or not, carries the metadata the filtered reads below ask for.
+        const tag = { tag: `tag-${randomUUID()}` };
+        const message = (owner: StorageThreadType, offset: number) =>
+          createSampleMessageV2({ ...scope(owner), content: { metadata: tag }, createdAt: new Date(base + offset) });
+        const sendTagged = async (owner: StorageThreadType, offset: number) => {
+          const signal = signalFor(owner, { createdAt: new Date(base + offset) });
+          const tagged = {
+            ...signal,
+            content: { ...signal.content, metadata: { ...signal.content.metadata, ...tag } },
+          };
+          expect(await memory.enqueuePendingSignal({ message: tagged })).toBe('accepted');
+          return tagged;
+        };
+        const before = message(thread, 0);
+        const after = message(thread, 2);
         await memory.saveMessages({ messages: [before, after] });
-        const hidden = await send(thread, { createdAt: new Date(base + 1) });
+        const hidden = await sendTagged(thread, 1);
         // A second thread of the same resource, with a message and a hidden row of its own.
         const sibling = await memory.saveThread({
           thread: createSampleThread({ resourceId: thread.resourceId }) as StorageThreadType,
         });
-        const siblingMessage = createSampleMessageV2({ ...scope(sibling), createdAt: new Date(base + 3) });
+        const siblingMessage = message(sibling, 3);
         await memory.saveMessages({ messages: [siblingMessage] });
-        const siblingHidden = await send(sibling, { createdAt: new Date(base + 4) });
+        const siblingHidden = await sendTagged(sibling, 4);
         if (state === 'claimed') {
           expect(ids(await claim(thread, await startRun(thread)))).toEqual([hidden.id]);
           expect(ids(await claim(sibling, await startRun(sibling)))).toEqual([siblingHidden.id]);
@@ -354,9 +367,36 @@ export function createPendingSignalsTest({ storage, peerStorage }: PendingSignal
         expect(secondPage.total).toBe(2);
         expect(secondPage.hasMore).toBe(false);
 
+        const pastTheEnd = await memory.listMessages({ threadId: thread.id, perPage: 1, page: 5 });
+        expect(pastTheEnd.messages).toEqual([]);
+        expect(pastTheEnd.total).toBe(2);
+
+        const withoutTotal = await memory.listMessages({ threadId: thread.id, perPage: 3, includeTotal: false });
+        expect(ids(withoutTotal.messages)).toEqual(visible);
+        expect(withoutTotal.hasMore).toBe(false);
+
+        const allWithoutTotal = await memory.listMessages({ threadId: thread.id, perPage: false, includeTotal: false });
+        expect(ids(allWithoutTotal.messages)).toEqual(visible);
+
+        const byMetadata = await memory.listMessages({
+          threadId: thread.id,
+          perPage: false,
+          filter: { metadata: tag },
+        });
+        expect(ids(byMetadata.messages)).toEqual(visible);
+        expect(byMetadata.total).toBe(2);
+
         const byResource = await memory.listMessagesByResourceId({ resourceId: thread.resourceId, perPage: false });
         expect(ids(byResource.messages)).toEqual([...visible, siblingMessage.id]);
         expect(byResource.total).toBe(3);
+
+        const byResourceAndMetadata = await memory.listMessagesByResourceId({
+          resourceId: thread.resourceId,
+          perPage: false,
+          filter: { metadata: tag },
+        });
+        expect(ids(byResourceAndMetadata.messages)).toEqual([...visible, siblingMessage.id]);
+        expect(byResourceAndMetadata.total).toBe(3);
 
         const byId = await memory.listMessagesById({ messageIds: [before.id, hidden.id, after.id, siblingHidden.id] });
         expect(sorted(ids(byId.messages))).toEqual(sorted(visible));
@@ -578,6 +618,48 @@ export function createPendingSignalsTest({ storage, peerStorage }: PendingSignal
         await startRun(thread, runId);
         expect(await claim(thread, runId)).toEqual([]);
       });
+
+      it.each(['pending', 'claimed'] as const)(
+        'leaves a %s row unchanged when it is saved under another thread',
+        async state => {
+          const thread = await newThread();
+          const other = await newThread();
+          const runId = await startRun(thread);
+          const createdAt = new Date(Date.now() - 10_000);
+          const signal = await send(thread, { createdAt });
+          if (state === 'claimed') expect(ids(await claim(thread, runId))).toEqual([signal.id]);
+          const moving = createSampleMessageV2({ ...scope(thread), createdAt: new Date(Date.now() - 8_000) });
+          await memory.saveMessages({ messages: [moving] });
+          const fresh = createSampleMessageV2({ ...scope(other), createdAt: new Date(Date.now() - 6_000) });
+
+          await memory.saveMessages({
+            messages: [
+              {
+                ...signal,
+                ...scope(other),
+                createdAt: new Date(Date.now() - 4_000),
+                content: { ...signal.content, parts: [{ type: 'text', text: 'changed' }] },
+              },
+              fresh,
+              { ...moving, ...scope(other) },
+            ],
+          });
+
+          // The row without a status moved, the new message was saved, and the signal row stayed as it was.
+          expect(await visibleIds(thread)).toEqual([]);
+          expect(await visibleIds(other)).toEqual([moving.id, fresh.id]);
+          expect((await memory.listMessagesById({ messageIds: [signal.id] })).messages).toEqual([]);
+          expect(await memory.listPendingSignals(onThread(other))).toEqual([]);
+
+          const rows =
+            state === 'pending' ? await memory.listPendingSignals(onThread(thread)) : await claim(thread, runId);
+          expect(rows).toMatchObject([
+            { id: signal.id, threadId: thread.id, resourceId: thread.resourceId, content: signal.content },
+          ]);
+          expect(new Date(rows[0]!.createdAt).getTime()).toBe(createdAt.getTime());
+          if (state === 'claimed') expect(await pendingIds(thread)).toEqual([]);
+        },
+      );
     });
 
     describe('close', () => {
