@@ -32,9 +32,9 @@ const DEFAULT_SETTINGS = { cpuCount: 2, memoryMb: 1024, idleTimeoutMinutes: 5 } 
 /**
  * vCPU counts a sandbox can be created with: one, or an even number. An odd
  * count above one fails at creation. How high an account can go depends on its
- * E2B plan, so the list runs to 64 and the account's own limit applies.
+ * E2B plan, so the list runs to 32, the most E2B accepts, and the account's own limit applies.
  */
-const CPU_COUNTS = [1, ...Array.from({ length: 32 }, (_, index) => (index + 1) * 2)];
+const CPU_COUNTS = [1, ...Array.from({ length: 16 }, (_, index) => (index + 1) * 2)];
 
 /**
  * The largest offered count that does not exceed `count`. A count saved before
