@@ -7,16 +7,30 @@
  */
 
 import { createHash } from 'node:crypto';
-import type { AnyExportedSpan, ModelGenerationAttributes, ScoreEvent, SpanErrorInfo } from '@mastra/core/observability';
+import { isDeepStrictEqual } from 'node:util';
+import type {
+  AnyExportedSpan,
+  MappingAttributes,
+  ModelGenerationAttributes,
+  ModelInferenceAttributes,
+  ModelStepAttributes,
+  ModelStepResult,
+  ScoreEvent,
+  SpanErrorInfo,
+  ToolCallAttributes,
+} from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import { omitKeys } from '@mastra/core/utils';
 import { TrackingExporter } from '@mastra/observability';
 import type { TraceData, TrackingExporterConfig } from '@mastra/observability';
 import type { ClientConfig, RunTreeConfig } from 'langsmith';
-import { Client, RunTree } from 'langsmith';
+import { Client, LS_MESSAGE_VIEW_EXCLUDE, RunTree } from 'langsmith';
 import type { KVMap } from 'langsmith/schemas';
 import type { LangSmithMetadataInput } from './helpers';
-import { formatUsageMetrics } from './metrics';
+import { messageOfCall, messagesOfCall, toChatMessages, toResultText, toText, waitsForTools } from './messages';
+import type { Conversation } from './messages';
+import { addUsage, formatUsageMetrics, usageLeft } from './metrics';
+import type { LangSmithUsageMetrics } from './metrics';
 
 export interface LangSmithExporterConfig extends ClientConfig, TrackingExporterConfig {
   /** LangSmith client instance */
@@ -73,6 +87,9 @@ type LangSmithSpan = RunTree;
 type LangSmithEvent = RunTree;
 type LangSmithMetadata = LangSmithMetadataInput;
 type LangSmithTraceData = TraceData<LangSmithRoot, LangSmithSpan, LangSmithEvent, LangSmithMetadata>;
+
+/** Key prefix for the per-trace `Conversation` of a MODEL_GENERATION. */
+const CONVERSATION = 'conversation:';
 
 // Default span type for all spans
 const DEFAULT_SPAN_TYPE = 'chain';
@@ -384,7 +401,10 @@ export class LangSmithExporter extends TrackingExporter<
   }
 
   protected override async _finishSpan(args: { span: AnyExportedSpan; traceData: LangSmithTraceData }): Promise<void> {
-    await this.handleSpanUpdateOrEnd({ ...args, isEnd: true });
+    const sent = this.handleSpanUpdateOrEnd({ ...args, isEnd: true });
+    // Not after `sent` settles: the next model call may start meanwhile.
+    this.recordConversation(args.span, args.traceData);
+    await sent;
   }
 
   protected override async _abortSpan(args: {
@@ -417,10 +437,20 @@ export class LangSmithExporter extends TrackingExporter<
 
     const updatePayload = this.buildRunTreePayload(span, traceData);
 
+    // LangSmith gets the inputs when a run starts. A tool result or a replayed call can arrive
+    // just after the next model call has started, so send its inputs again if they changed.
+    const resendInputs =
+      span.type === SpanType.MODEL_INFERENCE &&
+      updatePayload.inputs != null &&
+      !isDeepStrictEqual(updatePayload.inputs, langSmithSpan.inputs);
+
     langSmithSpan.metadata = {
       ...langSmithSpan.metadata,
       ...updatePayload.metadata,
     };
+    if (updatePayload.run_type != null) {
+      langSmithSpan.run_type = updatePayload.run_type;
+    }
     if (updatePayload.inputs != null) {
       langSmithSpan.inputs = updatePayload.inputs;
     }
@@ -431,9 +461,9 @@ export class LangSmithExporter extends TrackingExporter<
       langSmithSpan.error = updatePayload.error;
     }
 
-    // Add new_token event for TTFT tracking on MODEL_GENERATION spans
-    if (span.type === SpanType.MODEL_GENERATION) {
-      const modelAttr = (span.attributes ?? {}) as ModelGenerationAttributes;
+    // Add new_token event for TTFT tracking on model spans
+    if (span.type === SpanType.MODEL_GENERATION || span.type === SpanType.MODEL_INFERENCE) {
+      const modelAttr = (span.attributes ?? {}) as ModelGenerationAttributes | ModelInferenceAttributes;
       if (modelAttr.completionStartTime !== undefined) {
         langSmithSpan.addEvent({
           name: 'new_token',
@@ -451,7 +481,7 @@ export class LangSmithExporter extends TrackingExporter<
       } else {
         await langSmithSpan.end();
       }
-      await langSmithSpan.patchRun();
+      await langSmithSpan.patchRun(resendInputs ? { excludeInputs: false } : undefined);
     }
   }
 
@@ -515,6 +545,78 @@ export class LangSmithExporter extends TrackingExporter<
     return typeof own === 'string' && own ? own : undefined;
   }
 
+  /** The conversation of the MODEL_GENERATION that `span` is or belongs to, when this process exported it. */
+  private findConversation(span: AnyExportedSpan, traceData: LangSmithTraceData): Conversation | undefined {
+    let id = span.type === SpanType.MODEL_GENERATION ? span.id : span.parentSpanId;
+    while (id) {
+      const conversation = traceData.getExtraValue(CONVERSATION + id) as Conversation | undefined;
+      if (conversation) return conversation;
+      id = traceData.getParentId({ spanId: id });
+    }
+    return undefined;
+  }
+
+  /** Keep an ended model call or tool result, so the next call of the generation can be sent with it. */
+  private recordConversation(span: AnyExportedSpan, traceData: LangSmithTraceData): void {
+    const conversation = this.findConversation(span, traceData);
+    if (!conversation) return;
+
+    switch (span.type) {
+      case SpanType.MODEL_INFERENCE: {
+        const message = !span.errorInfo && span.output ? messageOfCall(span.output as ModelStepResult) : undefined;
+        if (message) conversation.calls.push({ stepId: span.parentSpanId, message });
+        break;
+      }
+      case SpanType.MODEL_STEP:
+        // A processor rejected this step's answer, so the next call is sent without it.
+        if ((span.attributes as ModelStepAttributes | undefined)?.finishReason === 'retry') {
+          conversation.calls = conversation.calls.filter(call => call.stepId !== span.id);
+        }
+        break;
+      case SpanType.TOOL_CALL:
+      case SpanType.MCP_TOOL_CALL:
+      case SpanType.PROVIDER_TOOL_CALL: {
+        const toolCallId = (span.attributes as ToolCallAttributes | undefined)?.toolCallId;
+        const result = span.errorInfo ? span.errorInfo.message : span.output;
+        if (toolCallId && result !== undefined) conversation.toolResults.set(toolCallId, toText(result));
+        break;
+      }
+      case SpanType.MAPPING: {
+        // Ends after the tool call, with what `toModelOutput` made of its result.
+        const { mappingType, toolCallId } = (span.attributes ?? {}) as MappingAttributes;
+        if (mappingType === 'toModelOutput' && toolCallId && span.output != null) {
+          conversation.toolResults.set(toolCallId, toResultText(span.output));
+        }
+      }
+    }
+  }
+
+  /**
+   * The usage a model span's run is counted with, or undefined when the run does not stand for a
+   * model call. LangSmith sums usage over nested `llm` runs, so each token belongs to one of them:
+   * to its MODEL_INFERENCE, or to the MODEL_GENERATION around it when that call was not exported
+   * (generateLegacy, SDK agents, filtered spans, another process).
+   */
+  private countedUsage(
+    span: AnyExportedSpan,
+    conversation: Conversation | undefined,
+  ): LangSmithUsageMetrics | undefined {
+    const attributes = span.attributes as ModelGenerationAttributes | ModelInferenceAttributes | undefined;
+    const usage = formatUsageMetrics(attributes?.usage);
+
+    if (span.type === SpanType.MODEL_INFERENCE) {
+      // A resumed run replays the call it was suspended on, with the usage it had and no response.
+      if (span.endTime && span.metadata?.resumed && !attributes?.completionStartTime) return undefined;
+      if (conversation?.ended) return undefined;
+      if (conversation && span.endTime) conversation.counted = addUsage(conversation.counted ?? {}, usage);
+      return usage;
+    }
+
+    if (!conversation || !span.endTime) return usage;
+    conversation.ended = true;
+    return conversation.counted ? usageLeft(usage, conversation.counted) : usage;
+  }
+
   private buildRunTreePayload(
     span: AnyExportedSpan,
     traceData: LangSmithTraceData,
@@ -573,8 +675,43 @@ export class LangSmithExporter extends TrackingExporter<
 
     const attributes = (span.attributes ?? {}) as Record<string, any>;
 
-    if (span.type === SpanType.MODEL_GENERATION) {
-      const modelAttr = attributes as ModelGenerationAttributes;
+    if (span.type === SpanType.MODEL_GENERATION || span.type === SpanType.MODEL_INFERENCE) {
+      const modelAttr = attributes as ModelGenerationAttributes | ModelInferenceAttributes;
+      const isInference = span.type === SpanType.MODEL_INFERENCE;
+      if (isNew && !isInference) {
+        const conversation: Conversation = {
+          input: toChatMessages(span.input?.messages),
+          calls: [],
+          toolResults: new Map(),
+        };
+        traceData.setExtraValue(CONVERSATION + span.id, conversation);
+      }
+      const conversation = this.findConversation(span, traceData);
+      const usage = this.countedUsage(span, conversation);
+      payload.run_type = usage ? 'llm' : DEFAULT_SPAN_TYPE;
+      payload.metadata.usage_metadata = usage;
+
+      // Otherwise LangSmith guesses the format from the provider, whatever the messages look like.
+      payload.metadata.ls_message_format = 'completions';
+
+      if (isInference && conversation) {
+        // The span's own input is a preview that only names tool calls and results.
+        const messages = messagesOfCall(conversation, span.output);
+        if (messages) payload.inputs = { ...payload.inputs, messages };
+      }
+
+      // The answer as a message, which is how LangSmith recognizes it. A call that waits for tools
+      // is left as it is: LangSmith pairs it with their results from the next call's input.
+      const text: unknown = payload.outputs?.text;
+      if (usage && text && !(isInference && waitsForTools(payload.outputs!))) {
+        payload.outputs = { ...payload.outputs, role: 'assistant', content: text };
+      }
+
+      // Not part of the conversation: a generation whose calls already show it, and the call
+      // that names the thread, whose input is a transcript.
+      const isShownByCalls = usage && !isInference && conversation?.counted;
+      const isTitle = 'resultType' in modelAttr && modelAttr.resultType === 'title_generation';
+      if (isShownByCalls || isTitle) payload.metadata[LS_MESSAGE_VIEW_EXCLUDE] = true;
 
       // See: https://docs.langchain.com/langsmith/log-llm-trace
       if (modelAttr.model !== undefined) {
@@ -589,9 +726,6 @@ export class LangSmithExporter extends TrackingExporter<
         // LangSmith eg “openai”, “anthropic”, etc.
         payload.metadata.ls_provider = modelAttr.provider;
       }
-
-      // Usage/token info goes to metrics
-      payload.metadata.usage_metadata = formatUsageMetrics(modelAttr.usage);
 
       // Model parameters go to metadata
       if (modelAttr.parameters !== undefined) {
