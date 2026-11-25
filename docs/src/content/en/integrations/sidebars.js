@@ -1232,14 +1232,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'vectors/surrealdb',
-          label: 'SurrealDB',
-          customProps: {
-            icon: 'https://cdn.simpleicons.org/surrealdb?viewbox=auto&size=28',
-          },
-        },
-        {
-          type: 'doc',
           id: 'vectors/turbopuffer',
           label: 'Turbopuffer',
           customProps: {
