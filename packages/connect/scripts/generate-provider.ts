@@ -2005,7 +2005,8 @@ const EXA_CATEGORY_ENUM = "z.enum(['company', 'people', 'publication', 'news', '
  *   result failed a whole search or answer.
  * - get_contents checked for a content option in execute, and Exa refuses
  *   category/filter combinations, summaries on `lite`, and content ages over
- *   720 hours that the templates let through; the schemas say so now.
+ *   720 hours that the templates let through, and blank queries would be
+ *   sent as billed searches; the schemas say so now.
  * Drop an entry once the upstream template is fixed.
  */
 const EXA_FIXES: Readonly<Record<string, ProviderActionFixes & { description?: string }>> = {
@@ -2042,6 +2043,12 @@ const EXA_FIXES: Readonly<Record<string, ProviderActionFixes & { description?: s
     .refine(input => input.type !== 'lite' || input.summary === undefined, { message: 'The lite search type does not return summaries; use auto or ask for text or highlights.', path: ['summary'] })`,
         count: 1,
         what: 'category filters',
+      },
+      {
+        pattern: /query: z\.string\(\)\.min\(1\)\.describe\('The search query string\.'\)/,
+        replacement: "query: z.string().trim().min(1).describe('The search query string.')",
+        count: 1,
+        what: 'blank queries',
       },
       {
         pattern: /(title|url|publishedDate|image|favicon): z\.string\(\)\.optional\(\)/,
@@ -2086,6 +2093,12 @@ const EXA_FIXES: Readonly<Record<string, ProviderActionFixes & { description?: s
   },
   answer: {
     statements: [
+      {
+        pattern: /query: z\.string\(\)\.describe\(/,
+        replacement: 'query: z.string().trim().min(1).describe(',
+        count: 1,
+        what: 'blank questions',
+      },
       {
         pattern: /(title|url|text): z\.string\(\)\.optional\(\)/,
         replacement: '$1: z.string().nullish()',

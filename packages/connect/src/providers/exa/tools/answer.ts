@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type { PlatformProxy, PlatformProxyRequest } from '../../../runtime/platform-proxy.js';
 
 export const answerInputSchema = z.object({
-  query: z.string().describe('The question to answer. Example: "What is the capital of France?"'),
+  query: z.string().trim().min(1).describe('The question to answer. Example: "What is the capital of France?"'),
   text: z.boolean().optional().describe('If true, each citation object includes the full page text.'),
 });
 

@@ -5,8 +5,10 @@ import { errorMessage, makeStep, probeTool, requireTools } from '../scenario.js'
  * Exa scenario. Exa bills every search, contents, and answer call, so nothing
  * here spends credits unless `MASTRA_SMOKE_EXA_ALLOW_BILLED=1`.
  *
- * - Unset, each tool is sent a blank query or id, which Exa refuses before
- *   doing any work. That still proves routing, auth, and serialization.
+ * - Unset, contents is sent an id that isn't a URL, which Exa refuses as
+ *   INVALID_URLS (400) before fetching anything. Search and answer have no
+ *   input that passes their schemas and that Exa documents refusing before
+ *   billing, so they are recorded as skipped.
  * - With it, the scenario searches the web, reads the first result's contents,
  *   and answers a question with citations, asking for as few results and as
  *   little text as the checks need. When search fails, the contents read uses
@@ -40,9 +42,15 @@ export const exaScenario: Scenario = {
     }
 
     if (process.env.MASTRA_SMOKE_EXA_ALLOW_BILLED !== '1') {
-      steps.push(await probeTool(call, tools, 'search (probe)', 'exa_search', { query: ' ' }));
-      steps.push(await probeTool(call, tools, 'get contents (probe)', 'exa_get_contents', { ids: [''], text: {} }));
-      steps.push(await probeTool(call, tools, 'answer (probe)', 'exa_answer', { query: '' }));
+      const billed = 'Exa bills every call; set MASTRA_SMOKE_EXA_ALLOW_BILLED=1 to run it';
+      steps.push(makeStep('search', 'exa_search', 'skip', billed));
+      steps.push(
+        await probeTool(call, tools, 'get contents (probe)', 'exa_get_contents', {
+          ids: ['mastra-smoke-not-a-url'],
+          text: {},
+        }),
+      );
+      steps.push(makeStep('answer', 'exa_answer', 'skip', billed));
       return steps;
     }
 

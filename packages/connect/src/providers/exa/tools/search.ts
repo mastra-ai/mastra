@@ -19,7 +19,7 @@ const SummaryInputSchema = z.object({
 
 export const searchInputSchema = z
   .object({
-    query: z.string().min(1).describe('The search query string.'),
+    query: z.string().trim().min(1).describe('The search query string.'),
     type: z
       .enum(['auto', 'lite', 'fast', 'instant', 'deep-lite', 'deep', 'deep-reasoning'])
       .optional()

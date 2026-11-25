@@ -163,6 +163,11 @@ describe('Exa tools', () => {
       expect(requests[0]!.body).toMatchObject({ type: 'lite' });
     });
 
+    it.each(['', '   '])('refuses the blank query %j before calling Exa', async query => {
+      await expect(run('exa_search', { query })).rejects.toThrow(/failed validation/);
+      expect(requests).toEqual([]);
+    });
+
     it('refuses a summary on a lite search before calling Exa', async () => {
       await expect(run('exa_search', { query: 'agents', type: 'lite', summary: {} })).rejects.toThrow(
         /failed validation/,
@@ -253,6 +258,11 @@ describe('Exa tools', () => {
   });
 
   describe('answer', () => {
+    it.each(['', '   '])('refuses the blank question %j before calling Exa', async query => {
+      await expect(run('exa_answer', { query })).rejects.toThrow(/failed validation/);
+      expect(requests).toEqual([]);
+    });
+
     it('keeps a citation whose title is null', async () => {
       answer = () => ({
         status: 200,
