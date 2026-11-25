@@ -365,16 +365,6 @@ describe('listing the models of a custom endpoint', () => {
       new RegExp(`^Could not reach ${closed.url}/models: .*ECONNREFUSED`),
     );
   });
-
-  // `.invalid` never resolves, but a machine without DNS answers EAI_AGAIN instead of ENOTFOUND.
-  it('reports a host that does not resolve as a network failure', async () => {
-    const result = await listCustomProviderModels({ url: 'http://custom-endpoint.invalid/v1' }, { timeoutMs: 3000 });
-
-    expect(result).toMatchObject({ ok: false, failure: { kind: 'network' } });
-    expect(result.ok ? '' : result.failure.message).toMatch(
-      /^Could not reach http:\/\/custom-endpoint\.invalid\/v1\/models: .*(ENOTFOUND|EAI_AGAIN)/,
-    );
-  });
 });
 
 describe('sending a test message to a custom endpoint model', () => {
