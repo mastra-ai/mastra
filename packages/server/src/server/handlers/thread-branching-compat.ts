@@ -12,12 +12,68 @@
  */
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { BranchThreadInput, BranchThreadOutput, MastraMemory, ThreadBranchErrorCode } from '@mastra/core/memory';
-import type {
-  GeneratedMessagePersistenceInput,
-  InternalThreadBranchAuthorizationCandidate,
-  InternalThreadBranchState,
-} from '@mastra/core/memory/internal';
+import type { MastraMemory, MemoryConfig, StorageThreadType } from '@mastra/core/memory';
+import type { ObservabilityContext } from '@mastra/core/observability';
+
+// Type copies: the published declarations must not reference branch types that older @mastra/core
+// versions lack, or they would resolve to `any` and drop type checking.
+
+export type ThreadBranchErrorCode =
+  | 'BRANCHING_UNSUPPORTED'
+  | 'BRANCH_INVALID_REQUEST'
+  | 'BRANCH_NOT_FOUND'
+  | 'BRANCH_LINEAGE_CORRUPT'
+  | 'BRANCH_MUTATION_CONFLICT';
+
+export type BranchThreadInput = {
+  threadId: string;
+  branchPointMessageId: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type PublicThreadBranchMetadata = {
+  parentThreadId: string;
+  branchPointMessageId: string;
+  branchPointCreatedAt: Date;
+  branchCreatedAt: Date;
+};
+
+export type BranchThreadOutput = {
+  thread: StorageThreadType;
+  branch: PublicThreadBranchMetadata;
+};
+
+export type ThreadBranchHistoryOutput = {
+  history: Array<{
+    thread: StorageThreadType;
+    branch: PublicThreadBranchMetadata | null;
+  }>;
+};
+
+export type GeneratedMessagePersistenceInput = {
+  messages: MastraDBMessage[];
+  memoryConfig?: MemoryConfig;
+  observabilityContext?: Partial<ObservabilityContext>;
+  /** @internal See `MastraMemory.saveMessages`. */
+  embeddedMessages?: Map<string, string>;
+  /** @internal Thread to create atomically with validated message persistence when absent. */
+  thread?: StorageThreadType;
+  /** @internal Reject when `thread` already exists instead of persisting into it. */
+  requireThreadCreation?: boolean;
+  /** @internal Store the messages without writing semantic recall vectors; the SemanticRecall processor writes them. */
+  skipVectors?: boolean;
+};
+
+export type InternalThreadBranchState = {
+  state: 'absent' | 'ordinary' | 'pending' | 'ready';
+  hasReadyDescendants: boolean;
+};
+
+export type InternalThreadBranchAuthorizationCandidate = {
+  id: string;
+  resourceId?: string;
+};
 
 export const MASTRA_THREAD_BRANCH_METADATA_KEY = '__mastra_thread_branch';
 export const MASTRA_THREAD_BRANCH_METADATA_KEYS = [

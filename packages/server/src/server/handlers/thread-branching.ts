@@ -1,8 +1,4 @@
-import type { MastraMemory, StorageThreadType, ThreadBranchHistoryOutput } from '@mastra/core/memory';
-import type {
-  InternalThreadBranchAuthorizationCandidate,
-  InternalThreadBranchState,
-} from '@mastra/core/memory/internal';
+import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
 import type { RequestContext } from '@mastra/core/request-context';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
@@ -15,6 +11,7 @@ import {
   MASTRA_THREAD_BRANCH_METADATA_KEYS,
   persistMessagesWithThreadCreation,
 } from './thread-branching-compat';
+import type { InternalThreadBranchAuthorizationCandidate, InternalThreadBranchState, ThreadBranchHistoryOutput } from './thread-branching-compat';
 import { enforceThreadAccess } from './utils';
 
 export function assertThreadBranchingSupported(memory: MastraMemory): void {
