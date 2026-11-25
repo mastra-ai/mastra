@@ -306,8 +306,8 @@ export const Multiple: Story = {
 };
 
 /**
- * With `allowCustomValue`, typed text that matches no option is offered as `Use "text"`. A picked value that no
- * option lists keeps a chip with the bare value, like `my-fine-tune` here.
+ * With `allowCustomValue`, typed text that matches no option is offered as a "Use" option. A picked value that no
+ * option lists, like `my-fine-tune` here, keeps a chip with the bare value and shows checked in the popup.
  */
 export const MultipleWithCustomValues: Story = {
   render: function MultipleWithCustomValuesStory() {
