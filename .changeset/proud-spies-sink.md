@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added pending agent signals to the memory storage domain for storage adapter authors. A memory store that sets `supportsPendingSignals` keeps a signal sent to a thread as a hidden row of its messages table until a run claims it, and the row becomes a normal message once the run's messages are saved. The in-memory store supports it. Other adapters are unchanged, and the new methods throw on them.
+Added pending agent signals to the memory storage domain for storage adapter authors. A memory store that sets `supportsPendingSignals` keeps a signal sent to a thread as a hidden row of its messages table until a run claims it, and the row becomes a normal message once the run's messages are saved. The in-memory store supports it. Other adapters are unchanged, and the new methods throw on them. These methods and flags are experimental, and their contract may change in a minor release.
 
 ```ts
 const memory = await storage.getStore('memory');
