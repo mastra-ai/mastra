@@ -67,7 +67,19 @@ export type TestCapabilities = {
   skillsMetadataFilter?: boolean;
 };
 
-export function createTestSuite(storage: MastraStorage, capabilities: TestCapabilities = {}) {
+export type TestSuiteOptions = {
+  /**
+   * A second storage instance on the same database, standing in for another
+   * process in the tests that race calls across instances.
+   */
+  peerStorage?: MastraStorage;
+};
+
+export function createTestSuite(
+  storage: MastraStorage,
+  capabilities: TestCapabilities = {},
+  { peerStorage }: TestSuiteOptions = {},
+) {
   describe(storage.constructor.name, () => {
     beforeAll(async () => {
       const start = Date.now();
@@ -152,7 +164,7 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
       storage,
       workflowResultsNoopWhenRunMissing: capabilities.workflowResultsNoopWhenRunMissing,
     });
-    createMemoryTest({ storage });
+    createMemoryTest({ storage, peerStorage });
     createScoresTest({ storage, capabilities });
     createObservabilityTests({ storage, capabilities });
     createAgentsTests({ storage });

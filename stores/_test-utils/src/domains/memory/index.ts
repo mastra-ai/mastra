@@ -1,14 +1,15 @@
 import type { MastraStorage, MemoryStorage } from '@mastra/core/storage';
-import { createListMessagesTest } from './messages-paginated';
-import { createThreadsTest } from './threads';
-import { createMessagesUpdateTest } from './messages-update';
-import { createMessagesBulkDeleteTest } from './messages-bulk-delete';
-import { createResourcesTest } from './resources';
-import { createObservationalMemoryTest } from './observational-memory';
 import { beforeAll } from 'vitest';
+import { createMessagesBulkDeleteTest } from './messages-bulk-delete';
 import { createMessagesListTest } from './messages-list';
+import { createListMessagesTest } from './messages-paginated';
+import { createMessagesUpdateTest } from './messages-update';
+import { createObservationalMemoryTest } from './observational-memory';
+import { createPendingSignalsTest } from './pending-signals';
+import { createResourcesTest } from './resources';
+import { createThreadsTest } from './threads';
 
-export function createMemoryTest({ storage }: { storage: MastraStorage }) {
+export function createMemoryTest({ storage, peerStorage }: { storage: MastraStorage; peerStorage?: MastraStorage }) {
   let memoryStorage: MemoryStorage;
 
   beforeAll(async () => {
@@ -38,4 +39,6 @@ export function createMemoryTest({ storage }: { storage: MastraStorage }) {
   createResourcesTest({ storage });
 
   createObservationalMemoryTest({ storage });
+
+  createPendingSignalsTest({ storage, peerStorage });
 }

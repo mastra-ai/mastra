@@ -1,5 +1,6 @@
 import { MockStore } from '@mastra/core/storage';
 import type { ObservabilityStorage } from '@mastra/core/storage';
+import { describe, expect, it } from 'vitest';
 import { createMastraStorageCompositionTests } from './composite-tests';
 import {
   createKnowledgeImporterHostTests,
@@ -12,6 +13,14 @@ import { createTestSuite } from './factory';
 
 // Test InMemoryStore (MockStore)
 createTestSuite(new MockStore(), { scopedTraceDeletion: true });
+
+describe('Pending agent signals on InMemoryStore', () => {
+  it('are supported and not shared across processes', async () => {
+    const memory = await new MockStore().getStore('memory');
+    expect(memory?.supportsPendingSignals).toBe(true);
+    expect(memory?.pendingSignalsSharedAcrossProcesses).toBe(false);
+  });
+});
 
 // Test MastraStorage composition with InMemoryStore backing
 createMastraStorageCompositionTests();
