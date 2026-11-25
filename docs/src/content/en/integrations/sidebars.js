@@ -387,6 +387,12 @@ const sidebars = {
             iconDark: 'https://cdn.simpleicons.org/vercel/white?viewbox=auto&size=28',
           },
         },
+        {
+          type: 'doc',
+          id: 'sandboxes/wbx',
+          label: 'WBX Sandbox',
+          customProps: { icon: '/img/integrations/wbx.svg', customCSS: 'dark:invert' },
+        },
       ],
     },
     {
