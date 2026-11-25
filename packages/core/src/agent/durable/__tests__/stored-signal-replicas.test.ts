@@ -347,6 +347,54 @@ describe('an agent whose memory is a function of the request context', () => {
   });
 });
 
+describe('a cancel from a replica that does not hold the run', () => {
+  it('leaves the row to the replica holding the run when the memory is a function of the request context', async () => {
+    const { scope, prompts, toolGate, replica, startRun, admittedBy } = replicas(new InMemoryStore());
+    const tenantStorage = new InMemoryStore();
+    const tenantMemoryStore = new SharedMemory();
+    tenantStorage.stores.memory = tenantMemoryStore;
+    const tenantMemory = new MockMemory({ storage: tenantStorage });
+    const holder = replica({ memory: () => tenantMemory });
+    const cancellerCalls = { count: 0 };
+    const canceller = replica({
+      memory: () => {
+        cancellerCalls.count++;
+        return tenantMemory;
+      },
+      workers: false,
+    });
+    const { runId, done } = await startRun(holder, new RequestContext([['tenant', 'tenant-a']]));
+    const sent = holder.agent.sendSignal({ type: 'user-message', contents: 'CANCELLED_WITHOUT_THE_CONTEXT' }, scope);
+    await expect(sent.accepted).resolves.toEqual({ action: 'deliver', runId });
+
+    const callsBeforeCancel = cancellerCalls.count;
+    // Nothing this replica holds or can resolve has the signal.
+    await expect(canceller.agent.cancelQueuedMessages({ ...scope, signalIds: [sent.signal.id] })).resolves.toEqual({
+      cancelledSignalIds: [],
+    });
+    expect(cancellerCalls.count).toBe(callsBeforeCancel);
+    // The holder handles the thread's events in order: once it admitted a signal sent after the cancel, the
+    // cancel reached its store before that signal's insert.
+    let ids: string[] = [];
+    const admitted = admittedBy(holder, () => ids);
+    const after = canceller.agent.sendSignal({ type: 'user-message', contents: 'SENT_AFTER_THE_CANCEL' }, scope);
+    ids = [after.signal.id];
+    await expect(after.accepted).resolves.toEqual({ action: 'deliver', runId });
+    await admitted;
+    expect(cancellerCalls.count).toBe(callsBeforeCancel);
+    expect((await tenantMemoryStore.listPendingSignals({ threadId: scope.threadId })).map(row => row.id)).toEqual([
+      after.signal.id,
+    ]);
+    toolGate.release();
+    await done;
+
+    expect(prompts.some(prompt => occurrences(prompt, 'CANCELLED_WITHOUT_THE_CONTEXT') > 0)).toBe(false);
+    expect(occurrences(prompts[1], 'SENT_AFTER_THE_CANCEL')).toBe(1);
+    const saved = (await tenantMemoryStore.listMessages({ threadId: scope.threadId, perPage: false })).messages;
+    expect(saved.some(message => message.id === sent.signal.id)).toBe(false);
+  });
+});
+
 describe('a signal a replica that does not hold the run stores itself', () => {
   it('is stored once and reaches the run once: the replica holding the run does not store it again', async () => {
     const storage = new InMemoryStore();
