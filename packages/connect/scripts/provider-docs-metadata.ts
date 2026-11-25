@@ -105,6 +105,16 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
       'convert text to speech, transcribe audio and video, clone voices, compose music, manage conversational AI agents, voices and voice settings, and pronunciation dictionaries, and read and delete history items, dubbing projects, conversations, and knowledge-base documents',
     emit: true,
   },
+  exa: {
+    name: 'Exa',
+    logo: { src: 'https://app.nango.dev/images/template-logos/exa.svg' },
+    canonicalPage: 'tools/exa.mdx',
+    ownership: 'generated-page',
+    category: 'Tools',
+    summary: 'search the web, read page contents, and answer questions with cited sources',
+    note: 'Exa bills each search, contents, and answer call to the API key on the connection. The `deep` search types run multi-step searches that take several seconds and cost more than `auto` or `lite`.',
+    emit: true,
+  },
   figma: {
     name: 'Figma',
     logo: { slug: 'figma' },

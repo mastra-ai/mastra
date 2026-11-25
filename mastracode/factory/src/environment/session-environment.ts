@@ -116,8 +116,8 @@ export function environmentSandboxContext(
       ...(repo.setupCommand ? { setupCommand: repo.setupCommand } : {}),
     })),
     ...(environment.workspaceSetupCommand ? { workspaceSetupCommand: environment.workspaceSetupCommand } : {}),
-    // A repository whose setup fails still lands in the image; the boot hook
-    // re-runs that setup from `setup-failed`.
+    // A repository whose setup fails still lands in the image, recorded in
+    // `setup-failed`; the boot hook reports it failed without running it again.
     continueOnSetupFailure: true,
     ...(environment.workingDirectory ? { workingDirectory: environment.workingDirectory } : {}),
     ...(options.resolveHead ? { resolveHead: options.resolveHead } : {}),

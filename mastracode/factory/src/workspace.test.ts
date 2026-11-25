@@ -4454,7 +4454,7 @@ describe('factory environment sandbox context', () => {
      */
     async function boot(
       resolver: (args: any) => Promise<any>,
-      markers: { repos?: Record<string, boolean>; workspace?: boolean } = {},
+      markers: { repos?: Record<string, boolean | 'failed-in-build'>; workspace?: boolean } = {},
     ) {
       const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
       const sandbox = mocks.createSandbox.mock.results[0]!.value as { exec: ReturnType<typeof vi.fn> };
@@ -4463,7 +4463,8 @@ describe('factory environment sandbox context', () => {
         const text = String(command);
         const repoProbe = /test -d "[^"]*\/([^/"]+)\/\.git" && test -f/.exec(text);
         if (repoProbe) {
-          return { exitCode: markers.repos?.[repoProbe[1]!] ? 0 : 1, stdout: '', stderr: '' };
+          const marker = markers.repos?.[repoProbe[1]!];
+          return { exitCode: marker === 'failed-in-build' ? 3 : marker ? 0 : 1, stdout: '', stderr: '' };
         }
         if (text.includes('workspace-setup"') && text.startsWith('test -f')) {
           return { exitCode: markers.workspace ? 0 : 1, stdout: '', stderr: '' };
@@ -5075,6 +5076,28 @@ describe('factory environment sandbox context', () => {
           error: 'Setup command failed (exit 1): fatal: https://***@github.com/octocat/docs',
         },
       ]);
+      warn.mockRestore();
+    });
+
+    it('starts without running a setup command the environment build already saw fail, and reports it failed', async () => {
+      const { resolver, github } = environmentFixture({
+        links: [twoLinks[0]!, { ...twoLinks[1]!, setupCommand: 'pnpm docs' }],
+      });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await expect(
+        boot(resolver, { repos: { hello: 'failed-in-build', docs: 'failed-in-build' }, workspace: true }),
+      ).resolves.toBeDefined();
+
+      expect(mocks.runSetupCommand).not.toHaveBeenCalled();
+      expect(peekSessionEnvironment('session-a')?.repositories).toMatchObject([
+        { slug: 'octocat/hello', setupStatus: 'failed' },
+        { slug: 'octocat/docs', setupStatus: 'failed' },
+      ]);
+      // The build's own result stays on the repository: a session start has nothing new to record.
+      expect((github.sourceControlStorage.projectRepositories as any).setBuildStatus).not.toHaveBeenCalled();
       warn.mockRestore();
     });
 

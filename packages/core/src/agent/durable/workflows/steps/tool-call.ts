@@ -999,8 +999,11 @@ export function createDurableToolCallStep() {
           state.resourceId &&
           !state.memoryConfig?.readOnly
         ) {
-          const authorizationRequestContext =
-            registryEntry?.requestContext ?? restoreRequestContext(initData.requestContextEntries, requestContext);
+          const authorizationRequestContext = restoreRequestContext(
+            initData.requestContextEntries,
+            requestContext,
+            registryEntry?.requestContext,
+          );
           const authorizeMemory = (permission: Parameters<typeof authorizeDurableMemory>[1]['permission']) =>
             authorizeDurableMemory(getDurableMemoryAuthorizationChecks(registryEntry), {
               mastra: mastra as Mastra | undefined,
@@ -1060,8 +1063,11 @@ export function createDurableToolCallStep() {
       // persisted `requestContextEntries` snapshot — the same source the tool
       // rebuild uses — so context-aware approval predicates still see the
       // request scope captured when the run started.
-      const approvalRequestContext =
-        registryEntry?.requestContext ?? restoreRequestContext(initData.requestContextEntries, requestContext);
+      const approvalRequestContext = restoreRequestContext(
+        initData.requestContextEntries,
+        requestContext,
+        registryEntry?.requestContext,
+      );
       const requiresApproval = await toolRequiresApproval(tool, effectiveRequireToolApproval, args, {
         toolName,
         requestContext: Object.fromEntries(
@@ -2197,9 +2203,11 @@ export function createDurableToolCallStep() {
                   toolCallId: params.toolCallId,
                   toolName: params.toolName,
                   status: params.status === 'failed' ? 'failed' : 'completed',
-                  requestContext:
-                    registryEntry?.requestContext ??
-                    restoreRequestContext(initData.requestContextEntries, requestContext),
+                  requestContext: restoreRequestContext(
+                    initData.requestContextEntries,
+                    requestContext,
+                    registryEntry?.requestContext,
+                  ),
                 });
               }
             } catch (error) {
