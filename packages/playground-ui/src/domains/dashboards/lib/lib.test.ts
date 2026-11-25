@@ -1,6 +1,12 @@
 import { MastraClient } from '@mastra/client-js';
 import type { DashboardQuery } from '@mastra/client-js';
 import { EntityType } from '@mastra/core/observability';
+import {
+  countTraceAggregateBuckets,
+  TRACE_AGGREGATE_DEFAULT_LIMIT,
+  TRACE_AGGREGATE_MAX_ROWS,
+} from '@mastra/core/storage';
+import type { TraceAggregateInterval } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 import { kpisIssues } from '../kinds/kpis/options';
 import type { KpisOptions } from '../kinds/kpis/options';
@@ -9,7 +15,7 @@ import type { ResolvedView } from '../widget-kind';
 import { dashboardDefaults, inScope, targetScope, viewDrilldown } from './definition';
 import { intersectFilters } from './filters';
 import { buildPreviousRequest, buildRequest, pageQuery, sendRequest } from './requests';
-import type { DashboardAnswer, DashboardPageContext, DashboardRequestOptions } from './requests';
+import type { DashboardAnswer, DashboardPageContext, DashboardRequest, DashboardRequestOptions } from './requests';
 import {
   buildTableRows,
   countRows,
@@ -187,6 +193,40 @@ describe('buildRequest', () => {
     const previous = buildPreviousRequest(query, page, {});
     expect(previous).toMatchObject({ priority: 2 });
     expect(previous?.args).toMatchObject({ timeRange: { to: window.start.toISOString() } });
+  });
+
+  describe('a bucketed trace or span series without a limit of its own', () => {
+    const week = { start: new Date('2026-10-21T12:00:00Z'), end: window.end };
+    const weekPage: DashboardPageContext = { ...page, window: week, filters: { timestamp: week } };
+    const rowsOf = (request: DashboardRequest) => {
+      const { limit, interval } = request.args as { limit?: number; interval?: TraceAggregateInterval };
+      if (limit === undefined || interval === undefined) throw new Error('no limit or interval');
+      return limit * countTraceAggregateBuckets(week.start.getTime(), week.end.getTime(), interval);
+    };
+
+    it.each(['traceAggregate', 'spanAggregate'] as const)(
+      "%s: keeps an hourly week under the server's row cap",
+      source => {
+        const request = buildRequest({ source, measures: ['count'] }, weekPage, { interval: '1h' });
+        if (!request) throw new Error('no request');
+        expect(rowsOf(request)).toBeLessThanOrEqual(TRACE_AGGREGATE_MAX_ROWS);
+      },
+    );
+
+    it('keeps as many groups as the cap allows, the default where it fits', () => {
+      const query: DashboardQuery = { source: 'spanAggregate', groupBy: ['entityName'], measures: ['count'] };
+      expect(buildRequest(query, weekPage, { interval: '1h' })?.args).toMatchObject({ limit: 59 });
+      expect(built(query, { interval: '1h' }).args).toMatchObject({ limit: TRACE_AGGREGATE_DEFAULT_LIMIT });
+    });
+
+    it('caps its own stored interval too, and leaves a set limit or an unbucketed query alone', () => {
+      const own: DashboardQuery = { source: 'traceAggregate', measures: ['count'], interval: '1h' };
+      expect(buildRequest(own, weekPage, {})?.args).toMatchObject({ limit: 59 });
+      const set: DashboardQuery = { source: 'traceAggregate', measures: ['count'], limit: 500 };
+      expect(buildRequest(set, weekPage, { interval: '1h' })?.args).toMatchObject({ limit: 500 });
+      const total: DashboardQuery = { source: 'traceAggregate', measures: ['count'] };
+      expect(buildRequest(total, weekPage, {})?.args).not.toHaveProperty('limit');
+    });
   });
 });
 

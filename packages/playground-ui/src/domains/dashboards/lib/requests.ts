@@ -1,4 +1,10 @@
 import type { AggregateSpansArgs, AggregateTracesArgs, DashboardQuery, MastraClient } from '@mastra/client-js';
+import {
+  countTraceAggregateBuckets,
+  TRACE_AGGREGATE_DEFAULT_LIMIT,
+  TRACE_AGGREGATE_MAX_ROWS,
+} from '@mastra/core/storage';
+import type { TraceAggregateInterval } from '@mastra/core/storage';
 import type { MetricsQueryFilters } from '@mastra/react/hooks/metrics';
 import { bucketPlan } from '../../metrics/lib/metrics-buckets';
 import { AGGREGATE_PRIORITY } from '../../metrics/lib/request-limiter';
@@ -128,6 +134,16 @@ function bucketOf<I extends string>(own: I | undefined, interval: Interval | und
 }
 
 /**
+ * The groups a bucketed trace or span query asks for when it sets no limit: the server's default,
+ * lowered so `limit × buckets` stays under its row cap (an hourly week fits 59 groups).
+ */
+function seriesLimit(limit: number | undefined, interval: TraceAggregateInterval | undefined, window: Window) {
+  if (limit !== undefined || interval === undefined) return limit;
+  const buckets = countTraceAggregateBuckets(window.start.getTime(), window.end.getTime(), interval);
+  return Math.max(1, Math.min(TRACE_AGGREGATE_DEFAULT_LIMIT, Math.floor(TRACE_AGGREGATE_MAX_ROWS / buckets)));
+}
+
+/**
  * The request a query sends over `window`, the page's filters ANDed with the widget's: trace and span
  * predicates are joined with `and`; metrics and scores filters intersect (`intersectFilters`), and a
  * contradiction marks the request unsatisfiable. A scores query without a scorer sends nothing: the
@@ -141,26 +157,32 @@ export function buildRequest(
   priority?: AggregatePriority,
 ): DashboardRequest | undefined {
   if (query.source === 'traceAggregate') {
-    const { source: _source, id: _id, compare: _compare, where, interval: own, ...rest } = query;
+    const { source: _source, id: _id, compare: _compare, where, interval: own, limit, ...rest } = query;
+    const bucket = own ?? interval;
+    const capped = seriesLimit(limit, bucket, window);
     return {
       method: 'aggregateTraces',
       args: {
         timeRange: toTraceAggregateTimeRange(window),
         ...rest,
-        interval: own ?? interval,
+        interval: bucket,
+        ...(capped !== undefined && { limit: capped }),
         where: andTrace(where, page.traceWhere),
       },
       priority,
     };
   }
   if (query.source === 'spanAggregate') {
-    const { source: _source, id: _id, compare: _compare, where, interval: own, ...rest } = query;
+    const { source: _source, id: _id, compare: _compare, where, interval: own, limit, ...rest } = query;
+    const bucket = own ?? interval;
+    const capped = seriesLimit(limit, bucket, window);
     return {
       method: 'aggregateSpans',
       args: {
         timeRange: toTraceAggregateTimeRange(window),
         ...rest,
-        interval: own ?? interval,
+        interval: bucket,
+        ...(capped !== undefined && { limit: capped }),
         where: andSpan(where, page.spanWhere),
       },
       priority,
