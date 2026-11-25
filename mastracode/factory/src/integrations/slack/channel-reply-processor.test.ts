@@ -77,6 +77,19 @@ describe('FactoryChannelReplyProcessor', () => {
     }
   });
 
+  it('tells every channel run to write for the people in the thread, not another agent', () => {
+    const runs = [
+      instruction(channelContext()),
+      instruction(channelContext(), { reply_in_thread: {} }),
+      instruction(new RequestContext(), { reply_in_thread: {} }),
+    ];
+    for (const text of runs) {
+      expect(text).toContain('Write for the people in the thread, not for another agent.');
+      expect(text).toContain('Leave out tool names, session and run ids');
+      expect(text).toContain('never paste its report');
+    }
+  });
+
   it('adds the instruction once across steps', () => {
     const requestContext = channelContext();
     const messageList = new MessageList({});
