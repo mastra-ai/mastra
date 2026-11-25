@@ -64,29 +64,28 @@ export function useKnowledgeLiveUpdates(factoryProjectId: string | undefined): b
     let retry: ReturnType<typeof setTimeout> | undefined;
     let burst: ReturnType<typeof setTimeout> | undefined;
     const reading = new Map<string, { again: boolean }>();
-    const reread = (query: Query) => {
+    const reread = (query: Query, afterWrite: boolean) => {
       const inFlight = reading.get(query.queryHash);
       if (inFlight) {
         inFlight.again = true;
         return;
       }
-      // Aborting a read in the browser doesn't stop it on the server: join a running refresh, then read once more.
-      const runningRefresh =
-        query.isActive() && query.state.data !== undefined && query.state.fetchStatus === 'fetching';
-      const read = { again: runningRefresh };
+      // Aborting a read in the browser doesn't stop it on the server: join a running read, then read once more.
+      const running = query.isActive() && query.state.fetchStatus === 'fetching';
+      const read = { again: running && (afterWrite || query.state.data !== undefined) };
       reading.set(query.queryHash, read);
       void queryClient
         .invalidateQueries({ queryKey: query.queryKey, exact: true }, { cancelRefetch: false })
         .finally(() => {
           reading.delete(query.queryHash);
-          if (read.again && !abort.signal.aborted) reread(query);
+          if (read.again && !abort.signal.aborted) reread(query, false);
         });
     };
-    const refresh = () => {
+    const refresh = (afterWrite: boolean) => {
       const queries = queryClient
         .getQueryCache()
         .findAll({ predicate: query => isProjectKnowledgeQuery(query.queryKey, factoryProjectId) });
-      for (const query of queries) reread(query);
+      for (const query of queries) reread(query, afterWrite);
     };
 
     const connect = () => {
@@ -96,12 +95,12 @@ export function useKnowledgeLiveUpdates(factoryProjectId: string | undefined): b
         {
           onChange: () => {
             clearTimeout(burst);
-            burst = setTimeout(refresh, BURST_MS);
+            burst = setTimeout(() => refresh(true), BURST_MS);
           },
           onConnected: () => {
             setConnected(true);
             // Whatever landed while no stream was open was never announced.
-            refresh();
+            refresh(false);
           },
         },
         abort.signal,
