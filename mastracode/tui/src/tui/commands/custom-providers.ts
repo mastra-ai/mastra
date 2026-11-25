@@ -1,3 +1,4 @@
+import { customProviderHeaderProblem } from '@mastra/code-sdk/onboarding/custom-provider-headers';
 import {
   removeCustomProviderFromSettings,
   upsertCustomProviderInSettings,
@@ -8,7 +9,11 @@ import {
   saveSettings,
   toCustomProviderModelId,
 } from '@mastra/code-sdk/onboarding/settings';
-import type { GlobalSettings } from '@mastra/code-sdk/onboarding/settings';
+import type {
+  CustomProviderAuthScheme,
+  CustomProviderHeader,
+  GlobalSettings,
+} from '@mastra/code-sdk/onboarding/settings';
 import { askModalQuestion } from '../modal-question.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -48,6 +53,99 @@ export function removeModelFromCustomProviderInSettings(
   const before = provider.models.length;
   provider.models = provider.models.filter(model => model !== modelName);
   return provider.models.length < before;
+}
+
+/**
+ * Add several model ids to a provider at once and return how many were new.
+ * Ids already configured and blank ids are skipped.
+ */
+export function addModelsToCustomProviderInSettings(
+  settings: GlobalSettings,
+  providerId: string,
+  modelNames: readonly string[],
+): number {
+  const provider = settings.customProviders.find(entry => getCustomProviderId(entry.name) === providerId);
+  if (!provider) return 0;
+  const before = provider.models.length;
+  provider.models = [...new Set([...provider.models, ...modelNames.map(model => model.trim()).filter(Boolean)])];
+  return provider.models.length - before;
+}
+
+/**
+ * Change how a provider sends its API key. Returns why the change is refused,
+ * or undefined once it is applied. A saved custom header may already use the
+ * header the new scheme writes, so the headers are checked against it first.
+ */
+export function setCustomProviderAuthSchemeInSettings(
+  settings: GlobalSettings,
+  providerId: string,
+  authScheme: CustomProviderAuthScheme,
+): string | undefined {
+  const provider = settings.customProviders.find(entry => getCustomProviderId(entry.name) === providerId);
+  if (!provider) return 'Provider not found.';
+  const problem = customProviderHeaderProblem(provider.headers ?? [], authScheme);
+  if (problem) return problem;
+  provider.authScheme = authScheme;
+  return undefined;
+}
+
+/**
+ * Add a custom header to a provider. Returns why the header is refused, or
+ * undefined once it is added.
+ */
+export function addHeaderToCustomProviderInSettings(
+  settings: GlobalSettings,
+  providerId: string,
+  header: CustomProviderHeader,
+): string | undefined {
+  const provider = settings.customProviders.find(entry => getCustomProviderId(entry.name) === providerId);
+  if (!provider) return 'Provider not found.';
+  const next = { name: header.name.trim(), value: header.value.trim(), secret: header.secret ?? true };
+  const headers = [...(provider.headers ?? []), next];
+  const problem = customProviderHeaderProblem(headers, provider.authScheme);
+  if (problem) return problem;
+  provider.headers = headers;
+  return undefined;
+}
+
+/** Remove a custom header from a provider by name, ignoring case. Returns whether one was removed. */
+export function removeHeaderFromCustomProviderInSettings(
+  settings: GlobalSettings,
+  providerId: string,
+  headerName: string,
+): boolean {
+  const provider = settings.customProviders.find(entry => getCustomProviderId(entry.name) === providerId);
+  if (!provider?.headers) return false;
+  const before = provider.headers.length;
+  provider.headers = provider.headers.filter(header => header.name.toLowerCase() !== headerName.toLowerCase());
+  return provider.headers.length < before;
+}
+
+/** The origin of a URL, or the URL itself when it does not parse. */
+function urlOrigin(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Split a provider's headers for an edit that moves it from `previousUrl` to
+ * `nextUrl`. A saved secret is never sent to a new origin unless the user
+ * types it again, so secret headers are dropped when the origin changes.
+ * A header saved without a `secret` flag counts as secret.
+ */
+export function headersForCustomProviderUrlChange(
+  headers: readonly CustomProviderHeader[],
+  previousUrl: string,
+  nextUrl: string,
+): { kept: CustomProviderHeader[]; removed: CustomProviderHeader[] } {
+  if (urlOrigin(previousUrl) === urlOrigin(nextUrl)) return { kept: [...headers], removed: [] };
+  return {
+    kept: headers.filter(header => header.secret === false),
+    removed: headers.filter(header => header.secret !== false),
+  };
 }
 
 async function askText(
