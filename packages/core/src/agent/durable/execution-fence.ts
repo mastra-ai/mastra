@@ -37,6 +37,7 @@ import { PUBSUB_SYMBOL } from '../../workflows/constants';
 import { MASTRA_DURABLE_EXECUTIONS_KEY } from '../request-context-snapshot';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-ownership';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
+import { DurableStepIds } from './constants';
 import { ExecutionOwnershipGuard } from './execution-ownership-guard';
 import { executionTransport, withExecutionStreamProducer } from './execution-stream-publisher';
 import { currentRunFenceScope, runInRunFenceScope } from './run-fence-scope';
@@ -859,30 +860,107 @@ export class ExecutionFence implements RunFenceScope {
     if (!claim.agentId) return undefined;
     const executionBackend = await resolveRemoteBackend(mastra, claim.agentId, runId, claim);
     if (!executionBackend) return undefined;
-    // Called only after run ownership was renewed for this claim. For a generation-fenced claim that renewal already
-    // excludes any successor, so the thread lease cannot have been handed on: a missing lease lapsed (e.g. Redis
-    // restarted) and is taken back unless someone else holds it, and a lease backend refusing every client (so
-    // nobody else can acquire from it either) does not fence the execution. Any other backend error still does.
-    const holdsThreadLease = async (threadId: string): Promise<boolean> => {
-      const lease = [mastra.pubsub, runId, threadId, claim.resourceId, claim.generation, claim.executionId] as const;
-      if (claim.generation === undefined) return agentThreadStreamRuntime.renewDurableThreadLease(...lease);
+    const details = { agentId: claim.agentId, runId, executionId: claim.executionId };
+    const threadId = claim.threadId;
+    const lease = threadId
+      ? ([mastra.pubsub, runId, threadId, claim.resourceId, claim.generation, claim.executionId] as const)
+      : undefined;
+    let heartbeatRenewal: Promise<void> | undefined;
+    let participant: ExecutionFence | undefined;
+    const verifyCurrent = async () => {
+      await executionBackend.verify(claim, details);
+      if (participant?.isLost()) throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, details);
+    };
+    const checkThread = async (threadLease: NonNullable<typeof lease>, heartbeatWorker?: ExecutionFence) => {
+      const stopped = () => heartbeatWorker && (!heartbeatWorker.#heartbeat || heartbeatWorker.isLost());
+      let timedOut = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const check = async () => {
+        let renewed: boolean;
+        try {
+          renewed = await agentThreadStreamRuntime.renewDurableThreadLease(...threadLease);
+        } catch (error) {
+          if (agentThreadStreamRuntime.isThreadLeaseBackendUnavailableToAll(mastra.pubsub, error)) return true;
+          throw error;
+        }
+        if (renewed) return true;
+        if (timedOut || stopped()) return undefined;
+        await verifyCurrent();
+        if (timedOut || stopped()) return undefined;
+        let acquired: boolean;
+        try {
+          acquired = await agentThreadStreamRuntime.reclaimDurableThreadLease(...threadLease);
+        } catch (error) {
+          if (agentThreadStreamRuntime.isThreadLeaseBackendUnavailableToAll(mastra.pubsub, error)) return true;
+          throw error;
+        }
+        if (acquired) {
+          try {
+            await verifyCurrent();
+          } catch (error) {
+            // Even a late grant must not leave an old generation holding the thread.
+            if (error instanceof DurableExecutionFenceError && error.id === EXECUTION_SUPERSEDED_ERROR_ID) {
+              void (async () => {
+                const store = await mastra.getStorage()?.getStore('workflows');
+                const snapshot = await store?.loadWorkflowSnapshot({
+                  workflowName: DurableStepIds.AGENTIC_LOOP,
+                  runId,
+                });
+                // A suspension releases the execution claim but retains its thread lease.
+                const parked = snapshot?.status === 'suspended' || snapshot?.status === 'waiting';
+                if (!parked || (await executionBackend.isSuperseded(claim))) {
+                  await agentThreadStreamRuntime.releaseDurableThreadLease(...threadLease);
+                }
+              })().catch(() => {});
+            }
+            throw error;
+          }
+        } else if (heartbeatWorker) {
+          if (timedOut || stopped()) return undefined;
+          // A failed reclaim alone does not identify a different run.
+          const [pubsub, , threadId, resourceId] = threadLease;
+          if (
+            !(await agentThreadStreamRuntime.isDurableThreadLeaseHeldByAnotherRun(pubsub, runId, threadId, resourceId))
+          ) {
+            return undefined;
+          }
+        }
+        return acquired;
+      };
       try {
-        return (
-          (await agentThreadStreamRuntime.renewDurableThreadLease(...lease)) ||
-          (await agentThreadStreamRuntime.reclaimDurableThreadLease(...lease))
-        );
-      } catch (error) {
-        if (!agentThreadStreamRuntime.isThreadLeaseBackendUnavailableToAll(mastra.pubsub, error)) throw error;
-        mastra
-          .getLogger()
-          ?.warn(`[DurableAgent] run ${runId}: thread lease backend unavailable, relying on run ownership`, {
-            error,
-          });
-        return true;
+        return await Promise.race([
+          check(),
+          new Promise<undefined>(resolve => {
+            timer = setTimeout(() => {
+              timedOut = true;
+              resolve(undefined);
+            }, EXECUTION_LEASE_RENEW_INTERVAL_MS);
+            timer.unref?.();
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
       }
     };
     const backend: OwnershipBackend = {
       ...executionBackend,
+      verify: async () => {
+        await verifyCurrent();
+        if (!lease || claim.generation === undefined) return;
+        for (;;) {
+          const held = await checkThread(lease);
+          await verifyCurrent();
+          if (held === true) return;
+          if (held === false) {
+            // Another run owns the thread. Release only this claim so the API's ownership watch reports an error.
+            void ExecutionFence.releaseSharedClaim(mastra, runId, claim, 'abandoned').catch(() => {});
+            throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, details);
+          }
+          // Silence is not a takeover. Keep storage renewal independent and retry before admitting work.
+          await sleep(VERIFY_RETRY_DELAY_MS);
+          await verifyCurrent();
+        }
+      },
       renew: async current => {
         const result = await executionBackend.renew(current);
         if (!result.renewed) {
@@ -895,18 +973,28 @@ export class ExecutionFence implements RunFenceScope {
           }
           return result;
         }
-        if (claim.threadId && !(await holdsThreadLease(claim.threadId))) {
-          throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, {
-            agentId: claim.agentId!,
-            runId,
-            executionId: claim.executionId,
-          });
+        if (lease) {
+          if (claim.generation === undefined) {
+            if (!(await agentThreadStreamRuntime.renewDurableThreadLease(...lease))) {
+              throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, details);
+            }
+          } else if (participant && !heartbeatRenewal) {
+            // Use the same bounded reclaim as work admission without delaying the storage heartbeat.
+            const worker = participant;
+            heartbeatRenewal = checkThread(lease, worker)
+              .then(async held => {
+                if (held !== false || !worker.#heartbeat || worker.isLost()) return;
+                worker.#markLost(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, details));
+                await ExecutionFence.releaseSharedClaim(mastra, runId, claim, 'abandoned');
+              })
+              .catch(() => {})
+              .finally(() => (heartbeatRenewal = undefined));
+          }
         }
         return result;
       },
     };
     const startedAt = Date.now();
-    const details = { agentId: claim.agentId, runId, executionId: claim.executionId };
     let deadline: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([
@@ -940,14 +1028,14 @@ export class ExecutionFence implements RunFenceScope {
     } finally {
       if (deadline) clearTimeout(deadline);
     }
-    const fence = new ExecutionFence({
+    const fence = (participant = new ExecutionFence({
       ...details,
       backend,
       generation: claim.generation,
       workflowsStore: await mastra.getStorage()?.getStore('workflows'),
       leaseExpiresAt: startedAt + EXECUTION_LEASE_TTL_MS,
       logger: mastra.getLogger(),
-    });
+    }));
     if (claim.memoryFenced) await fence.coverMemory(await mastra.getStorage()?.getStore('memory'));
     if (backend.expires) fence.#startHeartbeat();
     return fence;

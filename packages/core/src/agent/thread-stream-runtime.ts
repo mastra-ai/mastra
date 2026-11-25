@@ -1241,6 +1241,7 @@ export class AgentThreadStreamRuntime {
     resourceId: string | undefined,
     generation: number | undefined,
     executionId?: string,
+    workerFenced = false,
   ): Promise<void> {
     const key = this.#threadKey(resourceId, threadId);
     const owner = threadLeaseOwner(runId, generation, executionId);
@@ -1268,7 +1269,7 @@ export class AgentThreadStreamRuntime {
     if (!lease.acquired) throw new AgentThreadLeaseConflictError(runId, lease.owner ?? 'another owner');
     if (this.#getState(pubsub).leaseRenewalTimers.has(runId)) {
       this.#stopLeaseRenewal(pubsub, runId);
-      this.#startLeaseRenewal(pubsub, key, runId, owner);
+      this.#startLeaseRenewal(pubsub, key, runId, owner, workerFenced);
     }
   }
 
@@ -1307,6 +1308,17 @@ export class AgentThreadStreamRuntime {
       AGENT_THREAD_LEASE_TTL_MS,
     );
     return acquired;
+  }
+
+  /** @internal Missing ownership is not evidence that another run took the thread. */
+  async isDurableThreadLeaseHeldByAnotherRun(
+    pubsub: PubSub,
+    runId: string,
+    threadId: string,
+    resourceId?: string,
+  ): Promise<boolean> {
+    const owner = await this.#getLeaseProvider(pubsub).getLeaseOwner(this.#threadKey(resourceId, threadId));
+    return owner !== undefined && threadLeaseRunId(owner) !== runId;
   }
 
   /** @internal Whether `error` from the thread lease backend means it is refusing every client, not just this one. */
@@ -1636,20 +1648,30 @@ export class AgentThreadStreamRuntime {
    * that point, so once it passes a successor may own the thread and the
    * run is aborted, even if the backend never answers.
    */
-  #startLeaseRenewal(pubsub: PubSub, key: string, runId: string, owner = this.#threadLeaseOwner(pubsub, runId)): void {
+  #startLeaseRenewal(
+    pubsub: PubSub,
+    key: string,
+    runId: string,
+    owner = this.#threadLeaseOwner(pubsub, runId),
+    workerFenced = false,
+    confirmedSentAt = Date.now(),
+  ): void {
     const state = this.#getState(pubsub);
     if (state.leaseRenewalTimers.has(runId)) {
       if (state.leaseOwners.get(runId) === owner) return;
       this.#stopLeaseRenewal(pubsub, runId);
     }
     const leaseProvider = this.#getLeaseProvider(pubsub);
+    // Shared evented dispatch delegates lease-loss decisions to the worker's execution fence.
     const timer = setInterval(() => {
+      if (workerFenced && state.pendingLeaseRenewals.has(runId)) return;
       const sentAt = Date.now();
       state.pendingLeaseRenewals.set(runId, (state.pendingLeaseRenewals.get(runId) ?? 0) + 1);
       void leaseProvider
         .renewLease(key, owner, AGENT_THREAD_LEASE_TTL_MS)
         .then(renewed => {
           if (!renewed) {
+            if (workerFenced) return;
             // A renewal that settles after the run ended or re-registered speaks for no live run, and must not
             // leave a rejecting fence behind for a later run with this id.
             if (state.leaseRenewalTimers.get(runId) !== timer) return;
@@ -1667,7 +1689,9 @@ export class AgentThreadStreamRuntime {
               this.#abortLeaseLostRun(state, runId);
             });
           } else {
-            if (state.leaseRenewalTimers.get(runId) === timer) this.#armLeaseDeadline(pubsub, key, runId, sentAt);
+            if (!workerFenced && state.leaseRenewalTimers.get(runId) === timer) {
+              this.#armLeaseDeadline(pubsub, key, runId, sentAt);
+            }
             if (state.sweptLeasedRunIds.has(runId)) {
               // A renewal in flight when the sweep stopped this timer still extended the lease.
               state.sweptLeasedRunIds.set(runId, Date.now());
@@ -1689,8 +1713,9 @@ export class AgentThreadStreamRuntime {
     }
     state.leaseRenewalTimers.set(runId, timer);
     state.leaseOwners.set(runId, owner);
+    if (workerFenced) return;
     // The lease was acquired or transferred just before this call.
-    this.#armLeaseDeadline(pubsub, key, runId, Date.now());
+    this.#armLeaseDeadline(pubsub, key, runId, confirmedSentAt);
     // A pubsub that can't lease has no owner to check, so every tool call would look like a takeover.
     if (!this.#resolveLeaseProvider(pubsub).isFallback) {
       const fence = this.#leaseFence(pubsub, key, runId, timer, owner);
@@ -5461,8 +5486,25 @@ export class AgentThreadStreamRuntime {
     // Keep the record intact for resume routing while bounding how long a parked
     // run remains cached in this process.
     record.suspendedAt = Date.now();
+    const state = this.#getState(pubsub);
+    // A suspended worker no longer renews the thread. Restore the parked runtime's
+    // deadline and fence if the shared dispatch had put its timer in passive mode.
+    const owner = state.leaseOwners.get(record.runId);
+    if (owner && state.threadRunsById.get(record.runId) === record && !state.leaseDeadlines.has(record.runId)) {
+      const resolvedPubSub = this.#getPubSub(pubsub);
+      this.#stopLeaseRenewal(resolvedPubSub, record.runId);
+      // No local deadline was tracked during dispatch. Verify the lease immediately.
+      this.#startLeaseRenewal(
+        resolvedPubSub,
+        key,
+        record.runId,
+        owner,
+        false,
+        record.suspendedAt - AGENT_THREAD_LEASE_TTL_MS,
+      );
+    }
     // Shutdown announces the runs it hands back itself.
-    if (this.#getState(pubsub).shutdownStreams.has(record.streamId)) return;
+    if (state.shutdownStreams.has(record.streamId)) return;
     await this.#publishAndWait(pubsub, key, {
       type: 'run-suspended',
       runId: record.runId,
