@@ -88,7 +88,7 @@ A handler gets one object:
     name: 'connect',
     type: 'ConnectClient',
     description:
-      "A `ConnectClient` for the project, built from the worker's options. Call `connect.withResource(event.resourceId)` to act as the end user an event's connection belongs to.",
+      "A `ConnectClient` for the project, built from the worker's options. When the event's connection belongs to an end user, it's scoped to the event's `resourceId`, so its calls act as that user.",
   },
 ]}
 />
@@ -111,13 +111,13 @@ Subscribes to the project's events. Mastra calls it when it starts its workers, 
 
 ### `stop(options?)`
 
-Ends the subscription and waits for the event being handled, up to `options.drainTimeout` milliseconds. Mastra calls it when it stops its workers.
+Ends the subscription and waits for the events being handled, up to `options.drainTimeout` milliseconds. Mastra calls it when it stops its workers.
 
 ## Delivery
 
-Events are handled one at a time, in order. A handler that throws is logged, and later events are still handled.
+Events from different connections are handled concurrently, and one connection's events one at a time, in the order they arrived. A slow handler only holds up its own connection, until 100 events are waiting to be handled. Then the worker waits for one to finish before reading more. A handler that throws is logged, and later events are still handled.
 
-Delivery is at least once: the worker moves past an event after its handler returns, so a handler can see an event again after a restart. Make handlers safe to repeat, for example by starting a workflow with a run id built from `event.sourceEventId ?? event.id` and skipping a run that already started, as the usage example does. Without a `cursorStore`, the subscription starts at the newest event each time it starts, so events that arrive while the worker is stopped aren't handled.
+Delivery is at least once: the cursor moves past an event once it and every event before it have been handled, so a handler can see an event again after a restart. A `cursorStore` that throws is logged, and the next save tries again. Make handlers safe to repeat, for example by starting a workflow with a run id built from `event.sourceEventId ?? event.id` and skipping a run that already started, as the usage example does. Without a `cursorStore`, the subscription starts at the newest event each time it starts, so events that arrive while the worker is stopped aren't handled.
 
 Run the worker in one process. Every process that runs it receives every event. Use [`MASTRA_WORKERS`](/docs/deployment/workers#select-workers) to pick the process.
 
