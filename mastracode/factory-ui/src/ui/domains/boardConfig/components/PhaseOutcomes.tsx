@@ -84,16 +84,31 @@ export function PhaseOutcomes({
   return (
     <div className="flex flex-col gap-3">
       <SettingsContainer>
+        <div className="flex gap-3 px-4 pt-3">
+          <Field className="w-36">
+            <FieldLabel size="smaller" info={KEY_INFO}>
+              Key
+            </FieldLabel>
+          </Field>
+          <Field className="min-w-48 flex-1">
+            <FieldLabel size="smaller" info={DESCRIPTION_INFO}>
+              Description
+            </FieldLabel>
+          </Field>
+          <Field className="w-44">
+            <FieldLabel size="smaller" info={TARGET_INFO}>
+              Moves the card to
+            </FieldLabel>
+          </Field>
+          {!disabled && <div aria-hidden className="w-8" />}
+        </div>
         <ul aria-label={`${phase.name} outcomes`} className="flex flex-col">
           {own.map((outcome, index) => {
             const problem = problems[index] ?? {};
             const name = `outcome ${outcome.key || index + 1}`;
             return (
-              <li key={index} className="flex flex-wrap items-start gap-3 px-4 py-3">
+              <li key={index} className="flex items-start gap-3 px-4 py-2">
                 <Field invalid={Boolean(problem.key)} disabled={disabled} className="w-36">
-                  <FieldLabel size="smaller" info={KEY_INFO}>
-                    Key
-                  </FieldLabel>
                   <Input
                     aria-label={`${phase.name} outcome ${index + 1} key`}
                     value={outcome.key}
@@ -104,9 +119,6 @@ export function PhaseOutcomes({
                   {problem.key && <FieldError>{problem.key}</FieldError>}
                 </Field>
                 <Field invalid={Boolean(problem.label)} disabled={disabled} className="min-w-48 flex-1">
-                  <FieldLabel size="smaller" info={DESCRIPTION_INFO}>
-                    Description
-                  </FieldLabel>
                   <Input
                     aria-label={`${phase.name} outcome ${index + 1} label`}
                     value={outcome.label}
@@ -117,9 +129,6 @@ export function PhaseOutcomes({
                   {problem.label && <FieldError>{problem.label}</FieldError>}
                 </Field>
                 <Field disabled={disabled} className="w-44">
-                  <FieldLabel size="smaller" info={TARGET_INFO}>
-                    Moves the card to
-                  </FieldLabel>
                   <Select
                     value={outcome.to}
                     disabled={disabled}
@@ -138,13 +147,7 @@ export function PhaseOutcomes({
                   </Select>
                 </Field>
                 {!disabled && (
-                  <Button
-                    size="icon-sm"
-                    variant="ghost"
-                    tooltip={`Remove ${name}`}
-                    className="mt-6"
-                    onClick={() => remove(index)}
-                  >
+                  <Button size="icon-sm" variant="ghost" tooltip={`Remove ${name}`} onClick={() => remove(index)}>
                     <TrashIcon />
                   </Button>
                 )}

@@ -430,10 +430,10 @@ describe("Editing a phase's outcomes", () => {
       'fixed moves the card to Fixed',
     ]);
     await user.click(screen.getByRole('button', { name: 'Customize outcomes' }));
-    // Each field says what it means.
-    expect(screen.getAllByRole('button', { name: 'About Key' })).toHaveLength(2);
-    expect(screen.getAllByRole('button', { name: 'About Description' })).toHaveLength(2);
-    expect(screen.getAllByRole('button', { name: 'About Moves the card to' })).toHaveLength(2);
+    // One header names the columns and says what each means, however many outcomes there are.
+    expect(screen.getAllByRole('button', { name: 'About Key' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'About Description' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'About Moves the card to' })).toHaveLength(1);
 
     const key = await screen.findByRole('textbox', { name: 'Fixing outcome 2 key' });
     await user.clear(key);
