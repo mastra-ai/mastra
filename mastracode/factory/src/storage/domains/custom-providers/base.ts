@@ -348,11 +348,12 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
     };
   }
 
-  /** Stored columns for a header list. An empty list is stored as `null`, like a row from before headers. */
+  /** The stored `headers` column for a list. An empty list is stored as `null`, like a row from before headers. */
   async #encryptHeaders(headers: CustomProviderHeader[]): Promise<string | null> {
     return headers.length === 0 ? null : this.encryption.encrypt(headers);
   }
 
+  /** Re-encrypt the row's key and header list when they were written under an older key or none. One atomic write per row, so a concurrent edit is not overwritten. */
   async #migrateSecrets(collection: string, id: string): Promise<void> {
     await this.#db.updateAtomic<CustomProviderDbRow>(collection, { id }, async row => {
       const set: Partial<CustomProviderDbRow> = {};
@@ -460,7 +461,9 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
             headers: await this.#encryptHeaders(settings.resolved.headers),
             last_check: lastCheck ?? null,
             models: input.models,
-            updated_at: new Date(),
+            // `recordCheck` and `checked` tell edits apart by `updated_at`, so two
+            // edits within one millisecond must still get different values.
+            updated_at: new Date(Math.max(Date.now(), current.updated_at.getTime() + 1)),
           };
         },
       );

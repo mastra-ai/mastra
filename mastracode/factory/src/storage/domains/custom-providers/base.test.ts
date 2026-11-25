@@ -554,7 +554,7 @@ describe('CustomProvidersStorage headers, auth scheme and last check', () => {
     const update = (input: CustomProviderInput) => seed.customProviders.update({ owner, providerId: 'my-llm', input });
     const keptHeaders = [{ name: 'X-Tenant' }, { name: 'X-Region' }];
 
-    // A new model list, or the same key and headers sent again, change nothing that is called.
+    // A new model list, or the same key and headers sent again, leaves the call unchanged.
     expect(saved(await update(endpoint({ models: ['m', 'n'] }))).lastCheck).toEqual(passed);
     expect(saved(await update(endpoint({ apiKey: 'sk-1', headers: keptHeaders }))).lastCheck).toEqual(passed);
 
@@ -597,6 +597,17 @@ describe('CustomProvidersStorage headers, auth scheme and last check', () => {
       }),
     ).toBeNull();
     expect((await seed.customProviders.get({ owner, providerId: 'my-llm' }))!.lastCheck).toBeNull();
+
+    // A save that passed its test against the old row does not stamp the row that replaced it.
+    const stale = saved(
+      await seed.customProviders.update({
+        owner,
+        providerId: 'my-llm',
+        input: endpoint({ url: 'https://llm.example.com/v2', lastCheck: { at: '2026-11-26T10:02:00.000Z', ok: true } }),
+        checked: beforeEdit,
+      }),
+    );
+    expect(stale.lastCheck).toBeNull();
   });
 
   it('reads and edits a row written before headers, schemes and checks existed', async () => {
