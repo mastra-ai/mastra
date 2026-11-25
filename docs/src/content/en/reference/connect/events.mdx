@@ -77,7 +77,8 @@ Delivery is at-least-once: an event whose handling throws, or that you break out
   {
     name: 'afterTimestamp',
     type: 'number',
-    description: 'Start after this time, in milliseconds since the epoch, when there is no event id to resume from.',
+    description:
+      'Start after this time, in milliseconds since the epoch. A saved cursor from `cursorStore` takes precedence over it, so it only applies when nothing has been saved yet. Passing both `after` and `afterTimestamp` throws `invalid_options`.',
     isOptional: true,
   },
   {

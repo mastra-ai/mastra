@@ -15,6 +15,7 @@ A [worker](/docs/deployment/workers) that handles provider events on a project's
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
 import { ConnectEventWorker } from '@mastra/connect'
+import { reviewer } from './agents/reviewer'
 import { triageIssue } from './workflows/triage-issue'
 
 const connectEvents = new ConnectEventWorker({
@@ -38,6 +39,7 @@ const connectEvents = new ConnectEventWorker({
 })
 
 export const mastra = new Mastra({
+  agents: { reviewer },
   workflows: { triageIssue },
   workers: [connectEvents],
 })
@@ -107,7 +109,9 @@ A provider without typed payloads gets every event type, with an `unknown` paylo
 
 ### `start()`
 
-Subscribes to the project's events. Mastra calls it when it starts its workers, so you only call it after `stop()`. Without handlers, the worker doesn't subscribe. When the subscription can't start, for example without platform credentials, the worker logs the error and Mastra starts its other workers.
+Subscribes to the project's events. Mastra calls it when it starts its workers. Without handlers, the worker doesn't subscribe. When the subscription can't start, for example without platform credentials, the worker logs the error and Mastra starts its other workers.
+
+The subscription also ends, with the error logged and `isRunning` set to `false`, when the events service refuses the token, rejects the cursor and there is no time to fall back to, or when `onGap` throws or `cursorStore.load` throws or returns an invalid cursor. See [`ConnectEvents` errors](/reference/connect/events#errors). Call `start()` again to resubscribe, for example after fixing the credentials or when `isRunning` is `false`.
 
 ### `stop(options?)`
 
@@ -117,7 +121,7 @@ Ends the subscription and waits for the events being handled, up to `options.dra
 
 Events from different connections are handled concurrently, and one connection's events one at a time, in the order they arrived. A slow handler only holds up its own connection, until 100 events are waiting to be handled. Then the worker waits for one to finish before reading more. A handler that throws is logged, and later events are still handled.
 
-Delivery is at least once: the cursor moves past an event once it and every event before it have been handled, so a handler can see an event again after a restart. A `cursorStore` that throws is logged, and the next save tries again. Make handlers safe to repeat, for example by starting a workflow with a run id built from `event.sourceEventId ?? event.id` and skipping a run that already started, as the usage example does. Without a `cursorStore`, the subscription starts at the newest event each time it starts, so events that arrive while the worker is stopped aren't handled.
+Delivery is at least once: the cursor moves past an event once it and every event before it have been handled, so a handler can see an event again after a restart. A `cursorStore.save` that throws is logged, and the next save tries again. A `cursorStore.load` that throws ends the subscription, as [`start()`](#start) describes. Make handlers safe to repeat, for example by starting a workflow with a run id built from `event.sourceEventId ?? event.id` and skipping a run that already started, as the usage example does. Without a `cursorStore`, the subscription starts at the newest event each time it starts, so events that arrive while the worker is stopped aren't handled.
 
 Run the worker in one process. Every process that runs it receives every event. Use [`MASTRA_WORKERS`](/docs/deployment/workers#select-workers) to pick the process.
 

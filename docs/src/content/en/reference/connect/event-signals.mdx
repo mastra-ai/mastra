@@ -103,7 +103,9 @@ An event type that the provider doesn't send is a compile error.
 
 ### `start()`
 
-Subscribes to the project's events. The agent calls it when it's created, so you only call it after `stop()`. When the subscription can't start, for example without platform credentials, it logs the error and the agent runs without events.
+Subscribes to the project's events. The agent calls it when it's created. When the subscription can't start, for example without platform credentials, it logs the error and the agent runs without events.
+
+The subscription also ends, with the error logged, when the events service refuses the token, rejects the cursor and there is no time to fall back to, or when `onGap` or the `cursorStore` throws, or `cursorStore.load` returns an invalid cursor. See [`ConnectEvents` errors](/reference/connect/events#errors). The agent then runs without events until you call `start()` again.
 
 ### `stop()`
 
@@ -111,7 +113,7 @@ Ends the subscription. Call it when your app stops, because the agent doesn't ca
 
 ## Delivery
 
-Events reach the agent in order. An event whose target or notification function throws, or whose notification can't be stored, is logged and skipped, and later events are still delivered. Without a `cursorStore`, the subscription starts at the newest event each time it starts.
+Events reach the agent in order. An event whose target or notification function throws, or whose notification can't be stored, is logged and skipped, and later events are still delivered. Errors that end the subscription are described under [`start()`](#start). Without a `cursorStore`, the subscription starts at the newest event each time it starts.
 
 ## Related
 
