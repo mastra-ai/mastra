@@ -5,7 +5,7 @@ import { bucketGrid, bucketPlan, gridIndex, intervalHours } from '../../metrics/
 import type { ApiInterval } from '../../metrics/lib/metrics-buckets';
 import { bucketTraceAggregateRows } from '../../metrics/lib/trace-aggregate';
 import type { TraceAggregateRow } from '../../metrics/lib/trace-aggregate';
-import { measureOf, rowsOf, seriesOf, valueOf } from './answers';
+import { emptyMeasure, measureOf, rowsOf, seriesOf, valueOf } from './answers';
 import type { DashboardAnswer } from './requests';
 import {
   colorSchema,
@@ -160,8 +160,9 @@ export function shapeTimeseries({
     const answer = responses.get(ref.query);
     const aggregate = rowsOf(answer);
     if (aggregate) {
+      const empty = ref.measure ? emptyMeasure(ref.measure) : 0;
       bucketTraceAggregateRows(aggregate.rows, window).forEach((b, i) => {
-        values[i] = fromRows(b.rows, ref, groupByOf(ref.query)) ?? 0;
+        values[i] = fromRows(b.rows, ref, groupByOf(ref.query)) ?? empty;
       });
     }
     for (const s of seriesOf(answer) ?? []) {
