@@ -709,6 +709,24 @@ test('seed preserves wiki syntax in code alongside managed prose links', { timeo
     assert.ok(stored?.body?.includes(`See [[${guide.destination}]].`));
     assert.equal((await f.cli()).report.repairedLinks, false, 'A repeated seed preserves the corrected link index');
 
+    await f.knowledge(async (knowledge, storage) => {
+      const prose = `See [[${guide.destination}]].`;
+      const body = ['  ~~~text', `[[${guide.destination}]]`, '  ~~~', '', prose].join('\n');
+      const { page } = await knowledge.upsertPage({
+        scope: 'docs:north',
+        path: 'reindex-example',
+        name: 'Reindex example',
+        body,
+      });
+      await knowledge.reindexLinks();
+      const edges = await storage.listPageLinks({ pageIds: [page.id], read: 'all', direction: 'out', kinds: ['body'] });
+      assert.deepEqual(
+        edges.map(edge => [edge.toPageId, edge.count]),
+        [[guide.id, 1]],
+      );
+      assert.equal((await storage.getPage({ id: page.id, read: 'all' }))?.body, body);
+    });
+
     const stable = await f.snapshot();
     await writeFile(caseFile, '# Example\n\n~~~text\n[[example-placeholder]]');
     assert.match((await f.cli({ code: 1 })).output, /Unclosed Markdown code block before generated page content/u);

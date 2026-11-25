@@ -244,6 +244,24 @@ type MarkdownNode = {
   children?: MarkdownNode[];
 };
 
+export function withoutMarkdownCode(body: string) {
+  const bomLength = body.startsWith('\uFEFF') ? 1 : 0;
+  const parts: string[] = [];
+  let offset = 0;
+  function visit(node: MarkdownNode) {
+    const start = node.position?.start.offset;
+    const end = node.position?.end.offset;
+    if ((node.type === 'code' || node.type === 'inlineCode') && start !== undefined && end !== undefined) {
+      parts.push(body.slice(offset, start + bomLength), ' ');
+      offset = end + bomLength;
+    } else {
+      node.children?.forEach(visit);
+    }
+  }
+  visit(fromMarkdown(body));
+  return [...parts, body.slice(offset)].join('');
+}
+
 function rejectHtml(node: MarkdownNode) {
   if (node.type === 'html') throw new Error('Unsupported or reserved Markdown syntax');
   node.children?.forEach(rejectHtml);
