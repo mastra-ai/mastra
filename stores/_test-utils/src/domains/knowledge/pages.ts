@@ -1408,6 +1408,15 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
           const oldestOrder = <E extends { createdAt: Date; id: string }>(events: E[]) => datedOrder(events).reverse();
           const positionOf = (event: { createdAt: Date; id: string }) => ({ createdAt: event.createdAt, id: event.id });
 
+          it('refuses order asc and after on a store that does not report it, instead of answering newest first', async () => {
+            if (ascending()) return;
+            const position = { createdAt: new Date(T0), id: 'x' };
+            await expect(store.listPageActivity({ read: 'all', order: 'asc' })).rejects.toThrow(RangeError);
+            await expect(store.listPageActivity({ read: 'all', order: 'asc', after: position })).rejects.toThrow(
+              RangeError,
+            );
+          });
+
           it('orders by createdAt then id ascending, and pages with after through ties and out-of-order ids without skipping or repeating', async () => {
             if (!ascending()) return;
             const acme = await scopeAt('org:acme');

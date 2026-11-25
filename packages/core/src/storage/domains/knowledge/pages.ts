@@ -902,7 +902,10 @@ export interface KnowledgePageStore {
    * first: `createdAt` then `id`, both ascending, with `since`/`until` still applying. `after`
    * returns only events strictly newer than that event in this order, so a reader can continue from
    * the last event it handled. `after` needs `order: 'asc'` and can't be combined with `cursor`;
-   * `before` can't be used with `order: 'asc'`. Invalid combinations throw a `RangeError`.
+   * `before` can't be used with `order: 'asc'`. Invalid combinations throw a `RangeError`, and so
+   * do `order: 'asc'` and `after` on a store that doesn't report the capability. For a read that
+   * resumes later, continue with `after` rather than the store cursor: the cursor can be a plain
+   * offset, which shifts if an event lands inside the range already read.
    */
   listPageActivity(
     input: KnowledgePageActivityInput,

@@ -2,6 +2,8 @@
 '@mastra/core': minor
 '@mastra/pg': minor
 '@mastra/libsql': minor
+'@mastra/mysql': patch
+'@mastra/mongodb': patch
 ---
 
 Knowledge activity can now be read oldest first, so an agent can work through changes in the order they happened and pick up from the last one it handled.
@@ -12,4 +14,4 @@ Knowledge activity can now be read oldest first, so an agent can work through ch
 const { events } = await storage.listPageActivity({ read, since, order: 'asc', after: last })
 ```
 
-Stores that support this report `supportsActivityAscending`: the in-memory store, LibSQL and PostgreSQL. The default order is still newest first.
+Stores that support this report `supportsActivityAscending`: the in-memory store, LibSQL and PostgreSQL. The default order is still newest first. MySQL and MongoDB don't support it yet. They now refuse `order: 'asc'` and `after` with a `RangeError` instead of quietly returning newest first.
