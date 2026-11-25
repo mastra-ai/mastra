@@ -39,9 +39,9 @@ interface ModelDefaultsContext {
 }
 
 const sessionAddressFieldsSchema = z.object({
-  resourceId: z.string().trim().min(1),
-  threadId: z.string().trim().min(1),
-  sessionId: z.string().trim().min(1).optional(),
+  resourceId: z.string().min(1),
+  threadId: z.string().min(1),
+  sessionId: z.string().min(1).optional(),
 });
 
 function withSessionId<T extends { resourceId: string; sessionId?: string }>(address: T) {
