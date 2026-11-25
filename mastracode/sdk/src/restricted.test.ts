@@ -108,7 +108,7 @@ describe('restricted Mastra Code embedding', () => {
     expect(controllerConfig.initialState).toMatchObject({
       yolo: false,
       skipGlobalInstructions: true,
-      observerModelSelection: '__restricted_model_disabled__',
+      observerModelSelection: undefined,
       projectPath: '/remote/workspace',
       projectName: 'remote-project',
       gitBranch: 'main',
@@ -164,13 +164,11 @@ describe('restricted Mastra Code embedding', () => {
     const { createRestrictedMastraCodeAgentController } = await import('./restricted.js');
     await expect(createRestrictedMastraCodeAgentController(createConfig())).resolves.toBeDefined();
     const controllerConfig = controllerConfigs[0] as Record<string, any>;
-    expect(controllerConfig.stateSchema.parse({})).toMatchObject({
-      observerModelId: '__restricted_model_disabled__',
-      reflectorModelId: '__restricted_model_disabled__',
-      observerModelSelection: '__restricted_model_disabled__',
-      reflectorModelSelection: '__restricted_model_disabled__',
-      skipGlobalInstructions: true,
-    });
+    const defaults = controllerConfig.stateSchema.parse({});
+    expect(defaults.skipGlobalInstructions).toBe(true);
+    for (const key of ['observerModelId', 'reflectorModelId', 'observerModelSelection', 'reflectorModelSelection']) {
+      expect(defaults[key]).toBeUndefined();
+    }
 
     expect(loadEnvFile).not.toHaveBeenCalled();
     expect(cwd).not.toHaveBeenCalled();

@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { InMemoryStore } from '@mastra/core/storage';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { LocalFilesystem, Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace';
+import { Memory } from '@mastra/memory';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { mountRestrictedAgentControllerOnMastra } from './restricted.js';
@@ -138,5 +139,41 @@ describe('restricted workspace tool enforcement', () => {
 
     // The model catalog must not reveal which providers the server process has credentials for.
     await expect(controller.listAvailableModels()).resolves.toEqual([]);
+  });
+
+  it('reports no observational memory model when the injected memory configures one', async () => {
+    const storage = new InMemoryStore();
+    const memory = new Memory({ storage, options: { observationalMemory: { model: 'openai/gpt-4o-mini' } } });
+    const { controller } = await mountRestrictedAgentControllerOnMastra({
+      project: {
+        resourceId: 'remote-project-1',
+        name: 'remote-project',
+        rootPath: '/remote/workspace',
+      },
+      model: new MastraLanguageModelV2Mock({}),
+      instructions: 'Use only host-provided capabilities.',
+      modes: [{ id: 'build', metadata: { default: true } }],
+      allowedTools: [],
+      workspace: new Workspace({
+        id: 'remote-workspace',
+        filesystem: new LocalFilesystem({ basePath: tempDirectory }),
+      }),
+      storage,
+      memory,
+      initialState: { observerModelSelection: 'openai/gpt-5', reflectorModelId: 'openai/gpt-5' },
+    });
+    const session = await controller.createSession({ id: 'session-om', ownerId: 'owner-1' });
+    await session.thread.create();
+
+    for (const role of [session.om.observer, session.om.reflector]) {
+      expect(role.model()).toBeUndefined();
+      expect(role.modelId()).toBeUndefined();
+      expect(role.resolvedModel()).toBeUndefined();
+    }
+
+    await expect(session.om.observer.switchModel({ modelId: 'openai/gpt-5' })).rejects.toThrow('Invalid state update');
+    await expect(session.om.reflector.switchModel({ modelId: 'auto' })).rejects.toThrow('Invalid state update');
+    expect(session.om.observer.modelId()).toBeUndefined();
+    expect(session.om.reflector.modelId()).toBeUndefined();
   });
 });

@@ -18,12 +18,11 @@ import type { MastraCodeState } from './schema.js';
 
 // Keep the restricted entry point independent from the regular Mastra Code
 // schema, whose defaults intentionally consult the local process environment.
-// The observational memory model keys are locked to a disabled sentinel: a
-// client-selected id would resolve through the model router's default
-// gateways and their ambient credentials. Hosts configure observational
-// memory models on the injected memory instead.
-const disabledModelId = '__restricted_model_disabled__';
-const disabledModel = z.literal(disabledModelId).default(disabledModelId);
+// The observational memory model keys are locked to unset: a client-selected
+// id would resolve through the model router's default gateways and their
+// ambient credentials. Hosts configure observational memory models on the
+// injected memory instead.
+const disabledModel = z.never().optional();
 
 type PermissionRules = NonNullable<MastraCodeState['permissionRules']>;
 
@@ -291,10 +290,10 @@ export async function createRestrictedMastraCodeAgentController(config: Restrict
       ...config.initialState,
       yolo: false,
       skipGlobalInstructions: true,
-      observerModelId: disabledModelId,
-      reflectorModelId: disabledModelId,
-      observerModelSelection: disabledModelId,
-      reflectorModelSelection: disabledModelId,
+      observerModelId: undefined,
+      reflectorModelId: undefined,
+      observerModelSelection: undefined,
+      reflectorModelSelection: undefined,
       projectPath: config.project.rootPath,
       projectName: config.project.name,
       gitBranch: config.project.gitBranch,
