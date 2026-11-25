@@ -79,6 +79,13 @@ const graphs: Record<string, GraphBuilder> = {
     processorWorkflow('loop')
       .dountil(createStep(om), async () => true)
       .commit() as ProcessorWorkflow,
+  foreach: om =>
+    processorWorkflow('foreach')
+      .map(async ({ inputData }) => [inputData])
+      .foreach(createStep(om))
+      .map(async ({ inputData }) => inputData[0])
+      .commit() as ProcessorWorkflow,
+  'after sleep': om => processorWorkflow('after-sleep').sleep(1).then(createStep(om)).commit() as ProcessorWorkflow,
   nested: om =>
     processorWorkflow('outer')
       .then(processorWorkflow('inner').then(createStep(om)).commit())

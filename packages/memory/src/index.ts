@@ -501,8 +501,9 @@ type ProcessorGraphEntry = { type: string; step?: unknown; steps?: ProcessorGrap
 
 /**
  * Whether a processor with `id` is configured, either at the top level or as a step
- * anywhere inside a processor workflow (sequential, branch, parallel, loop, nested workflow).
+ * anywhere inside a processor workflow (sequential, branch, parallel, loop, foreach, nested workflow).
  * Workflow steps built with `createStep(processor)` carry the id `processor:<id>`.
+ * A step inside a branch counts even though it only runs when that branch is taken.
  */
 function hasConfiguredProcessorId(processors: readonly unknown[], id: string): boolean {
   const seen = new Set<unknown>();
@@ -524,8 +525,9 @@ function hasConfiguredProcessorId(processors: readonly unknown[], id: string): b
     (isEntry(entry.step) ? matchesEntry(entry.step) : matchesStep(entry.step)) ||
     (entry.steps ?? []).some(matchesEntry);
 
-  return processors.some(processor =>
-    isProcessorWorkflow(processor) ? matchesStep(processor) : (processor as { id?: unknown }).id === id,
+  return processors.some(
+    processor =>
+      (processor as { id?: unknown }).id === id || (isProcessorWorkflow(processor) && matchesStep(processor)),
   );
 }
 
