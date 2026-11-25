@@ -26,7 +26,6 @@ import type {
   ThreadStateStorage,
   WorkflowDefinitionsStorage,
   KnowledgeStorage,
-  AgentSignalsStorage,
 } from './domains';
 import { InMemoryThreadStateStorage } from './domains/thread-state/inmemory';
 import type { PruneOptions, PruneResult, RetentionConfig, TableRetentionPolicy } from './retention';
@@ -59,7 +58,6 @@ export type StorageDomains = {
   toolProviderConnections?: ToolProviderConnectionsStorage;
   threadState?: ThreadStateStorage;
   knowledge?: KnowledgeStorage;
-  agentSignals?: AgentSignalsStorage;
 };
 
 /**
@@ -110,7 +108,6 @@ export const DOMAIN_KEYS = [
   'notifications',
   'threadState',
   'knowledge',
-  'agentSignals',
 ] as const satisfies ReadonlyArray<keyof StorageDomains>;
 
 /**

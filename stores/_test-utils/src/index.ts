@@ -9,7 +9,6 @@ export * from './domains/knowledge';
 export * from './domains/datasets/fidelity';
 export * from './domains/run-fencing';
 export { createBackgroundTasksTests } from './domains/background-tasks';
-export * from './domains/agent-signals';
 export * from './domains/workflow-step-guards';
 export * from './domains/workflows/runs-table-upgrade';
 export * from './vector-factory';
