@@ -6,6 +6,7 @@ import { ActivityLine } from './ActivityLine';
 import { Composer } from './Composer';
 import { Transcript } from './Transcript';
 import type { TranscriptTail } from './Transcript';
+import { TranscriptHistoryLoader } from './TranscriptHistoryLoader';
 import { ChatMessageBoundary } from '../context/ChatSessionProvider';
 import { useChatMessagePreparation } from '../context/useChatMessagePreparation';
 import { useChatTranscript } from '../context/useChatTranscript';
@@ -32,6 +33,7 @@ export function SessionChatSurface({
 }: SessionChatSurfaceProps) {
   const { busy, loadMore, transcript } = useChatTranscript();
   const { preparing: threadPreparing } = useChatMessagePreparation();
+  const conversationStarted = transcript.entries.some(entry => entry.kind !== 'notice');
 
   return (
     <SessionSurface
@@ -39,9 +41,7 @@ export function SessionChatSurface({
       preparing={threadPreparing || openingSession}
       tasks={transcript.tasks}
       loadMore={loadMore}
-      conversationStarted={transcript.entries.some(entry => entry.kind !== 'notice')}
       composer={<Composer variant="inline" statusLead={composerStatus} />}
-      emptyState={emptyState}
       composerLabel={composerLabel}
       secondaryBar={secondaryBar}
       contentOverlay={contentOverlay}
@@ -50,6 +50,8 @@ export function SessionChatSurface({
       composerColumnClassName={composerColumnClass}
     >
       <ChatMessageBoundary showPreparation={false}>
+        <TranscriptHistoryLoader />
+        {!conversationStarted && emptyState}
         <Transcript tail={activityTail} />
       </ChatMessageBoundary>
     </SessionSurface>

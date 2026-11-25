@@ -450,4 +450,15 @@ describe('ThreadPage when reading the session fails', () => {
     expect(screen.queryByRole('button', { name: 'Session panel' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('workspace-files-card')).not.toBeInTheDocument();
   });
+
+  it('greets no new thread beside the notice on a session the viewer cannot read', async () => {
+    const { sessionGate, messagesGate, sessionAnswer } = stubThreadRoute();
+    sessionAnswer.status = 404;
+    sessionGate.resolve();
+    messagesGate.resolve();
+    renderThreadRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${SESSION_ID}`);
+
+    expect(await screen.findByText(/not found or is private to another user/)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'What can I help you build?' })).not.toBeInTheDocument();
+  });
 });

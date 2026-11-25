@@ -28,10 +28,7 @@ export interface SessionSurfaceProps {
   preparing: boolean;
   tasks: AgentControllerTaskSnapshot[];
   loadMore: SessionSurfaceLoadMore;
-  /** Shown until the conversation has a turn. */
-  emptyState?: ReactNode;
-  conversationStarted: boolean;
-  /** The transcript, usually `TranscriptEntries`. */
+  /** The conversation: the history loader, the empty state and `TranscriptEntries`, inside the host's error boundary. */
   children: ReactNode;
   composer: ReactNode;
   composerLabel: string;
@@ -43,14 +40,12 @@ export interface SessionSurfaceProps {
   composerColumnClassName?: string;
 }
 
-/** A session's page body, shared by every host: transcript, tasks, history loading and the composer dock. */
+/** A session's page body, shared by every host: transcript, tasks and the composer dock. */
 export function SessionSurface({
   busy,
   preparing,
   tasks,
   loadMore,
-  emptyState,
-  conversationStarted,
   children,
   composer,
   composerLabel,
@@ -89,8 +84,6 @@ export function SessionSurface({
               <SessionPreparationOverlay preparing={preparing} />
               <ChatShell.Transcript className="flex-1">
                 <TranscriptAnnotations />
-                <TranscriptHistoryLoader loading={loadMore.isLoading} />
-                {!conversationStarted && emptyState}
                 {children}
               </ChatShell.Transcript>
             </ChatShell.Content>

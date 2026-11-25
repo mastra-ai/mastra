@@ -26,7 +26,7 @@ function toolCall(id: string, state: 'call' | 'result'): TimelineEntry {
 describe('ActivityLine', () => {
   it('shows the running tool while the run works', () => {
     render(<ActivityLine entries={[toolCall('a', 'call')]} busy runsStarted={1} stretchLive={false} />);
-    expect(document.body.textContent).not.toBe('');
+    expect(screen.getByText('Using SearchDocs')).toBeTruthy();
   });
 
   it('shows Thinking once the tool settles and the run is still busy', () => {
