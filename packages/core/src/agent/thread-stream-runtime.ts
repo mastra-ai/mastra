@@ -927,6 +927,8 @@ type AgentThreadStreamRuntimeEvent =
   // Without a streamId the sender found the run through the thread lease, not a stream it watches.
   | { type: 'run-abort-requested'; runId: string; streamId?: string; clearPendingSignals?: boolean }
   | { type: 'signals-cancelled'; signalIds: string[] }
+  // A process executing runId's steps elsewhere drained these queued signals into the run.
+  | { type: 'signals-drained'; runId: string; signalIds: string[]; sourceId: string }
   // runId is the run whose trim removes the entry; a cancellation has no owning run.
   | { type: 'user-message-presentation'; runId?: string; chunk: UserMessagePendingChunk | UserMessageCancelledChunk }
   | { type: 'user-message-delivered'; signalId: string }
@@ -2245,6 +2247,9 @@ export class AgentThreadStreamRuntime {
         if (chunk.type === 'data-user-message-pending' && chunk.data.metadata?.status === 'pending') {
           this.#settleForwardedIdleSignal(state, key, chunk.data.id, chunk.runId);
         }
+      } else if (data?.type === 'signals-drained') {
+        // The executing process delivered them; drop ours so run completion does not send them again.
+        if (data.sourceId !== this.#getSourceId()) this.#dropQueuedSignals(state, key, new Set(data.signalIds));
       } else if (data?.type === 'signals-cancelled') {
         for (const id of data.signalIds) this.#settleForwardedIdleSignal(state, key, id);
         // A backend retry can deliver the original enqueue after its cancellation.
@@ -2349,6 +2354,7 @@ export class AgentThreadStreamRuntime {
       if (
         type !== 'signal-enqueued' &&
         type !== 'signals-cancelled' &&
+        type !== 'signals-drained' &&
         type !== 'run-abort-requested' &&
         type !== 'run-registered' &&
         !((type === 'user-message-presentation' || type === 'user-message-admitted') && awaitingForwards) &&
@@ -6273,6 +6279,82 @@ export class AgentThreadStreamRuntime {
 
     signalsByThread.delete(key);
     return queue;
+  }
+
+  #dropQueuedSignals(state: AgentThreadRuntimeState, key: string, signalIds: ReadonlySet<string>) {
+    for (const queues of [state.preRunSignalsByThread, state.pendingSignalsByThread]) {
+      const remaining = queues.get(key)?.filter(signal => !signalIds.has(signal.id));
+      if (remaining?.length) queues.set(key, remaining);
+      else queues.delete(key);
+    }
+  }
+
+  /**
+   * Collects the signals queued for `runId` when its steps execute in this
+   * process but the run was started (and its queue lives) in another one.
+   *
+   * Replays the thread topic so signals sent before this process picked the run
+   * up are included. `drain` hands them to the run and announces it, so the
+   * starting process drops its copies instead of sending them again once the run
+   * ends. Signals nobody drains stay queued there and follow up as a new run.
+   *
+   * @internal Used by the durable runtime when it rebuilds a run from Mastra.
+   */
+  followRemoteRun(
+    runId: string,
+    target: { resourceId?: string; threadId: string },
+    pubsub?: PubSub,
+  ): { ready: Promise<void>; drain: (scope?: 'pending' | 'pre-run') => CreatedAgentSignal[]; stop: () => void } {
+    const resolvedPubSub = this.#getPubSub(pubsub);
+    const key = this.#threadKey(target.resourceId, target.threadId);
+    const topic = this.#threadTopic(key);
+    const queued = new Map<string, { signal: CreatedAgentSignal; preRun: boolean }>();
+    const settled = new Set<string>();
+    let stopped = false;
+    const onEvent: EventCallback = async (event, ack) => {
+      const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
+      if (data?.type === 'signal-enqueued' && data.runId === runId && !settled.has(data.signal.id)) {
+        queued.set(data.signal.id, { signal: createSignal(data.signal), preRun: data.preRun === true });
+      } else if ((data?.type === 'signals-drained' && data.runId === runId) || data?.type === 'signals-cancelled') {
+        for (const id of data.signalIds) {
+          settled.add(id);
+          queued.delete(id);
+        }
+      } else if (
+        (data?.type === 'run-completed' || data?.type === 'run-failed' || data?.type === 'run-aborted') &&
+        data.runId === runId
+      ) {
+        stop();
+      }
+      await ack?.();
+    };
+    const stop = () => {
+      if (stopped) return;
+      stopped = true;
+      void ready.then(() => resolvedPubSub.unsubscribe(topic, onEvent)).catch(() => {});
+    };
+    const ready = resolvedPubSub.subscribeWithReplay(topic, onEvent);
+    void ready.catch(() => {});
+    const drain = (scope: 'pending' | 'pre-run' = 'pending') => {
+      const signals: CreatedAgentSignal[] = [];
+      for (const [id, entry] of queued) {
+        // A pending drain also takes pre-run leftovers, as the local drain folds them in.
+        if (scope === 'pre-run' && !entry.preRun) continue;
+        signals.push(entry.signal);
+        settled.add(id);
+        queued.delete(id);
+      }
+      if (signals.length) {
+        this.#publish(resolvedPubSub, key, {
+          type: 'signals-drained',
+          runId,
+          signalIds: signals.map(signal => signal.id),
+          sourceId: this.#getSourceId(),
+        });
+      }
+      return signals;
+    };
+    return { ready, drain, stop };
   }
 
   /** Resolves `'reserved'` when this call reserved the thread for `runId`. The caller then owns the reservation. */

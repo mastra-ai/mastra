@@ -334,6 +334,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   let rehydratedFromMastra = false;
   let rebuiltAgent: Agent<any, any, any, any> | undefined;
   let backgroundTasks: ReturnType<typeof resolveBackgroundTasks> | undefined;
+  let drainPendingSignals: RunRegistryEntry['drainPendingSignals'];
 
   // If the registry entry is a real (non-placeholder) in-process entry we
   // trust it wholesale (in-process / same-process resume). Otherwise fall
@@ -402,6 +403,17 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       errorProcessors = rebuiltProcessors.errorProcessors;
       processorStates = rebuiltProcessors.processorStates;
 
+      // The process that started the run holds its signal queue. Follow it so
+      // the drain step here can deliver steers sent while the run executes.
+      if (!globalEntry?.drainPendingSignals && input.state.threadId && rebuiltAgent?.__followRemoteRunSignals) {
+        const follower = rebuiltAgent.__followRemoteRunSignals(runId, {
+          resourceId: input.state.resourceId,
+          threadId: input.state.threadId,
+        });
+        await follower.ready;
+        drainPendingSignals = follower.drain;
+      }
+
       rehydratedFromMastra = true;
     } catch (error) {
       if (error instanceof DurableProcessorRebuildError || error instanceof DurableAgentNotFoundError) throw error;
@@ -445,6 +457,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       processorStates,
       agent: rebuiltAgent,
       ...backgroundTasks,
+      ...(drainPendingSignals ? { drainPendingSignals } : {}),
     };
     if (globalEntry) {
       Object.assign(globalEntry, rebuilt);

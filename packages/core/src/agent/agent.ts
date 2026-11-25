@@ -1721,6 +1721,16 @@ export class Agent<
   }
 
   /**
+   * Collects signals queued for `runId` by the process that started it, for a
+   * process that rebuilt the run to execute its steps. See
+   * `AgentThreadStreamRuntime.followRemoteRun`.
+   * @internal
+   */
+  __followRemoteRunSignals(runId: string, target: { resourceId?: string; threadId: string }) {
+    return agentThreadStreamRuntime.followRemoteRun(runId, target, this.getPubSub());
+  }
+
+  /**
    * Returns a closure that queues a signal on a durable run through
    * `sendSignal`, so the run's drain delivers it to the next model request.
    * @internal
