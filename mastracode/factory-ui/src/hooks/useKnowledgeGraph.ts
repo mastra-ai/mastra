@@ -2,7 +2,7 @@
 
 import type { KnowledgeExplorerTreeRequest } from '@mastra/playground-ui/domains/knowledge/components/KnowledgePageExplorer';
 import { keepPreviousData, skipToken, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { QueryKey } from '@tanstack/react-query';
+import type { Query, QueryKey } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
 import { useApiConfig } from '../api/config';
@@ -63,10 +63,31 @@ export function useKnowledgeLiveUpdates(factoryProjectId: string | undefined): b
     const abort = new AbortController();
     let retry: ReturnType<typeof setTimeout> | undefined;
     let burst: ReturnType<typeof setTimeout> | undefined;
-    const refresh = () =>
-      void queryClient.invalidateQueries({
-        predicate: query => isProjectKnowledgeQuery(query.queryKey, factoryProjectId),
-      });
+    const reading = new Map<string, { again: boolean }>();
+    const reread = (query: Query) => {
+      const inFlight = reading.get(query.queryHash);
+      if (inFlight) {
+        inFlight.again = true;
+        return;
+      }
+      // Aborting a read in the browser doesn't stop it on the server: join a running refresh, then read once more.
+      const runningRefresh =
+        query.isActive() && query.state.data !== undefined && query.state.fetchStatus === 'fetching';
+      const read = { again: runningRefresh };
+      reading.set(query.queryHash, read);
+      void queryClient
+        .invalidateQueries({ queryKey: query.queryKey, exact: true }, { cancelRefetch: false })
+        .finally(() => {
+          reading.delete(query.queryHash);
+          if (read.again && !abort.signal.aborted) reread(query);
+        });
+    };
+    const refresh = () => {
+      const queries = queryClient
+        .getQueryCache()
+        .findAll({ predicate: query => isProjectKnowledgeQuery(query.queryKey, factoryProjectId) });
+      for (const query of queries) reread(query);
+    };
 
     const connect = () => {
       streamKnowledgeChanges(
