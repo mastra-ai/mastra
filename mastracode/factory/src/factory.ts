@@ -22,6 +22,7 @@
 import { existsSync } from 'node:fs';
 
 import { MastraAuthStudio } from '@mastra/auth-studio';
+import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import type { MastraCodeConfig } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
@@ -49,6 +50,7 @@ import type { FactorySandbox, FactorySandboxDescription, WorkspaceSandbox } from
 import {
   buildAuthDisabledRoutes,
   buildAuthRoutes,
+  authProviders,
   createFactoryAuthGate,
   createFactoryInteractiveMarker,
   createFactoryRouteAuth,
@@ -122,8 +124,10 @@ import { logIntegrationSummary } from './integrations/startup-summary.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { SELECT_VANTA_VULNERABILITIES_MIGRATION, vantaOrgsSyncingWithoutSource } from './integrations/vanta/sync.js';
 import { shareLinkedRepositoryChanges } from './linked-repositories-changed.js';
-import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
+import { createWorkosMcpCallerResolver } from './mcp/caller.js';
+import { buildFactoryMcpRoutes, factoryMcpResource, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
+import { createMcpTokenVerifier } from './mcp/token.js';
 import { resolveFactoryEmbedder } from './memory-embedder.js';
 import {
   FactoryMetrics,
@@ -363,8 +367,10 @@ export interface MastraFactoryConfig {
    */
   publicUrl?: string;
   /**
-   * The Factory MCP server at `/web/factory/projects/:projectId/mcp`, which lets
-   * MCP clients such as ChatGPT use the Factory tools as the signed-in user.
+   * The Factory MCP server at `<publicUrl>/mcp`, which lets MCP clients such
+   * as Claude and ChatGPT use the Factory tools as the signed-in user. It
+   * serves the organization's only Factory project, and accepts only access
+   * tokens issued for this URL (RFC 8707 Resource Indicators).
    * On by default with Mastra Platform auth; other providers need
    * `authorizationServers` set. Pass `false` to turn it off.
    */
@@ -932,7 +938,20 @@ export class MastraFactory {
     const deploymentModelProviders = resolveDeploymentModelProviders(this.#config.deploymentModelProviders);
     // One RouteAuth seam per boot, closed over the resolved provider. Every
     // factory route module receives this handle — no service locator.
-    const routeAuth = createFactoryRouteAuth(auth);
+    // Tokens issued for the MCP endpoint are refused on every other route, and
+    // so is any audience-bound token where the provider doesn't check `aud`.
+    const authOptions = {
+      mcpResource: factoryMcpResource(publicOrigin),
+      refuseAudienceBoundTokens: (provider: IMastraAuthProvider) =>
+        provider instanceof MastraAuthWorkos || provider instanceof MastraAuthStudio,
+    };
+    // Inside a `CompositeAuth` too: the MCP endpoint resolves WorkOS callers
+    // through WorkOS, and honors Platform auth's pinned organization.
+    const workosAuth = authProviders(auth).find((p): p is MastraAuthWorkos => p instanceof MastraAuthWorkos);
+    const pinnedOrganizationId = authProviders(auth).find(
+      (p): p is MastraAuthStudio => p instanceof MastraAuthStudio,
+    )?.pinnedOrganizationId;
+    const routeAuth = createFactoryRouteAuth(auth, authOptions);
     const mcpConfig = this.#config.mcp;
     const mcpAuthorizationServers =
       mcpConfig === false || mcpConfig?.enabled === false ? [] : resolveMcpAuthorizationServers(auth?.name, mcpConfig);
@@ -2331,12 +2350,19 @@ export class MastraFactory {
           // `apiRoutes` (not plain Hono routes) because the entry can't touch the
           // Hono app the deployer generates. `requiresAuth: false`; the gate
           // skips `/auth/*`. Auth-disabled mode still answers `/auth/me` (404).
-          ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : buildAuthDisabledRoutes()),
+          ...(auth ? buildAuthRoutes(auth, { ...authOptions, publicUrl: publicOrigin }) : buildAuthDisabledRoutes()),
           ...(mcpEnabled
             ? buildFactoryMcpRoutes({
-                auth: routeAuth,
+                verifyAccessToken: createMcpTokenVerifier({
+                  authorizationServers: mcpAuthorizationServers,
+                  resource: authOptions.mcpResource,
+                  ...(workosAuth
+                    ? { resolveCaller: createWorkosMcpCallerResolver(workosAuth.getWorkOS().userManagement) }
+                    : {}),
+                }),
                 publicOrigin,
                 authorizationServers: mcpAuthorizationServers,
+                ...(pinnedOrganizationId ? { organizationId: pinnedOrganizationId } : {}),
                 projects: factoryProjectsStorage,
                 sourceControls: sourceControlHandles,
                 tools: factoryToolDeps,
@@ -2594,7 +2620,7 @@ export class MastraFactory {
             auth,
             middleware: [
               ...timing,
-              createFactoryAuthGate(auth),
+              createFactoryAuthGate(auth, authOptions),
               createSessionAccessGuard({
                 auth: routeAuth,
                 sessions: sourceControlSessions,
