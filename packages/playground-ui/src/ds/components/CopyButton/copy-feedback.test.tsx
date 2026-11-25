@@ -28,7 +28,8 @@ describe('CopyTooltip that opens on copy', () => {
     expect(await screen.findByRole('tooltip', { name: 'Copied' })).toBeTruthy();
 
     await user.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull());
+    // Well before the copied state would end on its own.
+    await waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull(), { timeout: 500 });
 
     await user.click(button);
     expect(await screen.findByRole('tooltip', { name: 'Copied' })).toBeTruthy();
