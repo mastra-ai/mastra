@@ -74,6 +74,24 @@ describe.each([
     expect(screen.getByRole('menu')).toBeTruthy();
   });
 
+  it('stays open when a second press fails after the first one copied', async () => {
+    const user = setupUser();
+    await openMenu();
+    let allowFirst = () => {};
+    vi.spyOn(navigator.clipboard, 'writeText')
+      .mockImplementationOnce(() => new Promise(resolve => (allowFirst = resolve)))
+      .mockImplementationOnce(() => new Promise((_, reject) => setTimeout(reject, 200)));
+    const item = await copyItem();
+
+    await user.click(item);
+    await user.click(item);
+    allowFirst();
+
+    expect(await screen.findByRole('menuitem', { name: 'Failed' })).toBeTruthy();
+    await waitForClose();
+    expect(screen.getByRole('menu')).toBeTruthy();
+  });
+
   it('stays open and says so when the browser blocks the copy', async () => {
     const user = setupUser();
     vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(new DOMException('Blocked', 'NotAllowedError'));

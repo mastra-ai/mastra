@@ -37,7 +37,10 @@ export function CopyMenuItem({ value, children, className, ...props }: CopyMenuI
 
   async function copy() {
     clearTimeout(closeTimer.current);
-    if (await copyToClipboard(value)) closeTimer.current = setTimeout(closeMenu, CLOSE_AFTER_COPY_MS);
+    const copied = await copyToClipboard(value);
+    // Again: an earlier press may have set it while this copy was pending.
+    clearTimeout(closeTimer.current);
+    if (copied) closeTimer.current = setTimeout(closeMenu, CLOSE_AFTER_COPY_MS);
   }
 
   return (

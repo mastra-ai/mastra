@@ -61,10 +61,17 @@ export type CopyTooltipProps = {
 /** The tooltip of a control that copies: stays open through the click and says "Copied". */
 export function CopyTooltip({ status, label, openOnCopy = false, children }: CopyTooltipProps) {
   const [open, setOpen] = useState(false);
+  // Escape, or the pointer leaving, closes what the copy opened. The next copy opens it again.
+  const [dismissed, setDismissed] = useState(false);
+
+  function handleOpenChange(nextOpen: boolean) {
+    setOpen(nextOpen);
+    setDismissed(!nextOpen);
+  }
 
   return (
-    <Tooltip open={open || (openOnCopy && status !== 'idle')} onOpenChange={setOpen}>
-      <TooltipTrigger closeOnClick={false} render={children} />
+    <Tooltip open={open || (openOnCopy && status !== 'idle' && !dismissed)} onOpenChange={handleOpenChange}>
+      <TooltipTrigger closeOnClick={false} onClick={() => setDismissed(false)} render={children} />
       <TooltipContent>{status === 'idle' ? label : STATUS_TOOLTIPS[status]}</TooltipContent>
     </Tooltip>
   );
