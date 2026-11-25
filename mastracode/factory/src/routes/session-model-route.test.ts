@@ -110,6 +110,16 @@ describe('PUT /web/config/session-model', () => {
     expect(live.settings.size).toBe(0);
   });
 
+  it('switches only the session named by the exact id the access guard checked', async () => {
+    const live = liveSession();
+    const { app } = await setupSessionModelRoutes('user', 'org', live.getSession);
+
+    const padded = await putSelection(app, { kind: 'default' }, { resourceId: ` ${SESSION_ID} ` });
+    expect(padded.ok).toBe(false);
+    expect(live.switches).toEqual([]);
+    expect(live.settings.size).toBe(0);
+  });
+
   it('uses the pack set the run uses when auth is disabled', async () => {
     const live = liveSession();
     const { app } = await setupSessionModelRoutes('user', 'org', live.getSession, false);
