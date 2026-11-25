@@ -2977,15 +2977,12 @@ export const CANCEL_AGENT_PENDING_SIGNALS_ROUTE = createRoute({
         effectiveResourceId,
         permission: MastraFGAPermissions.MEMORY_WRITE,
       });
-      const result = agent.cancelQueuedMessages({
+      // Awaited so a failed cancellation in memory storage is reported here.
+      return await agent.cancelQueuedMessages({
         resourceId: effectiveResourceId,
         threadId: effectiveThreadId,
         signalIds,
       });
-      // Signals kept in storage are cancelled there; the response lists them once the store answered.
-      return {
-        cancelledSignalIds: result.settled ? (await result.settled).cancelledSignalIds : result.cancelledSignalIds,
-      };
     } catch (error) {
       return handleError(error, 'error cancelling pending thread signals');
     }
