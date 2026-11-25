@@ -906,6 +906,41 @@ describe('signals a run consumed and memory never saved', () => {
     );
   });
 
+  it('starts the next turn with a transient signal sent after the run closed, and takes it once', async () => {
+    const { agent, memoryStore, scope, prompts, toolGate, start } = setup();
+    const subscription = await agent.subscribeToThread(scope);
+    const { stream, done } = await start();
+    // The thread's chunks of the turn after the run, until that turn finishes.
+    const followUpChunks: Array<{ type: string; runId?: string }> = [];
+    const followUpEnded = (async () => {
+      for await (const chunk of subscription.stream as AsyncIterable<{ type: string; runId?: string }>) {
+        if (chunk.runId === stream.runId) continue;
+        followUpChunks.push(chunk);
+        if (chunk.type === 'finish') return;
+      }
+    })();
+    // The executing process closed the run before this send was stored, as finalize does before FINISH.
+    await memoryStore.closeSignalRun({ threadId: scope.threadId, runId: stream.runId, consumedIds: [] });
+    const sent = agent.sendSignal({ type: 'user', contents: 'TRANSIENT_AFTER_CLOSE', transient: true }, scope);
+    await expect(sent.accepted).resolves.toEqual({ action: 'deliver', runId: stream.runId });
+    toolGate.release();
+    await done;
+    await followUpEnded;
+    subscription.unsubscribe();
+
+    // The turn starts with the signal as its input, and its first request's claim does not add it again.
+    expect(prompts).toHaveLength(3);
+    expect(occurrences(prompts[1], 'TRANSIENT_AFTER_CLOSE')).toBe(0);
+    expect(occurrences(prompts[2], 'TRANSIENT_AFTER_CLOSE')).toBe(1);
+    expect(signalChunksOf(followUpChunks, 'TRANSIENT_AFTER_CLOSE')).toHaveLength(1);
+    // Never saved, and its row is gone: nothing waits and nothing stays hidden for the thread's next run.
+    expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
+    await memoryStore.setSignalRun({ threadId: scope.threadId, runId: 'next-run' });
+    expect(
+      await memoryStore.claimPendingSignals({ threadId: scope.threadId, runId: 'next-run', consumedIds: [] }),
+    ).toEqual([]);
+  });
+
   it.each([
     // The process that started the run settles it from the workflow's result.
     ['a pubsub inside the process', () => ({ memoryStore: new ObservedMemory(), pubsub: new EventEmitterPubSub() })],
