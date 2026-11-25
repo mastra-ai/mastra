@@ -710,9 +710,12 @@ export const useChat = ({
                       _currentRunId.current = activeRunId;
                       setIsRunning(pendingToolApprovalIdsRef.current.size === 0);
                     }
-                    setSubscriptionPagination(
-                      typeof hasMore === 'boolean' ? { key: subscriptionKey, pagination: { hasMore } } : undefined,
-                    );
+                    // `initialHistoryPagination` describes the first page, the one the page loads older ones from.
+                    if (!catchingUp) {
+                      setSubscriptionPagination(
+                        typeof hasMore === 'boolean' ? { key: subscriptionKey, pagination: { hasMore } } : undefined,
+                      );
+                    }
                   }
                   // Merge history into `messages` now, as a queued update, so the
                   // live chunks right behind it accumulate onto the stored parts.
@@ -723,6 +726,9 @@ export const useChat = ({
                       ? catchUpWithHistory({ conversation: current, history, activeRunId: chunk.payload.activeRunId })
                       : mergeHistoryIntoConversation({ conversation: current, history, previousHistory }),
                   );
+                  // A catch-up is applied once, here: the page's hydration stays the first history's, which merging
+                  // the catch-up again would undo.
+                  if (catchingUp) return;
                   setSubscriptionHistory({
                     key: `${agentId}:${resourceId ?? ''}:${threadId}`,
                     messages: chunk.payload.messages,

@@ -280,6 +280,30 @@ describe('useChat once its thread stream broke (a phone locked, the network gone
     expect(clientIdOf(page.result.current.messages.at(-1))).toBe(clientMessageId);
   });
 
+  it('keeps the first history page of a page that asks for one, and its pagination', async () => {
+    const threads = givenThreadStreams();
+    const page = followThread({ withInitialHistory: { perPage: 2 } });
+    unmount = page.unmount;
+    await threads.followedAgain(1);
+    await threads.send(0, historyOf([question, stored('a1', 'assistant', 'Half, then whole.')]));
+    await waitFor(() => expect(texts(page.result.current.messages)).toEqual(['Tell me more', 'Half, then whole.']));
+    expect(page.result.current.initialHistoryPagination).toEqual({ hasMore: false });
+
+    threads.breakStream(0);
+    await threads.followedAgain(2);
+    await threads.send(
+      1,
+      historyOf([stored('u2', 'user', 'And then?'), stored('a2', 'assistant', 'Then.')], null, true),
+    );
+
+    await waitFor(() =>
+      expect(texts(page.result.current.messages)).toEqual(['Tell me more', 'Half, then whole.', 'And then?', 'Then.']),
+    );
+    // Still the first page's: the page loads older pages from there.
+    expect(page.result.current.initialHistoryPagination).toEqual({ hasMore: false });
+    expect(threads.streams[1]!.body).toMatchObject({ withInitialHistory: { perPage: 2 } });
+  });
+
   it('follows the thread no more once the page leaves, though it followed it again before', async () => {
     const threads = givenThreadStreams();
     const page = followThread();
