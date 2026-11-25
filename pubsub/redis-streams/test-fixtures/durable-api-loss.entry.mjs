@@ -128,7 +128,9 @@ process.once('SIGTERM', async () => {
 if (role === 'worker' || role === 'local') await mastra.startWorkers();
 console.info('api-loss-ready');
 const thread = { resourceId: 'api-loss-resource', threadId: process.env.TAKEOVER_THREAD };
-if (role === 'aborter') {
+if (role === 'recoverer') {
+  console.info(`recovery-result:${JSON.stringify(await mastra.recoverAllDurableAgents())}`);
+} else if (role === 'aborter') {
   await agent.abortRunStream(runId);
   await pubsub.flush();
   console.info('abort-requested');

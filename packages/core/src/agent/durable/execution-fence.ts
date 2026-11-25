@@ -61,6 +61,29 @@ const CLAIM_POLL_INTERVAL_MS = 100;
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, Math.max(0, ms)));
 
 /**
+ * Longest a single ownership read of a pubsub-owned claim may take before it counts as a storage failure. Not a
+ * liveness bound: nothing decides ownership from it. Long enough for a store under load, short enough that a hung
+ * connection does not hold a delivery forever.
+ */
+export const OWNERSHIP_READ_TIMEOUT_MS = 30_000;
+
+/** `read`, rejecting once it has not answered within {@link OWNERSHIP_READ_TIMEOUT_MS}. */
+export async function boundedOwnershipRead<T>(read: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      read,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Ownership read did not answer')), OWNERSHIP_READ_TIMEOUT_MS);
+        timer.unref?.();
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * What a release of a claim answered, or false when it has not answered within one renewal interval. A release can
  * hang; a renewal result must never wait on one longer than that.
  */
@@ -176,7 +199,8 @@ export class DurableExecutionFenceError extends MastraNonRetryableError {
 /**
  * `recover()` refused a run that is still live. `details.retryAt` (epoch ms,
  * local clock) is when the evidence it is live lapses unless renewed, clamped
- * to at least a second from now and at most one TTL.
+ * to at least a second from now and at most one TTL. A claim that never lapses
+ * gets no `retryAt`, so nothing schedules a re-check of it.
  */
 function runActiveError(args: {
   agentId: string;
@@ -200,7 +224,7 @@ function runActiveError(args: {
       liveBy,
       ...(attempt.holder ? { holder: attempt.holder } : {}),
       leaseExpiresAt: attempt.leaseExpiresAt?.toISOString() ?? null,
-      retryAt: now + Math.min(Math.max(remainingMs, MIN_RETRY_DELAY_MS), ttlMs),
+      ...(attempt.untimed ? {} : { retryAt: now + Math.min(Math.max(remainingMs, MIN_RETRY_DELAY_MS), ttlMs) }),
     },
   });
 }
@@ -409,6 +433,8 @@ type ClaimAttempt = {
   leaseExpiresAt?: Date | null;
   /** For a refused recovery: what showed the run is still live. */
   liveBy?: 'claim' | 'thread-lease';
+  /** The holder's claim is not renewed and never lapses. */
+  untimed?: boolean;
 };
 
 /**
@@ -586,6 +612,9 @@ function storageBackend(store: WorkflowsStorage, runId: string, pubsubOwned = fa
     // fails here and is reported as that claimant's.
     async tryRecover(executionId, untracked) {
       const current = await store.getRunOwnership({ runId });
+      if (pubsubOwned && current && current.leaseExpiresAt !== null) {
+        return { claimed: false, holder: current.ownerId, liveBy: 'claim', untimed: true };
+      }
       if (current?.live) return { ...attempt({ acquired: false, record: current }), liveBy: 'claim' };
       if (!current && (await untracked?.isLive())) return { claimed: false, liveBy: 'thread-lease' };
       const result = await store.claimRunOwnership({
@@ -620,6 +649,7 @@ function storageBackend(store: WorkflowsStorage, runId: string, pubsubOwned = fa
     },
     // A failed renewal reports the run's record. A claim keeps its owner and generation when released, and any later
     // claim raises the generation, so a record still naming `claim` with no lease means `claim` was released.
+    // Never called for a pubsub-owned claim: `expires` is false, so no heartbeat starts.
     async renew(claim) {
       const result = await store.renewRunOwnership({ ...fence(claim), leaseMs: EXECUTION_LEASE_TTL_MS });
       // Some adapters build a renewed result's `record` with `!` from a read that can miss, so it may still be null.
@@ -746,7 +776,8 @@ export class ExecutionFence implements RunFenceScope {
     executionId: string;
     generation?: number;
     pubsubOwned?: boolean;
-    leaseExpiresAt: number;
+    /** The local lease deadline the heartbeat keeps; omitted for a claim nothing renews. */
+    leaseExpiresAt?: number;
     logger?: IMastraLogger;
   }) {
     this.#backend = args.backend;
@@ -756,7 +787,7 @@ export class ExecutionFence implements RunFenceScope {
     this.executionId = args.executionId;
     this.generation = args.generation;
     this.pubsubOwned = args.pubsubOwned === true && args.generation !== undefined;
-    this.#leaseExpiresAt = args.leaseExpiresAt;
+    this.#leaseExpiresAt = args.leaseExpiresAt ?? Infinity;
     this.#logger = args.logger;
     this.whenSettled = new Promise(resolve => {
       this.#resolveSettled = resolve;
@@ -777,9 +808,8 @@ export class ExecutionFence implements RunFenceScope {
    * Ownership lives in `workflowsStore` when it supports run fencing, and in
    * `leaseProvider` otherwise.
    *
-   * With `pubsubOwned` (see {@link pubsubOwnsEventedRuns}) and a fencing store, the claim is never renewed.
-   * `acquire` conflicts while the previous claim was not released, and `recover` takes the run over: nothing can tell
-   * a live chain of deliveries from a stuck one without a timer.
+   * With `pubsubOwned` (see {@link pubsubOwnsEventedRuns}) and a fencing store, the claim is never renewed, and
+   * `acquire` and `recover` refuse while the previous claim was not released. Only `takeover` replaces such a claim.
    */
   static async claim(args: {
     leaseProvider: LeaseProvider;
@@ -791,10 +821,9 @@ export class ExecutionFence implements RunFenceScope {
     pubsubOwned?: boolean;
     logger?: IMastraLogger;
   }): Promise<ExecutionFence> {
-    const { agentId, runId } = args;
+    const { agentId, runId, mode } = args;
     const workflowsStore = (await supportsRunFencing(args.workflowsStore)) ? args.workflowsStore : undefined;
     const pubsubOwned = args.pubsubOwned === true && workflowsStore !== undefined;
-    const mode = pubsubOwned && args.mode === 'recover' ? 'takeover' : args.mode;
     const backend = workflowsStore
       ? storageBackend(workflowsStore, runId, pubsubOwned)
       : leaseBackend(args.leaseProvider, agentId, runId);
@@ -855,6 +884,7 @@ export class ExecutionFence implements RunFenceScope {
     fencesByExecutionId.set(executionId, fence);
     activeFenceByRunId.set(runId, fence);
     if (backend.expires) fence.#startHeartbeat();
+    else if (pubsubOwned) fence.#startOwnershipWatch();
     return fence;
   }
 
@@ -922,7 +952,6 @@ export class ExecutionFence implements RunFenceScope {
         generation: claim.generation,
         pubsubOwned: true,
         workflowsStore: await mastra.getStorage()?.getStore('workflows'),
-        leaseExpiresAt: Date.now() + EXECUTION_LEASE_TTL_MS,
         logger: mastra.getLogger(),
       });
       if (claim.memoryFenced) await fence.coverMemory(await mastra.getStorage()?.getStore('memory'));
@@ -1154,6 +1183,16 @@ export class ExecutionFence implements RunFenceScope {
     }
     // A lease backend renews on verify; a storage read leaves expiry to the heartbeat.
     if (this.generation === undefined) this.#leaseExpiresAt = startedAt + EXECUTION_LEASE_TTL_MS;
+  }
+
+  /** A read of the run's record: whether this claim still holds the run and was not released. Never marks loss. */
+  async holdsUnreleasedClaim(): Promise<boolean> {
+    if (this.generation === undefined || !this.#workflowsStore) return false;
+    const record = await boundedOwnershipRead(this.#workflowsStore.getRunOwnership({ runId: this.runId }));
+    return (
+      !!record?.leaseExpiresAt &&
+      matchesRunFence(record, { runId: this.runId, generation: this.generation, ownerId: this.executionId })
+    );
   }
 
   /**
@@ -1442,6 +1481,38 @@ export class ExecutionFence implements RunFenceScope {
    * renewal waits at most one renewal interval for a release in flight to
    * answer, and a successful one never waits.
    */
+  /**
+   * For a pubsub-owned claim, which nothing renews: read the run's record every renewal interval, without renewing
+   * it, so this execution learns that another execution claimed the run. A release gets one interval for this
+   * execution's settlement to explain it, as a released renewal does. Failed reads are skipped.
+   */
+  #startOwnershipWatch(): void {
+    let releaseSeen = false;
+    let reading = false;
+    const fence: RunFence = { runId: this.runId, generation: this.generation!, ownerId: this.executionId };
+    this.#heartbeat = setInterval(() => {
+      if (this.#settlement || this.#lossError || reading) return;
+      reading = true;
+      void boundedOwnershipRead(this.#workflowsStore!.getRunOwnership({ runId: this.runId }))
+        .then(record => {
+          if (this.#settlement || this.#lossError) return;
+          if (!record || !matchesRunFence(record, fence)) {
+            this.#takenOver = true;
+            this.#markLost(new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, this.#details()));
+          } else if (record.leaseExpiresAt === null) {
+            if (releaseSeen)
+              this.#markLost(new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, this.#details()));
+            releaseSeen = true;
+          }
+        })
+        .catch(error => this.#logger?.debug?.(`[DurableAgent] run ${this.runId}: ownership read failed: ${error}`))
+        .finally(() => {
+          reading = false;
+        });
+    }, EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    this.#heartbeat.unref?.();
+  }
+
   #startHeartbeat(): void {
     const key = claimKey(this.runId, this.claim);
     let fences = renewingFencesByClaim.get(key);

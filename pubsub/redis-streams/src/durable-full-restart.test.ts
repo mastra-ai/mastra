@@ -15,9 +15,12 @@ const RESOURCE_ID = 'full-restart-resource';
 /**
  * COR-1497: on a split deploy (API with MASTRA_WORKERS=false plus a dedicated
  * worker) with `recovery.durableAgents: 'auto'`, the API and the worker die
- * together mid-tool and both restart. The API's boot recovery must leave the
- * run progressing to a terminal state, never parked `running` behind a lease
- * the API keeps renewing, and must release the thread for the next run.
+ * together mid-tool and both restart. The run must still reach a terminal state
+ * and release the thread for the next run.
+ *
+ * Redis Streams redelivers unacked events and Postgres guards steps, so the
+ * broker owns the run (COR-1609): the API's boot recovery leaves it alone, and
+ * the restarted worker finishes it from the redelivered event.
  */
 describe('durable agent run recovered after the API and worker die together (COR-1497)', () => {
   it.each([
@@ -97,7 +100,8 @@ describe('durable agent run recovered after the API and worker die together (COR
         await waitForLine(worker, 'full-restart-ready');
         const api = launch('api');
         await waitForLine(worker, 'tool-entered:sleep-1', 60_000);
-        expect((await workflows.getRunOwnership({ runId }))?.live).toBe(true);
+        // Claimed and not released. Nothing renews the claim, so its stored expiry may already have passed.
+        expect((await workflows.getRunOwnership({ runId }))?.leaseExpiresAt).not.toBeNull();
         const checkpoint = await workflows.loadWorkflowSnapshot({ workflowName: 'durable-agentic-loop', runId });
         expect(checkpoint?.status).toBe('running');
 
@@ -114,6 +118,10 @@ describe('durable agent run recovered after the API and worker die together (COR
             waitForLine(restartedApi, 'full-restart-ready'),
           ]);
           live = [restartedApi, restartedWorker];
+          await waitForLine(restartedApi, 'recovery-result:', 60_000);
+          expect(restartedApi.stdout).toMatch(
+            /recovery-result:\{"agents":1,"recovered":0,"succeeded":0,"failed":0,"skipped":0\}/,
+          );
           if (crash < crashes) await waitForLine(restartedWorker, `tool-entered:sleep-${crash + 1}`, 90_000);
         }
 

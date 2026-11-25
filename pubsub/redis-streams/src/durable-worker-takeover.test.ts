@@ -29,7 +29,7 @@ describe('healthy durable workers survive API loss (COR-1490)', () => {
       signal: 'SIGTERM',
       local: true,
       thread: false,
-      scenario: 'single-process Redis shutdown lets ownership expire without transfer',
+      scenario: 'single-process Redis shutdown keeps the unrenewed claim and boot recovery leaves the run',
     },
   ] as const)(
     '$signal, thread=$thread, local=$local: $scenario',
@@ -47,7 +47,7 @@ describe('healthy durable workers survive API loss (COR-1490)', () => {
       const redis = createClient({ url });
       const observer = new RedisStreamsPubSub({ url, keyPrefix: prefix, blockMs: 100 });
       const processes: ManagedProcess[] = [];
-      const launch = (role: 'api' | 'worker' | 'local' | 'followup' | 'aborter') => {
+      const launch = (role: 'api' | 'worker' | 'local' | 'followup' | 'aborter' | 'recoverer') => {
         const child = spawnFixture({
           entry: resolve(__dirname, '../test-fixtures/durable-api-loss.entry.mjs'),
           label: role,
@@ -120,20 +120,29 @@ describe('healthy durable workers survive API loss (COR-1490)', () => {
         } else {
           await killProcess(api, signal);
         }
+        // Redis Streams redelivers unacked events and Postgres guards steps, so the pubsub owns the run: nothing
+        // renews its claim, and the stored expiry stays the one written when the run was claimed (COR-1609).
         if (local) {
           const detached = await workflows!.getRunOwnership({ runId });
           expect(detached?.ownerId).toBe(initial?.ownerId);
           expect(detached?.generation).toBe(initial?.generation);
-          await waitFor(async () => !(await workflows!.getRunOwnership({ runId }))?.live, AGENT_LEASE_TTL_MS * 2);
+          expect(detached?.leaseExpiresAt?.getTime()).toBe(initial?.leaseExpiresAt?.getTime());
+          // Boot recovery leaves the run to the broker, which redelivers the interrupted delivery.
+          const recoverer = launch('recoverer');
+          await waitForLine(recoverer, 'recovery-result:');
+          expect(recoverer.stdout).toContain(
+            'recovery-result:{"agents":1,"recovered":0,"succeeded":0,"failed":0,"skipped":0}',
+          );
+          expect(await workflows!.getRunOwnership({ runId })).toEqual(detached);
           return;
         }
-        // Sample after the coordinator's old lease has expired, while the worker still runs tools.
+        // Sample after the claim's stored expiry has passed, while the worker still runs tools.
         await new Promise(resolve => setTimeout(resolve, AGENT_LEASE_TTL_MS + 1000));
         const during = await workflows!.getRunOwnership({ runId });
         expect(during?.ownerId).toBe(initial?.ownerId);
         expect(during?.generation).toBe(initial?.generation);
-        expect(during?.live).toBe(true);
-        expect(during!.leaseExpiresAt!.getTime()).toBeGreaterThan(initial!.leaseExpiresAt!.getTime());
+        expect(during?.live).toBe(false);
+        expect(during?.leaseExpiresAt?.getTime()).toBe(initial?.leaseExpiresAt?.getTime());
         if (thread) {
           expect(
             await agentThreadStreamRuntime.isRunHoldingThreadLease(

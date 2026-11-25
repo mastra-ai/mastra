@@ -34,7 +34,7 @@ Enable running-checkpoint persistence before starting the run. Even with persist
 4. No other execution holds a live claim on it, unless `force` is set.
 5. For a run without an ownership record (started by a version from before ownership records existed), its thread lease is not held. A run without a thread, or a pubsub without leases, gives no signal, so such a run counts as not live.
 
-Evented agent runs whose pubsub owns them skip steps 4 and 5; see [Engines](#engines).
+For evented agent runs whose pubsub owns them, the public `recover(runId)` skips steps 4 and 5. `recoverActiveRuns()` keeps step 4 and treats any claim that wasn't released as live, however old. See [Engines](#engines).
 
 The checks happen in that order. The claim in step 4 is atomic with the check, so no other execution can claim the run once it succeeds. With storage fencing, storage rejects writes from any execution that lost the run from that moment. An execution that already settled as owner stops fencing its late background writes, so those writes are not rejected. With a pubsub lease, an execution that lost the run can still write until it notices the loss (see [`force`](#force)).
 
@@ -109,13 +109,14 @@ Neither recovery nor takeover can undo a side effect. A tool that was running wh
 
 ## Engines
 
-The evented engine's durable loop is registered as a distributed internal workflow. Its events reach the broker only when the workflows store has step guards (`localOnly: !store?.supportsWorkflowStepGuards()` in `Mastra`); otherwise they stay in the process, no sibling worker picks up a crashed run's steps, and the run stays stranded until `recover()` restarts it, as on the default engine.
+The evented engine's durable loop is registered as a distributed internal workflow. Its events reach the broker only when the workflows store has step guards (`localOnly: !store?.supportsWorkflowStepGuards()` in `Mastra`); otherwise they stay in the process, no sibling worker picks up a crashed run's steps, and the run stays `running` until `recover()` restarts it, as on the default engine.
 
-On the supported multi-process setup (the pubsub reaches other processes and redelivers unacked messages, and the store fences writes and guards steps), the pubsub redelivers a dead worker's deliveries, so recovery behaves differently; see [leases.md](./leases.md#pubsub-owned-evented-runs):
+When the pubsub reaches other processes and redelivers unacked messages, and the store fences writes and guards steps, the pubsub redelivers a dead worker's deliveries. [leases.md](./leases.md#pubsub-owned-evented-runs) has the mechanics.
 
 - `recoverActiveRuns()` without a `runId`, and so `recoverAllDurableAgents()` and boot recovery, leave the agent's runs out.
-- `recover()` takes the run over with or without `force`: the claim is never renewed, so nothing tells a live run from a stuck one. Steps 2 and 3 of [When a run is recovered](#when-a-run-is-recovered) still apply; steps 4 and 5 do not, and `DURABLE_AGENT_RUN_ACTIVE` is never raised.
-- [Timing](#timing) does not apply: there is no TTL to wait for after a crash.
+- `recover(runId)` takes the run over with or without `force`, and aborts the in-flight model and tool calls of a healthy chain too. The claim is never renewed, and nothing else tells a live run from a stuck one. Steps 2 and 3 of [When a run is recovered](#when-a-run-is-recovered) still apply.
+- `recoverActiveRuns({ runId })`, a `resume()` that finds the run `running`, and the boot re-check refuse a run whose claim wasn't released with `DURABLE_AGENT_RUN_ACTIVE`. The refusal carries no `retryAt`. It's reported as `skipped` with reason `run-active` and never re-checked.
+- [Timing](#timing) doesn't apply. No TTL has to pass after a crash.
 
 The evented engine stores each loop iteration as a nested run with its own run id. The nested runs are adopted under the parent's claim, so their writes are fenced by the parent's generation.
 
@@ -123,3 +124,4 @@ The evented engine stores each loop iteration as a nested run with its own run i
 
 - The evented engine re-runs a step that finished before the crash instead of continuing past it (COR-1354).
 - Evented durable-agent recovery fails at some crash points (a nested snapshot left `pending` with no active paths, an empty execution path, or a hang). This predates run ownership.
+- On a pubsub-owned evented run, a claim is never released when the process that made it dies after claiming and before publishing the start or resume message. No delivery exists to settle the run, automatic recovery skips it, and `stream()` or `resume()` conflicts with it, so only an explicit `recover(runId)` moves it on. Tracked in COR-1619.

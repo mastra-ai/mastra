@@ -1,9 +1,13 @@
 import {
+  boundedOwnershipRead,
   DurableExecutionFenceError,
   EXECUTION_LEASE_RENEW_INTERVAL_MS,
   EXECUTION_LEASE_TTL_MS,
   EXECUTION_UNVERIFIED_ERROR_ID,
 } from './execution-fence';
+
+/** Reads an untimed guard makes, 250ms apart, before a storage failure fails the check. */
+const UNTIMED_READ_ATTEMPTS = 3;
 
 /** One step's observation of its immutable driver's claim. Never renews it. */
 export class ExecutionOwnershipGuard {
@@ -93,7 +97,14 @@ export class ExecutionOwnershipGuard {
 
   /** Boundary callers wait for a fresh read, never an earlier periodic read. */
   async check(): Promise<void> {
-    while (this.#pending) await this.#pending;
+    // A failed earlier read is not this check's answer: wait for it, then read again.
+    while (this.#pending) {
+      try {
+        await this.#pending;
+      } catch {
+        // Its error is the earlier read's; a known loss still throws below.
+      }
+    }
     this.throwIfLost();
     if (this.#disposed) return;
     const pending = this.#check();
@@ -106,9 +117,10 @@ export class ExecutionOwnershipGuard {
   }
 
   async #check(): Promise<void> {
+    let failedReads = 0;
     while (!this.#disposed) {
       try {
-        await this.#bounded(this.#observe());
+        await this.#bounded(this.#untimed ? boundedOwnershipRead(this.#observe()) : this.#observe());
         if (this.#disposed) return;
         this.throwIfLost();
         if (this.#remote) this.#armDeadline();
@@ -120,8 +132,10 @@ export class ExecutionOwnershipGuard {
           this.#lose(error);
           throw error;
         }
-        // A storage failure, not a loss: the caller fails this attempt and the delivery is retried.
-        if (this.#untimed) throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, this.#details, error);
+        // A storage failure, not a loss: after a few reads the caller fails this attempt and the delivery is retried.
+        if (this.#untimed && ++failedReads >= UNTIMED_READ_ATTEMPTS) {
+          throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, this.#details, error);
+        }
         let timer!: ReturnType<typeof setTimeout>;
         try {
           await this.#bounded(

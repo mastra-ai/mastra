@@ -514,6 +514,8 @@ function rebindRecoveredModelList(
 
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
 const RESOLVED_DEFAULT_OPTIONS = Symbol('mastra.durable.resolvedDefaultOptions');
+/** `recover()` options passed by `recoverActiveRuns()`, which must not take over a claim that never lapses. */
+const internalRecoveries = new WeakSet<object>();
 function createLocalRequestReader(runId: string, entry: RunRegistryEntry, mastra: Mastra | undefined) {
   const scope = (entry.runScope ??= createRunScope());
   scope.delete(LOCAL_MODEL_REQUEST_KEY);
@@ -14109,9 +14111,13 @@ export class Agent<
       // Claim the run only while no execution is live, or take it over from
       // the live one under `force`, before reading its state: from here on any
       // other execution can no longer write (#23734).
+      // A pubsub-owned claim never lapses, so an explicit recover() takes the run over. recoverActiveRuns() refuses.
+      const takeover =
+        options?.force ||
+        (!(options && internalRecoveries.has(options)) && (await this.executionEngine.pubsubOwnsRuns(this.logger)));
       executionFence = await this.executionEngine.claimExecution(
         runId,
-        options?.force ? 'takeover' : 'recover',
+        takeover ? 'takeover' : 'recover',
         this.#executionStreamBus.forRun(this.__usesSharedRunLog()).pubsub,
         this.logger,
         this.#untrackedRunLiveness(runId, workflowInput),
@@ -16154,9 +16160,11 @@ export class Agent<
    * another process, `retryAt` says when to check again. A run that finished
    * or suspended before its turn is left out.
    *
-   * Without `runId`, an evented agent whose pubsub redelivers unacknowledged
-   * events, on a store with run fencing and step guards, recovers nothing:
-   * the pubsub hands a dead worker's deliveries to another worker.
+   * For an evented agent whose pubsub redelivers unacknowledged events, on a
+   * store with run fencing and step guards, the pubsub hands a dead worker's
+   * deliveries to another worker. Without `runId` this recovers none of the
+   * agent's runs. With `runId` it skips a run whose claim was not released,
+   * with reason `run-active` and no `retryAt`; `recover(runId)` takes it over.
    *
    * @example
    * ```typescript
@@ -16241,14 +16249,16 @@ export class Agent<
               const onTerminal = () => {
                 if (this.__getStreamBus()?.cleanupTimeoutMs === 0) setTimeout(() => releaseAfterTerminal?.(), 0);
               };
-              const { cleanup } = await this.recover(targetRunId, {
-                onError: ({ error }) => {
+              const recoverOptions = {
+                onError: ({ error }: { error: Error | string }) => {
                   runError = error instanceof Error ? error : new Error(String(error));
                   onTerminal();
                 },
                 onFinish: onTerminal,
                 onAbort: onTerminal,
-              });
+              };
+              internalRecoveries.add(recoverOptions);
+              const { cleanup } = await this.recover(targetRunId, recoverOptions);
               started = true;
               releaseAfterTerminal = cleanup;
               try {
@@ -16413,6 +16423,7 @@ export class Agent<
       const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
       // Read twice before concluding absence/completion. In particular a newer
       // claim must win over terminal replay from the execution it superseded.
+      const pubsubOwned = await this.executionEngine.pubsubOwnsRuns(this.logger);
       for (let attempt = 0; attempt < 2; attempt++) {
         const history = await pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0);
         // A newer segment's nonterminal history keeps the observer attached even
@@ -16449,14 +16460,10 @@ export class Agent<
           if (type === 'finish' || type === 'error' || type === 'abort') terminal = true;
         }
         if (!terminal) {
-          if (hasHistory || ownership?.live) return false;
           // A pubsub-owned claim is never renewed: an unreleased one is held however old it is.
-          if (
-            ownership &&
-            ownership.leaseExpiresAt !== null &&
-            (await this.executionEngine.pubsubOwnsRuns(this.logger))
-          )
+          if (hasHistory || (pubsubOwned ? ownership && ownership.leaseExpiresAt !== null : ownership?.live)) {
             return false;
+          }
           if (getRunRegistryEntry(runId, this.#mastra) || this.executionRunRegistry.get(runId)) return false;
           if (await resolveLeaseProvider(pubsub).getLeaseOwner(executionLeaseKey(this.id, runId))) {
             return false;

@@ -1020,6 +1020,7 @@ export class DefaultAgentExecutionEngine {
  */
 export class EventedAgentExecutionEngine extends DefaultAgentExecutionEngine {
   #warnedUnfencedSharedExecution = false;
+  #pubsubOwnsRuns?: boolean;
 
   override get executionMode(): 'blocking' | 'background' {
     return 'background';
@@ -1037,8 +1038,13 @@ export class EventedAgentExecutionEngine extends DefaultAgentExecutionEngine {
   }
 
   override async pubsubOwnsRuns(logger: IMastraLogger): Promise<boolean> {
+    if (this.#pubsubOwnsRuns !== undefined) return this.#pubsubOwnsRuns;
     if (!this.mastra || this.resolveWorkflowEngine('evented', logger) !== 'evented') return false;
-    return pubsubOwnsEventedRuns(this.mastra.pubsub, await this.mastra.getStorage()?.getStore('workflows'));
+    // Cached once answered: the pubsub and store don't change, and a store that can't tell yet rejects.
+    return (this.#pubsubOwnsRuns = await pubsubOwnsEventedRuns(
+      this.mastra.pubsub,
+      await this.mastra.getStorage()?.getStore('workflows'),
+    ));
   }
 
   override prepareExecution(
