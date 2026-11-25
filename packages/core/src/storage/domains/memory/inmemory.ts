@@ -540,7 +540,9 @@ export class InMemoryMemory extends MemoryStorage {
     for (const message of messages) {
       // Saving a pending signal's row turns it into a message. The claimant stays until
       // the run that claimed it closes, so a redelivered step can claim the row again.
+      // A pending signal never leaves its thread through a save.
       const existing = this.db.messages.get(message.id);
+      if (existing && isSignalRow(existing) && existing.thread_id !== (message.threadId || '')) continue;
       this.db.messages.set(message.id, {
         ...toStorageMessage(message),
         signalStatus: null,
