@@ -1,9 +1,10 @@
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import { z } from 'zod';
 
 export const MODEL_PACK_MODELS_MAX = 4;
 export const MODEL_PACKS_MAX = 8;
 export const MODEL_PACK_NAME_MAX = 40;
-export const FACTORY_MODEL_PACK_SETTING = 'factoryModelPackId';
+export const FACTORY_MODEL_SELECTION_SETTING = 'factoryModelSelection';
 
 export interface ModelPackModel {
   modelId: string;
@@ -21,6 +22,23 @@ export interface ModelPackSet {
   defaultModelPackId: string | null;
 }
 
+export type StoredModelSelection = { kind: 'default' } | { kind: 'pack'; packId: string } | { kind: 'model' };
+
+export type ModelSelection = { kind: 'pack'; pack: ModelPack } | { kind: 'model' };
+
+export type ResolvedModelSelection = { kind: 'pack'; packId: string } | { kind: 'model' };
+
+export type ModelSelectionRequest =
+  | { kind: 'default' }
+  | { kind: 'pack'; packId: string }
+  | { kind: 'model'; modelId: string; thinkingLevel?: ThinkingLevelSetting };
+
+const storedModelSelectionSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('default') }),
+  z.object({ kind: z.literal('pack'), packId: z.string().min(1) }),
+  z.object({ kind: z.literal('model') }),
+]);
+
 export interface DefaultModelChange {
   modelId?: string | null;
   thinkingLevel?: ThinkingLevelSetting;
@@ -35,13 +53,33 @@ export function defaultModelPack(set: ModelPackSet): ModelPack | undefined {
   return set.modelPacks.find(pack => pack.id === set.defaultModelPackId);
 }
 
-export function activeModelPack(
+export function parseStoredModelSelection(value: unknown): StoredModelSelection | undefined {
+  const parsed = storedModelSelectionSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+}
+
+function packSelection(pack: ModelPack | undefined): ModelSelection {
+  return pack ? { kind: 'pack', pack } : { kind: 'model' };
+}
+
+export function resolveModelSelection(
   set: ModelPackSet,
-  sessionPackId: string | null | undefined,
-  activeModelId: string | undefined,
-): ModelPack | undefined {
-  const pack = set.modelPacks.find(candidate => candidate.id === sessionPackId) ?? defaultModelPack(set);
-  return pack && pack.models[0]?.modelId === activeModelId ? pack : undefined;
+  stored: StoredModelSelection | undefined,
+  sessionModelId: string | undefined,
+): ModelSelection {
+  const defaultPack = defaultModelPack(set);
+  if (!stored) {
+    return defaultPack && defaultPack.models[0]?.modelId === sessionModelId
+      ? packSelection(defaultPack)
+      : { kind: 'model' };
+  }
+  if (stored.kind === 'model') return { kind: 'model' };
+  if (stored.kind === 'default') return packSelection(defaultPack);
+  return packSelection(set.modelPacks.find(pack => pack.id === stored.packId) ?? defaultPack);
+}
+
+export function resolvedModelSelection(selection: ModelSelection): ResolvedModelSelection {
+  return selection.kind === 'pack' ? { kind: 'pack', packId: selection.pack.id } : { kind: 'model' };
 }
 
 export function legacyModelPackSet(modelId: string | null, thinkingLevel: ThinkingLevelSetting): ModelPackSet {

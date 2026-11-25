@@ -81,8 +81,9 @@ export function createSlackConnectRoutes(deps: {
   tenantStateSigner?: StateSigner;
   oidc?: SlackOidcConfig;
   /**
-   * Factory projects domain, for validating (and listing to) the per-link
-   * default factory. Unset → the default-factory PATCH route rejects.
+   * Factory projects domain, for validating the per-link default factory and
+   * for defaulting a new link to the org's only factory. Unset → the
+   * default-factory PATCH route rejects and connect sets no default.
    */
   projects?: FactoryProjectsStorage;
 }): ApiRoute[] {
@@ -209,7 +210,7 @@ export function createSlackConnectRoutes(deps: {
           return c.redirect(`${uiOrigin}/?slack=error`);
         }
 
-        await accountLinks.saveAccountLink({
+        const link = await accountLinks.saveAccountLink({
           platform: 'slack',
           externalTeamId: teamId,
           externalUserId: slackUserId,
@@ -218,6 +219,33 @@ export function createSlackConnectRoutes(deps: {
           externalTeamName: typeof teamName === 'string' ? teamName : undefined,
           externalUserName: typeof userName === 'string' ? userName : undefined,
         });
+
+        // Mirrors `resolveFactoryForLink`: with no usable default and exactly
+        // one factory in the org, route Slack sessions there now so the
+        // settings picker is filled right after connecting. Best-effort — the
+        // link is saved, and the dispatch path still stamps it lazily.
+        if (projects && tenant.orgId) {
+          const orgId = tenant.orgId;
+          try {
+            const current = link.defaultFactoryProjectId
+              ? await projects.get({ orgId, id: link.defaultFactoryProjectId })
+              : null;
+            if (!current) {
+              const factories = await projects.list({ orgId });
+              if (factories.length === 1) {
+                await accountLinks.setDefaultFactory({
+                  platform: 'slack',
+                  externalTeamId: teamId,
+                  externalUserId: slackUserId,
+                  userId: tenant.userId,
+                  factoryProjectId: factories[0]!.id,
+                });
+              }
+            }
+          } catch {
+            // Leave the default unset; the user can still pick one in settings.
+          }
+        }
 
         const successPath = tenant.factoryProjectId
           ? `/factories/${encodeURIComponent(tenant.factoryProjectId)}/settings/connections/slack`

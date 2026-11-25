@@ -1068,7 +1068,7 @@ describe('Account presets', () => {
     renderOnboarding();
     await findActiveSection('Model');
     await user.click(await enabledCreateButton());
-    expect(await screen.findByRole('button', { name: 'Creating your factory…' })).toBeDisabled();
+    expect(await screen.findByRole('button', { name: 'Create factory', busy: true })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Change codebase' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Change work' })).toBeDisabled();
     const accounts = within(screen.getByRole('region', { name: 'Accounts' }));

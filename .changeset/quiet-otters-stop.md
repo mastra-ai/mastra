@@ -21,4 +21,4 @@ const stopOnInvalidRequest: Processor = {
 
 Leaving `fallback` unset keeps today's behavior.
 
-Also exported `getRetryAfterMs` and `PROVIDER_FAILURE_KINDS` from `@mastra/core/error`.
+Also exported `PROVIDER_FAILURE_KINDS` from `@mastra/core/error`.

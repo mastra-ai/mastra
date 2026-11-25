@@ -80,6 +80,14 @@ const pinKey = (pageId: string, kind: KnowledgePinKind) => `${kind}:${pageId}`;
  *
  * @experimental
  */
+export interface InMemoryKnowledgePageSnapshot {
+  pages: Map<string, KnowledgePage>;
+  notes: Map<string, KnowledgeNote>;
+  pins: Map<string, KnowledgePin>;
+  activity: KnowledgePageActivityEvent[];
+  bodyLinks: Map<string, KnowledgePageBodyLink[]>;
+}
+
 export class InMemoryKnowledgePageStore implements KnowledgePageStore {
   #pages = new Map<string, KnowledgePage>();
   #notes = new Map<string, KnowledgeNote>();
@@ -87,6 +95,27 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
   #activity: KnowledgePageActivityEvent[] = [];
   #bodyLinks = new Map<string, KnowledgePageBodyLink[]>();
   #clock = 0;
+
+  /** A deep copy of every page, note, pin, body link and event, for {@link restore}. */
+  snapshot(): InMemoryKnowledgePageSnapshot {
+    return structuredClone({
+      pages: this.#pages,
+      notes: this.#notes,
+      pins: this.#pins,
+      activity: this.#activity,
+      bodyLinks: this.#bodyLinks,
+    });
+  }
+
+  /** Puts back what {@link snapshot} copied. */
+  restore(snapshot: InMemoryKnowledgePageSnapshot): void {
+    const copy = structuredClone(snapshot);
+    this.#pages = copy.pages;
+    this.#notes = copy.notes;
+    this.#pins = copy.pins;
+    this.#activity = copy.activity;
+    this.#bodyLinks = copy.bodyLinks;
+  }
 
   /** Drops every page, note, pin, body link and event. */
   clear(): void {

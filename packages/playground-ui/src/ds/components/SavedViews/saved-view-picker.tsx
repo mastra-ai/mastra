@@ -92,7 +92,7 @@ export function SavedViewPicker<TSettings>({
             Reset
           </Button>
           {editable && (
-            <Button type="button" variant="default" size="sm" disabled={views.pending} onClick={views.save}>
+            <Button type="button" variant="default" size="sm" loading={views.pending} onClick={views.save}>
               Save changes
             </Button>
           )}
@@ -304,7 +304,7 @@ function ViewNameForm({
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" variant="default" size="sm" disabled={pending || !name.trim()}>
+        <Button type="submit" variant="default" size="sm" disabled={!name.trim()} loading={pending}>
           {submitLabel}
         </Button>
       </div>

@@ -3,7 +3,6 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
@@ -300,16 +299,16 @@ function EditLayoutWrapper() {
       ) : !isCodeAgentEditable ? null : (
         <>
           <Button
-            icon={isSavingDraft ? <Spinner /> : <IconFloppyDisk1 />}
             variant="ghost"
             size="sm"
             onClick={() => void handleSaveDraft()}
-            disabled={!isDirty || isSavingDraft || isSubmitting}
+            disabled={!isDirty || isSubmitting}
+            icon={<IconFloppyDisk1 />}
+            loading={isSavingDraft}
           >
-            {isSavingDraft ? 'Saving...' : 'Save'}
+            Save
           </Button>
           <Button
-            icon={isSubmitting ? <Spinner /> : <IconCheckmark2Medium />}
             variant="primary"
             size="sm"
             onClick={() => void handlePublishVersion()}
@@ -318,8 +317,10 @@ function EditLayoutWrapper() {
                 ? selectedVersionId === activeVersionId || isSubmitting || isSavingDraft
                 : !hasDraft || isSubmitting || isSavingDraft
             }
+            icon={<IconCheckmark2Medium />}
+            loading={isSubmitting}
           >
-            {isSubmitting ? 'Publishing...' : isViewingPreviousVersion ? 'Publish this version' : 'Publish'}
+            {isViewingPreviousVersion ? 'Publish this version' : 'Publish'}
           </Button>
         </>
       )}

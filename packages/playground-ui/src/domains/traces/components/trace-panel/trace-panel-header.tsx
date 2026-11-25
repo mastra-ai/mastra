@@ -15,7 +15,6 @@ import { IconArrowInbox } from '@/ds/icons/central/IconArrowInbox';
 import { IconChainLink3 } from '@/ds/icons/central/IconChainLink3';
 import { IconFloppyDisk1 } from '@/ds/icons/central/IconFloppyDisk1';
 import { IconGauge } from '@/ds/icons/central/IconGauge';
-import { IconLoadingCircle } from '@/ds/icons/central/IconLoadingCircle';
 import { TraceIcon } from '@/ds/icons/TraceIcon';
 
 export interface TracePanelHeaderProps {
@@ -124,10 +123,10 @@ export function TracePanelDownloadButton({ onDownload, isPending = false }: Trac
       size="icon-sm"
       variant="ghost"
       tooltip="Download trace JSON"
-      disabled={isPending}
       onClick={() => onDownload(traceId)}
+      loading={isPending}
     >
-      {isPending ? <IconLoadingCircle className="animate-spin" /> : <IconArrowInbox />}
+      <IconArrowInbox />
     </Button>
   );
 }

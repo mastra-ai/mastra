@@ -36,10 +36,14 @@ import {
   MODEL_FALLBACK_PART_TYPE,
   MODEL_FALLBACK_STATE_KEY,
   modelFallbackNoticeText,
-  modelRouteFailureFromError,
   pendingModelFallbackSchema,
 } from '../model-fallback.js';
-import type { ModelFallbackPartData, ModelFallbackReason, PendingModelFallback } from '../model-fallback.js';
+import type {
+  ModelFallbackPartData,
+  ModelFallbackReason,
+  ModelRouteFailure,
+  PendingModelFallback,
+} from '../model-fallback.js';
 import { findRouteModelIndex, getCredentialProviderId, normalizeLegacyModelId } from '../providers/model-ids.js';
 import type { ModelRouteEntry } from '../schema.js';
 import { isThinkingLevelSetting } from '../thinking.js';
@@ -136,6 +140,7 @@ const MAX_CAUSE_DEPTH = 4;
 export type RotationClassification =
   | { kind: 'rotate'; reason: 'rate-limit' | 'quota-exhausted' | 'auth-failed' }
   | { kind: 'hop' }
+  | { kind: 'model-missing' }
   | { kind: 'stream-cut' }
   | { kind: 'never' };
 
@@ -262,7 +267,9 @@ export function isStreamCutAfterResponse(error: unknown): boolean {
  * occurrence); auth failures and `ProviderAuthRequiredError` rotate after one
  * forced refresh; 5xx/network hop only when the transient retry budget is
  * already spent (they reach this processor because `StreamErrorRetryProcessor`
- * declined); everything else never touches the registry.
+ * declined); a model the provider no longer serves (404 `model_not_found`)
+ * hops without touching the account pool; everything else never touches the
+ * registry.
  */
 export function classifyRotationError(error: unknown): RotationClassification {
   if (isProviderAuthRequiredError(error)) {
@@ -275,6 +282,7 @@ export function classifyRotationError(error: unknown): RotationClassification {
   const status = readErrorStatus(error);
   const byStatus = rotationFromStatus(status);
   if (byStatus) return byStatus;
+  if (status === 404 && classifyProviderError(error) === 'model_rejected') return { kind: 'model-missing' };
   // Wording only speaks for a statusless or 400 failure, where providers put quota and rate-limit text.
   const byKind =
     status === undefined || status === 400 ? ROTATION_BY_PROVIDER_KIND[classifyProviderError(error)] : undefined;
@@ -432,9 +440,8 @@ async function emitAccountSwitchPart(
 function providerFromSession(
   args: Pick<ProcessAPIErrorArgs, 'requestContext'> | Pick<ProcessInputArgs, 'requestContext'>,
 ): string | undefined {
-  const controller = args.requestContext?.get('controller') as { session?: { modelId?: unknown } } | undefined;
-  const modelId = controller?.session?.modelId;
-  return typeof modelId === 'string' ? providerFromModelId(modelId) : undefined;
+  const { modelId } = requestModelRoute(args.requestContext, getRoutingController(args));
+  return modelId ? providerFromModelId(modelId) : undefined;
 }
 
 /**
@@ -497,13 +504,13 @@ function resolveAccountRoute(
   explicit?: ModelRouteEntry,
 ): AccountRoute | null {
   const controller = getRoutingController(args);
-  const { entries, pending } = requestModelRoute(args.requestContext, controller);
+  const { entries, pending, modelId } = requestModelRoute(args.requestContext, controller);
   const routeEntries = entries ?? [];
   const entry = explicit
     ? explicit
     : pending
       ? routeEntries.find(candidate => candidate.id === pending.toEntryId && candidate.modelId === pending.toModelId)
-      : routeEntries[findRouteModelIndex(routeEntries, controller?.session?.modelId)];
+      : routeEntries[findRouteModelIndex(routeEntries, modelId)];
   if (!entry || typeof entry.id !== 'string' || typeof entry.modelId !== 'string') return null;
   const providerId = providerFromModelId(entry.modelId);
   if (!providerId) return null;
@@ -622,6 +629,11 @@ export class AccountRotationProcessor implements Processor {
     // Q14: 400/unknown errors never rotate and never advance routes.
     if (classification.kind === 'never') {
       return this.declineHop(args);
+    }
+
+    if (classification.kind === 'model-missing') {
+      await this.emitModelFallbackPart(args, 'persistent-outage');
+      return { retry: false };
     }
 
     // A stream cut after the provider accepted the request (e.g. the ChatGPT
@@ -773,10 +785,10 @@ export class AccountRotationProcessor implements Processor {
     }
     const controller = getRoutingController(args);
     const state = controller?.getState?.();
-    const { entries: route, pending } = requestModelRoute(args.requestContext, controller);
+    const { entries: route, pending, modelId } = requestModelRoute(args.requestContext, controller);
     const startIndex = pending
       ? route?.findIndex(entry => entry.id === pending.toEntryId)
-      : route && findRouteModelIndex(route, controller?.session?.modelId);
+      : route && findRouteModelIndex(route, modelId);
     if (!route || startIndex === undefined || startIndex < 0 || route.length - startIndex < 2) {
       args.state.modelRouteCascade = null;
       return null;
@@ -855,13 +867,10 @@ export class AccountRotationProcessor implements Processor {
           emitEvent?: (event: { type: 'info'; message: string }) => void;
         }
       | undefined;
-    const now = Date.now();
-    const at = new Date(now).toISOString();
-    const failure = modelRouteFailureFromError(
-      args.error,
-      now,
-      isProviderAuthRequiredError(args.error) ? 'auth' : undefined,
-    );
+    const at = new Date().toISOString();
+    const failure: ModelRouteFailure = {
+      kind: isProviderAuthRequiredError(args.error) ? 'auth' : classifyProviderError(args.error),
+    };
     const threadId = typeof controller?.threadId === 'string' ? controller.threadId : undefined;
     const pending = {
       fromEntryId: from.id,
@@ -887,7 +896,7 @@ export class AccountRotationProcessor implements Processor {
       if (sticky) await controller?.setThreadSetting?.({ key: MODEL_FALLBACK_STATE_KEY, value: undefined });
       throw error;
     }
-    await controller?.setState?.({ [MODEL_FALLBACK_STATE_KEY]: pending });
+    if (sticky) await controller?.setState?.({ [MODEL_FALLBACK_STATE_KEY]: pending });
     args.state.startNoticeEmitted = false;
     const targetRoute = resolveAccountRoute(args, to);
     if (targetRoute) {

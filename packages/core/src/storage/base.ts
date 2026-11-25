@@ -592,6 +592,8 @@ export class MastraCompositeStore extends MastraBase {
       initialization = Promise.resolve()
         .then(() => this.init())
         .then(() => knowledge.init())
+        // Importer tables go with the pages, on the same explicit or automatic activation.
+        .then(() => knowledge.importers?.init())
         .catch(error => {
           knowledgeInitializations.delete(knowledge);
           throw error;

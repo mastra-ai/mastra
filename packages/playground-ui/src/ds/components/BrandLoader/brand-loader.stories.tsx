@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, within } from 'storybook/test';
 
 import { LogoWithoutText } from '../Logo/MastraLogo';
 
@@ -94,17 +95,30 @@ export const SuperposedOnLogo: Story = {
   ),
 };
 
+export const Fill: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: () => (
+    <div className="h-120 border border-dashed border-border">
+      <BrandLoader fill />
+    </div>
+  ),
+};
+
 /**
- * Renders the `BrandLoader` centered in a full-viewport container to preview
- * the brand moment as it appears on app boot.
+ * `fill="screen"` centers it in the window, as on app boot.
  */
 export const FullHeightPage: Story = {
   parameters: {
     layout: 'fullscreen',
   },
   render: () => (
-    <div className="flex h-screen w-screen items-center justify-center bg-sidebar">
-      <BrandLoader size="lg" aria-label="Loading app" />
+    <div className="bg-sidebar">
+      <BrandLoader fill="screen" aria-label="Loading app" />
     </div>
   ),
+  play: async ({ canvasElement }) => {
+    const loader = within(canvasElement).getByRole('status', { name: 'Loading app' }).getBoundingClientRect();
+    await expect(loader.top + loader.height / 2).toBeCloseTo(window.innerHeight / 2, 0);
+    await expect(loader.left + loader.width / 2).toBeCloseTo(document.documentElement.clientWidth / 2, 0);
+  },
 };

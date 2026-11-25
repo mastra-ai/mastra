@@ -3,8 +3,13 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { DEFAULT_THINKING_LEVEL } from '../default-thinking-level.js';
-import { activeModelPack, EMPTY_MODEL_PACK_SET, FACTORY_MODEL_PACK_SETTING } from '../model-packs.js';
-import type { ModelPackModel, ModelPackSet } from '../model-packs.js';
+import {
+  EMPTY_MODEL_PACK_SET,
+  FACTORY_MODEL_SELECTION_SETTING,
+  parseStoredModelSelection,
+  resolveModelSelection,
+} from '../model-packs.js';
+import type { ModelPackModel, ModelPackSet, StoredModelSelection } from '../model-packs.js';
 import { UUID_PATTERN } from '../routes/contracts.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import { resolveFactoryModelPolicy, routedPersonalDefaults } from './credential-policy.js';
@@ -12,7 +17,7 @@ import type { FactoryModelPolicyDependencies } from './credential-policy.js';
 
 const FACTORY_PROJECT_ID = new RegExp(UUID_PATTERN);
 
-interface RoutedModelDefaultsDependencies extends FactoryModelPolicyDependencies {
+export interface RoutedModelDefaultsDependencies extends FactoryModelPolicyDependencies {
   modelDefaults: Pick<ModelDefaultsStorage, 'ensureReady' | 'get'>;
 }
 
@@ -93,18 +98,28 @@ async function readRoutedModelDefaults(
   }
 }
 
-export async function resolveSessionModelFallbacks(
+async function stampModelSelection(
+  controller: AgentControllerRequestContext,
+  value: StoredModelSelection,
+): Promise<void> {
+  try {
+    await controller.setThreadSetting?.({ key: FACTORY_MODEL_SELECTION_SETTING, value });
+  } catch (error) {
+    console.warn('[factory] Could not record the session model selection.', error);
+  }
+}
+
+export async function resolveSessionModelRoute(
   requestContext: RequestContext | undefined,
   deps: RoutedModelDefaultsDependencies,
 ): Promise<ModelPackModel[]> {
   const controller = requestContext?.get('controller') as AgentControllerRequestContext | undefined;
   if (!controller) return [];
-  const sessionPackId = await controller.getThreadSetting?.(FACTORY_MODEL_PACK_SETTING);
+  const stored = parseStoredModelSelection(await controller.getThreadSetting?.(FACTORY_MODEL_SELECTION_SETTING));
   const { modelPackSet } = await resolveRoutedModelDefaults(requestContext, deps);
-  const pack = activeModelPack(
-    modelPackSet,
-    typeof sessionPackId === 'string' ? sessionPackId : null,
-    controller.session?.modelId,
-  );
-  return pack ? pack.models.slice(1) : [];
+  const selection = resolveModelSelection(modelPackSet, stored, controller.session?.modelId);
+  if (!stored && modelPackSet.modelPacks.length > 0) {
+    await stampModelSelection(controller, selection.kind === 'pack' ? { kind: 'default' } : { kind: 'model' });
+  }
+  return selection.kind === 'pack' ? selection.pack.models : [];
 }

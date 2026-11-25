@@ -61,8 +61,8 @@ export function DeleteExperimentsButton({
           </AlertDialog.Header>
           <AlertDialog.Footer>
             <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-            <Button icon={<TrashIcon />} variant="destructive" onClick={handleDelete} disabled={isDeleting}>
-              {isDeleting ? 'Deleting…' : count === 1 ? 'Delete experiment' : 'Delete experiments'}
+            <Button icon={<TrashIcon />} variant="destructive" onClick={handleDelete} loading={isDeleting}>
+              {count === 1 ? 'Delete experiment' : 'Delete experiments'}
             </Button>
           </AlertDialog.Footer>
         </AlertDialog.Content>

@@ -1,4 +1,4 @@
-import { classifyProviderError, getRetryAfterMs, PROVIDER_FAILURE_KINDS } from '@mastra/core/error';
+import { PROVIDER_FAILURE_KINDS } from '@mastra/core/error';
 import type { ProviderFailureKind } from '@mastra/core/error';
 import { z } from 'zod';
 import type { ThinkingLevelSetting } from './thinking.js';
@@ -18,23 +18,9 @@ const REASON_CLAUSE: Record<ModelFallbackReason, (model: string) => string> = {
 
 const modelRouteFailureSchema = z.object({
   kind: z.enum(PROVIDER_FAILURE_KINDS),
-  retryAt: z.string().optional(),
 });
 
 export type ModelRouteFailure = z.infer<typeof modelRouteFailureSchema>;
-
-export function modelRouteFailureFromError(
-  error: unknown,
-  now: number,
-  kind: ProviderFailureKind = classifyProviderError(error),
-): ModelRouteFailure {
-  const retryAfterMs = getRetryAfterMs(error, now);
-  const retryAt = retryAfterMs === undefined ? undefined : new Date(now + retryAfterMs);
-  return {
-    kind,
-    ...(retryAt && !Number.isNaN(retryAt.getTime()) ? { retryAt: retryAt.toISOString() } : {}),
-  };
-}
 
 export const pendingModelFallbackSchema = z.object({
   fromEntryId: z.string().min(1),
@@ -75,6 +61,7 @@ const FAILURE_CLAUSE: Partial<Record<ProviderFailureKind, (model: string) => str
   auth: model => `${model} has missing or invalid credentials`,
   unavailable: model => `${model} is unavailable`,
   timeout: model => `${model} timed out`,
+  model_rejected: model => `${model} was not found by its provider`,
 };
 
 export function modelFallbackNoticeText(

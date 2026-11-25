@@ -91,8 +91,14 @@ export function NewSkillEditor({ factoryId, onCreated }: { factoryId: string; on
           <Button size="sm" variant="ghost" onClick={discard} disabled={create.isPending}>
             Discard
           </Button>
-          <Button size="sm" variant="primary" onClick={submit} disabled={problem !== undefined || create.isPending}>
-            {create.isPending ? 'Creating…' : 'Create'}
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={submit}
+            disabled={problem !== undefined}
+            loading={create.isPending}
+          >
+            Create
           </Button>
         </SaveBar>
       )}

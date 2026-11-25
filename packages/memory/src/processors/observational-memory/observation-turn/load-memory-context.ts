@@ -18,11 +18,8 @@ export async function loadMemoryContextMessages({
 }): Promise<Awaited<ReturnType<MemoryContextProvider['getContext']>>> {
   const ctx = await memory.getContext({ threadId, resourceId, runState });
 
-  for (const msg of ctx.messages) {
-    if (msg.role !== 'system') {
-      messageList.add(msg, 'memory');
-    }
-  }
+  const messages = ctx.messages.filter(msg => msg.role !== 'system');
+  if (messages.length) messageList.add(messages, 'memory');
 
   return ctx;
 }

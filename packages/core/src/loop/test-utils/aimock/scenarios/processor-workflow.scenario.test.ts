@@ -110,55 +110,56 @@ describeForAllEngines('Support agent processors packaged as workflows', engine =
   });
 
   // Technical: processOutputResult inside an output workflow step rewrites the assistant message
-  // in the final response messages. COR-1414: durable, evented and inngest save the rewrite but return
-  // the raw model text in response.messages, so the final assertion is pinned as it.fails there.
-  const wrapped = engine === 'durable' || engine === 'evented' || engine === 'inngest';
-  (wrapped ? it.fails : it)('applies an output processor workflow to the final assistant message', async () => {
-    const tagReply = {
-      id: 'reply-tagger',
-      processOutputResult: async ({ messages }) =>
-        messages.map(msg =>
-          msg.role === 'assistant'
-            ? {
-                ...msg,
-                content: {
-                  ...msg.content,
-                  parts: msg.content.parts.map(part =>
-                    part.type === 'text' ? { ...part, text: `${part.text} [REVIEWED]` } : part,
-                  ),
-                },
-              }
-            : msg,
-        ),
-    } satisfies Processor;
-    const outputWorkflow = createWorkflow({
-      id: 'reply-review-workflow',
-      inputSchema: ProcessorStepInputSchema,
-      outputSchema: ProcessorStepOutputSchema,
-    })
-      .then(createStep(tagReply))
-      .commit();
+  // in the final response messages. Inngest still returns the raw model text (COR-1414).
+  (engine === 'inngest' ? it.fails : it)(
+    'applies an output processor workflow to the final assistant message',
+    async () => {
+      const tagReply = {
+        id: 'reply-tagger',
+        processOutputResult: async ({ messages }) =>
+          messages.map(msg =>
+            msg.role === 'assistant'
+              ? {
+                  ...msg,
+                  content: {
+                    ...msg.content,
+                    parts: msg.content.parts.map(part =>
+                      part.type === 'text' ? { ...part, text: `${part.text} [REVIEWED]` } : part,
+                    ),
+                  },
+                }
+              : msg,
+          ),
+      } satisfies Processor;
+      const outputWorkflow = createWorkflow({
+        id: 'reply-review-workflow',
+        inputSchema: ProcessorStepInputSchema,
+        outputSchema: ProcessorStepOutputSchema,
+      })
+        .then(createStep(tagReply))
+        .commit();
 
-    const { output, requests } = await runLoopScenario({
-      engine,
-      llm: getMock(),
-      prompt: 'Where is my parcel?',
-      outputProcessors: [outputWorkflow],
-      fixtures: llm => {
-        llm.on({ endpoint: 'chat' }, { content: 'It ships tomorrow.' });
-      },
-    });
+      const { output, requests } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Where is my parcel?',
+        outputProcessors: [outputWorkflow],
+        fixtures: llm => {
+          llm.on({ endpoint: 'chat' }, { content: 'It ships tomorrow.' });
+        },
+      });
 
-    expect(requests).toHaveLength(1);
-    const assistantTexts = (await output.response)
-      .messages!.filter(m => m.role === 'assistant')
-      .flatMap(m =>
-        typeof m.content === 'string'
-          ? [m.content]
-          : (m.content as { type: string; text?: string }[]).filter(p => p.type === 'text').map(p => p.text),
-      );
-    expect(assistantTexts).toEqual(['It ships tomorrow. [REVIEWED]']);
-  });
+      expect(requests).toHaveLength(1);
+      const assistantTexts = (await output.response)
+        .messages!.filter(m => m.role === 'assistant')
+        .flatMap(m =>
+          typeof m.content === 'string'
+            ? [m.content]
+            : (m.content as { type: string; text?: string }[]).filter(p => p.type === 'text').map(p => p.text),
+        );
+      expect(assistantTexts).toEqual(['It ships tomorrow. [REVIEWED]']);
+    },
+  );
 
   // Technical: abort(reason, { retry: false }) inside an output workflow step sets
   // output.tripwire with that reason and finishes the run as a tripwire.

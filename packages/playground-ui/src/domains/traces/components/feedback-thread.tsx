@@ -355,8 +355,8 @@ export function FeedbackThread({
           )}
           <AlertDialog.Footer>
             <AlertDialog.Cancel disabled={isDeleting}>Cancel</AlertDialog.Cancel>
-            <Button icon={<TrashIcon />} variant="primary" disabled={isDeleting} onClick={handleDeleteConfirm}>
-              {isDeleting ? 'Deleting…' : 'Delete'}
+            <Button icon={<TrashIcon />} variant="primary" onClick={handleDeleteConfirm} loading={isDeleting}>
+              Delete
             </Button>
           </AlertDialog.Footer>
         </AlertDialog.Content>

@@ -7,7 +7,7 @@ description: "Browse Tencent Coding Plan (China) model IDs, capabilities, and co
 
 # <img src="https://models.dev/logos/tencent-coding-plan.svg" alt="Tencent Coding Plan (China) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Tencent Coding Plan (China)
 
-Access 8 Tencent Coding Plan (China) models through Mastra's model router. Authentication is handled automatically using the `TENCENT_CODING_PLAN_API_KEY` environment variable.
+Access 1 Tencent Coding Plan (China) model through Mastra's model router. Authentication is handled automatically using the `TENCENT_CODING_PLAN_API_KEY` environment variable.
 
 Learn more in the [Tencent Coding Plan (China) documentation](https://cloud.tencent.com/document/product/1772/128947).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "tencent-coding-plan/glm-5"
+  model: "tencent-coding-plan/tc-code-latest"
 });
 
 // Generate a response
@@ -74,7 +74,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.lkeap.cloud.tencent.com/coding/v3",
-    id: "tencent-coding-plan/glm-5",
+    id: "tencent-coding-plan/tc-code-latest",
     apiKey: process.env.TENCENT_CODING_PLAN_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -95,7 +95,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "tencent-coding-plan/tc-code-latest"
-      : "tencent-coding-plan/glm-5";
+      : "tencent-coding-plan/tc-code-latest";
   }
 });
 ```

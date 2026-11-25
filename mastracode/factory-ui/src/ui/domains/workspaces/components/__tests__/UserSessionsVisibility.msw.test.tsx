@@ -195,7 +195,7 @@ describe('User session visibility', () => {
     await user.click(await screen.findByRole('button', { name: `Private session: ${name}` }));
     const share = await screen.findByRole('button', { name: 'Share with organization' });
     await user.click(share);
-    expect(share).toBeDisabled();
+    expect(share).toHaveAttribute('aria-busy', 'true');
     await user.keyboard('{Escape}');
     await openActions(user, name, entry);
     const pending = await screen.findByRole('menuitem', { name: 'Share with organization' });

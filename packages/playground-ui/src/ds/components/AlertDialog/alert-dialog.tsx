@@ -35,13 +35,16 @@ function AlertDialogContent({ size = 'sm', ...props }: AlertDialogContentProps) 
   );
 }
 
-function AlertDialogAction({ children, ...props }: React.ComponentProps<typeof DialogClose>) {
+type AlertDialogActionProps = React.ComponentProps<typeof DialogClose> & { loading?: boolean };
+
+function AlertDialogAction({ children, loading, ...props }: AlertDialogActionProps) {
   return (
     <DialogClose
       render={
         <Button
           variant="primary"
           size="md"
+          loading={loading}
           className={cn(dialogActionLayoutClasses, dialogActionSizeClasses.md)}
           children={children}
         />

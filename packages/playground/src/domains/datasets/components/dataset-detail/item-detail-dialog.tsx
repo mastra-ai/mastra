@@ -267,8 +267,8 @@ export function ItemDetailDialog({
           </AlertDialog.Header>
           <AlertDialog.Footer>
             <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-            <AlertDialog.Action onClick={handleDeleteConfirm}>
-              {deleteItem.isPending ? 'Deleting...' : 'Yes, delete'}
+            <AlertDialog.Action onClick={handleDeleteConfirm} loading={deleteItem.isPending}>
+              Yes, delete
             </AlertDialog.Action>
           </AlertDialog.Footer>
         </AlertDialog.Content>
@@ -294,9 +294,9 @@ export function ItemDetailDialog({
               variant="primary"
               size="lg"
               onClick={() => void handlePurgeConfirm()}
-              disabled={purgeItem.isPending}
+              loading={purgeItem.isPending}
             >
-              {purgeItem.isPending ? 'Purging...' : 'Purge data'}
+              Purge data
             </Button>
           </AlertDialog.Footer>
         </AlertDialog.Content>
@@ -464,8 +464,8 @@ function EditModeContent({
           <Button icon={<IconCrossMedium />} onClick={onCancel} disabled={isSaving}>
             Cancel
           </Button>
-          <Button icon={<IconCheckmark2Medium />} variant="primary" onClick={onSave} disabled={isSaving}>
-            {isSaving ? 'Saving...' : 'Save changes'}
+          <Button icon={<IconCheckmark2Medium />} variant="primary" onClick={onSave} loading={isSaving}>
+            Save changes
           </Button>
         </div>
       </div>

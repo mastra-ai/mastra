@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { activeModelPack, defaultModelPack, legacyModelPackSet, withDefaultModel } from './model-packs.js';
+import {
+  defaultModelPack,
+  legacyModelPackSet,
+  parseStoredModelSelection,
+  resolveModelSelection,
+  withDefaultModel,
+} from './model-packs.js';
 import type { ModelPack, ModelPackSet } from './model-packs.js';
 
 const build: ModelPack = {
@@ -24,27 +30,53 @@ const cheap: ModelPack = {
 
 const packs: ModelPackSet = { modelPacks: [build, cheap], defaultModelPackId: 'build' };
 
-describe('activeModelPack', () => {
-  it('uses the default pack while the session runs its first model', () => {
-    expect(activeModelPack(packs, null, 'anthropic/claude-opus-5.5')).toBe(build);
+describe('resolveModelSelection', () => {
+  it('runs the exact model whenever the session picked one', () => {
+    expect(resolveModelSelection(packs, { kind: 'model' }, 'anthropic/claude-opus-5.5')).toEqual({ kind: 'model' });
   });
 
-  it('uses the session pack over the default pack', () => {
-    expect(activeModelPack(packs, 'cheap', 'deepseek/deepseek-flash')).toBe(cheap);
+  it('runs the picked pack whatever model the session currently shows', () => {
+    expect(resolveModelSelection(packs, { kind: 'pack', packId: 'cheap' }, 'openai/gpt-5.6-sol')).toEqual({
+      kind: 'pack',
+      pack: cheap,
+    });
   });
 
-  it('falls back to the default pack when the session pack no longer exists', () => {
-    expect(activeModelPack(packs, 'deleted', 'anthropic/claude-opus-5.5')).toBe(build);
+  it('runs the default pack when the picked pack was deleted', () => {
+    expect(resolveModelSelection(packs, { kind: 'pack', packId: 'deleted' }, undefined)).toEqual({
+      kind: 'pack',
+      pack: build,
+    });
   });
 
-  it('turns the pack off when the session runs a model that is not the pack first model', () => {
-    expect(activeModelPack(packs, 'cheap', 'openai/gpt-5.6-sol')).toBeUndefined();
-    expect(activeModelPack(packs, 'cheap', 'anthropic/claude-opus-5.5')).toBeUndefined();
-    expect(activeModelPack(packs, null, undefined)).toBeUndefined();
+  it('follows whichever pack is the default', () => {
+    expect(resolveModelSelection({ ...packs, defaultModelPackId: 'cheap' }, { kind: 'default' }, undefined)).toEqual({
+      kind: 'pack',
+      pack: cheap,
+    });
   });
 
-  it('has no active pack when there are no packs', () => {
-    expect(activeModelPack(legacyModelPackSet(null, 'medium'), null, 'anthropic/claude-opus-5.5')).toBeUndefined();
+  it('runs the exact model when no default pack exists', () => {
+    const empty = legacyModelPackSet(null, 'medium');
+    expect(resolveModelSelection(empty, { kind: 'default' }, 'anthropic/claude-opus-5.5')).toEqual({ kind: 'model' });
+    expect(resolveModelSelection(empty, { kind: 'pack', packId: 'cheap' }, undefined)).toEqual({ kind: 'model' });
+  });
+
+  it('reads an unset selection as the default pack only while the session runs its first model', () => {
+    expect(resolveModelSelection(packs, undefined, 'anthropic/claude-opus-5.5')).toEqual({ kind: 'pack', pack: build });
+    expect(resolveModelSelection(packs, undefined, 'deepseek/deepseek-flash')).toEqual({ kind: 'model' });
+    expect(resolveModelSelection(packs, undefined, undefined)).toEqual({ kind: 'model' });
+  });
+});
+
+describe('parseStoredModelSelection', () => {
+  it('accepts the stored shapes and rejects anything else', () => {
+    expect(parseStoredModelSelection({ kind: 'pack', packId: 'cheap' })).toEqual({ kind: 'pack', packId: 'cheap' });
+    expect(parseStoredModelSelection({ kind: 'default' })).toEqual({ kind: 'default' });
+    expect(parseStoredModelSelection({ kind: 'model' })).toEqual({ kind: 'model' });
+    expect(parseStoredModelSelection('cheap')).toBeUndefined();
+    expect(parseStoredModelSelection({ kind: 'pack' })).toBeUndefined();
+    expect(parseStoredModelSelection(undefined)).toBeUndefined();
   });
 });
 
