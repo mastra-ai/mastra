@@ -335,6 +335,13 @@ export const mastra = new Mastra({
             description: 'Storage for knowledge nodes and records. Experimental.',
             isOptional: true,
           },
+          {
+            name: 'agentSignals',
+            type: 'AgentSignalsStorage',
+            description:
+              'Storage for signals sent to a running agent run that are still waiting to be read. The composite store has no in-memory fallback for this domain.',
+            isOptional: true,
+          },
         ],
       },
     ],
