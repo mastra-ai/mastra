@@ -854,6 +854,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
                 `[InngestDurableAgent] Run ${state.runId} has no recorded stop cause; its span outcome is unknown`,
               );
           }
+          const runTripwire = tripwire ?? state.lastStepResult?.tripwire ?? initData.inputTripwire;
           const termination = deadlineTermination
             ? deadlineTermination
             : ['tripwire', 'error'].includes(finishReason ?? '') && recordedTermination
@@ -862,13 +863,15 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
                   stopCause,
                   delegationFailure: state.tracingDelegationFailure ?? registry?.tracingDelegationFailure,
                   finishReason,
-                  tripwire: tripwire ?? state.lastStepResult?.tripwire,
+                  tripwire: runTripwire,
                   maxSteps: state.options?.maxSteps ?? maxSteps,
                 });
           if (modelSpanData) {
             const modelSpan =
               liveSegmentSpan(modelSpanData, registry?.resumeModelSpan, registry?.modelSpan) ??
               (observability?.rebuildSpan(modelSpanData) as AIModelGenerationSpan | undefined);
+            // A hidden generation reports its usage on its parent; a rebuilt one has no live parent.
+            if (modelSpan?.isInternal) modelSpan.parent ??= agentSpan;
             const toolCalls = state.accumulatedSteps.flatMap(step =>
               ((step.toolCalls ?? []) as DurableToolCallInput[]).map(tc => ({
                 toolCallId: tc.toolCallId,
@@ -879,7 +882,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
             const { usageIncomplete, usage } = generationUsage(state.accumulatedUsage, state.accumulatedSteps);
             modelSpan?.createTracker()?.endGeneration({
               ...termination,
-              output: { text: finalText, ...(toolCalls.length ? { toolCalls } : {}) },
+              output: { text: finalText, object: finishResult.object, ...(toolCalls.length ? { toolCalls } : {}) },
               attributes: {
                 finishReason: state.lastStepResult?.reason || 'stop',
                 ...(usageIncomplete ? { usageIncomplete: true } : {}),
@@ -893,13 +896,26 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
 
           // End AGENT_RUN span with final output
           if (agentSpanData) {
-            const agentSpan =
-              liveSegmentSpan(agentSpanData, registry?.resumeAgentSpan, registry?.agentSpan) ??
-              observability?.rebuildSpan(agentSpanData);
             agentSpan?.end({
               ...termination,
-              output: { text: finalText },
-              ...(Object.keys(clocks).length ? { attributes: clocks } : {}),
+              output: {
+                text: finalText,
+                object: finishResult.object,
+                ...(runTripwire ? { tripwire: runTripwire } : {}),
+              },
+              attributes: {
+                ...clocks,
+                ...(runTripwire
+                  ? {
+                      tripwireAbort: {
+                        reason: runTripwire.reason,
+                        processorId: runTripwire.processorId,
+                        retry: runTripwire.retry,
+                        metadata: runTripwire.metadata,
+                      },
+                    }
+                  : {}),
+              },
             });
           }
 

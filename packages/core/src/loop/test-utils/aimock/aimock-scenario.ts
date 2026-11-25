@@ -174,6 +174,7 @@ async function buildScenarioAgent({
   maxRetries,
   inputProcessorsOnAgent,
   agentOutputProcessors,
+  tracingPolicy,
 }: { inputProcessorsOnAgent?: boolean } & Pick<
   RunLoopScenarioOptions,
   | 'llm'
@@ -201,6 +202,7 @@ async function buildScenarioAgent({
   | 'fsRouted'
   | 'maxRetries'
   | 'agentOutputProcessors'
+  | 'tracingPolicy'
 >): Promise<{ agent: any; mastra: any }> {
   const openai = createOpenAI({
     apiKey: 'aimock-test-key',
@@ -255,6 +257,7 @@ async function buildScenarioAgent({
         ...(inputProcessorsOnAgent && inputProcessors ? { inputProcessors } : {}),
         ...(agentOutputProcessors ? { outputProcessors: agentOutputProcessors } : {}),
         ...(durable ? { durable } : {}),
+        ...(tracingPolicy ? { options: { tracingPolicy } } : {}),
       },
       instructionsMd: (instructions as string | undefined) ?? defaultInstructions,
       ...(fsTools ? { tools: fsTools } : {}),
@@ -278,6 +281,7 @@ async function buildScenarioAgent({
       ...(maxRetries === undefined ? {} : { maxRetries }),
       ...(agentOutputProcessors ? { outputProcessors: agentOutputProcessors } : {}),
       ...(durable ? { durable } : {}),
+      ...(tracingPolicy ? { options: { tracingPolicy } } : {}),
       // For durable engines, inputProcessors must be on the agent constructor
       // (not yet supported as call-time options for durable); outputProcessors
       // are forwarded at call-time via preparation.ts.
@@ -423,6 +427,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     server,
     engine = 'normal',
     fsRouted,
+    tracingPolicy,
   } = opts;
 
   fixtures(llm);
@@ -485,6 +490,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
       fsRouted,
       maxRetries,
       agentOutputProcessors,
+      tracingPolicy,
     });
     agent = built.agent;
     mastra = built.mastra;
