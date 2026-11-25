@@ -328,8 +328,9 @@ async function flushMessagesBeforeSuspension({
 }
 
 /**
- * Context for output processors on a tool result: a context rebuilt for this run already carries the
- * current caller's user, while a live context is reused only for the execution that owns it.
+ * Context for output processors on a tool result. A live context is reused only for the execution that
+ * owns it. A context rebuilt from the run snapshot is returned as before; whether a rebuilt entry can
+ * outlive a resume by another caller is tracked in COR-1660.
  */
 function toolResultRequestContext(
   registryEntry: RunRegistryEntry | undefined,
