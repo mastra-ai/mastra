@@ -2675,6 +2675,53 @@ describe('Agent signals: pending cancellation', () => {
       }
     });
 
+    it("does not count a lease read that started before the returned probe's read saw the run regain as a miss", async () => {
+      const { pubsub, key, model, probes, tick, forwardOnRunEnd, published, dispose } =
+        await heldForwardFixture('stale-watcher-miss');
+      try {
+        await forwardOnRunEnd('first-ending-run', 'first message', 'run-r');
+        pubsub.owners.delete(key);
+        await tick();
+        // The second miss probes; the probe is held.
+        probes.hold = true;
+        await tick();
+        expect(probes.held.length).toBeGreaterThan(0);
+        // The next check samples the free lease and stalls.
+        let releaseRead!: () => void;
+        const readHeld = new Promise<void>(resolve => {
+          releaseRead = resolve;
+        });
+        let readStarted = false;
+        const readOwner = pubsub.getLeaseOwner.bind(pubsub);
+        pubsub.getLeaseOwner = async (leaseKey: string) => {
+          const owner = await readOwner(leaseKey);
+          if (readStarted) return owner;
+          readStarted = true;
+          await readHeld;
+          return owner;
+        };
+        await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS);
+        expect(readStarted).toBe(true);
+        // R takes the lease back and the returned probe's read sees it, which ends the loss. R lets go again.
+        pubsub.owners.set(key, 'run-r');
+        for (const deliver of probes.held.splice(0)) deliver();
+        await pubsub.flush();
+        await nextTick();
+        pubsub.owners.delete(key);
+        // The stalled read sampled the lease before that regain, so it is no miss of the loss that follows: the next
+        // check is the first, and one miss does not probe.
+        releaseRead();
+        await pubsub.flush();
+        await nextTick();
+        const before = published();
+        await tick();
+        expect(published()).toBe(before);
+        expect(model.doStreamCalls).toHaveLength(0);
+      } finally {
+        dispose();
+      }
+    });
+
     it("ends every lease loss of the run the returned probe's read sees holding the lease", async () => {
       const { pubsub, key, model, probes, tick, forwardOnRunEnd, published, dispose } =
         await heldForwardFixture('probe-regain-all');
