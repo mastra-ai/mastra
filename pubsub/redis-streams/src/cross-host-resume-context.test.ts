@@ -130,4 +130,96 @@ describe('evented resume claimed by another host', () => {
       rmSync(logFile, { force: true });
     }
   }, 120_000);
+
+  it('runs resumed tool-result processing as the resuming caller on a worker that rebuilt the run', async () => {
+    mock.on(
+      { endpoint: 'chat', hasToolResult: false },
+      { toolCalls: [{ id: 'approval-one', name: 'approve', arguments: {} }] },
+    );
+    mock.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Approved.' });
+
+    const schemaName = `xhostw_${randomUUID().slice(0, 8)}`;
+    const logFile = join(tmpdir(), `${schemaName}.jsonl`);
+    const runId = randomUUID();
+    const env = {
+      MASTRA_EVENTED_EXECUTION: 'true',
+      CROSS_HOST_SCHEMA: schemaName,
+      CROSS_HOST_MODEL_URL: mock.url,
+      CROSS_HOST_LOG: logFile,
+      CROSS_HOST_RUN_ID: runId,
+      POSTGRES_CONNECTION_STRING: POSTGRES,
+      REDIS_URL,
+    };
+    // Host A starts the run but runs no steps; worker W runs them all.
+    const { agent, mastra, storage } = createCrossHostRuntime({
+      host: 'A',
+      schemaName,
+      connectionString: POSTGRES,
+      redisUrl: REDIS_URL,
+      modelUrl: mock.url,
+      logFile,
+      worker: false,
+    });
+    const read = (): Observation[] =>
+      readFileSync(logFile, 'utf8')
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map(line => JSON.parse(line));
+    let worker: ReturnType<typeof spawnFixture> | undefined;
+    let hostB: ReturnType<typeof spawnFixture> | undefined;
+    try {
+      await storage.init();
+      worker = spawnFixture({ entry: 'test-fixtures/cross-host-worker.entry.ts', env });
+      await waitForLine(worker, /cross-host-worker-ready/, 60_000);
+
+      const requestContext = new RequestContext();
+      requestContext.set('resume-marker', 'A');
+      requestContext.set('mastra__user', { id: 'alice' });
+      const output = await agent.stream('Ask for approval.', {
+        runId,
+        memory: { thread: runId, resource: 'cross-host' },
+        requestContext,
+      });
+      void output.consumeStream().catch(() => {});
+      const workflows = (await storage.getStore('workflows'))!;
+      await waitFor(async () => {
+        const snapshot = await workflows.loadWorkflowSnapshot({ workflowName: 'durable-agentic-loop', runId });
+        return snapshot?.status === 'suspended';
+      }, 60_000);
+      const beforeResume = read().length;
+
+      hostB = spawnFixture({
+        entry: 'test-fixtures/cross-host-resume.entry.ts',
+        env: { ...env, MASTRA_WORKERS: 'false' },
+      });
+      await waitForLine(hostB, /host-b-text:/, 60_000);
+      await waitFor(async () =>
+        read()
+          .slice(beforeResume)
+          .some(entry => entry.event === 'tool-result'),
+      );
+
+      const initial = read().slice(0, beforeResume);
+      const resumed = read().slice(beforeResume);
+      console.log('INITIAL', JSON.stringify(initial));
+      console.log('RESUMED', JSON.stringify(resumed));
+
+      // Precondition: worker W ran the first segment as alice and also runs the resumed segment.
+      expect(initial.some(entry => entry.host === 'W' && entry.user === 'alice')).toBe(true);
+      const toolResults = resumed.filter(entry => entry.event === 'tool-result');
+      expect(toolResults.length).toBeGreaterThan(0);
+      expect(toolResults.every(entry => entry.host === 'W')).toBe(true);
+
+      for (const entry of toolResults) expect(entry.user).toBe('bob');
+    } finally {
+      if (hostB) await killProcess(hostB);
+      if (worker) await killProcess(worker);
+      await mastra.shutdown();
+      const cleanup = new PostgresStore({ id: `${schemaName}_cleanup`, schemaName, connectionString: POSTGRES });
+      await cleanup.db.none(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+      await cleanup.close();
+      rmSync(logFile, { force: true });
+    }
+  }, 180_000);
 });

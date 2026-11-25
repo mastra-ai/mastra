@@ -29,6 +29,8 @@ export function createCrossHostRuntime(config: {
   modelUrl: string;
   logFile: string;
   worker: boolean;
+  /** Also log the context tool-result output processing sees. */
+  observeToolResults?: boolean;
 }) {
   const log = (event: string, requestContext: RequestContext | undefined) =>
     appendFileSync(
@@ -75,6 +77,14 @@ export function createCrossHostRuntime(config: {
           log('output-result', requestContext);
           return messages;
         },
+        ...(config.observeToolResults
+          ? {
+              processOutputStream: async ({ part, requestContext }) => {
+                if (part.type === 'tool-result') log('tool-result', requestContext);
+                return part;
+              },
+            }
+          : {}),
       },
     ],
   });
