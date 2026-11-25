@@ -622,7 +622,9 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
             ...withCapabilities(withOwnerProfile(session, owners), {
               recreateSandbox,
               takeOwnership,
-              switchModel: canSwitchSessionModel(session, resolved.tenant),
+              switchModel: await canSwitchSessionModel(session, resolved.tenant, orgId =>
+                options.auth.isOrganizationAdmin(loose(c), orgId),
+              ),
             }),
             // The client opens the session by its id and creates it under this resource.
             resourceId,

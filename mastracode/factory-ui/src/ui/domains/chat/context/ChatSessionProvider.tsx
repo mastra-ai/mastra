@@ -31,7 +31,7 @@ import { TranscriptContinuationContext, useTranscriptKey } from './transcriptKey
 
 function modelLockedReason(session: FactoryUserSession | undefined): string | undefined {
   if (session?.capabilities?.switchModel !== false) return undefined;
-  return `Only ${session.owner?.name ?? 'the session owner'} can change this session’s model or thinking level.`;
+  return `Only ${session.owner?.name ?? 'the session owner'} or an organization admin can change this session’s model or thinking level.`;
 }
 
 /** Stable project/API configuration for chat shell consumers such as the sidebar. */

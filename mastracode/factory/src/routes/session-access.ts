@@ -29,12 +29,17 @@ export function canViewSourceControlSession(
   return session.visibility !== 'private' || session.userId === viewer.userId;
 }
 
-/** A teammate steers a shared session; only its owner changes the model and thinking level its turns run on. */
-export function canSwitchSessionModel(
-  session: Pick<SourceControlSession, 'userId'>,
+/**
+ * A teammate steers a shared session; only its owner or an organization admin changes the model and
+ * thinking level its turns run on.
+ */
+export async function canSwitchSessionModel(
+  session: Pick<SourceControlSession, 'orgId' | 'userId'>,
   viewer: { userId: string },
-): boolean {
-  return session.userId === viewer.userId;
+  isOrganizationAdmin: (orgId: string) => Promise<boolean>,
+): Promise<boolean> {
+  if (session.userId === viewer.userId) return true;
+  return isOrganizationAdmin(session.orgId);
 }
 
 /** The controller reads the guard needs to find which resource a session runs on. */
@@ -157,7 +162,8 @@ async function addressed(c: Context): Promise<{ sessionIds: string[]; resourceId
  * the authorized resource, or the caller's own user id when none is named. The
  * controller-wide active-runs list drops runs on unreachable resources.
  * Denials answer 404 so ids do not leak existence. A teammate who can see a
- * session but tries to change its model or thinking level gets 403. With auth
+ * session but is neither its owner nor an organization admin gets 403 when
+ * changing its model or thinking level. With auth
  * disabled there is no tenant to protect and everything passes through.
  */
 export function createSessionAccessGuard({
@@ -219,8 +225,8 @@ export function createSessionAccessGuard({
     if (await switchesModel(ctx)) {
       for (const sessionId of target.sessionIds) {
         const session = await sessions.getBySessionId(sessionId);
-        if (session && !canSwitchSessionModel(session, viewer)) {
-          return c.json({ error: 'Only the session’s owner can change its model' }, 403);
+        if (session && !(await canSwitchSessionModel(session, viewer, orgId => auth.isOrganizationAdmin(ctx, orgId)))) {
+          return c.json({ error: 'Only the session’s owner or an organization admin can change its model' }, 403);
         }
       }
     }

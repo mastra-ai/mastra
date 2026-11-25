@@ -54,7 +54,10 @@ const projects = new Map([
   [OTHER_FACTORY_ID, 'org-2'],
 ]);
 
-function buildApp(user?: { workosId: string; organizationId: string }, options: { authEnabled?: boolean } = {}) {
+function buildApp(
+  user?: { workosId: string; organizationId: string },
+  options: { authEnabled?: boolean; organizationAdmin?: boolean } = {},
+) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('factoryAuthUser' as never, user as never);
@@ -64,7 +67,11 @@ function buildApp(user?: { workosId: string; organizationId: string }, options: 
   app.use(
     '*',
     createSessionAccessGuard({
-      auth: fakeRouteAuth({ enabled: options.authEnabled }),
+      auth: fakeRouteAuth({
+        enabled: options.authEnabled,
+        isOrganizationAdmin: async organizationId =>
+          Boolean(options.organizationAdmin) && organizationId === user?.organizationId,
+      }),
       sessions: { getBySessionId: async id => rows.get(id) ?? null },
       projects: {
         get: async ({ orgId, id }) => {
@@ -121,6 +128,8 @@ function buildApp(user?: { workosId: string; organizationId: string }, options: 
 const owner = buildApp({ workosId: 'owner', organizationId: 'org-1' });
 const teammate = buildApp({ workosId: 'teammate', organizationId: 'org-1' });
 const outsider = buildApp({ workosId: 'outsider', organizationId: 'org-2' });
+const admin = buildApp({ workosId: 'admin', organizationId: 'org-1' }, { organizationAdmin: true });
+const outsideAdmin = buildApp({ workosId: 'outside-admin', organizationId: 'org-2' }, { organizationAdmin: true });
 
 const post = (app: Hono, path: string, body: unknown) =>
   app.request(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
@@ -187,7 +196,9 @@ describe('createSessionAccessGuard', () => {
     expect((await post(teammate, sessionPath(SHARED_ID, 'model'), switchModel)).status).toBe(403);
     const refused = await put(teammate, sessionPath(SHARED_ID, 'state'), { state: { thinkingLevel: 'high' } });
     expect(refused.status).toBe(403);
-    await expect(refused.json()).resolves.toEqual({ error: 'Only the session’s owner can change its model' });
+    await expect(refused.json()).resolves.toEqual({
+      error: 'Only the session’s owner or an organization admin can change its model',
+    });
     expect((await put(teammate, sessionPath(SHARED_ID, 'state'), { state: { thinkingLevel: null } })).status).toBe(403);
 
     expect(
@@ -197,6 +208,18 @@ describe('createSessionAccessGuard', () => {
     expect((await post(owner, sessionPath(SHARED_ID, 'model'), switchModel)).status).toBe(200);
     expect((await put(owner, sessionPath(SHARED_ID, 'state'), { state: { thinkingLevel: 'high' } })).status).toBe(200);
     expect((await post(teammate, sessionPath('teammate-scratch', 'model'), switchModel)).status).toBe(200);
+  });
+
+  it("lets an organization admin change a shared session's model and thinking level, but not reach private ones", async () => {
+    const switchModel = { modelId: 'openai/gpt-5-mini' };
+    expect((await post(admin, sessionPath(SHARED_ID, 'model'), switchModel)).status).toBe(200);
+    expect((await put(admin, sessionPath(SHARED_ID, 'state'), { state: { thinkingLevel: 'high' } })).status).toBe(200);
+    expect(
+      (await multipart(admin, 'PUT', sessionPath(SHARED_ID, 'state'), { state: { thinkingLevel: 'high' } })).status,
+    ).toBe(200);
+
+    expect((await post(admin, sessionPath(PRIVATE_ID, 'model'), switchModel)).status).toBe(404);
+    expect((await post(outsideAdmin, sessionPath(SHARED_ID, 'model'), switchModel)).status).toBe(404);
   });
 
   it('passes through a session on its own id that no Factory session row claims', async () => {
