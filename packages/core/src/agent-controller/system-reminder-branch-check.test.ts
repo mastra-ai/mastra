@@ -89,3 +89,42 @@ describe('AgentController system reminders on branch-tree threads', () => {
     ]);
   });
 });
+
+describe('AgentController raw storage thread reads', () => {
+  it('reads, lists messages for, and updates a thread without listing every thread', async () => {
+    const storage = new InMemoryStore();
+    const session = await createSession(storage);
+    const { id: threadId } = await session.thread.create({ title: 'Ordinary' });
+    const { calls } = await spyOnListThreads(storage);
+
+    await expect(session.thread.getById({ threadId })).resolves.toMatchObject({ id: threadId });
+    await expect(session.thread.listMessages({ threadId })).resolves.toEqual([]);
+    await session.thread.rename({ title: 'Renamed' });
+    await expect(session.thread.getById({ threadId })).resolves.toMatchObject({ title: 'Renamed' });
+
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.filter(call => call.perPage === false)).toEqual([]);
+  });
+
+  it('refuses to read a thread with a ready branch, found by its indexed parent key', async () => {
+    const storage = new InMemoryStore();
+    const session = await createSession(storage);
+    const { id: threadId } = await session.thread.create({ title: 'Parent' });
+    const { memoryStore } = await spyOnListThreads(storage);
+    await memoryStore.saveThread({
+      thread: {
+        id: 'child',
+        resourceId: 'resource',
+        createdAt,
+        updatedAt: createdAt,
+        metadata: {
+          [MASTRA_THREAD_BRANCH_METADATA_KEY]: { parentThreadId: threadId, state: 'ready' },
+          [MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY]: threadId,
+          [MASTRA_THREAD_BRANCH_STATE_METADATA_KEY]: 'ready',
+        },
+      },
+    });
+
+    await expect(session.thread.getById({ threadId })).rejects.toMatchObject({ id: 'BRANCHING_UNSUPPORTED' });
+  });
+});
