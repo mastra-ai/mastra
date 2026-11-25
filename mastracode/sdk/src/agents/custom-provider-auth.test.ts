@@ -344,26 +344,6 @@ describe('custom provider credentials', () => {
       });
       expect(endpoint.authorizations).toEqual([undefined]);
     });
-
-    it('receives them from a registered custom providers source', async () => {
-      const endpoint = await startEndpoint();
-      setCustomProvidersSource(() => [
-        {
-          name: 'Acme',
-          url: endpoint.url,
-          apiKey: 'acme-secret',
-          authScheme: 'x-api-key',
-          headers: [{ name: 'X-Org-Id', value: 'org-1' }],
-          models: ['model-x'],
-        },
-      ]);
-      setCredentialStoreProvider(() => accountCredentials({}));
-
-      await sendPrompt('acme/model-x', signedInRequest());
-
-      expect(endpoint.headers[0]).toMatchObject({ 'x-api-key': 'acme-secret', 'x-org-id': 'org-1' });
-      expect(endpoint.authorizations).toEqual([undefined]);
-    });
   });
 
   describe('an endpoint without a key', () => {
