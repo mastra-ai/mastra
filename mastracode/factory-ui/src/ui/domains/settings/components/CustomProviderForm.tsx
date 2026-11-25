@@ -110,6 +110,7 @@ export function CustomProviderForm({
   const offerUncheckedSave = connection?.result.ok === false && connection.result.refusedSave && !connectionOutdated;
   const target = { ...(provider ? { previousId: provider.id } : {}), ...(scope ? { scope } : {}) };
 
+  /** Applies an edit to the draft. */
   const update = (patch: Partial<CustomProviderDraft>) => setDraft(current => ({ ...current, ...patch }));
 
   /** Why the connection settings cannot be sent, or undefined when they can. */
@@ -118,6 +119,7 @@ export function CustomProviderForm({
     return headerDraftProblem(draft.headers);
   };
 
+  /** Lists the endpoint's models with the draft settings. The result keeps the settings it was produced with. */
   const test = async () => {
     const problem = connectionProblem();
     setError(problem);
@@ -136,6 +138,7 @@ export function CustomProviderForm({
     }
   };
 
+  /** Sends the test message to the chosen model with the draft settings. */
   const sendTestMessage = async () => {
     const problem = connectionProblem();
     setError(problem);
@@ -148,6 +151,7 @@ export function CustomProviderForm({
     }
   };
 
+  /** Saves the draft. With `check` the server tests the connection first and saves nothing if the test fails. */
   const save = async (check: boolean) => {
     const name = draft.name.trim();
     if (!name || !draft.url.trim()) {

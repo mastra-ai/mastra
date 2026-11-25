@@ -95,6 +95,7 @@ export function CustomProviderRow({
     );
   };
 
+  /** Tests the saved endpoint as stored. The server records the result, and a toast reports it. */
   const test = () => {
     checkMutation.mutate(
       { previousId: provider.id, scope: provider.scope },
