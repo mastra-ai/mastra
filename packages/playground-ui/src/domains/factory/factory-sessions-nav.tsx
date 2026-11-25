@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
 
+import { sessionBeltLabel } from './session-belt-label';
+import { SidebarEmptyNote, SidebarLoadError, SidebarNavigationSkeleton } from './sidebar-list-states';
 import { ActivityBelt } from '@/ds/components/Activity';
 import type { ActivityStatus } from '@/ds/components/Activity';
 import { Sidebar, useMaybeSidebarState } from '@/ds/components/Sidebar';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { Txt } from '@/ds/components/Txt';
 import type { LinkComponent } from '@/ds/types/link-component';
 
 export type FactorySessionsNavSession = {
@@ -21,19 +21,15 @@ export type FactorySessionsNavProps = {
   /** Undefined while loading. */
   sessions: FactorySessionsNavSession[] | undefined;
   error?: boolean;
+  onRetry?: () => void;
+  retrying?: boolean;
   isActive?: (href: string) => boolean;
   /** Beside the Sessions header. */
   headerAction?: ReactNode;
-  /** Called after any link is followed, e.g. to close a mobile sidebar. */
+  /** Called when a session link is followed, e.g. to close a mobile sidebar. */
   onNavigate?: () => void;
   /** Router link; defaults to the Sidebar's. */
   LinkComponent?: LinkComponent;
-};
-
-const BELT_LABEL: Record<ActivityStatus, string> = {
-  initializing: 'Initializing',
-  working: 'Agent working in',
-  ready: 'Waiting on you in',
 };
 
 /**
@@ -43,6 +39,8 @@ const BELT_LABEL: Record<ActivityStatus, string> = {
 export function FactorySessionsNav({
   sessions,
   error,
+  onRetry,
+  retrying,
   isActive,
   headerAction,
   onNavigate,
@@ -57,21 +55,18 @@ export function FactorySessionsNav({
       </Sidebar.NavHeader>
       <Sidebar.NavList>
         {error ? (
-          <li role="alert" className="py-0.5 pl-3">
-            <Txt as="p" variant="label" className="m-0 truncate text-destructive-foreground">
+          <li>
+            <SidebarLoadError onRetry={onRetry} retrying={retrying}>
               Couldn’t load sessions
-            </Txt>
+            </SidebarLoadError>
           </li>
         ) : !sessions ? (
-          <li aria-label="Loading sessions" aria-busy className="flex flex-col gap-1 px-3 py-1">
-            <Skeleton className="h-3 w-3/4" />
-            <Skeleton className="h-3 w-1/2" />
+          <li>
+            <SidebarNavigationSkeleton label="Loading sessions" />
           </li>
         ) : sessions.length === 0 ? (
-          <li className="py-0.5 pl-3">
-            <Txt as="p" variant="label" tone="muted" className="m-0">
-              No sessions yet
-            </Txt>
+          <li>
+            <SidebarEmptyNote>No sessions yet</SidebarEmptyNote>
           </li>
         ) : (
           sessions.map(session => (
@@ -85,7 +80,7 @@ export function FactorySessionsNav({
               }
               action={
                 session.status ? (
-                  <ActivityBelt status={session.status} label={`${BELT_LABEL[session.status]} ${session.name}`} />
+                  <ActivityBelt status={session.status} label={sessionBeltLabel(session.status, session.name)} />
                 ) : undefined
               }
             />
