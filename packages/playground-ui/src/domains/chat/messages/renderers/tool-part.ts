@@ -9,6 +9,10 @@ export interface ToolPartFields {
   input: unknown;
   output: unknown;
   modelOutput?: unknown;
+  /** The Mastra background task running the call, when it was deferred. */
+  backgroundTaskId?: string;
+  /** `running` while a deferred call's part holds a placeholder; `completed`/`failed` once it holds the result. */
+  backgroundTaskStatus?: string;
   state?: string;
   errorText?: string;
 }
@@ -20,6 +24,18 @@ const readField = (value: unknown, key: string): unknown => (isRecord(value) ? v
 const readModelOutput = (part: ToolPart): unknown => {
   const providerMetadata = readField(part, 'resultProviderMetadata') ?? readField(part, 'providerMetadata');
   return readField(readField(providerMetadata, 'mastra'), 'modelOutput');
+};
+
+const readBackgroundTask = (part: ToolPart): Pick<ToolPartFields, 'backgroundTaskId' | 'backgroundTaskStatus'> => {
+  for (const key of ['resultProviderMetadata', 'callProviderMetadata', 'providerMetadata']) {
+    const backgroundTask = readField(readField(readField(part, key), 'mastra'), 'backgroundTask');
+    const taskId = readField(backgroundTask, 'taskId');
+    const status = readField(backgroundTask, 'status');
+    if (typeof taskId === 'string') {
+      return { backgroundTaskId: taskId, backgroundTaskStatus: typeof status === 'string' ? status : undefined };
+    }
+  }
+  return {};
 };
 
 export function isToolPart(part: MessageFactoryPart): part is ToolPart {
@@ -35,6 +51,7 @@ export function readToolPart(part: ToolPart): ToolPartFields {
       input: 'args' in invocation ? invocation.args : undefined,
       output: 'result' in invocation ? invocation.result : undefined,
       modelOutput: readModelOutput(part),
+      ...readBackgroundTask(part),
       state:
         invocation.state === 'result' && 'isError' in invocation && invocation.isError === true
           ? 'output-error'
@@ -48,6 +65,7 @@ export function readToolPart(part: ToolPart): ToolPartFields {
     input: part.input,
     output: part.output,
     modelOutput: readModelOutput(part),
+    ...readBackgroundTask(part),
     state: part.state,
     errorText: part.errorText,
   };

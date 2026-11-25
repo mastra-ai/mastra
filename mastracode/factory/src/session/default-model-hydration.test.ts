@@ -49,9 +49,9 @@ function sourceControlRow(): SourceControlSession {
   };
 }
 
-function createSession(state: Record<string, unknown> = {}): DefaultModelHydrationSession {
+function createSession(state: Record<string, unknown> = {}, resourceId = 'session-1'): DefaultModelHydrationSession {
   return {
-    identity: { getResourceId: () => 'session-1' },
+    identity: { getId: () => 'session-1', getResourceId: () => resourceId },
     model: { get: () => 'openai/mode-default', switch: vi.fn().mockResolvedValue(undefined), setDefault: vi.fn() },
     state: {
       get: () => state,
@@ -305,16 +305,18 @@ describe('hydrateSessionDefaultModel', () => {
   });
 
   it('does not apply a user default to active Factory run bindings before state is seeded', async () => {
-    const session = createSession();
+    const session = createSession({}, 'factory-1');
     const dependencies = createDependencies();
     vi.mocked(dependencies.workItems.findRunBindingByThread).mockResolvedValue({} as never);
 
     await hydrateSessionDefaultModel(session, dependencies);
 
+    // The run session sits on its Factory's resource; the binding is found by its session id.
+    expect(dependencies.sourceControl.getBySessionId).toHaveBeenCalledWith('session-1');
     expect(dependencies.workItems.findRunBindingByThread).toHaveBeenCalledExactlyOnceWith({
       orgId: 'org-1',
       threadId: 'session-1',
-      resourceId: 'session-1',
+      resourceId: 'factory-1',
       sessionId: 'session-1',
       rejectAmbiguous: true,
     });

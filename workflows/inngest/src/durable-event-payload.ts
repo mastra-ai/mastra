@@ -1,7 +1,21 @@
 import type { ActorSignal } from '@mastra/core/auth/ee';
 import type { TracingOptions } from '@mastra/core/observability';
-import { MASTRA_AUTH_TOKEN_KEY } from '@mastra/core/request-context';
+import { MASTRA_AUTH_TOKEN_KEY, withoutLiveRequestKeys } from '@mastra/core/request-context';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { RunFence } from '@mastra/core/storage';
+
+/**
+ * Lease on an InngestAgent resume claim until its event starts. A claim whose event never started
+ * (its resume died before sending, or the send failed) lapses, and a later resume takes it over.
+ */
+export const RESUME_CLAIM_DISPATCH_LEASE_MS = 60_000;
+
+/**
+ * Lease on an InngestAgent resume claim once its event runs. The segment releases the claim when it
+ * ends, and the `resume-claim-release` function when Inngest fails or cancels the run, so this only
+ * bounds a release that never arrives.
+ */
+export const RESUME_CLAIM_RUN_LEASE_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Single source of truth for the `data` payload of the `workflow.<id>` events
@@ -59,13 +73,15 @@ export function serializeRequestContext(requestContext?: RequestContext<any>): R
 
 /**
  * Resume request-context rule: values persisted in the snapshot are the base,
- * and anything the caller supplies on this resume call overrides them.
+ * and anything the caller supplies on this resume call overrides them. The
+ * snapshot's bearer token and authenticated user, roles and permissions are
+ * dropped first, so they only ever come from the request doing the resuming.
  */
 export function mergeResumeRequestContext(
   snapshotRequestContext: Record<string, any> | undefined,
   requestContext?: RequestContext<any>,
 ): Record<string, any> {
-  return { ...(snapshotRequestContext ?? {}), ...serializeRequestContext(requestContext) };
+  return { ...withoutLiveRequestKeys(snapshotRequestContext), ...serializeRequestContext(requestContext) };
 }
 
 export function buildDurableTriggerEventData(
@@ -103,6 +119,10 @@ export function buildDurableResumeEventData(
       steps: string[];
       resumePayload: any;
       resumePath?: any;
+      /** Resume label (the tool call id for agent runs) that picks one parked step. */
+      label?: string;
+      /** The InngestAgent resume claim the resumed segment holds until it ends. */
+      claim?: RunFence;
     };
     tracingOptions?: TracingOptions;
     workflowId?: string;

@@ -1,0 +1,107 @@
+---
+title: "Mastra Agent Builder"
+description: Build, test, observe, and improve internal AI agents on a TypeScript platform your whole team can use.
+---
+
+# Agent Builder
+
+The Agent Builder provides a UI for creating and operating Mastra agents. It runs inside your Mastra server. Everything persists to Mastra's storage layer, with support for multi-tenant agent workflows, RBAC, and channel integrations.
+
+- [**Configuration**](/configuration): Toggle UI sections and pin admin-controlled defaults for every new agent.
+- [**Model policy**](/model-policy): Restrict which providers and models the Builder exposes, and pin a default.
+- [**Memory**](/memory): Configure the default memory shape for every Builder-created agent.
+- [**Workspace**](/workspace): Configure the default filesystem, sandbox, and skills workspace for Builder-created agents.
+- [**Browser**](/browser): Register browser providers and pin a default browser configuration.
+- [**Access control**](/access-control): Gate the Builder behind Mastra RBAC roles and permissions.
+- [**Channels**](/channels): Connect Builder-created agents to Slack and other channels.
+- [**Tool providers**](/tool-providers): Connect Builder-created agents to third-party apps through OAuth-backed tool providers.
+- [**Skill registries**](/skill-registries): Browse and install community skills from opt-in registries.
+- [**Deployment**](/deployment): Swap local primitives for cloud-backed storage, filesystems, and sandboxes.
+
+For building agents entirely in code, see the [Agents overview](https://mastra.ai/docs/agents/overview). For editing code-defined agents through Studio, see the [Editor overview](https://mastra.ai/docs/editor/overview).
+
+:::tip[📹 Watch]
+
+Watch [Mastra Agent Builder overview](https://www.youtube.com/watch?v=AbdgIu4Z07I) to see how teams create and configure agents from the UI.
+
+:::
+
+## Prerequisites
+
+The Agent Builder requires:
+
+- **Mastra Enterprise Edition**: Production deployments require a valid EE license. [Contact sales](https://mastra.ai/contact) for more information.
+
+## Quickstart
+
+Run this command to create a new Mastra project with the Agent Builder enabled:
+
+```bash npm2yarn
+npm create mastra@latest -- --template agent-builder
+```
+
+Afterwards, start Mastra's development server:
+
+```bash npm2yarn
+npx mastra dev
+```
+
+The Agent Builder is mounted at `http://localhost:4111/agent-builder`.
+
+## Manual install
+
+<Accordion>
+  <AccordionItem title="Instructions">
+    The Agent Builder requires:
+
+    - An existing Mastra project (Follow the [installation guide](https://mastra.ai/guides/getting-started/quickstart) to set up a new project)
+    - **Storage**: A `@mastra/core` storage adapter on the `Mastra` instance. Agents, memory, and workspace state all persist through `Mastra.storage`.
+    - **A builder agent**: Register a `builderAgent` created with the `createBuilderAgent()` factory from `@mastra/editor/ee` on `Mastra.agents`. The chat-based editor invokes it through the same `Mastra.getAgent(id)` lookup as any other agent. Without this registration, the chat-based editor returns 404.
+    - **Model credentials**: `createBuilderAgent()` uses an OpenAI model by default, which requires `OPENAI_API_KEY`. To use a different provider, pass a `model` override to `createBuilderAgent({ model })` and set that provider's credentials instead.
+
+    Install `@mastra/editor` alongside a storage adapter. This example uses `@mastra/libsql`:
+
+    ```bash npm2yarn
+    npm install @mastra/editor @mastra/libsql
+    ```
+
+    The example below defines a storage adapter and registers a builder agent, plus enables the editor as explained in the prerequisites:
+
+    ```typescript title="src/mastra/index.ts"
+    import { Mastra } from '@mastra/core/mastra'
+    import { MastraEditor } from '@mastra/editor'
+    import { createBuilderAgent } from '@mastra/editor/ee'
+    import { LibSQLStore } from '@mastra/libsql'
+
+    export const mastra = new Mastra({
+      storage: new LibSQLStore({ id: 'mastra-storage', url: 'file:./mastra.db' }),
+      agents: { builderAgent: createBuilderAgent() },
+      editor: new MastraEditor({
+        builder: {
+          enabled: true,
+          configuration: {
+            agent: {
+              memory: { observationalMemory: true },
+            },
+          },
+        },
+      }),
+    })
+    ```
+
+    Start Mastra's development server:
+
+    ```bash npm2yarn
+    npx mastra dev
+    ```
+
+    The Agent Builder is mounted at `http://localhost:4111/agent-builder`.
+  </AccordionItem>
+</Accordion>
+
+## Next steps
+
+- [Configuration](/configuration): Toggle Builder surfaces and pin defaults for new agents.
+- [Access control](/access-control): Gate the Builder with authentication and role-based access control.
+- [Deployment](/deployment): Replace local development primitives with production-ready storage, filesystems, and sandboxes.
+- 📹 [Mastra Agent Builder workshop](https://www.youtube.com/live/p2p_wb-rUPg?si=8ChwvAHb5qO7Hjad)

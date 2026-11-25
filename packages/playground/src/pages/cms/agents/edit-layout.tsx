@@ -3,11 +3,15 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconEyeOpen } from '@mastra/playground-ui/icons/central/IconEyeOpen';
+import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
+import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
+import { IconRocket } from '@mastra/playground-ui/icons/central/IconRocket';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useAgent, useAgentVersion, useAgentVersions, useStoredAgent } from '@mastra/react/hooks/agents';
-import { Check, Download, GitPullRequest, Save, Rocket, Eye } from 'lucide-react';
 import { useCallback, useEffect, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -15,6 +19,7 @@ import { AgentCmsFormShell } from '@/domains/agents/components/agent-cms-form-sh
 import { getCodeAgentOverrideSections } from '@/domains/agents/components/agent-cms-sidebar/agent-cms-sections';
 import { AgentVersionPanel } from '@/domains/agents/components/agent-version-panel';
 import { useAgentCmsForm } from '@/domains/agents/hooks/use-agent-cms-form';
+import { isCodeBackedAgent } from '@/domains/agents/utils/agent-source';
 import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import { getEditorOwnership } from '@/domains/agents/utils/editor-ownership';
@@ -70,18 +75,18 @@ function EditFormContent({
     <Notice variant="info" title="This is a previous version" className="mb-4">
       <Notice.Message>You are seeing a specific version of the agent.</Notice.Message>
       <div className="flex items-center gap-2">
-        <Button icon={<Eye />} type="button" variant="default" size="sm" onClick={() => setSearchParams({})}>
+        <Button icon={<IconEyeOpen />} type="button" variant="default" size="sm" onClick={() => setSearchParams({})}>
           View latest version
         </Button>
         <Button
-          icon={<Rocket />}
+          icon={<IconRocket />}
           type="button"
           variant="default"
           size="sm"
           onClick={() => void handlePublish(selectedVersionId ?? undefined)}
           disabled={selectedVersionId === activeVersionId}
         >
-          Publish This Version
+          Publish this version
         </Button>
       </div>
     </Notice>
@@ -160,9 +165,9 @@ function EditLayoutWrapper() {
     queryOptions: { enabled: Boolean(agentId) && hasVersions },
   });
 
-  // A code agent override is when the underlying agent is code-defined,
+  // A code agent override is when the underlying agent is defined in code or in an agent folder,
   // regardless of whether a stored override record already exists
-  const isCodeAgentOverride = codeAgent?.source === 'code';
+  const isCodeAgentOverride = isCodeBackedAgent(codeAgent);
   const codeAgentOverrideSections = useMemo(
     () => (isCodeAgentOverride ? getCodeAgentOverrideSections(codeAgent?.editor) : []),
     [codeAgent?.editor, isCodeAgentOverride],
@@ -269,11 +274,12 @@ function EditLayoutWrapper() {
               size="sm"
               onClick={() => void handleDownloadJson()}
               disabled={isSavingDraft || isSubmitting}
-              icon={<Download />}
+              icon={<IconArrowInbox />}
             >
               Download JSON
             </Button>
             <Button
+              icon={<IconPullRequest />}
               variant="primary"
               size="sm"
               disabled={!canOpenPr || isSavingDraft || isSubmitting}
@@ -286,7 +292,6 @@ function EditLayoutWrapper() {
                 });
               }}
             >
-              <GitPullRequest />
               Open PR
             </Button>
           </>
@@ -297,19 +302,11 @@ function EditLayoutWrapper() {
             variant="ghost"
             size="sm"
             onClick={() => void handleSaveDraft()}
-            disabled={!isDirty || isSavingDraft || isSubmitting}
+            disabled={!isDirty || isSubmitting}
+            icon={<IconFloppyDisk1 />}
+            loading={isSavingDraft}
           >
-            {isSavingDraft ? (
-              <>
-                <Spinner className="h-4 w-4" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save />
-                Save
-              </>
-            )}
+            Save
           </Button>
           <Button
             variant="primary"
@@ -320,18 +317,10 @@ function EditLayoutWrapper() {
                 ? selectedVersionId === activeVersionId || isSubmitting || isSavingDraft
                 : !hasDraft || isSubmitting || isSavingDraft
             }
+            icon={<IconCheckmark2Medium />}
+            loading={isSubmitting}
           >
-            {isSubmitting ? (
-              <>
-                <Spinner className="h-4 w-4" />
-                Publishing...
-              </>
-            ) : (
-              <>
-                <Check />
-                {isViewingPreviousVersion ? 'Publish This Version' : 'Publish'}
-              </>
-            )}
+            {isViewingPreviousVersion ? 'Publish this version' : 'Publish'}
           </Button>
         </>
       )}
@@ -339,7 +328,7 @@ function EditLayoutWrapper() {
   );
 
   return (
-    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
+    <PageLayout variant="page" body="fixed" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
       <h1 className="sr-only">{agentId}</h1>
       {isNotFound ? (
         <>

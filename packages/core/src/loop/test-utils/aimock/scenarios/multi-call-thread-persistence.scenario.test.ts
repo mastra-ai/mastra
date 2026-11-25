@@ -37,6 +37,7 @@ describeForAllEngines(
     it('accumulates messages across multiple calls in same thread', async () => {
       const sharedMemory = new MockMemory();
       const shared = await createSharedAgent(getMock(), {
+        engine,
         memory: sharedMemory,
       });
 
@@ -109,6 +110,7 @@ describeForAllEngines(
     it('maintains thread isolation across different thread IDs', async () => {
       const sharedMemory = new MockMemory();
       const shared = await createSharedAgent(getMock(), {
+        engine,
         memory: sharedMemory,
       });
 
@@ -176,6 +178,7 @@ describeForAllEngines(
     it('rejects a thread owned by a different resource before calling the model', async () => {
       const sharedMemory = new MockMemory();
       const shared = await createSharedAgent(getMock(), {
+        engine,
         memory: sharedMemory,
       });
 

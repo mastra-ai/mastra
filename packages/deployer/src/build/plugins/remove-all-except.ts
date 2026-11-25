@@ -1,5 +1,5 @@
 import { transformAsync } from '@babel/core';
-import type { IMastraLogger } from '@mastra/core/logger';
+import type { IMastraLogger } from '@internal/core/logger';
 import type { Config as MastraConfig } from '@mastra/core/mastra';
 import type { Plugin, SourceMapInput } from 'rollup';
 import { removeAllOptionsFromMastraExcept } from '../babel/remove-all-options-except';

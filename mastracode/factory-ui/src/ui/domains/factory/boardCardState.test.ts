@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { InstalledPhaseInfo } from '../../../api/types';
-import { boardCardState, canMoveTo, itemAwaitsPerson } from './boardCardState';
+import { boardCardState, canMoveTo } from './boardCardState';
 import type { BoardCardOwner, BoardCardStateInput } from './boardCardState';
 import { cardActions } from './cardPrimaryAction';
 import type { FactoryDecisionSummary } from './services/decisions';
@@ -75,7 +75,7 @@ describe('status row', () => {
   it('separates an effect the server is retrying from one it has not tried yet', () => {
     expect(boardCardState({ decision: decision({ status: 'retry', lastError: 'ECONNRESET' }) }).status).toEqual({
       kind: 'error',
-      label: 'Automated run could not start — retrying…',
+      label: 'Automated run could not start. Retrying…',
       detail: 'ECONNRESET',
     });
   });
@@ -119,7 +119,7 @@ describe('status row', () => {
           lastError: null,
         }),
       }).status,
-    ).toEqual({ kind: 'error', label: "Couldn't sync GitHub issue — retrying…", detail: undefined });
+    ).toEqual({ kind: 'error', label: "Couldn't sync GitHub issue. Retrying…", detail: undefined });
   });
 
   it('says a run is starting until the registry or the workspace record shows its session', () => {
@@ -181,17 +181,18 @@ describe('status row', () => {
     ).toEqual({ kind: 'idle' });
   });
 
-  it('names the held classification so the card says why it waits on a person', () => {
-    expect(boardCardState({ heldAs: 'feature request' }).status).toEqual({
+  it('says a card triage left in Intake waits on a person', () => {
+    expect(boardCardState({ held: true }).status).toEqual({
       kind: 'held',
-      label: 'Feature request · needs your approval',
+      label: 'Held for your go-ahead',
     });
     // A suggested run cannot start until the card is accepted, so the hold is the live question.
-    expect(
-      boardCardState({ heldAs: 'feature request', proposal: { label: 'Build', decisionId: 'decision-9' } }).status,
-    ).toEqual({ kind: 'held', label: 'Feature request · needs your approval' });
+    expect(boardCardState({ held: true, proposal: { label: 'Build', decisionId: 'decision-9' } }).status).toEqual({
+      kind: 'held',
+      label: 'Held for your go-ahead',
+    });
     // Anything the server is doing outranks the standing hold.
-    expect(boardCardState({ heldAs: 'feature request', preparing: 'Starting…' }).status).toEqual({
+    expect(boardCardState({ held: true, preparing: 'Starting…' }).status).toEqual({
       kind: 'busy',
       label: 'Starting…',
     });
@@ -204,7 +205,6 @@ describe('status row', () => {
 
 describe('what a card shows', () => {
   const run = { label: 'Review', start: () => {} };
-  const session = { label: 'Open session', href: '/session' };
   const retry = { label: 'Retry', start: () => {} };
 
   interface ShownCard {
@@ -216,12 +216,7 @@ describe('what a card shows', () => {
   function shown(input: BoardCardStateInput): ShownCard {
     const state = boardCardState(input);
     const retryOffered = state.status.kind === 'error' && state.status.retryDecisionId !== undefined;
-    const actions = cardActions({
-      state,
-      session: input.sessionStatus === undefined ? undefined : session,
-      retry: retryOffered ? retry : undefined,
-      run,
-    });
+    const actions = cardActions({ state, retry: retryOffered ? retry : undefined, run });
     return {
       row: state.status.kind === 'idle' ? undefined : state.status.label,
       wick: state.wick,
@@ -239,7 +234,7 @@ describe('what a card shows', () => {
     [
       'your move on a card with a live session',
       { moving: { stage: 'review', label: 'Reviewing' }, sessionStatus: 'working' },
-      { row: 'Moving to Reviewing…', wick: 'working', buttons: ['Open session'] },
+      { row: 'Moving to Reviewing…', wick: 'working', buttons: ['Moving… (disabled)'] },
     ],
     [
       'your retry before the failure refreshes',
@@ -264,7 +259,7 @@ describe('what a card shows', () => {
     [
       'an automatic retry',
       { decision: decision({ status: 'retry', lastError: 'Timeout' }) },
-      { row: 'Automated run could not start — retrying…', wick: undefined, buttons: ['Retrying… (disabled)'] },
+      { row: 'Automated run could not start. Retrying…', wick: undefined, buttons: ['Retrying… (disabled)'] },
     ],
     [
       'a refused move while a run is queued',
@@ -277,14 +272,29 @@ describe('what a card shows', () => {
       { row: 'Automated run could not start', wick: undefined, buttons: ['Retry', 'Review'] },
     ],
     [
+      'a final failure on a card whose session is idle',
+      { decision: decision({ status: 'failed' }), sessionStatus: 'ready' },
+      { row: 'Automated run could not start', wick: 'ready', buttons: ['Retry', 'Review'] },
+    ],
+    [
+      'a suggested run on a card whose session is idle',
+      { proposal: { label: 'Re-review', decisionId: 'decision-9' }, sessionStatus: 'ready' },
+      { row: 'Re-review', wick: 'ready', buttons: ['Review'] },
+    ],
+    [
+      'a suggested run on a card whose session runs',
+      { proposal: { label: 'Re-review', decisionId: 'decision-9' }, sessionStatus: 'ready', sessionHolds: true },
+      { row: 'Re-review', wick: 'ready', buttons: ['Review (disabled)'] },
+    ],
+    [
       'a live run',
-      { decision: decision({ status: 'leased' }), sessionStatus: 'working' },
-      { row: undefined, wick: 'working', buttons: ['Open session'] },
+      { decision: decision({ status: 'leased' }), sessionStatus: 'working', sessionHolds: true },
+      { row: undefined, wick: 'working', buttons: [] },
     ],
     [
       'a parked session with a run queued behind it',
-      { decision: decision({ status: 'pending' }), sessionStatus: 'ready' },
-      { row: 'Starting an automated run…', wick: 'ready', buttons: ['Open session'] },
+      { decision: decision({ status: 'pending' }), sessionStatus: 'ready', sessionHolds: true },
+      { row: 'Starting an automated run…', wick: 'ready', buttons: [] },
     ],
   ])('%s', (_, input, expected) => {
     expect(shown(input)).toEqual(expected);
@@ -303,17 +313,5 @@ describe('canMoveTo', () => {
     ['you', 'terminal', false],
   ])('a card held by %s into a %s phase: %s', (ownerKind, phaseKind, allowed) => {
     expect(canMoveTo(ownerKind, phaseKind)).toBe(allowed);
-  });
-});
-
-describe('itemAwaitsPerson', () => {
-  it('marks a parked run and an effect that failed for good, never a retry the server still owns', () => {
-    expect(itemAwaitsPerson(decision({ status: 'proposed' }), undefined)).toBe(true);
-    expect(itemAwaitsPerson(undefined, decision({ status: 'failed' }))).toBe(true);
-    expect(itemAwaitsPerson(undefined, decision({ status: 'retry' }))).toBe(false);
-  });
-
-  it('stays quiet while an effect the card calls busy runs over the parked run', () => {
-    expect(itemAwaitsPerson(decision({ status: 'proposed' }), decision({ status: 'leased' }))).toBe(false);
   });
 });

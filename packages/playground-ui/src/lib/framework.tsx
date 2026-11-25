@@ -62,8 +62,10 @@ const LinkComponentContext = createContext<{
   navigate: (path: string) => void;
   paths: LinkComponentPaths;
 }>({
-  Link: forwardRef<HTMLAnchorElement, LinkComponentProps>(function DefaultLink(_props, _ref) {
-    return null;
+  // Without a provider, a link is a plain anchor: a host outside Studio still shows the links its parts were
+  // given an href for, while the Studio routes (`paths`) stay empty, so the parts that build them show text.
+  Link: forwardRef<HTMLAnchorElement, LinkComponentProps>(function DefaultLink(props, ref) {
+    return <a ref={ref} {...props} />;
   }),
   navigate: () => {},
   paths: {

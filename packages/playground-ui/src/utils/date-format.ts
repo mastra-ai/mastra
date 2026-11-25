@@ -43,17 +43,30 @@ const PRESET_OPTIONS = {
     fractionalSecondDigits: 3,
   },
   timePrecise: { hour: 'numeric', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 },
+  logLine: {
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    fractionalSecondDigits: 3,
+    hourCycle: 'h23',
+  },
 } satisfies Record<string, Intl.DateTimeFormatOptions>;
 
 type FormatterKey = keyof typeof PRESET_OPTIONS;
 
+export type FractionDigits = 1 | 2 | 3;
+
 const formatters = new Map<string, Intl.DateTimeFormat>();
 
-function getFormatter(key: FormatterKey, locale?: string, timeZone?: string) {
-  const cacheKey = `${locale ?? ''}|${timeZone ?? ''}|${key}`;
+function getFormatter(key: FormatterKey, locale?: string, timeZone?: string, fractionDigits?: FractionDigits) {
+  const cacheKey = `${locale ?? ''}|${timeZone ?? ''}|${key}|${fractionDigits ?? ''}`;
   let formatter = formatters.get(cacheKey);
   if (!formatter) {
-    formatter = new Intl.DateTimeFormat(locale, { ...PRESET_OPTIONS[key], timeZone });
+    const options: Intl.DateTimeFormatOptions = { ...PRESET_OPTIONS[key], timeZone };
+    if (fractionDigits) options.fractionalSecondDigits = fractionDigits;
+    formatter = new Intl.DateTimeFormat(locale, options);
     formatters.set(cacheKey, formatter);
   }
   return formatter;
@@ -139,6 +152,23 @@ export function formatDate(value: DateInput, preset: DatePreset, options: Format
   return getFormatter(preset, locale, timeZone).format(date);
 }
 
+function calendarDay(date: Date, timeZone?: string) {
+  const { year, month, day } = calendarDate(date, timeZone);
+  return Date.UTC(Number(year), Number(month) - 1, Number(day)) / 86_400_000;
+}
+
+/** When something happened, by its day and clock: `Today at 10:44:44 AM`, `Yesterday at …`, `Oct 21 at …`. */
+export function formatMoment(value: DateInput, options: FormatOptions = {}) {
+  const date = toDate(value);
+  if (!date) return undefined;
+  const clock = formatDate(date, 'time-seconds', options);
+  const daysAgo =
+    calendarDay(new Date(options.now ?? Date.now()), options.timeZone) - calendarDay(date, options.timeZone);
+  if (daysAgo === 0) return `Today at ${clock}`;
+  if (daysAgo === 1) return `Yesterday at ${clock}`;
+  return `${formatShortDate(date, options)} at ${clock}`;
+}
+
 /** Locale-aware compact date range, e.g. `Sep 2 – 5, 2026`. */
 export function formatDateRange(start: DateInput, end: DateInput, options: Omit<FormatOptions, 'now'> = {}) {
   const from = toDate(start);
@@ -149,11 +179,49 @@ export function formatDateRange(start: DateInput, end: DateInput, options: Omit<
     .replace(/\u2009/g, ' ');
 }
 
+export interface LogLineTimestampParts {
+  day: string;
+  time: string;
+  fraction: string;
+}
+
+export function formatLogLineTimestamp(
+  value: DateInput,
+  {
+    locale,
+    timeZone,
+    fractionDigits = 2,
+  }: { locale?: string; timeZone?: string; fractionDigits?: FractionDigits } = {},
+): LogLineTimestampParts | undefined {
+  const date = toDate(value);
+  if (!date) return undefined;
+  const parts = getFormatter('logLine', locale, timeZone, fractionDigits).formatToParts(date);
+  const timeStart = parts.findIndex(part => part.type === 'hour');
+  const fractionStart = parts.findIndex(part => part.type === 'fractionalSecond');
+  const join = (from: number, to: number) =>
+    parts
+      .slice(from, to)
+      .map(part => part.value)
+      .join('');
+  return {
+    day: join(0, timeStart).trim().replace(/,$/, ''),
+    time: join(timeStart, fractionStart - 1),
+    fraction: join(fractionStart - 1, parts.length),
+  };
+}
+
 /** Date and time down to milliseconds, for trace debugging. `withDate: false` keeps only the time. */
 export function formatTimestampPrecise(
   value: DateInput,
-  { locale, withDate = true }: { locale?: string; withDate?: boolean } = {},
+  {
+    locale,
+    timeZone,
+    withDate = true,
+    fractionDigits,
+  }: { locale?: string; timeZone?: string; withDate?: boolean; fractionDigits?: FractionDigits } = {},
 ) {
   const date = toDate(value);
-  return date ? getFormatter(withDate ? 'precise' : 'timePrecise', locale).format(date) : undefined;
+  return date
+    ? getFormatter(withDate ? 'precise' : 'timePrecise', locale, timeZone, fractionDigits).format(date)
+    : undefined;
 }

@@ -20,6 +20,18 @@ export const Colors = {
   'chart-share-4': 'var(--chart-share-4)',
   'chart-share-5': 'var(--chart-share-5)',
   'chart-share-rest': 'var(--chart-share-rest)',
+  'chart-series-pink': 'var(--chart-series-pink)',
+  'chart-series-orange': 'var(--chart-series-orange)',
+  'chart-series-amber': 'var(--chart-series-amber)',
+  'chart-series-lime': 'var(--chart-series-lime)',
+  'chart-series-green': 'var(--chart-series-green)',
+  'chart-series-teal': 'var(--chart-series-teal)',
+  'chart-series-cyan': 'var(--chart-series-cyan)',
+  'chart-series-blue': 'var(--chart-series-blue)',
+  'chart-series-indigo': 'var(--chart-series-indigo)',
+  'chart-series-violet': 'var(--chart-series-violet)',
+  'chart-series-magenta': 'var(--chart-series-magenta)',
+  'chart-series-neutral': 'var(--chart-series-neutral)',
   'span-agent': 'var(--span-agent)',
   'span-workflow': 'var(--span-workflow)',
   'span-model': 'var(--span-model)',
@@ -247,6 +259,8 @@ export const Colors = {
   background: 'var(--background)',
   sidebar: 'var(--sidebar)',
   card: 'var(--card)',
+  nested: 'var(--nested)',
+  row: 'var(--row)',
   field: 'var(--field)',
   dialog: 'var(--dialog)',
   'field-disabled': 'var(--field-disabled)',
@@ -272,7 +286,10 @@ export const Colors = {
   muted: 'var(--muted)',
   foreground: 'var(--foreground)',
   'muted-foreground': 'var(--muted-foreground)',
+  'subtle-foreground': 'var(--subtle-foreground)',
   placeholder: 'var(--placeholder)',
+  icon: 'var(--icon)',
+  'muted-icon': 'var(--muted-icon)',
 
   scrim: 'var(--scrim)',
 
@@ -335,6 +352,7 @@ export const Colors = {
 };
 
 export const BorderColors = {
+  separator: 'var(--separator)',
   'surface-rim': 'var(--surface-rim)',
   border: 'var(--border)',
   'border-strong': 'var(--border-strong)',

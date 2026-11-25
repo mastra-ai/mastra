@@ -1591,6 +1591,21 @@ export function createDatasetsTests({
         expect(page1.items).toHaveLength(1);
         expect(page1.pagination.hasMore).toBe(false);
       });
+
+      it('listItems with perPage 0 returns only the total at a version', async () => {
+        await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'second' } });
+        await datasetsStorage.deleteItem({ id: item1.id, datasetId: ds.id });
+        // v1: item1, v2: item1 (updated), v3: item1 + second, v4: second
+
+        for (const [version, total] of [0, 1, 1, 2, 1].entries()) {
+          const result = await datasetsStorage.listItems({
+            datasetId: ds.id,
+            version,
+            pagination: { page: 0, perPage: 0 },
+          });
+          expect(result).toMatchObject({ items: [], pagination: { total, hasMore: total > 0 } });
+        }
+      });
     });
 
     // ---------------------------------------------------------------------------

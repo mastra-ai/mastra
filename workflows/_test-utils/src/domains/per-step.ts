@@ -240,6 +240,307 @@ export function createPerStepWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: a step-by-step run still pauses after a step that was retried
+  {
+    mockRegistry.register('perstep-retry:step1', () =>
+      vi.fn().mockRejectedValueOnce(new Error('transient failure')).mockResolvedValue({ value: 'step1-done' }),
+    );
+    mockRegistry.register('perstep-retry:step2', () => vi.fn().mockResolvedValue({ value: 'step2-done' }));
+
+    const step1 = createStep({
+      id: 'step1',
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      retries: 1,
+      execute: async ctx => mockRegistry.get('perstep-retry:step1')(ctx),
+    });
+
+    const step2 = createStep({
+      id: 'step2',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: async ctx => mockRegistry.get('perstep-retry:step2')(ctx),
+    });
+
+    const workflow = createWorkflow({
+      id: 'perstep-retry',
+      steps: [step1, step2],
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+    });
+
+    workflow.then(step1).then(step2).commit();
+
+    workflows['perstep-retry'] = {
+      workflow,
+      mocks: {
+        get step1() {
+          return mockRegistry.get('perstep-retry:step1');
+        },
+        get step2() {
+          return mockRegistry.get('perstep-retry:step2');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
+  // Test: a step-by-step run pauses after a loop, once every iteration ran
+  {
+    mockRegistry.register('perstep-loop:increment', () =>
+      vi.fn().mockImplementation(async ({ inputData }: any) => ({ count: inputData.count + 1 })),
+    );
+    mockRegistry.register('perstep-loop:after', () => vi.fn().mockResolvedValue({ count: -1 }));
+
+    const increment = createStep({
+      id: 'increment',
+      inputSchema: z.object({ count: z.number() }),
+      outputSchema: z.object({ count: z.number() }),
+      execute: async ctx => mockRegistry.get('perstep-loop:increment')(ctx),
+    });
+
+    const after = createStep({
+      id: 'after',
+      inputSchema: z.object({ count: z.number() }),
+      outputSchema: z.object({ count: z.number() }),
+      execute: async ctx => mockRegistry.get('perstep-loop:after')(ctx),
+    });
+
+    const workflow = createWorkflow({
+      id: 'perstep-loop',
+      steps: [increment, after],
+      inputSchema: z.object({ count: z.number() }),
+      outputSchema: z.object({ count: z.number() }),
+    });
+
+    workflow
+      .dountil(increment, async ({ inputData }) => inputData.count >= 3)
+      .then(after)
+      .commit();
+
+    workflows['perstep-loop'] = {
+      workflow,
+      mocks: {
+        get increment() {
+          return mockRegistry.get('perstep-loop:increment');
+        },
+        get after() {
+          return mockRegistry.get('perstep-loop:after');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
+  // Test: a step-by-step run over a conditional with no matching branch pauses
+  {
+    mockRegistry.register('perstep-no-branch:branchA', () => vi.fn().mockResolvedValue({ value: 'A-done' }));
+    mockRegistry.register('perstep-no-branch:after', () => vi.fn().mockResolvedValue({ value: 'after-done' }));
+
+    const branchA = createStep({
+      id: 'branchA',
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: async ctx => mockRegistry.get('perstep-no-branch:branchA')(ctx),
+    });
+
+    const after = createStep({
+      id: 'after',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ value: z.string() }),
+      execute: async ctx => mockRegistry.get('perstep-no-branch:after')(ctx),
+    });
+
+    const workflow = createWorkflow({
+      id: 'perstep-no-branch',
+      steps: [branchA, after],
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+    });
+
+    workflow
+      .branch([[async () => false, branchA]])
+      .then(after)
+      .commit();
+
+    workflows['perstep-no-branch'] = {
+      workflow,
+      mocks: {
+        get branchA() {
+          return mockRegistry.get('perstep-no-branch:branchA');
+        },
+        get after() {
+          return mockRegistry.get('perstep-no-branch:after');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
+  // Test: a step-by-step run pauses after a nested workflow whose step bails
+  {
+    mockRegistry.register('perstep-nested-bail:bailer', () =>
+      vi.fn().mockImplementation(async ({ bail }: any) => bail({ value: 'bailed' })),
+    );
+    mockRegistry.register('perstep-nested-bail:skipped', () => vi.fn().mockResolvedValue({ value: 'not-bailed' }));
+    mockRegistry.register('perstep-nested-bail:after', () => vi.fn().mockResolvedValue({ value: 'after-done' }));
+
+    const bailer = createStep({
+      id: 'bailer',
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: async ctx => mockRegistry.get('perstep-nested-bail:bailer')(ctx),
+    });
+
+    const skipped = createStep({
+      id: 'skipped',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: async ctx => mockRegistry.get('perstep-nested-bail:skipped')(ctx),
+    });
+
+    const inner = createWorkflow({
+      id: 'perstep-nested-bail-inner',
+      steps: [bailer, skipped],
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+    });
+
+    inner.then(bailer).then(skipped).commit();
+
+    const after = createStep({
+      id: 'after',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: async ctx => mockRegistry.get('perstep-nested-bail:after')(ctx),
+    });
+
+    const workflow = createWorkflow({
+      id: 'perstep-nested-bail',
+      steps: [inner, after],
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+    });
+
+    workflow.then(inner).then(after).commit();
+
+    workflows['perstep-nested-bail'] = {
+      workflow,
+      mocks: {
+        get bailer() {
+          return mockRegistry.get('perstep-nested-bail:bailer');
+        },
+        get skipped() {
+          return mockRegistry.get('perstep-nested-bail:skipped');
+        },
+        get after() {
+          return mockRegistry.get('perstep-nested-bail:after');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
+  // Test: a step-by-step run whose step aborts the run ends canceled
+  {
+    mockRegistry.register('perstep-cancel:step1', () =>
+      vi.fn().mockImplementation(async ({ abort }: any) => {
+        abort();
+        return { value: 'step1-done' };
+      }),
+    );
+    mockRegistry.register('perstep-cancel:step2', () => vi.fn().mockResolvedValue({ value: 'step2-done' }));
+
+    const step1 = createStep({
+      id: 'step1',
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: async ctx => mockRegistry.get('perstep-cancel:step1')(ctx),
+    });
+
+    const step2 = createStep({
+      id: 'step2',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: async ctx => mockRegistry.get('perstep-cancel:step2')(ctx),
+    });
+
+    const workflow = createWorkflow({
+      id: 'perstep-cancel',
+      steps: [step1, step2],
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+    });
+
+    workflow.then(step1).then(step2).commit();
+
+    workflows['perstep-cancel'] = {
+      workflow,
+      mocks: {
+        get step1() {
+          return mockRegistry.get('perstep-cancel:step1');
+        },
+        get step2() {
+          return mockRegistry.get('perstep-cancel:step2');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
+  // Test: a step-by-step run whose step bails ends the run, on the first attempt or on a retry
+  for (const { id, failuresBeforeBail } of [
+    { id: 'perstep-bail', failuresBeforeBail: 0 },
+    { id: 'perstep-bail-retry', failuresBeforeBail: 1 },
+  ]) {
+    mockRegistry.register(`${id}:step1`, () => {
+      let attempts = 0;
+      return vi.fn().mockImplementation(async ({ bail }: any) => {
+        attempts++;
+        if (attempts <= failuresBeforeBail) throw new Error('transient failure');
+        return bail({ value: 'bailed' });
+      });
+    });
+    mockRegistry.register(`${id}:step2`, () => vi.fn().mockResolvedValue({ value: 'step2-done' }));
+
+    const step1 = createStep({
+      id: 'step1',
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      retries: failuresBeforeBail,
+      execute: async ctx => mockRegistry.get(`${id}:step1`)(ctx),
+    });
+
+    const step2 = createStep({
+      id: 'step2',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: async ctx => mockRegistry.get(`${id}:step2`)(ctx),
+    });
+
+    const workflow = createWorkflow({
+      id,
+      steps: [step1, step2],
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+    });
+
+    workflow.then(step1).then(step2).commit();
+
+    workflows[id] = {
+      workflow,
+      mocks: {
+        get step1() {
+          return mockRegistry.get(`${id}:step1`);
+        },
+        get step2() {
+          return mockRegistry.get(`${id}:step2`);
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
   return workflows;
 }
 
@@ -355,5 +656,113 @@ export function createPerStepTests(ctx: WorkflowTestContext, registry?: Workflow
         expect(mocks.step1).toHaveBeenCalled();
       },
     );
+
+    it.skipIf(skipTests.perStepRetry)('should pause after a step that succeeded on its retry', async () => {
+      const { workflow, mocks, resetMocks } = registry!['perstep-retry']!;
+      resetMocks?.();
+      const result = await execute(workflow, { input: 'test' }, { perStep: true });
+
+      expect(result.status).toBe('paused');
+      expect(result.steps.step1).toMatchObject({ status: 'success', output: { value: 'step1-done' } });
+      expect(result.steps.step2).toBeUndefined();
+      expect(mocks.step1).toHaveBeenCalledTimes(2);
+      expect(mocks.step2).not.toHaveBeenCalled();
+    });
+
+    it.skipIf(skipTests.perStepLoop)('should pause after a loop once all its iterations ran', async () => {
+      const { workflow, mocks, resetMocks } = registry!['perstep-loop']!;
+      resetMocks?.();
+      const result = await execute(workflow, { count: 0 }, { perStep: true });
+
+      expect(result.status).toBe('paused');
+      expect(result.steps.increment).toMatchObject({ status: 'success', output: { count: 3 } });
+      expect(result.steps.after).toBeUndefined();
+      expect(mocks.increment).toHaveBeenCalledTimes(3);
+      expect(mocks.after).not.toHaveBeenCalled();
+    });
+
+    it.skipIf(skipTests.perStepNoBranch)(
+      'should pause a per-step run over a conditional with no matching branch',
+      async () => {
+        const { workflow, mocks, resetMocks } = registry!['perstep-no-branch']!;
+        resetMocks?.();
+        const runId = `perstep-no-branch-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+        const result = await execute(workflow, { input: 'test' }, { perStep: true, runId });
+
+        expect(result.status).toBe('paused');
+        expect(result.steps.after).toBeUndefined();
+        expect(mocks.branchA).not.toHaveBeenCalled();
+        expect(mocks.after).not.toHaveBeenCalled();
+
+        const stored = await workflow.getWorkflowRunById(runId);
+        expect(stored?.status).toBe('paused');
+      },
+    );
+
+    it.skipIf(skipTests.perStepNestedBail)('should pause after a nested workflow whose step bails', async () => {
+      const { workflow, mocks, resetMocks } = registry!['perstep-nested-bail']!;
+      resetMocks?.();
+      const runId = `perstep-nested-bail-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      const result = await execute(workflow, { input: 'test' }, { perStep: true, runId });
+
+      expect(result.status).toBe('paused');
+      expect(result.steps.after).toBeUndefined();
+      expect(mocks.bailer).toHaveBeenCalledTimes(1);
+      expect(mocks.skipped).not.toHaveBeenCalled();
+      expect(mocks.after).not.toHaveBeenCalled();
+
+      const stored = await workflow.getWorkflowRunById(runId);
+      expect(stored?.status).toBe('paused');
+
+      // The bail ended the nested run; only the parent pauses.
+      const workflowsStore = await ctx.getStorage?.()?.getStore('workflows');
+      if (workflowsStore) {
+        const { runs } = await workflowsStore.listWorkflowRuns({ workflowName: 'perstep-nested-bail-inner' });
+        const childStatuses = runs.map(
+          run => (typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot)?.status,
+        );
+        expect(childStatuses).toEqual(['success']);
+      }
+    });
+
+    it.skipIf(skipTests.perStepCancel)('should end canceled when a step aborts the run', async () => {
+      const { workflow, mocks, resetMocks } = registry!['perstep-cancel']!;
+      resetMocks?.();
+      const runId = `perstep-cancel-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      const result = await execute(workflow, { input: 'test' }, { perStep: true, runId });
+
+      expect(result.status).toBe('canceled');
+      expect(mocks.step1).toHaveBeenCalledTimes(1);
+      expect(mocks.step2).not.toHaveBeenCalled();
+
+      const stored = await workflow.getWorkflowRunById(runId);
+      expect(stored?.status).toBe('canceled');
+    });
+
+    for (const { id, title, skip, step1Calls } of [
+      { id: 'perstep-bail', title: 'should end with success when a step bails', skip: 'perStepBail', step1Calls: 1 },
+      {
+        id: 'perstep-bail-retry',
+        title: 'should end with success when a step bails on its retry',
+        skip: 'perStepBailRetry',
+        step1Calls: 2,
+      },
+    ] as const) {
+      it.skipIf(skipTests[skip])(title, async () => {
+        const { workflow, mocks, resetMocks } = registry![id]!;
+        resetMocks?.();
+        const runId = `${id}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+        const result = await execute(workflow, { input: 'test' }, { perStep: true, runId });
+
+        expect(result.status).toBe('success');
+        if (result.status === 'success') expect(result.result).toEqual({ value: 'bailed' });
+        expect(result.steps.step2).toBeUndefined();
+        expect(mocks.step1).toHaveBeenCalledTimes(step1Calls);
+        expect(mocks.step2).not.toHaveBeenCalled();
+
+        const stored = await workflow.getWorkflowRunById(runId);
+        expect(stored?.status).toBe('success');
+      });
+    }
   });
 }

@@ -86,13 +86,22 @@ export function withRunFence<T>(
  * duplicate key if they don't. On retry the row exists and the claim
  * serializes behind its row lock.
  */
-export async function claimTransaction<T>(
+export function claimTransaction<T>(
   pool: sql.ConnectionPool,
   fn: (transaction: sql.Transaction) => Promise<T>,
 ): Promise<T> {
+  return retryWriteRace(() => inTransaction(pool, fn));
+}
+
+/**
+ * Runs `write` again when it lost a race to insert the same row: a deadlock
+ * victim or a duplicate key. `write` must be a whole statement or
+ * transaction, since a deadlock victim's transaction has already ended.
+ */
+export async function retryWriteRace<T>(write: () => Promise<T>): Promise<T> {
   for (let attempt = 1; ; attempt++) {
     try {
-      return await inTransaction(pool, fn);
+      return await write();
     } catch (error) {
       const number = (error as { number?: number }).number;
       const retryable = number === ERR_DEADLOCK_VICTIM || number === ERR_PRIMARY_KEY || number === ERR_UNIQUE_INDEX;

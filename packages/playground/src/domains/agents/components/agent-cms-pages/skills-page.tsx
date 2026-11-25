@@ -5,11 +5,11 @@ import { Entity, EntityContent, EntityName, EntityDescription } from '@mastra/pl
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Switch } from '@mastra/playground-ui/components/Switch';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { useStoredSkills } from '@mastra/react/hooks/agents';
-import { Plus } from 'lucide-react';
+
 import { useState } from 'react';
 import { useWatch } from 'react-hook-form';
-
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { SkillEditDialog } from './skill-edit-dialog';
 import { SectionHeader } from '@/domains/cms';
@@ -70,7 +70,7 @@ export function SkillsPage() {
           />
 
           {!readOnly && (
-            <Button size="sm" onClick={() => setDialogOpen(true)} icon={<Plus />}>
+            <Button size="sm" onClick={() => setDialogOpen(true)} icon={<IconPlusMedium />}>
               Add a skill
             </Button>
           )}
@@ -81,7 +81,7 @@ export function SkillsPage() {
         {filteredSkills.length > 0 && (
           <div className="flex flex-col gap-2">
             {filteredSkills.map(skill => (
-              <Entity key={skill.id} className="bg-background">
+              <Entity key={skill.id} className="bg-nested">
                 <EntityContent>
                   <EntityName>{skill.name}</EntityName>
                   <EntityDescription>{skill.description || 'No description'}</EntityDescription>
@@ -105,7 +105,7 @@ export function SkillsPage() {
               descriptionSlot="Create a skill to give your agent specialized knowledge."
               actionSlot={
                 !readOnly ? (
-                  <Button onClick={() => setDialogOpen(true)} icon={<Plus />}>
+                  <Button onClick={() => setDialogOpen(true)} icon={<IconPlusMedium />}>
                     Add a skill
                   </Button>
                 ) : undefined

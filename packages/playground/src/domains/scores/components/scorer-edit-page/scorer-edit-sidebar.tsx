@@ -10,15 +10,14 @@ import {
 import { Input } from '@mastra/playground-ui/components/Input';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { Check, Save } from 'lucide-react';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
+
 import type { RefObject } from 'react';
 import { Controller, useWatch } from 'react-hook-form';
 import type { UseFormReturn } from 'react-hook-form';
-
 import type { ScorerFormValues } from './utils/form-validation';
 import { SectionHeader } from '@/domains/cms';
 import { LLMProviders, LLMModels } from '@/domains/llm';
@@ -178,52 +177,35 @@ export function ScorerEditSidebar({
       <div className="shrink-0 p-4">
         {mode === 'edit' && onSaveDraft ? (
           <div className="flex gap-2">
-            <Button onClick={onSaveDraft} disabled={isSavingDraft || isSubmitting} className="flex-1">
-              {isSavingDraft ? (
-                <>
-                  <Spinner className="h-4 w-4" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Icon>
-                    <Save />
-                  </Icon>
-                  Save
-                </>
-              )}
+            <Button
+              onClick={onSaveDraft}
+              disabled={isSubmitting}
+              className="flex-1"
+              icon={<IconFloppyDisk1 />}
+              loading={isSavingDraft}
+            >
+              Save
             </Button>
-            <Button variant="primary" onClick={onPublish} disabled={isSubmitting || isSavingDraft} className="flex-1">
-              {isSubmitting ? (
-                <>
-                  <Spinner className="h-4 w-4" />
-                  Publishing...
-                </>
-              ) : (
-                <>
-                  <Icon>
-                    <Check />
-                  </Icon>
-                  Publish
-                </>
-              )}
+            <Button
+              variant="primary"
+              onClick={onPublish}
+              disabled={isSavingDraft}
+              className="flex-1"
+              icon={<IconCheckmark2Medium />}
+              loading={isSubmitting}
+            >
+              Publish
             </Button>
           </div>
         ) : (
-          <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
-            {isSubmitting ? (
-              <>
-                <Spinner className="h-4 w-4" />
-                Creating...
-              </>
-            ) : (
-              <>
-                <Icon>
-                  <Check />
-                </Icon>
-                Create scorer
-              </>
-            )}
+          <Button
+            variant="primary"
+            onClick={onPublish}
+            className="w-full"
+            icon={<IconCheckmark2Medium />}
+            loading={isSubmitting}
+          >
+            Create scorer
           </Button>
         )}
       </div>

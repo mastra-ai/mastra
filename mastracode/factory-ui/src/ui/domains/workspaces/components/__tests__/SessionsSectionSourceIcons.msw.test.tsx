@@ -1,5 +1,5 @@
 import { screen } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -62,6 +62,19 @@ function workItem(id: string, sessionId: string, branch: string, externalSource:
   };
 }
 
+const cards = [
+  workItem('issue-item', 'issue-run', 'factory/issue-3', {
+    integrationId: 'github',
+    type: 'issue',
+    externalId: '3',
+  }),
+  workItem('linear-item', 'linear-run', 'factory/issue-4', {
+    integrationId: 'linear',
+    type: 'issue',
+    externalId: 'ENG-4',
+  }),
+];
+
 beforeEach(() => {
   stubSessionsFactory(factoryId, [projectRepositoryId]);
   server.use(
@@ -70,20 +83,7 @@ beforeEach(() => {
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/sessions`, () => HttpResponse.json({ sessions })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, () =>
-      HttpResponse.json({
-        workItems: [
-          workItem('issue-item', 'issue-run', 'factory/issue-3', {
-            integrationId: 'github',
-            type: 'issue',
-            externalId: '3',
-          }),
-          workItem('linear-item', 'linear-run', 'factory/issue-4', {
-            integrationId: 'linear',
-            type: 'issue',
-            externalId: 'ENG-4',
-          }),
-        ],
-      }),
+      HttpResponse.json({ workItems: cards }),
     ),
   );
 });
@@ -101,7 +101,7 @@ function renderSection() {
 }
 
 const iconFor = async (name: string) =>
-  (await screen.findByRole('button', { name })).querySelector('[data-source]')?.getAttribute('data-source');
+  (await screen.findByRole('link', { name })).querySelector('[data-source]')?.getAttribute('data-source');
 
 describe('Sessions sidebar source icons', () => {
   it('marks each session with where it came from', async () => {
@@ -112,5 +112,21 @@ describe('Sessions sidebar source icons', () => {
     expect(await iconFor('Add audit log')).toBe('linear-issue');
     expect(await iconFor('Review PR 12')).toBe('github-pr');
     expect(await iconFor('Answer deploy question')).toBe('slack-thread');
+  });
+
+  it('marks them from the cards holding a session, without waiting for the board', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, async ({ request }) => {
+        // The board never answers: only the list of the cards holding a session does.
+        if (new URL(request.url).searchParams.get('scope') !== 'sessions') await delay('infinite');
+        return HttpResponse.json({ workItems: cards });
+      }),
+    );
+
+    renderSection();
+
+    expect(await iconFor('Fix flaky login')).toBe('github-issue');
+    expect(await iconFor('Add audit log')).toBe('linear-issue');
+    expect(await iconFor('Plan the migration')).toBe('user');
   });
 });

@@ -1,6 +1,6 @@
 # Contributing to Mastra's documentation
 
-We welcome contributions of any size and contributors of any skill level.
+You can _best_ help by creating high-quality issues with good reproductions and descriptions. Thanks for taking the time to contribute!
 
 > **Tip for new contributors:**
 > Take a look at [GitHub's Docs](https://docs.github.com/en/get-started/quickstart/hello-world) and [https://github.com/firstcontributions/first-contributions](https://github.com/firstcontributions/first-contributions) for helpful information on working with GitHub.
@@ -23,18 +23,6 @@ pnpm run dev
 ```
 
 This will start a local development server at `http://localhost:3000` where you can preview your changes.
-
-If you're copying these instructions, remember to [configure this project as a fork](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/configuring-a-remote-repository-for-a-fork).
-
-```shell
-git remote add upstream git@github.com:mastra-ai/mastra.git
-```
-
-At any point, create a branch for your contribution. We are not strict about branch names.
-
-```shell
-git checkout -b docs/fix-agent-example-typo
-```
 
 ### Testing your changes
 
@@ -64,11 +52,13 @@ Before submitting a PR, make sure to:
    pnpm run vale:download
    ```
 
-   Run the validation scripts:
+   Run every docs check. Pass the files you changed to scope file-level checks, and `--fix` to apply safe fixes:
 
    ```shell
-   pnpm run lint:prose && pnpm run validate
+   pnpm run check
    ```
+
+   See [`styleguides/CHECKS.md`](./styleguides/CHECKS.md) for rule IDs and how to disable a rule on one page.
 
 6. **Add redirect** (optional): If you've renamed or deleted a doc, add a redirect to `vercel.redirects.json` and run `pnpm run generate-vercel-redirects` to update the generated `vercel.json`.
 
@@ -105,6 +95,13 @@ packages:
 - `title`: The title of the page. Used to populate the HTML `<title>` tag
 - `description`: A short description of the page's content. Used in the HTML `<meta name="description">` tag for SEO purposes.
 - `packages`: An array of npm packages that are relevant to the content on the page. Enables embedded docs, see [EMBEDDED_DOCS.md](../scripts/EMBEDDED_DOCS.md) for more details.
+
+Every listed package ships its own copy of the page, so list only the packages whose users need the page:
+
+- List the package that owns the documented API. Don't add `@mastra/core` when a dedicated package such as `@mastra/mcp` or `@mastra/evals` owns the API.
+- Add `@mastra/core` to broader framework guides, because every Mastra project installs it.
+- On overview pages that compare several adapters, list the shared interface package, not every adapter. Each adapter's own page lists the adapter package.
+- Keep the list to four packages or fewer. `pnpm check` warns above that.
 
 ### Headings
 

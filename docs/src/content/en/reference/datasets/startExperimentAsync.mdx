@@ -37,7 +37,19 @@ console.log(`Current status: ${experiment.status}`)
 
 ## Parameters
 
-Takes the same `StartExperimentConfig` as [`dataset.startExperiment()`](/reference/datasets/startExperiment).
+Takes the same `StartExperimentConfig` as [`dataset.startExperiment()`](/reference/datasets/startExperiment), plus `durable`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'durable',
+    type: 'boolean',
+    isOptional: true,
+    description:
+      "Runs the experiment as an evented workflow with one step per item, so a stopped process doesn't leave it `running`. Needs workers and a pubsub that redelivers events, such as Redis Streams. Only serializable options are allowed: other options throw `EXPERIMENT_NOT_DURABLE` before anything is created. See [Durable experiments](/docs/evals/experiments#durable-experiments).",
+  },
+]}
+/>
 
 When `persistence.experiments` is set to `'none'`, `startExperimentAsync()` doesn't persist an experiment record, progress updates, or item results. Score persistence remains controlled separately by `persistence.scores`. Without an experiment event observer, the run is fire-and-forget, and the experiment API can't report whether it completed or failed.
 

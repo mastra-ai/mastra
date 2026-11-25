@@ -7,7 +7,7 @@ description: "Browse Alibaba (China) model IDs, capabilities, context windows, a
 
 # <img src="https://models.dev/logos/alibaba-cn.svg" alt="Alibaba (China) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Alibaba (China)
 
-Access 91 Alibaba (China) models through Mastra's model router. Authentication is handled automatically using the `DASHSCOPE_API_KEY` environment variable.
+Access 68 Alibaba (China) models through Mastra's model router. Authentication is handled automatically using the `DASHSCOPE_API_KEY` environment variable.
 
 Learn more in the [Alibaba (China) documentation](https://www.alibabacloud.com/help/en/model-studio/models).
 
@@ -46,59 +46,23 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "alibaba-cn/deepseek-r1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 16384,
-    "inputCost": 0.574,
-    "outputCost": 2.294
-  },
-  {
-    "model": "alibaba-cn/deepseek-r1-0528",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 16384,
-    "inputCost": 0.574,
-    "outputCost": 2.294
-  },
-  {
     "model": "alibaba-cn/deepseek-r1-distill-llama-70b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": true,
+    "toolUsage": false,
     "reasoning": true,
     "contextWindow": 32768,
     "maxOutput": 16384,
     "inputCost": 0.287,
     "outputCost": 0.861
-  },
-  {
-    "model": "alibaba-cn/deepseek-r1-distill-llama-8b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 32768,
-    "maxOutput": 16384,
-    "inputCost": null,
-    "outputCost": null
   },
   {
     "model": "alibaba-cn/deepseek-r1-distill-qwen-1-5b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": true,
+    "toolUsage": false,
     "reasoning": true,
     "contextWindow": 32768,
     "maxOutput": 16384,
@@ -106,79 +70,19 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "alibaba-cn/deepseek-r1-distill-qwen-14b",
+    "model": "alibaba-cn/deepseek-v3.2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 32768,
-    "maxOutput": 16384,
-    "inputCost": 0.144,
-    "outputCost": 0.431
-  },
-  {
-    "model": "alibaba-cn/deepseek-r1-distill-qwen-32b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 32768,
-    "maxOutput": 16384,
-    "inputCost": 0.287,
-    "outputCost": 0.861
-  },
-  {
-    "model": "alibaba-cn/deepseek-r1-distill-qwen-7b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 32768,
-    "maxOutput": 16384,
-    "inputCost": 0.072,
-    "outputCost": 0.144
-  },
-  {
-    "model": "alibaba-cn/deepseek-v3",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 65536,
-    "maxOutput": 8192,
-    "inputCost": 0.287,
-    "outputCost": 1.147
-  },
-  {
-    "model": "alibaba-cn/deepseek-v3-1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
     "contextWindow": 131072,
     "maxOutput": 65536,
-    "inputCost": 0.574,
-    "outputCost": 1.721
+    "inputCost": 0.299433,
+    "outputCost": 0.449149
   },
   {
-    "model": "alibaba-cn/deepseek-v3-2-exp",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 65536,
-    "inputCost": 0.287,
-    "outputCost": 0.431
-  },
-  {
-    "model": "alibaba-cn/deepseek-v4-flash",
+    "model": "alibaba-cn/deepseek-v4-flash-0731",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -186,8 +90,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.14,
-    "outputCost": 0.28
+    "inputCost": 0.449149,
+    "outputCost": 1.347447
   },
   {
     "model": "alibaba-cn/deepseek-v4-pro",
@@ -198,8 +102,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.435,
-    "outputCost": 0.87
+    "inputCost": 1.65,
+    "outputCost": 3.301
   },
   {
     "model": "alibaba-cn/deepseek-v4.1-flash",
@@ -262,16 +166,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3.851
   },
   {
-    "model": "alibaba-cn/kimi-k2-thinking",
+    "model": "alibaba-cn/glm-5.3-prime",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 16384,
-    "inputCost": 0.574,
-    "outputCost": 2.294
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 2.395461,
+    "outputCost": 8.384113
   },
   {
     "model": "alibaba-cn/kimi-k2.5",
@@ -283,7 +187,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 262144,
     "maxOutput": 32768,
     "inputCost": 0.574,
-    "outputCost": 2.411
+    "outputCost": 3.011
   },
   {
     "model": "alibaba-cn/kimi-k2.6",
@@ -308,6 +212,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 1048576,
     "inputCost": 2.827,
     "outputCost": 14.133
+  },
+  {
+    "model": "alibaba-cn/kimi-k3.1-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 1.946312,
+    "outputCost": 10.180709
+  },
+  {
+    "model": "alibaba-cn/kimi-k3.1-pro-prime",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 3.892624,
+    "outputCost": 20.361418
   },
   {
     "model": "alibaba-cn/kimi/kimi-k2.5",
@@ -344,30 +272,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.3,
     "outputCost": 1.2
-  },
-  {
-    "model": "alibaba-cn/moonshot-kimi-k2-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.574,
-    "outputCost": 2.294
-  },
-  {
-    "model": "alibaba-cn/qvq-max",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 1.147,
-    "outputCost": 4.588
   },
   {
     "model": "alibaba-cn/qwen-deep-research",
@@ -410,36 +314,12 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": true,
+    "toolUsage": false,
     "reasoning": false,
     "contextWindow": 10000000,
     "maxOutput": 8192,
     "inputCost": 0.072,
     "outputCost": 0.287
-  },
-  {
-    "model": "alibaba-cn/qwen-math-plus",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 4096,
-    "maxOutput": 3072,
-    "inputCost": 0.574,
-    "outputCost": 1.721
-  },
-  {
-    "model": "alibaba-cn/qwen-math-turbo",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 4096,
-    "maxOutput": 3072,
-    "inputCost": 0.287,
-    "outputCost": 0.861
   },
   {
     "model": "alibaba-cn/qwen-max",
@@ -466,42 +346,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.775
   },
   {
-    "model": "alibaba-cn/qwen-mt-turbo",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 16384,
-    "maxOutput": 8192,
-    "inputCost": 0.101,
-    "outputCost": 0.28
-  },
-  {
-    "model": "alibaba-cn/qwen-omni-turbo",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 32768,
-    "maxOutput": 2048,
-    "inputCost": 0.058,
-    "outputCost": 0.23
-  },
-  {
-    "model": "alibaba-cn/qwen-omni-turbo-realtime",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 32768,
-    "maxOutput": 2048,
-    "inputCost": 0.23,
-    "outputCost": 0.918
-  },
-  {
     "model": "alibaba-cn/qwen-plus",
     "imageInput": false,
     "audioInput": false,
@@ -518,36 +362,12 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": true,
+    "toolUsage": false,
     "reasoning": false,
     "contextWindow": 32768,
     "maxOutput": 4096,
     "inputCost": 0.115,
     "outputCost": 0.287
-  },
-  {
-    "model": "alibaba-cn/qwen-turbo",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 16384,
-    "inputCost": 0.044,
-    "outputCost": 0.087
-  },
-  {
-    "model": "alibaba-cn/qwen-vl-max",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.23,
-    "outputCost": 0.574
   },
   {
     "model": "alibaba-cn/qwen-vl-ocr",
@@ -562,198 +382,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.072
   },
   {
-    "model": "alibaba-cn/qwen-vl-plus",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.115,
-    "outputCost": 0.287
-  },
-  {
-    "model": "alibaba-cn/qwen2-5-14b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.144,
-    "outputCost": 0.431
-  },
-  {
-    "model": "alibaba-cn/qwen2-5-32b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.287,
-    "outputCost": 0.861
-  },
-  {
-    "model": "alibaba-cn/qwen2-5-72b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.574,
-    "outputCost": 1.721
-  },
-  {
-    "model": "alibaba-cn/qwen2-5-7b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.072,
-    "outputCost": 0.144
-  },
-  {
-    "model": "alibaba-cn/qwen2-5-coder-32b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.287,
-    "outputCost": 0.861
-  },
-  {
-    "model": "alibaba-cn/qwen2-5-coder-7b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.144,
-    "outputCost": 0.287
-  },
-  {
-    "model": "alibaba-cn/qwen2-5-math-72b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 4096,
-    "maxOutput": 3072,
-    "inputCost": 0.574,
-    "outputCost": 1.721
-  },
-  {
-    "model": "alibaba-cn/qwen2-5-math-7b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 4096,
-    "maxOutput": 3072,
-    "inputCost": 0.144,
-    "outputCost": 0.287
-  },
-  {
-    "model": "alibaba-cn/qwen2-5-omni-7b",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 32768,
-    "maxOutput": 2048,
-    "inputCost": 0.087,
-    "outputCost": 0.345
-  },
-  {
-    "model": "alibaba-cn/qwen2-5-vl-72b-instruct",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 2.294,
-    "outputCost": 6.881
-  },
-  {
-    "model": "alibaba-cn/qwen2-5-vl-7b-instruct",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.287,
-    "outputCost": 0.717
-  },
-  {
-    "model": "alibaba-cn/qwen3-14b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.144,
-    "outputCost": 0.574
-  },
-  {
-    "model": "alibaba-cn/qwen3-235b-a22b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 16384,
-    "inputCost": 0.287,
-    "outputCost": 1.147
-  },
-  {
-    "model": "alibaba-cn/qwen3-32b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 16384,
-    "inputCost": 0.287,
-    "outputCost": 1.147
-  },
-  {
-    "model": "alibaba-cn/qwen3-8b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.072,
-    "outputCost": 0.287
-  },
-  {
     "model": "alibaba-cn/qwen3-asr-flash",
     "imageInput": false,
     "audioInput": true,
@@ -762,32 +390,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 53248,
     "maxOutput": 4096,
-    "inputCost": 0.032,
-    "outputCost": 0.032
-  },
-  {
-    "model": "alibaba-cn/qwen3-coder-30b-a3b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 65536,
-    "inputCost": 0.216,
-    "outputCost": 0.861
-  },
-  {
-    "model": "alibaba-cn/qwen3-coder-480b-a35b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 65536,
-    "inputCost": 0.861,
-    "outputCost": 3.441
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "alibaba-cn/qwen3-coder-flash",
@@ -802,54 +406,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.574
   },
   {
-    "model": "alibaba-cn/qwen3-coder-plus",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 0.574,
-    "outputCost": 2.296
-  },
-  {
-    "model": "alibaba-cn/qwen3-max",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 65536,
-    "inputCost": 0.359,
-    "outputCost": 1.434
-  },
-  {
-    "model": "alibaba-cn/qwen3-next-80b-a3b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 32768,
-    "inputCost": 0.144,
-    "outputCost": 0.574
-  },
-  {
-    "model": "alibaba-cn/qwen3-next-80b-a3b-thinking",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 32768,
-    "inputCost": 0.144,
-    "outputCost": 1.434
-  },
-  {
     "model": "alibaba-cn/qwen3-omni-flash",
     "imageInput": true,
     "audioInput": true,
@@ -858,50 +414,14 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 65536,
     "maxOutput": 16384,
-    "inputCost": 0.058,
-    "outputCost": 0.23
-  },
-  {
-    "model": "alibaba-cn/qwen3-omni-flash-realtime",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 65536,
-    "maxOutput": 16384,
-    "inputCost": 0.23,
-    "outputCost": 0.918
-  },
-  {
-    "model": "alibaba-cn/qwen3-vl-235b-a22b",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 32768,
-    "inputCost": 0.286705,
-    "outputCost": 1.14682
-  },
-  {
-    "model": "alibaba-cn/qwen3-vl-30b-a3b",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 32768,
-    "inputCost": 0.108,
-    "outputCost": 0.431
+    "inputCost": 0.258,
+    "outputCost": 0.989
   },
   {
     "model": "alibaba-cn/qwen3-vl-plus",
     "imageInput": true,
     "audioInput": false,
-    "videoInput": false,
+    "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
@@ -910,7 +430,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.433525
   },
   {
-    "model": "alibaba-cn/qwen3.5-397b-a17b",
+    "model": "alibaba-cn/qwen3.5-122b-a10b",
     "imageInput": true,
     "audioInput": false,
     "videoInput": true,
@@ -918,8 +438,32 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 65536,
-    "inputCost": 0.172,
-    "outputCost": 1.032
+    "inputCost": 0.119773,
+    "outputCost": 0.958184
+  },
+  {
+    "model": "alibaba-cn/qwen3.5-27b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.08983,
+    "outputCost": 0.718638
+  },
+  {
+    "model": "alibaba-cn/qwen3.5-35b-a3b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.059887,
+    "outputCost": 0.479092
   },
   {
     "model": "alibaba-cn/qwen3.5-flash",
@@ -934,16 +478,28 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.287
   },
   {
-    "model": "alibaba-cn/qwen3.5-plus",
+    "model": "alibaba-cn/qwen3.6-27b",
     "imageInput": true,
     "audioInput": false,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
+    "contextWindow": 262144,
     "maxOutput": 65536,
-    "inputCost": 0.115,
-    "outputCost": 0.688
+    "inputCost": 0.449149,
+    "outputCost": 2.694894
+  },
+  {
+    "model": "alibaba-cn/qwen3.6-35b-a3b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.269489,
+    "outputCost": 1.616936
   },
   {
     "model": "alibaba-cn/qwen3.6-flash",
@@ -954,20 +510,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 65536,
-    "inputCost": 0.1875,
-    "outputCost": 1.125
-  },
-  {
-    "model": "alibaba-cn/qwen3.6-max-preview",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 245800,
-    "maxOutput": 65536,
-    "inputCost": 1.32,
-    "outputCost": 7.9
+    "inputCost": 0.165,
+    "outputCost": 0.99
   },
   {
     "model": "alibaba-cn/qwen3.6-plus",
@@ -978,8 +522,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 65536,
-    "inputCost": 0.5,
-    "outputCost": 3
+    "inputCost": 0.276,
+    "outputCost": 1.651
   },
   {
     "model": "alibaba-cn/qwen3.7-flash",
@@ -1001,9 +545,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1000000,
-    "maxOutput": 65536,
-    "inputCost": 2.5,
-    "outputCost": 7.5
+    "maxOutput": 131072,
+    "inputCost": 1.65,
+    "outputCost": 4.951
   },
   {
     "model": "alibaba-cn/qwen3.7-plus",
@@ -1013,9 +557,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1000000,
-    "maxOutput": 64000,
-    "inputCost": 0.5,
-    "outputCost": 3
+    "maxOutput": 131072,
+    "inputCost": 0.276,
+    "outputCost": 1.101
   },
   {
     "model": "alibaba-cn/qwen3.8-flash",
@@ -1054,28 +598,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.382
   },
   {
-    "model": "alibaba-cn/qwq-32b",
-    "imageInput": false,
+    "model": "alibaba-cn/qwen4-max",
+    "imageInput": true,
     "audioInput": false,
-    "videoInput": false,
+    "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.287,
-    "outputCost": 0.861
-  },
-  {
-    "model": "alibaba-cn/qwq-plus",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.23,
-    "outputCost": 0.574
+    "contextWindow": 1000000,
+    "maxOutput": 262144,
+    "inputCost": 1.497163,
+    "outputCost": 4.491489
   },
   {
     "model": "alibaba-cn/siliconflow/deepseek-r1-0528",
@@ -1147,6 +679,8 @@ Model availability, capabilities, context windows, and pricing are sourced from 
 ### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -1164,6 +698,8 @@ const agent = new Agent({
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",

@@ -7,12 +7,17 @@ export { useSpanDetail } from './use-span-detail';
 export { useTags } from './use-tags';
 export { useThreadHasOtherTraces } from './use-thread-has-other-traces';
 export { useTraceLightSpans } from './use-trace-light-spans';
+export { useTraceTrajectory } from './use-trace-trajectory';
 export {
   useTraceOrBranchSpans,
   type UseTraceOrBranchSpansArgs,
   type UseTraceOrBranchSpansResult,
 } from './use-trace-or-branch-spans';
+export * from './use-span-aggregate';
+export * from './use-trace-aggregate';
 export * from './use-trace-query';
+export * from './use-query-spans';
+export * from './use-query-threads';
 export * from './use-trace-spans';
 export * from './use-trace-usage';
 export * from './use-traces';

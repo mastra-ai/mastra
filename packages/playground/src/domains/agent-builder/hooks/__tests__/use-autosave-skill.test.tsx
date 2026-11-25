@@ -5,7 +5,7 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import React from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { SkillEditFormValues } from '../use-autosave-skill';
 import { useAutosaveSkill } from '../use-autosave-skill';
@@ -13,6 +13,9 @@ import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 const SKILL_ID = 'autosave-skill';
+// Long enough that no test can miss the transient `saved` status while polling
+// for it; the test that checks the return to `idle` advances fake time past it.
+const SAVED_DISPLAY_MS = 60_000;
 
 // `useUpdateSkill` reads `usePermissions` to decide whether to write workspace
 // files. With auth disabled there is no RBAC, so the form values above (which
@@ -31,7 +34,7 @@ const baseFormValues: SkillEditFormValues = {
 const renderAutosave = ({
   defaultValues = baseFormValues,
   debounceMs = 50,
-  savedDisplayMs = 30,
+  savedDisplayMs = SAVED_DISPLAY_MS,
 }: {
   defaultValues?: SkillEditFormValues;
   debounceMs?: number;
@@ -66,6 +69,10 @@ describe('useAutosaveSkill', () => {
     server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authDisabled)));
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   describe('when retry triggers a save with the current form values', () => {
     it('regenerates the SKILL.md file tree and PATCHes the stored skill', async () => {
       let body: any = null;
@@ -92,15 +99,21 @@ describe('useAutosaveSkill', () => {
           HttpResponse.json({ id: SKILL_ID, status: 'active', name: 'Skill' }),
         ),
       );
+      // Fake time drives the display window; it still advances with real time so
+      // MSW and React Testing Library's own timers keep running.
+      vi.useFakeTimers({ shouldAdvanceTime: true });
 
-      const { result } = renderAutosave({ savedDisplayMs: 20 });
+      const { result } = renderAutosave();
 
       await act(async () => {
         result.current.retry();
       });
 
       await waitFor(() => expect(result.current.status).toBe('saved'));
-      await waitFor(() => expect(result.current.status).toBe('idle'));
+      await act(() => vi.advanceTimersByTimeAsync(SAVED_DISPLAY_MS - 1_000));
+      expect(result.current.status).toBe('saved');
+      await act(() => vi.advanceTimersByTimeAsync(1_000));
+      expect(result.current.status).toBe('idle');
     });
   });
 

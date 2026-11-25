@@ -64,14 +64,6 @@ vi.mock('@mastra/playground-ui/resize/separator', () => ({
   PanelSeparator: () => <div data-testid="panel-separator" />,
 }));
 
-vi.mock('@mastra/playground-ui/resize/panel-drawer', () => ({
-  PanelDrawer: ({ label, children }: { label: string; children: ReactNode }) => (
-    <aside data-testid="panel-drawer" aria-label={label}>
-      {children}
-    </aside>
-  ),
-}));
-
 vi.mock('@mastra/playground-ui/hooks/use-is-mobile', () => ({
   useIsMobile: () => mobileState.value,
 }));
@@ -148,16 +140,15 @@ describe('StudioFrame side panel', () => {
     expect(screen.getByTestId('collapsible-route-side-panel')).toBeTruthy();
   });
 
-  it('uses an edge drawer instead of a resizable panel on mobile', async () => {
+  it('shows no side panel next to the frame on mobile, where pages use their own drawer', () => {
     mobileState.value = true;
     renderFrame({ withPanel: true });
 
-    const drawer = await screen.findByTestId('panel-drawer');
-    await waitFor(() => expect(drawer.textContent).toContain('Panel content'));
     // The page stays under the same panel so crossing the breakpoint never remounts it.
     expect(screen.getByTestId('panel-studio-frame')).toBeTruthy();
     expect(screen.queryByTestId('collapsible-route-side-panel')).toBeNull();
     expect(screen.queryByTestId('panel-separator')).toBeNull();
+    expect(screen.queryByText('Panel content')).toBeNull();
   });
 
   it('keeps the page mounted when crossing the mobile breakpoint', async () => {
@@ -175,7 +166,7 @@ describe('StudioFrame side panel', () => {
       </RouteSidePanelProvider>,
     );
 
-    await screen.findByTestId('panel-drawer');
+    await waitFor(() => expect(screen.queryByTestId('collapsible-route-side-panel')).toBeNull());
     expect(screen.getByTestId('frame-content')).toBe(before);
   });
 });

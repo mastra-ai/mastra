@@ -27,9 +27,6 @@ async function seedFactory(orgId = 'org-1') {
     orgId,
     connectionId: connection.id,
     repositoryId: repository.id,
-    createdByUserId: 'owner',
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/sandbox/mastra',
   });
   const createSession = (sessionId: string, userId: string, visibility: SourceControlSessionVisibility = 'org') =>
     sourceControl.sessions.create({
@@ -77,9 +74,9 @@ function context({
   if (user) requestContext.set('user', user);
   if (interactive) requestContext.set(FACTORY_INTERACTIVE_KEY, true);
   requestContext.set('controller', {
+    sessionId: resourceId,
     resourceId,
     threadId,
-    scope: '/worktree',
     getState: () => (tag ? { factoryProjectId: tag } : {}),
   });
   return requestContext;

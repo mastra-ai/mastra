@@ -35,6 +35,11 @@ export type { InlineLinkEntry } from './inline-media';
  */
 export type PostableMessage = string | CardElement | { markdown: string };
 
+/** What `formatError` knows about the failure beyond the error itself. */
+export interface ChannelErrorContext {
+  requestContext?: RequestContext;
+}
+
 /** Per-adapter configuration shared across all `toolDisplay` modes. */
 export interface ChannelAdapterBaseConfig {
   adapter: Adapter<any, any>;
@@ -55,10 +60,12 @@ export interface ChannelAdapterBaseConfig {
   /**
    * Override how errors are rendered in the chat.
    * Return a user-friendly message instead of exposing the raw error.
+   * `context.requestContext` is the failed run's request context, so a host can
+   * link the message back to whatever the run belongs to.
    *
    * @default `"❌ Error: <error.message>"`
    */
-  formatError?: (error: Error) => PostableMessage;
+  formatError?: (error: Error, context: ChannelErrorContext) => PostableMessage;
 
   /**
    * Dialect for the agent's final reply text.
@@ -72,6 +79,32 @@ export interface ChannelAdapterBaseConfig {
    * notices are unaffected.
    */
   textFormat?: 'markdown' | 'plain';
+
+  /**
+   * Whether the agent's reply text is posted to the channel.
+   * - `'show'` (default) - reply text streams (or posts) to the thread as it does today.
+   * - `'hidden'` - reply text is never posted. The agent's own messages reach the
+   *   channel only through tools you give it (for example a reply tool that posts to the thread).
+   *
+   * Tool display, approval prompts, error messages, and typing status are unaffected.
+   */
+  textDisplay?: 'show' | 'hidden';
+
+  /**
+   * **Experimental. Slack only; ignored on other adapters.** Let the agent post
+   * Block Kit cards.
+   *
+   * When `true`, runs on the Slack adapter get a `render_card` tool. The agent
+   * calls it with a [json-render](https://json-render.dev) spec (cards, fields,
+   * tables, charts, images, link buttons) and the card is posted to the thread
+   * as Block Kit. Invalid specs come back to the agent as a list of issues so it
+   * can fix them and retry.
+   *
+   * Requires the optional `@json-render/chat` package to be installed.
+   *
+   * @default false
+   */
+  generativeUI?: boolean;
 
   /**
    * What to do with buffered (not-yet-posted) reply text when a run is aborted.
@@ -95,6 +128,9 @@ export interface ChannelAdapterBaseConfig {
    * @default `true` for Slack, Discord, Teams, Google Chat and Telegram; `false` otherwise.
    */
   approvalButtons?: boolean;
+
+  /** Who may approve or deny a tool call in a shared channel. Defaults to the requester. */
+  toolApprovers?: 'requester' | 'anyone';
 
   /**
    * Show platform typing indicators (and adaptive status text where supported,
@@ -463,7 +499,8 @@ export type SlashCommandChannelHandlerConfig = SlashCommandChannelHandler | fals
 /**
  * Handler function for action events (button clicks, select changes).
  * Receives the original Chat SDK event, the default handler implementation
- * (built-in tool approval card handling; a no-op for other action ids), and a
+ * (built-in tool approval cards and `run_continue` retry buttons; a no-op for
+ * other action ids), and a
  * runtime context carrying the resolved Mastra instance.
  */
 export type ActionChannelHandler = (
@@ -541,6 +578,13 @@ export interface ChannelHandlers {
   onMention?: ChannelHandlerConfig;
 
   /**
+   * Handler for messages that neither mention the bot nor belong to a subscribed thread.
+   * Opt-in: registered only when a function is supplied; omitted or false ignores these messages.
+   * Calling defaultHandler runs the agent, posts the response, and subscribes the thread.
+   */
+  onMessage?: ChannelHandlerConfig;
+
+  /**
    * Handler for messages in subscribed threads.
    * Default: Routes to agent.stream and posts the response.
    */
@@ -555,8 +599,9 @@ export interface ChannelHandlers {
   /**
    * Handler for action events (button clicks, select changes).
    * Default: Handles the built-in tool approval cards
-   * (`tool_approve:<toolCallId>` / `tool_deny:<toolCallId>`) and ignores other action ids.
-   * Setting `false` also disables the built-in tool approval buttons.
+   * (`tool_approve:<toolCallId>` / `tool_deny:<toolCallId>`) and `run_continue` buttons,
+   * which send `Continue.` from the clicker through `onSubscribedMessage`. Ignores other action ids.
+   * Setting `false` also disables these built-in buttons.
    */
   onAction?: ActionChannelHandlerConfig;
 }
@@ -645,6 +690,17 @@ export interface ChannelConfig {
    * ```
    */
   inlineLinks?: InlineLinkEntry[];
+
+  /**
+   * Total bytes of channel attachments the agent may store under
+   * `channel-attachments/` in its workspace. Binary attachments that need an
+   * authenticated download (e.g. Slack files) are saved there so workspace
+   * tools can open them. When saving a file would go over this limit, the
+   * agent gets the attachment URL instead and nothing is written.
+   *
+   * @default 104857600 (100 MiB)
+   */
+  maxAttachmentStorageBytes?: number;
 
   /** State adapter for deduplication, locking, and subscriptions. Defaults to in-memory. */
   state?: StateAdapter;

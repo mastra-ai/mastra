@@ -1,64 +1,47 @@
-import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { ArrowUpDown, Funnel, LayersPlus } from 'lucide-react';
+import { BoardPropertiesMenu as SharedBoardPropertiesMenu } from '@mastra/playground-ui/domains/factory';
+import type { LucideIcon } from 'lucide-react';
 
-import { PropertiesMenu } from '../../../ui/PropertiesMenu';
-import { boardFilterItems, boardFiltersActive, boardFilterValues, withBoardFilterValues } from '../boardFilters';
-import { boardSortOptions, DEFAULT_BOARD_SORT } from '../boardSort';
-import type { BoardKind } from '../boardStages';
+import { withBoardFilterValues } from '../boardFilters';
+import type { BoardFilterFieldId } from '../boardFilters';
+import { BOARD_SORT_LABELS, boardSortOptions, DEFAULT_BOARD_SORT } from '../boardSort';
+import type { BoardSort } from '../boardSort';
 import type { BoardView } from '../hooks/useBoardView';
-import { BoardFilterSubmenu } from './BoardFilterSubmenu';
 import type { BoardFilterField } from './boardFilterFields';
+import { IconHistory } from '@mastra/playground-ui/icons/central/IconHistory';
+import { IconFilterAsc } from '@mastra/playground-ui/icons/central/IconFilterAsc';
+import { IconFilterDesc } from '@mastra/playground-ui/icons/central/IconFilterDesc';
+import { IconUserEdit } from '@mastra/playground-ui/icons/central/IconUserEdit';
+
+const SORT_ICONS: Record<BoardSort, LucideIcon> = {
+  recent: IconHistory,
+  'recent-mine': IconUserEdit,
+  'created-newest': IconFilterDesc,
+  'created-oldest': IconFilterAsc,
+};
+
+export function boardPropertiesMenuProps(view: BoardView, fields: readonly BoardFilterField[], currentUserId?: string) {
+  return {
+    view,
+    fields,
+    sortLabels: BOARD_SORT_LABELS,
+    defaultSort: DEFAULT_BOARD_SORT,
+    sortOptions: boardSortOptions(currentUserId).map(option => {
+      const Icon = SORT_ICONS[option.value];
+      return { ...option, icon: <Icon aria-hidden /> };
+    }),
+    onFilterChange: (fieldId: BoardFilterFieldId, values: string[]) =>
+      view.setFilters(withBoardFilterValues(view.filters, fieldId, values)),
+  };
+}
 
 export function BoardPropertiesMenu({
-  kind,
   view,
   fields,
   currentUserId,
 }: {
-  kind: BoardKind;
   view: BoardView;
   fields: readonly BoardFilterField[];
   currentUserId?: string;
 }) {
-  const items = boardFilterItems(view.filters, kind);
-  const changedCount = items.length + (view.sort === DEFAULT_BOARD_SORT ? 0 : 1);
-  const canSaveAsView = !view.savedViews.applied && boardFiltersActive(view.filters, kind);
-
-  return (
-    <PropertiesMenu
-      label="Board properties"
-      variant="default"
-      icon={<Funnel size={15} aria-hidden />}
-      changedCount={changedCount}
-      onReset={view.resetProperties}
-    >
-      <DropdownMenu.RadioSub
-        label="Sort"
-        icon={<ArrowUpDown aria-hidden />}
-        options={boardSortOptions(currentUserId)}
-        value={view.sort}
-        onValueChange={view.setSort}
-      />
-      {fields
-        .filter(field => !field.hidden)
-        .map(field => (
-          <BoardFilterSubmenu
-            key={field.id}
-            field={field}
-            selected={boardFilterValues(view.filters, kind, field.id)}
-            narrowing={items.some(item => item.fieldId === field.id)}
-            onChange={values => view.setFilters(withBoardFilterValues(view.filters, kind, field.id, values))}
-          />
-        ))}
-      {canSaveAsView && (
-        <>
-          <DropdownMenu.Separator />
-          <DropdownMenu.Item onClick={() => view.savedViews.create(view.newViewSettings, items)}>
-            <LayersPlus aria-hidden />
-            <span>Save as view</span>
-          </DropdownMenu.Item>
-        </>
-      )}
-    </PropertiesMenu>
-  );
+  return <SharedBoardPropertiesMenu {...boardPropertiesMenuProps(view, fields, currentUserId)} />;
 }

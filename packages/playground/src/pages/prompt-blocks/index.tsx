@@ -1,7 +1,7 @@
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
@@ -9,6 +9,7 @@ import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-
 import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { useStoredPromptBlocks, PromptsList, NoPromptBlocksInfo } from '@/domains/prompt-blocks';
 import { PromptBlocksHeaderCreateAction } from '@/domains/prompt-blocks/prompt-blocks-header-actions';
@@ -19,6 +20,8 @@ const PROMPT_BLOCKS_PER_PAGE = 50;
 const PROMPT_BLOCKS_SORT_KEYS = ['updatedAt'] as const;
 
 export default function PromptBlocks() {
+  const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
+  const canCreate = !isCmsLoading && isCmsAvailable;
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -63,7 +66,7 @@ export default function PromptBlocks() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Prompts</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
@@ -72,7 +75,7 @@ export default function PromptBlocks() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Prompts</h1>
         <PermissionDenied variant="fill" resource="prompt blocks" />
       </PageLayout>
@@ -81,7 +84,7 @@ export default function PromptBlocks() {
 
   if (error) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Prompts</h1>
         <EmptyState
           tone="error"
@@ -95,25 +98,27 @@ export default function PromptBlocks() {
 
   if (promptBlocks.length === 0 && !isLoading && page === 0) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Prompts</h1>
-        <NoPromptBlocksInfo />
+        <NoPromptBlocksInfo canCreate={canCreate} />
       </PageLayout>
     );
   }
 
   return (
     <PageLayout
+      variant="page"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={<PromptBlocksHeaderCreateAction />}
       actionRow={
         <ActionRow>
           <ActionRow.Start>
             <div className="max-w-120 flex-1">
-              <ListSearch
-                onSearch={handleSearchChange}
-                label="Filter prompts"
-                placeholder="Filter by name or description"
+              <SearchInput
+                {...listSearchProps}
+                onValueChange={handleSearchChange}
+                label="Search prompts"
+                placeholder="Search by name or description"
               />
             </div>
           </ActionRow.Start>

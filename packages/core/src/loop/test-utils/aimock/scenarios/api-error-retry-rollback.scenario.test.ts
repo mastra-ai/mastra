@@ -1,6 +1,8 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { SpanType } from '../../../../observability';
+import { captureOutcomeEvents } from '../outcome-test-utils';
 import { MockMemory } from '../../../../memory/mock';
 import { StreamErrorRetryProcessor } from '../../../../processors';
 import { createTool } from '../../../../tools';
@@ -49,9 +51,16 @@ describeForAllEngines('Support agent reply interrupted by a dropped connection',
   // step boundary before the retry (#26654). (#26857)
   it('a reply cut off mid-sentence is retried and only the complete reply is saved (#26857)', async () => {
     const memory = new MockMemory();
+    const { observability, ended } = captureOutcomeEvents();
+    const onError = vi.fn();
 
     const { output, chunks } = await runLoopScenario({
       engine,
+      observability,
+      onError,
+      afterStream: async () => {
+        await expect.poll(() => ended().length).toBeGreaterThan(0);
+      },
       llm: getMock(),
       prompt: 'Where is my order #4821?',
       memory,
@@ -70,6 +79,11 @@ describeForAllEngines('Support agent reply interrupted by a dropped connection',
     expect(deltas.length).toBeGreaterThan(1);
     expect(CUT_OFF_REPLY.startsWith(deltas[0]!)).toBe(true);
 
+    expect(onError).not.toHaveBeenCalled();
+    expect(ended()).toHaveLength(1);
+    expect(ended()[0]).toMatchObject({ outcome: 'success', stopReason: null });
+    expect(ended(SpanType.MODEL_GENERATION)).toHaveLength(1);
+    expect(ended(SpanType.MODEL_GENERATION)[0]).toMatchObject({ outcome: 'success' });
     expect(await output.text).toBe(FULL_REPLY);
     expect(getMock().getRequests()).toHaveLength(2);
     expect(await savedAssistantText(memory, 'thread-26857')).toEqual([FULL_REPLY]);

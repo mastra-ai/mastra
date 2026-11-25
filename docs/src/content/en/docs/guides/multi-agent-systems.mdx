@@ -23,7 +23,7 @@ This is often the case when:
 - Different stages need different prompts, models, or guardrails.
 - You want clear boundaries between routing, execution, and synthesis.
 
-Start with one agent when possible. Add more agents when the added structure clearly improves quality, speed, or reliability.
+Start with one agent when possible. Add more agents when the added structure improves quality, speed, or reliability.
 
 Multi-agent patterns are useful when the system needs a clear way to divide context, decisions, and responsibilities across components. In practice, the key design question is which component stays in control as the task moves forward.
 
@@ -48,7 +48,7 @@ In Mastra, [workflows](/docs/workflows/overview) can implement coordination patt
 A supervisor pattern keeps one lead agent in control for the full task. The supervisor decides when to delegate, which specialist to call, what context to pass, and how to combine the result.
 
 Use this pattern when the task is open-ended and the full sequence isn't known in advance. For example, a research task may require different lines of inquiry based on what earlier steps uncover. A supervisor can adapt as the task unfolds.
-The tradeoff is that the supervisor becomes the main coordination point. That makes the pattern flexible, but it also means the result depends heavily on good delegation behavior and clear subagent boundaries.
+The tradeoff is that the supervisor becomes the main coordination point. That makes the pattern flexible, but it also means the result depends on good delegation behavior and clear subagent boundaries.
 
 In Mastra, this pattern maps directly to [supervisor agents](/docs/subagents). A supervisor defines subagents through the `agents` property, then coordinates them with `stream()` or `generate()`. Mastra helps control this pattern through delegation hooks and message filtering, with memory isolation between agents.
 

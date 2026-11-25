@@ -1,7 +1,7 @@
 extends: existence
 message: "Don't use language (such as '%s') that defines people by their disability."
 link: https://docs.microsoft.com/en-us/style-guide/a-z-word-list-term-collections/term-collections/accessibility-terms
-level: suggestion
+level: error
 ignorecase: true
 tokens:
   - a victim of
@@ -10,7 +10,10 @@ tokens:
   - birth defect
   - crippled
   - differently abled
-  - disabled
+  # "Disabled" is usually a feature or field state (`disabled: true`), which is
+  # fine. Only flag it when it labels people.
+  - \bthe disabled(?![\w-])
+  - disabled (person|people|child|children|individual|individuals|student|students)
   - dumb
   - handicapped
   - handicaps

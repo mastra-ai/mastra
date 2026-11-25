@@ -6,7 +6,7 @@ import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.js';
 import type { TestAuthUser } from '../../routes/test-utils.js';
 import { PlatformGitLabIntegration } from '../platform/gitlab/integration.js';
 import { GitLabApiError } from './api.js';
-import { decodeIssueReference, encodeIssueReference, encodeSourceId, GitLabIntegration } from './integration.js';
+import { encodeIssueReference, encodeSourceId, GitLabIntegration } from './integration.js';
 import type { GitLabIntegrationBase } from './integration.js';
 import { buildGitLabRoutes } from './routes.js';
 
@@ -56,55 +56,6 @@ describe('GitLab webhook auth boundary', () => {
 });
 
 describe('GitLab UI routes', () => {
-  it('serves Review MR candidates only for a repository linked to the caller-owned Factory', async () => {
-    const gitlab = new GitLabIntegration({ accessToken: 'group-token' });
-    vi.spyOn(gitlab, 'resolveOrgId').mockResolvedValue('org1');
-    const linked = vi.spyOn(gitlab, 'getLinkedRepository').mockResolvedValue(null);
-    const list = vi
-      .spyOn(gitlab.versionControl, 'listPullRequests')
-      .mockResolvedValue({ pullRequests: [], nextCursor: null });
-    const target = vi.spyOn(gitlab.versionControl, 'getRepositoryTarget').mockResolvedValue({
-      connection: { type: 'oauth', accessToken: 'gitlab-connection:direct' },
-      sourceId: '10:acme/app',
-    });
-    const path = '/web/gitlab/projects/link-1/prs?factoryProjectId=factory-1&page=1';
-    const absent = await buildApp(gitlab, orgUser()).request(path);
-    expect(absent.status).toBe(404);
-    expect(list).not.toHaveBeenCalled();
-
-    linked.mockResolvedValue({ repository: { id: 'repo-1', externalId: '10' }, host: 'gitlab.com' } as never);
-    list.mockResolvedValue({
-      pullRequests: [
-        {
-          id: '5',
-          title: 'Validate MR',
-          url: 'https://gitlab.com/acme/app/-/merge_requests/5',
-          author: 'rhys',
-          assignees: [],
-          requestedReviewers: [],
-          body: 'description',
-          state: 'open',
-          draft: false,
-          merged: false,
-          mergeable: true,
-          baseBranch: 'main',
-          headBranch: 'feature',
-          headSha: 'abc',
-          createdAt: '2026-09-18T00:00:00Z',
-          updatedAt: '2026-09-18T00:00:00Z',
-        },
-      ],
-      nextCursor: null,
-    });
-    const response = await buildApp(gitlab, orgUser()).request(path);
-    expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(body.pullRequests[0]).toMatchObject({ number: 5, title: 'Validate MR' });
-    expect(body.pullRequests[0].externalId).toMatch(/^gitlab-pr:/);
-    expect(target).toHaveBeenCalledWith({ orgId: 'org1', repositoryId: 'repo-1' });
-    expect(list).toHaveBeenCalledWith(expect.objectContaining({ includeDrafts: false, cursor: '1' }));
-  });
-
   it('reports direct server configuration without exposing credentials', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
@@ -145,7 +96,11 @@ describe('GitLab UI routes', () => {
 
   it('reports platform connections including reauthorization state', async () => {
     const gitlab = new PlatformGitLabIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+      connect: {
+        baseUrl: 'https://integrations.example.com',
+        projectId: 'proj_factory',
+        accessToken: 'platform-token',
+      },
       connectionId: 'a1b_old',
     });
     vi.spyOn(gitlab, 'listConnections').mockResolvedValue([
@@ -196,8 +151,6 @@ describe('GitLab UI routes', () => {
           connectionId: 'direct',
           accountLabel: 'gitlab.com',
           defaultBranch: 'main',
-          sandboxProvider: 'none',
-          sandboxWorkdir: '~/app',
         },
       ],
     });
@@ -275,9 +228,7 @@ describe('GitLab UI routes', () => {
       }),
       listBindings: vi
         .fn()
-        .mockResolvedValue([
-          { integrationId: 'gitlab', sourceId: legacyId, factoryProjectId: 'factory-1', board: 'work' },
-        ]),
+        .mockResolvedValue([{ integrationId: 'gitlab', sourceId: legacyId, factoryProjectId: 'factory-1' }]),
       migrateSourceIds: vi.fn().mockResolvedValue({
         migrations: [{ from: legacyId, to: canonicalId }],
         conflicts: [],
@@ -292,53 +243,6 @@ describe('GitLab UI routes', () => {
       integrationId: 'gitlab',
       migrations: [{ from: legacyId, to: canonicalId }],
     });
-  });
-
-  it('lists only selected GitLab sources routed to the caller-owned Factory', async () => {
-    const gitlab = new GitLabIntegration({ accessToken: 'group-token' });
-    const factoryProjectId = '11111111-1111-4111-8111-111111111111';
-    const sourceId = encodeSourceId({ connectionId: 'direct', projectId: '10', projectPath: 'acme/app' });
-    vi.spyOn(gitlab, 'resolveOrgId').mockResolvedValue('org1');
-    vi.spyOn(gitlab.intake, 'listIssues').mockResolvedValue({
-      issues: [
-        {
-          id: '42',
-          identifier: 'acme/app#42',
-          title: 'Fix routed intake',
-          url: 'https://gitlab.com/acme/app/-/issues/42',
-          author: 'grace',
-          state: 'opened',
-          stateType: 'unstarted',
-          priority: null,
-          assignee: null,
-          assignees: [],
-          source: 'acme/app',
-          sourceId,
-          labels: [],
-          commentCount: 0,
-          createdAt: '2026-09-01T00:00:00Z',
-          updatedAt: '2026-09-01T00:00:00Z',
-        },
-      ],
-      nextCursor: null,
-    });
-    const intake = {
-      ensureReady: vi.fn(),
-      getConfig: vi.fn().mockResolvedValue({ gitlab: { enabled: true, sourceIds: [sourceId, 'other'] } }),
-      listBindings: vi.fn().mockResolvedValue([
-        { integrationId: 'gitlab', sourceId, factoryProjectId, board: 'work' },
-        { integrationId: 'gitlab', sourceId: 'other', factoryProjectId, board: 'planning' },
-      ]),
-    } as unknown as NonNullable<Parameters<typeof buildGitLabRoutes>[0]['intake']>;
-
-    const response = await buildApp(gitlab, orgUser(), intake).request(
-      '/web/gitlab/issues?factoryProjectId=' + factoryProjectId + '&board=work',
-    );
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(decodeIssueReference(body.issues[0].externalId)).toMatchObject({ projectId: '10', issueIid: 42 });
-    expect(gitlab.intake.listIssues).toHaveBeenCalledWith(expect.objectContaining({ sourceIds: [sourceId] }));
   });
 
   it('loads details only for a selected GitLab source routed to the caller-owned Factory', async () => {
@@ -371,7 +275,7 @@ describe('GitLab UI routes', () => {
     const intake = {
       ensureReady: vi.fn(),
       getConfig: vi.fn().mockResolvedValue({ gitlab: { enabled: true, sourceIds: [sourceId] } }),
-      listBindings: vi.fn().mockResolvedValue([{ integrationId: 'gitlab', sourceId, factoryProjectId, board: 'work' }]),
+      listBindings: vi.fn().mockResolvedValue([{ integrationId: 'gitlab', sourceId, factoryProjectId }]),
     } as unknown as NonNullable<Parameters<typeof buildGitLabRoutes>[0]['intake']>;
 
     const response = await buildApp(gitlab, orgUser(), intake).request(
@@ -450,7 +354,7 @@ describe('GitLab subscriptions route', () => {
       subscribedByUserId: 'u1',
     },
     createdAt: new Date(),
-    updatedAt: new Date(),
+    updatedAt: new Date('2026-11-03T10:00:00.000Z'),
   };
   const subscribedGitLab = () => {
     const gitlab = new GitLabIntegration({ accessToken: 'group-token' });
@@ -494,6 +398,7 @@ describe('GitLab subscriptions route', () => {
           repoFullName: 'acme/app',
           pullRequestNumber: 17,
           status: 'open',
+          updatedAt: '2026-11-03T10:00:00.000Z',
           url: 'https://gitlab.example.com/acme/app/-/merge_requests/17',
         },
       ],

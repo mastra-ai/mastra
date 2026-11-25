@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderHookWithProviders } from '../../../e2e/ui/render';
-import { useAvailableModelsQuery, usePersonalAvailableModelsQuery } from '../useAvailableModels';
+import { useAvailableModelsQuery, useScopeModelCatalogQuery } from '../useAvailableModels';
 
 describe('scoped model catalogs', () => {
   it('caches organization, personal, and Factory catalogs separately', async () => {
@@ -21,11 +21,11 @@ describe('scoped model catalogs', () => {
 
     const { result } = renderHookWithProviders(() => ({
       factory: useAvailableModelsQuery({ factoryProjectId: 'fp-1' }),
-      personal: usePersonalAvailableModelsQuery(),
+      personal: useScopeModelCatalogQuery('user'),
       organization: useAvailableModelsQuery({ scope: 'org' }),
     }));
 
-    await waitFor(() => expect(result.current.personal.data?.map(m => m.id)).toEqual(['openai/gpt-5']));
+    await waitFor(() => expect(result.current.personal.data?.models.map(m => m.id)).toEqual(['openai/gpt-5']));
     await waitFor(() => expect(result.current.factory.data?.map(m => m.id)).toEqual(['deepseek/deepseek-flash']));
     await waitFor(() => expect(result.current.organization.data?.map(m => m.id)).toEqual(['anthropic/claude-fable-5']));
     expect([...queries].sort()).toEqual(['?factoryId=fp-1', '?scope=org', '?scope=user']);

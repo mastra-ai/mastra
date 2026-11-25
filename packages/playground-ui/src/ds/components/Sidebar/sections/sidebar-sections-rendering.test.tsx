@@ -95,19 +95,6 @@ describe('SidebarSections', () => {
     expect(untitled.hasAttribute('aria-labelledby')).toBe(false);
   });
 
-  it('points a section heading at the heading it actually rendered', () => {
-    render(
-      <SidebarSections
-        sections={[{ key: 'workspace', title: 'Workspace', links: [{ name: 'Agents', url: '/agents' }] }]}
-      />,
-    );
-
-    const section = screen.getByRole('region', { name: 'Workspace' });
-    const headingId = section.getAttribute('aria-labelledby');
-
-    expect(document.getElementById(headingId ?? '')?.textContent).toBe('Workspace');
-  });
-
   it('gives two sections that share a key their own heading ids', () => {
     render(
       <>
@@ -201,5 +188,27 @@ describe('SidebarSections', () => {
     expect(screen.getByRole('link', { name: 'Agents' }).className).toContain('px-3');
     expect(screen.getByRole('link', { name: 'Templates' }).className).toContain('pl-8');
     expect(screen.getByRole('link', { name: 'Drafts' }).className).toContain('pl-10');
+  });
+});
+
+describe('SidebarSections group titles', () => {
+  it('opens the list with rows: the first group title is only for screen readers, later ones show', () => {
+    render(
+      <SidebarSections
+        sections={[
+          { key: 'primitives', title: 'Primitives', links: [{ name: 'Agents', url: '/agents' }] },
+          { key: 'evaluation', title: 'Evaluation', links: [{ name: 'Scorers', url: '/scorers' }] },
+        ]}
+      />,
+    );
+
+    // Both groups stay named regions for assistive tech.
+    const first = screen.getByRole('region', { name: 'Primitives' });
+    const second = screen.getByRole('region', { name: 'Evaluation' });
+
+    const firstTitle = first.querySelector('header');
+    const secondTitle = second.querySelector('header');
+    expect(firstTitle?.classList.contains('sr-only')).toBe(true);
+    expect(secondTitle?.classList.contains('sr-only')).toBe(false);
   });
 });

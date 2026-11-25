@@ -35,8 +35,8 @@ const summary = await dataset.startExperiment({
 })
 
 console.log(summary.status) // 'completed' | 'failed'
-console.log(summary.succeededCount) // number of items that ran successfully
-console.log(summary.failedCount) // number of items that failed
+console.log(summary.succeededCount) // items that executed without an error
+console.log(summary.failedCount) // items with execution errors
 ```
 
 `startExperiment()` blocks until all items finish. For fire-and-forget execution, see [async experiments](#async-experiments).
@@ -50,6 +50,31 @@ To configure scorers for one item, edit the item and enable **Override dataset s
 After running an experiment, the **Experiments** tab shows all runs for that dataset (with status, counts, and timestamps). Select an experiment to see per-item results, scores, and execution traces.
 
 In the **Experiments** tab, select **Compare** and choose two or more experiments to compare their scores and results side by side.
+
+## Interpret results
+
+An experiment's status and counts describe execution. Use the scores to assess output quality. A `completed` experiment can contain execution errors, and `failedCount: 0` doesn't mean every answer meets your quality requirements.
+
+| Result | What it tells you |
+| - | - |
+| `succeededCount` and `failedCount` | How many items executed without an error or ended with an execution error |
+| Each item's `scores` | How the output performed against each scorer's criteria, with a reason when provided |
+| Average score | Aggregate performance for a scorer, which can hide individual failures |
+
+For example, an experiment with one item asks `2 + 2?` and returns `5`. An accuracy scorer assigns `0`, but the task itself returns without throwing. Its summary contains:
+
+```typescript
+console.log(summary.status) // 'completed'
+console.log(summary.succeededCount) // 1
+console.log(summary.failedCount) // 0
+console.log(summary.results[0].scores[0].score) // 0
+```
+
+In Studio, open the experiment and inspect per-item outputs, scores, and reasons before deciding whether a change improved your agent. Check scorer errors too: a missing score provides no evidence of quality.
+
+If every item must meet a requirement, check each item's score against it. For a binary scorer where `1` means the requirement was met, five scores of `1` and one of `0` average about `0.83`, but one item still fails the requirement.
+
+For automated quality checks in CI, [`runEvals()` gates and verdicts](/docs/evals/gates-and-verdicts) provide explicit pass/fail criteria. Those options belong to `runEvals()`. Dataset experiment status and counts remain execution results.
 
 ## Delete experiments
 
@@ -166,7 +191,7 @@ Scorers automatically run after each item's target execution. Pass scorer instan
     ```typescript
     import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt'
 
-    const relevancy = createAnswerRelevancyScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' })
+    const relevancy = createAnswerRelevancyScorer({ model: '__GATEWAY_OPENAI_MODEL_LUNA__' })
 
     const summary = await dataset.startExperiment({
       name: 'with-scorer-instances',
@@ -438,7 +463,7 @@ In [Studio](/docs/studio/overview), edit a dataset item to author tool mocks as 
 
 ### Limitations
 
-- **No tool span for mocked calls.** A mocked call returns its output before the tool executes, so it doesn't create a tool span. Trajectory scorers backed by stored traces may therefore not see mocked tool calls. Trajectory extraction that falls back to the agent's message output still sees them, so trajectory scoring can differ depending on your observability configuration.
+- **Mocked tool spans are flat.** A served mock records a `tool_call` span with the mocked output and the attribute `mocked: true`. A mismatched or exhausted mock records one with `success: false`. The real tool never runs, so the span has no child spans and no `toolDescription`.
 - **Storage support.** The LibSQL, PostgreSQL, MongoDB, and Spanner adapters persist tool mocks and tool mock reports, while the MySQL adapter rejects writes that carry either one. All dataset storage adapters persist `unmockedToolPolicy`.
 
 ## Async experiments
@@ -471,6 +496,34 @@ while (experiment.status === 'pending' || experiment.status === 'running') {
 
 console.log(experiment.status) // 'completed' | 'failed'
 ```
+
+### Durable experiments
+
+By default, `startExperimentAsync()` runs the experiment inside the process that started it. If that process stops or redeploys, the experiment stays `running`. Pass `durable: true` to run it as an [evented workflow](/docs/deployment/workers) instead, with one workflow step per item:
+
+```typescript title="src/mastra/experiments/durable.ts"
+const { experimentId } = await dataset.startExperimentAsync({
+  durable: true,
+  targetType: 'agent',
+  targetId: 'translation-agent',
+  scorers: ['accuracy'],
+  maxConcurrency: 5,
+})
+```
+
+The workflow's run ID is the experiment ID. Each item's result is upserted on `(experimentId, itemId, attempt)`, so an item that runs again after a crash still leaves one row. A target error is recorded on the item's row and doesn't fail the run. When every item is done, Mastra finalizes the experiment.
+
+Durable runs need [workers](/docs/deployment/workers) and a pubsub that redelivers unacknowledged events, such as Redis Streams, Valkey Streams, or Google Cloud Pub/Sub. A process that only handles pushed events through `mastra.handleWorkflowEvent()` can run the steps too, without starting workers. On the default in-memory pubsub, the run works but stays in one process, so it isn't durable.
+
+Everything in a durable run must be serializable, so `durable: true` accepts registered targets, scorer IDs, `version`, `maxConcurrency`, `itemTimeout`, `maxRetries`, `agentModel` as a `provider/modelId` string, `requestContext` with plain JSON values, `unmockedToolPolicy`, and `versions`. It throws a `MastraError` with the `id` `EXPERIMENT_NOT_DURABLE` before creating anything when the config uses an inline `task`, lifecycle hooks, `onEvent`, `signal`, scorer objects or step scorers, `persistence` set to `'none'`, or `requestContext` values that aren't plain JSON, such as functions or dates.
+
+A durable run doesn't keep the signed-in user from the request that started it. Mastra removes the auth token, user, roles, and permissions from `requestContext` before the run is published or stored, so targets in a durable run don't see them.
+
+Keep these limits in mind:
+
+- **Recovery waits for the broker.** With Redis or Valkey Streams, an item cut off by a crash runs again after `reclaimIdleMs` (60 seconds by default).
+- **A pull worker runs one step at a time.** Items run in parallel only across workers, so `maxConcurrency` above the worker count doesn't speed up the run.
+- **Workflow targets can run twice after a crash.** Workflow recovery can restart the cut-off target run while the item also runs again. The item still counts once.
 
 ## Caller-driven experiments
 
@@ -505,7 +558,7 @@ const { result, scores } = await dataset.runExperimentItem({
 })
 ```
 
-Retries and timeouts belong to your orchestrator: each `runExperimentItem` call executes the item exactly once. Scorers resolve with the same precedence as native runs: experiment `scorers` win over item `scorerIds`, which win over dataset `scorerIds`.
+By default each `runExperimentItem` call executes the item once. Pass `maxRetries` and `itemTimeout` to retry and time out inside the call, or leave both to your orchestrator. The item's tool mocks apply as in native runs. Scorers resolve with the same precedence as native runs: experiment `scorers` win over item `scorerIds`, which win over dataset `scorerIds`.
 
 ### Ingest external results
 

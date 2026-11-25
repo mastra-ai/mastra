@@ -69,7 +69,7 @@ const store = new WeaviateVector({
 
 ## Documentation
 
-- [@mastra/weaviate documentation](https://mastra.ai/reference/vectors/weaviate)
+- [@mastra/weaviate documentation](https://mastra.ai/integrations/vectors/weaviate)
 
 ## Changelog
 

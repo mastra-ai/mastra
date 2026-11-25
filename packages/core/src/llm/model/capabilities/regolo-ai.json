@@ -14,6 +14,8 @@
     "apertus-70b",
     "brick-complexity-pro",
     "brick-v1-beta",
+    "deepseek-ocr-2",
+    "faster-whisper-large-v3",
     "gemma4-31b",
     "glm5.2",
     "gpt-oss-120b",
@@ -34,26 +36,26 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "qwen3.8-27b": [
-      {
-        "type": "toggle"
-      }
-    ],
     "gpt-oss-20b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "gemma4-31b": [
-      {
-        "type": "toggle"
-      }
-    ],
     "glm5.2": [
       {
         "type": "effort",
         "values": ["high", "max"]
+      }
+    ],
+    "qwen3.8-27b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "gemma4-31b": [
+      {
+        "type": "toggle"
       }
     ]
   }

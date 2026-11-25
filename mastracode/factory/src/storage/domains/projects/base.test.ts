@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import type { ModelPack } from '../../../model-packs.js';
 import { createFactoryStorageForTests } from '../../test-utils.js';
+import type { UpdateFactoryProjectInput } from './base.js';
 
 describe('FactoryProjectsStorage', () => {
   it('creates an org-owned project without any integration or repository', async () => {
@@ -123,23 +125,75 @@ describe('FactoryProjectsStorage', () => {
     expect(await seed.projects.update({ orgId: 'org-1', id: project.id, input: cleared })).toMatchObject(cleared);
   });
 
-  it('keeps review test checks off by default and lets a project toggle them', async () => {
+  it('reads a project saved before packs as a single Default pack built from its default model', async () => {
+    const seed = await createFactoryStorageForTests();
+    const empty = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Empty' } });
+    expect(empty).toMatchObject({ defaultModelId: null, modelPacks: [], defaultModelPackId: null });
+
+    const legacy = await seed.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Legacy', defaultModelId: 'anthropic/claude-opus-5.5' },
+    });
+    expect(legacy).toMatchObject({
+      defaultModelId: 'anthropic/claude-opus-5.5',
+      defaultThinkingLevel: 'medium',
+      modelPacks: [
+        {
+          id: 'default',
+          name: 'Default',
+          models: [{ modelId: 'anthropic/claude-opus-5.5', thinkingLevel: 'medium' }],
+        },
+      ],
+      defaultModelPackId: 'default',
+    });
+  });
+
+  it('mirrors the default pack into the default model and edits the pack through the default model', async () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'P' } });
-    expect(project.reviewTestChecksEnabled).toBe(false);
-    const enabled = await seed.projects.update({
-      orgId: 'org-1',
-      id: project.id,
-      input: { reviewTestChecksEnabled: true },
+    const build: ModelPack = {
+      id: 'build',
+      name: 'Build',
+      models: [
+        { modelId: 'anthropic/claude-opus-5.5', thinkingLevel: 'medium' },
+        { modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'high' },
+      ],
+    };
+    const cheap: ModelPack = {
+      id: 'cheap',
+      name: 'Cheap',
+      models: [{ modelId: 'deepseek/deepseek-flash', thinkingLevel: 'low' }],
+    };
+    const update = (input: UpdateFactoryProjectInput) =>
+      seed.projects.update({ orgId: 'org-1', id: project.id, input });
+
+    expect(await update({ modelPackSet: { modelPacks: [build, cheap], defaultModelPackId: 'cheap' } })).toMatchObject({
+      defaultModelId: 'deepseek/deepseek-flash',
+      defaultThinkingLevel: 'low',
+      modelPacks: [build, cheap],
+      defaultModelPackId: 'cheap',
     });
-    expect(enabled?.reviewTestChecksEnabled).toBe(true);
-    const disabled = await seed.projects.update({
-      orgId: 'org-1',
-      id: project.id,
-      input: { reviewTestChecksEnabled: false },
+
+    await update({ modelPackSet: { modelPacks: [build, cheap], defaultModelPackId: 'build' } });
+    await update({ defaultModelId: 'moonshot/kimi-k3' });
+    expect(await seed.projects.getById({ id: project.id })).toMatchObject({
+      defaultModelId: 'moonshot/kimi-k3',
+      defaultThinkingLevel: 'medium',
+      modelPacks: [
+        { ...build, models: [{ modelId: 'moonshot/kimi-k3', thinkingLevel: 'medium' }, build.models[1]] },
+        cheap,
+      ],
     });
-    expect(disabled?.reviewTestChecksEnabled).toBe(false);
-    expect((await seed.projects.get({ orgId: 'org-1', id: project.id }))?.reviewTestChecksEnabled).toBe(false);
+
+    await update({ name: 'Renamed' });
+    expect((await seed.projects.get({ orgId: 'org-1', id: project.id }))?.defaultModelPackId).toBe('build');
+
+    expect(await update({ modelPackSet: { modelPacks: [], defaultModelPackId: null } })).toMatchObject({
+      defaultModelId: null,
+      modelPacks: [],
+      defaultModelPackId: null,
+    });
   });
 });
 

@@ -1,6 +1,7 @@
 export {
   PlatformClient,
   PlatformApiError,
+  type PlatformAccessToken,
   type PlatformClientOptions,
   type PlatformProxyError,
   type SandboxProvider,
@@ -29,6 +30,7 @@ export {
   type PlatformSandboxNetworkIsolation,
   type PlatformSandboxTemplate,
   type SandboxAddressRegistry,
+  type SandboxPortAuthCookie,
   type SandboxTemplatePending,
 } from './sandbox.js';
 export {
@@ -37,6 +39,7 @@ export {
   type PlatformRepoTemplateRepository,
   type PlatformRepoTemplateResolver,
 } from './repo-template.js';
+export { PlatformSandboxFilesystem } from './sandbox-filesystem.js';
 export { platformFilesystemProvider, platformSandboxProvider } from './provider.js';
 export {
   PlatformFactorySandbox,

@@ -1,3 +1,5 @@
+import { withObservationalMemoryLifecycleColumns } from '@internal/core/memory';
+import type { UpdateActiveObservationsResult, UpdateBufferedObservationsResult } from '@internal/core/memory';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -6,6 +8,8 @@ import {
   createStorageErrorId,
   isRunFenceConflictError,
   MemoryStorage,
+  OBSERVATIONAL_MEMORY_TABLE_SCHEMA,
+  TABLE_OBSERVATIONAL_MEMORY,
   normalizePerPage,
   calculatePagination,
   resolveRunFence,
@@ -21,6 +25,18 @@ import {
   retentionCutoffMs,
 } from '@mastra/core/storage';
 import type {
+  CreateObservationalMemoryInput,
+  CreateReflectionGenerationInput,
+  ObservationalMemoryHistoryOptions,
+  ObservationalMemoryRecord,
+  StorageListMessagesByResourceIdInput,
+  SwapBufferedReflectionToActiveInput,
+  SwapBufferedToActiveInput,
+  SwapBufferedToActiveResult,
+  UpdateActiveObservationsInput,
+  UpdateBufferedObservationsInput,
+  UpdateBufferedReflectionInput,
+  UpdateObservationalMemoryConfigInput,
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
@@ -41,6 +57,7 @@ import type { MssqlDomainConfig } from '../../db';
 import { assertRunFence, claimTransaction, DB_NOW_MS, withRunFence } from '../../db/run-fencing';
 import type { Queryable } from '../../db/run-fencing';
 import { getTableName, getSchemaName, buildDateRangeFilter, prepareWhereClause } from '../utils';
+import { MssqlObservationalMemory } from './observational-memory';
 
 function bindMssqlMetadataParams(request: sql.Request, params: Record<string, unknown>): void {
   for (const [paramName, paramValue] of Object.entries(params)) {
@@ -80,7 +97,10 @@ function buildMssqlMessageMetadataFilter(metadataFilter: StorageMetadataFilter |
 
 export class MemoryMSSQL extends MemoryStorage {
   override readonly supportsPartialThreadUpdate = true;
+  override readonly supportsObservationalMemory = true;
+  override readonly supportsObservationalMemoryHistorySearch = true;
   private pool: sql.ConnectionPool;
+  #om: MssqlObservationalMemory;
   private schema?: string;
   private db: MssqlDB;
   private needsConnect: boolean;
@@ -127,6 +147,11 @@ export class MemoryMSSQL extends MemoryStorage {
     this.pool = pool;
     this.schema = schemaName;
     this.db = new MssqlDB({ pool, schemaName, skipDefaultIndexes });
+    this.#om = new MssqlObservationalMemory({
+      pool,
+      schema: schemaName,
+      assertFence: (transaction, operation) => this.#assertFence(transaction, undefined, operation),
+    });
     this.needsConnect = needsConnect;
     this.skipDefaultIndexes = skipDefaultIndexes;
     // Filter indexes to only those for tables managed by this domain
@@ -145,8 +170,28 @@ export class MemoryMSSQL extends MemoryStorage {
       tableName: TABLE_MEMORY_RUN_FENCES as TABLE_NAMES,
       schema: RUN_FENCING_TABLE_SCHEMAS[TABLE_MEMORY_RUN_FENCES],
     });
+    await this.#initObservationalMemoryTable();
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+  }
+
+  /** Creates or upgrades the observational memory table and its head-lookup index. */
+  async #initObservationalMemoryTable(): Promise<void> {
+    const schema = withObservationalMemoryLifecycleColumns(
+      OBSERVATIONAL_MEMORY_TABLE_SCHEMA[TABLE_OBSERVATIONAL_MEMORY],
+    );
+    if (!schema) return;
+    const tableName = TABLE_OBSERVATIONAL_MEMORY as TABLE_NAMES;
+    await this.db.createTable({ tableName, schema });
+    await this.db.alterTable({ tableName, schema, ifNotExists: Object.keys(schema) });
+    if (this.skipDefaultIndexes) return;
+    // No schema prefix: index names only need to be unique per table, and a long schema name
+    // would push a prefixed name past the 63-character identifier limit.
+    await this.db.createIndex({
+      name: 'mastra_om_lookupkey_generation_idx',
+      table: tableName,
+      columns: ['lookupKey', 'generationCount DESC'],
+    });
   }
 
   override supportsRunFencing(): boolean {
@@ -316,6 +361,7 @@ export class MemoryMSSQL extends MemoryStorage {
     await this.db.clearTable({ tableName: TABLE_THREADS });
     await this.db.clearTable({ tableName: TABLE_RESOURCES });
     await this.db.clearTable({ tableName: TABLE_MEMORY_RUN_FENCES as TABLE_NAMES });
+    await this.db.clearTable({ tableName: TABLE_OBSERVATIONAL_MEMORY as TABLE_NAMES });
   }
 
   async getThreadById({
@@ -941,9 +987,7 @@ export class MemoryMSSQL extends MemoryStorage {
   }
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
-    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
-
+    const { threadId } = args;
     // Normalize threadId to array
     const threadIds = Array.isArray(threadId) ? threadId : [threadId];
 
@@ -958,6 +1002,35 @@ export class MemoryMSSQL extends MemoryStorage {
         new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
     }
+    return this.#queryMessages(args, threadIds);
+  }
+
+  /** Lists a resource's messages across all of its threads (used by resource-scoped observational memory). */
+  public async listMessagesByResourceId(
+    args: StorageListMessagesByResourceIdInput,
+  ): Promise<StorageListMessagesOutput> {
+    const { resourceId } = args;
+    if (!resourceId || typeof resourceId !== 'string' || resourceId.trim().length === 0) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'LIST_MESSAGES', 'INVALID_QUERY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { resourceId: resourceId ?? '' },
+        },
+        new Error('resourceId is required'),
+      );
+    }
+    return this.#queryMessages(args, null);
+  }
+
+  /** One page of messages from `threadIds`, or from every thread of `resourceId` when `threadIds` is null. */
+  async #queryMessages(
+    args: Omit<StorageListMessagesInput, 'threadId'> & { threadId?: string | string[] },
+    threadIds: string[] | null,
+  ): Promise<StorageListMessagesOutput> {
+    const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     if (page < 0) {
       throw new MastraError({
@@ -966,7 +1039,7 @@ export class MemoryMSSQL extends MemoryStorage {
         category: ErrorCategory.USER,
         text: 'Page number must be non-negative',
         details: {
-          threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
+          threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
           page,
         },
       });
@@ -984,7 +1057,7 @@ export class MemoryMSSQL extends MemoryStorage {
       const baseQuery = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId, resourceId FROM ${tableName}`;
 
       const filters: Record<string, any> = {
-        thread_id: threadIds.length === 1 ? threadIds[0] : { $in: threadIds },
+        ...(threadIds ? { thread_id: threadIds.length === 1 ? threadIds[0] : { $in: threadIds } } : {}),
         ...(resourceId ? { resourceId } : {}),
         ...buildDateRangeFilter(filter?.dateRange, 'createdAt'),
       };
@@ -1099,11 +1172,12 @@ export class MemoryMSSQL extends MemoryStorage {
         return seqA != null && seqB != null ? (seqA - seqB) * mult : a.id.localeCompare(b.id);
       });
 
-      const threadIdSet = new Set(threadIds);
+      const threadIdSet = new Set(threadIds ?? []);
       const returnedThreadMessageCount = finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).length;
-      const hasMore = metadataFilter
-        ? perPageInput !== false && offset + primaryPageCount < total
-        : perPageInput !== false && returnedThreadMessageCount < total && offset + perPage < total;
+      const hasMore =
+        metadataFilter || !threadIds
+          ? perPageInput !== false && offset + primaryPageCount < total
+          : perPageInput !== false && returnedThreadMessageCount < total && offset + perPage < total;
 
       return {
         messages: finalMessages,
@@ -1119,11 +1193,11 @@ export class MemoryMSSQL extends MemoryStorage {
       }
       const mastraError = new MastraError(
         {
-          id: createStorageErrorId('MSSQL', 'LIST_MESSAGES', 'FAILED'),
+          id: createStorageErrorId('MSSQL', threadIds ? 'LIST_MESSAGES' : 'LIST_MESSAGES_BY_RESOURCE_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
+            threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
             resourceId: resourceId ?? '',
           },
         },
@@ -1557,5 +1631,97 @@ export class MemoryMSSQL extends MemoryStorage {
       this.logger?.trackException?.(mastraError);
       throw mastraError;
     }
+  }
+
+  // ============================================
+  // Observational Memory
+  // ============================================
+
+  override getObservationalMemory(
+    threadId: string | null,
+    resourceId: string,
+  ): Promise<ObservationalMemoryRecord | null> {
+    return this.#om.getObservationalMemory(threadId, resourceId);
+  }
+
+  override getObservationalMemoryHistory(
+    threadId: string | null,
+    resourceId: string,
+    limit?: number,
+    options?: ObservationalMemoryHistoryOptions,
+  ): Promise<ObservationalMemoryRecord[]> {
+    return this.#om.getObservationalMemoryHistory(threadId, resourceId, limit, options);
+  }
+
+  override initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {
+    return this.#om.initializeObservationalMemory(input);
+  }
+
+  override updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
+    return this.#om.updateActiveObservations(input);
+  }
+
+  override commitActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult> {
+    return this.#om.commitActiveObservations(input);
+  }
+
+  override updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
+    return this.#om.updateBufferedObservations(input);
+  }
+
+  override appendBufferedObservations(
+    input: UpdateBufferedObservationsInput,
+  ): Promise<UpdateBufferedObservationsResult> {
+    return this.#om.appendBufferedObservations(input);
+  }
+
+  override swapBufferedToActive(input: SwapBufferedToActiveInput): Promise<SwapBufferedToActiveResult> {
+    return this.#om.swapBufferedToActive(input);
+  }
+
+  override createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
+    return this.#om.createReflectionGeneration(input);
+  }
+
+  override updateBufferedReflection(input: UpdateBufferedReflectionInput): Promise<void> {
+    return this.#om.updateBufferedReflection(input);
+  }
+
+  override swapBufferedReflectionToActive(
+    input: SwapBufferedReflectionToActiveInput,
+  ): Promise<ObservationalMemoryRecord> {
+    return this.#om.swapBufferedReflectionToActive(input);
+  }
+
+  override setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {
+    return this.#om.setReflectingFlag(id, isReflecting);
+  }
+
+  override setObservingFlag(id: string, isObserving: boolean): Promise<void> {
+    return this.#om.setObservingFlag(id, isObserving);
+  }
+
+  override setBufferingObservationFlag(id: string, isBuffering: boolean, lastBufferedAtTokens?: number): Promise<void> {
+    return this.#om.setBufferingObservationFlag(id, isBuffering, lastBufferedAtTokens);
+  }
+
+  override setBufferingReflectionFlag(id: string, isBuffering: boolean): Promise<void> {
+    return this.#om.setBufferingReflectionFlag(id, isBuffering);
+  }
+
+  override clearObservationalMemory(threadId: string | null, resourceId: string): Promise<void> {
+    return this.#om.clearObservationalMemory(threadId, resourceId);
+  }
+
+  override setPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
+    return this.#om.setPendingMessageTokens(id, tokenCount);
+  }
+
+  override insertObservationalMemoryRecord(record: ObservationalMemoryRecord): Promise<void> {
+    return this.#om.insertObservationalMemoryRecord(record);
+  }
+
+  override updateObservationalMemoryConfig(input: UpdateObservationalMemoryConfigInput): Promise<void> {
+    return this.#om.updateObservationalMemoryConfig(input, (target, source) => this.deepMergeConfig(target, source));
   }
 }

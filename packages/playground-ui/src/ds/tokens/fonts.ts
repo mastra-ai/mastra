@@ -9,6 +9,7 @@
 export const TextRoles = [
   'hero',
   'lead',
+  'display-lg',
   'display',
   'title',
   'heading',
@@ -19,6 +20,7 @@ export const TextRoles = [
   'card-title-tight',
   'card-title-strong',
   'body-sm',
+  'menu',
   'column',
   'caption',
   'eyebrow',

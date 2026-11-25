@@ -1,9 +1,10 @@
 import type { ArrayWrapperProps } from '@autoform/react';
-import { Brackets, Plus } from 'lucide-react';
 import { Children, useContext, useRef } from 'react';
 import { ArrayAddButtonContext, FormReadOnlyContext } from '../field-context';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
+import { IconBrackets1 } from '@/ds/icons/central/IconBrackets1';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 
 export function ArrayWrapper({ label, children, onAddItem }: ArrayWrapperProps) {
   const readOnly = useContext(FormReadOnlyContext);
@@ -13,11 +14,12 @@ export function ArrayWrapper({ label, children, onAddItem }: ArrayWrapperProps) 
     <div className="min-w-0">
       <div className="mb-2 flex items-center justify-between gap-2">
         <Txt as="h3" variant="caption" tone="muted" className="flex items-center gap-1.5">
-          <Brackets aria-hidden className="size-3.5" />
+          <IconBrackets1 aria-hidden className="size-icon-sm" />
           {label} <span className="tabular-nums">{count}</span>
         </Txt>
         {!readOnly && (
           <Button
+            icon={<IconPlusMedium />}
             ref={addButtonRef}
             type="button"
             variant="ghost"
@@ -25,7 +27,6 @@ export function ArrayWrapper({ label, children, onAddItem }: ArrayWrapperProps) 
             aria-label={`Add ${label} item`}
             onClick={onAddItem}
           >
-            <Plus />
             Add item
           </Button>
         )}

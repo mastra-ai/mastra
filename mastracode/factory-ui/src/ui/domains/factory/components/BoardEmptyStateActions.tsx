@@ -1,16 +1,20 @@
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { Link } from 'react-router';
 
+import { boardRulesPath } from '../../boardConfig/boardConfigPaths';
 import { settingsSectionPath } from '../../settings/settingsSections';
+import type { IntakeSetup } from './BoardColumnEmptyState';
 
 export function BoardEmptyStateActions({
   factoryId,
-  connectSource,
+  boardId,
+  intakeSetup,
   onCreate,
   onClearFilters,
 }: {
   factoryId: string;
-  connectSource: boolean;
+  boardId: string;
+  intakeSetup?: IntakeSetup;
   onCreate?: () => void;
   onClearFilters?: () => void;
 }) {
@@ -29,9 +33,14 @@ export function BoardEmptyStateActions({
           Create card
         </Button>
       )}
-      {connectSource && (
+      {intakeSetup === 'source' && (
         <Link to={settingsSectionPath(factoryId, 'intake')} className={buttonVariants({ size: 'sm' })}>
           Connect issue source
+        </Link>
+      )}
+      {intakeSetup === 'route' && (
+        <Link to={boardRulesPath(factoryId, boardId)} className={buttonVariants({ size: 'sm' })}>
+          Add intake rule
         </Link>
       )}
     </>

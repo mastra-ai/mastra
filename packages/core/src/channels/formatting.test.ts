@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest';
 import {
   formatArgsSummary,
   formatResult,
+  formatTaskTitle,
   formatToolApproval,
   formatToolApproved,
   formatToolDenied,
@@ -126,6 +127,62 @@ describe('formatArgsSummary', () => {
 
   it('returns an empty string when the input is invalid JSON string', () => {
     expect(formatArgsSummary('not json {')).toBe('');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatTaskTitle
+// ---------------------------------------------------------------------------
+
+describe('formatTaskTitle', () => {
+  it('reads the description from JSON-string args too', () => {
+    // ToolTracker hands over whatever the model emitted, which can still be
+    // the raw JSON string; the description must not be lost on that path.
+    expect(
+      formatTaskTitle(
+        'execute_command',
+        'ls -la /workspace',
+        JSON.stringify({ command: 'ls -la /workspace', description: 'Listing files in /workspace' }),
+      ),
+    ).toBe('Listing files in /workspace');
+    expect(formatTaskTitle('execute_command', 'ls', '{not json')).toBe('execute_command ls');
+  });
+
+  it('uses the description alone when the tool provides one', () => {
+    expect(
+      formatTaskTitle('execute_command', 'ls -la /workspace', {
+        command: 'ls -la /workspace',
+        description: 'Listing files in /workspace',
+      }),
+    ).toBe('Listing files in /workspace');
+  });
+
+  it('truncates a long description at 80 characters', () => {
+    const result = formatTaskTitle('execute_command', '', { description: 'x'.repeat(100) });
+    expect(result).toHaveLength(81);
+    expect(result.endsWith('…')).toBe(true);
+  });
+
+  it('falls back to name and args without a description', () => {
+    expect(formatTaskTitle('view', 'src/index.ts', { path: 'src/index.ts' })).toBe('view src/index.ts');
+  });
+
+  it('falls back to the bare name when there are no args', () => {
+    expect(formatTaskTitle('list_threads', '', {})).toBe('list_threads');
+  });
+
+  it('ignores a blank or non-string description', () => {
+    expect(formatTaskTitle('view', 'a.ts', { description: '  ', path: 'a.ts' })).toBe('view a.ts');
+    expect(formatTaskTitle('view', 'a.ts', { description: '\n\n  \n', path: 'a.ts' })).toBe('view a.ts');
+    expect(formatTaskTitle('view', 'a.ts', { description: 42, path: 'a.ts' })).toBe('view a.ts');
+  });
+
+  it('keeps only the first line of a multi-line description and collapses whitespace', () => {
+    // Issue/PR creators and MCP tools take whole bodies under `description`.
+    const body = '\n  Fix the   flaky\tlogin test\n\nIt fails when the clock crosses midnight.\n- step one\n- step two';
+    expect(formatTaskTitle('github_create_issue', 'Fix login', { title: 'Fix login', description: body })).toBe(
+      'Fix the flaky login test',
+    );
   });
 });
 

@@ -9,6 +9,7 @@ import { omDebug } from '../debug';
 import { getObservableMessages } from '../message-utils';
 import type { ObservationalMemory } from '../observational-memory';
 import type { MemoryContextProvider } from '../processor';
+import { idsMarkedForResave, withMessagesMarkedForResave } from '../resave-counted-messages';
 import type { ObservationModelContext } from '../types';
 
 import { loadMemoryContextMessages } from './load-memory-context';
@@ -50,13 +51,6 @@ export class ObservationTurn {
   private _generationCountAtStart = -1;
 
   /**
-   * Ids of the messages this turn was started with (the user's request). Mid-turn
-   * observation may record them, but they stay in the live prompt until the turn ends.
-   * @internal Set by step 0.
-   */
-  inputMessageIds: string[] = [];
-
-  /**
    * Fingerprints of the non-marker parts each message had when a step last drained it. A message
    * is unread step output only if it gained a part the model has not seen — including a tool result
    * merged in place into an existing tool-invocation part — not when it only gained OM markers.
@@ -96,7 +90,10 @@ export class ObservationTurn {
   /** Processor-provided hooks for turn/step lifecycle integration. */
   readonly hooks: ObservationTurnHooks;
 
+  readonly abortSignal?: AbortSignal;
+
   constructor(opts: {
+    abortSignal?: AbortSignal;
     om: ObservationalMemory;
     threadId: string;
     resourceId?: string;
@@ -108,6 +105,7 @@ export class ObservationTurn {
     observabilityContext?: ObservabilityContext;
     hooks?: ObservationTurnHooks;
   }) {
+    this.abortSignal = opts.abortSignal;
     this.om = opts.om;
     this.threadId = opts.threadId;
     this.resourceId = opts.resourceId;
@@ -236,9 +234,15 @@ export class ObservationTurn {
     // Save any unsaved messages from the last step
     const unsavedInput = messageList.get.input.db();
     const unsavedOutput = messageList.get.response.db();
-    const unsavedMessages = [...unsavedInput, ...unsavedOutput];
+    // Stored messages whose token counts changed go back with them.
+    const unsavedMessages = withMessagesMarkedForResave(messageList, [...unsavedInput, ...unsavedOutput]);
     if (unsavedMessages.length > 0) {
-      await this.om.persistMessages(unsavedMessages, this.threadId, this.resourceId);
+      await this.om.persistMessages(
+        unsavedMessages,
+        this.threadId,
+        this.resourceId,
+        idsMarkedForResave(messageList, [...unsavedInput, ...unsavedOutput]),
+      );
     }
 
     // When the agent goes idle, start buffering any unobserved messages in the background.
@@ -246,7 +250,7 @@ export class ObservationTurn {
     // rather than waiting for the next turn's step.prepare() to trigger buffering.
     const asyncObservationEnabled = this.om.buffering.isAsyncObservationEnabled();
     const bufferOnIdle = this.om.getObservationConfig().bufferOnIdle;
-    if (asyncObservationEnabled && bufferOnIdle) {
+    if (!this.abortSignal?.aborted && asyncObservationEnabled && bufferOnIdle) {
       const allMessages = getObservableMessages(messageList);
       const record = this._record!;
       const unobservedMessages = this.om.getUnobservedMessages(allMessages, record);

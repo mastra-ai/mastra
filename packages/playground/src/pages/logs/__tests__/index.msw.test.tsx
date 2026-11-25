@@ -88,6 +88,18 @@ describe('when logs are sorted from the Date column', () => {
   });
 });
 
+describe('when the URL filters logs on the MCP Server primitive type', () => {
+  it('asks the server only for logs rooted at an MCP server', async () => {
+    const urls: string[] = [];
+    useHandlers(urls);
+
+    renderWithProviders(<LogsPage />, { router: { initialEntries: ['/logs?rootEntityType=mcp_server'] } });
+
+    await waitFor(() => expect(urls.length).toBeGreaterThan(0));
+    expect(new URL(urls[urls.length - 1] ?? '').searchParams.get('rootEntityType')).toBe('mcp_server');
+  });
+});
+
 const LocationProbe = () => {
   const location = useLocation();
   return <div data-testid="location">{location.search}</div>;
@@ -117,9 +129,11 @@ describe('LogsPage log drawer', () => {
   beforeEach(() => {
     if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
     useDrawerHandlers();
-    // jsdom has no layout; give the list viewport a size so the virtualizer renders rows.
+    // jsdom has no layout; give the list viewport a size (the virtualizer reads clientWidth/clientHeight) so the virtualizer renders rows.
     vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(800);
     vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(1200);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(800);
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1200);
   });
 
   afterEach(() => {
@@ -168,7 +182,7 @@ describe('LogsPage log drawer', () => {
       const traceDialog = await screen.findByRole('dialog', { name: /trace-a/ });
       expect(await within(traceDialog).findByText('llm call')).toBeTruthy();
 
-      fireEvent.change(within(traceDialog).getByPlaceholderText('Search spans...'), {
+      fireEvent.change(within(traceDialog).getByPlaceholderText('Search spans'), {
         target: { value: 'zanzibar-payload-term' },
       });
 

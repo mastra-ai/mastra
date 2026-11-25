@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
+import { invalidateSessionQueries } from '../../../../hooks/useWorkspaces';
 import { recreateSessionSandbox } from '../services/user-sessions';
 
 export interface RecreateSandboxTarget {
@@ -22,11 +23,11 @@ export function useRecreateSessionSandbox(
     mutationFn: () => recreateSessionSandbox(baseUrl, sessionId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceChanges(workspacePath) });
-      // Every thread's listing and every open file belonged to the destroyed sandbox.
-      void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceFilesScope(workspacePath) });
+      // Every listed folder and every open file belonged to the destroyed sandbox.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceTreeScope(workspacePath) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceFileScope(workspacePath) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.userSession(sessionId) });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(factoryId) });
+      void invalidateSessionQueries(queryClient, factoryId);
       toast('Sandbox recreated. Send a message to continue.');
       onSuccess?.();
     },

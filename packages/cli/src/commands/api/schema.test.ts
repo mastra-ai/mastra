@@ -72,7 +72,7 @@ describe('buildCommandExamples', () => {
 
   it('uses observability score route shapes', () => {
     expect(commands('scoreCreate')).toEqual([
-      'mastra api score create \'{"score":{"scoreId":"score_123","scorerId":"quality","score":0.95,"runId":"run_123","entityType":"agent","entityId":"weather-agent"}}\'',
+      'mastra api score create \'{"score":{"traceId":"trace_123","scorerId":"quality","score":0.95}}\'',
     ]);
     expect(commands('scoreList')).toEqual([
       'mastra api score list \'{"page":0,"perPage":50}\'',
@@ -85,6 +85,12 @@ describe('buildCommandExamples', () => {
     expect(commands('mcpGet')).toEqual(['mastra api mcp get id_123']);
     expect(commands('datasetCreate')).toEqual(['mastra api dataset create \'{"name":"weather-eval"}\'']);
     expect(commands('experimentRun')).toEqual(['mastra api experiment run dataset_123 \'{"name":"baseline"}\'']);
+  });
+
+  it('includes required path IDs in generated list examples', () => {
+    expect(commands('workflowRunList')).toEqual([
+      'mastra api workflow run list workflowId_123 \'{"page":0,"perPage":50}\'',
+    ]);
   });
 });
 

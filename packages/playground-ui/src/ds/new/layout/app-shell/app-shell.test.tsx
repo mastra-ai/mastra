@@ -4,9 +4,14 @@ import { describe, expect, it } from 'vitest';
 import { AppShell } from './app-shell';
 import { MainCard } from './main-card';
 
-function renderShell({ mobileHeader = true, sidebar = false }: { mobileHeader?: boolean; sidebar?: boolean } = {}) {
+function renderShell({
+  edgeToEdge,
+  mobileHeader = true,
+  sidebar = false,
+}: { edgeToEdge?: boolean; mobileHeader?: boolean; sidebar?: boolean } = {}) {
   return renderToStaticMarkup(
     <AppShell
+      edgeToEdge={edgeToEdge}
       mobileHeader={mobileHeader ? <header>Mobile header</header> : undefined}
       sidebar={sidebar ? <nav>Sidebar</nav> : undefined}
     >
@@ -17,6 +22,10 @@ function renderShell({ mobileHeader = true, sidebar = false }: { mobileHeader?: 
 
 function bodyClassName(markup: string) {
   return markup.match(/data-slot="app-shell-body" class="([^"]*)"/)?.[1] ?? '';
+}
+
+function transitionClasses(classes: string[]) {
+  return classes.filter(className => className.includes('transition'));
 }
 
 describe('AppShell', () => {
@@ -44,8 +53,9 @@ describe('AppShell', () => {
       expect(markup.indexOf('Sidebar')).toBeLessThan(markup.indexOf('Main content'));
     });
 
-    it('lays the sidebar and content out as a desktop grid', () => {
-      expect(markup).toContain('data-slot="app-shell" class="h-full min-h-0 lg:grid lg:grid-cols-[auto_minmax(0,1fr)]');
+    it('reserves a sidebar column beside the content from lg', () => {
+      const shellClasses = markup.match(/data-slot="app-shell" class="([^"]*)"/)?.[1].split(/\s+/) ?? [];
+      expect(shellClasses).toEqual(expect.arrayContaining(['lg:grid', 'lg:grid-cols-[auto_minmax(0,1fr)]']));
     });
 
     it('lets wide content scroll inside itself instead of widening the content column', () => {
@@ -61,12 +71,6 @@ describe('AppShell', () => {
         .split(/\s+/)
         .filter(className => /^(max-lg:)?p[trblxy]?-/.test(className));
       expect(unscopedPadding).toEqual([]);
-    });
-
-    it('never mixes padding shorthands with longhands, so consumer CSS order cannot override the lg inset', () => {
-      const classes = bodyClassName(markup).split(/\s+/);
-      expect(classes).not.toContain('p-1.5');
-      expect(classes).not.toContain('lg:p-2');
     });
 
     it('keeps the mobile header outside the inset body', () => {
@@ -95,20 +99,59 @@ describe('AppShell', () => {
       expect(markup).toContain('Main content');
     });
   });
-});
 
-describe('MainCard', () => {
-  const classes =
-    renderToStaticMarkup(<MainCard>Content</MainCard>)
-      .match(/data-slot="main-card" class="([^"]*)"/)?.[1]
-      ?.split(/\s+/) ?? [];
-
-  it('frames the content only from lg, where the sidebar sits beside it', () => {
-    expect(classes).toEqual(expect.arrayContaining(['lg:rounded-studio-frame', 'lg:p-px', 'lg:shadow-raised']));
+  describe('when edge to edge', () => {
+    it.each([{ sidebar: true }, { sidebar: false }])('drops every lg inset, sidebar: $sidebar', ({ sidebar }) => {
+      const padding = bodyClassName(renderShell({ edgeToEdge: true, sidebar }))
+        .split(/\s+/)
+        .filter(className => /^(lg:)?p[trblxy]?-/.test(className));
+      expect(padding).toEqual([]);
+    });
   });
 
-  it('is flat below lg: no rounding, rim padding or elevation outside the lg variant', () => {
-    const frameClasses = classes.filter(className => /^(max-lg:)?(rounded|p-|shadow)/.test(className));
+  describe('inset animation', () => {
+    it('stays static for apps that leave edgeToEdge out', () => {
+      expect(transitionClasses(bodyClassName(renderShell({ sidebar: true })).split(/\s+/))).toEqual([]);
+    });
+
+    it.each([true, false])('animates both ways for apps that pass edgeToEdge, edgeToEdge: %s', edgeToEdge => {
+      expect(transitionClasses(bodyClassName(renderShell({ edgeToEdge, sidebar: true })).split(/\s+/))).not.toEqual([]);
+    });
+  });
+});
+
+function mainCardClasses({ edgeToEdge }: { edgeToEdge?: boolean } = {}) {
+  return (
+    renderToStaticMarkup(<MainCard edgeToEdge={edgeToEdge}>Content</MainCard>)
+      .match(/data-slot="main-card" class="([^"]*)"/)?.[1]
+      ?.split(/\s+/) ?? []
+  );
+}
+
+describe('MainCard', () => {
+  const classes = mainCardClasses();
+
+  it('frames the content only from lg, where the sidebar sits beside it', () => {
+    expect(classes).toEqual(expect.arrayContaining(['lg:rounded-studio-frame', 'lg:border', 'border-surface-rim']));
+  });
+
+  it('keeps the mobile frame flat', () => {
+    const frameClasses = classes.filter(className => /^(max-lg:)?(rounded|border$|shadow)/.test(className));
     expect(frameClasses).toEqual([]);
+  });
+
+  it('drops the frame when edge to edge', () => {
+    const frameClasses = mainCardClasses({ edgeToEdge: true }).filter(className =>
+      /^(lg:)?(rounded|border$|shadow)/.test(className),
+    );
+    expect(frameClasses).toEqual([]);
+  });
+
+  it('stays static for apps that leave edgeToEdge out', () => {
+    expect(transitionClasses(classes)).toEqual([]);
+  });
+
+  it.each([true, false])('animates the frame both ways for apps that pass edgeToEdge, edgeToEdge: %s', edgeToEdge => {
+    expect(transitionClasses(mainCardClasses({ edgeToEdge }))).not.toEqual([]);
   });
 });

@@ -1,5 +1,101 @@
 # @mastra/auth-better-auth
 
+## 1.1.13
+
+### Patch Changes
+
+- Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package. ([#31176](https://github.com/mastra-ai/mastra/pull/31176))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+## 1.1.13-alpha.0
+
+### Patch Changes
+
+- Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package. ([#31176](https://github.com/mastra-ai/mastra/pull/31176))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+## 1.1.12
+
+### Patch Changes
+
+- dependencies updates: ([#30464](https://github.com/mastra-ai/mastra/pull/30464))
+  - Updated dependency [`better-auth@^1.7.22` ↗︎](https://www.npmjs.com/package/better-auth/v/1.7.22) (from `^1.7.18`, in `dependencies`)
+
+## 1.1.12-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#30464](https://github.com/mastra-ai/mastra/pull/30464))
+  - Updated dependency [`better-auth@^1.7.22` ↗︎](https://www.npmjs.com/package/better-auth/v/1.7.22) (from `^1.7.18`, in `dependencies`)
+
+## 1.1.11
+
+### Patch Changes
+
+- dependencies updates: ([#29714](https://github.com/mastra-ai/mastra/pull/29714))
+  - Updated dependency [`better-auth@^1.7.18` ↗︎](https://www.npmjs.com/package/better-auth/v/1.7.18) (from `^1.7.15`, in `dependencies`)
+
+- Updated `better-auth` to `^1.7.15`. ([#29052](https://github.com/mastra-ai/mastra/pull/29052))
+
+- Added `user` support for dynamic agent configuration callbacks: the provider now implements `toMastraUser()` so callbacks receive a correctly mapped `user` argument (id, name, email, avatar, and role where available). ([#28612](https://github.com/mastra-ai/mastra/pull/28612))
+
+## 1.1.11-alpha.2
+
+### Patch Changes
+
+- Added `user` support for dynamic agent configuration callbacks: the provider now implements `toMastraUser()` so callbacks receive a correctly mapped `user` argument (id, name, email, avatar, and role where available). ([#28612](https://github.com/mastra-ai/mastra/pull/28612))
+
+## 1.1.11-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#29714](https://github.com/mastra-ai/mastra/pull/29714))
+  - Updated dependency [`better-auth@^1.7.18` ↗︎](https://www.npmjs.com/package/better-auth/v/1.7.18) (from `^1.7.15`, in `dependencies`)
+
+## 1.1.11-alpha.0
+
+### Patch Changes
+
+- Updated `better-auth` to `^1.7.15`. ([#29052](https://github.com/mastra-ai/mastra/pull/29052))
+
+## 1.1.10
+
+### Patch Changes
+
+- dependencies updates: ([#28538](https://github.com/mastra-ai/mastra/pull/28538))
+  - Updated dependency [`better-auth@^1.7.13` ↗︎](https://www.npmjs.com/package/better-auth/v/1.7.13) (from `^1.7.12`, in `dependencies`)
+
+## 1.1.10-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#28538](https://github.com/mastra-ai/mastra/pull/28538))
+  - Updated dependency [`better-auth@^1.7.13` ↗︎](https://www.npmjs.com/package/better-auth/v/1.7.13) (from `^1.7.12`, in `dependencies`)
+
+## 1.1.9
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`better-auth@^1.7.12` ↗︎](https://www.npmjs.com/package/better-auth/v/1.7.12) (from `^1.7.7`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+## 1.1.9-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`better-auth@^1.7.12` ↗︎](https://www.npmjs.com/package/better-auth/v/1.7.12) (from `^1.7.7`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+## 1.1.8
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
 ## 1.1.8-alpha.0
 
 ### Patch Changes

@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { useLocation } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 import ExperimentsPage from '..';
+import { storageWithoutMetrics } from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
 import { buildDataset, buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
 import {
   buildListExperimentsResponse,
@@ -57,6 +58,7 @@ function select(...ids: string[]) {
 
 beforeEach(() => {
   server.use(
+    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(storageWithoutMetrics)),
     http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(noAgents)),
     http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
     http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
@@ -165,14 +167,6 @@ describe('Experiments page — selection and compare', () => {
       expect(await getCompareTooltip()).toBe('Select at least two experiments to compare');
     });
 
-    it('offers New experiment without a Reset button', async () => {
-      await renderLoadedPage();
-
-      expect(screen.getByRole('button', { name: /new experiment/i })).toBeDefined();
-      expect(screen.queryByRole('button', { name: /reset/i })).toBeNull();
-      expect(screen.queryByRole('button', { name: /cancel/i })).toBeNull();
-    });
-
     it('lets every experiment be selected', async () => {
       await renderLoadedPage();
 
@@ -229,6 +223,19 @@ describe('Experiments page — selection and compare', () => {
 
       expect(isChecked('exp-c')).toBe(false);
       expect(getSelectionCount(1)).toBeDefined();
+    });
+  });
+
+  describe('when the dataset of the selected experiment cannot be found', () => {
+    beforeEach(() => {
+      server.use(http.get(`${TEST_BASE_URL}/api/datasets`, () => HttpResponse.json(buildListDatasetsResponse([]))));
+    });
+
+    it('gives the dataset id in the legend instead', async () => {
+      await renderLoadedPage();
+      select('exp-a');
+
+      await waitFor(() => expect(getLegend().textContent).toBe('Comparable experiments share dataset dataset-1'));
     });
   });
 
@@ -371,13 +378,6 @@ describe('Experiments page — selection and compare', () => {
 
   describe('when three experiments from the same dataset are selected', () => {
     beforeEach(listManySameDatasetExperiments);
-
-    it('counts them against the ten compare slots', async () => {
-      await renderLoadedPage();
-      select('exp-a', 'exp-b', 'exp-d');
-
-      expect(getSelectionCount(3)).toBeDefined();
-    });
 
     it('compares the first pick as baseline against the others as contenders', async () => {
       await renderLoadedPage();

@@ -1,10 +1,10 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
 import { getShortId } from '@mastra/playground-ui/components/Text';
+import { getExperimentDisplayName } from '@mastra/playground-ui/domains/experiments/utils/experiment-display-name';
 import { ExperimentsIcon } from '@mastra/playground-ui/icons/ExperimentsIcon';
 import { useExperimentsForDatasetFilter } from '@mastra/react/hooks/experiments';
 import type { ExperimentTargetFilter } from '@mastra/react/hooks/experiments';
-import { getExperimentDisplayName } from '@/domains/experiments/utils/experiment-display-name';
 
 /** Sentinel value emitted when the "All experiments" option is picked. */
 export const ALL_EXPERIMENTS = 'all';
@@ -44,7 +44,7 @@ export function ExperimentCombobox({
   const experimentOptions = (data?.experiments ?? []).map(experiment => ({
     label: getExperimentDisplayName(experiment),
     value: experiment.id,
-    start: <ExperimentsIcon className="size-4 shrink-0 text-muted-foreground" data-testid="experiments-icon" />,
+    start: <ExperimentsIcon className="size-icon-md shrink-0 text-muted-foreground" data-testid="experiments-icon" />,
     description: experiment.description
       ? truncate(experiment.description)
       : (getShortId(experiment.id) ?? experiment.id),
@@ -59,7 +59,7 @@ export function ExperimentCombobox({
       value={value ?? (allOption ? ALL_EXPERIMENTS : '')}
       onValueChange={onValueChange}
       placeholder={isLoading ? 'Loading experiments...' : isError ? 'Failed to load experiments' : 'Select experiment'}
-      searchPlaceholder="Search experiments..."
+      searchPlaceholder="Search experiments"
       emptyText="No experiments found."
       className={className}
       disabled={isLoading || isError}

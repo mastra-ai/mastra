@@ -30,8 +30,11 @@ const TRACE_DIMENSIONS = [
   'entityName',
   'name',
   'spanType',
+  'entityId',
   'environment',
   'status',
+  'outcome',
+  'stopReason',
   'serviceName',
   'executionSource',
   'threadId',
@@ -70,7 +73,12 @@ const TOKEN_COST_MEASURES = [
   'cost.avg',
 ];
 
-const ALL_MEASURES = [...ROOT_MEASURES, ...TOKEN_COST_MEASURES];
+const TIME_TO_FIRST_STATISTICS = ['avg', 'min', 'max', 'p50', 'p90', 'p95', 'p99', 'count'] as const;
+const TIME_TO_FIRST_MEASURES = (['timeToFirstToken', 'timeToFirstChunk'] as const).flatMap(kind =>
+  TIME_TO_FIRST_STATISTICS.map(statistic => `${kind}.${statistic}`),
+);
+
+const ALL_MEASURES = [...ROOT_MEASURES, ...TOKEN_COST_MEASURES, ...TIME_TO_FIRST_MEASURES];
 
 const PROTOTYPE_KEYS = ['constructor', '__proto__', 'toString', 'hasOwnProperty'];
 
@@ -150,9 +158,11 @@ describe('trace aggregate dimension registry', () => {
   it('allows traceId for countDistinct but no other identity field', () => {
     expect(isTraceAggregateDimension('traceId')).toBe(false);
     expect(isTraceAggregateCountDistinctField('traceId')).toBe(true);
-    for (const field of ['spanId', 'runId', 'requestId']) {
+    for (const field of ['spanId', 'runId', 'requestId', 'stopReasonContext']) {
       expect(isTraceAggregateCountDistinctField(field), field).toBe(false);
     }
+    expect(isTraceAggregateDimension('stopReasonContext')).toBe(false);
+    expect(isTraceAggregateCountDistinctField('outcome')).toBe(true);
     expect(isTraceAggregateCountDistinctField('metadata.tenant')).toBe(true);
     expect(isTraceAggregateCountDistinctField('metadata.a.b')).toBe(false);
   });
@@ -176,7 +186,7 @@ describe('trace aggregate dimension registry', () => {
 });
 
 describe('trace aggregate measure registry', () => {
-  it('declares exactly the root, token, and cost measures, in order', () => {
+  it('declares exactly the root, token, cost, and time-to-first measures, in order', () => {
     expect(Object.keys(TRACE_AGGREGATE_MEASURE_REGISTRY)).toEqual(ALL_MEASURES);
     expect(TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX).toBe('countDistinct.');
   });
@@ -189,7 +199,20 @@ describe('trace aggregate measure registry', () => {
     const approximate = Object.entries(TRACE_AGGREGATE_MEASURE_REGISTRY)
       .filter(([, rule]) => rule.approximate)
       .map(([name]) => name);
-    expect(approximate).toEqual(['duration.p50', 'duration.p90', 'duration.p95', 'duration.p99']);
+    expect(approximate).toEqual([
+      'duration.p50',
+      'duration.p90',
+      'duration.p95',
+      'duration.p99',
+      'timeToFirstToken.p50',
+      'timeToFirstToken.p90',
+      'timeToFirstToken.p95',
+      'timeToFirstToken.p99',
+      'timeToFirstChunk.p50',
+      'timeToFirstChunk.p90',
+      'timeToFirstChunk.p95',
+      'timeToFirstChunk.p99',
+    ]);
 
     expect(TRACE_AGGREGATE_MEASURE_REGISTRY.count).toEqual({ kind: 'count', unit: 'count', approximate: false });
     expect(TRACE_AGGREGATE_MEASURE_REGISTRY.errorCount).toEqual({ kind: 'error', unit: 'count', approximate: false });
@@ -201,6 +224,22 @@ describe('trace aggregate measure registry', () => {
         unit: 'milliseconds',
         approximate: statistic.startsWith('p'),
       });
+    }
+  });
+
+  it('maps time-to-first measures to their nullable span column', () => {
+    const fields = { timeToFirstToken: 'timeToFirstTokenMs', timeToFirstChunk: 'timeToFirstChunkMs' } as const;
+    for (const [kind, field] of Object.entries(fields)) {
+      for (const statistic of TIME_TO_FIRST_STATISTICS) {
+        const name = `${kind}.${statistic}` as keyof typeof TRACE_AGGREGATE_MEASURE_REGISTRY;
+        expect(TRACE_AGGREGATE_MEASURE_REGISTRY[name], name).toEqual({
+          kind,
+          statistic,
+          unit: statistic === 'count' ? 'count' : 'milliseconds',
+          approximate: statistic.startsWith('p'),
+          field,
+        });
+      }
     }
   });
 
