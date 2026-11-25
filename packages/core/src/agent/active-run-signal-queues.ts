@@ -15,6 +15,21 @@ export function createActiveRunSignalQueues() {
   const queuesFor = (scope: ActiveRunSignalScope) =>
     scope === 'pre-run' ? preRunSignalsByThread : pendingSignalsByThread;
 
+  // Moves the thread's `from` queue in front of its `to` queue, as a new array.
+  // A missing or empty `from` queue moves nothing and is left as it is.
+  const moveInFront = (
+    from: Map<string, CreatedAgentSignal[]>,
+    to: Map<string, CreatedAgentSignal[]>,
+    key: string,
+  ): CreatedAgentSignal[] => {
+    const moved = from.get(key) ?? [];
+    if (moved.length > 0) {
+      from.delete(key);
+      to.set(key, [...moved, ...(to.get(key) ?? [])]);
+    }
+    return moved;
+  };
+
   return {
     pendingSignalsByThread,
     preRunSignalsByThread,
@@ -56,6 +71,55 @@ export function createActiveRunSignalQueues() {
       for (const queue of [preRunSignalsByThread.get(key), pendingSignalsByThread.get(key)]) {
         yield* queue ?? [];
       }
+    },
+
+    /** Passes each queued signal to `forward`, pre-run first, then drops the thread's queues. */
+    handOff(key: string, forward: (signal: CreatedAgentSignal, preRun: boolean) => void): void {
+      for (const preRun of [true, false]) {
+        const queues = preRun ? preRunSignalsByThread : pendingSignalsByThread;
+        for (const signal of queues.get(key) ?? []) forward(signal, preRun);
+        queues.delete(key);
+      }
+    },
+
+    /** Puts pre-run signals a finished run never took in front of the thread's follow-ups. */
+    foldPreRunIntoPending(key: string): void {
+      moveInFront(preRunSignalsByThread, pendingSignalsByThread, key);
+    },
+
+    /** Removes the oldest follow-up, dropping the queue once it is empty. */
+    takeNextPending(key: string): CreatedAgentSignal | undefined {
+      const queue = pendingSignalsByThread.get(key);
+      const signal = queue?.shift();
+      if (signal && queue && queue.length === 0) {
+        pendingSignalsByThread.delete(key);
+      }
+      return signal;
+    },
+
+    /** Puts a follow-up back at the front of the thread's queue. */
+    returnToFront(key: string, signal: CreatedAgentSignal): void {
+      const restored = pendingSignalsByThread.get(key) ?? [];
+      pendingSignalsByThread.set(key, [signal, ...restored]);
+    },
+
+    /**
+     * Moves the remaining follow-ups in front of the thread's pre-run signals,
+     * for a follow-up run's first model request, and returns them.
+     */
+    batchPendingIntoPreRun(key: string): CreatedAgentSignal[] {
+      return moveInFront(pendingSignalsByThread, preRunSignalsByThread, key);
+    },
+
+    /**
+     * Requeues after a follow-up run failed to start: `signal`, then whatever
+     * was batched into its pre-run queue, then the follow-ups queued since.
+     */
+    restoreAfterFailedStart(key: string, signal: CreatedAgentSignal | undefined): void {
+      const batchedLeftover = preRunSignalsByThread.get(key) ?? [];
+      preRunSignalsByThread.delete(key);
+      const restored = [...(signal ? [signal] : []), ...batchedLeftover, ...(pendingSignalsByThread.get(key) ?? [])];
+      if (restored.length > 0) pendingSignalsByThread.set(key, restored);
     },
   };
 }
