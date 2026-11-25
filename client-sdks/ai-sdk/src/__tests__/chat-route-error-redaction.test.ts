@@ -18,7 +18,7 @@ import { chatRoute } from '../chat-route';
 
 const STACK_MARKERS = ['"stack"', '    at ', 'file://', __filename];
 
-function failingModel() {
+function failingModel(error: unknown = new Error('upstream 529 overloaded')) {
   return new MockLanguageModelV2({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
@@ -26,7 +26,7 @@ function failingModel() {
         { type: 'response-metadata', id: 'msg-1', modelId: 'mock-model', timestamp: new Date(0) },
         { type: 'text-start', id: 'text-1' },
         { type: 'text-delta', id: 'text-1', delta: 'Hello' },
-        { type: 'error', error: new Error('upstream 529 overloaded') },
+        { type: 'error', error },
       ] as any),
       rawCall: { rawPrompt: [], rawSettings: {} },
       warnings: [],
@@ -167,6 +167,21 @@ describe.each<Engine>(['normal', 'durable'])('chatRoute default error serializat
     const errorEvent = events.find(e => e.type === 'error');
     expect(errorEvent).toBeDefined();
     expect(JSON.parse(errorEvent.errorText)).toEqual({ name: 'Error', message: 'upstream 529 overloaded' });
+    expectNoStackTrace(raw);
+  });
+
+  it.each([
+    ['Anthropic', { type: 'overloaded_error', message: 'Overloaded' }, '"type":"overloaded_error"'],
+    ['Google', { code: 503, message: 'The model is overloaded.', status: 'UNAVAILABLE' }, '"status":"UNAVAILABLE"'],
+  ])('a %s error body keeps its provider error type', async (_provider, body, expectedField) => {
+    const mastra = createMastra(engine, failingModel(body));
+    const baseUrl = await serve(chatRoute({ path: '/chat/:agentId' }), mastra);
+
+    const { raw, events } = await postChat(baseUrl);
+
+    const errorEvent = events.find(e => e.type === 'error');
+    expect(errorEvent.errorText).toContain(body.message);
+    expect(errorEvent.errorText).toContain(expectedField);
     expectNoStackTrace(raw);
   });
 

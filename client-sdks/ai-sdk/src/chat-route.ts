@@ -701,7 +701,7 @@ export type chatRouteOptions<OUTPUT = undefined, UI_MESSAGE extends SupportedUIM
  * @param {boolean} [options.sendSources=false] - Whether to include source citations in the stream
  * @param {boolean} [options.includeSubAgentMetadata=true] - Whether to emit `data-tool-agent` / `data-tool-agent-step` parts with sub-agent progress
  * @param {number} [options.heartbeatMs] - Target interval for periodic SSE comment heartbeats. Already-buffered source events and stream lifecycle signals take priority. Values up to 0 disable heartbeats. `NaN`, positive infinity, and values above 2,147,483,647 throw a `RangeError`.
- * @param {(error: unknown) => string} [options.onError] - Custom error serializer streamed to the client. When omitted, the client receives only the error `name` and `message` plus safe fields (`code`, `id`, `domain`, `category`, `statusCode`, `isRetryable`, and a redacted `cause`); stack traces, URLs, and provider request/response payloads are never sent. A custom `onError` receives the full error.
+ * @param {(error: unknown) => string} [options.onError] - Custom error serializer streamed to the client. When omitted, the client receives only the error `name` and `message` plus safe fields (`code`, `id`, `domain`, `category`, `statusCode`, `isRetryable`, the provider error `type`, `status` and `param`, and a redacted `cause` or nested `error`); stack traces, URLs, and provider request/response payloads are never sent. A custom `onError` receives the full error.
  * @param {Function} [options.messageMetadata] - Maps stream parts to metadata attached to AI SDK start and finish message parts. Receives `{ part, traceId }`.
  *
  * @returns A POST route, or `[postRoute, reconnectRoute]` when `resumable: true`

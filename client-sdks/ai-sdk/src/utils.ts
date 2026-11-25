@@ -51,7 +51,26 @@ export const isMastraTextStreamChunk = (chunk: any): chunk is ChunkType<OutputSc
 // provider or library adds later. Callers that want richer diagnostics should
 // pass their own `onError` to chatRoute / handleChatStream, which receives the
 // original error unchanged.
-const SAFE_ERROR_FIELDS = ['name', 'message', 'code', 'id', 'domain', 'category', 'statusCode', 'isRetryable'] as const;
+//
+// `type`, `status` and `param` cover provider error bodies that reach the stream
+// as plain objects: Anthropic `{ type: 'overloaded_error', message }`, OpenAI
+// `{ message, type, param, code }`, Google `{ code, message, status }`.
+// A nested `error` (OpenAI Responses `{ type: 'error', error: { ... } }`, or a
+// thrown `{ error: 'quota exceeded' }`) is kept as a string or picked like `cause`.
+const SAFE_ERROR_FIELDS = [
+  'name',
+  'message',
+  'code',
+  'id',
+  'domain',
+  'category',
+  'statusCode',
+  'isRetryable',
+  'type',
+  'status',
+  'param',
+] as const;
+const NESTED_ERROR_FIELDS = ['cause', 'error'] as const;
 const MAX_CAUSE_DEPTH = 3;
 
 function pickSafeErrorFields(error: object, depth: number): Record<string, unknown> {
@@ -62,10 +81,14 @@ function pickSafeErrorFields(error: object, depth: number): Record<string, unkno
       safe[field] = value;
     }
   }
-  const cause = (error as { cause?: unknown }).cause;
-  if (typeof cause === 'object' && cause !== null && depth < MAX_CAUSE_DEPTH) {
-    const safeCause = pickSafeErrorFields(cause, depth + 1);
-    if (Object.keys(safeCause).length > 0) safe.cause = safeCause;
+  for (const field of NESTED_ERROR_FIELDS) {
+    const nested = (error as Record<string, unknown>)[field];
+    if (field === 'error' && typeof nested === 'string') {
+      safe[field] = nested;
+    } else if (typeof nested === 'object' && nested !== null && depth < MAX_CAUSE_DEPTH) {
+      const safeNested = pickSafeErrorFields(nested, depth + 1);
+      if (Object.keys(safeNested).length > 0) safe[field] = safeNested;
+    }
   }
   return safe;
 }

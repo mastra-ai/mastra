@@ -91,6 +91,47 @@ describe('safeParseErrorObject', () => {
     expect(JSON.parse(serialized)).toEqual({ name: 'Error', message: 'boom' });
   });
 
+  it.each([
+    [
+      'Anthropic',
+      { type: 'overloaded_error', message: 'Overloaded' },
+      { type: 'overloaded_error', message: 'Overloaded' },
+    ],
+    [
+      'OpenAI chat',
+      { message: 'Rate limit reached', type: 'requests', param: null, code: 'rate_limit_exceeded' },
+      { message: 'Rate limit reached', type: 'requests', code: 'rate_limit_exceeded' },
+    ],
+    [
+      'OpenAI Responses',
+      {
+        type: 'error',
+        sequence_number: 3,
+        error: { type: 'invalid_request_error', code: 'invalid_value', message: 'Bad input', param: 'input[0]' },
+      },
+      {
+        type: 'error',
+        error: { type: 'invalid_request_error', code: 'invalid_value', message: 'Bad input', param: 'input[0]' },
+      },
+    ],
+    [
+      'Google',
+      { code: 503, message: 'The model is overloaded.', status: 'UNAVAILABLE', details: [{ '@type': 'debug' }] },
+      { code: 503, message: 'The model is overloaded.', status: 'UNAVAILABLE' },
+    ],
+    ['a thrown { error } object', { error: 'quota exceeded' }, { error: 'quota exceeded' }],
+  ])('keeps the safe fields of a %s error body', (_provider, body, expected) => {
+    expect(JSON.parse(safeParseErrorObject(body))).toEqual(expected);
+  });
+
+  it('drops a stack carried inside a nested error body', () => {
+    const serialized = safeParseErrorObject({
+      error: { message: 'boom', stack: 'Error: boom\n    at start (file:///srv/app/index.mjs:1:1)' },
+    });
+
+    expect(JSON.parse(serialized)).toEqual({ error: { message: 'boom' } });
+  });
+
   it('redacts nested requestBodyValues carried on cause', () => {
     const inner = new APICallError({
       message: 'upstream',
