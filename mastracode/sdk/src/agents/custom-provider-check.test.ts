@@ -415,18 +415,45 @@ describe('listing the models of a custom endpoint', () => {
     });
   });
 
-  it.each([-1, 0, 2500.5, Number.NaN, 2 ** 40])('still answers with a timeoutMs of %s', async timeoutMs => {
+  // A diagnostic check must never run without a deadline or reject on bad input.
+  it.each([-1, 0, Number.NaN, Number.POSITIVE_INFINITY])(
+    'uses the default timeout for a timeoutMs of %s',
+    async timeoutMs => {
+      // Answers after 200 ms, so a zero or near-zero deadline would time out first.
+      const endpoint = await startEndpoint((request, res) => {
+        setTimeout(() => json(200, { data: [{ id: 'model-x' }] })(request, res), 200);
+      });
+
+      const list = await listCustomProviderModels({ url: endpoint.url }, { timeoutMs });
+      const reply = await testCustomProviderModel(
+        { providerId: 'acme', connection: { url: endpoint.url }, modelId: 'model-x' },
+        { timeoutMs },
+      );
+
+      expect(list).toMatchObject({ ok: true, models: ['model-x'] });
+      // The endpoint answers chat calls with a model list, so the test message fails, as a result and not a throw.
+      expect(reply).toMatchObject({ ok: false, failure: { kind: 'invalid_response' } });
+    },
+  );
+
+  it('rounds a fractional timeoutMs up to the next millisecond', async () => {
+    const endpoint = await startEndpoint(() => {});
+
+    const result = await listCustomProviderModels({ url: endpoint.url }, { timeoutMs: 0.5 });
+
+    expect(result).toMatchObject({
+      ok: false,
+      failure: { kind: 'timeout', message: `No answer from ${endpoint.url}/models within 0.001 s` },
+    });
+  });
+
+  // The deadline itself would only show after 24 days; the check must accept the value instead of throwing.
+  it('caps a timeoutMs above the timer maximum instead of refusing it', async () => {
     const endpoint = await startEndpoint(json(200, { data: [{ id: 'model-x' }] }));
 
-    const list = await listCustomProviderModels({ url: endpoint.url }, { timeoutMs });
-    const reply = await testCustomProviderModel(
-      { providerId: 'acme', connection: { url: endpoint.url }, modelId: 'model-x' },
-      { timeoutMs },
-    );
+    const result = await listCustomProviderModels({ url: endpoint.url }, { timeoutMs: 2 ** 40 });
 
-    expect(list).toMatchObject({ ok: true, models: ['model-x'] });
-    // The endpoint answers chat calls with a model list, so the test message fails, as a result and not a throw.
-    expect(reply).toMatchObject({ ok: false, failure: { kind: 'invalid_response' } });
+    expect(result).toMatchObject({ ok: true, models: ['model-x'] });
   });
 
   it.each([
@@ -708,6 +735,41 @@ describe('sending a test message to a custom endpoint model', () => {
     },
     5000,
   );
+
+  // One event is buffered whole before it becomes a delta, so only the byte cap bounds it.
+  it('stops a single 3 MB delta at the byte cap', async () => {
+    let closed!: () => void;
+    const connectionClosed = new Promise<void>(resolve => (closed = resolve));
+    const endpoint = await startEndpoint((_, res) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.on('close', closed);
+      res.write(
+        `data: ${JSON.stringify({
+          id: 'chatcmpl-test',
+          object: 'chat.completion.chunk',
+          created: 0,
+          model: 'model-x',
+          choices: [{ index: 0, delta: { content: 'y'.repeat(3 * 1024 * 1024) }, finish_reason: null }],
+        })}\n\n`,
+      );
+    });
+
+    const result = await testModel({ url: endpoint.url });
+
+    expect(result).toMatchObject({ ok: false, failure: { kind: 'invalid_response' } });
+    await connectionClosed;
+  }, 5000);
+
+  it('redacts a key that a single large delta carries across the reply budget', async () => {
+    const key = 'sk-SECRETVALUE1234';
+    const endpoint = await startEndpoint(chatStream(`${'x'.repeat(3995)}${key}${'z'.repeat(500_000)}`));
+
+    const result = await testModel({ url: endpoint.url, apiKey: key });
+
+    expect(result).toMatchObject({ ok: true });
+    expect(result.ok ? result.reply : '').toHaveLength(4000);
+    expect(result.ok ? result.reply : 'sk-').not.toContain('sk-');
+  });
 
   it('keeps the text a model sent before a flood reached the byte cap', async () => {
     const endpoint = await startEndpoint((_, res) => {

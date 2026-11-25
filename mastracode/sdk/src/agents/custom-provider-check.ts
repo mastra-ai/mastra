@@ -125,6 +125,13 @@ export type CustomProviderModelTestResult =
 
 /** Options shared by both checks. */
 export interface CustomProviderCheckOptions {
+  /**
+   * Deadline for the whole check: 10 s for the model list, 30 s for the test
+   * message by default. A value that is not a positive finite number uses the
+   * default, a fraction is rounded up to the next millisecond, and a value
+   * above the platform timer maximum (2,147,483,647 ms) is capped at it, so a
+   * check always has a deadline and never rejects on this option.
+   */
   timeoutMs?: number;
   signal?: AbortSignal;
   /** Keep only the upstream error message or page title in `detail`, never raw body text. */
