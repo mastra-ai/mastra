@@ -89,8 +89,8 @@ describe('chatRoute memory resource validation through Express', () => {
     };
   }
 
-  // #3923: chatRoute returned a bare 500 here while the agent API returned a helpful 400.
-  it('chatRoute rejects a memory thread without a resource with the same 400 as the agent API (#3923)', async () => {
+  // chatRoute used to return a bare 500 here while the agent API returned a helpful 400.
+  it('chatRoute rejects a memory thread without a resource with the same 400 as the agent API', async () => {
     const post = await start();
     const agentApi = await post('/api/agents/memory-agent/stream', { messages, memory: { thread: 't-1' } });
     expect(agentApi.status).toBe(400);
@@ -101,7 +101,7 @@ describe('chatRoute memory resource validation through Express', () => {
     expect(JSON.parse(res.text)).toEqual({ error: RESOURCE_REQUIRED });
   });
 
-  it('resumable chatRoute rejects a chat without a trusted resource with the same 400 (#3923)', async () => {
+  it('resumable chatRoute rejects a chat without a trusted resource with the same 400', async () => {
     const post = await start();
     const res = await post('/resumable-chat/memory-agent', { id: 't-1', messages });
     expect(res.status).toBe(400);
