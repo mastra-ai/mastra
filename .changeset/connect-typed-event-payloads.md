@@ -16,4 +16,14 @@ for await (const event of new ConnectEvents()) {
 
 Unverified events and payloads that weren't JSON never match. To type another provider's events, extend the `ConnectEventPayloads` interface with `declare module '@mastra/connect'`. To type more events of a typed provider, extend its map, such as `SlackWebhookPayloads`, the same way.
 
-**Breaking (prerelease only):** `ConnectEvent` is now a union of the typed events and `UntypedConnectEvent`, so an interface can no longer extend it. Extend `UntypedConnectEvent` instead. Its `integrationId` field is renamed to `provider`, and `ConnectEventIntegration` to `ConnectEventProvider`.
+**Breaking:** `ConnectEvent`'s `integrationId` field is renamed to `provider`, and the `ConnectEventIntegration` type to `ConnectEventProvider`:
+
+```ts
+// Before
+await handle(event.integrationId, event.eventType, event.payload);
+
+// After
+await handle(event.provider, event.eventType, event.payload);
+```
+
+`ConnectEvent` is now a union of the typed events and `UntypedConnectEvent`, so an interface can no longer extend it. Extend `UntypedConnectEvent` instead.
