@@ -97,3 +97,26 @@ describe('MessageList response message rotation with recalled history (#28565)',
     expect(messageList.get.remembered.db().map(message => message.id)).toContain('previous-reply');
   });
 });
+
+describe('MessageList response message rotation with an assistant-ending input', () => {
+  it('Given input that ends with an assistant message and no response yet, When the id rotates, Then the next response still gets its own row', () => {
+    const messageList = new MessageList({
+      threadId: 'thread-1',
+      generateMessageId: context => (context?.role === 'assistant' ? 'response-1' : 'user-1'),
+    });
+    messageList.add({ ...assistantMessage('recalled-reply', 'earlier turn'), threadId: 'thread-1' }, 'memory');
+    messageList.add({ role: 'user', content: 'hi' }, 'input');
+    messageList.add({ ...assistantMessage('prefill', 'partial answer'), threadId: 'thread-1' }, 'input');
+
+    const nextMessageId = messageList.rotateResponseMessageId('response-not-created-yet');
+    messageList.add({ ...assistantMessage(nextMessageId, 'this turn'), threadId: 'thread-1' }, 'response');
+
+    const assistantIds = messageList.get.all
+      .db()
+      .filter(message => message.role === 'assistant')
+      .map(message => message.id);
+    expect(assistantIds).toEqual(['recalled-reply', 'prefill', 'response-1']);
+    const recalled = messageList.get.all.db().find(message => message.id === 'recalled-reply');
+    expect(recalled?.content.metadata).toBeUndefined();
+  });
+});
