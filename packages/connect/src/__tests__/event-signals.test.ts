@@ -304,6 +304,129 @@ describe('ConnectEventSignals', () => {
     expect(JSON.stringify(prompts[0])).toContain('PR opened: Fix login');
   });
 
+  it('caps how many events of one connection wake the agent, and stores the rest', async () => {
+    const burst = (connectionId: string, count: number) =>
+      Array.from({ length: count }, (_, i) => ({
+        provider: 'linear',
+        eventType: 'Issue.create',
+        payload: { data: { id: `${connectionId}-${i}` } },
+        connectionId,
+        sourceEventId: `${connectionId}-${i}`,
+      }));
+    const service = await eventsService([...burst('conn_noisy', 20), ...burst('conn_quiet', 1)]);
+    const { prompts, notifications } = opsAgent(service.url, {
+      target: { threadId: 'ops', resourceId: 'team-ops' },
+      rateLimit: { limit: 1, windowMs: 60_000 },
+    });
+
+    await vi.waitFor(async () => expect(await notifications()).toHaveLength(21), { timeout: 5_000 });
+    const limited = (await notifications())
+      .filter(n => n.metadata?.rateLimited)
+      .map(n => (n.payload as { data: { id: string } }).data.id);
+    // The first event of each connection wakes the agent; the noisy one's other 19 don't.
+    expect(limited.sort()).toEqual(
+      burst('conn_noisy', 20)
+        .slice(1)
+        .map(d => d.payload.data.id)
+        .sort(),
+    );
+  });
+
+  describe('a steady stream of events from one connection', () => {
+    // Each event arrives after the agent finished with the one before, so
+    // every event that may wake the agent starts its own run.
+    async function runs(rateLimit?: { limit: number; windowMs: number }) {
+      const s = await eventsServer([
+        (_req, res) => {
+          startStream(res);
+          res.write(ready('10'));
+          for (let i = 0; i < 4; i++) {
+            setTimeout(
+              () =>
+                res.write(
+                  event(
+                    String(11 + i),
+                    fields({
+                      provider: 'linear',
+                      eventType: 'Issue.create',
+                      payload: { data: { id: `i${i}` } },
+                      sourceEventId: `i${i}`,
+                    }),
+                  ),
+                ),
+              i * 250,
+            );
+          }
+        },
+      ]);
+      servers.push(s);
+      const { prompts, notifications } = opsAgent(s.url, {
+        target: { threadId: 'ops', resourceId: 'team-ops' },
+        ...(rateLimit ? { rateLimit } : {}),
+      });
+      await vi.waitFor(async () => expect(await notifications()).toHaveLength(4), { timeout: 5_000 });
+      await new Promise(resolve => setTimeout(resolve, 300));
+      return prompts.length;
+    }
+
+    it('wakes the agent for each event without a rate limit', async () => {
+      expect(await runs()).toBe(4);
+    });
+
+    it('wakes the agent only up to the rate limit', async () => {
+      expect(await runs({ limit: 1, windowMs: 60_000 })).toBe(1);
+    });
+  });
+
+  it("lets a connection wake the agent again once the rate limit's window passes", async () => {
+    const issue = (id: string) => ({
+      provider: 'linear',
+      eventType: 'Issue.create',
+      payload: { data: { id } },
+      sourceEventId: id,
+    });
+    const streams: ServerResponse[] = [];
+    const s = await eventsServer([
+      (_req, res) => {
+        streams.push(res);
+        startStream(res);
+        res.write(ready('10'));
+        res.write(event('11', fields(issue('a'))));
+        res.write(event('12', fields(issue('b'))));
+        setTimeout(() => {
+          res.write(event('13', fields(issue('c'))));
+          res.write(event('14', fields(issue('d'))));
+        }, 400);
+      },
+    ]);
+    servers.push(s);
+    const { notifications } = opsAgent(s.url, { target: ops, rateLimit: { limit: 1, windowMs: 200 } });
+
+    await vi.waitFor(async () => expect(await notifications()).toHaveLength(4), { timeout: 5_000 });
+    const limited = (await notifications()).map(n => [
+      (n.payload as { data: { id: string } }).data.id,
+      !!n.metadata?.rateLimited,
+    ]);
+    expect(limited).toEqual([
+      ['a', false],
+      ['b', true],
+      ['c', false],
+      ['d', true],
+    ]);
+  });
+
+  it('rejects a rate limit that could never be met', () => {
+    for (const rateLimit of [
+      { limit: -1, windowMs: 1000 },
+      { limit: 1.5, windowMs: 1000 },
+      { limit: 1, windowMs: 0 },
+    ]) {
+      expect(() => new ConnectEventSignals({ target: ops, rateLimit })).toThrow(
+        expect.objectContaining({ code: 'invalid_options' }),
+      );
+    }
+  });
+
   it('stops listening when stopped, and listens again when started', async () => {
     const service = await eventsService([]);
     const { signals } = opsAgent(service.url, { target: ops });

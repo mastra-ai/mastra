@@ -33,7 +33,7 @@ export type {
 } from './connect-client.js';
 export { ConnectEvents } from './events.js';
 export { ConnectEventSignals } from './event-signals.js';
-export type { ConnectEventSignalsOptions } from './event-signals.js';
+export type { ConnectEventRateLimit, ConnectEventSignalsOptions } from './event-signals.js';
 export type { ConnectEventFilter, ConnectEventFilterOptions, FilteredConnectEvent } from './event-filter.js';
 export type {
   ConnectEvent,
