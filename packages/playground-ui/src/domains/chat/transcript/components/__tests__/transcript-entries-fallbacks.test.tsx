@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TimelineEntry } from '../../services/transcript';
 import { TranscriptSlotsProvider } from '../slots';
@@ -197,13 +198,8 @@ describe('a transcript drawn by a host that draws its own data parts', () => {
     },
   };
 
-  it('shows the parts the host claims, in place, and keeps every other data part hidden', () => {
-    const parts: MastraDBMessage['content']['parts'] = [
-      { type: 'data-model-switch', data: {} },
-      { type: 'data-usage', data: {} },
-      { type: 'text', text: 'Reviewed on the fallback' },
-    ];
-    render(
+  function drawReply(parts: MastraDBMessage['content']['parts']) {
+    return render(
       <TranscriptSlotsProvider slots={slots}>
         <TranscriptEntries
           entries={[
@@ -223,9 +219,30 @@ describe('a transcript drawn by a host that draws its own data parts', () => {
         />
       </TranscriptSlotsProvider>,
     );
+  }
+
+  it('shows the parts the host claims, in place, and keeps every other data part hidden', () => {
+    drawReply([
+      { type: 'data-model-switch', data: {} },
+      { type: 'data-usage', data: {} },
+      { type: 'text', text: 'Reviewed on the fallback' },
+    ]);
 
     expect(screen.getByText('data-model-switch')).toBeTruthy();
     expect(screen.queryByText('data-usage')).toBeNull();
     expect(screen.getByText('Reviewed on the fallback')).toBeTruthy();
+  });
+
+  it('copies the reply with a paragraph break where a part the host draws splits it', async () => {
+    const user = userEvent.setup();
+    drawReply([
+      { type: 'text', text: 'First.' },
+      { type: 'data-model-switch', data: {} },
+      { type: 'text', text: 'Second.' },
+    ]);
+
+    await user.click(screen.getByRole('button', { name: 'Copy message' }));
+
+    expect(await navigator.clipboard.readText()).toBe('First.\n\nSecond.');
   });
 });

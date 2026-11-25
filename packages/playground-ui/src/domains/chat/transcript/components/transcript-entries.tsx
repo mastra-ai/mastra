@@ -11,6 +11,7 @@ import { MessageBubble } from './MessageBubble';
 import { agentWorkingDirectory, isTurnDivider } from './signals';
 import { ApprovalCard, DefaultNotification, DefaultRunError, DefaultSuspension, useTranscriptSlots } from './slots';
 import { draws, messageText, renderableParts } from './transcript-parts';
+import type { DrawsDataPart } from './transcript-parts';
 import { isRecord } from './transcript-shared';
 import { turnGaps } from './turn-gaps';
 import { TurnRevealScope } from './TurnReveal';
@@ -30,10 +31,14 @@ import { cn } from '@/utils/cn';
 export type TranscriptTail = (stretchLive: boolean) => ReactNode;
 
 /** A step ending is not the reply ending, so a running turn has no whole answer to copy yet. */
-function turnReply(steps: MessageEntry[], runningTurn: boolean): string | undefined {
+function turnReply(
+  steps: MessageEntry[],
+  runningTurn: boolean,
+  drawsData: DrawsDataPart | undefined,
+): string | undefined {
   if (runningTurn) return undefined;
   return steps
-    .map(step => messageText(renderableParts(step)))
+    .map(step => messageText(renderableParts(step, drawsData)))
     .filter(Boolean)
     .join('\n\n');
 }
@@ -110,7 +115,7 @@ export function TranscriptEntries({
 
         const steps = replySteps(group);
         const replyEnd = steps.at(-1);
-        const reply = turnReply(steps, runningTurn);
+        const reply = turnReply(steps, runningTurn, drawsData);
         const activityByEntry = planTurnActivity(group.entries, suspensions, runningTurn, drawsData);
 
         return (
