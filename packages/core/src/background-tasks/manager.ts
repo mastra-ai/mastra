@@ -65,7 +65,9 @@ function minLeaseOverride(): number | undefined {
  * - Expiry and adoption: `recoverStaleTasks` only reclaims a `running` task
  *   once its lease has expired (or was released on shutdown), fenced on the
  *   owner/lease it read so one manager wins. It re-runs when the earliest live
- *   lease lapses. `restart()` is the one deliberate takeover of a live lease.
+ *   lease lapses, and the periodic sweep in `#sweepLapsedPins` reclaims rows
+ *   whose owner died later. `restart()` is the one deliberate takeover of a
+ *   live lease.
  * - Loss: a failed renewal aborts the local run's signal when another owner
  *   holds the task or it was cancelled.
  *
@@ -150,11 +152,13 @@ export class BackgroundTaskManager {
   // process restart. This timer re-runs recovery once the earliest such lease
   // lapses, which lets a crashed owner's tasks settle without a restart.
   private staleRecoveryTimeout?: ReturnType<typeof setTimeout>;
-  // Periodic scan for `pinToWorker` rows whose owner stopped renewing; see `#sweepLapsedPins`.
+  // Periodic scan for `running` and `pinToWorker` rows whose owner stopped renewing; see `#sweepLapsedPins`.
   private pinSweepInterval?: ReturnType<typeof setInterval>;
   private sweepingPins = false;
   // Page of pending rows the next pin sweep reads; see `#sweepLapsedPins`.
   private pinSweepPage = 0;
+  // Page of running rows the next sweep reads; see `#sweepLapsedPins`.
+  private runningSweepPage = 0;
 
   // Settlement chains of workflow runs started by this manager, plus the run
   // deletes they spawn. Shutdown drains these so they finish while storage is
@@ -2310,55 +2314,13 @@ export class BackgroundTaskManager {
       const { tasks: staleTasks } = await storage.listTasks({ status: 'running' });
       let nextSweepAt: number | undefined;
       for (const task of staleTasks) {
-        // A still-valid lease proves the owner is alive — do not reclaim it.
-        // This is what stops a second worker from taking over a task another
-        // process is actively running.
-        if (task.ownerId && task.leaseExpiresAt && task.leaseExpiresAt.getTime() > now) {
-          const leaseExpiry = task.leaseExpiresAt.getTime();
+        if (isLiveRunning(task, now)) {
+          const leaseExpiry = task.leaseExpiresAt!.getTime();
           nextSweepAt = nextSweepAt === undefined ? leaseExpiry : Math.min(nextSweepAt, leaseExpiry);
           continue;
         }
-
-        // Fence the reclaim on the owner/lease we observed. If another worker
-        // reclaimed this task between the list and now, the compare-and-set
-        // fails and we leave it to them instead of clobbering their run.
-        const fence = {
-          expectedStatus: 'running' as const,
-          expectedOwnerId: task.ownerId ?? null,
-          expectedLeaseExpiresAt: task.leaseExpiresAt ?? null,
-        };
-        // A lease that lapsed with its owner still set means the worker died
-        // mid-run, possibly because of this task, so re-pending it spends a
-        // retry like a lapsed pin in `#recoverLapsedPin`; otherwise a task that
-        // kills its worker is re-run by every process that starts. A graceful
-        // shutdown clears the owner to hand the task back, and that costs
-        // nothing.
-        const handedBack = !task.ownerId && task.maxRetries > 0;
-        if (handedBack || task.retryCount < task.maxRetries) {
-          await storage.updateTask(
-            task.id,
-            {
-              status: 'pending',
-              retryCount: handedBack ? task.retryCount : task.retryCount + 1,
-              startedAt: undefined,
-              ownerId: undefined,
-              leaseExpiresAt: undefined,
-            },
-            fence,
-          );
-        } else {
-          await storage.updateTask(
-            task.id,
-            {
-              status: 'failed',
-              error: { message: 'Worker process terminated before task completed' },
-              completedAt: new Date(),
-              ownerId: undefined,
-              leaseExpiresAt: undefined,
-            },
-            fence,
-          );
-        }
+        // Re-pended rows are dispatched by the pending pass below.
+        await this.#reclaimLapsedRunning(storage, task);
       }
 
       const { tasks: pendingTasks } = await storage.listTasks({
@@ -2387,6 +2349,58 @@ export class BackgroundTaskManager {
         logger.error('Failed to recover stale background tasks', error);
       }
     }
+  }
+
+  /**
+   * Reclaims a `running` row whose lease lapsed: re-pends it, or fails it once
+   * it is out of retries. Returns `true` when the row was re-pended and should
+   * be dispatched; `false` when it was failed or another worker got to it first.
+   */
+  async #reclaimLapsedRunning(
+    storage: Awaited<ReturnType<BackgroundTaskManager['getStorage']>>,
+    task: BackgroundTask,
+  ): Promise<boolean> {
+    // Fence the reclaim on the owner/lease we observed. If another worker
+    // reclaimed this task between the list and now, the compare-and-set
+    // fails and we leave it to them instead of clobbering their run.
+    const fence = {
+      expectedStatus: 'running' as const,
+      expectedOwnerId: task.ownerId ?? null,
+      expectedLeaseExpiresAt: task.leaseExpiresAt ?? null,
+    };
+    // A lease that lapsed with its owner still set means the worker died
+    // mid-run, possibly because of this task, so re-pending it spends a
+    // retry like a lapsed pin in `#recoverLapsedPin`; otherwise a task that
+    // kills its worker is re-run by every process that starts. A graceful
+    // shutdown clears the owner to hand the task back, and that costs
+    // nothing.
+    const handedBack = !task.ownerId && task.maxRetries > 0;
+    if (handedBack || task.retryCount < task.maxRetries) {
+      const requeued = await storage.updateTask(
+        task.id,
+        {
+          status: 'pending',
+          retryCount: handedBack ? task.retryCount : task.retryCount + 1,
+          startedAt: undefined,
+          ownerId: undefined,
+          leaseExpiresAt: undefined,
+        },
+        fence,
+      );
+      return Boolean(requeued);
+    }
+    await storage.updateTask(
+      task.id,
+      {
+        status: 'failed',
+        error: { message: 'Worker process terminated before task completed' },
+        completedAt: new Date(),
+        ownerId: undefined,
+        leaseExpiresAt: undefined,
+      },
+      fence,
+    );
+    return false;
   }
 
   /**
@@ -2474,20 +2488,36 @@ export class BackgroundTaskManager {
   }
 
   /**
-   * Periodically recovers lapsed `pinToWorker` rows. The startup scan only
-   * sees rows that existed when this worker started, so without this a pin
-   * enqueued later by a worker that then died would wait for a restart.
-   * Unpinned pending rows are left alone: they are dispatched by their own
-   * worker and by startup recovery, as before.
+   * Periodically recovers `running` rows and `pinToWorker` rows whose owner
+   * stopped renewing its lease. The startup scan only sees rows that existed
+   * when this worker started, so without this a task whose worker died later
+   * would wait for a restart. Unpinned pending rows are left alone: they are
+   * dispatched by their own worker and by startup recovery, as before.
    */
   async #sweepLapsedPins(): Promise<void> {
     if (this.shuttingDown || this.sweepingPins) return;
     this.sweepingPins = true;
     try {
-      // Retry recovered pins whose dispatch failed on an earlier tick.
-      if (this.localPendingTaskIds.size > 0) await this.drainPending();
       const storage = await this.getStorage();
       const now = Date.now();
+      // One page per tick, so many running tasks don't make every worker read every row each lease.
+      const { tasks: running } = await storage.listTasks({
+        status: 'running',
+        orderBy: 'createdAt',
+        orderDirection: 'asc',
+        page: this.runningSweepPage,
+        perPage: PIN_SWEEP_PAGE_SIZE,
+      });
+      this.runningSweepPage = running.length < PIN_SWEEP_PAGE_SIZE ? 0 : this.runningSweepPage + 1;
+      for (const task of running) {
+        if (this.shuttingDown) return;
+        if (isLiveRunning(task, now)) continue;
+        // Queue it rather than dispatching now: the dead row counted against
+        // concurrency until it was re-pended, and the drain re-checks the limit.
+        if (await this.#reclaimLapsedRunning(storage, task)) this.localPendingTaskIds.add(task.id);
+      }
+      // Dispatches reclaimed rows, and recovered pins whose dispatch failed on an earlier tick.
+      if (this.localPendingTaskIds.size > 0) await this.drainPending();
       // One page per tick, so a long queue doesn't make every worker read every pending row each lease.
       const { tasks } = await storage.listTasks({
         status: 'pending',
@@ -2541,6 +2571,14 @@ export class BackgroundTaskManager {
     // Never keep the process alive just to sweep for stale tasks.
     this.staleRecoveryTimeout.unref?.();
   }
+}
+
+/**
+ * A still-valid lease proves a `running` row's owner is alive. This is what
+ * stops a second worker from taking over a task another process is running.
+ */
+function isLiveRunning(task: BackgroundTask, now: number): boolean {
+  return Boolean(task.ownerId && task.leaseExpiresAt && task.leaseExpiresAt.getTime() > now);
 }
 
 function suspensionToken(task: BackgroundTask): number | null {
