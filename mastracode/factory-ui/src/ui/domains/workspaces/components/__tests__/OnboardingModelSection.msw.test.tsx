@@ -6,7 +6,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import type { ProviderInfo } from '../../../../../api/types';
+import type {
+  CustomProviderCheckFailedResponse,
+  CustomProviderCheckFailure,
+  CustomProviderInfo,
+  ProviderInfo,
+} from '../../../../../api/types';
 import { datedModels } from '../../../settings/components/__tests__/fixtures/models';
 import {
   chooseProvider,
@@ -547,6 +552,82 @@ describe('Model provider onboarding', () => {
         repository: modelSectionRepository,
         modelScope: 'user',
         personal: { providerId: 'my-llm', method: 'api_key', modelId: 'my-llm/model-a' },
+      });
+    });
+
+    it('saves an endpoint that fails its connection test with Save anyway and still picks it', async () => {
+      const failure: CustomProviderCheckFailure = {
+        kind: 'http',
+        status: 401,
+        message: 'HTTP 401 Unauthorized from https://api.example.com/v1/models',
+      };
+      const saves: unknown[] = [];
+      let created = false;
+      registerAuthHandler();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            orgKeyAdmin: true,
+            providers: created
+              ? [{ provider: 'my-llm', source: 'stored-org', orgCredential: 'api_key', orgKey: true, custom: true }]
+              : [],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+          HttpResponse.json({
+            models: created
+              ? [{ id: 'my-llm/model-a', provider: 'my-llm', modelName: 'model-a', hasApiKey: true }]
+              : [],
+          }),
+        ),
+        http.post(`${TEST_BASE_URL}/web/config/custom-providers`, async ({ request }) => {
+          const body = await request.json();
+          saves.push(body);
+          if (body && typeof body === 'object' && 'check' in body) {
+            const refused: CustomProviderCheckFailedResponse = {
+              error: 'custom_endpoint_check_failed',
+              message: 'The connection test failed, so the provider was not saved.',
+              failure,
+            };
+            return HttpResponse.json(refused, { status: 422 });
+          }
+          created = true;
+          const provider: CustomProviderInfo = {
+            id: 'my-llm',
+            name: 'my-llm',
+            url: 'https://api.example.com/v1',
+            hasApiKey: true,
+            authScheme: 'bearer',
+            headers: [],
+            models: ['model-a'],
+            scope: 'org',
+          };
+          return HttpResponse.json({ ok: true, provider });
+        }),
+      );
+      const { client, onCreate } = renderModelSection();
+
+      const user = await createCustomProvider();
+      expect(await screen.findByRole('alert')).toHaveTextContent(failure.message);
+      await user.click(screen.getByRole('button', { name: 'Save anyway' }));
+      await waitForMutationsIdle(client);
+
+      expect(saves).toHaveLength(2);
+      expect(saves[1]).toEqual({
+        name: 'my-llm',
+        url: 'https://api.example.com/v1',
+        apiKey: 'sk-test',
+        authScheme: 'bearer',
+        headers: [],
+        models: ['model-a'],
+        scope: 'org',
+      });
+      expect(await screen.findByRole('combobox')).toHaveValue('Model A');
+      await user.click(screen.getByRole('button', { name: 'Create factory' }));
+      expect(onCreate).toHaveBeenCalledWith({
+        repository: modelSectionRepository,
+        modelScope: 'factory',
+        model: { providerId: 'my-llm', modelId: 'my-llm/model-a', method: 'api_key' },
       });
     });
 

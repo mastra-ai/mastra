@@ -142,6 +142,37 @@ describe('useCheckCustomProvider', () => {
   });
 });
 
+describe('useCheckCustomProvider with a draft', () => {
+  it('checks the draft without refetching the provider list, since nothing was recorded', async () => {
+    let listReads = 0;
+    const listed: CustomProviderCheckResponse = {
+      ok: true,
+      check: { models: { ok: true, models: ['my-llm/fast'], latencyMs: 20 } },
+    };
+    server.use(
+      http.get(URL, () => {
+        listReads += 1;
+        return HttpResponse.json(customProvidersResponse);
+      }),
+      http.post(`${URL}/check`, () => HttpResponse.json(listed)),
+    );
+
+    const { result, client } = renderHookWithProviders(() => ({
+      query: useCustomProvidersQuery(),
+      check: useCheckCustomProvider(),
+    }));
+    await waitFor(() => expect(result.current.query.data).toEqual([customProvider]));
+
+    await act(async () => {
+      await result.current.check.mutateAsync({ url: 'https://api.my-llm.test/v1', previousId: 'my-llm' });
+    });
+    // Settles every query the check would have invalidated, so a refetch would have been counted.
+    await waitForMutationsIdle(client);
+
+    expect(listReads).toBe(1);
+  });
+});
+
 describe('useRemoveCustomProvider', () => {
   describe('when a provider is removed', () => {
     it('DELETEs by id and invalidates the list', async () => {
