@@ -133,6 +133,7 @@ describe('IntakeSection common', () => {
       await waitFor(() => expect(requested).toBe(true));
       expect(screen.getByRole('status', { name: 'Loading intake sources' })).toBeInTheDocument();
       expect(screen.queryByRole('region', { name: 'Linear' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Connect Linear' })).not.toBeInTheDocument();
 
       releaseStatus();
 
