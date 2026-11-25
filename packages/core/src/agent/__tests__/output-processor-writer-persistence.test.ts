@@ -469,4 +469,26 @@ describe('writes recorded where the writer part actually lands', () => {
     );
     expect(saved).toEqual([{ v: 1 }]);
   });
+
+  it('processToolResult: two writes, one to another message id, with copied parts assigned back, keeps both', async () => {
+    const saved = await savedDataParts(
+      {
+        outputProcessors: [
+          {
+            id: 'merge-and-assign-back',
+            processToolResult: async ({ messages, writer }: any) => {
+              const target = (messages as MastraDBMessage[]).findLast(m => m.role === 'assistant')!;
+              const parts = [...target.content.parts];
+              await writer?.custom({ type: 'data-e', data: { v: 1 } }, { messageId: 'another-message' });
+              await writer?.custom({ type: 'data-e', data: { v: 2 } });
+              target.content.parts = parts;
+              return messages;
+            },
+          },
+        ],
+      },
+      'merge-assign',
+    );
+    expect(saved).toEqual([{ v: 1 }, { v: 2 }]);
+  });
 });
