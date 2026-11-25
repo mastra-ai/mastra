@@ -78,6 +78,8 @@ export type GeneratedMessagePersistenceInput = {
   embeddedMessages?: Map<string, string>;
   /** @internal Thread to create atomically with validated message persistence when absent. */
   thread?: StorageThreadType;
+  /** @internal Reject when `thread` already exists instead of persisting into it. */
+  requireThreadCreation?: boolean;
   /** @internal Store the messages without writing semantic recall vectors; the SemanticRecall processor writes them. */
   skipVectors?: boolean;
 };

@@ -4,7 +4,6 @@ import { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, MastraError } from '@mastra/core/error';
 import { stripClientAuthoredTurnMarks } from '@mastra/core/memory';
 import type {
-  BranchThreadOutput,
   MastraMemory,
   ObservationalMemoryRecords,
   ObservationalMemorySettings,
@@ -103,6 +102,7 @@ import {
   getThreadBranchAuthorizationCandidates,
   persistGeneratedMessages,
 } from './thread-branching-compat';
+import type { BranchThreadOutput } from './thread-branching-compat';
 import {
   validateBody,
   getEffectiveResourceId,
