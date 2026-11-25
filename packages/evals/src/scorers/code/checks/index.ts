@@ -138,7 +138,7 @@ export function matches(pattern: RegExp, options: MatchesOptions = {}) {
         .filter(m => m.role === 'assistant')
         .map(m => getTextContentFromMastraDBMessage(m))
         .join('');
-      const regex = exact ? new RegExp(`^${pattern.source}$`, pattern.flags) : pattern;
+      const regex = exact ? new RegExp(`^(?:${pattern.source})$`, pattern.flags) : pattern;
       // g/y regexes keep lastIndex between calls, and the scorer is reused across items
       regex.lastIndex = 0;
       const matched = regex.test(output);
