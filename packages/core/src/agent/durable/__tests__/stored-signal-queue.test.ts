@@ -434,6 +434,47 @@ describe('signals of a running evented agent kept in memory storage', () => {
     expect(prompts.map(textOf).some(prompt => prompt.includes('NO_THREAD_SEND'))).toBe(false);
   });
 
+  it('shows a subscriber that joins while a signal waits the pending message once, and a later one not', async () => {
+    type ThreadChunk = { type: string; runId?: string };
+    /** Reads a thread subscription until `last` matches a chunk, which ends the read. */
+    const readUntil = async (stream: AsyncIterable<unknown>, last: (chunk: ThreadChunk) => boolean) => {
+      const chunks: ThreadChunk[] = [];
+      for await (const chunk of stream as AsyncIterable<ThreadChunk>) {
+        chunks.push(chunk);
+        if (last(chunk)) break;
+      }
+      return chunks;
+    };
+    const pendingChunksOf = (chunks: ThreadChunk[], contents: string) =>
+      chunks.filter(chunk => chunk.type === 'data-user-message-pending' && JSON.stringify(chunk).includes(contents));
+    const { agent, memoryStore, scope, toolGate, start } = setup();
+    const { stream, done } = await start();
+    const sent = agent.sendSignal({ type: 'user', contents: 'WAITING_FOR_THE_RUN' }, scope);
+    await sent.accepted;
+    expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([
+      expect.objectContaining({ id: sent.signal.id }),
+    ]);
+
+    // Joins after the send, so only the thread's pending input tells it about the signal.
+    const joined = await agent.subscribeToThread(scope);
+    const joinedRead = readUntil(joined.stream, chunk => chunk.type === 'finish' && chunk.runId === stream.runId);
+    toolGate.release();
+    await done;
+    const joinedChunks = await joinedRead;
+    joined.unsubscribe();
+    expect(pendingChunksOf(joinedChunks, 'WAITING_FOR_THE_RUN')).toHaveLength(1);
+
+    // The run took it; a subscriber joining now reads it from history, not as pending input.
+    expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
+    const later = await agent.subscribeToThread(scope);
+    const wake = agent.sendSignal({ type: 'user', contents: 'WAKES_THE_THREAD_AGAIN' }, scope);
+    const woken = await wake.accepted;
+    expect(woken.action).toBe('wake');
+    const laterChunks = await readUntil(later.stream, chunk => chunk.type === 'finish' && chunk.runId === woken.runId);
+    later.unsubscribe();
+    expect(pendingChunksOf(laterChunks, 'WAITING_FOR_THE_RUN')).toEqual([]);
+  });
+
   it('cancels a signal no drain took yet, resolves with its id, and never delivers it', async () => {
     const { agent, memoryStore, scope, prompts, toolGate, start, savedMessages } = setup();
     const { done } = await start();
