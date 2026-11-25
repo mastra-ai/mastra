@@ -769,6 +769,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'tools/context',
+          label: 'Context.dev',
+          customProps: { icon: '/img/integrations/context.svg' },
+        },
+        {
+          type: 'doc',
           id: 'tools/firecrawl',
           label: 'Firecrawl',
           customProps: { icon: '/img/integrations/firecrawl.svg' },
