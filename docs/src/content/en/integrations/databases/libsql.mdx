@@ -126,9 +126,9 @@ storage: new LibSQLStore({
 
 ## Managed tables
 
-The storage implementation creates the core storage tables automatically, including `mastra_notifications` for notification inbox records and delivery metadata.
+The storage implementation creates the core storage tables automatically, including `mastra_notifications` for notification inbox records and delivery metadata. It also creates `mastra_agent_signals` for signals sent to running evented agents, and `mastra_agent_signal_runs` to record which evented agent runs have closed.
 
-`LibSQLStore` exposes notification storage through `getStore('notifications')`.
+`LibSQLStore` exposes notification storage through `getStore('notifications')`, and agent signal storage through `getStore('agentSignals')`. Agent signals are [shared across processes](/docs/server/pubsub#evented-workflows-and-agents) except with an in-memory database (`:memory:`), an embedded replica (`syncUrl`), or a `client` you pass in that isn't connected to a remote database. A local `file:` URL is shared only by processes on the same machine. Deleting a thread with `memory.deleteThread()` also deletes its agent signal rows from the storage of the Mastra instance the memory is registered with.
 
 ## Initialization
 

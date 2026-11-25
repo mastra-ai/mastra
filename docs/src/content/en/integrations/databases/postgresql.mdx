@@ -191,8 +191,10 @@ The storage implementation handles schema creation and updates automatically. It
 - `mastra_scorers`: Stores scoring and evaluation data
 - `mastra_resources`: Stores resource working memory data
 - `mastra_notifications`: Stores notification inbox records and delivery metadata
+- `mastra_agent_signals`: Stores signals sent to running evented agents until the run takes them
+- `mastra_agent_signal_runs`: Records which evented agent runs have closed
 
-`PostgresStore` exposes notification storage through `getStore('notifications')`.
+`PostgresStore` exposes notification storage through `getStore('notifications')`, and agent signal storage through `getStore('agentSignals')`. Deleting a thread with `memory.deleteThread()` also deletes its agent signal rows from the storage of the Mastra instance the memory is registered with.
 
 ### Observability
 

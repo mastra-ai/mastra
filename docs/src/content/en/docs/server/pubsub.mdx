@@ -120,6 +120,19 @@ Workflows on the [evented execution engine](/docs/workflows/scheduled-workflows#
 
 The backends that redeliver are marked **Yes** in the [Choosing a backend](#choosing-a-backend) table. A backend's reference page says whether redelivery can be turned off. The storage adapters with workflow step guards are `@mastra/pg` and `@mastra/libsql`. With `@mastra/libsql`, see [evented agent worker takeover](/reference/pubsub/redis-streams#evented-agent-worker-takeover) for the database setups that work across machines.
 
+Messages and other signals sent to a running evented agent also depend on the storage adapter. These pages use two terms for it:
+
+- **Storage that keeps agent signals**: The adapter implements the `agentSignals` storage domain. An evented agent stores the signals sent to a running run there until the run takes them. `@mastra/pg`, `@mastra/libsql`, and `InMemoryStore` from `@mastra/core/storage` keep agent signals.
+- **Storage that shares agent signals across processes**: Storage that keeps agent signals in a database every process of the deployment reads. A run then reads its signals in whichever process executes its next step.
+
+| Storage adapter | Keeps agent signals | Shares them across processes |
+| - | - | - |
+| `@mastra/pg` | Yes | Yes |
+| `@mastra/libsql` | Yes | Yes, except with an in-memory database (`:memory:`), an embedded replica (`syncUrl`), or a `client` you pass in that isn't connected to a remote database. A local `file:` URL is shared only by processes on the same machine |
+| `InMemoryStore` | Yes | No |
+
+Without storage that shares agent signals across processes, a signal sent to a running evented agent is forwarded to the process that holds the run and kept in that process's memory. It reaches the run only when that process also executes the run's next step. Otherwise the agent answers it in a new turn after the run ends.
+
 [`EventEmitterPubSub`](/reference/pubsub/event-emitter) and [`UnixSocketPubSub`](/reference/pubsub/unix-socket-pubsub) don't redeliver an event that a stopped process received and never acknowledged. On the default `EventEmitterPubSub`, evented workflows and agents run in one process, which is how you try the evented engine locally and run it in tests. Don't use either backend to run evented workflows or agents on several processes:
 
 - `EventEmitterPubSub` delivers inside one process. An event never reaches another instance, and each instance that boots restarts the active evented workflow runs of the others.
@@ -131,6 +144,7 @@ Mastra logs a warning the first time an evented run is created in a setup that c
 
 - The PubSub backend delivers to other processes and doesn't redeliver unacknowledged events.
 - The PubSub backend redelivers unacknowledged events and the storage adapter has no workflow step guards.
+- The PubSub backend delivers to other processes and the storage doesn't share agent signals across processes. Mastra logs this one separately, the first time an evented agent run is prepared, starting with `Signals sent to running evented agents aren't supported on several processes with this setup`.
 
 The default `EventEmitterPubSub` doesn't trigger the warning, because its events never leave the process. `UnixSocketPubSub` triggers it even when one process uses the socket, because Mastra can't tell how many processes share it.
 
