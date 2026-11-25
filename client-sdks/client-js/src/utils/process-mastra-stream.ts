@@ -46,6 +46,11 @@ async function sharedProcessMastraStream({
         }
       }
     }
+  } catch (error) {
+    // Releasing the lock alone leaves the source open, so tell the producer to stop.
+    // Not awaited: a cancel that never settles must not hold back the caller's error.
+    if (!signal?.aborted) void reader.cancel(error).catch(() => {});
+    throw error;
   } finally {
     signal?.removeEventListener('abort', abort);
     reader.releaseLock();
