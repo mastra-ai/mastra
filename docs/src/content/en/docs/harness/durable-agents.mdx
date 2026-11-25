@@ -31,44 +31,42 @@ For short-lived, request-scoped calls where the client stays connected, a regula
 
 ## Quickstart
 
-This example uses `@mastra/libsql` for persistent storage and requires an `OPENAI_API_KEY` for the model. Install `@mastra/libsql` in your Mastra project before continuing.
+Set `durable.executionEngine` to `'default'` on your agent to run it in the current process. This example uses an `OPENAI_API_KEY` for the model:
 
-In `src/mastra/index.ts`, set `durable.executionEngine` to `'default'` to run the agent in the current process. Register it with persistent storage and enable automatic recovery so it can continue from a saved checkpoint after a restart:
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
+```typescript title="src/mastra/agents/researcher.ts"
 import { Agent } from '@mastra/core/agent'
-import { LibSQLStore } from '@mastra/libsql'
 
-const researcher = new Agent({
+export const researcher = new Agent({
   id: 'researcher',
   name: 'Researcher',
-  instructions: 'Research topics and summarize your findings.',
+  instructions: 'You research topics thoroughly.',
   model: '__GATEWAY_OPENAI_MODEL__',
   durable: { executionEngine: 'default' },
 })
+```
+
+Register the agent with Mastra and call `stream()`:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { researcher } from './agents/researcher'
 
 export const mastra = new Mastra({
   agents: { researcher },
-  storage: new LibSQLStore({ id: 'research-storage', url: 'file:./research.db' }),
-  recovery: { durableAgents: 'auto' },
 })
-```
-
-From your application code, import the configured `mastra` instance and start a run. This example assumes the calling file is under `src/`:
-
-```typescript
-import { mastra } from './mastra'
 
 const output = await mastra
   .getAgent('researcher')
-  .stream('Summarize recent advances in battery recycling.')
-for await (const text of output.textStream) {
-  console.log(text)
+  .stream('Research quantum computing advances in 2025')
+
+for await (const chunk of output.fullStream) {
+  // Process each chunk as it arrives
 }
 ```
 
 The native `stream()` returns the model output directly. Use `output.runId` to [reconnect](#resumable-streams). With a wrapper, `stream()` returns a handle with the model output in `.output`. See the [wrapper example](/reference/agents/durable-agent#usage-example).
+
+To continue a run after a process restart, configure persistent storage and [crash recovery](#crash-recovery).
 
 ## How it works
 
@@ -84,9 +82,9 @@ A durable agent adds three layers on top of a regular agent:
 
 Choose the engine based on where the agent should run:
 
-| Native agent setting | Wrapper equivalent | Where it runs |
+| Native agent setting | Wrapper equivalent | Best for |
 | - | - | - |
-| `durable.executionEngine: 'default'` | `createDurableAgent()` from `@mastra/core/agent/durable` | In the caller's process. Consume the stream directly. |
+| `durable.executionEngine: 'default'` | `createDurableAgent()` from `@mastra/core/agent/durable` | Local development and single-process servers. You get a stream you can await directly. |
 | `durable.executionEngine: 'evented'` | `createEventedAgent()` from `@mastra/core/agent/durable` | Runs in the background, and you can follow the run through PubSub. It can run in one process or across multiple processes with a [supported PubSub backend and storage adapter](/docs/server/pubsub#evented-workflows-and-agents). |
 | No native setting | `createInngestAgent()` from `@mastra/inngest` | On Inngest, with step memoization, retries, and a monitoring dashboard. |
 
@@ -135,7 +133,7 @@ await mastraClient.createStoredAgent({
 })
 ```
 
-`durable` also accepts `{ cleanupTimeoutMs }`. Stored agents inherit the server's replay cache and PubSub transport. Use a [code-defined agent](/docs/harness/durable-agents#quickstart) to select a checkpointing engine and configure `maxSteps` or snapshot persistence per agent. For existing code that uses a wrapper, pass those options to `createDurableAgent()` instead.
+`durable` also accepts `{ cleanupTimeoutMs }`. Stored agents inherit the server's replay cache and PubSub transport. To select an engine per agent, use a [code-defined agent](#quickstart).
 
 ### Inngest-powered with `createInngestAgent()`
 
@@ -161,7 +159,7 @@ Visit the [`createInngestAgent()` reference](/reference/agents/inngest-agent) fo
 
 ## Resumable streams
 
-Durable agents support resumable streams through PubSub and an event cache. To reconnect after a disconnect, call `observe()` with the run ID. Native `observe()` returns a handle with `.output` and `.detach()` without advancing the run. It keeps watching if the run suspends unless you pass `closeOnSuspend: true`:
+Durable agents support resumable streams through PubSub and an event cache. When a client disconnects mid-stream, the cache continues storing events. To reconnect, pass the run ID to `observe()` and read the stream from the returned handle's `.output`:
 
 ```typescript title="src/server/reconnect.ts"
 const { output } = await mastra.getAgent('researcher').observe(runId)
@@ -367,9 +365,7 @@ await durableAgent.recoverActiveRuns({ runId: 'run-abc-123' })
 
 To recover a stored agent that wasn't registered at boot, first load it with `await mastra.getEditor()?.agent.getById(agentId)` without a `versionId`. Once it loads, call `mastra.recoverAllDurableAgents()`.
 
-`recoverActiveRuns()` reports `success`, `failed`, or `skipped` for each run. A skipped result can include `retryAt`, for example when another process still owns the run, recovery times out, or recovery encounters a transient error. For an owned run, `retryAt` is when the claim expires unless the owner renews it. For a timeout, the result also includes `reason: 'recovery-timeout'`.
-
-If you call `recoverActiveRuns()` directly, use `retryAt` to schedule your own re-check. `mastra.recoverAllDurableAgents()` schedules a re-check when a skipped run returns `retryAt`. It counts a timed-out attempt only as `skipped`, even if that attempt settles later.
+`recoverActiveRuns()` reports `success`, `failed`, or `skipped` for each run. If a skipped run returns `retryAt`, schedule your own re-check when calling `recoverActiveRuns()` directly. `mastra.recoverAllDurableAgents()` schedules that re-check for you and counts timed-out attempts only as `skipped`.
 
 Manual recovery reads the same `running` checkpoints as automatic recovery. For a `DurableAgent` using the default snapshot policy with `recovery.durableAgents` set to `'off'`, in-flight runs are only checkpointed at step boundaries reached after `mastra.shutdown()` starts. A run that crashes before then, or doesn't reach a step boundary during the drain, has no checkpoint, so `listActiveRuns()` and `recoverActiveRuns()` don't find it. See [snapshot persistence](#snapshot-persistence).
 
