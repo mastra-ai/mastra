@@ -1,10 +1,15 @@
 import type { ChunkType, NetworkChunkType } from '@mastra/core/stream';
 import { createSseEventSplitter } from './sse-event-splitter';
 
-// Cancel reasons from a failed onChunk, so sources can tell the SDK's cleanup apart from a consumer detach.
-const handlerFailures = new WeakSet<object>();
-export const isHandlerFailure = (reason: unknown) =>
-  typeof reason === 'object' && reason !== null && handlerFailures.has(reason);
+// Cancel reason after a failed onChunk, so sources can tell the SDK's cleanup apart from a consumer detach.
+// Wraps the thrown value so this works whatever onChunk throws.
+class HandlerFailure extends Error {
+  constructor(cause: unknown) {
+    super('onChunk handler failed', { cause });
+    this.name = 'HandlerFailure';
+  }
+}
+export const isHandlerFailure = (reason: unknown) => reason instanceof HandlerFailure;
 
 async function sharedProcessMastraStream({
   stream,
@@ -54,10 +59,7 @@ async function sharedProcessMastraStream({
   } catch (error) {
     // Releasing the lock alone leaves the source open, so tell the producer to stop.
     // Not awaited: a cancel that never settles must not hold back the caller's error.
-    if (!signal?.aborted) {
-      if (typeof error === 'object' && error !== null) handlerFailures.add(error);
-      void reader.cancel(error).catch(() => {});
-    }
+    if (!signal?.aborted) void reader.cancel(new HandlerFailure(error)).catch(() => {});
     throw error;
   } finally {
     signal?.removeEventListener('abort', abort);

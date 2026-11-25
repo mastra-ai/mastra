@@ -134,7 +134,7 @@ for (const process of [processMastraStream, processMastraNetworkStream]) {
           },
         }),
       ).rejects.toBe(failure);
-      expect(cancel).toHaveBeenCalledWith(failure);
+      expect(cancel).toHaveBeenCalledWith(expect.objectContaining({ cause: failure }));
       expect(stream.locked).toBe(false);
     });
   });

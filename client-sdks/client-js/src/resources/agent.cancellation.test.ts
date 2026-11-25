@@ -175,12 +175,14 @@ describe('stream execution cancellation over HTTP', () => {
     13_000,
   );
 
-  it('keeps an unacknowledged caller cancellation retrying when onChunk throws', async () => {
+  it.each([
+    ['an error', new Error('handler failed')],
+    ['a string', 'handler failed'],
+  ])('keeps an unacknowledged caller cancellation retrying when onChunk throws %s', async (_, failure) => {
     attemptsBeforeAck = Infinity;
     firstChunk = true;
     const ac = new AbortController();
     const response = await start('stream', ac.signal);
-    const failure = new Error('handler failed');
     await expect(
       response.processDataStream({
         onChunk: () => {
