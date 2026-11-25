@@ -4,7 +4,7 @@
  * This module imports nothing at runtime, so settings parsing, the TUI and the
  * Factory routes can validate headers without loading the AI SDK.
  */
-import type { CustomProviderAuthScheme, CustomProviderHeader } from './settings.js';
+import type { CustomProviderAuthScheme } from './settings.js';
 
 /** The most custom headers one provider may send. */
 export const MAX_CUSTOM_PROVIDER_HEADERS = 20;
@@ -23,10 +23,23 @@ export const REFUSED_CUSTOM_PROVIDER_HEADER_NAMES: readonly string[] = [
   'content-type',
   'transfer-encoding',
   'connection',
+  'keep-alive',
+  'upgrade',
+  'expect',
+  'te',
+  'trailer',
+  'proxy-connection',
 ];
 
 /** The `token` grammar of RFC 9110, which every header name must match. */
 const HEADER_NAME_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+
+/**
+ * Characters outside tab, printable ASCII and Latin-1. The HTTP client refuses
+ * control characters and anything above 0xFF at call time, so such a value
+ * would fail every request instead of failing when it is saved.
+ */
+const INVALID_HEADER_VALUE_CHARACTER = /[^\t\x20-\x7e\x80-\xff]/;
 
 /**
  * The header the auth scheme writes the key into. A missing scheme means
@@ -46,18 +59,23 @@ export function isCustomProviderAuthScheme(value: unknown): value is CustomProvi
  *
  * An entry without `value` is accepted, because an edit may keep a saved value
  * by naming the header only. The caller decides whether a value is required.
+ * Entries are typed loosely because they often come straight from a request
+ * body, where a name or value may not be a string.
  */
 export function customProviderHeaderProblem(
-  headers: ReadonlyArray<Pick<CustomProviderHeader, 'name'> & { value?: string }>,
+  headers: ReadonlyArray<{ name: unknown; value?: unknown }>,
   authScheme: CustomProviderAuthScheme | undefined,
 ): string | undefined {
+  if (!Array.isArray(headers)) return 'Custom headers must be a list.';
   if (headers.length > MAX_CUSTOM_PROVIDER_HEADERS) {
     return `A provider can send at most ${MAX_CUSTOM_PROVIDER_HEADERS} custom headers.`;
   }
   const authHeader = customProviderAuthHeaderName(authScheme).toLowerCase();
   const seen = new Set<string>();
-  for (const header of headers) {
-    const name = header.name;
+  for (const header of headers as unknown[]) {
+    if (typeof header !== 'object' || header === null) return 'Each custom header needs a name and a value.';
+    const { name, value } = header as { name: unknown; value?: unknown };
+    if (typeof name !== 'string') return 'Each custom header name must be text.';
     if (!HEADER_NAME_PATTERN.test(name)) {
       return `"${name}" is not a valid header name.`;
     }
@@ -72,15 +90,21 @@ export function customProviderHeaderProblem(
       return `The ${name} header is listed more than once.`;
     }
     seen.add(lowerName);
-    if (header.value === undefined) continue;
-    if (header.value.length === 0) {
+    if (value === undefined) continue;
+    if (typeof value !== 'string') {
+      return `The ${name} header value must be text.`;
+    }
+    if (value.length === 0) {
       return `The ${name} header has no value.`;
     }
-    if (/[\r\n]/.test(header.value)) {
+    if (value.length > MAX_CUSTOM_PROVIDER_HEADER_VALUE_LENGTH) {
+      return `The ${name} header value is longer than ${MAX_CUSTOM_PROVIDER_HEADER_VALUE_LENGTH} characters.`;
+    }
+    if (/[\r\n]/.test(value)) {
       return `The ${name} header value cannot contain a line break.`;
     }
-    if (header.value.length > MAX_CUSTOM_PROVIDER_HEADER_VALUE_LENGTH) {
-      return `The ${name} header value is longer than ${MAX_CUSTOM_PROVIDER_HEADER_VALUE_LENGTH} characters.`;
+    if (INVALID_HEADER_VALUE_CHARACTER.test(value)) {
+      return `The ${name} header value can only hold printable characters up to U+00FF.`;
     }
   }
   return undefined;
