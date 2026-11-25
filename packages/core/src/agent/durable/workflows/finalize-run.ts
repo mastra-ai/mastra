@@ -81,6 +81,8 @@ export interface DurableFinishSideEffectsResult {
   titleForStream?: Promise<string | undefined>;
   /** Chunks from the `structuredOutput.model` structuring pass, to publish before FINISH. */
   structuredOutputChunks?: ChunkType[];
+  /** The validated `structuredOutput` object, when the run asked for one. */
+  object?: unknown;
   /**
    * Chunks output processors wrote with `writer.custom()` in processOutputResult. Publish them
    * marked output-processed, after `structuredOutputChunks` and before the tripwire or FINISH,
@@ -232,11 +234,13 @@ export async function runDurableFinishSideEffects({
       ? toLiveStructuredOutputSchema(structuredOutput.schema, structuredOutput.nullToUndefined)
       : undefined);
   let structuredOutputChunks: ChunkType[] | undefined;
+  let object: unknown;
   // The structuring model reads tool calls and results too, so a tool-only answer still qualifies.
   const structuringParts = structuredOutput?.hasStructuringModel ? responseStreamParts(messageList) : undefined;
   if (structuredOutputSchema && (structuredOutputText.trim() || structuringParts?.length)) {
     const finishReason = outputResult?.finishReason;
     const truncated = finishReason === 'length' || finishReason === 'content-filter';
+    const failed = finishReason === 'abort' || finishReason === 'error';
     const errorStrategy = liveStructuredOutput ? liveStructuredOutput.errorStrategy : structuredOutput?.errorStrategy;
     const fallbackValue = liveStructuredOutput ? liveStructuredOutput.fallbackValue : structuredOutput?.fallbackValue;
     let value: unknown;
@@ -245,7 +249,6 @@ export async function runDurableFinishSideEffects({
       // separate structuring model turns that answer into the object.
       const structuringModel = liveStructuredOutput?.model ?? structuredOutput.structuringModelConfig?.originalConfig;
       // Never structure partial text from an aborted or failed turn.
-      const failed = finishReason === 'abort' || finishReason === 'error';
       if (structuringModel && !truncated && !failed) {
         structuredOutputChunks = await runStructuringPass({
           options: {
@@ -278,6 +281,8 @@ export async function runDurableFinishSideEffects({
     const lastAssistantMessage = messageList.get.response
       .db()
       .findLast(message => message.role === 'assistant' && !message.content?.metadata?.completionResult);
+    // The caller of a failed or aborted run gets no object.
+    object = failed ? undefined : value;
     if (value !== undefined && lastAssistantMessage) {
       lastAssistantMessage.content.metadata = {
         ...lastAssistantMessage.content.metadata,
@@ -553,6 +558,7 @@ export async function runDurableFinishSideEffects({
     titleGeneration,
     titleForStream,
     structuredOutputChunks,
+    object,
     outputResultChunks,
   };
 }

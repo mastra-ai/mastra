@@ -939,6 +939,7 @@ const sidebars = {
       collapsible: false,
       className: 'sidebar-group-name',
       items: [
+        { type: 'doc', id: 'mastra-platform/mcp', label: 'MCP server', customProps: { tags: ['new'] } },
         { type: 'doc', id: 'mastra-platform/team-members', label: 'Team members' },
         { type: 'doc', id: 'mastra-platform/access-tokens', label: 'Access tokens' },
       ],

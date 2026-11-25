@@ -999,7 +999,7 @@ const agent = await mastraClient.createStoredAgent({
 
 #### Resumable streams for stored agents
 
-Set `durable` to configure [resumable streams](/docs/agents/resumable-streams) on the hydrated plain agent. Pass `true` to enable streams, `false` to disable them, or an object to tune stream cleanup:
+Set `durable` to configure [resumable streams](/docs/agents/resumable-streams) for the stored agent. Pass `true` to enable streams, `false` to disable them, or an object to tune stream cleanup:
 
 ```typescript
 const agent = await mastraClient.createStoredAgent({
@@ -1014,7 +1014,7 @@ const agent = await mastraClient.createStoredAgent({
 })
 ```
 
-Only serializable options are accepted, with cache and pubsub inherited from the server's `Mastra` instance. Existing stored agents with `durable: true` also use this field for resumable streams only. To retain durable execution and checkpoint recovery, register a code agent wrapped with `createDurableAgent({ agent })`.
+Stored agents accept only serializable options and inherit the server's cache and PubSub settings. You can't select an execution engine through `createStoredAgent()`, but stored agents can inherit the [server's engine default](/docs/harness/durable-agents#resumable-streams-for-stored-agents).
 
 ### `getStoredAgent()`
 

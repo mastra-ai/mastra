@@ -1799,3 +1799,110 @@ describe('hidden internal workflows', () => {
     expect(result).toEqual({ runId: 'run-1' });
   });
 });
+
+// A process that stalls while it drives a run can lose the run to another instance. Its saves are
+// then refused, which is the other instance's run going on, not a failure of this server.
+describe('workflow routes when another instance takes the run over', () => {
+  const OTHER_OWNER = 'other-instance-owner';
+
+  async function setup() {
+    let open!: () => void;
+    const stalled = new Promise<void>(resolve => (open = resolve));
+    const reached = Promise.withResolvers<void>();
+    const step = createStep({
+      id: 'slow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      execute: async () => {
+        reached.resolve();
+        await stalled;
+        return {};
+      },
+    });
+    const workflow = createWorkflow({ id: 'stalls', inputSchema: z.object({}), outputSchema: z.object({}) })
+      .then(step)
+      .commit();
+    const storage = new MockStore();
+    const mastra = new Mastra({ logger: false, storage, workflows: { stalls: workflow } });
+    const store = (await storage.getStore('workflows'))!;
+    const logger = mastra.getLogger();
+    const errors = vi.spyOn(logger, 'error');
+    const debugs = vi.spyOn(logger, 'debug');
+
+    /** Lets the stalled step finish once the run is lost: taken over, or its store failing. */
+    async function lose(runId: string, how: 'takeover' | 'store failure') {
+      await reached.promise;
+      if (how === 'takeover') {
+        await store.claimRunOwnership({ runId, ownerId: OTHER_OWNER, leaseMs: 60_000, force: true });
+      } else {
+        vi.spyOn(store, 'persistWorkflowSnapshot').mockRejectedValue(new Error('connection terminated'));
+      }
+      open();
+    }
+    return { mastra, store, errors, debugs, lose };
+  }
+
+  it.each([
+    ['takeover', 409],
+    ['store failure', 500],
+  ] as const)('answers an awaited start whose run had a %s with %i', async (how, status) => {
+    const { mastra, errors, lose } = await setup();
+    const runId = `run-${how.replace(' ', '-')}`;
+
+    const request = START_ASYNC_WORKFLOW_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      workflowId: 'stalls',
+      runId,
+      inputData: {},
+    } as any).catch((error: unknown) => error);
+    await lose(runId, how);
+    const error = (await request) as HTTPException;
+
+    expect(error).toBeInstanceOf(HTTPException);
+    expect(error.status).toBe(status);
+    if (how === 'takeover') {
+      const body = await error.getResponse().json();
+      expect(body).toEqual({
+        error: `Workflow run "${runId}" is now driven by another instance. Read the run for its current state.`,
+        code: 'STORAGE_RUN_FENCE_CONFLICT',
+      });
+      expect(JSON.stringify(body)).not.toContain(OTHER_OWNER);
+      expect(errors).not.toHaveBeenCalled();
+    }
+  });
+
+  it.each(['takeover', 'store failure'] as const)(
+    'logs a background start whose run had a %s at the right level, with no unhandled rejection',
+    async how => {
+      const { mastra, errors, debugs, lose } = await setup();
+      const runId = `run-bg-${how.replace(' ', '-')}`;
+      await (mastra.getWorkflow('stalls') as Workflow).createRun({ runId });
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => void unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        const result = await START_WORKFLOW_RUN_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workflowId: 'stalls',
+          runId,
+          inputData: {},
+        } as any);
+        expect(result).toEqual({ message: 'Workflow run started' });
+        await lose(runId, how);
+
+        const logged = how === 'takeover' ? debugs : errors;
+        await vi.waitFor(() =>
+          expect(logged).toHaveBeenCalledWith(
+            expect.stringContaining('Failed to start workflow run'),
+            expect.anything(),
+          ),
+        );
+        await new Promise(resolve => setImmediate(resolve));
+        if (how === 'takeover') expect(errors).not.toHaveBeenCalled();
+        expect(unhandled).toEqual([]);
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+      }
+    },
+  );
+});

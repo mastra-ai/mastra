@@ -3,8 +3,11 @@ import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useState } from 'react';
-import type { ComponentProps, KeyboardEvent, PointerEvent, ReactNode } from 'react';
-import { Link, NavLink } from 'react-router';
+import type { KeyboardEvent, PointerEvent, ReactNode } from 'react';
+import { Link } from 'react-router';
+import { BoardConfigNav, BoardConfigNavLink } from '@mastra/playground-ui/domains/factory';
+import type { BoardConfigPage } from '@mastra/playground-ui/domains/factory';
+import { HrefLink } from '../../../ui/HrefLink';
 
 import type { StoredBoardResponse } from '../../../../api/types';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
@@ -19,12 +22,8 @@ import { boardIntakePath, boardRulesPath, boardConfigPath, boardSkillsPath, newB
 import type { BoardConfigLocation } from '../boardConfigPaths';
 import { movePhase } from '../boardDraft';
 import { AddPhaseButton } from './AddPhaseButton';
-import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
-import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
-import { IconInboxEmpty } from '@mastra/playground-ui/icons/central/IconInboxEmpty';
 import { IconDotGrid2x3 } from '@mastra/playground-ui/icons/central/IconDotGrid2x3';
 import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
-import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
@@ -35,65 +34,49 @@ import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconC
  */
 export function BoardConfigNavigation({ factoryId, boardId, phaseKey, skills, rules, intake }: BoardConfigLocation) {
   const query = useBoardQuery(factoryId, boardId);
+  const overlays = useOverlays();
+  const page: BoardConfigPage = skills
+    ? 'skills'
+    : intake
+      ? 'routing'
+      : rules
+        ? 'rules'
+        : phaseKey
+          ? { phase: phaseKey }
+          : 'overview';
 
   return (
-    <nav className="flex flex-col gap-6" aria-label="Board configuration">
-      <section className="flex flex-col gap-1" aria-label="All boards">
-        <Sidebar.NavHeader>All boards</Sidebar.NavHeader>
-        <Sidebar.NavList>
-          <ConfigLink
-            to={boardSkillsPath(factoryId, boardId)}
-            isActive={skills === true}
-            icon={<IconBook />}
-            label="Skills"
+    <BoardConfigNav
+      page={page}
+      hrefs={{
+        skills: boardSkillsPath(factoryId, boardId),
+        routing: boardIntakePath(factoryId, boardId),
+        overview: boardConfigPath(factoryId, boardId),
+        rules: boardRulesPath(factoryId, boardId),
+      }}
+      onNavigate={() => overlays.close('sidebar')}
+      LinkComponent={HrefLink}
+      switcher={<BoardSwitcher factoryId={factoryId} boardId={boardId} />}
+      phases={
+        query.isPending ? (
+          <SidebarNavigationSkeleton label="Loading phases" rows={4} />
+        ) : query.isError ? (
+          <SidebarLoadError onRetry={() => void query.refetch()} retrying={query.isFetching}>
+            Couldn’t load phases
+          </SidebarLoadError>
+        ) : (
+          <PhaseList
+            factoryId={factoryId}
+            boardId={boardId}
+            phaseKey={phaseKey}
+            skills={skills}
+            rules={rules}
+            intake={intake}
+            response={query.data}
           />
-          <ConfigLink
-            to={boardIntakePath(factoryId, boardId)}
-            isActive={intake === true}
-            icon={<IconInboxEmpty />}
-            label="Routing"
-          />
-        </Sidebar.NavList>
-      </section>
-      <section className="flex flex-col gap-2" aria-label="This board">
-        <Sidebar.NavHeader>This board</Sidebar.NavHeader>
-        <BoardSwitcher factoryId={factoryId} boardId={boardId} />
-        <Sidebar.NavList>
-          <ConfigLink
-            to={boardConfigPath(factoryId, boardId)}
-            isActive={!phaseKey && !skills && !rules && !intake}
-            icon={<IconSettingsSliderHor />}
-            label="Overview"
-          />
-          <ConfigLink
-            to={boardRulesPath(factoryId, boardId)}
-            isActive={rules === true}
-            icon={<IconBranch />}
-            label="Rules"
-          />
-        </Sidebar.NavList>
-        <section className="flex flex-col gap-1 pt-2" aria-label="Phases">
-          <Sidebar.NavHeader>Phases</Sidebar.NavHeader>
-          {query.isPending ? (
-            <SidebarNavigationSkeleton label="Loading phases" rows={4} />
-          ) : query.isError ? (
-            <SidebarLoadError onRetry={() => void query.refetch()} retrying={query.isFetching}>
-              Couldn’t load phases
-            </SidebarLoadError>
-          ) : (
-            <PhaseList
-              factoryId={factoryId}
-              boardId={boardId}
-              phaseKey={phaseKey}
-              skills={skills}
-              rules={rules}
-              intake={intake}
-              response={query.data}
-            />
-          )}
-        </section>
-      </section>
-    </nav>
+        )
+      }
+    />
   );
 }
 
@@ -165,6 +148,7 @@ function PhaseList({
 }) {
   const { board, canEdit } = response;
   const { draft, locked, setDraft } = useBoardDraft(factoryId, boardId, board);
+  const overlays = useOverlays();
   const editable = canEdit === true && board.editable === true;
   // The skills, rules and intake pages have no save bar to keep a reorder made there.
   const sortable = editable && !skills && !rules && !intake && !locked && draft.phases.length > 2;
@@ -251,9 +235,11 @@ function PhaseList({
           const lands =
             drag && drag.to !== drag.from && drag.to === index ? (drag.to < drag.from ? 'before' : 'after') : undefined;
           return (
-            <ConfigLink
+            <BoardConfigNavLink
               key={phase.key}
-              to={boardConfigPath(factoryId, boardId, phase.key)}
+              href={boardConfigPath(factoryId, boardId, phase.key)}
+              LinkComponent={HrefLink}
+              onNavigate={() => overlays.close('sidebar')}
               isActive={phase.key === phaseKey}
               icon={
                 <PhaseIcon movable={movable}>
@@ -315,49 +301,5 @@ function PhaseIcon({ movable, children }: { movable: boolean; children: ReactNod
         className="text-muted-foreground size-icon-md invisible group-focus-within/phase:visible group-hover/phase:visible pointer-coarse:visible"
       />
     </span>
-  );
-}
-
-function ConfigLink({
-  to,
-  isActive,
-  icon,
-  label,
-  className,
-  description,
-  onKeyDown,
-  ...row
-}: Pick<ComponentProps<'li'>, 'style' | 'onPointerDown'> & {
-  'data-drop'?: 'before' | 'after';
-  to: string;
-  isActive: boolean;
-  icon: ReactNode;
-  label: string;
-  className?: string;
-  description?: string;
-  onKeyDown?: (event: KeyboardEvent) => void;
-}) {
-  const overlays = useOverlays();
-
-  return (
-    <Sidebar.NavLink
-      {...row}
-      link={{ name: label, url: to }}
-      isActive={isActive}
-      className={className}
-      render={
-        <NavLink
-          to={to}
-          // Rows move by the grip; the link's own drag would carry a URL instead.
-          draggable={false}
-          onClick={() => overlays.close('sidebar')}
-          onKeyDown={onKeyDown}
-          aria-description={description}
-        >
-          {icon}
-          <Sidebar.NavLabel>{label}</Sidebar.NavLabel>
-        </NavLink>
-      }
-    />
   );
 }
