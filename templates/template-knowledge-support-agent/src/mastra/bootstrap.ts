@@ -55,7 +55,7 @@ export async function bootstrap() {
   const reviewerAuthority =
     platform?.reviewerAuthority ?? oauth?.reviewerAuthority ?? createReviewerAuthority(credentials);
   const review = createReviewWorkflow(createReviewService(supportKnowledge, memory, reviewerAuthority));
-  const { authorize, writerContentionResponse } = createSupportAuthorization(memory, review, reviewerAuthority);
+  const { authorize, writerContentionResponse } = createSupportAuthorization(memory, review, reviewerAuthority, hosted);
   const middleware = [
     ...(onPlatform ? [platform?.middleware ?? platformAuthMiddleware()] : []),
     ...(hosted ? [writerContentionResponse] : []),

@@ -29,8 +29,7 @@ import { GET_SYSTEM_PACKAGES_ROUTE } from '@mastra/server/handlers/system';
 import { LIST_TOOLS_ROUTE } from '@mastra/server/handlers/tools';
 import type { Memory } from '@mastra/memory';
 import { MemoryPG } from '@mastra/pg';
-import { hostedMode } from '../database/store.ts';
-import { withWriterLock } from '../knowledge/writer-lock.ts';
+import { withWriterLock, WriterBusyError } from '../knowledge/writer-lock.ts';
 
 type RoutePolicy = (input: {
   request: Request;
@@ -91,22 +90,16 @@ function hasStudioStreamOptions(body: Record<string, unknown>): boolean {
 const supportAgent = ({ params }: Parameters<RoutePolicy>[0]) => params.agentId === 'support';
 const supportKnowledge = ({ params }: Parameters<RoutePolicy>[0]) => params.knowledgeKey === 'support';
 
-export function createStudioAccess(memory: Memory) {
-  let pending: Promise<unknown> = Promise.resolve();
+export function createStudioAccess(memory: Memory, hosted: boolean) {
+  const pending = new Map<string, Promise<boolean>>();
+  let hostedClaims = 0;
 
-  async function bindThread(threadId: string, owner: string): Promise<boolean> {
-    const existing = await memory.getThreadById({ threadId });
-    if (existing) return existing.resourceId === owner;
-
-    const operation = pending.then(async () => {
-      // First ownership must be serialized across workers, before agent execution writes Memory.
-      const queued = await memory.getThreadById({ threadId });
-      if (queued) return queued.resourceId === owner;
-      if (!hostedMode()) {
-        await memory.createThread({ threadId, resourceId: owner });
-        return true;
-      }
-      return withWriterLock(async ({ postgres }) => {
+  async function bindHostedThread(threadId: string, owner: string) {
+    if (hostedClaims >= 8) throw new WriterBusyError('hosted thread claims');
+    hostedClaims++;
+    try {
+      // First ownership must be serialized across workers before agent execution writes Memory.
+      return await withWriterLock(async ({ postgres }) => {
         const store = postgres ? new MemoryPG({ client: postgres, schemaName: 'public' }) : memory;
         const claimed = await store.getThreadById({ threadId });
         if (claimed) return claimed.resourceId === owner;
@@ -114,9 +107,31 @@ export function createStudioAccess(memory: Memory) {
         await store.saveThread({ thread });
         return true;
       });
-    });
-    pending = operation.catch(() => undefined);
-    return operation;
+    } finally {
+      hostedClaims--;
+    }
+  }
+
+  async function bindThread(threadId: string, owner: string): Promise<boolean> {
+    const existing = await memory.getThreadById({ threadId });
+    if (existing) return existing.resourceId === owner;
+    if (hosted) return bindHostedThread(threadId, owner);
+
+    const previous = pending.get(threadId) ?? Promise.resolve();
+    const operation = previous
+      .catch(() => undefined)
+      .then(async () => {
+        const claimed = await memory.getThreadById({ threadId });
+        if (claimed) return claimed.resourceId === owner;
+        await memory.createThread({ threadId, resourceId: owner });
+        return true;
+      });
+    pending.set(threadId, operation);
+    try {
+      return await operation;
+    } finally {
+      if (pending.get(threadId) === operation) pending.delete(threadId);
+    }
   }
 
   const readThread: RoutePolicy = async ({ params, owner }) => {

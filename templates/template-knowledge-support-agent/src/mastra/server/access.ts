@@ -59,8 +59,9 @@ export function createSupportAuthorization(
   memory: Memory,
   reviewWorkflow: ReviewWorkflow,
   authority: ReviewerAuthority,
+  hosted: boolean,
 ) {
-  const authorizeStudioRoute = createStudioAccess(memory);
+  const authorizeStudioRoute = createStudioAccess(memory, hosted);
   const authorizeReviewRoute = createReviewAccess(reviewWorkflow, authority);
   const busyRequests = new WeakSet<RequestContext>();
   const writerContentionResponse: Middleware = async (context, next) => {
