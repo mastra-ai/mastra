@@ -4,8 +4,14 @@ import { act } from 'react';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
+import type { CustomProviderCheckFailure, CustomProviderCheckResponse, CustomProviderInfo } from '../../api/types';
 import { TEST_BASE_URL, renderHookWithProviders, waitForMutationsIdle } from '../../../e2e/ui/render';
-import { useCustomProvidersQuery, useRemoveCustomProvider, useSaveCustomProvider } from '../use-custom-providers';
+import {
+  useCheckCustomProvider,
+  useCustomProvidersQuery,
+  useRemoveCustomProvider,
+  useSaveCustomProvider,
+} from '../use-custom-providers';
 import { customProvider, customProvidersResponse } from './fixtures/custom-providers';
 
 const URL = `${TEST_BASE_URL}/web/config/custom-providers`;
@@ -89,6 +95,50 @@ describe('useSaveCustomProvider', () => {
 
       expect(postBody?.previousId).toBe('old-id');
     });
+  });
+});
+
+describe('useCheckCustomProvider', () => {
+  it('checks a saved endpoint by id and refetches the list so its row shows the recorded result', async () => {
+    const failure: CustomProviderCheckFailure = {
+      kind: 'http',
+      status: 401,
+      message: 'HTTP 401 Unauthorized from https://api.my-llm.test/v1/models',
+    };
+    const checkResponse: CustomProviderCheckResponse = {
+      ok: true,
+      check: { models: { ok: false, failure, latencyMs: 40 } },
+    };
+    const recorded: CustomProviderInfo = {
+      ...customProvider,
+      lastCheck: { at: '2026-11-26T10:00:00.000Z', ok: false, message: failure.message },
+    };
+    let checked = false;
+    let checkBody: unknown;
+    server.use(
+      http.get(URL, () => HttpResponse.json({ providers: [checked ? recorded : customProvider] })),
+      http.post(`${URL}/check`, async ({ request }) => {
+        checkBody = await request.json();
+        checked = true;
+        return HttpResponse.json(checkResponse);
+      }),
+    );
+
+    const { result, client } = renderHookWithProviders(() => ({
+      query: useCustomProvidersQuery(),
+      check: useCheckCustomProvider(),
+    }));
+    await waitFor(() => expect(result.current.query.data).toEqual([customProvider]));
+
+    let response: Awaited<ReturnType<typeof result.current.check.mutateAsync>> | undefined;
+    await act(async () => {
+      response = await result.current.check.mutateAsync({ previousId: 'my-llm', scope: 'user' });
+    });
+    await waitForMutationsIdle(client);
+
+    expect(checkBody).toEqual({ previousId: 'my-llm', scope: 'user' });
+    expect(response).toEqual(checkResponse);
+    await waitFor(() => expect(result.current.query.data).toEqual([recorded]));
   });
 });
 
