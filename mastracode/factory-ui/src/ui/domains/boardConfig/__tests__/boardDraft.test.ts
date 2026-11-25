@@ -4,6 +4,9 @@ import { describe, expect, it } from 'vitest';
 import type { StoredPhaseInfo } from '../../../../api/types';
 import {
   canRemovePhase,
+  defaultOutcomes,
+  newOutcome,
+  outcomeProblems,
   keyFromName,
   keyProblem,
   movePhase,
@@ -176,5 +179,52 @@ describe('starterBoard', () => {
   it('is a board the server stores as it is', () => {
     const parsed = storedBoardInputSchema.safeParse({ ...starterBoard(), key: 'bugs', name: 'Bugs' });
     expect(parsed.error?.issues).toBeUndefined();
+  });
+});
+
+describe('phase outcomes', () => {
+  const board: StoredPhaseInfo[] = [
+    { key: 'backlog', name: 'Backlog', kind: 'resting', nextPhases: ['doing'] },
+    { key: 'doing', name: 'Doing', kind: 'working', runner: { context: 'work' } },
+    { key: 'done', name: 'Done', kind: 'terminal', nextPhases: [] },
+  ];
+  const doing = board[1];
+
+  it('offers one outcome per next phase when a phase lists none, as the server does', () => {
+    expect(defaultOutcomes(doing, board)).toEqual([
+      { key: 'backlog', label: 'Backlog', to: 'backlog' },
+      { key: 'done', label: 'Done', to: 'done' },
+    ]);
+  });
+
+  it('adds an outcome for a move no outcome takes yet, under a free key', () => {
+    expect(newOutcome(doing, board, [{ key: 'backlog', label: 'Back', to: 'backlog' }])).toEqual({
+      key: 'done',
+      label: 'Done',
+      to: 'done',
+    });
+    const both = defaultOutcomes(doing, board);
+    expect(newOutcome(doing, board, both)).toEqual({ key: 'backlog-2', label: 'Backlog', to: 'backlog' });
+  });
+
+  it('flags keys and labels the server would refuse, and holds the phase back', () => {
+    const outcomes = [
+      { key: 'ship', label: 'Shipped', to: 'done' },
+      { key: 'ship', label: ' ', to: 'backlog' },
+      { key: 'bad key', label: 'Back', to: 'backlog' },
+    ];
+    expect(outcomeProblems(outcomes)).toEqual([
+      { key: 'This key is already in use.' },
+      { key: 'This key is already in use.', label: 'Enter a label.' },
+      { key: 'Use letters, digits, hyphens and underscores, starting with a letter or digit.' },
+    ]);
+    expect(phaseHasProblem({ ...doing, outcomes })).toBe(true);
+    expect(phaseHasProblem({ ...doing, outcomes: outcomes.slice(0, 1) })).toBe(false);
+  });
+
+  it('drops an outcome going to a removed phase even when moves are unset', () => {
+    const custom = { ...doing, outcomes: [{ key: 'ship', label: 'Shipped', to: 'done' }] };
+    const [, kept] = removePhase([board[0], custom, board[2]], 'done');
+    expect(kept).toEqual({ ...doing, outcomes: null });
   });
 });
