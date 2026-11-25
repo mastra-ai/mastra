@@ -41,6 +41,8 @@ export interface FakePlatformRequest {
   query: URLSearchParams;
   /** The JSON request body, when there was one. */
   body?: unknown;
+  /** The end user the request was scoped to (`x-mastra-resource-id`), when it was. */
+  resourceId?: string;
 }
 
 /** A platform problem response (`application/problem+json`), as the platform itself answers. */
@@ -74,6 +76,13 @@ export class FakePlatform {
   });
   /** Routes a test adds, tried before the built-in ones; `undefined` falls through. */
   route: (method: string, path: string, body: unknown) => FakeReply | undefined = () => undefined;
+  /** `GET /v2/connections/:id/context` bodies, by connection id. */
+  readonly contexts = new Map<string, unknown>();
+  /**
+   * `GET /v2/connections/:id/credentials` bodies, by connection id. An
+   * `accessToken` here is also what `POST .../github/app/installations/:id/access_tokens` mints.
+   */
+  readonly credentials = new Map<string, unknown>();
 
   #url = '';
 
@@ -109,7 +118,14 @@ export class FakePlatform {
     const method = req.method ?? 'GET';
     const url = new URL(req.url ?? '/', 'http://platform');
     const path = url.pathname;
-    this.requests.push({ method, path, query: url.searchParams, ...(body === undefined ? {} : { body }) });
+    const resourceId = req.headers['x-mastra-resource-id'];
+    this.requests.push({
+      method,
+      path,
+      query: url.searchParams,
+      ...(body === undefined ? {} : { body }),
+      ...(typeof resourceId === 'string' ? { resourceId } : {}),
+    });
     const reply = this.route(method, path, body) ?? this.#route(method, path, url.searchParams, body);
     res.statusCode = reply.status;
     for (const [name, value] of Object.entries(reply.headers ?? {})) res.setHeader(name, value);
@@ -162,6 +178,37 @@ export class FakePlatform {
       const limit = Number(query.get('limit') ?? 100);
       const page = (this.connectionEvents.get(id) ?? []).filter(e => compareStreamIds(e.id, after) > 0).slice(0, limit);
       return { status: 200, body: { events: page, nextCursor: page.at(-1)?.id ?? null } };
+    }
+    const context = /^\/v2\/connections\/([^/]+)\/context$/.exec(path);
+    if (method === 'GET' && context) {
+      const reply = this.contexts.get(decodeURIComponent(context[1]!));
+      return reply === undefined ? problem(404, 'not_found', path) : { status: 200, body: reply };
+    }
+    const mint = /^\/v2\/connections\/([^/]+)\/github\/app\/installations\/([^/]+)\/access_tokens$/.exec(path);
+    if (method === 'POST' && mint) {
+      // As the platform: a connection mints only for the installation its context
+      // names. Its token is the credential's token; a narrowed one names its
+      // repositories so tests can tell them apart.
+      const id = decodeURIComponent(mint[1]!);
+      const context = this.contexts.get(id) as { connection_config?: { installation_id?: unknown } } | undefined;
+      if (String(context?.connection_config?.installation_id) !== mint[2]) return problem(404, 'not_found', path);
+      const credential = this.credentials.get(id) as { accessToken?: string; expiresAt?: string } | undefined;
+      if (!credential?.accessToken) return problem(404, 'not_found', path);
+      const { repositories } = (body ?? {}) as { repositories?: string[] };
+      return {
+        status: 201,
+        body: {
+          token: repositories ? `${credential.accessToken}@${repositories.join(',')}` : credential.accessToken,
+          expires_at: credential.expiresAt ?? '2099-01-01T00:00:00.000Z',
+          permissions: {},
+          repository_selection: repositories ? 'selected' : 'all',
+        },
+      };
+    }
+    const credentials = /^\/v2\/connections\/([^/]+)\/credentials$/.exec(path);
+    if (method === 'GET' && credentials) {
+      const reply = this.credentials.get(decodeURIComponent(credentials[1]!));
+      return reply === undefined ? problem(404, 'not_found', path) : { status: 200, body: reply };
     }
     const proxy = /^\/v2\/connections\/([^/]+)\/proxy(\/.*)?$/.exec(path);
     if (proxy) return this.proxy(decodeURIComponent(proxy[1]!), proxy[2] ?? '/', query, body);

@@ -15,7 +15,16 @@ import type {
 type CommentPort = Pick<VersionControl, 'listComments' | 'createComment' | 'updateComment' | 'deleteComment'>;
 
 export type ReviewStatusPublishResult =
-  | { action: 'created' | 'updated'; commentId: string; url: string }
+  | {
+      action: 'created' | 'updated';
+      commentId: string;
+      url: string;
+      /** The state the comment now records, with what earlier steps of the attempt filled in. */
+      state: ReviewStatusState;
+      stats?: ReviewStatusStats;
+      /** What the comment recorded before this step, from this run or the one it replaced. */
+      previous?: ReviewStatusState;
+    }
   | { action: 'stale'; commentId: string }
   | { action: 'skipped' };
 
@@ -27,6 +36,15 @@ export interface ReviewStatusStep extends Omit<ReviewStatusView, 'stats'> {
   stats?: (state: ReviewStatusState) => Promise<ReviewStatusStats>;
   /** Ends the run an earlier attempt started, so that attempt's start time and head still apply. */
   continuesRun?: boolean;
+  /**
+   * The commit the run's check goes on, recorded in the comment so later steps
+   * find it. `previous` is this run's last recorded step, if any.
+   */
+  checkHead?: (input: {
+    state: ReviewStatusState;
+    stats?: ReviewStatusStats;
+    previous?: ReviewStatusState;
+  }) => string | undefined;
 }
 
 async function listAll<T>(page: (cursor?: string) => Promise<{ items: T[]; nextCursor: string | null }>): Promise<T[]> {
@@ -86,7 +104,7 @@ export async function publishReviewStatus(
   // session link come from the step that recorded them. A new attempt (queued or waiting to
   // retry) starts clean, so it never reports an earlier attempt's timing, unless
   // it is only ending the run that earlier attempt started.
-  const state =
+  const merged =
     existing?.run === step.state.run &&
     (existing.attempt === step.state.attempt || step.continuesRun === true) &&
     !FRESH_ATTEMPT_PHASES.has(step.state.phase)
@@ -101,13 +119,20 @@ export async function publishReviewStatus(
       : step.state;
   // A run only ends a comment it opened: a run cancelled or finished before it
   // ever showed progress leaves no trace, and never replaces another run's result.
-  if (!CREATING_PHASES.has(state.phase) && existing?.run !== state.run) return { action: 'skipped' };
-  const { stats: readStats, continuesRun: _continuesRun, ...view } = step;
-  const stats = readStats ? await readStats(state) : undefined;
+  if (!CREATING_PHASES.has(merged.phase) && existing?.run !== merged.run) return { action: 'skipped' };
+  const { stats: readStats, continuesRun: _continuesRun, checkHead: readCheckHead, ...view } = step;
+  const stats = readStats ? await readStats(merged) : undefined;
+  const checkHead = readCheckHead?.({
+    state: merged,
+    ...(stats ? { stats } : {}),
+    ...(existing?.run === merged.run ? { previous: existing } : {}),
+  });
+  const state = checkHead ? { ...merged, checkHead } : merged;
   const body = renderReviewStatusComment({ ...view, state, ...(stats ? { stats } : {}) });
+  const landed = { state, ...(stats ? { stats } : {}), ...(existing ? { previous: existing } : {}) };
   if (!canonical) {
     const created = await versionControl.createComment({ ...ref, body });
-    return { action: 'created', commentId: created.id, url: created.url };
+    return { action: 'created', commentId: created.id, url: created.url, ...landed };
   }
   const updated = await versionControl.updateComment({
     connection: ref.connection,
@@ -115,5 +140,5 @@ export async function publishReviewStatus(
     commentId: canonical.id,
     body,
   });
-  return { action: 'updated', commentId: updated.id, url: updated.url };
+  return { action: 'updated', commentId: updated.id, url: updated.url, ...landed };
 }

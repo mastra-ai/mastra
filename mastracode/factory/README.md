@@ -1245,6 +1245,32 @@ curl -X PATCH "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes/$DEFAULT
 }'
 ```
 
+### Platform GitHub and the Mastra Factory apps
+
+`PlatformGithubIntegration` serves each organization through one of two sets of GitHub Apps:
+
+- **The Mastra GitHub App** (the default). Factory reaches GitHub through the platform's GitHub routes, as before, and still reads the App's webhooks from each linked repository's platform event log.
+- **The Mastra Factory apps**, after an organization admin switches. They are two Mastra Connect integrations, `factory-github` and `factory-reviews-github`, with one connection for each GitHub account they're installed on. Factory calls GitHub directly with the apps' installation tokens:
+  - reviews, review comments, and the review-status comment and check are posted as **Mastra Factory Reviews**;
+  - everything else is posted as **Mastra Factory**.
+
+  `factory-github`'s webhooks are read from each connection's event log by the deployment's Platform Connect event poller, which Platform GitLab and Linear share.
+
+While Factory reviews a pull request, it shows the review in the pull request's Checks tab as well as in its review-status comment. The check is named after the reviewer (`Factory review`, or `<FACTORY_REVIEW_STATUS_NAME> review`). It is in progress while the review is queued, running or waiting to retry, and ends as a success when the review approves and neutral otherwise: changes requested, a failed run, or a cancelled run, whose reason is in the check's summary. A Factory review therefore never fails a required check; its verdict is the GitHub review itself. The check stays on the commit the review started on, and a check left open on an older commit, because the pull request moved on or a newer review replaced the run, is closed as skipped. This works with either set of apps and with a self-managed GitHub App that has the `checks: write` permission. Without that permission, the comment is still posted, and for an hour after GitHub refuses a check, Factory publishes only the checks that end a review for that installation.
+
+`MASTRA_PLATFORM_GITHUB_POLLING_ENABLED` (default `true`) and `MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS` (default 20 seconds) control the Mastra GitHub App's event poller. One replica polls at a time, and each repository's cursor advances past an event once it's handled. An event whose handler still fails after three attempts is skipped, and the integration reconciles. In both modes, the reconcile runs hourly, the sweep for pull requests that opened while events were missed every five minutes, and the Dependabot sync every fifteen. `MASTRACODE_PLATFORM_GITHUB_RECONCILE_INTERVAL_MS`, `MASTRACODE_PLATFORM_GITHUB_PR_RECONCILE_INTERVAL_MS`, `MASTRACODE_PLATFORM_GITHUB_ISSUE_RECONCILE_INTERVAL_MS` and `MASTRACODE_PLATFORM_GITHUB_PR_DISCOVERY_INTERVAL_MS` change their cadence.
+
+**Switching an organization.** In **Settings → Source control**, an organization admin installs both apps on every GitHub account Factory uses, then chooses **Switch**. The switch is allowed only once both apps can reach every repository linked to a Factory project. Until then, the page lists what's missing: an app, an account, or a repository. The switch moves the organization's installations and repositories onto the new apps by GitHub repository id, so project links, cards and sessions carry over. It runs in one transaction, and running it again is a no-op. There is no switch back. Afterwards, accounts both apps are installed on are picked up when Source control loads, as the Mastra GitHub App's are. The API is `GET` and `POST /web/integrations/platform/github/switch`, both for organization admins only.
+
+**Acting as a person.** After the switch, a person can connect their own GitHub account in **Settings → Connected accounts**, either through the Mastra Factory app or by pasting a personal access token. A connection takes precedence over a token. Then:
+
+- Factory's writes are made by the apps, never as the person: reviews and review dismissals by Mastra Factory Reviews, and pull requests, merges, issues and comments by Mastra Factory. Each starts with `> Opened by @<GitHub login>` (or `@<Factory user id>` without a connected account; the Mastra GitHub App uses the person's display name first), and a pull request is assigned to the person who opened it. Factory's own writes never come back to it as a person's, and its verdict reviews stay its own to dismiss.
+- the person's account is used only to change their own pending review, which nobody else can see.
+
+**Sandbox tokens.** After the switch, an agent sandbox gets an installation token scoped to its session's repositories (at most 10) with Factory's usual permission set, minted by the platform. A sandbox never gets a token for the whole installation.
+
+Factory recognizes its own writes by the apps' logins. `MASTRA_FACTORY_GITHUB_APP_SLUG` (default `mastra-factory`) and `MASTRA_FACTORY_REVIEWS_GITHUB_APP_SLUG` (default `mastra-factory-reviews`) override them for deployments with differently named apps.
+
 ### GitHub event rules
 
 Both `GithubIntegration` and `PlatformGithubIntegration` own their GitHub event handlers. Existing installations retain the defaults without additional configuration.

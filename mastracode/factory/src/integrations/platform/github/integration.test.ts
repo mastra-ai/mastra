@@ -10,6 +10,7 @@ import type { IntegrationContext } from '../../base.js';
 import { registerGithubRefreshTarget } from '../../github/token-refresh.js';
 import { createPlatformStorageForTests, mountApiRoutes } from '../test-utils.js';
 import { PlatformGithubIntegration } from './integration.js';
+import { PlatformGithubModes } from './mode.js';
 
 const config = {
   baseUrl: 'https://platform.example.com',
@@ -1339,6 +1340,7 @@ describe('PlatformGithubIntegration', () => {
       'github_subscribe_pr',
       'github_unsubscribe_pr',
     ]);
+    // Without a Factory runtime there is nothing to reconcile, but legacy events are still read.
     expect(integration.workers(context).map(worker => worker.name)).toEqual(['platform-github-events']);
     expect(integration.diagnostics()).toEqual({
       mode: 'platform',
@@ -1808,6 +1810,8 @@ describe('PlatformGithubIntegration', () => {
 
     const first = integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace');
     const second = integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'GRACE');
+    // The lookup picks the org's transport before it fetches.
+    await new Promise(resolve => setTimeout(resolve, 0));
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     release(json({ permission: 'write', roleName: 'write', user: actor }));
     await expect(Promise.all([first, second])).resolves.toEqual(['write', 'write']);
@@ -1854,28 +1858,52 @@ describe('PlatformGithubIntegration', () => {
     }
   });
 
-  it('keeps the reconciliation worker alive when polling is disabled', async () => {
-    vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
-    const seed = await createPlatformStorageForTests();
-    const integration = createIntegration();
-    const context = {
+  function reconcileContext(seed: Awaited<ReturnType<typeof createPlatformStorageForTests>>) {
+    return {
       controller: {},
       storage: {
         generic: seed.integrations.forIntegration('github'),
         sourceControl: seed.sourceControl.forIntegration('github'),
       },
+      runtime: { configVersion: 'test-rules', workItems: seed.workItems, boards: createBoardRegistry() },
     } as unknown as IntegrationContext;
+  }
+
+  it('runs the legacy event poller and the reconcile worker, each under its own lease', async () => {
+    const seed = await createPlatformStorageForTests();
+    const integration = createIntegration();
+    const context = reconcileContext(seed);
     integration.versionControl.initialize({ storage: context.storage.sourceControl });
 
     const workers = integration.workers(context);
-    expect(workers).toHaveLength(1);
+    expect(workers.map(worker => worker.name)).toEqual(['platform-github-events', 'platform-github-reconcile']);
     expect(integration.diagnostics()).toMatchObject({
-      polling: { enabled: false },
+      polling: { enabled: true },
       reconcile: {
         pullRequests: { enabled: true },
         issues: { enabled: true },
       },
     });
+  });
+
+  it('reads events only from the Mastra Factory app’s connections, not the reviews app’s', async () => {
+    const seed = await createPlatformStorageForTests();
+    const integration = createIntegration();
+    const route = integration.connectEventRoute(reconcileContext(seed));
+
+    expect(route?.binding.providerKeys).toEqual(['factory-github', 'factory-reviews-github']);
+    expect(route?.eventProviderKeys).toEqual(['factory-github']);
+  });
+
+  it('keeps the reconcile worker alive when polling is disabled', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
+    const seed = await createPlatformStorageForTests();
+    const integration = createIntegration();
+    const context = reconcileContext(seed);
+    integration.versionControl.initialize({ storage: context.storage.sourceControl });
+
+    expect(integration.workers(context).map(worker => worker.name)).toEqual(['platform-github-reconcile']);
+    expect(integration.diagnostics()).toMatchObject({ polling: { enabled: false } });
   });
 
   it('allows issue reconciliation to override a disabled legacy reconcile switch', async () => {
@@ -1884,23 +1912,24 @@ describe('PlatformGithubIntegration', () => {
     vi.stubEnv('MASTRACODE_PLATFORM_GITHUB_ISSUE_RECONCILE_ENABLED', 'true');
     const seed = await createPlatformStorageForTests();
     const integration = createIntegration();
-    const context = {
-      controller: {},
-      storage: {
-        generic: seed.integrations.forIntegration('github'),
-        sourceControl: seed.sourceControl.forIntegration('github'),
-      },
-    } as unknown as IntegrationContext;
+    const context = reconcileContext(seed);
     integration.versionControl.initialize({ storage: context.storage.sourceControl });
 
     const workers = integration.workers(context);
-    expect(workers).toHaveLength(1);
+    expect(workers.map(worker => worker.name)).toEqual(['platform-github-reconcile']);
     expect(integration.diagnostics()).toMatchObject({
       reconcile: {
         pullRequests: { enabled: false },
         issues: { enabled: true },
       },
     });
+  });
+
+  it('runs no reconcile worker when both sweeps are switched off', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED', 'false');
+    const seed = await createPlatformStorageForTests();
+    const integration = createIntegration();
+    expect(integration.workers(reconcileContext(seed)).map(worker => worker.name)).toEqual(['platform-github-events']);
   });
 
   it('removes one issue label through the Platform proxy and surfaces a missing label as a 404', async () => {
@@ -1917,6 +1946,34 @@ describe('PlatformGithubIntegration', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
+  describe('transport selection by org mode', () => {
+    async function switchedIntegration() {
+      const seed = await createPlatformStorageForTests();
+      const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json({ pullRequests: [] }));
+      const integration = createIntegration(fetchImpl);
+      const generic = seed.integrations.forIntegration('github');
+      integration.initialize?.({ storage: generic });
+      integration.versionControl.initialize({ storage: seed.sourceControl.forIntegration('github') });
+      await new PlatformGithubModes(() => generic).saveConnect('org-switched', {
+        switchedAt: Date.parse('2026-11-13T00:00:00.000Z'),
+        installations: [{ installationId: 900, connectionId: 'conn-github', reviewsConnectionId: 'conn-reviews' }],
+      });
+      return { integration, fetchImpl };
+    }
+
+    it('keeps an org that has not switched on the legacy routes', async () => {
+      const { integration, fetchImpl } = await switchedIntegration();
+
+      await integration.versionControl.listPullRequests({
+        connection: { type: 'app-installation', installationId: 1, orgId: 'org-legacy' },
+        sourceId: 'acme/app',
+      });
+
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      expect(String(fetchImpl.mock.calls[0]![0])).toContain('/v1/server/github/repos/acme/app/pulls');
+    });
+  });
+
   describe('resolveIntakeDispatch', () => {
     it('derives repository + issue number from the intake externalId format', async () => {
       const integration = createIntegration();
@@ -1926,7 +1983,7 @@ describe('PlatformGithubIntegration', () => {
           externalSource: { type: 'issue', externalId: 'acme/app:34' },
         }),
       ).resolves.toEqual({
-        connection: { type: 'app-installation', installationId: 1 },
+        connection: { type: 'app-installation', installationId: 1, orgId: 'org-1' },
         sourceId: 'acme/app',
         issueId: '34',
       });

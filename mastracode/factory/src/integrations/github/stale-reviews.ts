@@ -62,7 +62,11 @@ export async function dismissStaleFactoryReviews(
   // could dismiss these reviews on GitHub themselves may trigger it.
   if (!isFactoryAuthor(decision.approvingAuthor) && !(await isTrustedApprover(decision.approvingAuthor))) return [];
   const ref = {
-    connection: { type: 'app-installation' as const, installationId: decision.installationId },
+    connection: {
+      type: 'app-installation' as const,
+      installationId: decision.installationId,
+      ...(decision.orgId ? { orgId: decision.orgId } : {}),
+    },
     sourceId: decision.repository,
     pullRequestId: String(decision.pullRequestNumber),
   };

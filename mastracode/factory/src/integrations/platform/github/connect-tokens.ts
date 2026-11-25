@@ -1,0 +1,199 @@
+import { MastraConnectError } from '@mastra/connect';
+import type { ConnectClient, ConnectionCredential } from '@mastra/connect';
+
+import { FACTORY_GITHUB_PROVIDER_KEY } from './connect-events.js';
+
+/** A token is reused until this long before it expires. */
+const EXPIRY_SKEW_MS = 60_000;
+/** A credential without an expiry is reused for at most this long. */
+const UNDATED_TOKEN_TTL_MS = 10 * 60_000;
+/** How long a user's pasted token, or their having no token, is remembered. */
+const USER_LOOKUP_TTL_MS = 60_000;
+
+/** Repository and permission narrowing for an installation token. */
+export interface GithubTokenScope {
+  repositories: readonly string[];
+  permissions: Readonly<Record<string, 'read' | 'write' | 'admin'>>;
+}
+
+/** GitHub's create-installation-access-token response, as the platform passes it on. */
+interface MintedInstallationToken {
+  token: string;
+  expires_at: string;
+}
+
+export type GithubUserToken =
+  { source: 'connection'; connectionId: string; token: string } | { source: 'pat'; token: string };
+
+/** Reads the classic PAT a user pasted into Factory, or null. */
+export type GithubUserPatSource = (orgId: string, userId: string) => Promise<string | null>;
+
+type Cached<T> = { value: T; expiresAt: number };
+
+/** Thrown when a GitHub App connection's context does not name its installation. */
+export class GithubConnectInstallationUnknownError extends Error {
+  constructor(connectionId: string) {
+    super(`GitHub connection ${connectionId} does not record its GitHub App installation.`);
+    this.name = 'GithubConnectInstallationUnknownError';
+  }
+}
+
+/** Thrown when a Connect credential is not the OAuth token a GitHub connection must hold. */
+export class GithubConnectCredentialError extends Error {
+  constructor(connectionId: string, type: string) {
+    super(`GitHub connection ${connectionId} returned a ${type} credential, not an OAuth token.`);
+    this.name = 'GithubConnectCredentialError';
+  }
+}
+
+/**
+ * GitHub tokens for the Mastra Factory apps: their installation tokens, minted
+ * by the platform per connection (the apps' signing keys never leave it),
+ * optionally narrowed to named repositories, and each Factory user's own token. A user's
+ * token comes from their end-user `factory-github` connection (`resourceId` =
+ * their user id) when they have an active one, else from the PAT they pasted
+ * into Factory. Tokens are cached
+ * until shortly before they expire; a caller that sees GitHub reject one
+ * invalidates it and asks again.
+ */
+export class GithubConnectTokens {
+  readonly #connect: ConnectClient;
+  readonly #now: () => number;
+  readonly #userPat: GithubUserPatSource;
+  readonly #installations = new Map<string, Cached<string>>();
+  /** A connection's GitHub App installation id, until a mint refuses it (the app was reinstalled). */
+  readonly #installationIds = new Map<string, number>();
+  readonly #users = new Map<string, Cached<GithubUserToken | null>>();
+  readonly #inflight = new Map<string, Promise<unknown>>();
+
+  constructor(connect: ConnectClient, options: { now?: () => number; userPat?: GithubUserPatSource } = {}) {
+    this.#connect = connect;
+    this.#now = options.now ?? Date.now;
+    this.#userPat = options.userPat ?? (async () => null);
+  }
+
+  /** A token with the installation's whole grant, for Factory's own server-side calls. */
+  installationToken(connectionId: string): Promise<string> {
+    return this.#mint(connectionId, connectionId, {});
+  }
+
+  /** A token for only `scope.repositories`, with only `scope.permissions`. Agent sandboxes get these. */
+  repositoryToken(connectionId: string, scope: GithubTokenScope): Promise<string> {
+    const repositories = [...new Set(scope.repositories)].sort();
+    const permissions = Object.fromEntries(Object.entries(scope.permissions).sort(([a], [b]) => a.localeCompare(b)));
+    const key = `${connectionId}\u0000${repositories.join(',')}\u0000${JSON.stringify(permissions)}`;
+    return this.#mint(connectionId, key, { repositories, permissions });
+  }
+
+  /** Drops every cached token of the connection, scoped or not. A moved installation is found by the next mint. */
+  invalidateInstallation(connectionId: string): void {
+    for (const key of this.#installations.keys()) {
+      if (key === connectionId || key.startsWith(`${connectionId}\u0000`)) this.#installations.delete(key);
+    }
+  }
+
+  #mint(connectionId: string, key: string, body: Partial<GithubTokenScope>): Promise<string> {
+    const cached = this.#installations.get(key);
+    if (cached && cached.expiresAt > this.#now()) return Promise.resolve(cached.value);
+    return this.#once(`installation:${key}`, async () => {
+      const cachedId = this.#installationIds.get(connectionId);
+      let minted: MintedInstallationToken;
+      try {
+        minted = await this.#request(connectionId, await this.#installationId(connectionId), body);
+      } catch (error) {
+        // A reinstalled app has a new installation behind the same connection,
+        // so the platform refuses the old one (404) or GitHub no longer has it
+        // (410). Read the connection's installation again, and retry once if it moved.
+        if (!isGone(error)) throw error;
+        this.#installationIds.delete(connectionId);
+        if (cachedId === undefined) throw error;
+        const installationId = await this.#installationId(connectionId);
+        if (installationId === cachedId) throw error;
+        minted = await this.#request(connectionId, installationId, body);
+      }
+      this.#installations.set(key, { value: minted.token, expiresAt: this.#expiry(minted.expires_at) });
+      return minted.token;
+    });
+  }
+
+  #request(
+    connectionId: string,
+    installationId: number,
+    body: Partial<GithubTokenScope>,
+  ): Promise<MintedInstallationToken> {
+    // GitHub's own endpoint, served under the connection: the platform signs it with the app's key.
+    return this.#connect.request<MintedInstallationToken>(
+      'POST',
+      `/v2/connections/${encodeURIComponent(connectionId)}/github/app/installations/${installationId}/access_tokens`,
+      { body },
+    );
+  }
+
+  async #installationId(connectionId: string): Promise<number> {
+    const known = this.#installationIds.get(connectionId);
+    if (known !== undefined) return known;
+    const context = await this.#connect.getContext(connectionId);
+    const raw = context.connection_config?.installation_id;
+    const installationId = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : Number.NaN;
+    if (!Number.isSafeInteger(installationId) || installationId <= 0) {
+      throw new GithubConnectInstallationUnknownError(connectionId);
+    }
+    this.#installationIds.set(connectionId, installationId);
+    return installationId;
+  }
+
+  /** The user's own GitHub token in `orgId`, or null when they have neither a connection nor a PAT. */
+  userToken(orgId: string, userId: string): Promise<GithubUserToken | null> {
+    const key = userKey(orgId, userId);
+    const cached = this.#users.get(key);
+    if (cached && cached.expiresAt > this.#now()) return Promise.resolve(cached.value);
+    return this.#once(`user:${key}`, async () => {
+      const scoped = this.#connect.withResource(userId);
+      const connection = (await scoped.listConnections({ providerKeys: [FACTORY_GITHUB_PROVIDER_KEY] })).find(
+        candidate => candidate.status === 'active' && candidate.resourceId === userId,
+      );
+      if (connection) {
+        const { token, expiresAt } = this.#oauth(connection.id, await scoped.getCredential(connection.id));
+        const value: GithubUserToken = { source: 'connection', connectionId: connection.id, token };
+        this.#users.set(key, { value, expiresAt });
+        return value;
+      }
+      const pat = await this.#userPat(orgId, userId);
+      const value: GithubUserToken | null = pat ? { source: 'pat', token: pat } : null;
+      this.#users.set(key, { value, expiresAt: this.#now() + USER_LOOKUP_TTL_MS });
+      return value;
+    });
+  }
+
+  invalidateUser(orgId: string, userId: string): void {
+    this.#users.delete(userKey(orgId, userId));
+  }
+
+  #oauth(connectionId: string, credential: ConnectionCredential): { token: string; expiresAt: number } {
+    if (credential.type !== 'oauth2') throw new GithubConnectCredentialError(connectionId, credential.type);
+    return { token: credential.accessToken, expiresAt: this.#expiry(credential.expiresAt) };
+  }
+
+  #expiry(expiresAt: string | null | undefined): number {
+    const expires = expiresAt ? Date.parse(expiresAt) : Number.NaN;
+    return Number.isFinite(expires) ? expires - EXPIRY_SKEW_MS : this.#now() + UNDATED_TOKEN_TTL_MS;
+  }
+
+  #once<T>(key: string, load: () => Promise<T>): Promise<T> {
+    const pending = this.#inflight.get(key) as Promise<T> | undefined;
+    if (pending) return pending;
+    const promise = load().finally(() => this.#inflight.delete(key));
+    this.#inflight.set(key, promise);
+    return promise;
+  }
+}
+
+function isGone(error: unknown): boolean {
+  return (
+    error instanceof MastraConnectError && error.source === 'platform' && (error.status === 404 || error.status === 410)
+  );
+}
+
+function userKey(orgId: string, userId: string): string {
+  return `${orgId}\u0000${userId}`;
+}
