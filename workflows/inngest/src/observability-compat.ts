@@ -22,6 +22,11 @@ export function endRunSpansWithError(...args: Parameters<typeof coreDurable.endR
   if (coreFeatures.has('execution-outcomes')) coreDurable.endRunSpansWithError?.(...args);
 }
 
+/** End the spans a failed execution left open; an older core leaves them open. */
+export function endFailedSegmentSpans(...args: Parameters<typeof coreDurable.endFailedSegmentSpans>): void {
+  if (carriesSegmentSpans()) coreDurable.endFailedSegmentSpans?.(...args);
+}
+
 export function executionFailureTermination(
   ...args: Parameters<typeof coreObservability.executionFailureTermination>
 ): SpanOutcomeFields {

@@ -1,4 +1,4 @@
-import { DURABLE_STOP_WHEN_ERROR_ID, emitErrorEvent } from '@mastra/core/agent/durable';
+import { DURABLE_STOP_WHEN_ERROR_ID, emitErrorEvent, getRunRegistryEntry } from '@mastra/core/agent/durable';
 import { RequestContext } from '@mastra/core/di';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import { PubSub } from '@mastra/core/events';
@@ -27,7 +27,7 @@ import {
   NESTED_WORKFLOW_OUTPUT_MODE,
   resolveNestedWorkflowOutputMode,
 } from './nested-workflow-output';
-import { workflowResumeTracingContext, workflowTermination } from './observability-compat';
+import { endFailedSegmentSpans, workflowResumeTracingContext, workflowTermination } from './observability-compat';
 import { InngestPubSub } from './pubsub';
 import { InngestRun } from './run';
 import type {
@@ -860,6 +860,19 @@ export class InngestWorkflow<
               });
             } catch (publishError) {
               this.logger.debug?.('Failed to publish workflow-finish event:', publishError);
+            }
+
+            // Last, so an Inngest retry of this step cannot end the run's spans twice.
+            if (result.status === 'failed' && durableAgentInput) {
+              endFailedSegmentSpans({
+                mastra,
+                requestContext,
+                runId: durableAgentInput.runId,
+                state: durableAgentInput,
+                steps: result.steps as Record<string, any>,
+                error: durableAgentWorkflowError(result.error).error,
+                live: getRunRegistryEntry(durableAgentInput.runId, mastra),
+              });
             }
 
             // Throw after span ended for failed workflows

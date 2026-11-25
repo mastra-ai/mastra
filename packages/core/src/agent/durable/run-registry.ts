@@ -9,6 +9,7 @@ import type { CoreTool } from '../../tools/types';
 import type { MessageList } from '../message-list';
 import type { SaveQueueManager } from '../save-queue';
 import { stopDurableExecutionParticipants } from './evented-execution';
+import { stepFailure } from './segment-spans';
 import type { RunRegistryEntry } from './types';
 
 /**
@@ -277,6 +278,10 @@ export async function abandonDurableAgentExecutions(mastra: Mastra): Promise<voi
 export function endRunSpansWithError(runId: string, error: Error, options: { endSpan?: boolean } = {}): void {
   try {
     const entry = globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined;
+    // Behind a broker another worker may have ended this step already; the worker that settles the failure ends it.
+    if (!entry?.eventedExecution && options.endSpan !== false) {
+      entry?.openStepSpan?.error(stepFailure({ error, ...executionFailureTermination(error), endSpan: true }));
+    }
     (entry?.resumeModelSpan ?? entry?.modelSpan)?.error({
       error,
       ...executionFailureTermination(error),

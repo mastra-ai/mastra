@@ -573,7 +573,8 @@ export function createDurableToolCallStep() {
               ? subtractReportedUsage(total, reported)
               : undefined;
           if (ownsStep) {
-            obs.rebuildSpan(typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)?.end({
+            const stepSpanData = typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>;
+            (liveSegmentSpan(stepSpanData, reg?.openStepSpan) ?? obs.rebuildSpan(stepSpanData))?.end({
               output,
               ...(reported ? { attributes: { usage: extractUsageMetrics(typedInput.stepUsage) } } : {}),
               outcome: 'suspend',

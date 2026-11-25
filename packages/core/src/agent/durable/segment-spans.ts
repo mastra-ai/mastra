@@ -7,10 +7,14 @@
  * carries it on the request context, which every engine hands to every step and persists with the
  * run, so the worker that finishes a segment ends that segment's spans wherever it runs.
  */
+import { executionFailureTermination } from '../../loop/shared/execution-outcome';
+import { isMastraTimeoutError } from '../../loop/timeout';
+import type { Mastra } from '../../mastra';
 import { resolveExportedSpanId } from '../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, Span, SpanType } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { MASTRA_DURABLE_SEGMENTS_KEY } from '../request-context-snapshot';
+import { DurableStepIds, MAP_FINAL_OUTPUT_STEP_ID } from './constants';
 import type { RunRegistryEntry } from './types';
 
 export interface SegmentSpanData {
@@ -133,4 +137,68 @@ export function segmentOwnsStep(segment: SegmentSpanData & { carried?: boolean }
     return parent !== undefined && [segment.stepParentId, ...segment.openStepsOf].includes(parent);
   if (segment.adoptsOpenSteps) return segment.endedStepsOf === undefined || parent !== segment.endedStepsOf;
   return parent === segment.stepParentId;
+}
+
+/** A MODEL_STEP the run's deadline stopped is interrupted, as on the regular agent; the run itself hit a limit. */
+export function stepFailure<T extends { error: Error }>(failure: T): T {
+  return isMastraTimeoutError(failure.error) ? { ...failure, outcome: 'interrupted' as const } : failure;
+}
+
+/**
+ * End what a failed execution left open, from the facts the run carries, where the process that settles the
+ * failure may hold none of the run's live spans. An iteration's failure ends its MODEL_STEP; the run's failure
+ * ends the MODEL_GENERATION and AGENT_RUN its segment reports under. Never throws.
+ */
+export function endFailedSegmentSpans({
+  mastra,
+  requestContext,
+  runId,
+  state,
+  steps,
+  error,
+  live,
+  firstPairOnly,
+}: {
+  mastra: Mastra | undefined;
+  requestContext: RequestContext<any>;
+  runId: string;
+  state: { agentSpanData?: unknown; modelSpanData?: unknown };
+  steps: Record<string, any>;
+  error: Error;
+  live?: RunRegistryEntry;
+  /** Leave a resumed or recovered pair to the process that opened it. */
+  firstPairOnly?: boolean;
+}): void {
+  try {
+    const observability = mastra?.observability?.getSelectedInstance({ requestContext });
+    // The finish step ends the pair itself; a later step's failure must not end it again.
+    if (!observability || steps[MAP_FINAL_OUTPUT_STEP_ID]?.status === 'success') return;
+    const segment = segmentSpanData(requestContext, runId, state, live);
+    const failure = { error, ...executionFailureTermination(error), endSpan: true };
+    if (DurableStepIds.LLM_EXECUTION in steps) {
+      const stepSpanData = steps[DurableStepIds.LLM_EXECUTION]?.output?.stepSpanData;
+      // The mapping step ends the step itself.
+      if (!stepSpanData || steps[DurableStepIds.LLM_MAPPING]?.status === 'success') return;
+      if (!segmentOwnsStep(segment, stepSpanData)) return;
+      (
+        liveSegmentSpan<Span<SpanType.MODEL_STEP>>(stepSpanData, live?.openStepSpan) ??
+        observability.rebuildSpan<SpanType.MODEL_STEP>(stepSpanData)
+      ).error(stepFailure(failure));
+      return;
+    }
+    if (firstPairOnly && segment.carried) return;
+    const { modelSpanData, agentSpanData } = segment;
+    if (modelSpanData)
+      (
+        liveSegmentSpan<Span<SpanType.MODEL_GENERATION>>(modelSpanData, live?.resumeModelSpan, live?.modelSpan) ??
+        observability.rebuildSpan(modelSpanData)
+      ).error(failure);
+    if (agentSpanData)
+      (
+        liveSegmentSpan(agentSpanData, live?.resumeAgentSpan, live?.agentSpan) ??
+        observability.rebuildSpan(agentSpanData)
+      ).error(failure);
+  } catch {
+    // Span bookkeeping must never break settlement.
+  }
 }

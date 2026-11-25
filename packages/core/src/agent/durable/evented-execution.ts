@@ -16,6 +16,8 @@ import {
   getExecutionClaimScope,
 } from './execution-fence';
 import { runInRunFenceScope } from './run-fence-scope';
+import { getRunRegistryEntry } from './run-registry';
+import { endFailedSegmentSpans } from './segment-spans';
 import { emitErrorEvent } from './stream-adapter';
 
 type Participant = { fence: Promise<ExecutionFence | undefined>; stop: (interrupt?: boolean) => Promise<void> };
@@ -186,8 +188,30 @@ export async function retrySettledDurableExecution(mastra: Mastra, event: Event)
   return true;
 }
 
+function endFailedSpans(mastra: Mastra, event: Event): void {
+  const { stepResults, prevResult, requestContext } = event.data ?? {};
+  const runId = stepResults?.input?.runId;
+  // An execution that lost the run leaves its spans to the owner that took it over.
+  if (!runId || isExecutionFenceError(prevResult?.error)) return;
+  endFailedSegmentSpans({
+    mastra,
+    requestContext: new RequestContext<unknown>(Object.entries(requestContext ?? {})),
+    runId,
+    state: stepResults.input,
+    steps: stepResults,
+    error: getErrorFromUnknown(prevResult?.error ?? 'Workflow execution failed'),
+    live: getRunRegistryEntry(runId, mastra),
+    // The process that resumes or recovers a run settles that segment itself.
+    firstPairOnly: true,
+  });
+}
+
 /** Called only after the root terminal handler has persisted and published its outcome. */
 export async function settleEventedDurableExecution(mastra: Mastra, event: Event): Promise<void> {
+  // Only the failed iteration's own event still carries its open MODEL_STEP.
+  if (event.type === 'workflow.fail' && event.data?.workflowId === DurableStepIds.AGENTIC_EXECUTION) {
+    endFailedSpans(mastra, event);
+  }
   if (!isRootTerminal(event)) return;
   const context = new RequestContext<unknown>(Object.entries(event.data?.requestContext ?? {}));
   const claim = getExecutionClaim(context, event.runId);
@@ -216,6 +240,7 @@ export async function settleEventedDurableExecution(mastra: Mastra, event: Event
     const delivery =
       failure?.code === DURABLE_STOP_WHEN_ERROR_ID || failure?.id === DURABLE_STOP_WHEN_ERROR_ID ? 'reject' : undefined;
     await emitErrorEvent(mastra.pubsub, event.runId, error, claim.generation, delivery);
+    endFailedSpans(mastra, event);
   }
   // Storage-backed deletes are fenced; lease-only stores retain their existing best-effort write guarantees.
   if (event.type !== 'workflow.suspend') {

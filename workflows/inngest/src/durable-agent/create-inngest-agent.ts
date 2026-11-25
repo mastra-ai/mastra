@@ -1744,12 +1744,15 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             const reason = registryEntry.abortSignal?.reason;
             return isMastraTimeoutError(reason) && reason !== abortController.signal.reason;
           };
+          // No worker will run, so the spans opened at prepare end here.
+          const endTimedOutSpans = () => endRunSpansWithError(runId, registryEntry.abortSignal!.reason as Error);
           // The deadline already reported the timeout and cleared the run's rows; don't start it.
-          if (deadlineFired()) return;
+          if (deadlineFired()) return endTimedOutSpans();
           // Written before the trigger so it can never land after the engine's terminal row.
           const persistedRunning = await persistRunningSnapshot(runId, workflowInput);
           // The deadline can also fire while that row is being written; its cleanup may have run first.
           if (deadlineFired()) {
+            endTimedOutSpans();
             if (persistedRunning) await deleteRunSnapshots(runId);
             return;
           }
