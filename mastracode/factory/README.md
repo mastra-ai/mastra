@@ -424,6 +424,19 @@ const factory = new MastraFactory({
 });
 ```
 
+`createWorkflowBoardEngine` runs each card on a `factory-board` workflow run of its own, with run id `factory-board:<card id>`. The run starts on the first move or run end asked of the card, applies each one in turn, and suspends between them until the card's next input. Each move still commits through the transition service, so board checks, hooks and phase starts behave as with the default engine. `MastraFactory` registers the workflow with the host's Mastra, which stores the runs:
+
+```typescript
+import { MastraFactory, createWorkflowBoardEngine } from '@mastra/factory';
+
+const factory = new MastraFactory({
+  storage,
+  boardEngine: createWorkflowBoardEngine,
+});
+```
+
+A custom engine that runs on workflows of its own lists them under `workflows`, and `MastraFactory` registers them the same way.
+
 ### Board tool-result rules
 
 A board may react to a tool result produced inside one of its seats. Declare handlers under `tools`, keyed by tool name:

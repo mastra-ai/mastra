@@ -1,3 +1,5 @@
+import type { AnyWorkflow } from '@mastra/core/workflows';
+
 import type { BoardRegistry } from '../boards/index.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { moveCardToBoard } from '../boards/relocate.js';
@@ -55,6 +57,8 @@ export interface FactoryBoardEngine {
    * it, so a wrapping engine sees that move like any other.
    */
   runEnded(binding: FactoryRunEndedBinding, engine: Pick<FactoryBoardEngine, 'requestMove'>): Promise<boolean>;
+  /** Workflows the engine runs cards on; `MastraFactory` registers them with the host's Mastra. */
+  readonly workflows?: Readonly<Record<string, AnyWorkflow>>;
 }
 
 /** The services an engine is built from; the host's `boardEngine` factory receives them. */
