@@ -117,6 +117,25 @@ describe('KnowledgePageExplorer', () => {
     expect(screen.getByRole('alert').textContent).toBe('Couldn’t refresh the graph. The graph read timed out.');
   });
 
+  it('shows the tree loading until the graph lands when the host has no tree levels', () => {
+    const explorer = (overview: typeof graph | undefined) => (
+      <KnowledgePageExplorer
+        graph={overview}
+        source={source}
+        selectedPageId={null}
+        onSelect={() => {}}
+        view="tree"
+        onViewChange={() => {}}
+      />
+    );
+    const { rerender } = renderWithProviders(explorer(undefined));
+    expect(screen.getByRole('status', { name: 'Loading pages' })).toBeTruthy();
+
+    rerender(explorer(graph));
+    expect(screen.queryByRole('status', { name: 'Loading pages' })).toBeNull();
+    expect(within(screen.getByRole('tree', { name: 'Knowledge pages' })).getByText('Acme')).toBeTruthy();
+  });
+
   it('marks pinned pages in the tree', () => {
     renderWithProviders(
       <KnowledgePageExplorer

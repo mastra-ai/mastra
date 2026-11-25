@@ -1291,6 +1291,7 @@ export function KnowledgePageExplorer({
   const loadingCanvas = canvasOpen && !overview && graphError === undefined && graphPages.length === 0;
   const graphDrawn = canvasOpen && !loadingCanvas;
   const rootLevelFailed = lazy.failed.has(KNOWLEDGE_TREE_ROOT) && !lazy.loaded.has(KNOWLEDGE_TREE_ROOT);
+  const treeLoading = source.useTreeLevels ? lazy.rootsPending : !overview && graphError === undefined;
   const floatingToolbar = fullBleedGraph && graphShown && !showPage;
   const toolbar = useMeasuredAutoHeight();
   const noticeSurface = floatingToolbar ? cn('w-fit rounded-lg px-2 py-1', overlaySurfaceStyle) : undefined;
@@ -1365,7 +1366,7 @@ export function KnowledgePageExplorer({
         </div>
       ) : null}
       <div className="min-h-0 flex-1 overflow-auto">
-        {source.useTreeLevels && lazy.rootsPending ? (
+        {treeLoading ? (
           <div className="p-2">
             <TreeRowsSkeleton label="Loading pages" rows={6} />
           </div>
