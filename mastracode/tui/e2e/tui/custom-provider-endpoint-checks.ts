@@ -67,11 +67,8 @@ export const customProviderEndpointChecksScenario = {
     await runtime.waitForScreenText(/Mock Endpoint answered in \d+ ms and lists 4 models\./i, terminal, 8_000);
 
     await openManageItem(terminal, runtime, missingEndpoint, 4);
-    await runtime.waitForScreenText(
-      /HTTP 404 Not Found from http:\/\/127\.0\.0\.1:\d+\/missing\/models/i,
-      terminal,
-      8_000,
-    );
+    await runtime.waitForScreenText(/HTTP 404 Not Found from http:\/\/[^/\s]+\/missing\/models/i, terminal, 8_000);
+    // "Not found" is the error message in AIMock's 404 body.
     await runtime.waitForScreenText(/^\s*Not found\s*$/im, terminal, 8_000);
     runtime.printScreen('connections tested', terminal);
 
