@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -149,5 +149,33 @@ describe('StudioConfigProvider instance status probe', () => {
 
     await waitFor(() => expect(readConfig().isLoading).toBe(false));
     expect(readConfig().baseUrl).toBe(BASE_URL);
+  });
+});
+
+describe('StudioConfigProvider server restart', () => {
+  describe('when the server goes down after Studio connected', () => {
+    it('keeps the connection on returning to the tab', async () => {
+      const onProbe = vi.fn<() => void>();
+      server.use(
+        http.get(`${BASE_URL}/api/auth/capabilities`, () => {
+          onProbe();
+          return HttpResponse.json(authDisabledCapabilities);
+        }),
+      );
+      renderProvider();
+      await waitFor(() => expect(readConfig().baseUrl).toBe(BASE_URL));
+      server.use(
+        http.get(`${BASE_URL}/api/auth/capabilities`, () => {
+          onProbe();
+          return new HttpResponse(null, { status: 500 });
+        }),
+      );
+
+      fireEvent(window, new Event('visibilitychange'));
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(readConfig().baseUrl).toBe(BASE_URL);
+      expect(onProbe).toHaveBeenCalledOnce();
+    });
   });
 });
