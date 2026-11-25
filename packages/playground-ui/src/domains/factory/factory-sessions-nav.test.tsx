@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FactorySessionsNav } from './factory-sessions-nav';
 import type { FactorySessionsNavSession } from './factory-sessions-nav';
@@ -35,6 +36,21 @@ describe('FactorySessionsNav', () => {
     const links = screen.getAllByRole('link');
     expect(links.map(link => link.getAttribute('href'))).toEqual(['/p/sessions/login', '/p/sessions/docs']);
     expect(links.every(link => link.hasAttribute('data-router-link'))).toBe(true);
+  });
+
+  it('draws each session as an icon in a collapsed sidebar, naming it on hover', async () => {
+    render(
+      <SidebarProvider defaultState="collapsed">
+        <FactorySessionsNav sessions={sessions} />
+      </SidebarProvider>,
+    );
+
+    const login = screen.getByRole('link', { name: /Fix login/ });
+    expect(login.querySelector('svg')).not.toBeNull();
+
+    await userEvent.hover(login);
+
+    expect((await screen.findByRole('tooltip')).textContent).toBe('Fix login');
   });
 
   it('tells the host when a session link is followed', () => {

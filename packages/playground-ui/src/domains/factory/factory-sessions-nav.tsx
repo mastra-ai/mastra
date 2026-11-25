@@ -5,6 +5,7 @@ import { SidebarEmptyNote, SidebarLoadError, SidebarNavigationSkeleton } from '.
 import { ActivityBelt } from '@/ds/components/Activity';
 import type { ActivityStatus } from '@/ds/components/Activity';
 import { Sidebar, useMaybeSidebarState } from '@/ds/components/Sidebar';
+import { IconChatBubble7 } from '@/ds/icons/central/IconChatBubble7';
 import type { LinkComponent } from '@/ds/types/link-component';
 
 export type FactorySessionsNavSession = {
@@ -72,9 +73,11 @@ export function FactorySessionsNav({
           sessions.map(session => (
             <Sidebar.NavLink
               key={session.id}
+              link={{ name: session.name, url: session.href }}
               isActive={isActive?.(session.href)}
               render={
                 <Link href={session.href} onClick={onNavigate}>
+                  <IconChatBubble7 />
                   <Sidebar.NavLabel description={session.description}>{session.name}</Sidebar.NavLabel>
                 </Link>
               }
