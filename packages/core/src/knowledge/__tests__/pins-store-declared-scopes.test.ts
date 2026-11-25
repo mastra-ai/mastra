@@ -40,4 +40,49 @@ describe('pinned context when the store declares the scopes', () => {
     expect(signal).toMatchObject({ mode: 'snapshot' });
     expect(signal!.contents).toContain('Ship the pixel office.');
   });
+
+  it('delivers no pins, without failing the turn, when the run has no Knowledge view', async () => {
+    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'pins-no-view' }), scopes: {}, tools: true });
+    // The store declares only an org scope, so Memory's resource:/thread: scopes are undeclared.
+    const orgOnly = Object.fromEntries(
+      Object.entries(knowledgeMemoryScopes()).filter(([key]) => key.startsWith('org:')),
+    );
+    vi.spyOn(await knowledge.getStorage(), 'getScopeDeclarations').mockResolvedValue(orgOnly);
+    const readPins = vi.fn(async () => []);
+    const processor = new PinnedStateProcessor({ principalsKey: run => knowledge.__principalsKey(run), readPins });
+
+    await expect(
+      processor.computeStateSignal(turn({ threadId: 'alpha', resourceId: 'user-42' })),
+    ).resolves.toBeUndefined();
+    await expect(processor.computeStateSignal(turn({}))).resolves.toBeUndefined();
+    expect(readPins).not.toHaveBeenCalled();
+  });
+
+  it('fails the turn when loading the store declarations fails', async () => {
+    const knowledge = new Knowledge({
+      storage: new InMemoryStore({ id: 'pins-store-down' }),
+      scopes: knowledgeMemoryScopes(),
+      tools: true,
+    });
+    vi.spyOn(await knowledge.getStorage(), 'getScopeDeclarations').mockRejectedValue(new Error('store down'));
+    const processor = new PinnedStateProcessor({
+      principalsKey: run => knowledge.__principalsKey(run),
+      readPins: run => knowledge.__deliveredPins(run),
+    });
+
+    await expect(processor.computeStateSignal(turn({ threadId: 'alpha', resourceId: 'user-42' }))).rejects.toThrow(
+      'store down',
+    );
+  });
 });
+
+function turn(ids: { threadId?: string; resourceId?: string }) {
+  return {
+    ...ids,
+    stepNumber: 0,
+    requestContext: new RequestContext(),
+    contextWindow: { hasSnapshot: false },
+    lastSnapshot: undefined,
+    deltasSinceSnapshot: [],
+  } as any;
+}

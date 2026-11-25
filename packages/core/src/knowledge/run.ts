@@ -33,6 +33,14 @@ export class KnowledgeNotFoundError extends Error {
   }
 }
 
+/** A run with no scopes and no Memory identity: it has no Knowledge view. @internal */
+export class KnowledgeRunScopesError extends Error {
+  constructor() {
+    super('Knowledge tools need run scopes: give the agent or the call `scopes`, or run it with Memory.');
+    this.name = 'KnowledgeRunScopesError';
+  }
+}
+
 const NAME_CANDIDATES = 5;
 const CLOSE_MATCHES = 3;
 
@@ -228,7 +236,7 @@ export function knowledgeRunPrincipals(
   if (context?.agent?.threadId)
     memory.push(knowledgeScopeAddress('thread:$threadId', { threadId: context.agent.threadId }));
   if (raw.length === 0 && memory.length === 0) {
-    throw new Error('Knowledge tools need run scopes: give the agent or the call `scopes`, or run it with Memory.');
+    throw new KnowledgeRunScopesError();
   }
   for (const address of memory) {
     if (!runtime.compiled.match(address)) {
