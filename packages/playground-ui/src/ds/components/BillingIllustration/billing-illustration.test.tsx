@@ -23,6 +23,10 @@ describe('BillingIllustration', () => {
     expect(projectSizes.map(solids)).toEqual([2, 2, 3, 5]);
   });
 
+  it.each([...projectSizes, ...plans, 'credits' as const])('draws %s in opaque grays, so crossings stay even', name => {
+    expect(draw(name)).not.toMatch(/stroke-opacity/);
+  });
+
   it('dashes only the serverless outlines and keeps its light solid', () => {
     const dashedNames = projectSizes.filter(name => draw(name).includes('stroke-dasharray'));
     const serverlessLight = draw('serverless').match(/<path [^>]*fill="white"[^>]*>/)?.[0];
