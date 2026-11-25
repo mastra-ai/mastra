@@ -155,6 +155,13 @@ Each event carries these fields. Until you narrow it, `provider` and `eventType`
     description: "The provider's delivery id, when the platform could identify one.",
   },
   {
+    name: 'resourceId',
+    type: 'string',
+    description:
+      "The end user the connection belongs to. Absent for a project-wide connection. To call the provider back as that user, use `ConnectClient`'s `withResource(event.resourceId)`.",
+    isOptional: true,
+  },
+  {
     name: 'payload',
     type: 'unknown',
     description: 'The webhook body, parsed from JSON, or the raw string when `payloadParseError` is set.',
