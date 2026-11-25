@@ -294,11 +294,48 @@ describe('Combobox', () => {
 
       expect(screen.queryByRole('option', { name: /^Use / })).toBeNull();
     });
+
+    it('adds the typed text to a multiple select as a chip showing the bare value', async () => {
+      const onValueChange = vi.fn();
+      render(<MultipleField allowCustomValue initial={['openai']} onValueChange={onValueChange} />);
+      const user = await openField();
+
+      await user.keyboard('new-provider/new-model');
+      await user.click(await screen.findByRole('option', { name: 'Use “new-provider/new-model”' }));
+
+      expect(onValueChange).toHaveBeenLastCalledWith(['openai', 'new-provider/new-model']);
+      expect(chipNames()).toEqual(['Remove OpenAI', 'Remove new-provider/new-model']);
+    });
+  });
+
+  describe('when a multiple select has a value its options do not list', () => {
+    it('keeps a chip for it and removes it with its ×', async () => {
+      const onValueChange = vi.fn();
+      render(<MultipleField initial={['openai', 'retired-model']} onValueChange={onValueChange} />);
+      expect(chipNames()).toEqual(['Remove OpenAI', 'Remove retired-model']);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Remove retired-model' }));
+
+      expect(onValueChange).toHaveBeenLastCalledWith(['openai']);
+    });
+
+    it('keeps it when another option is picked', async () => {
+      const onValueChange = vi.fn();
+      render(<MultipleField initial={['retired-model']} onValueChange={onValueChange} />);
+      const user = await openField();
+
+      await user.click(screen.getByRole('option', { name: 'Google' }));
+
+      expect(onValueChange).toHaveBeenLastCalledWith(['retired-model', 'google']);
+    });
   });
 
   describe('when custom values are not allowed', () => {
-    it('only says nothing matches', async () => {
-      render(<SingleField />);
+    it.each([
+      ['single', () => render(<SingleField />)],
+      ['multiple', () => render(<MultipleField />)],
+    ])('only says nothing matches in a %s select', async (_kind, renderField) => {
+      renderField();
       const user = await openField();
 
       await user.keyboard('new-provider/new-model');
