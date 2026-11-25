@@ -263,7 +263,16 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
           await persistReplayOwner(mastra, runId, 'another-agent');
           expect((await observe()).status).toBe(403);
           await persistReplayOwner(mastra, runId, agent.id);
-          for (const offset of [0, 1, 2]) {
+          // Log indices are opaque cursors, not positions: a fresh log is
+          // seeded from the clock, so read the three entries' real indices
+          // instead of assuming 0/1/2.
+          const logIndices = (await agent.pubsub.getHistory(topic, 0)).map(event => event.index as number);
+          expect(logIndices).toHaveLength(3);
+          const terminalIndex = logIndices.at(-1)!;
+          // Resuming at any of the run's own indices still yields every public
+          // frame: the two entries before the terminal one are lifecycle
+          // records that never reach the wire.
+          for (const offset of logIndices) {
             const response = await fetch(`${server.baseUrl}/api/agents/agent/observe`, {
               method: 'POST',
               headers: { 'content-type': 'application/json' },
@@ -273,16 +282,17 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
             expect(await collectPublicFrames(response)).toEqual(expected);
           }
           expect(expected).toHaveLength(terminal === 'error' ? 1 : 2);
-          // The terminal log entry is index 2. Only its finish frame carries that index: the
-          // abort frame synthesized before it has none, so the last indexed frame is always
-          // the finish, and resuming past the entry returns nothing and closes (COR-1506).
+          // Only the terminal entry's finish frame carries its log index: the
+          // abort frame synthesized before it has none, so the last indexed
+          // frame is always the finish, and resuming past the entry returns
+          // nothing and closes.
           expect(expected.map(frame => (frame as { index?: number }).index)).toEqual(
-            terminal === 'error' ? [2] : [undefined, 2],
+            terminal === 'error' ? [terminalIndex] : [undefined, terminalIndex],
           );
           const pastEnd = await fetch(`${server.baseUrl}/api/agents/agent/observe`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ runId, offset: 3 }),
+            body: JSON.stringify({ runId, offset: terminalIndex + 1 }),
           });
           expect(await collectPublicFrames(pastEnd)).toEqual([]);
           if (config.observeWithClient) expect(await config.observeWithClient(server.baseUrl, runId)).toEqual(expected);
@@ -431,7 +441,10 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
         });
         expect(response.status).toBe(200);
         const wire = await response.text();
-        expect(wire).toContain(JSON.stringify({ ...prefix, index: 0 }));
+        // The chunk carries its own log index, an opaque clock-seeded cursor
+        // rather than a position, so read it back from the log.
+        const [chunkEntry] = await agent.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0);
+        expect(wire).toContain(JSON.stringify({ ...prefix, index: chunkEntry!.index }));
         expect(wire).not.toContain('[DONE]');
         expect(wire).not.toContain('"type":"error"');
       });

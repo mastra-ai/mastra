@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { MastraClient } from '../client';
+import type { Agent } from '../resources/agent';
 import { processMastraNetworkStream, processMastraStream } from './process-mastra-stream';
 
 const event = (text: string) => ({ type: 'text-delta', payload: { id: '1', text } });
@@ -111,6 +112,31 @@ for (const process of [processMastraStream, processMastraNetworkStream]) {
       expect(stream.locked).toBe(false);
       expect(chunks).toEqual([]);
     });
+
+    it.each([
+      ['settles', () => undefined],
+      ['throws', () => Promise.reject(new Error('cancel failed'))],
+      ['never settles', () => new Promise<void>(() => {})],
+    ])('cancels the source when onChunk throws and its cancel %s (#30788)', async (_, onCancel) => {
+      const failure = new Error('handler failed');
+      const cancel = vi.fn(onCancel);
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(`${sse('first')}\n\n`));
+        },
+        cancel,
+      });
+      await expect(
+        process({
+          stream,
+          onChunk: () => {
+            throw failure;
+          },
+        }),
+      ).rejects.toBe(failure);
+      expect(cancel).toHaveBeenCalledWith(expect.objectContaining({ cause: failure }));
+      expect(stream.locked).toBe(false);
+    });
   });
 }
 
@@ -192,5 +218,25 @@ describe('MastraClient agent.stream SSE readers', () => {
       },
     });
     expect(chunks).toEqual([event('hé🙂'), event('final')]);
+  });
+
+  it.each([
+    ['stream', (agent: Agent) => agent.stream('hi')],
+    ['network', (agent: Agent) => agent.network('hi', {})],
+    ['observe', (agent: Agent) => agent.observe({ runId: 'run-1' })],
+    ['recover', (agent: Agent) => agent.recover({ runId: 'run-1' })],
+  ])('%s closes the server response when onChunk throws (#30788)', async (_, open) => {
+    const disconnected = new Promise<void>(resolve => {
+      onDisconnect = resolve;
+    });
+    const result = await open(new MastraClient({ baseUrl, retries: 0 }).getAgent('cancel'));
+    await expect(
+      result.processDataStream({
+        onChunk: () => {
+          throw new Error('handler failed');
+        },
+      }),
+    ).rejects.toThrow('handler failed');
+    await disconnected;
   });
 });

@@ -9,7 +9,12 @@ import { noopLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import { InMemoryStore } from '../storage/mock';
 import { createStep, createWorkflow } from '../workflows';
-import { WORKFLOW_RUN_LEASE_TTL_MS } from '../workflows/run-ownership';
+import type { WorkflowOptions } from '../workflows';
+import {
+  MAX_WORKFLOW_RUN_LEASE_TTL_MS,
+  MIN_WORKFLOW_RUN_LEASE_TTL_MS,
+  WORKFLOW_RUN_LEASE_TTL_MS,
+} from '../workflows/run-ownership';
 import { Mastra } from './index';
 
 function buildReplica(
@@ -17,6 +22,7 @@ function buildReplica(
   onExecute: (runId: string, suspend: (payload: object) => Promise<unknown>) => Promise<void>,
   storageVersion?: 1 | 2,
   options: Partial<ConstructorParameters<typeof Mastra>[0]> = {},
+  workflowOptions: WorkflowOptions = {},
 ) {
   const step = createStep({
     id: 'side-effect',
@@ -31,7 +37,7 @@ function buildReplica(
     id: 'recoverable-wf',
     inputSchema: z.object({}),
     outputSchema: z.object({ done: z.boolean() }),
-    ...(storageVersion ? { options: { storageVersion } } : {}),
+    options: { ...workflowOptions, ...(storageVersion ? { storageVersion } : {}) },
   })
     .then(step)
     .commit();
@@ -475,4 +481,234 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
       );
     },
   );
+
+  describe('lease length (COR-1634)', () => {
+    const fakeTimers = () =>
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
+    // setImmediate stays real, so this lets in-memory storage work settle without moving the fake clock.
+    const until = async (done: () => boolean) => {
+      while (!done()) await new Promise(resolve => setImmediate(resolve));
+    };
+    const leaseOf = async (storage: InMemoryStore, runId: string) => {
+      const record = (await (await storage.getStore('workflows'))!.getRunOwnership({ runId }))!;
+      return { live: record.live, ms: record.leaseExpiresAt!.getTime() - record.updatedAt!.getTime() };
+    };
+
+    it("holds a run's lease for the workflow's leaseTtlMs, or the run's own", async () => {
+      fakeTimers();
+      const storage = new InMemoryStore();
+      const gates: (() => void)[] = [];
+      const replica = buildReplica(
+        storage,
+        () => new Promise<void>(resolve => gates.push(resolve)),
+        undefined,
+        { recovery: { workflows: 'off' } },
+        { leaseTtlMs: 3_000 },
+      );
+      replicas.push(replica);
+
+      const workflowLease = await replica.getWorkflow('workflow').createRun();
+      const ownLease = await replica.getWorkflow('workflow').createRun({ leaseTtlMs: 90_000 });
+      const hugeLease = await replica.getWorkflow('workflow').createRun({ leaseTtlMs: Number.MAX_SAFE_INTEGER });
+      const results = [workflowLease, ownLease, hugeLease].map(run => run.start({ inputData: {} }));
+      await until(() => gates.length === 3);
+      expect(await leaseOf(storage, workflowLease.runId)).toEqual({ live: true, ms: 3_000 });
+      expect(await leaseOf(storage, ownLease.runId)).toEqual({ live: true, ms: 90_000 });
+      expect(await leaseOf(storage, hugeLease.runId)).toEqual({ live: true, ms: MAX_WORKFLOW_RUN_LEASE_TTL_MS });
+
+      // Renewals keep the length and come often enough for a lease shorter than the default renew interval.
+      for (let second = 0; second < 10; second++) {
+        await vi.advanceTimersByTimeAsync(1_000);
+        expect(await leaseOf(storage, workflowLease.runId)).toEqual({ live: true, ms: 3_000 });
+      }
+
+      gates.forEach(open => open());
+      expect((await Promise.all(results)).map(result => result.status)).toEqual(['success', 'success', 'success']);
+    });
+
+    // createRun() options can come from a request body, so a tiny lease must not set the storage write rate.
+    it('renews a run with a lease under the minimum no more often than one at the minimum', async () => {
+      fakeTimers();
+      const storage = new InMemoryStore();
+      const gates: (() => void)[] = [];
+      const replica = buildReplica(storage, () => new Promise<void>(resolve => gates.push(resolve)), undefined, {
+        recovery: { workflows: 'off' },
+      });
+      replicas.push(replica);
+      const store = (await storage.getStore('workflows'))!;
+      const renewals = vi.spyOn(store, 'renewRunOwnership');
+
+      const tiny = await replica.getWorkflow('workflow').createRun({ leaseTtlMs: 1 });
+      const minimum = await replica.getWorkflow('workflow').createRun({ leaseTtlMs: MIN_WORKFLOW_RUN_LEASE_TTL_MS });
+      const results = [tiny, minimum].map(run => run.start({ inputData: {} }));
+      await until(() => gates.length === 2);
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      const renewalsOf = (runId: string) => renewals.mock.calls.filter(([args]) => args.runId === runId).length;
+      expect(renewalsOf(minimum.runId)).toBeGreaterThan(0);
+      expect(renewalsOf(tiny.runId)).toBe(renewalsOf(minimum.runId));
+      expect(await leaseOf(storage, tiny.runId)).toEqual({ live: true, ms: MIN_WORKFLOW_RUN_LEASE_TTL_MS });
+
+      gates.forEach(open => open());
+      expect((await Promise.all(results)).map(result => result.status)).toEqual(['success', 'success']);
+    });
+
+    it("takes a run's leaseTtlMs from a later createRun() for the same run id", async () => {
+      const storage = new InMemoryStore();
+      const gates: (() => void)[] = [];
+      const replica = buildReplica(
+        storage,
+        () => new Promise<void>(resolve => gates.push(resolve)),
+        undefined,
+        { recovery: { workflows: 'off' } },
+        { leaseTtlMs: 3_000 },
+      );
+      replicas.push(replica);
+
+      const created = await replica.getWorkflow('workflow').createRun();
+      const again = await replica.getWorkflow('workflow').createRun({ runId: created.runId, leaseTtlMs: 90_000 });
+      expect(again).toBe(created);
+      const result = again.start({ inputData: {} });
+      await until(() => gates.length === 1);
+      expect(await leaseOf(storage, created.runId)).toEqual({ live: true, ms: 90_000 });
+
+      gates.forEach(open => open());
+      expect((await result).status).toBe('success');
+    });
+
+    it('doubles the lease of a run restarted over a lapsed one, up to 8 times its base, and warns each time', async () => {
+      fakeTimers();
+      const storage = new InMemoryStore();
+      const gates: (() => void)[] = [];
+      const warnings: { message: string; context: unknown }[] = [];
+      const logger = {
+        ...noopLogger,
+        warn: (message: string, context: unknown) => warnings.push({ message, context }),
+      } as IMastraLogger;
+      const replica = () => {
+        const mastra = buildReplica(
+          storage,
+          () => new Promise<void>(resolve => gates.push(resolve)),
+          undefined,
+          { logger, recovery: { workflows: 'off' } },
+          { leaseTtlMs: 1_000 },
+        );
+        replicas.push(mastra);
+        return mastra;
+      };
+
+      const run = await replica().getWorkflow('workflow').createRun();
+      const executions = [run.start({ inputData: {} })];
+      await until(() => gates.length === 1);
+      const lengths = [(await leaseOf(storage, run.runId)).ms];
+      for (let takeover = 1; takeover <= 4; takeover++) {
+        // The owner blocks its event loop past its lease: time passes and none of its timers run.
+        vi.setSystemTime(Date.now() + 10_000);
+        executions.push((await replica().getWorkflow('workflow').createRun({ runId: run.runId })).restart());
+        await until(() => gates.length === takeover + 1);
+        lengths.push((await leaseOf(storage, run.runId)).ms);
+      }
+
+      expect(lengths).toEqual([1_000, 2_000, 4_000, 8_000, 8_000]);
+      expect(warnings.filter(({ message }) => message.startsWith('Took over')).map(({ context }) => context)).toEqual([
+        { runId: run.runId, previousLeaseMs: 1_000, leaseMs: 2_000 },
+        { runId: run.runId, previousLeaseMs: 2_000, leaseMs: 4_000 },
+        { runId: run.runId, previousLeaseMs: 4_000, leaseMs: 8_000 },
+        { runId: run.runId, previousLeaseMs: 8_000, leaseMs: 8_000 },
+      ]);
+
+      // Only the last restart still owns the run.
+      gates.forEach(open => open());
+      const settled = await Promise.allSettled(executions);
+      expect(settled.at(-1)).toMatchObject({ status: 'fulfilled', value: { status: 'success' } });
+      for (const stale of settled.slice(0, -1)) {
+        expect(stale).toMatchObject({ status: 'rejected', reason: { id: 'STORAGE_RUN_FENCE_CONFLICT' } });
+      }
+    });
+
+    const tookOver = (warnings: { message: string }[]) =>
+      warnings.filter(({ message }) => message.startsWith('Took over'));
+
+    it('restarts with the base lease when the previous lease cannot be read, and still refuses a live run', async () => {
+      fakeTimers();
+      const storage = new InMemoryStore();
+      const gates: (() => void)[] = [];
+      const warnings: { message: string; context: unknown }[] = [];
+      const logger = { ...noopLogger, warn: (message: string) => warnings.push({ message, context: undefined }) };
+      const replica = (options: Partial<ConstructorParameters<typeof Mastra>[0]> = {}) => {
+        const mastra = buildReplica(
+          storage,
+          () => new Promise<void>(resolve => gates.push(resolve)),
+          undefined,
+          { recovery: { workflows: 'off' }, ...options },
+          { leaseTtlMs: 1_000 },
+        );
+        replicas.push(mastra);
+        return mastra;
+      };
+      const run = await replica().getWorkflow('workflow').createRun();
+      const first = run.start({ inputData: {} });
+      await until(() => gates.length === 1);
+      const store = (await storage.getStore('workflows'))!;
+      const read = vi.spyOn(store, 'getRunOwnership').mockRejectedValue(new Error('storage unavailable'));
+      const other = await replica({ logger: logger as IMastraLogger })
+        .getWorkflow('workflow')
+        .createRun({ runId: run.runId });
+
+      await expect(other.restart()).rejects.toMatchObject({ id: 'WORKFLOW_RESTART_RUN_OWNED' });
+      vi.setSystemTime(Date.now() + 10_000);
+      const restarted = other.restart();
+      await until(() => gates.length === 2);
+      expect(read).toHaveBeenCalled();
+      read.mockRestore();
+      expect(await leaseOf(storage, run.runId)).toEqual({ live: true, ms: 1_000 });
+      expect(tookOver(warnings)).toEqual([]);
+
+      gates.forEach(open => open());
+      expect((await restarted).status).toBe('success');
+      await expect(first).rejects.toMatchObject({ id: 'STORAGE_RUN_FENCE_CONFLICT' });
+    });
+
+    it('starts and resumes with the base lease, without reading the previous one', async () => {
+      const storage = new InMemoryStore();
+      const warnings: { message: string }[] = [];
+      const logger = { ...noopLogger, warn: (message: string) => warnings.push({ message }) } as IMastraLogger;
+      const resumed = Promise.withResolvers<void>();
+      const finish = Promise.withResolvers<void>();
+      let executions = 0;
+      const replica = buildReplica(
+        storage,
+        async (_runId, suspend) => {
+          if (executions++ === 0) {
+            await suspend({});
+            return;
+          }
+          resumed.resolve();
+          await finish.promise;
+        },
+        undefined,
+        { logger, recovery: { workflows: 'off' } },
+        { leaseTtlMs: 1_000 },
+      );
+      replicas.push(replica);
+      const store = (await storage.getStore('workflows'))!;
+      const reads = vi.spyOn(store, 'getRunOwnership');
+
+      const run = await replica.getWorkflow('workflow').createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+      expect(reads).not.toHaveBeenCalled();
+      // A lapsed lease, as a crashed owner leaves it.
+      await store.claimRunOwnership({ runId: run.runId, ownerId: 'crashed', leaseMs: 1, force: true });
+      await vi.waitFor(async () => expect((await store.getRunOwnership({ runId: run.runId }))?.live).toBe(false));
+      reads.mockClear();
+
+      const resuming = run.resume({ step: 'side-effect', resumeData: {} });
+      await resumed.promise;
+      expect(reads).not.toHaveBeenCalled();
+      expect(await leaseOf(storage, run.runId)).toEqual({ live: true, ms: 1_000 });
+      expect(tookOver(warnings)).toEqual([]);
+      finish.resolve();
+      expect((await resuming).status).toBe('success');
+    });
+  });
 });

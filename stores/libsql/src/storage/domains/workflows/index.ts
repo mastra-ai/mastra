@@ -84,7 +84,7 @@ import { createExecuteWriteOperationWithRetry, safeStringify } from '../../db/ut
 import { withClientWriteLock } from '../../db/write-lock';
 import { runPrune, resolveTargets } from '../../retention';
 
-const RUN_OWNER_COLUMNS = `generation, ownerId, leaseExpiresAt, ${DB_NOW_MS} AS nowMs`;
+const RUN_OWNER_COLUMNS = `generation, ownerId, leaseExpiresAt, updatedAt, ${DB_NOW_MS} AS nowMs`;
 
 /** Run ids per query in `getRunOwnerships`, under the bound-variable limit of older SQLite builds (999). */
 const RUN_OWNERSHIP_BATCH_SIZE = 500;
@@ -475,6 +475,7 @@ function toRunOwnershipRecord(runId: string, row: Record<string, SqliteValue>): 
     ownerId: String(row.ownerId),
     leaseExpiresAt: leaseExpiresAt === null ? null : new Date(leaseExpiresAt),
     live: leaseExpiresAt !== null && leaseExpiresAt > Number(row.nowMs),
+    updatedAt: new Date(Number(row.updatedAt)),
   };
 }
 
