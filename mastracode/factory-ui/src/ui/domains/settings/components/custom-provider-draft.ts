@@ -131,8 +131,34 @@ export function serverHeaderProblemTarget(
     return unsent && { key: unsent.key, input: 'value' };
   }
   const lowered = message.toLowerCase();
-  const named = headers.find(header => header.name.trim() && lowered.includes(header.name.trim().toLowerCase()));
+  // The longest name wins, so a message about `X-Org-Id` points at that row even when an `X-Org` row exists.
+  const named = headers
+    .filter(header => header.name.trim() && mentionsToken(lowered, header.name.trim().toLowerCase()))
+    .toSorted((left, right) => right.name.trim().length - left.name.trim().length)[0];
   return named && { key: named.key, input: 'name' };
+}
+
+/** The characters an HTTP header name is made of (RFC 9110 `tchar`). */
+const HEADER_NAME_CHAR = /[A-Za-z0-9!#$%&'*+.^_`|~-]/;
+
+/** Whether the character next to a match would make it part of a longer name or word. */
+function extendsToken(char: string | undefined): boolean {
+  return char !== undefined && HEADER_NAME_CHAR.test(char);
+}
+
+/**
+ * Whether `name` appears in `text` as a whole header name, not inside a word or a longer name. Both are
+ * lowercased by the caller, since header names compare ignoring case.
+ */
+function mentionsToken(text: string, name: string): boolean {
+  for (let at = text.indexOf(name); at !== -1; at = text.indexOf(name, at + 1)) {
+    const before = text[at - 1];
+    const after = text[at + name.length];
+    // A sentence may end right after the name, so a trailing period followed by a space or the end still counts.
+    const endsSentence = after === '.' && !extendsToken(text[at + name.length + 1]);
+    if (!extendsToken(before) && (!extendsToken(after) || endsSentence)) return true;
+  }
+  return false;
 }
 
 /**
