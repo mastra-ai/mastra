@@ -407,10 +407,27 @@ interface AbortState {
   timeoutMs: number;
 }
 
-/** A timeout signal joined with the caller's signal. `abortState` tells the two apart after an abort. */
+/** The largest delay Node timers accept. */
+const MAX_TIMEOUT_MS = 2_147_483_647;
+
+/**
+ * The timeout a check runs with. `AbortSignal.timeout` throws on a negative,
+ * fractional or oversized value, and a check must return its failure, never
+ * throw, so anything unusable falls back to the default.
+ */
+function checkTimeoutMs(requested: number | undefined, fallback: number): number {
+  if (typeof requested !== 'number' || !Number.isFinite(requested) || requested <= 0) return fallback;
+  return Math.min(Math.ceil(requested), MAX_TIMEOUT_MS);
+}
+
+/**
+ * A timeout signal joined with the caller's signal. `abortState` tells the
+ * two apart after an abort. A caller signal that is not an `AbortSignal` is
+ * ignored, because `AbortSignal.any` would throw on it.
+ */
 function checkSignal(timeoutMs: number, callerSignal: AbortSignal | undefined) {
   const timeout = AbortSignal.timeout(timeoutMs);
-  const signal = callerSignal ? AbortSignal.any([timeout, callerSignal]) : timeout;
+  const signal = callerSignal instanceof AbortSignal ? AbortSignal.any([timeout, callerSignal]) : timeout;
   return {
     signal,
     abortState: (): AbortState => ({ timedOut: timeout.aborted, aborted: signal.aborted, timeoutMs }),
@@ -429,7 +446,7 @@ export async function listCustomProviderModels(
   const latencyMs = () => Math.round(performance.now() - started);
   const secrets = secretsSent(connection);
   const summaryOnly = options.summaryDetailOnly ?? false;
-  const timeoutMs = options.timeoutMs ?? LIST_TIMEOUT_MS;
+  const timeoutMs = checkTimeoutMs(options.timeoutMs, LIST_TIMEOUT_MS);
   const url = `${connection.url.trim().replace(/\/+$/, '')}/models`;
   const fail = (failure: CustomProviderCheckFailure): CustomProviderModelsResult => ({
     ok: false,
@@ -578,7 +595,7 @@ export async function testCustomProviderModel(
   const started = performance.now();
   const latencyMs = () => Math.round(performance.now() - started);
   const secrets = secretsSent(args.connection);
-  const timeoutMs = options.timeoutMs ?? MODEL_TEST_TIMEOUT_MS;
+  const timeoutMs = checkTimeoutMs(options.timeoutMs, MODEL_TEST_TIMEOUT_MS);
   const chatUrl = `${args.connection.url.trim().replace(/\/+$/, '')}/chat/completions`;
   const { signal, abortState } = checkSignal(timeoutMs, options.signal);
 

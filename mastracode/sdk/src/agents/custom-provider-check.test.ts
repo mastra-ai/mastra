@@ -354,6 +354,20 @@ describe('listing the models of a custom endpoint', () => {
     });
   });
 
+  it.each([-1, 0, 2500.5, Number.NaN, 2 ** 40])('still answers with a timeoutMs of %s', async timeoutMs => {
+    const endpoint = await startEndpoint(json(200, { data: [{ id: 'model-x' }] }));
+
+    const list = await listCustomProviderModels({ url: endpoint.url }, { timeoutMs });
+    const reply = await testCustomProviderModel(
+      { providerId: 'acme', connection: { url: endpoint.url }, modelId: 'model-x' },
+      { timeoutMs },
+    );
+
+    expect(list).toMatchObject({ ok: true, models: ['model-x'] });
+    // The endpoint answers chat calls with a model list, so the test message fails, as a result and not a throw.
+    expect(reply).toMatchObject({ ok: false, failure: { kind: 'invalid_response' } });
+  });
+
   it('reports a refused connection as a network failure', async () => {
     const closed = await startEndpoint(() => {});
     await closed.close();
