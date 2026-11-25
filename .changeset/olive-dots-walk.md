@@ -22,7 +22,7 @@ Added connection checks, an auth scheme and custom headers for custom OpenAI-com
 
 - `authScheme` is `bearer` (the default) or `x-api-key`.
 - `headers` is the full list. A header is secret unless it is sent with `secret: false`, and secret values are never returned. On an edit, leave out `headers` to keep the saved list, or send a header without `value` to keep its saved value.
-- `check: true` calls `GET {url}/models` first and saves only when the endpoint answers. Otherwise the response is 422 `custom_endpoint_check_failed` with the upstream `failure`, and nothing is saved.
+- `check: true` calls `GET {url}/models` first and saves only when the endpoint lists its models. Otherwise the response is 422 `custom_endpoint_check_failed` with the upstream `failure`, and nothing is saved.
 
 Each provider in `GET /web/config/custom-providers` now has `authScheme`, `headers` (with values for plain headers only) and `lastCheck`. Saving a new URL, key, auth scheme or header list clears `lastCheck`.
 
@@ -33,5 +33,5 @@ Send the same fields as a save to test a draft without saving it, or only `previ
 **New error codes**
 
 - 400 `header_refused`: a header name or value is not allowed.
-- 400 `header_value_required`: a header value must be typed again. This happens for a new header, for a secret header made plain, and for a saved secret header when the URL moves to another host.
+- 400 `header_value_required`: a header value must be typed again. This happens for a new header, for a secret header made plain, and for a saved secret header when the URL moves to another origin.
 - 422 `custom_endpoint_check_failed`: a save with `check: true` failed its connection test.
