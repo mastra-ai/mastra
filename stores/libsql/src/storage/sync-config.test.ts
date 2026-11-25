@@ -74,4 +74,16 @@ describe('LibSQLStore embedded-replica sync config', () => {
       authToken: 'test-token',
     });
   });
+
+  it('keeps pending signals to one process for an embedded replica', () => {
+    const replica = new LibSQLStore({
+      id: 'replica-store',
+      url: 'file:./replica.db',
+      syncUrl: 'libsql://my-db.turso.io',
+    });
+    const local = new LibSQLStore({ id: 'local-store', url: 'file:./local.db' });
+
+    expect(replica.stores.memory!.pendingSignalsSharedAcrossProcesses).toBe(false);
+    expect(local.stores.memory!.pendingSignalsSharedAcrossProcesses).toBe(true);
+  });
 });
