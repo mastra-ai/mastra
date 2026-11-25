@@ -529,9 +529,9 @@ function hasConfiguredProcessorId(processors: readonly unknown[], id: string): b
     (isEntry(entry.step) ? matchesEntry(entry.step) : matchesStep(entry.step)) ||
     (entry.steps ?? []).some(matchesEntry);
 
-  return processors.some(
-    processor =>
-      (processor as { id?: unknown }).id === id || (isProcessorWorkflow(processor) && matchesStep(processor)),
+  return processors.some(processor =>
+    // A workflow's own id names the workflow, not a processor; only its steps count.
+    isProcessorWorkflow(processor) ? matchesStep(processor) : (processor as { id?: unknown }).id === id,
   );
 }
 

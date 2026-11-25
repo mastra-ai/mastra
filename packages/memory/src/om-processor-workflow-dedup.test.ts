@@ -139,6 +139,24 @@ describe('Memory does not add a second Observational Memory processor when one i
     expect(input.map(p => p.id)).toContain('observational-memory');
   });
 
+  it('still adds its OM processor when a workflow named observational-memory has no OM step', async () => {
+    const memory = createMemory();
+    const graph = processorWorkflow('observational-memory').then(passthrough('other')).commit() as ProcessorWorkflow;
+
+    const input = await memory.getInputProcessors([graph]);
+    const output = await memory.getOutputProcessors([graph]);
+    expect(input.map(p => p.id)).toContain('observational-memory');
+    expect(output.map(p => p.id)).toContain('observational-memory');
+  });
+
+  it('a top-level OM processor still suppresses Memory OM processor', async () => {
+    const memory = createMemory();
+    const om = new ObservationalMemoryProcessor((await memory.omEngine)!, memory);
+
+    const input = await memory.getInputProcessors([om]);
+    expect(input.map(p => p.id)).not.toContain('observational-memory');
+  });
+
   it('a non-OM step renamed to processor:observational-memory does not count as OM', async () => {
     const memory = createMemory();
     const other = passthrough('other');
