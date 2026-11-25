@@ -26,6 +26,7 @@ vi.hoisted(() => {
 });
 
 import { EventEmitterPubSub } from '../../events/event-emitter';
+import { PubSub } from '../../events/pubsub';
 import { describeForAllEngines } from '../../loop/test-utils/aimock/aimock-scenario';
 import { isDurableEngineVariant, nativeExecutionEngine } from '../../loop/test-utils/aimock/types';
 import type { EngineVariant } from '../../loop/test-utils/aimock/types';
@@ -129,6 +130,14 @@ class ReplicaPubSub extends EventEmitterPubSub {
 }
 
 /** A pubsub that can't lease, like google-cloud-pubsub or a custom backend. */
+class SharedReplicaPubSub extends ReplicaPubSub {
+  readonly #raw = Object.create(PubSub.prototype) as PubSub;
+
+  override __rawBus(): PubSub {
+    return this.#raw;
+  }
+}
+
 class NoLeasePubSub extends EventEmitterPubSub {
   constructor() {
     super();
@@ -200,61 +209,68 @@ function threadLeaseLoss(engine: EngineVariant) {
   const oldRunRequests = () =>
     llm.getRequests().filter(request => JSON.stringify(request.body?.messages ?? []).includes('old run')).length;
 
-  it('stops the run that lost its lease while the successor takes the thread', async () => {
-    for (let i = 0; i < 40; i++) {
-      llm.on(
-        { userMessage: 'old run', sequenceIndex: i },
-        { toolCalls: [{ id: `call_tick_${i}`, name: 'tick', arguments: {} }] },
-      );
-    }
-    llm.on({ userMessage: 'successor' }, { content: 'successor done' });
+  // Shared evented workers report takeover through the execution fence, covered in evented-execution.test.ts.
+  const takeoverBuses = engine === 'durable' || engine === 'native-default' ? ['local', 'shared'] : ['local'];
+  it.each(takeoverBuses)(
+    'stops the run that lost its lease while the successor takes the thread (%s bus)',
+    async bus => {
+      for (let i = 0; i < 40; i++) {
+        llm.on(
+          { userMessage: 'old run', sequenceIndex: i },
+          { toolCalls: [{ id: `call_tick_${i}`, name: 'tick', arguments: {} }] },
+        );
+      }
+      llm.on({ userMessage: 'successor' }, { content: 'successor done' });
 
-    const shared = new SharedLeases();
-    const memory = new MockMemory();
-    let ticks = 0;
-    const tick = createTool({
-      id: 'tick',
-      description: 'Tick once',
-      inputSchema: z.object({}),
-      execute: async () => {
-        ticks++;
-        await new Promise(resolve => setTimeout(resolve, 40));
-        return 'ticked';
-      },
-    });
-    const oldReplica = replica(shared, memory, { tick });
-    const newReplica = replica(shared, memory);
+      const shared = new SharedLeases();
+      const memory = new MockMemory();
+      let ticks = 0;
+      const tick = createTool({
+        id: 'tick',
+        description: 'Tick once',
+        inputSchema: z.object({}),
+        execute: async () => {
+          ticks++;
+          await new Promise(resolve => setTimeout(resolve, 40));
+          return 'ticked';
+        },
+      });
+      const Bus = bus === 'shared' ? SharedReplicaPubSub : ReplicaPubSub;
+      const oldReplica = replica(shared, memory, { tick }, new Bus(shared));
+      const newReplica = replica(shared, memory, {}, new Bus(shared));
 
-    const { output: oldRun, drain } = await startStream(oldReplica, 'old run', {
-      maxSteps: 40,
-      memory: { thread: THREAD, resource: RESOURCE },
-    });
-    const oldDone = drain().catch(() => undefined);
+      const { output: oldRun, drain } = await startStream(oldReplica, 'old run', {
+        maxSteps: 40,
+        memory: { thread: THREAD, resource: RESOURCE },
+      });
+      const oldDone = drain().catch(() => undefined);
 
-    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
-    const oldOwner = shared.owner(LEASE_KEY);
-    expect(oldOwner).toBeDefined();
+      await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+      const oldOwner = shared.owner(LEASE_KEY);
+      expect(oldOwner).toBeDefined();
 
-    shared.drop(LEASE_KEY);
+      shared.drop(LEASE_KEY);
 
-    const { output: successor, drain: drainSuccessor } = await startStream(newReplica, 'successor', {
-      memory: { thread: THREAD, resource: RESOURCE },
-    });
-    await drainSuccessor();
-    expect(await successor.text).toBe('successor done');
+      const { output: successor, drain: drainSuccessor } = await startStream(newReplica, 'successor', {
+        memory: { thread: THREAD, resource: RESOURCE },
+      });
+      await drainSuccessor();
+      expect(await successor.text).toBe('successor done');
 
-    // Give the old replica's renewal timer (TTL/3 = 100ms) time to notice.
-    await new Promise(resolve => setTimeout(resolve, 300));
-    const requestsAfterLoss = oldRunRequests();
-    const ticksAfterLoss = ticks;
-    await new Promise(resolve => setTimeout(resolve, 600));
+      // Give the old replica's renewal timer (TTL/3 = 100ms) time to notice.
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const requestsAfterLoss = oldRunRequests();
+      const ticksAfterLoss = ticks;
+      await new Promise(resolve => setTimeout(resolve, 600));
 
-    expect(oldRunRequests()).toBe(requestsAfterLoss);
-    expect(ticks).toBe(ticksAfterLoss);
-    expect(ticks).toBeLessThan(20);
-    await oldDone;
-    expect(await oldRun.finishReason).toBe('aborted');
-  }, 20_000);
+      expect(oldRunRequests()).toBe(requestsAfterLoss);
+      expect(ticks).toBe(ticksAfterLoss);
+      expect(ticks).toBeLessThan(20);
+      await oldDone;
+      expect(await oldRun.finishReason).toBe('aborted');
+    },
+    20_000,
+  );
 
   it('lets a command already running finish, keeps its result, then stops the run that lost its lease', async () => {
     const thread = 'lease-lost-running-command-thread';

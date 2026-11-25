@@ -14654,6 +14654,7 @@ export class Agent<
           resourceId,
           executionFence.generation,
           executionFence.executionId,
+          true,
         );
         setExecutionClaim(entry.requestContext, runId, {
           ...executionFence.claim,
