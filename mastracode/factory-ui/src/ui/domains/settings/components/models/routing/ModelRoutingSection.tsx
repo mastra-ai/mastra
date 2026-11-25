@@ -1,3 +1,4 @@
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
@@ -47,7 +48,15 @@ function FactoryModelRouting({ factoryId }: { factoryId: string }) {
       scope="factory"
       title="Model routing"
       description="Which defaults chats and work-item runs use. Running threads keep the model they already picked."
-      action={modelScope && <ModelRoutingSwitch value={modelScope} pending={saving} onValueChange={pickScope} />}
+      action={
+        modelScope ? (
+          <ModelRoutingSwitch value={modelScope} pending={saving} onValueChange={pickScope} />
+        ) : (
+          projectQuery.isPending && (
+            <Skeleton className="h-control-md w-72 rounded-full motion-reduce:before:animate-none" />
+          )
+        )
+      }
     >
       <div className="flex flex-col gap-6">
         {error && (
