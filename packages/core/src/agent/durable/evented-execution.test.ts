@@ -18,7 +18,7 @@ import { EventedExecutionEngine } from '../../workflows/evented/execution-engine
 import { WorkflowEventProcessor } from '../../workflows/evented/workflow-event-processor';
 import { Agent } from '../agent';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-ownership';
-import { agentThreadStreamRuntime } from '../thread-stream-runtime';
+import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { DurableStepIds } from './constants';
 import { createEventedAgent } from './create-evented-agent';
 import {
@@ -1845,6 +1845,49 @@ it.each(['expired', 'foreign'] as const)(
     });
   },
 );
+
+const threadOwner = (runId: string, generation: number) =>
+  `mastra:thread-lease:${JSON.stringify([runId, 'generation', generation])}`;
+
+it('waits for a settling execution to release the thread lease before claiming it', async () => {
+  const pubsub = sharedPubSub();
+  await agentThreadStreamRuntime.claimDurableThreadLease(pubsub, 'first', 'thread', 'resource', 1);
+  setTimeout(
+    () => void agentThreadStreamRuntime.releaseDurableThreadLease(pubsub, 'first', 'thread', 'resource', 1),
+    300,
+  );
+  await agentThreadStreamRuntime.claimDurableThreadLease(pubsub, 'second', 'thread', 'resource', 1);
+  expect(await pubsub.getLeaseOwner('resource\u0000thread')).toBe(threadOwner('second', 1));
+});
+
+it('reports a thread lease conflict once the previous execution holds it past the wait', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  const pubsub = sharedPubSub();
+  await agentThreadStreamRuntime.claimDurableThreadLease(pubsub, 'first', 'thread', 'resource', 1);
+  let settled = false;
+  const claim = agentThreadStreamRuntime
+    .claimDurableThreadLease(pubsub, 'second', 'thread', 'resource', 1)
+    .finally(() => (settled = true));
+  claim.catch(() => {});
+  await vi.advanceTimersByTimeAsync(4_800);
+  expect(settled).toBe(false);
+  await vi.advanceTimersByTimeAsync(400);
+  await expect(claim).rejects.toBeInstanceOf(AgentThreadLeaseConflictError);
+  expect(await pubsub.getLeaseOwner('resource\u0000thread')).toBe(threadOwner('first', 1));
+});
+
+it('stops waiting for the thread lease when another execution takes it over', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  const pubsub = sharedPubSub();
+  const key = 'resource\u0000thread';
+  await agentThreadStreamRuntime.claimDurableThreadLease(pubsub, 'first', 'thread', 'resource', 1);
+  const claim = agentThreadStreamRuntime.claimDurableThreadLease(pubsub, 'second', 'thread', 'resource', 1);
+  claim.catch(() => {});
+  await pubsub.transferLease(key, threadOwner('first', 1), threadOwner('third', 1), EXECUTION_LEASE_TTL_MS);
+  await vi.advanceTimersByTimeAsync(300);
+  await expect(claim).rejects.toThrow(threadOwner('third', 1));
+  expect(await pubsub.getLeaseOwner(key)).toBe(threadOwner('third', 1));
+});
 
 it('stops admitting work after losing the captured thread lease', async () => {
   vi.useFakeTimers();
