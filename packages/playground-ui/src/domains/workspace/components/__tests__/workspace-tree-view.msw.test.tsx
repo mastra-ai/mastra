@@ -273,7 +273,7 @@ describe('WorkspaceTreeView', () => {
 
       expect(file.getAttribute('aria-selected')).toBe('true');
       expect(screen.getByTestId('workspace-file-path').textContent).toBe('src/index.ts');
-      await waitFor(() => expect(document.querySelector('.shiki-token')).toBeTruthy(), { timeout: 5000 });
+      await waitFor(() => expect(document.querySelector('[class^="syntax-"]')).toBeTruthy(), { timeout: 5000 });
     });
   });
 

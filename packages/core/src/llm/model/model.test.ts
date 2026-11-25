@@ -369,7 +369,7 @@ describe('MastraLLM', () => {
     it('should stream text with correct parameters', async () => {
       const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
 
-      await aisdkText.__stream({
+      const result = await aisdkText.__stream({
         messages,
         tools: mockTools,
         temperature: 0.7,
@@ -377,6 +377,7 @@ describe('MastraLLM', () => {
         requestContext,
         tracingContext,
       });
+      await result.consumeStream();
 
       expect(streamSpy).toHaveBeenCalled();
     });
@@ -409,7 +410,7 @@ describe('MastraLLM', () => {
       const onStepFinish = vi.fn();
       const onFinish = vi.fn();
 
-      await aisdkText.__stream({
+      const result = await aisdkText.__stream({
         messages,
         onStepFinish,
         onFinish,
@@ -418,6 +419,7 @@ describe('MastraLLM', () => {
         requestContext,
         tracingContext,
       });
+      await result.consumeStream();
 
       expect(streamSpy).toHaveBeenCalled();
     });
@@ -426,7 +428,7 @@ describe('MastraLLM', () => {
       const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
       const runId = 'test-run';
 
-      await aisdkText.__stream({
+      const result = await aisdkText.__stream({
         messages,
         runId,
         temperature: 0.7,
@@ -434,6 +436,7 @@ describe('MastraLLM', () => {
         requestContext,
         tracingContext,
       });
+      await result.consumeStream();
 
       expect(streamSpy).toHaveBeenCalled();
 
@@ -451,7 +454,7 @@ describe('MastraLLM', () => {
       //   usage: { promptTokens: 10, completionTokens: 20 },
       // };
 
-      await aisdkText.__stream({
+      const result = await aisdkText.__stream({
         messages,
         runId,
         temperature: 0.7,
@@ -459,6 +462,7 @@ describe('MastraLLM', () => {
         requestContext,
         tracingContext,
       });
+      await result.consumeStream();
 
       expect(streamSpy).toHaveBeenCalled();
     });

@@ -2,6 +2,12 @@ import type { Session } from '@mastra/core/agent-controller';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEffectiveOMRoleModelId } from '../om-model.js';
 
+const usableProviders = vi.hoisted(() => new Set<string>());
+vi.mock('@mastra/code-sdk/agents/model', async importOriginal => ({
+  ...(await importOriginal<typeof import('@mastra/code-sdk/agents/model')>()),
+  canUseProvider: (providerId: string) => usableProviders.has(providerId),
+}));
+
 function session(observerModelId: string, memoryModelId?: string) {
   const state = {
     modelRoute: {
@@ -25,8 +31,8 @@ function session(observerModelId: string, memoryModelId?: string) {
 
 describe('getEffectiveOMRoleModelId', () => {
   beforeEach(() => {
-    vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
-    return () => vi.unstubAllEnvs();
+    usableProviders.clear();
+    usableProviders.add('anthropic');
   });
 
   it('reports the /om role model when the active route leaves memory unset', () => {
@@ -42,6 +48,13 @@ describe('getEffectiveOMRoleModelId', () => {
   it('reports the automatic model when the active route sets memory to Auto', () => {
     expect(getEffectiveOMRoleModelId(session('openai/gpt-5.4-mini', 'auto'), 'reflector')).toBe(
       'anthropic/claude-haiku-4-5',
+    );
+  });
+
+  it('reports Gemini Flash for Auto when Google is usable through any credential the runs accept', () => {
+    usableProviders.add('google');
+    expect(getEffectiveOMRoleModelId(session('openai/gpt-5.4-mini', 'auto'), 'observer')).toBe(
+      'google/gemini-3.5-flash',
     );
   });
 });

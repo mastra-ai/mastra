@@ -97,6 +97,7 @@ const ATTRIBUTE_KEYS = {
   TOOL_SUCCESS: 'tool.success',
   GEN_AI_PIPELINE_NAME: 'gen_ai.pipeline.name',
   GEN_AI_AGENT_PROMPT: 'gen_ai.agent.prompt',
+  GEN_AI_SYSTEM_INSTRUCTIONS: 'gen_ai.system_instructions',
   WORKFLOW_ID: 'workflow.id',
   WORKFLOW_STATUS: 'workflow.status',
   WORKFLOW_STEP_ID: 'workflow.step.id',
@@ -106,7 +107,7 @@ const ATTRIBUTE_KEYS = {
   GEN_AI_USAGE_TOTAL_TOKENS: 'gen_ai.usage.total_tokens',
   GEN_AI_USAGE_CACHE_READ_TOKENS: 'gen_ai.usage.cache_read.input_tokens',
   GEN_AI_USAGE_CACHE_WRITE_TOKENS: 'gen_ai.usage.cache_creation.input_tokens',
-  GEN_AI_USAGE_REASONING_TOKENS: 'gen_ai.usage.reasoning_tokens',
+  GEN_AI_USAGE_REASONING_TOKENS: 'gen_ai.usage.reasoning.output_tokens',
 } as const;
 
 export interface SentryExporterConfig extends BaseExporterConfig {
@@ -292,7 +293,6 @@ export class SentryExporter extends BaseExporter {
     const spanData = this.spanMap.get(span.id);
     if (!spanData) {
       this.logMissingSpan(span, 'span update');
-      return;
     }
     // Attributes are set on SPAN_STARTED and finalized on SPAN_ENDED.
     // If dynamic updates become necessary, add spanData.span.setAttributes() here.
@@ -411,6 +411,11 @@ export class SentryExporter extends BaseExporter {
 
   private buildSpanAttributes(span: AnyExportedSpan): Record<string, any> {
     const attributes = getGenAIAttributes(span, this.genAIOptions(span)) as Record<string, any>;
+
+    // Sentry span attributes hold primitives only, so lists go as JSON text.
+    for (const [key, value] of Object.entries(attributes)) {
+      if (Array.isArray(value)) attributes[key] = this.serializeValue(value);
+    }
 
     attributes[ATTRIBUTE_KEYS.SPAN_TYPE] = span.type;
     attributes[ATTRIBUTE_KEYS.ORIGIN] = 'auto.ai.mastra';
@@ -532,6 +537,8 @@ export class SentryExporter extends BaseExporter {
     }
 
     this.setAttributeIfDefined(attributes, ATTRIBUTE_KEYS.GEN_AI_AGENT_PROMPT, agentAttr.prompt);
+    // Sentry reads the system instructions as plain text, not as the OpenTelemetry list of parts.
+    this.setAttributeIfDefined(attributes, ATTRIBUTE_KEYS.GEN_AI_SYSTEM_INSTRUCTIONS, agentAttr.instructions);
   }
 
   // ============================================================================

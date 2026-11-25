@@ -76,7 +76,8 @@ function suspensionPayloadShape(payload: unknown): SuspendPayloadShape {
     ? optionsValue.flatMap(option => {
         const label = stringProperty(option, 'label');
         if (!label) return [];
-        return [{ label, description: stringProperty(option, 'description') }];
+        const recommended = hasProperty(option, 'recommended') && option.recommended === true;
+        return [{ label, description: stringProperty(option, 'description'), ...(recommended ? { recommended } : {}) }];
       })
     : undefined;
 

@@ -16,7 +16,7 @@ import { prepareMemoryStepOutputSchema, prepareToolsStepOutputSchema } from './s
  * Serialization invariants for the prepare-stream workflow.
  *
  * The evented engine routes step outputs through `JSON.stringify` (storage
- * snapshots, `UnixSocketPubSub` frames). Anything described by a step's
+ * snapshots, frames on a cross-process pubsub). Anything described by a step's
  * `outputSchema` MUST be JSON-safe — class instances, `Map`s, closures, and
  * non-cloneable state must live on the per-run {@link RunScope} instead.
  *

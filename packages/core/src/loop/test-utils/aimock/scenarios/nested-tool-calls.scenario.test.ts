@@ -1,8 +1,12 @@
 import { createOpenAI } from '@ai-sdk/openai-v5';
+import type { ChatCompletionRequest } from '@copilotkit/aimock';
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { it, expect } from 'vitest';
+import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
-import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import { MockMemory } from '../../../../memory/mock';
+import { createTool } from '../../../../tools';
+import { createSharedAgent, runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 import { SCENARIO_MODEL_ID } from '../types';
 
 /**
@@ -12,6 +16,10 @@ import { SCENARIO_MODEL_ID } from '../types';
  * grandchild subagent. Results must flow back through the full chain:
  * grandchild → child → parent. This pins the recursive delegation contract
  * and proves that agent-as-tools can themselves use agent-as-tools.
+ *
+ * A pause from the grandchild's tool surfaces at the parent on the parent's
+ * delegation call and names the grandchild's own tool call, not the child's
+ * intermediate delegation call (#28583).
  */
 describeForAllEngines('AIMock loop scenario: nested/recursive tool calls', engine => {
   const getMock = useLoopScenarioAimock();
@@ -259,5 +267,97 @@ describeForAllEngines('AIMock loop scenario: nested/recursive tool calls', engin
     const turn4Messages = turn4Request?.body?.messages ?? [];
     const turn4Serialized = JSON.stringify(turn4Messages);
     expect(turn4Serialized).toContain('===');
+  });
+
+  it("names the grandchild's paused tool call at the parent (parent → child → grandchild)", async () => {
+    const mock = getMock();
+    const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${mock.url.replace(/\/+$/, '')}/v1` });
+    const toolNames = (req: ChatCompletionRequest) => (req.tools ?? []).map(t => t.function?.name);
+    const lastIsToolResult = (req: ChatCompletionRequest) => req.messages.at(-1)?.role === 'tool';
+    const isParent = (req: ChatCompletionRequest) => toolNames(req).includes('agent-planner');
+    const isPlanner = (req: ChatCompletionRequest) => toolNames(req).includes('agent-researcher');
+    const isResearcher = (req: ChatCompletionRequest) => toolNames(req).includes('askScope');
+
+    const answers: string[] = [];
+    const askScope = createTool({
+      id: 'ask-scope',
+      description: 'Ask the user how deep the research should go.',
+      inputSchema: z.object({ question: z.string() }),
+      suspendSchema: z.object({ question: z.string() }),
+      resumeSchema: z.object({ answer: z.string() }),
+      execute: async ({ question }, context) => {
+        const answer = (context?.agent?.resumeData as { answer?: string } | undefined)?.answer;
+        if (!answer) return context?.agent?.suspend({ question });
+        answers.push(answer);
+        return { answer };
+      },
+    });
+    const researcher = new Agent({
+      id: 'researcher',
+      name: 'Researcher',
+      description: 'Researches topics in depth',
+      instructions: 'Ask for the scope, then research.',
+      model: openai(SCENARIO_MODEL_ID),
+      tools: { askScope },
+    });
+    const planner = new Agent({
+      id: 'planner',
+      name: 'Planner',
+      description: 'Plans and coordinates work',
+      instructions: 'Delegate to the researcher.',
+      model: openai(SCENARIO_MODEL_ID),
+      agents: { researcher },
+    });
+    const { agent } = await createSharedAgent(mock, {
+      instructions: 'Delegate to the planner.',
+      agents: { planner },
+      memory: new MockMemory(),
+      engine,
+    });
+
+    const delegate = (id: string, name: string) => ({ toolCalls: [{ id, name, arguments: { prompt: 'research' } }] });
+    mock.on(
+      { endpoint: 'chat', predicate: req => isParent(req) && !lastIsToolResult(req) },
+      delegate('call_planner', 'agent-planner'),
+    );
+    mock.on(
+      { endpoint: 'chat', predicate: req => isPlanner(req) && !lastIsToolResult(req) },
+      delegate('call_researcher', 'agent-researcher'),
+    );
+    mock.on(
+      { endpoint: 'chat', predicate: req => isResearcher(req) && !lastIsToolResult(req) },
+      { toolCalls: [{ id: 'call_ask_scope', name: 'askScope', arguments: { question: 'How deep?' } }] },
+    );
+    mock.on(
+      { endpoint: 'chat', predicate: req => isResearcher(req) && lastIsToolResult(req) },
+      { content: 'Researched.' },
+    );
+    mock.on({ endpoint: 'chat', predicate: req => isPlanner(req) && lastIsToolResult(req) }, { content: 'Planned.' });
+    mock.on({ endpoint: 'chat', predicate: req => isParent(req) && lastIsToolResult(req) }, { content: 'All done.' });
+
+    const memory = { thread: `nested-pause-${engine}`, resource: 'nested-pause-user' };
+    const run = await agent.stream('Plan a research project.', { memory, maxSteps: 5 });
+    let suspended: any;
+    for await (const chunk of run.fullStream) {
+      if (chunk.type === 'tool-call-suspended') {
+        suspended = chunk.payload;
+        // Durable streams stay open while suspended; stop at the pause.
+        break;
+      }
+    }
+
+    // Resumed through the parent's call; names the grandchild's tool, not the planner's `agent-researcher` call.
+    expect(suspended).toMatchObject({
+      toolCallId: 'call_planner',
+      toolName: 'agent-planner',
+      delegatedToolCallId: 'call_ask_scope',
+      delegatedToolName: 'askScope',
+    });
+
+    const resumed = await agent.resumeStream({ answer: 'shallow' }, { runId: run.runId, memory, maxSteps: 5 });
+    const types: string[] = [];
+    for await (const chunk of resumed.fullStream) types.push(chunk.type);
+    expect(types, `resumed chunks: ${types.join(', ')}`).not.toContain('error');
+    expect(answers).toEqual(['shallow']);
   });
 });

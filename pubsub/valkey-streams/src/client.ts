@@ -1,11 +1,5 @@
-import {
-  Batch,
-  Decoder,
-  GlideClient,
-  InfBoundary,
-  type GlideClientConfiguration,
-  type GlideString,
-} from '@valkey/valkey-glide';
+import { Batch, Decoder, GlideClient, InfBoundary } from '@valkey/valkey-glide';
+import type { GlideClientConfiguration, GlideString } from '@valkey/valkey-glide';
 
 export type ValkeyClientOptions = Omit<Partial<GlideClientConfiguration>, 'addresses'> & {
   url?: string;
@@ -193,6 +187,7 @@ export class ValkeyStreamsClient {
         useTLS:
           configuration.useTLS ??
           (parsed ? parsed.protocol === 'rediss:' || parsed.protocol === 'valkeys:' : undefined),
+        clientInfoTag: configuration.clientInfoTag ?? 'mastra',
       });
     }
     return this.#client;

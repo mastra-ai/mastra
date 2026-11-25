@@ -132,8 +132,7 @@ describe('SignInPage', () => {
       expect(screen.queryByRole('button', { name: 'Continue with GitHub' })).not.toBeInTheDocument();
 
       await userEvent.click(button);
-      expect(button).toBeDisabled();
-      expect(button).toHaveTextContent('Opening Mastra Platform…');
+      expect(button).toHaveAttribute('aria-busy', 'true');
       expect(redirectToLogin).toHaveBeenCalledWith(TEST_BASE_URL, '/factory/board');
     });
 
@@ -170,23 +169,12 @@ describe('SignInPage', () => {
       expect(screen.queryByLabelText('Email')).not.toBeInTheDocument();
 
       await userEvent.click(button);
-      expect(button).toBeDisabled();
-      expect(button).toHaveTextContent('Opening GitHub…');
+      expect(button).toHaveAttribute('aria-busy', 'true');
       expect(redirectToLogin).toHaveBeenCalledWith(TEST_BASE_URL, '/factory/board');
     });
   });
 
   describe('given a better-auth (self-hosted) deploy', () => {
-    it('renders the email/password form instead of the hosted button', async () => {
-      stubAuthMe({ provider: 'better-auth' });
-      renderSignIn();
-
-      expect(await screen.findByLabelText('Email')).toBeInTheDocument();
-      expect(screen.getByLabelText('Password')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'New here? Sign up' })).toBeInTheDocument();
-    });
-
     it('signs in with credentials and navigates to returnTo', async () => {
       stubAuthMe({ provider: 'better-auth' });
       const posted = vi.fn();

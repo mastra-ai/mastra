@@ -1,5 +1,6 @@
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
@@ -8,14 +9,17 @@ import { useAgent, useAgentVersions, useAgentVersion, useStoredAgent } from '@ma
 import { useMemory } from '@mastra/react/hooks/memory';
 import { useCallback, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
+import { AgentOverviewPanel } from '@/domains/agents/components/agent-overview-panel/agent-overview-panel';
 import { AgentPlaygroundView } from '@/domains/agents/components/agent-playground/agent-playground-view';
 import { AgentEditFormProvider } from '@/domains/agents/context/agent-edit-form-context';
 import { useAgentCmsForm } from '@/domains/agents/hooks/use-agent-cms-form';
+import { isCodeBackedAgent } from '@/domains/agents/utils/agent-source';
 import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import { getEditorOwnership } from '@/domains/agents/utils/editor-ownership';
 import { useEditorSource } from '@/domains/configuration/hooks/use-editor-source';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
+import { RouteSidePanel } from '@/lib/route-side-panel';
 
 function AgentPlayground() {
   const { agentId } = useParams();
@@ -53,7 +57,7 @@ function AgentPlayground() {
     queryOptions: { enabled: Boolean(agentId) && hasVersions },
   });
 
-  const isCodeAgentOverride = codeAgent?.source === 'code';
+  const isCodeAgentOverride = isCodeBackedAgent(codeAgent);
   const isCodeSourceAgent = isCodeAgentOverride && editorSource === 'code';
   const isCodeAgentEditable = !getEditorOwnership(isCodeAgentOverride, codeAgent?.editor).isFullyLocked;
   const showCodeModeActions = isCodeSourceAgent && isCodeAgentEditable;
@@ -82,7 +86,7 @@ function AgentPlayground() {
     if (isViewingVersion && versionData) return versionData;
     if (storedAgent) return storedAgent;
     if (codeAgent) return mapAgentResponseToDataSource(codeAgent);
-    return {} as AgentDataSource;
+    return {};
   }, [isViewingVersion, versionData, storedAgent, codeAgent]);
 
   const {
@@ -194,6 +198,11 @@ function AgentPlayground() {
         onOpenPr={handleOpenPrClick}
         isViewingPreviousVersion={isViewingPreviousVersion}
       />
+      <RouteSidePanel owner="agent-editor-detail" priority={1}>
+        <ActivatedSkillsProvider key={agentId}>
+          <AgentOverviewPanel agentId={agentId!} />
+        </ActivatedSkillsProvider>
+      </RouteSidePanel>
     </AgentEditFormProvider>
   );
 }

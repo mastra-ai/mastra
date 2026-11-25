@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraConnectError } from '../errors.js';
-import { PROVIDERS, type ProviderRegistration, type ProxyProviderRegistration } from '../registry.js';
+import { PROVIDERS } from '../registry.js';
+import type { ProviderRegistration, ProxyProviderRegistration } from '../registry.js';
 import { tools as connect } from '../tools.js';
 import type { ToolsOptions as ConnectOptions } from '../tools.js';
 import { applyToolFilter } from '../toolset.js';
@@ -629,6 +630,32 @@ describe('top-level filter and approval defaults', () => {
     expect(result['linear_delete_issue']!.requireApproval).toBe(true);
     expect(result['linear_get_issue']!.requireApproval).toBeFalsy();
     expect(result['notion_get_page']!.requireApproval).toBeFalsy();
+  });
+
+  it('loads only listed providers and applies top-level filters and approval to them', async () => {
+    const { options } = installTwoProviders();
+    const tools = connect({
+      ...options,
+      providers: ['linear'],
+      allowTools: ['linear_get_issue', 'linear_delete_issue'],
+      requireApproval: ['linear_delete_issue'],
+    });
+    const result = (await tools()) as Record<string, ApprovalTool>;
+    expect(Object.keys(result).sort()).toEqual(['linear_delete_issue', 'linear_get_issue']);
+    expect(result['linear_delete_issue']!.requireApproval).toBe(true);
+    expect(result['linear_get_issue']!.requireApproval).toBeFalsy();
+  });
+
+  it('drops tools the top-level allowTools leaves out of a listed provider', async () => {
+    const { options } = installTwoProviders();
+    const tools = connect({ ...options, providers: ['linear'], allowTools: ['linear_get_issue'] });
+    expect(Object.keys(await tools())).toEqual(['linear_get_issue']);
+  });
+
+  it('still loads unlisted providers when providers is a record', async () => {
+    const { options } = installTwoProviders();
+    const tools = connect({ ...options, providers: { linear: { requireApproval: ['linear_delete_issue'] } } });
+    expect(Object.keys(await tools()).sort()).toEqual(['linear_delete_issue', 'linear_get_issue', 'notion_get_page']);
   });
 
   it('never gates list_connections through top-level defaults', async () => {

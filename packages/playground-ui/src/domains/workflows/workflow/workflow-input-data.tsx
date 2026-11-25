@@ -1,4 +1,3 @@
-import { Play } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useRef, useState } from 'react';
 import type { ZodSchema } from 'zod';
@@ -9,10 +8,11 @@ import { WorkflowJsonInput } from './input/workflow-json-input';
 import { WorkflowProcessorInput } from './input/workflow-processor-input';
 import { WorkflowInputTypeToggle } from './workflow-input-type-toggle';
 import type { WorkflowInputType } from './workflow-input-type-toggle';
-import { Button } from '@/ds/components/Button';
+import type { Button } from '@/ds/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Txt } from '@/ds/components/Txt';
+import { IconPlay } from '@/ds/icons/central/IconPlay';
 import { Icon } from '@/ds/icons/Icon';
 import { DynamicForm } from '@/lib/form';
 import { getFormShapeError, parseJsonDraft, validateJsonDraft } from '@/lib/form/json-draft';
@@ -46,7 +46,7 @@ type InputDraft =
 
 const defaultSubmitIcon = (
   <Icon>
-    <Play />
+    <IconPlay />
   </Icon>
 );
 

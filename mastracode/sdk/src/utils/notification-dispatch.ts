@@ -59,13 +59,15 @@ export function shouldHoldNotificationDelivery({
   return !ownedHere || dispatcher.running;
 }
 
+type SessionScope = { resourceId: string; scope?: string };
+
 export type ResourceNotificationDispatcherOptions = {
   getMastra: () => Mastra | undefined;
   /**
    * The resources this process runs sessions for, each with the thread scope
    * (`threadScopeKey`) of a session serving it, unset when it has none.
    */
-  getSessionScopes: () => Iterable<{ resourceId: string; scope?: string }>;
+  getSessionScopes: () => Iterable<SessionScope> | Promise<Iterable<SessionScope>>;
   /**
    * Cross-process leases. When set, a resource's notifications are dispatched
    * only by the processes holding its dispatch leases, so two processes
@@ -124,7 +126,7 @@ export function createResourceNotificationDispatcher(options: ResourceNotificati
     const storage = await mastra?.getStorage()?.getStore('notifications');
     if (!mastra || !storage) return;
     const scopesByResource = new Map<string, Set<string>>();
-    for (const { resourceId, scope } of options.getSessionScopes()) {
+    for (const { resourceId, scope } of await options.getSessionScopes()) {
       const scopes = scopesByResource.get(resourceId) ?? new Set<string>();
       if (scope !== undefined) scopes.add(scope);
       scopesByResource.set(resourceId, scopes);

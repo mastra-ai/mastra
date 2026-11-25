@@ -7,9 +7,7 @@ const getMock = useLoopScenarioAimock();
 describeForAllEngines(
   'AIMock loop scenario: goal budget exhausted',
   engine => {
-    const itFailsOnInngest = engine === 'inngest' ? it.fails : it;
-    // Inngest's agentic loop has no isTaskComplete, goal, or onIterationComplete steps yet.
-    itFailsOnInngest('maxRuns reached, goal chunk emitted with budget exhausted, objective stays paused', async () => {
+    it('maxRuns reached, goal chunk emitted with budget exhausted, objective stays paused', async () => {
       const memory = new MockMemory();
       const THREAD = 'goal-budget-thread-1';
       const RESOURCE = 'user-1';

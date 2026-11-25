@@ -3,7 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MastraFactory } from './factory.js';
 
 const prepareMock = vi.fn(async (_config: Record<string, unknown>) => ({
-  base: { controller: { onSessionCreated: vi.fn(), setChannels: vi.fn() } },
+  base: {
+    controller: {
+      onSessionCreated: vi.fn(() => () => {}),
+      onSessionDeleted: vi.fn(() => () => {}),
+      setChannels: vi.fn(),
+    },
+  },
   mastraArgs: {},
   finalize: vi.fn(async () => {}),
 }));
@@ -31,5 +37,12 @@ describe('MastraFactory disableBuiltinTools', () => {
 
     expect(prepareMock).toHaveBeenCalledOnce();
     expect(prepareMock.mock.calls[0]![0]).not.toHaveProperty('disableBuiltinTools');
+  });
+
+  it('points every session at the plans directory the Factory UI renders', async () => {
+    const storage = new LibSQLFactoryStorage({ url: ':memory:', id: 'plans-dir-test' });
+    await new MastraFactory({ storage }).prepare();
+
+    expect(prepareMock.mock.calls[0]![0].plansDir).toBe('.artifacts/plans');
   });
 });

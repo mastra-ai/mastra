@@ -284,7 +284,11 @@ export interface WorkflowToolExecutionContext<TSuspend, TResume> {
   runId: string;
   workflowId: string;
   state: any;
+  /** Resolves to the run's state, or only its named top-level keys. Use it instead of `state` on storage v2 runs. */
+  getState: (keys?: readonly string[]) => Promise<any>;
   setState: (state: any) => void;
+  /** Merges the given top-level keys into the run's state and validates the merged state. */
+  updateState: (state: any) => void;
   suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
   // Optional - only present if workflow step was previously suspended
   resumeData?: TResume;
@@ -696,7 +700,8 @@ export interface ToolExecutionContext<
 
   /**
    * Observability helpers for recording child spans and structured logs
-   * from inside a tool's execute function. Always provided — when no
+   * from inside a tool's execute function. Always provided to the tool's
+   * `execute` callback (callers of `tool.execute()` may omit it) — when no
    * tracing context is active, `span` runs the function directly and
    * `log` is a no-op. No null-checking needed.
    *
@@ -711,6 +716,16 @@ export interface ToolExecutionContext<
 }
 
 /**
+ * Context accepted when calling `tool.execute(input, context)` directly. `observe`
+ * is optional here because the tool runtime fills it in (a no-op implementation
+ * when no tracing span is active); the tool's own `execute` callback always
+ * receives it.
+ */
+export type ToolExecuteCallContext<TContext> = Omit<TContext, 'observe'> & {
+  observe?: ToolObserve;
+};
+
+/**
  * Context received by a tool's `execute` callback. The runtime always provides
  * `requestContext` (an empty one is created if the caller passed none), so it
  * is non-optional here — like `observe`. No null-checking needed.
@@ -722,7 +737,33 @@ export type ToolExecuteContext<TContext, TRequestContext extends Record<string, 
   requestContext: RequestContext<TRequestContext>;
 };
 
-/** The `execute` callback signature used by `createTool` and `new Tool(...)`. */
+/**
+ * The `execute` callback of `createTool({ execute })` / `new Tool(...)`: called as
+ * `execute(inputData, context)`.
+ *
+ * - `inputData`: the tool input, already validated against `inputSchema` (the callback is not
+ *   called when validation fails; the caller gets a `ValidationError` instead). It is the
+ *   input object itself, not wrapped in `{ context }`.
+ * - `context`: runtime context — `requestContext` (always present), `mastra`, `abortSignal`,
+ *   `writer` (stream custom data), `workspace`, `observe`, and `agent` (`toolCallId`,
+ *   `threadId`, `resourceId`, `suspend`, `resumeData`) when an agent runs the tool, or
+ *   `workflow` when a workflow step does.
+ * - Return the tool output (validated against `outputSchema` when set).
+ *
+ * @example
+ * ```ts
+ * createTool({
+ *   id: 'get-weather',
+ *   description: 'Get the weather for a city',
+ *   inputSchema: z.object({ city: z.string() }),
+ *   execute: async ({ city }, { requestContext, abortSignal }) => {
+ *     return { city, temperature: 21 };
+ *   },
+ * });
+ * ```
+ *
+ * @see [createTool() reference](https://mastra.ai/reference/tools/create-tool)
+ */
 export type ToolExecuteFunction<
   TSchemaIn,
   TSchemaOut,
@@ -787,6 +828,12 @@ export interface ToolAction<
   // Note: For outputSchema, we use the input type because Zod transforms are applied during validation
   // Note: { error?: never } enables inline type narrowing with 'error' in result checks
   execute?: (inputData: TSchemaIn, context: TContext) => Promise<TSchemaOut | ValidationError | void>;
+  /**
+   * Display-only tool: stream the call to the client, return `{ acknowledged: true }`
+   * from the server, and continue the model loop without waiting for a browser result.
+   * Cannot be combined with `execute`.
+   */
+  renderOnly?: boolean;
   mastra?: Mastra;
   /**
    * Whether the tool requires explicit user approval before execution.

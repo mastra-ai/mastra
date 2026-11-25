@@ -54,7 +54,7 @@ function collect(value: unknown, parts: string[], path: Set<object>): void {
       return;
   }
 
-  const object = value as object;
+  const object = value;
 
   // Guard the current path only: a cycle must terminate, but the same object
   // referenced twice side by side is legitimately worth emitting twice.

@@ -1,7 +1,6 @@
+import { clearDraftsOnLogout } from '@mastra/playground-ui/domains/agents/chat';
 import { useMastraClient } from '@mastra/react';
 import { useLogout as useLogoutMutation } from '@mastra/react/hooks/auth';
-
-import { clearDraftsOnLogout } from '@/domains/conversation/context/thread-draft-state';
 
 /**
  * Signs the user out and clears their saved composer drafts once the session has ended,

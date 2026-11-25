@@ -3,6 +3,7 @@ export {
   compareObservationalMemoryHeadOrder,
   isAppendOnlySince,
   isBufferedChunkCoveredByCursor,
+  isBufferedReflectionUnchangedSince,
   maxObservationCursor,
   planReflectionGenerationText,
 } from '@internal/core/memory';

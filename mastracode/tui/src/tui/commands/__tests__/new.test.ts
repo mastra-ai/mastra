@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { AssistantRenderRegistry, getAssistantSegmentKey } from '../../assistant-render-registry.js';
 import { AssistantMessageComponent } from '../../components/assistant-message.js';
+import { ToolExecutionComponentEnhanced } from '../../components/tool-execution-enhanced.js';
 import { handleNewCommand } from '../new.js';
 import type { SlashCommandContext } from '../types.js';
 
@@ -22,7 +23,7 @@ function createMockState() {
     currentThreadTitle: 'Current thread',
     options: { appName: 'Mastra Code' },
     chatContainer: { clear: vi.fn() },
-    pendingTools: { clear: vi.fn() },
+    pendingTools: new Map(),
     pendingTaskToolIds: { clear: vi.fn() },
     pendingSubagents: new Map([['subagent', {}]]),
     pendingSignalMessageComponentsById: new Map([['signal', {}]]),
@@ -99,7 +100,7 @@ describe('handleNewCommand', () => {
     await handleNewCommand(ctx);
 
     expect(state.chatContainer.clear).toHaveBeenCalled();
-    expect(state.pendingTools.clear).toHaveBeenCalled();
+    expect(state.pendingTools.size).toBe(0);
     expect(state.pendingTaskToolIds.clear).toHaveBeenCalled();
     expect(state.pendingSubagents.size).toBe(0);
     expect(state.pendingSignalMessageComponentsById.size).toBe(0);
@@ -138,5 +139,35 @@ describe('handleNewCommand', () => {
     expect(state.githubPrPollingActive).toBe(false);
     expect(state.agentRunStartedAt).toBeUndefined();
     expect(state.agentRunLastStreamPartAt).toBeUndefined();
+  });
+
+  it('stops the running time ticker of a shell call left running in the old thread', async () => {
+    vi.useFakeTimers();
+    try {
+      const state = createMockState();
+      const ctx = createCtx(state);
+      const requestRender = vi.fn();
+      // A compact shell row redraws its elapsed time every 100ms while the command runs.
+      const shell = new ToolExecutionComponentEnhanced(
+        'execute_command',
+        { command: 'sleep 15', description: 'Waiting' },
+        { collapsedByDefault: true, previewLineLimit: 0 },
+        { requestRender } as any,
+      );
+      shell.render(80);
+      state.pendingTools.set('call-1', shell);
+      vi.advanceTimersByTime(500);
+      expect(requestRender).toHaveBeenCalled();
+
+      await handleNewCommand(ctx);
+      requestRender.mockClear();
+      vi.advanceTimersByTime(5_000);
+
+      // The row is gone from the new conversation, so nothing should keep redrawing the TUI.
+      expect(requestRender).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

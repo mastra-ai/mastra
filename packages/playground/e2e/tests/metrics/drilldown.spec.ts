@@ -39,7 +39,7 @@ test.describe('Metrics dashboard drilldown buttons', () => {
     test('opens traces filtered to the active tab rootEntityType', async ({ page }) => {
       await gotoMetricsOrSkip(page);
 
-      const button = cardByTitle(page, 'Latency').getByRole('button', { name: 'View in Traces' });
+      const button = cardByTitle(page, 'Latency').getByRole('button', { name: 'View in traces' });
       const url = await clickAndReadUrl(page, button, '/traces');
 
       expect(url.searchParams.get('datePreset')).toBe('last-24h');
@@ -53,7 +53,7 @@ test.describe('Metrics dashboard drilldown buttons', () => {
 
       const latencyCard = cardByTitle(page, 'Latency');
       await latencyCard.getByRole('tab', { name: 'Workflows' }).click();
-      const url = await clickAndReadUrl(page, latencyCard.getByRole('button', { name: 'View in Traces' }), '/traces');
+      const url = await clickAndReadUrl(page, latencyCard.getByRole('button', { name: 'View in traces' }), '/traces');
 
       expect(url.searchParams.get('rootEntityType')).toBe('workflow_run');
     });
@@ -63,7 +63,7 @@ test.describe('Metrics dashboard drilldown buttons', () => {
     test('opens agent errors in logs', async ({ page }) => {
       await gotoMetricsOrSkip(page);
 
-      const button = cardByTitle(page, 'Trace volume').getByRole('button', { name: 'View errors in Logs' });
+      const button = cardByTitle(page, 'Trace volume').getByRole('button', { name: 'View errors in logs' });
       const url = await clickAndReadUrl(page, button, '/logs');
 
       expect(url.searchParams.get('filterLevel')).toBe('error');
@@ -75,7 +75,7 @@ test.describe('Metrics dashboard drilldown buttons', () => {
     test('keeps the filter in the traces URL', async ({ page }) => {
       await gotoMetricsOrSkip(page, '/metrics?filterEnvironment=prod');
 
-      const button = cardByTitle(page, 'Latency').getByRole('button', { name: 'View in Traces' });
+      const button = cardByTitle(page, 'Latency').getByRole('button', { name: 'View in traces' });
       const url = await clickAndReadUrl(page, button, '/traces');
 
       expect(url.searchParams.get('filterEnvironment')).toBe('prod');
@@ -86,7 +86,7 @@ test.describe('Metrics dashboard drilldown buttons', () => {
     test('opens traces with the last-7d preset', async ({ page }) => {
       await gotoMetricsOrSkip(page, '/metrics?period=7d');
 
-      const button = cardByTitle(page, 'Latency').getByRole('button', { name: 'View in Traces' });
+      const button = cardByTitle(page, 'Latency').getByRole('button', { name: 'View in traces' });
       const url = await clickAndReadUrl(page, button, '/traces');
 
       expect(url.searchParams.get('datePreset')).toBe('last-7d');
@@ -97,7 +97,7 @@ test.describe('Metrics dashboard drilldown buttons', () => {
     test('opens traces', async ({ page }) => {
       await gotoMetricsOrSkip(page);
 
-      const button = cardByTitle(page, 'Usage').getByRole('button', { name: 'View in Traces' });
+      const button = cardByTitle(page, 'Usage').getByRole('button', { name: 'View in traces' });
       const url = await clickAndReadUrl(page, button, '/traces');
 
       expect(url.pathname).toMatch(/\/traces$/);

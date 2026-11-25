@@ -1,11 +1,20 @@
 import { mergeProps } from '@base-ui/react/merge-props';
 import { useRender } from '@base-ui/react/use-render';
-import { isValidElement, type ReactNode } from 'react';
-import { transitions } from '@/ds/primitives/transitions';
+import { isValidElement } from 'react';
+import type { ReactNode } from 'react';
+import {
+  BUTTON_LOADING_PROPS,
+  ButtonIcon,
+  ButtonLabel,
+  buttonLoadingClassName,
+  buttonVariants,
+} from '../Button/Button';
 import { cn } from '@/lib/utils';
 
 export interface NoticeButtonProps extends useRender.ComponentProps<'button'> {
   icon?: ReactNode;
+  /** Same as Button's `loading`. */
+  loading?: boolean;
 }
 
 function nativeButtonProps(render: NoticeButtonProps['render']) {
@@ -13,7 +22,8 @@ function nativeButtonProps(render: NoticeButtonProps['render']) {
   return {};
 }
 
-export function NoticeButton({ render, icon, className, children, ...props }: NoticeButtonProps) {
+export function NoticeButton({ render, icon, loading, className, children, ...props }: NoticeButtonProps) {
+  const recipe = buttonVariants({ variant: 'link' });
   return useRender({
     defaultTagName: 'button',
     render,
@@ -21,21 +31,25 @@ export function NoticeButton({ render, icon, className, children, ...props }: No
       nativeButtonProps(render),
       {
         className: cn(
-          'inline-flex min-w-0 cursor-pointer items-center gap-1.5 rounded-xs text-label text-foreground',
-          'underline decoration-foreground/40 underline-offset-4 hover:decoration-foreground',
-          transitions.colors,
-          'outline-offset-2 focus-visible:outline-2 focus-visible:outline-border-focus',
-          'disabled:cursor-not-allowed disabled:text-muted-foreground [&>svg]:size-icon-sm [&>svg]:shrink-0',
+          loading ? buttonLoadingClassName(recipe) : recipe,
+          'min-w-0 text-foreground [&>svg]:size-icon-sm [&>svg]:shrink-0',
           className,
         ),
         children: (
           <>
-            {icon}
-            {children}
+            {loading ? (
+              <ButtonIcon size="sm" loading>
+                {icon}
+              </ButtonIcon>
+            ) : (
+              icon
+            )}
+            <ButtonLabel variant="link">{children}</ButtonLabel>
           </>
         ),
       },
       props,
+      loading ? BUTTON_LOADING_PROPS : undefined,
     ),
   });
 }

@@ -9,14 +9,19 @@ import type { StandardSchemaWithJSON, InferStandardSchemaOutput, ZodSchema } fro
 import type { ScoringData } from './base.types';
 import type { ModelRouterModelId } from './provider-registry.js';
 
+// zod v4's `z.infer` reads `_zod.output`, which v3 schemas lack, so v3 needs its own branch. It reads
+// `_output` structurally: a v3 schema from a different zod install than core's fails `extends z3.ZodTypeAny`.
+// See https://github.com/mastra-ai/mastra/issues/29574
 export type inferOutput<Output extends StandardSchemaWithJSON | ZodSchema | JSONSchema7 | undefined = undefined> =
   Output extends StandardSchemaWithJSON
     ? InferStandardSchemaOutput<Output>
-    : Output extends ZodSchema
+    : Output extends z.ZodType
       ? z.infer<Output>
-      : Output extends JSONSchema7
-        ? unknown
-        : undefined;
+      : Output extends { readonly _output: infer O; readonly _def: unknown }
+        ? O
+        : Output extends JSONSchema7
+          ? unknown
+          : undefined;
 
 // Tripwire result extensions
 export type TripwireProperties = {
@@ -86,12 +91,29 @@ export type MastraLanguageModel = MastraLanguageModelV2 | MastraLanguageModelV3 
 
 export type SharedProviderOptions = SharedV2ProviderOptions | SharedV3ProviderOptions | SharedV4ProviderOptions;
 
-// Support for:
-// - "openai/gpt-4o" (magic string with autocomplete)
-// - { id: "openai/gpt-4o", apiKey: "..." } (config object)
-// - { id: "custom", url: "...", apiKey: "..." } (custom endpoint)
-// - LanguageModelV1/V2/V3/V4 (existing AI SDK models)
-// - { model, id: "mastra/openai/gpt-4o" } (any of the above, labeled with its full model ID)
+/**
+ * A single model value accepted by `new Agent({ model })` and the per-call `model` option.
+ * Any of these forms works:
+ *
+ * - A model-router ID string `'provider/model'`, e.g. `'openai/gpt-5.6-sol'`. The API key is
+ *   read from the provider's environment variable (e.g. `OPENAI_API_KEY`).
+ * - An OpenAI-compatible config object: `{ id: 'openai/gpt-5.6-sol', apiKey?, headers? }`, or
+ *   `{ providerId, modelId, url?, apiKey? }` for a custom endpoint.
+ * - An AI SDK model instance, e.g. `openai('gpt-5.6-sol')` from `@ai-sdk/openai`. AI SDK v4
+ *   (`LanguageModelV1`) models only work with `generateLegacy()` / `streamLegacy()`.
+ * - An already-wrapped Mastra language model.
+ *
+ * Agents additionally accept a function returning one of these, and an array of fallbacks
+ * (see `AgentConfig.model`).
+ *
+ * @example
+ * ```ts
+ * new Agent({ id: 'a', name: 'A', instructions: '...', model: 'openai/gpt-5.6-sol' });
+ * new Agent({ id: 'a', name: 'A', instructions: '...', model: { id: 'openai/gpt-5.6-sol', apiKey: process.env.MY_KEY } });
+ * ```
+ *
+ * @see [Models documentation](https://mastra.ai/models)
+ */
 type BaseModelConfig =
   | LanguageModelV1
   | LanguageModelV2
@@ -111,6 +133,14 @@ export type IdentifiedModelConfig = {
   id: string;
 };
 
+/**
+ * Every model value accepted by `new Agent({ model })` and the per-call `model` option: a
+ * {@link BaseModelConfig} (model-router ID string like `'openai/gpt-5.6-sol'`, OpenAI-compatible
+ * config object, or AI SDK model instance), or an {@link IdentifiedModelConfig} `{ model, id }`
+ * wrapping one of those.
+ *
+ * @see [Models documentation](https://mastra.ai/models)
+ */
 export type MastraModelConfig = BaseModelConfig | IdentifiedModelConfig;
 
 /**

@@ -71,10 +71,9 @@ export const apiKeyReopenStoredScenario = {
     terminal.write('\x1b');
     await runtime.waitForScreenText(/302ai\s+✓ \(stored\)/i, terminal, 8_000);
 
-    // Bug 4: Delete should remove the stored key
-    // (original env var was overwritten by setStoredApiKey, so provider becomes 'not set')
+    // Bug 4: Delete should remove the stored key and give back the env key it overrode
     terminal.write('\x7f');
-    await runtime.waitForScreenText(/302ai\s+✗ \(not set\)/i, terminal, 8_000);
+    await runtime.waitForScreenText(/302ai\s+✓ \(env\)/i, terminal, 8_000);
     runtime.printScreen('after deleting stored key', terminal);
 
     // Close overlay and exit

@@ -30,7 +30,7 @@ const renderComposer = (props: Partial<React.ComponentProps<typeof ChatComposer>
           onSubmit={e => e.preventDefault()}
           onKeyDown={noop}
           disabled={false}
-          canSubmit={true}
+          canSubmit
           inputTestId="composer-input"
           submitTestId="composer-submit"
           containerTestId="composer-container"
@@ -62,8 +62,8 @@ describe('ChatComposer', () => {
     const textarea = getByTestId('composer-input') as HTMLTextAreaElement;
 
     expect(submit.getAttribute('aria-label')).toBe('Generating…');
-    expect(submit.querySelector('.animate-spin')).not.toBeNull();
-    expect(submit.hasAttribute('disabled')).toBe(true);
+    expect(submit.getAttribute('aria-busy')).toBe('true');
+    expect(submit.getAttribute('aria-disabled')).toBe('true');
     expect(textarea.disabled).toBe(true);
   });
 });

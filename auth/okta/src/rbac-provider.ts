@@ -111,9 +111,7 @@ export class MastraRBACOkta implements IRBACProvider<OktaUser> {
     const apiToken = options.apiToken ?? process.env.OKTA_API_TOKEN;
 
     if (!domain) {
-      throw new Error(
-        'Okta domain is required. ' + 'Provide it in the options or set OKTA_DOMAIN environment variable.',
-      );
+      throw new Error('Okta domain is required. Provide it in the options or set OKTA_DOMAIN environment variable.');
     }
 
     if (!apiToken) {

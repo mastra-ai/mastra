@@ -29,7 +29,7 @@ const meta: Meta<typeof CodeBlock> = {
           '- `overflow="wrap"` (default) for commands and snippets; `overflow="scroll"` for source code where preserving columns matters.',
           '- Use `CodeEditor`, `DataCodeSection` or `CodeDiff` only for editable content, searchable/large structured data, or diffs.',
           '',
-          'Syntax colors are CSS-driven: tokens carry `--shiki-light`/`--shiki-dark` variables and the `.shiki-token` class resolves them from the `.light`/`.dark` root class, so light/dark works without a ThemeProvider.',
+          'Syntax colors are CSS-driven: tokens carry `syntax-*` role classes backed by `--syntax-*` variables that flip with the `.dark` root class, so light/dark works without a ThemeProvider and colors match the editors.',
         ].join('\n'),
       },
     },

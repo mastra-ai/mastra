@@ -7,8 +7,10 @@
  * the session it starts gets the pack's models for every mode, its subagent
  * models, its fallback route, and the thread's `activeModelPackId`.
  */
-import { listBuiltinModePacks, resolveModePackFallbackChain, type ModePack } from './packs.js';
-import { resolveModePackModels, type GlobalSettings } from './settings.js';
+import { listBuiltinModePacks, resolveModePackFallbackChain } from './packs.js';
+import type { ModePack } from './packs.js';
+import { resolveModePackModels } from './settings.js';
+import type { GlobalSettings } from './settings.js';
 
 /** Every pack id that can be activated: built-ins plus saved custom packs (`custom:<name>`). */
 export function listResolvableModePacks(settings: GlobalSettings): ModePack[] {

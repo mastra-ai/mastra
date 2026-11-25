@@ -50,6 +50,7 @@ describe('LocalSandbox foreground timeout defaults', () => {
       const result = { success: true, exitCode: 0, stdout: '', stderr: '', executionTimeMs: 0 };
       const spawn = vi.spyOn(sandbox.processes, 'spawn').mockResolvedValue({
         pid: 'test-process',
+        exitCode: 0,
         wait: async () => result,
       } as Awaited<ReturnType<typeof sandbox.processes.spawn>>);
 

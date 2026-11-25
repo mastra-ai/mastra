@@ -1,5 +1,4 @@
 import type { EntityLearningProgressResponse, SignalCatalogEntry } from '@mastra/client-js';
-import { CpuIcon, ExternalLink } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 
 import { Button } from '../../../ds/components/Button';
@@ -7,7 +6,10 @@ import { Card } from '../../../ds/components/Card';
 import type { LinkComponent } from '../../../ds/types/link-component';
 import { getSignalColor } from '../signal-colors';
 import { BUILT_IN_SIGNAL_CATALOG, orderedSignals, signalDescription, signalLabel } from '../signal-formatting';
+import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';
+import { IconChip } from '@/ds/icons/central/IconChip';
+import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
 import { TraceIcon } from '@/ds/icons/TraceIcon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { textStyle } from '@/ds/primitives/text';
@@ -110,7 +112,7 @@ function SignalProgressList({ progress }: { progress?: TraceIntelligenceProgress
         const label = signalLabel(catalog, signalName);
         const isReady = catalogEntry ? catalogEntry.status === 'ready' : progress.availableSignals.includes(signalName);
         return (
-          <li className="rounded-md border border-border bg-background px-3 py-2" key={signalName}>
+          <li className="rounded-md bg-nested px-3 py-2" key={signalName}>
             <div className="flex items-center justify-between gap-2">
               <Txt as="span" variant="subheading" style={signalStyle(signalName)}>
                 {label}
@@ -120,7 +122,10 @@ function SignalProgressList({ progress }: { progress?: TraceIntelligenceProgress
               </Txt>
             </div>
             <Txt variant="caption" tone="muted" className="mt-1">
-              {formatNumber(value.generated)} generated · {formatNumber(value.embedded)} embedded
+              <Metadata>
+                <Metadata.Item>{formatNumber(value.generated)} generated</Metadata.Item>
+                <Metadata.Item>{formatNumber(value.embedded)} embedded</Metadata.Item>
+              </Metadata>
             </Txt>
           </li>
         );
@@ -141,7 +146,7 @@ export function PendingSignalProgress({
   if (pendingSignals.length === 0) return null;
 
   return (
-    <section className="rounded-lg border border-border bg-background p-4" aria-labelledby="pending-signals-heading">
+    <section className="rounded-lg bg-nested p-4" aria-labelledby="pending-signals-heading">
       <Txt as="h2" variant="subheading" tone="ink" id="pending-signals-heading">
         Signals building themes
       </Txt>
@@ -167,7 +172,10 @@ export function PendingSignalProgress({
                 </Txt>
               ) : null}
               <Txt font="body" variant="caption" tone="muted" className="mt-1">
-                {formatNumber(value.generated)} generated · {formatNumber(value.embedded)} embedded
+                <Metadata>
+                  <Metadata.Item>{formatNumber(value.generated)} generated</Metadata.Item>
+                  <Metadata.Item>{formatNumber(value.embedded)} embedded</Metadata.Item>
+                </Metadata>
               </Txt>
             </li>
           );
@@ -262,7 +270,7 @@ export const SignalsEmptyState = ({
               aria-hidden="true"
               className="mt-5 flex size-14 items-center justify-center rounded-full border border-brand-green-indicator bg-fill-subtle"
             >
-              <CpuIcon className="size-4 text-brand-green-indicator" />
+              <IconChip className="size-icon-md text-brand-green-indicator" />
             </div>
             <Txt variant="meta" tone="muted" className="mt-3 max-w-40">
               Clusters similar trace signals into themes for each dimension
@@ -318,7 +326,7 @@ export const SignalsEmptyState = ({
           </ul>
         </section>
 
-        <aside className="mt-9 rounded-md border border-border bg-background px-5 py-4">
+        <aside className="mt-9 rounded-md bg-nested px-5 py-4">
           <div className="flex min-w-0 items-start gap-3">
             <span aria-hidden="true" className="mt-1.5 size-2 shrink-0 rounded-full bg-warning-indicator" />
             <div className="min-w-0 flex-1">
@@ -335,7 +343,7 @@ export const SignalsEmptyState = ({
           <div className="mt-4 flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
             {actionSlot}
             <Button
-              icon={<ExternalLink />}
+              icon={<IconSquareArrowTopRight />}
               render={
                 <a
                   href="https://mastra.ai/en/docs/mastra-platform/trace-intelligence"

@@ -4,7 +4,7 @@ import { Txt } from '@/ds/components/Txt';
 export function MetricsKpiCardLoading({ className }: { className?: string }) {
   return (
     <Txt as="span" className={className}>
-      <Spinner size="md" variant="pulse" className="text-placeholder" />
+      <Spinner size="md" variant="pulse" className="text-subtle-foreground" />
     </Txt>
   );
 }

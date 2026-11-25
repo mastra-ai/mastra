@@ -49,9 +49,8 @@ await agent.listTools()
   content={[
   {
     name: 'tools',
-    type: 'TTools | Promise<TTools>',
-    description:
-      'The tools configured for the agent, either as a direct object or a promise that resolves to the tools.',
+    type: 'Promise<TTools>',
+    description: 'A promise that resolves to the tools configured for the agent.',
   },
 ]}
 />

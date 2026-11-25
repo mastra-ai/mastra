@@ -14,6 +14,7 @@
  */
 
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import type { ProjectListRepository } from '@mastra/factory/routes/contracts';
 
 import { postRepositoryGitOp, postSourceControlRepositoryOp, readJsonOrThrow } from './http';
 import type { GitLabRepository } from '../../factory/services/gitlab';
@@ -36,6 +37,8 @@ export type GithubStatusReason =
   | 'auth_required'
   | 'organization_required'
   | 'not_connected'
+  /** Platform withholds a personal-account install while the Mastra organization has more than one member. */
+  | 'personal_install_hidden'
   | 'ready'
   | 'unavailable';
 
@@ -88,8 +91,8 @@ export interface GithubRepo {
   installationId: number;
   /** Storage UUID of the installation row backing this repo. */
   installationStorageId: string;
-  sandboxProvider: string;
-  sandboxWorkdir: string;
+  /** When the repository last received a push, if the server reports it. */
+  pushedAt?: string | null;
 }
 
 export type SourceControlRepository = GithubRepo | GitLabRepository;
@@ -215,10 +218,11 @@ export async function deleteGithubPat(baseUrl: string, kind: GithubPatKind = 'de
 export async function listGithubRepos(
   baseUrl: string,
   query?: string,
-  options?: { refresh?: boolean },
+  options?: { refresh?: boolean; limit?: number },
 ): Promise<GithubRepo[]> {
   const params = new URLSearchParams();
   if (query) params.set('q', query);
+  if (options?.limit) params.set('limit', String(options.limit));
   if (options?.refresh) params.set('refresh', '1');
   const search = params.toString();
   const url = `${baseUrl}/web/github/repos${search ? `?${search}` : ''}`;
@@ -248,30 +252,23 @@ export interface FactoryProjectPayload {
   modelScope?: FactoryModelScope;
   /** Thinking level every session and run uses until it picks its own. */
   defaultThinkingLevel?: ThinkingLevelSetting;
-  /** Whether Factory rules may start agent runs without someone asking for them. */
-  autoRunEnabled?: boolean;
-  /** Whether the Factory answers a run's plan itself instead of waiting for a person. */
-  autoApprovePlans?: boolean;
-  /** Whether Review agents publish test results as a commit check. Defaults to off. */
-  reviewTestChecksEnabled?: boolean;
-  /** Whether Work items get an independent self-review before the change request opens. Defaults to off. */
-  selfReviewEnabled?: boolean;
+}
+
+/** A Factory project row from `GET /web/factory/projects`, with its linked repositories. */
+export interface ListedFactoryProjectPayload extends FactoryProjectPayload {
+  repositories: ProjectListRepository[];
 }
 
 /** `{...projectRepository, repository}` payload from the Factory project routes. */
 interface ProjectRepositoryPayload {
   id: string;
   branch: string | null;
-  sandboxWorkdir: string;
   repository: { externalId: string; slug: string; defaultBranch: string } | null;
 }
 
-/** A source-control connection (with linked repos) from the Factory project routes. */
 interface ProjectConnectionPayload {
   id: string;
-  integrationId?: string;
   installationId: string;
-  repositories: ProjectRepositoryPayload[];
 }
 
 /** Browser-shaped view of a repository linked to a Factory project. */
@@ -282,7 +279,6 @@ export interface LinkedRepositoryPayload {
   externalId?: string;
   slug: string;
   gitBranch?: string;
-  sandboxWorkdir?: string;
 }
 
 /** A Factory project with its linked repositories flattened across connections. */
@@ -293,17 +289,18 @@ export interface FactoryProjectSnapshot extends FactoryProjectPayload {
 export type FactoryProject = FactoryProjectSnapshot;
 
 function toLinkedRepositoryPayload(
-  project: FactoryProjectPayload,
-  link: ProjectRepositoryPayload,
-  integrationId?: string,
+  projectName: string,
+  repository: Pick<
+    ProjectListRepository,
+    'projectRepositoryId' | 'integrationId' | 'externalId' | 'slug' | 'defaultBranch' | 'branch'
+  >,
 ): LinkedRepositoryPayload {
   return {
-    projectRepositoryId: link.id,
-    provider: integrationId === 'gitlab' ? 'gitlab' : 'github',
-    externalId: link.repository?.externalId,
-    slug: link.repository?.slug ?? project.name,
-    gitBranch: link.branch ?? link.repository?.defaultBranch,
-    sandboxWorkdir: link.sandboxWorkdir,
+    projectRepositoryId: repository.projectRepositoryId,
+    provider: repository.integrationId === 'gitlab' ? 'gitlab' : 'github',
+    externalId: repository.externalId ?? undefined,
+    slug: repository.slug ?? projectName,
+    gitBranch: repository.branch ?? repository.defaultBranch ?? undefined,
   };
 }
 
@@ -320,10 +317,9 @@ async function listProjectConnections(baseUrl: string, factoryProjectId: string)
 }
 
 /**
- * List the org's Factory projects with their linked repositories (flattened
- * across source-control connections). Resolves to `null` when the caller is
- * unauthenticated, org-less, or the feature is off, so hydration can keep the
- * local cache instead of wiping it.
+ * List the org's Factory projects with their linked repositories. Resolves to
+ * `null` when the caller is unauthenticated, org-less, or the feature is off,
+ * so hydration can keep the local cache instead of wiping it.
  */
 export async function listFactoryProjects(baseUrl: string): Promise<FactoryProjectSnapshot[] | null> {
   const res = await fetch(`${baseUrl}/web/factory/projects`, {
@@ -331,18 +327,14 @@ export async function listFactoryProjects(baseUrl: string): Promise<FactoryProje
     headers: { Accept: 'application/json' },
   });
   if (res.status === 401 || res.status === 403 || res.status === 404) return null;
-  const { projects } = await readJsonOrThrow<{ projects: FactoryProjectPayload[] }>(res, 'Failed to list Factories');
-  return Promise.all(
-    projects.map(async project => {
-      const connections = await listProjectConnections(baseUrl, project.id);
-      return {
-        ...project,
-        repositories: connections.flatMap(connection =>
-          connection.repositories.map(link => toLinkedRepositoryPayload(project, link, connection.integrationId)),
-        ),
-      };
-    }),
+  const { projects } = await readJsonOrThrow<{ projects: ListedFactoryProjectPayload[] }>(
+    res,
+    'Failed to list Factories',
   );
+  return projects.map(project => ({
+    ...project,
+    repositories: project.repositories.map(repository => toLinkedRepositoryPayload(project.name, repository)),
+  }));
 }
 
 /** Create a named Factory project. The name is user-chosen, not derived from a repo. */
@@ -450,14 +442,10 @@ export async function updateFactoryThinkingDefault(
 
 export interface ApplyFactoryDefaultModelResult {
   modelId: string;
-  applied: string[];
-  skipped: Array<{
-    threadId: string;
-    reason: 'not-running' | 'work-item-missing' | 'stage-inactive' | 'thread-missing' | 'mode-unknown' | 'apply-failed';
-  }>;
+  status: 'started';
 }
 
-/** Apply the Factory default model to currently running work and review sessions. */
+/** Start applying the Factory default model to currently running work and review sessions. */
 export async function applyFactoryDefaultModelToSessions(
   baseUrl: string,
   factoryProjectId: string,
@@ -471,25 +459,6 @@ export async function applyFactoryDefaultModelToSessions(
     },
   );
   return readJsonOrThrow<ApplyFactoryDefaultModelResult>(res, 'Failed to switch running sessions');
-}
-
-/** Toggle a Factory's automation settings: rule-started runs, plan approval. */
-export async function updateFactoryAutomation(
-  baseUrl: string,
-  factoryProjectId: string,
-  patch: Pick<
-    FactoryProjectPayload,
-    'autoRunEnabled' | 'autoApprovePlans' | 'reviewTestChecksEnabled' | 'selfReviewEnabled'
-  >,
-): Promise<FactoryProjectPayload> {
-  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
-    method: 'PATCH',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(patch),
-  });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update automation');
-  return project;
 }
 
 /**
@@ -524,14 +493,15 @@ export async function connectInstallation(
 }
 
 /**
- * Link a GitHub repository to a Factory project under the given connection.
- * Returns the browser-shaped linked-repository payload.
+ * Link a repository to a Factory project under the given connection. With `selectIntake`, the server
+ * also adds a GitHub repository to issue intake. Returns the browser-shaped linked-repository payload.
  */
 export async function linkRepository(
   baseUrl: string,
   factoryProjectId: string,
   connectionId: string,
   repo: SourceControlRepository,
+  selectIntake: boolean,
 ): Promise<LinkedRepositoryPayload> {
   const gitlab = isGitLabRepository(repo);
   const res = await fetch(
@@ -543,8 +513,7 @@ export async function linkRepository(
       body: JSON.stringify({
         repository: { externalId: gitlab ? repo.externalId : String(repo.id), slug: repo.fullName },
         branch: repo.defaultBranch,
-        sandboxProvider: repo.sandboxProvider,
-        sandboxWorkdir: repo.sandboxWorkdir,
+        selectIntake,
       }),
     },
   );
@@ -552,11 +521,14 @@ export async function linkRepository(
     res,
     `Failed to link ${gitlab ? 'GitLab' : 'GitHub'} repository`,
   );
-  return toLinkedRepositoryPayload(
-    { id: factoryProjectId, name: repo.fullName },
-    projectRepository,
-    gitlab ? 'gitlab' : 'github',
-  );
+  return toLinkedRepositoryPayload(repo.fullName, {
+    projectRepositoryId: projectRepository.id,
+    integrationId: gitlab ? 'gitlab' : 'github',
+    externalId: projectRepository.repository?.externalId ?? null,
+    slug: projectRepository.repository?.slug ?? null,
+    defaultBranch: projectRepository.repository?.defaultBranch ?? null,
+    branch: projectRepository.branch,
+  });
 }
 
 /**

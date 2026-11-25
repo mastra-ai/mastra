@@ -225,7 +225,7 @@ export function createDurableAgentTestSuite(config: DurableAgentTestConfig) {
     };
 
     // Register domain tests conditionally
-    if (!skip.constructor) {
+    if (!skip.agentCreation) {
       createConstructorTests(context);
     }
 
@@ -590,6 +590,9 @@ export function createWorkflowTestSuite(config: WorkflowTestConfig) {
     const context: WorkflowTestContext = {
       createWorkflow: factory.createWorkflow,
       createStep: factory.createStep,
+      createTool: factory.createTool,
+      Agent: factory.Agent,
+      Mastra: factory.Mastra,
       mapVariable,
       cloneStep,
       cloneWorkflow,

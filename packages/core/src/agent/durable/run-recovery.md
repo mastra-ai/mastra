@@ -7,8 +7,12 @@ Recovery only takes runs that are orphaned. Whether a run is orphaned is decided
 ## Prerequisites
 
 - The agent is registered on a `Mastra` instance with storage (`DURABLE_AGENT_RECOVER_NO_MASTRA`, `DURABLE_AGENT_RECOVER_NO_STORAGE` otherwise).
-- The run has a persisted `running` snapshot. `listActiveRuns()` and `recover()` read nothing else. A plain `DurableAgent` writes `running` snapshots only when `recovery.durableAgents` is `'auto'`, or when a user `shouldPersistSnapshot` includes `running`. `EventedAgent` always writes them.
+- The run has a persisted `running` snapshot. `listActiveRuns()` and `recover()` read nothing else. A plain `DurableAgent` with a user `shouldPersistSnapshot` writes `running` snapshots only when that policy returns `true` for `running` (and writes the restartable start row below only when it does so with empty `stepResults`), whatever `recovery.durableAgents` is; without one, it writes them only when `recovery.durableAgents` is `'auto'`, or at step boundaries once `mastra.shutdown()` starts. `EventedAgent` always writes them.
 - The workflows store supports run fencing. Without it recovery still works, but liveness comes from the pubsub lease and a superseded execution's writes are not rejected. `recoverActiveRuns()` and `recover()` warn once per store when that applies.
+
+The outer `durable-agentic-loop` snapshot is the restart source of truth. A nested `durable-agentic-execution` input cannot reconstruct the outer workflow's progress. An initial `pending` loop row without its own `context.input` is not corrupt, but is not restartable: `recover()` throws `DURABLE_AGENT_RECOVER_CHECKPOINT_NOT_AVAILABLE` without starting a recovered execution. If claim-time revalidation finds the row replaced by an initial pending row without workflow input, it throws the same error and releases the acquired claim. If the row was deleted, revalidation throws `DURABLE_AGENT_RECOVER_SNAPSHOT_NOT_FOUND` and releases the claim. A malformed input, wrong workflow kind, or foreign agent still fails its existing validation.
+
+Enable running-checkpoint persistence before starting the run. Even with persistence enabled, recovery is unavailable before the first running checkpoint is saved. When the snapshot policy returns `true` for `running` with empty `stepResults` (probed before the first step), a run that saves its accepted input to memory first stores a `running` loop row holding only that input (`Workflow.__persistRestartableStart`), which `restart()` starts from the first step, so a crash after the input save leaves a recoverable run (#30791); with `running` persistence off no restartable `running` checkpoint is written, but the accepted input can still be saved to memory, so a crash after that save leaves an unanswered message that recovery cannot resume, as before. Changing the configuration after a crash cannot reconstruct that checkpoint.
 
 ## Entry points
 
@@ -49,7 +53,7 @@ If setup fails after ownership is acquired but before the workflow restarts, the
 
 ## What the redo does
 
-The workflow restarts from the last persisted snapshot. Every step after it runs again, including model calls and tool calls.
+The workflow restarts from the last persisted snapshot. Every step after it runs again, including model calls and tool calls. Tool side effects must be idempotent. Recovery does not guarantee exactly-once execution.
 
 Writes from the redo land on the same rows the crashed execution wrote. Message and part ids come from the snapshot's state, not freshly generated, so a redo upserts rather than appends. This holds for crashes anywhere in the run, including with `savePerStep: true`, where memory can be one step ahead of the snapshot. No reconciliation pass runs. A real model can produce different content on the redo; the redo overwrites what the crashed execution flushed.
 
@@ -57,17 +61,19 @@ One edge: on the default engine, `map-final-output` publishes `finish` before it
 
 ## Refusals and errors
 
-| Error id                                    | Meaning                                                                                                                                                                        | In `recoverActiveRuns()`                       |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------- |
-| `DURABLE_AGENT_RUN_ACTIVE`                  | Another execution holds a live claim, or the thread lease of an untracked run is held. `details`: `liveBy` (`claim` or `thread-lease`), `holder`, `leaseExpiresAt`, `retryAt`. | `skipped`, reason `run-active`, with `retryAt` |
-| `DURABLE_AGENT_RECOVER_RUN_ACTIVE_LOCALLY`  | This process is executing the run.                                                                                                                                             | `skipped`, reason `run-active-locally`         |
-| `DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS` | This process is already recovering the run.                                                                                                                                    | `skipped`, reason `already-in-progress`        |
-| `DURABLE_AGENT_RECOVER_RUN_SUSPENDED`       | The run is suspended; call `resume()`.                                                                                                                                         | left out                                       |
-| `DURABLE_AGENT_EXECUTION_CONFLICT`          | A `force` takeover lost to a concurrent claimer.                                                                                                                               | not raised (no `force`)                        |
-| `DURABLE_AGENT_RECOVER_SNAPSHOT_NOT_FOUND`  | No snapshot: the run finished and was cleaned up, or `running` snapshots are not persisted.                                                                                    | left out                                       |
-| `DURABLE_AGENT_RECOVER_AGENT_MISMATCH`      | The run belongs to another agent.                                                                                                                                              | `failed`                                       |
+| Error id                                         | Meaning                                                                                                                                                                                              | In `recoverActiveRuns()`                       |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `DURABLE_AGENT_RUN_ACTIVE`                       | Another execution holds a live claim, or the thread lease of an untracked run is held. `details`: `liveBy` (`claim` or `thread-lease`), `holder`, `leaseExpiresAt`, `retryAt`.                       | `skipped`, reason `run-active`, with `retryAt` |
+| `DURABLE_AGENT_RECOVER_RUN_ACTIVE_LOCALLY`       | This process is executing the run.                                                                                                                                                                   | `skipped`, reason `run-active-locally`         |
+| `DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS`      | This process is already recovering the run.                                                                                                                                                          | `skipped`, reason `already-in-progress`        |
+| `DURABLE_AGENT_RECOVER_RUN_SUSPENDED`            | The run is suspended; call `resume()`.                                                                                                                                                               | left out                                       |
+| `DURABLE_AGENT_EXECUTION_CONFLICT`               | A `force` takeover lost to a concurrent claimer.                                                                                                                                                     | not raised (no `force`)                        |
+| `DURABLE_AGENT_RECOVER_CHECKPOINT_NOT_AVAILABLE` | The initial `pending` loop row has no workflow input, so no restartable checkpoint is available. Running-checkpoint persistence may be disabled or the first checkpoint may not have been saved yet. | silently left out                              |
+| `DURABLE_AGENT_RECOVER_SNAPSHOT_NOT_FOUND`       | No snapshot row exists, for example because the run finished and was cleaned up.                                                                                                                     | left out                                       |
+| `DURABLE_AGENT_RECOVER_RUN_NOT_ACTIVE`           | The snapshot is not restartable and is not suspended.                                                                                                                                                | left out before recovery                       |
+| `DURABLE_AGENT_RECOVER_AGENT_MISMATCH`           | The run belongs to another agent.                                                                                                                                                                    | `failed`                                       |
 
-The server maps the first five to 409 so clients can tell a run-state conflict from a bad request.
+The server maps ownership conflicts, `DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS`, suspended runs, and `DURABLE_AGENT_RECOVER_RUN_NOT_ACTIVE` to HTTP 409. `DURABLE_AGENT_RECOVER_CHECKPOINT_NOT_AVAILABLE` returns HTTP 500 because missing persistence can leave the run permanently unrecoverable.
 
 `recoverActiveRuns()` leaves out runs that finished or suspended between discovery and their turn. With an explicit `runId`, it applies the same rules: a run that is not `running` is not attempted.
 
@@ -91,7 +97,7 @@ This retry advice applies only to errors propagated by `recover()` for an identi
 
 `recover(runId, { force: true })` takes the run from a live execution. Use it when the owner is known to be gone (a killed container whose claim hasn't expired yet) or stuck.
 
-With storage fencing, the old execution's writes are rejected from the moment the takeover's claim lands. It notices on its next step check or heartbeat (within 10s), aborts its model call and tools, and writes nothing terminal. Its caller's stream receives the new owner's events, because the run topic is shared and older generations are dropped. Without storage fencing, `force` transfers the pubsub lease; the old execution still stops at its next check, but writes it makes before then are not rejected.
+With storage fencing, the old execution's writes are rejected from the moment the takeover's claim lands. It notices on its next step check or heartbeat (within 5s by default), aborts its model call and tools, and writes nothing terminal. Its caller's stream receives the new owner's events, because the run topic is shared and older generations are dropped. Without storage fencing, `force` transfers the pubsub lease; the old execution still stops at its next check, but writes it makes before then are not rejected.
 
 `force` never takes a run this process is executing, and a forced takeover still loses to a concurrent claimer.
 

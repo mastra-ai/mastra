@@ -1,26 +1,31 @@
+import type { DatasetRecord } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
-import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { useDatasets } from '@mastra/react/hooks/datasets';
-import { useInfiniteExperiments } from '@mastra/react/hooks/experiments';
-import { useReviewSummary } from '@mastra/react/hooks/review';
-import { Plus } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
-import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
-import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
+import { useTargetFilterFields } from '@mastra/playground-ui/domains/datasets';
 import {
   ExperimentsList,
   ExperimentsToolbar,
   getExperimentDatasetOptions,
+  MAX_COMPARED_EXPERIMENTS,
   NoExperimentsInfo,
-} from '@/domains/experiments';
-import { MAX_COMPARED_EXPERIMENTS } from '@/domains/experiments/components/comparison/constants';
-import type { ExperimentsFilters } from '@/domains/experiments/components/experiments-filter-bar';
+} from '@mastra/playground-ui/domains/experiments';
+import type { ExperimentsFilters } from '@mastra/playground-ui/domains/experiments';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
+import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { useDatasetMutations, useDatasets, useDatasetsByIds } from '@mastra/react/hooks/datasets';
+import { useExperimentsListMetrics, useInfiniteExperiments } from '@mastra/react/hooks/experiments';
+import type { ExperimentListMetrics } from '@mastra/react/hooks/experiments';
+import { useReviewSummary } from '@mastra/react/hooks/review';
+import { useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
+import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
+import { useTargetRegistries } from '@/domains/experiments/hooks/use-target-registries';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { buildReviewByExperimentMap } from '@/domains/review/review-maps';
 import {
@@ -31,6 +36,7 @@ import {
 
 const crumbs = [navCrumb('/experiments')];
 const EXPERIMENTS_SORT_KEYS = ['createdAt', 'status'] as const;
+const NO_METRICS = new Map<string, ExperimentListMetrics>();
 
 export default function Experiments() {
   const [search, setSearch] = useState('');
@@ -50,6 +56,7 @@ export default function Experiments() {
 
   const datasetFilter = searchParams.get('dataset') ?? 'all';
   const { targetType, targetId } = useTargetFilterParams();
+  const targetFields = useTargetFilterFields(targetType);
 
   const handleFiltersChange = (next: ExperimentsFilters) => {
     setSearch(next.search);
@@ -86,10 +93,31 @@ export default function Experiments() {
     orderBy: orderBy,
   });
   const { data: reviewSummary } = useReviewSummary();
+  const targetRegistries = useTargetRegistries();
+  const { deleteExperiment } = useDatasetMutations();
+  const handleDeleteExperiment = async (experimentId: string) => {
+    await deleteExperiment.mutateAsync(experimentId);
+  };
+  const { supportsMetrics } = useObservabilityStorageCapabilities();
 
   const datasets = useMemo(() => datasetsData?.datasets ?? [], [datasetsData?.datasets]);
   const experiments = useMemo(() => experimentsData ?? [], [experimentsData]);
   const experimentDatasetOptions = useMemo(() => getExperimentDatasetOptions(datasets), [datasets]);
+
+  // The datasets page above only holds the first page; name the datasets of every loaded experiment too.
+  const experimentDatasetIds = useMemo(
+    () => experiments.flatMap(exp => (exp.datasetId ? [exp.datasetId] : [])),
+    [experiments],
+  );
+  const { data: experimentDatasets } = useDatasetsByIds({ datasetIds: experimentDatasetIds });
+  const namedDatasets = useMemo(() => {
+    const byId = new Map<string, DatasetRecord>(datasets.map(dataset => [dataset.id, dataset]));
+    experimentDatasets?.forEach(dataset => byId.set(dataset.id, dataset));
+    return [...byId.values()];
+  }, [datasets, experimentDatasets]);
+
+  const { data: experimentMetrics } = useExperimentsListMetrics({ experiments, supportsMetrics });
+  const metricsByExperiment = supportsMetrics ? (experimentMetrics ?? NO_METRICS) : undefined;
   const reviewByExperiment = useMemo(() => buildReviewByExperimentMap(reviewSummary), [reviewSummary]);
 
   const isLoading = isLoadingDatasets || isLoadingExperiments;
@@ -108,10 +136,16 @@ export default function Experiments() {
     });
   };
 
-  // Any selection clears; otherwise pick the listed experiments, up to the compare cap.
+  // Any selection clears; otherwise pick the listed experiments sharing the first one's dataset, up to the cap.
   const toggleAllExperiments = (visibleExperimentIds: string[]) => {
+    const datasetByExperimentId = new Map(experiments.map(exp => [exp.id, exp.datasetId]));
+    const datasetId = datasetByExperimentId.get(visibleExperimentIds[0]);
     setSelectedExperimentIds(current =>
-      current.length > 0 ? [] : visibleExperimentIds.slice(0, MAX_COMPARED_EXPERIMENTS),
+      current.length > 0
+        ? []
+        : visibleExperimentIds
+            .filter(id => datasetByExperimentId.get(id) === datasetId)
+            .slice(0, MAX_COMPARED_EXPERIMENTS),
     );
   };
 
@@ -123,11 +157,17 @@ export default function Experiments() {
   }, [experiments, selectedExperimentIds]);
   // The first pick is the baseline, so its dataset decides which experiments can join the comparison.
   const comparableDatasetId = experiments.find(exp => exp.id === selectedIds[0])?.datasetId ?? undefined;
+  const comparableDataset = comparableDatasetId
+    ? {
+        id: comparableDatasetId,
+        name: namedDatasets.find(ds => ds.id === comparableDatasetId)?.name ?? comparableDatasetId,
+      }
+    : undefined;
   const compareDisabledReason =
     selectedIds.length < 2
       ? 'Select at least two experiments to compare'
       : selectedDatasetIds.size !== 1
-        ? 'Only experiments from the same dataset, highlighted in the list, can be compared'
+        ? 'Only experiments from the same dataset can be compared'
         : undefined;
 
   const executeCompare = () => {
@@ -142,7 +182,7 @@ export default function Experiments() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Experiments</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
@@ -151,7 +191,7 @@ export default function Experiments() {
 
   if (errorExperiments && is403ForbiddenError(errorExperiments)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Experiments</h1>
         <PermissionDenied variant="fill" resource="experiments" />
       </PageLayout>
@@ -160,7 +200,7 @@ export default function Experiments() {
 
   if (errorDatasets && is403ForbiddenError(errorDatasets)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Experiments</h1>
         <PermissionDenied variant="fill" resource="datasets" />
       </PageLayout>
@@ -169,7 +209,7 @@ export default function Experiments() {
 
   if (error) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Experiments</h1>
         <EmptyState
           tone="error"
@@ -192,7 +232,7 @@ export default function Experiments() {
   // With a dataset or target filter active, keep the toolbar so the user can remove it.
   if (experiments.length === 0 && !isLoading && datasetFilter === 'all' && !targetType) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Experiments</h1>
         <NoExperimentsInfo onRunExperiment={() => setRunDialogOpen(true)} />
         {runDialog}
@@ -202,9 +242,10 @@ export default function Experiments() {
 
   return (
     <PageLayout
+      variant="page"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={
-        <Button variant="primary" size="sm" icon={<Plus />} onClick={() => setRunDialogOpen(true)}>
+        <Button variant="primary" size="sm" icon={<IconPlusMedium />} onClick={() => setRunDialogOpen(true)}>
           New experiment
         </Button>
       }
@@ -216,22 +257,25 @@ export default function Experiments() {
           datasetOptions={experimentDatasetOptions}
           targetType={targetType}
           targetId={targetId}
+          targetFields={targetFields}
           onFiltersChange={handleFiltersChange}
           selection={{
-            selectedCount: selectedIds.length,
+            selectedIds,
             onClearSelection: () => setSelectedExperimentIds([]),
             onCompare: executeCompare,
             compareDisabledReason,
+            onDeleteExperiment: handleDeleteExperiment,
           }}
-          comparableDatasetId={comparableDatasetId}
+          comparableDataset={comparableDataset}
         />
       }
     >
       <h1 className="sr-only">Experiments</h1>
       <ExperimentsList
         experiments={experiments}
-        datasets={datasets}
+        datasets={namedDatasets}
         reviewByExperiment={reviewByExperiment}
+        metricsByExperiment={metricsByExperiment}
         isLoading={isLoading}
         search={search}
         statusFilter={statusFilter}
@@ -241,6 +285,8 @@ export default function Experiments() {
         setEndOfListElement={setEndOfListElement}
         sort={sort}
         onSortChange={onSortChange}
+        targetRegistries={targetRegistries}
+        onDeleteExperiment={handleDeleteExperiment}
         selection={{
           selectedExperimentIds: selectedIds,
           onToggleSelection: toggleExperimentSelection,

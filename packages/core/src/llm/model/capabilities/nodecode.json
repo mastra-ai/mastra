@@ -1,0 +1,16 @@
+{
+  "attachment": ["nodecode-cyber-v1"],
+  "temperature": ["nodecode-cyber-v1"],
+  "structuredOutput": ["nodecode-cyber-v1"],
+  "reasoning": {
+    "nodecode-cyber-v1": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ]
+  }
+}

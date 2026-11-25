@@ -31,12 +31,39 @@ function getMessageParts(msg: MastraDBMessage): any[] {
   return Array.isArray(parts) ? parts : [];
 }
 
-/** Returns true if a message has at least one non-data part with visible content. */
-function hasVisibleParts(msg: MastraDBMessage): boolean {
-  if (typeof msg.content === 'string') return (msg.content as string).length > 0;
+/**
+ * Returns true if recall can render at least one visible part of a message.
+ * Mirrors the skip rules in `formatMessageParts` without formatting tool results.
+ */
+export function hasVisibleParts(msg: MastraDBMessage): boolean {
+  if (typeof msg.content === 'string') return true;
   const parts = getMessageParts(msg);
   if (parts.length === 0) return Boolean(msg.content?.content);
-  return parts.some((p: { type?: string }) => !p.type?.startsWith('data-'));
+  return parts.some(isVisiblePart);
+}
+
+function isVisiblePart(part: any): boolean {
+  const partType: string | undefined = part?.type;
+  switch (partType) {
+    case undefined:
+    case '':
+    case 'reasoning':
+    case 'redacted-reasoning':
+    case 'step-start':
+      return false;
+    case 'text':
+      return Boolean(part.text);
+    case 'tool-invocation': {
+      const inv = part.toolInvocation;
+      if (!inv?.toolName) return false;
+      return (inv.state !== 'partial-call' && inv.args != null) || inv.state === 'result';
+    }
+    case 'tool-call':
+    case 'tool-result':
+      return Boolean(part.toolName);
+    default:
+      return !partType.startsWith('data-');
+  }
 }
 
 type RecallThread = {
@@ -311,7 +338,7 @@ export async function listThreadsForResource({
 // ── Cross-thread search ─────────────────────────────────────────────
 
 export const SEARCH_NOT_CONFIGURED_MESSAGE =
-  'Search is not configured. Enable it with `retrieval: { vector: true }` and configure a vector store and embedder on your Memory instance.';
+  'Search is not configured. Enable it with `retrieval: { vector: true }` and configure a vector store and an embedder, or a vector store that generates embeddings itself, on your Memory instance.';
 
 export async function searchMessagesForResource({
   memory,
@@ -921,7 +948,7 @@ function recallAttachmentToModelOutput(output: unknown): unknown {
   };
 }
 
-function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): FormattedPart[] {
+export function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): FormattedPart[] {
   const parts: FormattedPart[] = [];
 
   if (typeof msg.content === 'string') {
@@ -999,15 +1026,12 @@ function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): Formatt
           const fullText = `[Tool Result: ${toolName}]\n${resultStr}`;
           parts.push(makePart(msg, i, 'tool-result', fullText, detail, toolName));
         }
-      } else if (partType === 'reasoning') {
-        const reasoning = (part as { reasoning?: string; text?: string }).reasoning ?? (part as { text?: string }).text;
-        if (reasoning) {
-          parts.push(makePart(msg, i, 'reasoning', reasoning, detail));
-        }
+      } else if (partType === 'reasoning' || partType === 'redacted-reasoning') {
+        // Stored provider reasoning must never become ordinary text in a recall result.
       } else if (partType === 'image' || partType === 'file') {
         parts.push(makePart(msg, i, partType, formatAttachmentPart(partType, part), detail));
-      } else if (partType?.startsWith('data-')) {
-        // skip data parts — these are internal OM markers (buffering, observation, etc.)
+      } else if (partType === 'step-start' || partType?.startsWith('data-')) {
+        // Skip internal step boundaries and OM markers (buffering, observation, etc.).
       } else if (partType) {
         const fullText = `[${partType}]`;
         parts.push({ messageId: msg.id, partIndex: i, role: msg.role, type: partType, text: fullText, fullText });
@@ -1040,6 +1064,32 @@ function buildRenderedText(parts: FormattedPart[], timestamps: Map<string, Date>
   return lines.join('\n');
 }
 
+type RecallArgs = Parameters<RecallMemory['recall']>[0];
+
+/**
+ * Reads messages until `needed` of them are visible or storage is exhausted, growing the
+ * request each round. Hidden messages (reasoning-only, step boundaries, OM markers) don't
+ * count toward `needed`, so a run of them can't end paging early.
+ */
+async function recallVisibleMessages(
+  memory: RecallMemory,
+  args: Omit<RecallArgs, 'page' | 'perPage'>,
+  needed: number,
+  perPage = needed,
+): Promise<MastraDBMessage[]> {
+  let previousCount = -1;
+  while (true) {
+    const result = await memory.recall({ ...args, page: 0, perPage });
+    const visible = result.messages.filter(hasVisibleParts);
+    // Stop if storage is exhausted, or if a larger request returned nothing new.
+    if (visible.length >= needed || !result.hasMore || result.messages.length <= previousCount) {
+      return visible;
+    }
+    previousCount = result.messages.length;
+    perPage *= 2;
+  }
+}
+
 async function getNextVisibleMessage({
   memory,
   threadId,
@@ -1051,21 +1101,24 @@ async function getNextVisibleMessage({
   resourceId?: string;
   after: Date;
 }): Promise<MastraDBMessage | null> {
-  const result = await memory.recall({
-    threadId,
-    resourceId,
-    page: 0,
-    perPage: 50,
-    orderBy: { field: 'createdAt', direction: 'ASC' },
-    filter: {
-      dateRange: {
-        start: after,
-        startExclusive: true,
+  const visible = await recallVisibleMessages(
+    memory,
+    {
+      threadId,
+      resourceId,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      filter: {
+        dateRange: {
+          start: after,
+          startExclusive: true,
+        },
       },
     },
-  });
+    1,
+    50,
+  );
 
-  return result.messages.find(hasVisibleParts) ?? null;
+  return visible[0] ?? null;
 }
 
 const MAX_EXPAND_USER_TEXT_TOKENS = 200;
@@ -1079,7 +1132,7 @@ function expandLimit(part: FormattedPart): number {
 function expandPriority(part: FormattedPart): number {
   // Lower number = higher priority for expansion
   if (part.role === 'user' && part.type === 'text') return 0;
-  if (part.type === 'text' || part.type === 'reasoning') return 1;
+  if (part.type === 'text') return 1;
   if (part.type === 'tool-result') return 2;
   if (part.type === 'tool-call') return 3;
   return 4;
@@ -1450,27 +1503,27 @@ export async function recallMessages({
   // Fetch skip + limit + 1 to detect whether another page exists beyond this one
   const fetchCount = skip + normalizedLimit + 1;
 
-  const result = await memory.recall({
-    threadId: resolvedThreadId,
-    resourceId,
-    page: 0,
-    perPage: fetchCount,
-    orderBy: { field: 'createdAt', direction: isForward ? 'ASC' : 'DESC' },
-    filter: {
-      dateRange: isForward
-        ? {
-            start: anchor.createdAt,
-            startExclusive: true,
-          }
-        : {
-            end: anchor.createdAt,
-            endExclusive: true,
-          },
+  // Messages without visible content are filtered out so they don't consume page slots.
+  const visibleMessages = await recallVisibleMessages(
+    memory,
+    {
+      threadId: resolvedThreadId,
+      resourceId,
+      orderBy: { field: 'createdAt', direction: isForward ? 'ASC' : 'DESC' },
+      filter: {
+        dateRange: isForward
+          ? {
+              start: anchor.createdAt,
+              startExclusive: true,
+            }
+          : {
+              end: anchor.createdAt,
+              endExclusive: true,
+            },
+      },
     },
-  });
-
-  // Filter out messages with only internal data-* parts so they don't consume page slots.
-  const visibleMessages = result.messages.filter(hasVisibleParts);
+    fetchCount,
+  );
 
   // Memory.recall() always returns messages sorted chronologically (ASC) via MessageList.
   // For forward pagination: take from the start of the ASC array (oldest first after cursor).
@@ -1620,18 +1673,12 @@ export async function recallThreadFromStart({
   const pageIndex = normalizedPage - 1;
   const fetchCount = pageIndex * normalizedLimit + normalizedLimit + 1;
 
-  const result = await memory.recall({
-    threadId,
-    resourceId,
-    page: 0,
-    perPage: fetchCount,
-    orderBy: { field: 'createdAt', direction: anchor === 'end' ? 'DESC' : 'ASC' },
-  });
-
-  const visibleMessages =
-    anchor === 'end'
-      ? result.messages.slice(0, fetchCount).filter(hasVisibleParts).reverse()
-      : result.messages.slice(0, fetchCount).filter(hasVisibleParts);
+  const fetched = await recallVisibleMessages(
+    memory,
+    { threadId, resourceId, orderBy: { field: 'createdAt', direction: anchor === 'end' ? 'DESC' : 'ASC' } },
+    fetchCount,
+  );
+  const visibleMessages = anchor === 'end' ? fetched.reverse() : fetched;
   const skip = pageIndex * normalizedLimit;
   const messages = visibleMessages.slice(skip, skip + normalizedLimit);
   const hasExtraMessage = visibleMessages.length > skip + messages.length;
@@ -1802,7 +1849,7 @@ export const recallTool = (
         },
         partType: {
           type: 'string',
-          enum: ['text', 'tool-call', 'tool-result', 'reasoning', 'image', 'file'],
+          enum: ['text', 'tool-call', 'tool-result', 'image', 'file'],
           description: 'Filter results to only include parts of this type. Only applies to mode="messages".',
         },
         toolName: {

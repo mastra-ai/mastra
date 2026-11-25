@@ -13,6 +13,8 @@ Use it when several local processes need to share a stream, such as coordinating
 
 `UnixSocketPubSub` is a push transport: events arrive without a read loop, so Mastra doesn't run a pull worker for it.
 
+It doesn't redeliver the events a stopped process held, so it isn't a backend for evented workflows or agents that run on several processes. See [evented workflows and agents](/docs/server/pubsub#evented-workflows-and-agents).
+
 ## Usage example
 
 Pass a socket path that every participating process shares.
@@ -112,7 +114,7 @@ await pubsub.close()
 
 ## Broker election
 
-The broker is the first process to link its socket into place at the shared path. It routes events between all connected clients, and other processes connect to it as clients. Each candidate binds a socket at a private name and hard-links it to the shared path. The link fails if a socket is already there, so a candidate never replaces a live broker by accident.
+The broker is the first process to link its socket into place at the shared path. It routes events between all connected clients, and other processes connect to it as clients. Each candidate binds a socket at a private name and hard-links it to the shared path. The link fails if a socket is already there, preventing a candidate from replacing a live broker.
 
 When the broker exits cleanly, it removes the shared path. Clients then reconnect, and the first to link its socket into place becomes the new broker. The remaining clients resubscribe to it.
 

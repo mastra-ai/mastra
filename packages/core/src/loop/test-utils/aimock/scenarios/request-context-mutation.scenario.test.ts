@@ -6,12 +6,12 @@
  * (normal, durable, fs) tools share the same RequestContext reference,
  * so mutations persist between tool calls and are visible to the caller.
  *
- * The evented and Inngest engines are excluded: it serializes requestContext into event
+ * Native evented execution serializes requestContext into event
  * payloads (`requestContext.toJSON()` in evented/execution-engine.ts) and
  * rehydrates a fresh RequestContext per step in the event processor, so
  * mutation-by-reference cannot survive the pubsub boundary. This matches
  * real cross-process semantics and is a documented divergence, not a
- * harness limitation.
+ * harness limitation. The legacy evented and Inngest variants remain excluded.
  */
 
 import { stepCountIs } from '@internal/ai-sdk-v5';
@@ -81,9 +81,10 @@ describeForAllEngines(
       // Step 1: mutate tool always sees the initial value
       expect(step1Values).toEqual(['initial']);
 
-      // Shared reference — read tool sees the mutated value
-      expect(step2Values).toEqual(['step1-value']);
-      expect(requestContext.get('counter')).toBe('step1-value');
+      // Evented steps each restore their own copy; in-process steps share the original.
+      const expected = engine === 'native-evented' ? 'initial' : 'step1-value';
+      expect(step2Values).toEqual([expected]);
+      expect(requestContext.get('counter')).toBe(expected);
 
       expect(requests).toHaveLength(3);
     });
@@ -132,9 +133,13 @@ describeForAllEngines(
         },
       });
 
-      // Mutations accumulate (shared reference)
-      expect(mutations).toEqual(['saw:0,set:1', 'saw:1,set:2', 'saw:2,set:3']);
-      expect(requestContext.get('count')).toBe('3');
+      if (engine === 'native-evented') {
+        expect(mutations).toEqual(['saw:0,set:1', 'saw:0,set:1', 'saw:0,set:1']);
+        expect(requestContext.get('count')).toBe('0');
+      } else {
+        expect(mutations).toEqual(['saw:0,set:1', 'saw:1,set:2', 'saw:2,set:3']);
+        expect(requestContext.get('count')).toBe('3');
+      }
     });
   },
   { skip: ['evented', 'inngest'] },

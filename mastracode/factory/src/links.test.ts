@@ -1,0 +1,34 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import {
+  factoryBoardUrl,
+  factoryRulesUrl,
+  factorySessionUrl,
+  factorySettingsUrl,
+  factoryUiOrigin,
+  factoryWorkItemUrl,
+} from './links.js';
+
+describe('factory links', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('builds nothing when no public URL is configured', () => {
+    vi.stubEnv('MASTRACODE_PUBLIC_URL', '  ');
+    expect(factoryUiOrigin()).toBeNull();
+    expect(factoryWorkItemUrl({ factoryProjectId: 'f', workItemId: 'i' })).toBeUndefined();
+  });
+
+  it('links boards, cards, sessions, settings and rules', () => {
+    vi.stubEnv('MASTRACODE_PUBLIC_URL', 'https://factory.example.com/');
+    const base = 'https://factory.example.com/factories/f%201';
+    // The Review board is retired; a board keyed `review` now is a custom board like any other.
+    expect(factoryBoardUrl('f 1', 'review')).toBe(`${base}/boards/review`);
+    expect(factoryBoardUrl('f 1', 'ops')).toBe(`${base}/boards/ops`);
+    expect(factoryWorkItemUrl({ factoryProjectId: 'f 1', workItemId: 'i 1' })).toBe(`${base}/cards/i%201`);
+    expect(factorySessionUrl({ factoryProjectId: 'f 1', sessionId: 's', threadId: 't' })).toBe(
+      `${base}/workspaces/s/threads/t`,
+    );
+    expect(factorySettingsUrl('f 1', 'connections/slack')).toBe(`${base}/settings/connections/slack`);
+    expect(factoryRulesUrl('f 1', 'g')).toBe(`${base}/rules?group=g`);
+  });
+});
