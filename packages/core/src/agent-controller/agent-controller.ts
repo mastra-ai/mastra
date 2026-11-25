@@ -1720,9 +1720,10 @@ export class AgentController<TState = {}> {
     }
 
     // Register the agent on the resolved Mastra (the parent when registered,
-    // otherwise the internal one). Re-bind when the agent currently has no
-    // Mastra OR is bound to a different instance — e.g. an agent that built its
-    // own internal Mastra before this AgentController was registered on a parent.
+    // otherwise the internal one); with `registerAgents: false` only attach it.
+    // Re-bind when the agent currently has no Mastra OR is bound to a different
+    // instance — e.g. an agent that built its own internal Mastra before this
+    // AgentController was registered on a parent.
     // Done before workspace/browser propagation so that addAgent — which may
     // resolve agent.getWorkspace() — does not prematurely invoke a workspace
     // factory before the per-session request context is available.
@@ -1733,7 +1734,10 @@ export class AgentController<TState = {}> {
       if (this.#applicationPubSub && !agent.hasOwnPubSub()) {
         agent.__setPubSub(mastra === this.#internalMastra ? this.#applicationPubSub : mastra.pubsub);
       }
-      if (!mastra.listAgents()[agent.id]) {
+      if (this.config.registerAgents === false) {
+        agent.__registerPrimitives({ logger: mastra.getLogger(), storage: mastra.getStorage() });
+        agent.__registerMastra(mastra);
+      } else if (!mastra.listAgents()[agent.id]) {
         mastra.addAgent(agent);
       }
     }

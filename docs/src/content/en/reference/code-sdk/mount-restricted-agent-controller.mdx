@@ -61,7 +61,9 @@ The allowlist applies to every mode. A mode can narrow its own access with `avai
 
 The factory prevents Mastra Code itself from discovering ambient host capabilities. The model, workspace, storage, memory, tools, processors, routes, and callbacks you inject are trusted host code and remain responsible for their own filesystem, process, credential, and network access. In particular, `allowedTools` controls which tools the model can see and call. It doesn't sandbox the implementation of an allowed tool.
 
-Session state can't turn on automatic tool approval. `yolo` stays `false`, and `permissionRules` keeps an `allow` policy only when `initialState.permissionRules` already sets that tool or category to `allow`. Clients can still set `ask` or `deny` and answer approval prompts, including approving every call in a category from a prompt.
+Session state can't turn on automatic tool approval. `yolo` stays `false`, and `permissionRules` keeps an `allow` policy only when `initialState.permissionRules` already sets that tool or category to `allow`. Clients can still set `ask` or `deny` and answer approval prompts, including approving every call in a category from a prompt. Session `tags` are seeded into session state, so `createSession()` rejects a tag that names a state field, such as `skipGlobalInstructions`, `projectPath`, or an observer model, and the session route answers 400. Use other tag names to scope threads.
+
+The backing `codeAgent` isn't registered on the `Mastra` instance, so `mastra.listAgents()` and the standard `/agents` routes can't list it or run it outside the controller's tool approval. For the same reason, notifications sent to a session are persisted but never delivered to the agent, because deferred deliveries and retries run through Mastra's notification dispatcher, outside the controller.
 
 The `Mastra` server itself isn't restricted. Its standard routes, such as `GET /agents/providers`, report which model providers have API keys in the server's environment variables. Keep tenant credentials out of the process environment, or protect those routes with [server authentication](/docs/auth/overview).
 

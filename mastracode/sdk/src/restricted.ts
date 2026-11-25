@@ -2,6 +2,7 @@ import type { AgentConfig, ToolsInput } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import type { AgentControllerConfig, AgentControllerMode } from '@mastra/core/agent-controller';
 import { createCodingAgent } from '@mastra/core/coding-agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
 import type { GatewayLanguageModel } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
@@ -107,6 +108,28 @@ const restrictedStateSchema = z.looseObject({
     .default(null),
   activeBrowserSettings: z.never().optional(),
 });
+
+const restrictedStateKeys = new Set(Object.keys(restrictedStateSchema.shape));
+
+/**
+ * Session tags are seeded into session state without validation, so a tag
+ * must not name a state field.
+ */
+class RestrictedAgentController extends AgentController<MastraCodeState> {
+  override async createSession(options: Parameters<AgentController<MastraCodeState>['createSession']>[0] = {}) {
+    const stateTags = Object.keys(options.tags ?? {}).filter(key => restrictedStateKeys.has(key));
+    if (stateTags.length > 0) {
+      throw new MastraError({
+        id: 'RESTRICTED_MASTRA_CODE_STATE_TAGS',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: { status: 400 },
+        text: `Restricted Mastra Code session tags can't set state fields: ${stateTags.join(', ')}`,
+      });
+    }
+    return super.createSession(options);
+  }
+}
 
 export type RestrictedModel =
   | GatewayLanguageModel
@@ -259,7 +282,7 @@ export async function createRestrictedMastraCodeAgentController(config: Restrict
   const memory = config.memory === false ? undefined : config.memory;
 
   const codeAgent = createCodingAgent({
-    id: 'code-agent',
+    id: 'restricted-code-agent',
     name: 'Code Agent',
     workspace: undefined,
     model: config.model,
@@ -269,9 +292,12 @@ export async function createRestrictedMastraCodeAgentController(config: Restrict
     inputProcessors: config.inputProcessors ?? [],
     memory,
     signals: [],
+    // Deferred deliveries and retries run through Mastra's dispatcher, outside
+    // the controller's tool approval, so notifications are only persisted.
+    notifications: { deliveryPolicy: { default: { action: 'persist', reason: 'restricted-persist-only' } } },
   });
 
-  const controller = new AgentController<MastraCodeState>({
+  const controller = new RestrictedAgentController({
     id: 'mastra-code',
     resourceId: config.project.resourceId,
     storage: config.storage,
@@ -285,6 +311,7 @@ export async function createRestrictedMastraCodeAgentController(config: Restrict
     gateways: [],
     includeDefaultGateways: false,
     modelFallbacks: false,
+    registerAgents: false,
     workspace: config.workspace,
     initialState: {
       ...config.initialState,

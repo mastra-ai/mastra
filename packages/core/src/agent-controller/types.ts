@@ -378,6 +378,16 @@ export interface AgentControllerConfig<TState = {}> {
   modelFallbacks?: boolean;
 
   /**
+   * Whether backing agents are registered on the controller's Mastra, which
+   * lists them in `listAgents()` and lets the generic `/agents` server routes
+   * run them outside the controller. Set to `false` so they only run through
+   * this controller. Unregistered agents don't take the Mastra instance's
+   * `durable` defaults, and deferred notification delivery can't resolve them.
+   * @default true
+   */
+  registerAgents?: boolean;
+
+  /**
    * Observational Memory configuration defaults.
    * The AgentController auto-manages OM state (model IDs, thresholds) internally
    * and provides accessors that Memory's dynamic model functions can close over.

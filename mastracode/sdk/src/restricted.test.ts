@@ -100,6 +100,11 @@ describe('restricted Mastra Code embedding', () => {
     expect(controllerConfig.gateways).toEqual([]);
     expect(controllerConfig.includeDefaultGateways).toBe(false);
     expect(controllerConfig.modelFallbacks).toBe(false);
+    expect(controllerConfig.registerAgents).toBe(false);
+
+    expect((agentConfigs[0] as Record<string, any>).notifications).toEqual({
+      deliveryPolicy: { default: { action: 'persist', reason: 'restricted-persist-only' } },
+    });
     expect(controllerConfig.intervalHandlers).toEqual([]);
     expect(controllerConfig.modes).toEqual([
       { id: 'build', availableTools: ['remote_read', 'view'] },
