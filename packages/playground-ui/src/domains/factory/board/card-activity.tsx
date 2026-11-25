@@ -21,7 +21,7 @@ export interface CardActivityEntry {
   /** What happened. Rendered as given: the host decides wording and casing. */
   label: ReactNode;
   /** Leave out when the label already carries the time. */
-  time?: { dateTime: string; label: string };
+  time?: { dateTime: string; label: ReactNode };
 }
 
 export function CardActivityEvent({ entry, className }: { entry: CardActivityEntry; className?: string }) {
