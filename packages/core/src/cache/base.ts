@@ -57,8 +57,9 @@ export abstract class MastraServerCache extends MastraBase {
    * the millisecond clock advances, and an index must not outrun the next
    * seed. Epoch microseconds stay well inside Number.MAX_SAFE_INTEGER (2^53
    * ≈ year 2255). `ConvexServerCache` instead allocates `max(counter, list
-   * length)` inside one transaction, so its recreated logs renumber densely
-   * from 0. A clock seed is only as monotonic as the clock: recreating a log
+   * length)` inside one transaction. It and the generic fallback restart
+   * numbering from 0 when both list and counter are gone.
+   * A clock seed is only as monotonic as the clock: recreating a log
    * within the seed's resolution, or after the clock moves backwards, can
    * still repeat an index. The subscriber's fallback detection only
    * recognises a log that restarts at 0 (the dense case); a log reseeded
@@ -75,24 +76,16 @@ export abstract class MastraServerCache extends MastraBase {
    *   a retention bound for this log, and a log that never expires is never
    *   reclaimed. When omitted, the cache's default TTL applies.
    *
-   * The default implementation composes `increment()` + `listPush()` (multiple
-   * round-trips) and ignores `ttlMs`. Replay reads depend on every index below
-   * a published one already being in the log (the subscriber backfills gaps
-   * from it), which an atomic allocate-and-append provides for free and
-   * separate round-trips do not: a writer could publish its frame while an
-   * earlier allocation's append is still in flight, and the gap backfill would
-   * come up empty. So this fallback serializes appends per counter within the
-   * process, across every `CachingPubSub` sharing this cache instance.
+   * The default implementation preserves the original zero-based numbering
+   * and composes `increment()` + `listPush()`. It is NOT atomic and ignores
+   * `ttlMs`. Concurrent appends can land out of index order, causing attached
+   * readers and offset replays to miss frames; an old offset can also skip
+   * a recreated log whose numbering restarted below it.
    *
-   * That only covers single-process deployments. The evented engine runs each
-   * step on whichever worker claims it from the grouped `workflows` topic (see
-   * `StepExecutor.#getStepPubsub`), so in a multi-process deployment a step's
-   * frames and the owner's lifecycle frames are appended from different
-   * processes and can still interleave in this fallback. No composition of
-   * get/set/increment/listPush can close that; overrides must perform
-   * allocation, the seed check and the append in one server-side operation
-   * (see the Redis and Valkey caches), and a cache that cannot should not be
-   * the basis for cross-process replay.
+   * Do not seed this fallback with `set()`: it can overwrite concurrent
+   * allocations, and a stored numeric value need not be an incrementable
+   * counter (Convex stores them as different types). Overrides should
+   * initialize the counter, allocate and append in one server-side operation.
    */
   async listPushIndexed(
     listKey: string,
@@ -100,38 +93,8 @@ export abstract class MastraServerCache extends MastraBase {
     value: Record<string, unknown>,
     _ttlMs?: number,
   ): Promise<number> {
-    const prior = this.#indexedAppends.get(counterKey);
-    const run = (prior ?? Promise.resolve()).then(async () => {
-      let index = (await this.increment(counterKey)) - 1;
-      if (index === 0) {
-        // The counter was absent. Reseed so a log recreated after expiry is
-        // unlikely to reissue indices a subscriber already consumed. Within
-        // this process the serialization above makes the seed safe; a write
-        // from another process can still land between the increment and this
-        // set and lose its allocation.
-        index = Date.now() * 1000;
-        await this.set(counterKey, index + 1);
-      }
-      await this.listPush(listKey, { ...value, index });
-      return index;
-    });
-    // Chain past failures so one failed append does not wedge the counter.
-    const settled = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    this.#indexedAppends.set(counterKey, settled);
-    try {
-      return await run;
-    } finally {
-      if (this.#indexedAppends.get(counterKey) === settled) this.#indexedAppends.delete(counterKey);
-    }
+    const index = (await this.increment(counterKey)) - 1;
+    await this.listPush(listKey, { ...value, index });
+    return index;
   }
-
-  /**
-   * Per-counter chains serializing the composed fallback above. Entries are
-   * removed as soon as their chain drains, so idle counters hold no memory.
-   * Subclasses that override `listPushIndexed` never populate this.
-   */
-  #indexedAppends = new Map<string, Promise<void>>();
 }
