@@ -137,16 +137,63 @@ describe('useChat once its thread stream broke (a phone locked, the network gone
     expect(texts(page.result.current.messages)).toEqual(['Tell me more', 'Half, then whole.']);
   });
 
+  // Another run took the thread over while the stream was down (a queued follow-up, another device). Its `start` is
+  // stored, so the server doesn't send it again: only the history names it.
+  const handedOver = {
+    type: 'thread-history',
+    runId: '',
+    from: 'AGENT',
+    payload: {
+      messages: [
+        question,
+        stored('a1', 'assistant', 'Half, then whole.'),
+        stored('u2', 'user', 'And then?'),
+        stored('a2', 'assistant', 'Then'),
+      ],
+      hasMore: false,
+      activeRunId: 'run-2',
+    },
+  };
+  const ended = (runId: string) => ({
+    type: 'thread-run-status',
+    runId,
+    from: 'AGENT',
+    payload: { status: 'success' },
+  });
+
+  it.each([
+    { retained: true, chunks: [handedOver, ended('run-1')] },
+    { retained: false, chunks: [handedOver] },
+  ])(
+    'follows the run that took over meanwhile until it ends (first run status retained: $retained)',
+    async ({ chunks }) => {
+      const { send, page } = await givenReplyCut();
+      unmount = page.unmount;
+
+      await send(1, ...chunks);
+
+      await waitFor(() =>
+        expect(texts(page.result.current.messages)).toEqual(['Tell me more', 'Half, then whole.', 'And then?', 'Then']),
+      );
+      expect(page.result.current.isRunning).toBe(true);
+      await send(1, ended('run-2'));
+      await waitFor(() => expect(page.result.current.isRunning).toBe(false));
+    },
+  );
+
   it('follows the thread no more once the page leaves', async () => {
     const threads = givenThreadStreams();
     const page = renderHookWithProviders(() =>
       useChat({ agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1', enableThreadSignals: true }),
     );
     await waitFor(() => expect(threads.streams).toHaveLength(1));
+    act(() => threads.streams[0]!.controller.error(new TypeError('network error')));
+    await waitFor(() => expect(threads.streams).toHaveLength(2), { timeout: 3000 });
 
     page.unmount();
+    act(() => threads.streams[1]!.controller.error(new TypeError('network error')));
     await new Promise(resolve => setTimeout(resolve, 1_500));
 
-    expect(threads.streams).toHaveLength(1);
+    expect(threads.streams).toHaveLength(2);
   });
 });

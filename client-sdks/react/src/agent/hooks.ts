@@ -691,6 +691,16 @@ export const useChat = ({
                   nextHistoryCatchesUp = true;
                   if (_threadSubscriptionAbortRef.current === subscriptionAbort) {
                     const { hasMore, activeRunId } = chunk.payload;
+                    // Caught up, the run the page followed is over unless the history still names it: it ended while
+                    // the stream was down, and another run may have taken the thread over meanwhile.
+                    if (
+                      catchingUp &&
+                      liveRunId.current &&
+                      !liveRunFinished.current &&
+                      activeRunId !== liveRunId.current
+                    ) {
+                      settleLiveRun();
+                    }
                     if (
                       activeRunId &&
                       activeRunId !== liveRunId.current &&
@@ -700,9 +710,6 @@ export const useChat = ({
                       liveRunFinished.current = false;
                       _currentRunId.current = activeRunId;
                       setIsRunning(pendingToolApprovalIdsRef.current.size === 0);
-                    } else if (catchingUp && !activeRunId && liveRunId.current && !liveRunFinished.current) {
-                      // The run the page followed ended while its stream was down.
-                      settleLiveRun();
                     }
                     setSubscriptionPagination(
                       typeof hasMore === 'boolean' ? { key: subscriptionKey, pagination: { hasMore } } : undefined,
