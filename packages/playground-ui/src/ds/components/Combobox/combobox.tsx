@@ -152,6 +152,25 @@ function getCustomOption(options: ComboboxOption[], inputValue: string): Combobo
   return { label: `Use “${value}”`, value };
 }
 
+/**
+ * The selected values as options: listed ones in option order, then values no option lists (typed ones, or
+ * ones the caller's options no longer include) in the order given. An unlisted value's chip shows the bare value.
+ */
+function getSelectedOptions(options: ComboboxOption[], values: readonly string[]): ComboboxOption[] {
+  const selectedValues = new Set(values);
+  const listed = options.filter(option => selectedValues.has(option.value));
+  const listedValues = new Set(listed.map(option => option.value));
+  const unlisted = [...selectedValues]
+    .filter(value => !listedValues.has(value))
+    .map(value => ({ label: value, value }));
+  return [...listed, ...unlisted];
+}
+
+/** Base UI compares items by reference, and unlisted selections are rebuilt on every render. */
+function isSameOption(item: ComboboxOption, selected: ComboboxOption) {
+  return item.value === selected.value;
+}
+
 /** Matches the label like Base UI's default filter, the text a field shows, and any keywords. */
 function useOptionFilter() {
   const { contains } = BaseCombobox.useFilter();
@@ -464,9 +483,9 @@ function MultipleCombobox({
   // Mirrors the search text, which Base UI owns here, so the typed value can be offered as an option.
   const [inputValue, setInputValue] = React.useState('');
   const filter = useOptionFilter();
-  const selectedValues = new Set(value);
-  const selectedOptions = options.filter(option => selectedValues.has(option.value));
-  const customOption = allowCustomValue ? getCustomOption(options, inputValue) : undefined;
+  const selectedOptions = getSelectedOptions(options, value);
+  // A typed value that is already picked has its chip; offering it again would unpick it.
+  const customOption = allowCustomValue ? getCustomOption([...options, ...selectedOptions], inputValue) : undefined;
   const items = customOption ? [customOption, ...options] : options;
 
   /** Keeps the mirrored search text in step with Base UI, which also clears it after each pick. */
@@ -487,6 +506,7 @@ function MultipleCombobox({
       items={items}
       filter={filter}
       value={selectedOptions}
+      isItemEqualToValue={isSameOption}
       onInputValueChange={handleInputValueChange}
       onValueChange={picked => onValueChange?.(picked.map(item => item.value))}
       disabled={disabled}
