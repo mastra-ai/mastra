@@ -78,7 +78,7 @@ The background task worker manages concurrency limits, task lifecycle, and resul
 
 ### Connect event worker
 
-[`ConnectEventWorker`](/reference/connect/event-worker) from `@mastra/connect` starts workflows from provider webhooks on a project's [Connect](/docs/mastra-platform/connect) connections. Add it to `workers`. In a split deployment, run it in one process by adding its name, `connect-events`, to that process's `MASTRA_WORKERS`.
+[`ConnectEventWorker`](/reference/connect/event-worker) from `@mastra/connect` handles provider webhooks on a project's [Connect](/docs/mastra-platform/connect) connections, with a handler per provider or per event type. Add it to `workers`. In a split deployment, run it in one process by adding its name, `connect-events`, to that process's `MASTRA_WORKERS`.
 
 ## How workers run
 

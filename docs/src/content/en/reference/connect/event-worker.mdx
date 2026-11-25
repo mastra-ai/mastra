@@ -1,6 +1,6 @@
 ---
 title: 'Reference: ConnectEventWorker | Connect'
-description: 'API reference for ConnectEventWorker in @mastra/connect: start workflows from provider webhook events on a project’s connections, filtered by provider and event type.'
+description: 'API reference for ConnectEventWorker in @mastra/connect: handle provider webhook events on a project’s connections, with a handler per provider or per event type.'
 packages:
   - '@mastra/connect'
   - '@mastra/core'
@@ -8,120 +8,94 @@ packages:
 
 # ConnectEventWorker
 
-A [worker](/docs/deployment/workers) that starts workflows from provider events on a project's connections, such as a GitHub pull request opening or a Linear issue being created. Pass it to `Mastra({ workers: [...] })`. It subscribes with [`ConnectEvents`](/reference/connect/events) when Mastra starts its workers.
+A [worker](/docs/deployment/workers) that handles provider events on a project's connections, such as a GitHub pull request opening or a Linear issue being created. Pass it handlers keyed by provider, then pass the worker to `Mastra({ workers: [...] })`. It subscribes with [`ConnectEvents`](/reference/connect/events) when Mastra starts its workers.
 
 ## Usage example
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
-import { ConnectEventWorker, onConnectEvent } from '@mastra/connect'
-import { reviewPullRequest } from './workflows/review-pull-request'
+import { ConnectEventWorker } from '@mastra/connect'
 import { triageIssue } from './workflows/triage-issue'
 
 const connectEvents = new ConnectEventWorker({
-  triggers: [
-    onConnectEvent({
-      events: { github: ['pull_request.opened', 'pull_request.reopened'] },
-      workflow: reviewPullRequest,
-      inputData: event => ({
-        repo: event.payload.repository.full_name,
-        number: event.payload.number,
-      }),
-    }),
-    onConnectEvent({
-      events: { linear: ['Issue.create'] },
-      workflow: triageIssue,
-      inputData: event => ({ issueId: event.payload.data.id }),
-    }),
-  ],
+  github: {
+    'pull_request.opened': async ({ event, mastra }) => {
+      const agent = mastra.getAgent('reviewer')
+      await agent.generate(`Review ${event.payload.pull_request.html_url}`)
+    },
+  },
+  linear: {
+    'Issue.create': async ({ event, mastra }) => {
+      const run = await mastra.getWorkflow('triageIssue').createRun({
+        runId: `linear:${event.sourceEventId ?? event.id}`,
+        resourceId: event.resourceId,
+      })
+      if (run.workflowRunStatus === 'pending') {
+        await run.startAsync({ inputData: { issueId: event.payload.data.id } })
+      }
+    },
+  },
 })
 
 export const mastra = new Mastra({
-  workflows: { reviewPullRequest, triageIssue },
+  workflows: { triageIssue },
   workers: [connectEvents],
 })
 ```
 
-Each workflow must be registered on the same `Mastra` instance, which needs `storage` so a redelivered webhook doesn't start a workflow twice.
-
 ## Constructor parameters
 
-`ConnectEventWorker` takes one options object. It also accepts every [`ConnectEvents`](/reference/connect/events#constructor-parameters) option, such as `projectId`, `cursorStore` and `onGap`.
-
 <PropertiesTable
   content={[
   {
-    name: 'triggers',
-    type: 'ConnectEventTrigger[]',
+    name: 'handlers',
+    type: 'Record<string, ConnectEventHandler | Record<string, ConnectEventHandler>>',
     description:
-      'The workflows to start and the events that start them. Create each one with `onConnectEvent()`. An event starts every workflow whose trigger selects it.',
+      'Handlers keyed by provider, such as `github` or `linear`. Give a provider a function to handle all of its events, or an object with a function per event type. The worker receives only the providers and event types you give handlers for.',
+  },
+  {
+    name: 'options',
+    type: 'ConnectEventWorkerOptions',
+    description:
+      'Every [`ConnectEvents`](/reference/connect/events#constructor-parameters) option except `events`, such as `projectId`, `cursorStore` and `includeUnverified`, plus `timeoutMs` for the `connect` client handlers get.',
+    isOptional: true,
   },
 ]}
 />
 
-## `onConnectEvent()`
+## Handlers
 
-Creates a trigger that starts a workflow for the events it selects.
+A handler gets one object:
 
 <PropertiesTable
   content={[
   {
-    name: 'workflow',
-    type: 'Workflow',
-    description: 'The workflow to start. It must be registered on the `Mastra` instance the worker runs on.',
+    name: 'event',
+    type: 'ConnectEvent',
+    description: 'The event, with a typed payload when Connect has types for it.',
   },
   {
-    name: 'inputData',
-    type: '(event) => TInput | undefined | Promise<TInput | undefined>',
-    description:
-      "The workflow's input for an event. Its return type must match the workflow's `inputSchema`. Return `undefined` to skip the event.",
+    name: 'mastra',
+    type: 'Mastra',
+    description: 'The Mastra the worker runs on, to start workflows or call agents.',
   },
   {
-    name: 'events',
-    type: 'Record<string, true | string[]>',
-    description:
-      'Which providers and event types start the workflow: `true` for a provider, or a list of its event types. Providers you leave out are skipped. Omit it to start the workflow for every provider. See [Choosing events](/reference/connect/events#choosing-events).',
-    isOptional: true,
+    name: 'logger',
+    type: 'IMastraLogger',
+    description: "Mastra's logger.",
   },
   {
-    name: 'includeUnverified',
-    type: 'boolean',
+    name: 'connect',
+    type: 'ConnectClient',
     description:
-      'Start the workflow for events whose signature the platform couldn’t verify. Their payloads may be forged.',
-    isOptional: true,
-    defaultValue: 'false',
+      "A `ConnectClient` for the project, built from the worker's options. Call `connect.withResource(event.resourceId)` to act as the end user an event's connection belongs to.",
   },
 ]}
 />
 
-### Typed events
+Events are chosen the way [Choosing events](/reference/connect/events#choosing-events) describes. A function for a provider with [typed payloads](/reference/connect/events#typed-payloads) receives only the event types Connect has types for, so checking `event.eventType` narrows `event.payload`. A handler for one event type gets that event type's payload. An event type the provider doesn't send is a compile error. With `includeUnverified`, check `event.unverified` first: unverified payloads aren't typed.
 
-`inputData` receives the events `events` selects. For a provider with [typed payloads](/reference/connect/events#typed-payloads), every event it sends has a typed payload, so checking `event.provider` and `event.eventType` narrows `event.payload`. With `includeUnverified`, check `event.unverified` first: unverified payloads aren't typed.
-
-An event type that the provider doesn't send is a compile error, and so is an input that doesn't match the workflow's input.
-
-### Filter in `inputData`
-
-Return `undefined` to skip events the event types alone don't rule out:
-
-```typescript title="src/mastra/index.ts"
-onConnectEvent({
-  events: { github: ['pull_request.opened'] },
-  workflow: reviewPullRequest,
-  inputData: event =>
-    event.payload.pull_request.base.ref === 'main'
-      ? { repo: event.payload.repository.full_name, number: event.payload.number }
-      : undefined,
-})
-```
-
-## Runs
-
-The run id comes from the workflow id, the provider and the provider's delivery id, such as `connect:review-pull-request:github:<delivery id>`. When the platform delivers a webhook again, the worker finds the run it already started and skips the event, including after a restart. A workflow that doesn't persist snapshots can't be found again, so it can start twice.
-
-When the event's connection belongs to an end user, the run gets the event's `resourceId`.
-
-The worker starts each run and moves on to the next event without waiting for the run to finish.
+A provider without typed payloads gets every event type, with an `unknown` payload.
 
 ## Properties
 
@@ -133,17 +107,19 @@ The worker starts each run and moves on to the next event without waiting for th
 
 ### `start()`
 
-Subscribes to the project's events. Mastra calls it when it starts its workers, so you only call it after `stop()`. A trigger whose workflow isn't registered is logged and never runs. When the subscription can't start, for example without platform credentials, the worker logs the error and Mastra starts its other workers.
+Subscribes to the project's events. Mastra calls it when it starts its workers, so you only call it after `stop()`. Without handlers, the worker doesn't subscribe. When the subscription can't start, for example without platform credentials, the worker logs the error and Mastra starts its other workers.
 
 ### `stop(options?)`
 
-Ends the subscription and waits for the event being handled, up to `options.drainTimeout` milliseconds. Runs already started keep running. Mastra calls it when it stops its workers.
+Ends the subscription and waits for the event being handled, up to `options.drainTimeout` milliseconds. Mastra calls it when it stops its workers.
 
 ## Delivery
 
-Events are handled in order. An event whose `inputData` throws, or whose workflow can't start, is logged and skipped, and later events are still handled. Without a `cursorStore`, the subscription starts at the newest event each time it starts, so events that arrive while the worker is stopped aren't handled.
+Events are handled one at a time, in order. A handler that throws is logged, and later events are still handled.
 
-Run the worker in one process. Every process that runs it receives every event, so two processes can both start the run for one event. Use [`MASTRA_WORKERS`](/docs/deployment/workers#select-workers) to pick the process.
+Delivery is at least once: the worker moves past an event after its handler returns, so a handler can see an event again after a restart. Make handlers safe to repeat, for example by starting a workflow with a run id built from `event.sourceEventId ?? event.id` and skipping a run that already started, as the usage example does. Without a `cursorStore`, the subscription starts at the newest event each time it starts, so events that arrive while the worker is stopped aren't handled.
+
+Run the worker in one process. Every process that runs it receives every event. Use [`MASTRA_WORKERS`](/docs/deployment/workers#select-workers) to pick the process.
 
 ## Related
 

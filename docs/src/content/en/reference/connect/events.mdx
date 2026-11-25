@@ -197,7 +197,7 @@ Each event carries these fields. For a provider with [typed payloads](#typed-pay
 
 ## Choosing events
 
-`ConnectEvents`, [`ConnectEventSignals`](/reference/connect/event-signals) and each [`ConnectEventWorker`](/reference/connect/event-worker) trigger choose events the same way:
+`ConnectEvents`, [`ConnectEventSignals`](/reference/connect/event-signals) and [`ConnectEventWorker`](/reference/connect/event-worker) handlers choose events the same way:
 
 - **Unverified events** are skipped unless `includeUnverified` is set. Their payloads aren't typed, so check `event.unverified` before using one.
 - **A listed event type** is received when its payload is JSON. For a provider with typed payloads, an event type the provider doesn't send is a compile error.
