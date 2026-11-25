@@ -64,7 +64,7 @@ export function createDurableGoalStep() {
         goalConfig = (mastra as any)?.getAgentById?.(initData.agentId)?.__getGoalConfig?.();
       }
 
-      const liveRunContext = getLiveRunRequestContext(registryEntry);
+      const liveRunContext = getLiveRunRequestContext(registryEntry, state.runId, params.requestContext);
       const currentRequestContext = liveRunContext ?? params.requestContext;
       const requestContext = restoreRequestContext(
         initData.requestContextEntries,

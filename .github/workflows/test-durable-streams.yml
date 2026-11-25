@@ -109,7 +109,7 @@ jobs:
           MASTRA_AGENT_THREAD_LEASE_TTL_MS: '3000'
 
       - name: Verify native evented request context
-        run: pnpm exec vitest run src/agentic-loop-pubsub.test.ts -t 'retains live request context|uses resumed request context' --reporter=verbose
+        run: pnpm exec vitest run src/agentic-loop-pubsub.test.ts src/cross-host-resume-context.test.ts -t 'retains live request context|uses resumed request context|resuming caller context' --reporter=verbose
         working-directory: pubsub/redis-streams
 
       - name: Verify evented Factory title persistence

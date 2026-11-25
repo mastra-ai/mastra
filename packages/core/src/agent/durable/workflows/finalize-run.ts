@@ -189,7 +189,7 @@ export async function runDurableFinishSideEffects({
   const effectiveRequestContext = mergeRequestContextForFinalization(
     initData.requestContextEntries,
     requestContext,
-    getLiveRunRequestContext(registryEntry),
+    getLiveRunRequestContext(registryEntry, runId, requestContext),
   );
   // Snapshots drop MastraMemory (it holds a live instance), but memory processors read
   // memoryConfig (e.g. readOnly) from it. Restore it from durable state when it's missing.
@@ -623,6 +623,7 @@ export async function runDurableDeadlineOutputPass({
   messageListState,
   cutOffText,
   entry,
+  executionId,
   mastra,
   tracingContext,
   logger,
@@ -635,6 +636,7 @@ export async function runDurableDeadlineOutputPass({
   messageListState: SerializedMessageListState;
   cutOffText?: string;
   entry: RunRegistryEntry;
+  executionId: string;
   mastra?: Mastra;
   /** The run's agent span, so the deadline pass shows in the run's trace as the finish pass does. */
   tracingContext?: TracingContext;
@@ -644,7 +646,7 @@ export async function runDurableDeadlineOutputPass({
   const requestContext = mergeRequestContextForFinalization(
     initData.requestContextEntries,
     undefined,
-    getLiveRunRequestContext(entry),
+    getLiveRunRequestContext(entry, runId, undefined, executionId),
   );
   if (!requestContext.has('MastraMemory') && durableState?.threadId) {
     requestContext.set('MastraMemory', {

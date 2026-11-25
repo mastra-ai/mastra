@@ -13908,6 +13908,7 @@ export class Agent<
             initData: runInput,
             ...deadlineMessageListState(runInputEntry, runInput.messageListState),
             entry: runInputEntry,
+            executionId: fence!.executionId,
             mastra: this.#mastra,
             tracingContext: deadlineSpan ? { currentSpan: deadlineSpan } : undefined,
             logger: this.logger,
