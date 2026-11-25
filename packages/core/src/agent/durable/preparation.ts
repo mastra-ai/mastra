@@ -33,6 +33,7 @@ import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transfo
 import type { CoreTool, ToolHooks, ToolPayloadTransformPolicy } from '../../tools/types';
 import type { DynamicArgument } from '../../types';
 import { boundedStringify, deepMerge } from '../../utils';
+import { warnUnsharedAgentSignals } from '../../workflows/evented/setup-warning';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
 import type { AgentExecutionOptions, AgentExecutionOptionsBase, DelegationConfig } from '../agent.types';
@@ -47,6 +48,8 @@ import { SaveQueueManager } from '../save-queue';
 import { applyResolvedAgentScopes, incomingAgentScopes, resolveAgentScopes } from '../scopes';
 import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
 import { signalSpanAttributes } from '../signals';
+import { pendingSignalsStoreOf } from '../stored-signals';
+import type { ThreadSignalsStore } from '../stored-signals';
 import { TripWire } from '../trip-wire';
 import type {
   AgentInstructions,
@@ -225,11 +228,20 @@ export interface PreparationOptions<OUTPUT = undefined> {
    */
   durableAgentName?: string;
   /**
-   * Whether the preparing agent keeps signals sent to its runs in storage. The
-   * run carries this decision in its input and registry entry.
+   * Whether the run may keep signals sent to it in its memory storage: its
+   * agent runs on the evented engine and the run holds its thread. It does
+   * when the run also has memory, a thread and a resource, and that storage
+   * keeps pending signals; the run's input carries the outcome.
    * @internal
    */
   signalsStored?: boolean;
+  /**
+   * For a run rebuilt from storage, the outcome it started with, carried
+   * through `RESUMED_SIGNALS_STORED`. The run keeps it and leaves its thread's
+   * signal run as it is.
+   * @internal
+   */
+  resumedSignalsStored?: boolean;
 }
 
 /**
@@ -265,7 +277,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     methodType = 'stream',
     durableAgentId,
     durableAgentName,
-    signalsStored = false,
+    signalsStored: signalsStoredOption = false,
+    resumedSignalsStored,
   } = options;
 
   // Public-facing identity: use the durable wrapper's ID/name for all
@@ -464,6 +477,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       permission,
       actor: execOptions?.actor,
     });
+  let signalsStore: ThreadSignalsStore | undefined;
   if (memory && threadId && resourceId) {
     await authorizeMemory(MastraFGAPermissions.MEMORY_READ);
     const existingThread = await memory.getThreadById({ threadId });
@@ -483,6 +497,17 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         saveThread: true,
       }));
     threadExists = true;
+    // A read-only run keeps the in-process queues and leaves the thread's signal run to the run that holds the
+    // thread, even when it was started on a thread held for it. A resume keeps what its run decided.
+    if (resumedSignalsStored ?? (signalsStoredOption && !memoryConfig?.readOnly)) {
+      const store = await pendingSignalsStoreOf(memory);
+      if (store) {
+        signalsStore = { store, threadId, resourceId };
+        // Before the workflow starts, so the run's first claim finds itself named. A resume keeps the run named
+        // as it is: another run may have used the thread since.
+        if (resumedSignalsStored === undefined) await store.setSignalRun({ threadId, runId });
+      }
+    }
     requestContext.set('MastraMemory', { thread: threadObject, resourceId, memoryConfig });
   } else {
     // This run has no complete per-request memory context. Clear any
@@ -492,6 +517,26 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // memory — that would both leak prior resource memory into this prompt and
     // break the "no per-request memory options means no injection" gate.
     requestContext.delete('MastraMemory');
+  }
+  const signalsStored = resumedSignalsStored ?? signalsStore !== undefined;
+  if (
+    signalsStoredOption &&
+    resumedSignalsStored === undefined &&
+    !memoryConfig?.readOnly &&
+    mastra &&
+    !signalsStore?.store.pendingSignalsSharedAcrossProcesses
+  ) {
+    warnUnsharedAgentSignals(
+      mastra,
+      signalsStore
+        ? 'unshared-memory-storage'
+        : memory && threadId && resourceId
+          ? 'unsupported-memory-storage'
+          : 'no-memory-thread',
+    );
+  }
+  if (resumedSignalsStored && !signalsStore) {
+    logger?.error?.('This run keeps its signals in memory storage that this process cannot resolve', { runId });
   }
 
   // Resolve input processors now that the memory context is in place.
@@ -1032,6 +1077,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           enqueuePendingSignal: (signalInput: AgentSignalInput) =>
             typedAgent.__getEnqueuePendingSignal()({ runId, resourceId, threadId }, signalInput),
         }),
+    ...(signalsStore ? { pendingSignalsStore: signalsStore } : {}),
     // The in-process interrupt for a run executing where its signals are sent.
     subscribePendingSignals: listener => typedAgent.__getSubscribePendingSignals()(runId, listener),
     // Thread title generation — mirrors the non-durable `#executeOnFinish` branch,
