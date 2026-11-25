@@ -296,4 +296,74 @@ describe('stream ↔ persisted message identity', () => {
       expect.objectContaining({ type: 'text', text: 'Good to hear.' }),
     ]);
   }, 30000);
+
+  it('keeps the hop notice in place, live and saved, when a later step retries the fallback', async () => {
+    let primaryCalls = 0;
+    const primary = createToolCallModel({ provider: 'primary-provider', modelId: 'primary-model' });
+    const callTool = primary.doStream.bind(primary);
+    primary.doStream = async options => {
+      primaryCalls++;
+      if (primaryCalls > 1) throw new Error('rate limited');
+      return callTool(options);
+    };
+    let fallbackCalls = 0;
+    const fallback = createTextStreamModel('Good to hear.', {
+      provider: 'fallback-provider',
+      modelId: 'fallback-model',
+    });
+    const answer = fallback.doStream.bind(fallback);
+    fallback.doStream = async options => {
+      fallbackCalls++;
+      if (fallbackCalls === 1) throw new Error('rate limited');
+      return answer(options);
+    };
+    const hop = { type: 'data-mastracode-model-fallback' as const, data: { to: 'fallback-model' } };
+    let apiErrors = 0;
+    const { events, persistedAssistant } = await sendOneMessage({
+      errorProcessorDefaults: false,
+      maxProcessorRetries: 1,
+      tools: {
+        lookup: createTool({
+          id: 'lookup',
+          description: 'Look it up',
+          inputSchema: z.object({}),
+          execute: async () => 'found',
+        }),
+      },
+      errorProcessors: [
+        {
+          id: 'announce-hop-then-retry',
+          processAPIError: async ({ writer }) => {
+            apiErrors++;
+            if (apiErrors > 1) return { retry: true };
+            await writer?.custom(hop);
+            return { retry: false };
+          },
+        },
+      ],
+      model: [
+        { model: primary, maxRetries: 0 },
+        { model: fallback, maxRetries: 0 },
+      ],
+    });
+
+    expect(fallbackCalls).toBe(2);
+    expect(persistedAssistant).toHaveLength(1);
+    const reply = persistedAssistant[0]!;
+    expect(reply.content.parts.filter(part => part.type !== 'step-start')).toEqual([
+      expect.objectContaining({ type: 'text', text: 'Looking it up.' }),
+      expect.objectContaining({ type: 'tool-invocation' }),
+      expect.objectContaining(hop),
+      expect.objectContaining({ type: 'text', text: 'Good to hear.' }),
+    ]);
+    const liveHops = events.filter(
+      event => event.type === 'message_update' && event.event.type === 'part' && event.event.part.type === hop.type,
+    );
+    expect(liveHops).toEqual([
+      expect.objectContaining({
+        id: reply.id,
+        event: expect.objectContaining({ index: reply.content.parts.findIndex(part => part.type === hop.type) }),
+      }),
+    ]);
+  }, 30000);
 });
