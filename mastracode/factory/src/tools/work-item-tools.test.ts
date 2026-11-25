@@ -772,7 +772,7 @@ describe("a card's work requested from a chat", () => {
       ...createFactoryWorkItemTools(toolScope, {
         workItems: seed.workItems,
         boards,
-        boardEngine: new DispatcherBoardEngine({ transitionService: service }),
+        boardEngine: new DispatcherBoardEngine({ transitionService: service, workItems: seed.workItems, boards }),
         auditRecorder: { record: vi.fn(async () => null) } as never,
         sessions: { getSourceControlBySessionId: async () => null },
         intakeEvaluator: 'route-list',

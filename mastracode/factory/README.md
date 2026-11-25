@@ -394,7 +394,7 @@ Work declares `{ completed: 'done', canceled: 'canceled' }`. A board without `so
 
 The board engine decides how a card moves across its board. A person's move, the chat move tool, a new card's placement, a run start, an agent's move or review verdict, and a tool-result rule are all requested from the engine; none of them call the transition service directly. The default `DispatcherBoardEngine` commits each move through the transition service, with every board check, and the decision dispatcher runs the work the move queues. Provider events and rule decisions are queued as decisions first; the dispatcher requests their moves from the same engine when it runs them. A card filed without a transition (re-filed by a reconcile pass, or moved to another board when an intake route changes) is requested as a placement, which runs no phase rules.
 
-Pick the engine with the `boardEngine` option. It receives the transition service and returns the engine:
+Pick the engine with the `boardEngine` option. It receives the transition service, work item storage and the board registry, and returns the engine:
 
 ```typescript
 import { MastraFactory, createDispatcherBoardEngine } from '@mastra/factory';
@@ -405,7 +405,7 @@ const factory = new MastraFactory({
 });
 ```
 
-A custom engine implements `requestMove(request)`, which answers with the board's verdict (`accepted` or `rejected`), and `requestPlacement(placement)`, which answers `moved`, `unchanged` or `skipped`. One move can be requested more than once under the same `ingress.identity`, possibly concurrently: an agent's tool result asks right away, and the dispatcher replays the queued decision later. A custom engine must answer every repeat with its first verdict for that identity, except a `stale` refusal. Wrapping `createDispatcherBoardEngine(context)` keeps today's behavior, including this guarantee, while observing every move.
+A custom engine implements `requestMove(request)`, which answers with the board's verdict (`accepted` or `rejected`), `requestPlacement(placement)`, which answers `moved`, `unchanged` or `skipped`, and `runEnded(binding)`, which Factory calls when a run of a session bound to a card ends `complete`. `runEnded` decides whether the run's phase ended: the default engine moves the card by the outcome its session reported (or its exit tool's success) and answers `true`, or answers `false` when the card holds no outcome. It can be called twice for one run end and must move the card once. One move can be requested more than once under the same `ingress.identity`, possibly concurrently: an agent's tool result asks right away, and the dispatcher replays the queued decision later. A custom engine must answer every repeat with its first verdict for that identity, except a `stale` refusal. Wrapping `createDispatcherBoardEngine(context)` keeps today's behavior, including this guarantee, while observing every move.
 
 ### Board tool-result rules
 

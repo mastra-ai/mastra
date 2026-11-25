@@ -1,6 +1,10 @@
+import type { BoardRegistry } from '../boards/index.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { moveCardToBoard } from '../boards/relocate.js';
+import { applyPhaseOutcome } from '../rules/phase-outcome-move.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryTransitionResult } from '../rules/types.js';
+import type { FactoryRunBindingRecord, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 /**
  * A card filed somewhere without a transition: re-filed by a reconcile pass, or moved to another
@@ -10,6 +14,12 @@ export type FactoryCardPlacement = Parameters<typeof moveCardToBoard>[0];
 
 /** `moved` when the card was placed, `unchanged` when it already sat there, `skipped` when it could not move. */
 export type FactoryCardPlacementResult = Awaited<ReturnType<typeof moveCardToBoard>>;
+
+/** The run binding of a session whose run ended: which card, and the role that worked it. */
+export type FactoryRunEndedBinding = Pick<
+  FactoryRunBindingRecord,
+  'id' | 'role' | 'orgId' | 'factoryProjectId' | 'workItemId'
+>;
 
 /**
  * Decides how a card moves across its board. Every stage change from outside the engine (a
@@ -32,25 +42,44 @@ export interface FactoryBoardEngine {
   requestMove(request: FactoryTransitionRequest): Promise<FactoryTransitionResult>;
   /** Asks to file a card on a board and phase without a transition; the engine may answer `skipped`. */
   requestPlacement(placement: FactoryCardPlacement): Promise<FactoryCardPlacementResult>;
+  /**
+   * Tells the engine that a run of a session bound to a card ended `complete`. The engine decides
+   * what ends the phase: the outcome the session reported, or its exit tool's success. Answers
+   * true when the run's phase ended and the card moved on, false when the card holds no outcome
+   * for its phase. A refused outcome throws a `FactoryRuleRejectedError`.
+   *
+   * It can be told more than once for one run end (the dispatcher watching the run and the session
+   * itself both see it), and must move the card once.
+   */
+  runEnded(binding: FactoryRunEndedBinding): Promise<boolean>;
 }
 
 /** The services an engine is built from; the host's `boardEngine` factory receives them. */
 export interface FactoryBoardEngineContext {
   /** Factory's governed stage-transition service, with every board check and commit hook installed. */
   transitionService: Pick<FactoryTransitionService, 'transition'>;
+  /** Reads the card a run ended on, with the outcome its session reported. */
+  workItems: Pick<WorkItemsStorage, 'get'>;
+  /** The boards cards are filed on, built in and stored. */
+  boards: BoardRegistry | ProjectBoardSource;
 }
 
 export type FactoryBoardEngineFactory = (context: FactoryBoardEngineContext) => FactoryBoardEngine;
 
 /**
  * Today's engine: a move request commits synchronously through the transition service, and the
- * follow-up work it queues is run by the decision dispatcher.
+ * follow-up work it queues is run by the decision dispatcher. A run's end moves the card by the
+ * outcome its session reported, as one more move request.
  */
 export class DispatcherBoardEngine implements FactoryBoardEngine {
   readonly #transitionService: Pick<FactoryTransitionService, 'transition'>;
+  readonly #workItems: Pick<WorkItemsStorage, 'get'>;
+  readonly #boards: BoardRegistry | ProjectBoardSource;
 
   constructor(context: FactoryBoardEngineContext) {
     this.#transitionService = context.transitionService;
+    this.#workItems = context.workItems;
+    this.#boards = context.boards;
   }
 
   requestMove(request: FactoryTransitionRequest): Promise<FactoryTransitionResult> {
@@ -59,6 +88,11 @@ export class DispatcherBoardEngine implements FactoryBoardEngine {
 
   requestPlacement(placement: FactoryCardPlacement): Promise<FactoryCardPlacementResult> {
     return moveCardToBoard(placement);
+  }
+
+  /** Moves the card by its phase's outcome, as a move request from the agent that worked it. */
+  runEnded(binding: FactoryRunEndedBinding): Promise<boolean> {
+    return applyPhaseOutcome({ storage: this.#workItems, boards: this.#boards, boardEngine: this }, binding);
   }
 }
 

@@ -90,7 +90,6 @@ import {
 } from './dispatch-errors.js';
 import { isStatusEventDecision } from './event-rules.js';
 import { endPhaseGoal, PHASE_GOAL_METADATA_KEY, phaseGoalOf, startPhaseGoal } from './phase-goal.js';
-import { applyPhaseOutcome } from './phase-outcome-move.js';
 import { causeOf, isProviderCallError, publicFailureReason } from './public-failure-reason.js';
 import { isRunBearingDecision } from './run-bearing.js';
 import type { FactoryTransitionService } from './transition-service.js';
@@ -888,7 +887,12 @@ export class FactoryDecisionDispatcher {
     this.#openRuns = options.openRuns;
     this.#controller = options.controller;
     this.#boardEngine =
-      options.boardEngine ?? new DispatcherBoardEngine({ transitionService: options.transitionService });
+      options.boardEngine ??
+      new DispatcherBoardEngine({
+        transitionService: options.transitionService,
+        workItems: options.storage,
+        boards: toBoardSource(options.boards),
+      });
     this.#boards = toBoardSource(options.boards);
     this.#intakeRoutes = options.intakeRoutes;
     this.#intakeEvaluator = options.intakeEvaluator;
@@ -2001,13 +2005,7 @@ export class FactoryDecisionDispatcher {
                   // results before applying the run's outcome or deciding the unchanged card means
                   // the run did no work.
                   await this.#reconcileRunBinding?.(binding);
-                  if (
-                    await applyPhaseOutcome(
-                      { storage: this.#storage, boards: this.#boards, boardEngine: this.#boardEngine },
-                      binding,
-                    )
-                  )
-                    return;
+                  if (await this.#boardEngine.runEnded(binding)) return;
                   if (workingRevision === null) return;
                   const after = await this.#storage.get({ orgId: record.orgId, id: record.workItemId! });
                   if (after?.revision === workingRevision && !(await kickoffStale())) {

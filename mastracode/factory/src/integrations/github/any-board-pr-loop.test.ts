@@ -9,7 +9,6 @@ import { ProjectBoardCache } from '../../boards/project-boards.js';
 import { createTriageWorkRegistry } from '../../boards/test-utils.js';
 import { workSeedWithSelfReview } from '../../boards/work-migrations.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
-import { applyPhaseOutcome } from '../../rules/phase-outcome-move.js';
 import { createFactoryOutcomeTools } from '../../rules/tools.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
 import type { StoredBoardInput } from '../../storage/domains/boards/base.js';
@@ -370,10 +369,7 @@ async function harness(
         ),
       /** The agent's run ends: Factory applies the outcome it reported through the board engine. */
       runEnds: async () =>
-        applyPhaseOutcome(
-          { storage: workItems, boards, boardEngine: new DispatcherBoardEngine({ transitionService }) },
-          await binding(),
-        ),
+        new DispatcherBoardEngine({ transitionService, workItems, boards }).runEnded(await binding()),
       verdict: (input: { verdict: 'approve' | 'request changes'; findings?: string }) =>
         verdict!.execute(
           { reviewedHeadSha: SHA, ...input },

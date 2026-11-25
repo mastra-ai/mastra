@@ -10,6 +10,7 @@ import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import type { FactoryBoardEngine, FactoryCardPlacement } from '../board-engine/engine.js';
+import { DispatcherBoardEngine } from '../board-engine/engine.js';
 import { boardRegistryOf, createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
 import type { BoardPhaseDefinition, BoardRegistry } from '../boards/index.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -3252,6 +3253,7 @@ describe('FactoryDecisionDispatcher', () => {
       controller: controller as never,
       transitionService: new FactoryTransitionService({ storage, configVersion: 'rules-v1' }),
       boardEngine: {
+        runEnded: async () => false,
         requestMove: async input => {
           inputs.push(input);
           return {
@@ -5006,6 +5008,17 @@ describe('FactoryDecisionDispatcher', () => {
   });
 
   describe('a run whose session reported its phase outcome', () => {
+    /** The default engine, with the move requests it makes answered by `requestMove`. */
+    function outcomeEngine(
+      transitionService: FactoryTransitionService,
+      storage: WorkItemsStorage,
+      requestMove: FactoryBoardEngine['requestMove'],
+    ) {
+      const engine = new DispatcherBoardEngine({ transitionService, workItems: storage, boards: autoStartingBoards() });
+      engine.requestMove = requestMove;
+      return engine;
+    }
+
     /** What `factory_report_outcome` leaves on the card while the run is still going. */
     async function reported(storage: WorkItemsStorage, id: string, outcome: string, to: string, reason: string) {
       await storage.update({
@@ -5049,7 +5062,7 @@ describe('FactoryDecisionDispatcher', () => {
         controller: controller as never,
         boards: autoStartingBoards(),
         transitionService,
-        boardEngine: { requestMove, requestPlacement: vi.fn() },
+        boardEngine: outcomeEngine(transitionService, storage, requestMove),
         storage,
         ownerId: 'worker-1',
       });
@@ -5098,7 +5111,7 @@ describe('FactoryDecisionDispatcher', () => {
         controller: controller as never,
         boards: autoStartingBoards(),
         transitionService,
-        boardEngine: { requestMove, requestPlacement: vi.fn() },
+        boardEngine: outcomeEngine(transitionService, storage, requestMove),
         storage,
         ownerId: 'worker-1',
       });
@@ -5112,6 +5125,43 @@ describe('FactoryDecisionDispatcher', () => {
       expect(decision?.lastError).toContain('A person closes cards on this board.');
       expect(session.sendSignal).toHaveBeenCalledTimes(1);
       expect(requestMove).toHaveBeenCalledTimes(1);
+    });
+
+    it("leaves the end of the run's phase to the board engine", async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, {
+        type: 'invokeSkill',
+        role: 'work',
+        skillName: 'factory-build',
+        arguments: 'Continue building',
+        idempotencyKey: 'working-phase-engine-run-end',
+      });
+      const binding = await bindWorkRun(storage, item.id);
+      // No outcome on the card: only the engine knows the phase ended (a workflow engine reads its own state).
+      const runEnded = vi.fn<FactoryBoardEngine['runEnded']>(async () => true);
+      const requestMove = vi.fn<FactoryBoardEngine['requestMove']>(request => transitionService.transition(request));
+      const { controller } = createSession(undefined, {
+        signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+        emitAgentEndDuringSignal: true,
+        agentEndReason: 'complete',
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        boards: autoStartingBoards(),
+        transitionService,
+        boardEngine: { requestMove, requestPlacement: vi.fn(), runEnded },
+        storage,
+        ownerId: 'worker-1',
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+      await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+      expect(runEnded).toHaveBeenCalledWith(expect.objectContaining({ id: binding.id, workItemId: item.id }));
+      // The engine said the phase ended, so the unchanged card is not a run that did no work.
+      const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      expect(decision).toMatchObject({ status: 'succeeded' });
+      expect(requestMove).not.toHaveBeenCalled();
     });
   });
 
@@ -9245,6 +9295,7 @@ describe('custom-board deferred targets', () => {
     });
     const placements: FactoryCardPlacement[] = [];
     const engine: FactoryBoardEngine = {
+      runEnded: async () => false,
       requestMove: async () => {
         throw new Error('A skipRules placement is not a transition.');
       },
@@ -9278,6 +9329,7 @@ describe('custom-board deferred targets', () => {
     });
     let calls = 0;
     const engine: FactoryBoardEngine = {
+      runEnded: async () => false,
       requestMove: async () => {
         throw new Error('A skipRules placement is not a transition.');
       },
@@ -9309,6 +9361,7 @@ describe('custom-board deferred targets', () => {
     });
     let calls = 0;
     const engine: FactoryBoardEngine = {
+      runEnded: async () => false,
       requestMove: async () => {
         throw new Error('A skipRules placement is not a transition.');
       },
@@ -9342,6 +9395,7 @@ describe('custom-board deferred targets', () => {
       skipRules: true,
     });
     const engine: FactoryBoardEngine = {
+      runEnded: async () => false,
       requestMove: async () => {
         throw new Error('A skipRules placement is not a transition.');
       },
@@ -9381,6 +9435,7 @@ describe('custom-board deferred targets', () => {
     });
     const placements: FactoryCardPlacement[] = [];
     const engine: FactoryBoardEngine = {
+      runEnded: async () => false,
       requestMove: async () => {
         throw new Error('A skipRules placement is not a transition.');
       },
