@@ -13137,12 +13137,18 @@ export class Agent<
       const currentFence = getRunRegistryEntry(runId, this.#mastra)?.executionFence;
       // A continuation can finish an earlier reader after resume replaced its execution.
       if (currentFence && currentFence !== executionFence) return;
+      // The workers settle a run this process detached from. Its terminal event can arrive after the
+      // detach, and the reader still delivers it.
+      if (executionFence.detached) return;
       try {
         await publisher?.settle(status);
       } catch (error) {
-        if (!(error instanceof DurableExecutionFenceError) || error.id !== EXECUTION_UNVERIFIED_ERROR_ID) throw error;
+        const unverified = error instanceof DurableExecutionFenceError && error.id === EXECUTION_UNVERIFIED_ERROR_ID;
         // The local reader still finishes, but cannot mutate shared lifecycle state.
-        this.#unverifiedReaderFences.add(executionFence);
+        if (unverified) this.#unverifiedReaderFences.add(executionFence);
+        // The detach can also land while the write waits in the publisher's queue.
+        if (executionFence.detached) return;
+        if (!unverified) throw error;
         this.logger.warn(`[DurableAgent:${this.id}] run ${runId}: terminal ownership could not be verified`, { error });
       }
     };
