@@ -514,7 +514,8 @@ function hasConfiguredProcessorId(processors: readonly unknown[], id: string): b
     if (!step || typeof step !== 'object' || seen.has(step)) return false;
     seen.add(step);
     const { processorId, id: stepId } = step as { processorId?: unknown; id?: unknown };
-    if (processorId === id || stepId === `processor:${id}`) return true;
+    // `processorId` is authoritative; older core versions only carry the step id `processor:<id>`.
+    if (processorId !== undefined ? processorId === id : stepId === `processor:${id}`) return true;
     // Plain steps also pass `isProcessorWorkflow`; only nested workflows have a step graph.
     const graph = (step as { stepGraph?: ProcessorGraphEntry[] }).stepGraph;
     return Array.isArray(graph) && graph.some(matchesEntry);
@@ -4043,7 +4044,12 @@ Notes:
   ): Promise<ErrorProcessor[]> {
     const processors = await super.getErrorProcessors(configuredProcessors, context);
 
-    const om = await this.createOMProcessor(configuredProcessors, context);
+    // The error phase only calls `processAPIError`, which the runner skips for workflows,
+    // so an OM step inside an error workflow cannot stand in for Memory's OM here.
+    const om = await this.createOMProcessor(
+      configuredProcessors.filter(p => !isProcessorWorkflow(p)),
+      context,
+    );
     if (om) {
       processors.push(om as unknown as ErrorProcessor);
     }

@@ -114,17 +114,37 @@ describe('Memory does not add a second Observational Memory processor when one i
 
       const input = await memory.getInputProcessors([graph]);
       const output = await memory.getOutputProcessors([graph]);
-      const error = await memory.getErrorProcessors([graph]);
 
       expect(input.map(p => p.id)).not.toContain('observational-memory');
       expect(output.map(p => p.id)).not.toContain('observational-memory');
-      expect(error.map(p => p.id)).not.toContain('observational-memory');
+    });
+
+    // processAPIError only runs on processor instances, so an OM step in an error workflow
+    // never handles a provider error; Memory keeps its OM for context-overflow recovery.
+    it(`${name} error processor workflow: Memory still adds its OM error processor`, async () => {
+      const memory = createMemory();
+      const om = new ObservationalMemoryProcessor((await memory.omEngine)!, memory);
+
+      const error = await memory.getErrorProcessors([build(om)]);
+
+      expect(error.map(p => p.id)).toContain('observational-memory');
     });
   }
 
   it('still adds its OM processor when the workflow has no OM step', async () => {
     const memory = createMemory();
     const graph = processorWorkflow('no-om').then(passthrough('other')).commit() as ProcessorWorkflow;
+
+    const input = await memory.getInputProcessors([graph]);
+    expect(input.map(p => p.id)).toContain('observational-memory');
+  });
+
+  it('a non-OM step renamed to processor:observational-memory does not count as OM', async () => {
+    const memory = createMemory();
+    const other = passthrough('other');
+    const graph = processorWorkflow('renamed-other')
+      .then(cloneStep({ ...other, processorId: 'other' }, { id: 'processor:observational-memory' }))
+      .commit() as ProcessorWorkflow;
 
     const input = await memory.getInputProcessors([graph]);
     expect(input.map(p => p.id)).toContain('observational-memory');
