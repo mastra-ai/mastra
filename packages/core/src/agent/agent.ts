@@ -9142,7 +9142,9 @@ export class Agent<
     missingTools: MissingResumeTools;
     runId: string;
   }): ResumeSuspension | undefined {
-    const suspended = this.#findResumeTarget(snapshot, toolCallId);
+    const suspended =
+      this.#findResumeTarget(snapshot, toolCallId) ??
+      (toolCallId === undefined ? undefined : this.#findResumeTarget(snapshot, undefined));
     const bound = suspendedCallInstance(suspended);
     const suspension: ResumeSuspension | undefined = bound ? { kind: 'call', call: bound } : undefined;
     const target = suspended?.call;

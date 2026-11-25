@@ -2050,6 +2050,63 @@ describe.each([DurableAgent, EventedAgent])('resume schema preflight (%#)', Agen
     },
   );
 
+  // Technical: a toolCallId that names no suspended call skipped the preflight, but the workflow
+  // resumes the only suspended step when the label is unknown, so the invalid data consumed it.
+  it.each(['warm', 'cold'] as const)(
+    'validates data for the only suspended call when toolCallId names no call ($0 registry)',
+    async registry => {
+      const resumedValues: unknown[] = [];
+      const ask = createTool({
+        id: 'ask',
+        description: 'Ask for confirmation',
+        inputSchema: z.object({ action: z.string() }),
+        suspendSchema: z.object({}),
+        resumeSchema: z.object({ confirmed: z.boolean() }),
+        execute: async (_input, context) => {
+          if (!context?.agent?.resumeData) return context?.agent?.suspend({});
+          resumedValues.push(context.agent.resumeData);
+          return { confirmed: context.agent.resumeData.confirmed };
+        },
+      });
+      const agent = new Agent({
+        id: 'resume-schema-agent',
+        name: 'Resume Schema Agent',
+        instructions: 'Ask for confirmation',
+        model: createSuspendingThenTextModel('ask', ['Confirmed']),
+        tools: { ask },
+      });
+      const pubsub = new EventEmitterPubSub();
+      const durable = new AgentClass({ agent, pubsub });
+      const host = new Mastra({ agents: { durable }, storage: new InMemoryStore(), logger: false });
+      try {
+        const initial = await durable.stream('Confirm', { closeOnSuspend: true });
+        await drain(initial.output.fullStream);
+        await globalRunRegistry.get(initial.runId)?.workflowExecution;
+        if (registry === 'cold') {
+          durable.runRegistry.clear();
+          globalRunRegistry.delete(initial.runId);
+        }
+        const options = { runId: initial.runId, toolCallId: 'unknown-call' };
+
+        await expect(durable.resumeGenerate({ confirmed: 'yes' }, options)).rejects.toMatchObject({
+          id: 'AGENT_RESUME_INVALID_DATA',
+        });
+        expect((await durable.listSuspendedRuns()).runs).toHaveLength(1);
+        expect(resumedValues).toEqual([]);
+
+        const resumed = await durable.resumeGenerate(
+          { confirmed: true },
+          { runId: initial.runId, toolCallId: 'call-1' },
+        );
+        expect(resumed.error).toBeUndefined();
+        expect(resumedValues).toEqual([{ confirmed: true }]);
+      } finally {
+        await host.shutdown({ drainTimeout: 1000 });
+        await pubsub.close();
+      }
+    },
+  );
+
   // Technical: the rejected attempt wrote its request context onto the run registry entry (warm)
   // or left the entry prepare() rebuilt from it registered (cold), and the retry seeded from it.
   it.each(['warm', 'cold'].flatMap(registry => [false, true].map(untilIdle => ({ registry, untilIdle }))))(
