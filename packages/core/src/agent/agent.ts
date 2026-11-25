@@ -11243,6 +11243,7 @@ export class Agent<
       this.#abortLocalController(runId);
       void this.requestRemoteAbort(runId);
       if (await engine.cancelParkedRun(runId)) {
+        await engine.closeParkedRunSignals(runId);
         await engine.announceCanceledRun(runId, pubsub);
         await releaseRemoteAbortListener(runId, this.#mastra);
       }
@@ -11250,7 +11251,10 @@ export class Agent<
     }
     try {
       const canceled = await engine.cancelParkedRun(runId);
-      if (canceled) await engine.announceCanceledRun(runId, pubsub);
+      if (canceled) {
+        await engine.closeParkedRunSignals(runId);
+        await engine.announceCanceledRun(runId, pubsub);
+      }
       const acknowledged = await requestAcknowledgedAbort(pubsub, runId);
       if (canceled) await releaseRemoteAbortListener(runId, this.#mastra);
       return acknowledged || canceled;
@@ -11277,6 +11281,8 @@ export class Agent<
     ]);
     if (typeof runtimeLoopWorkflowName === 'string') workflowNames.add(runtimeLoopWorkflowName);
     try {
+      // Reads the run's consumed signals from the snapshot this deletes.
+      await this.#resolveExecutionEngine()?.closeParkedRunSignals(runId);
       mastra.__unregisterInternalWorkflow(AGENTIC_LOOP_WORKFLOW_ID, runId);
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
       await Promise.all(

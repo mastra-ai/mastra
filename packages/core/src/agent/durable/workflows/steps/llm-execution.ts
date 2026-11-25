@@ -85,6 +85,7 @@ import { DurableStepIds } from '../../constants';
 import { ExecutionFence, getExecutionOwnershipGuard } from '../../execution-fence';
 import { endRunSpansWithError, getRunRegistryEntry, markRunActive } from '../../run-registry';
 import { segmentSpanData } from '../../segment-spans';
+import { drainStoredSignalsForRequest } from '../../stored-signal-drain';
 import {
   createStepStartChunk,
   emitChunkEvent,
@@ -341,9 +342,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // Serialization ends this list's writable lifetime, before asynchronous
       // storage begins. Later sends must use the run queue, whose drain owns
       // transcript insertion, message rotation and the single stream echo.
+      // Set once this step took signals from the store, so they are saved with the transcript holding them.
+      let consumedSignalsState: Record<string, unknown> | undefined;
       const storeStepTranscript = () => {
         stepLifetime.closed = true;
-        return storeMessageListState(params, messageList.serialize());
+        return storeMessageListState(params, messageList.serialize(), consumedSignalsState);
       };
       const signalOwner = getRunRegistryEntry(runId, mastra as Mastra | undefined);
       const enqueuePendingSignal = signalOwner?.enqueuePendingSignal;
@@ -706,7 +709,21 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // queued since the loop's last drain: they arrived before this step subscribed, so they
       // could not interrupt it, and this is the request they would restart.
       const isFirstRequest = (inputData.stepIndex ?? 0) === 0 && !inputData.signalPreempted;
+      const storedSignals = await drainStoredSignalsForRequest({
+        params,
+        mastra: mastra as Mastra | undefined,
+        agentId,
+        runId,
+        state: typedInput.state,
+        requestContext,
+        hasLocalDrain: !!signalRegistry?.drainPendingSignals,
+        preRun: (inputData.stepIndex ?? 0) === 0,
+        pending: !isFirstRequest,
+        aborted: executionAbortSignalEarly?.aborted === true,
+      });
+      if (storedSignals) consumedSignalsState = storedSignals.state;
       const queuedSignals = [
+        ...(storedSignals?.signals ?? []),
         ...((inputData.stepIndex ?? 0) === 0 ? (signalRegistry?.drainPendingSignals?.('pre-run') ?? []) : []),
         ...(isFirstRequest ? [] : (signalRegistry?.drainPendingSignals?.('pending') ?? [])),
         ...(signalRegistry?.pendingProcessorSignals?.splice(0) ?? []),

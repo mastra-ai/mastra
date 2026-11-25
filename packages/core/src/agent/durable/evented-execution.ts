@@ -16,6 +16,7 @@ import {
   getExecutionClaimScope,
 } from './execution-fence';
 import { runInRunFenceScope } from './run-fence-scope';
+import { closeStoredSignalRun } from './stored-signal-drain';
 import { emitErrorEvent } from './stream-adapter';
 
 type Participant = { fence: Promise<ExecutionFence | undefined>; stop: (interrupt?: boolean) => Promise<void> };
@@ -210,6 +211,18 @@ export async function settleEventedDurableExecution(mastra: Mastra, event: Event
     released = record.leaseExpiresAt === null;
   } else if (claim.agentId) {
     await assertExecutionOwned({ mastra, runId: event.runId, agentId: claim.agentId, requestContext: context });
+  }
+  if (event.type !== 'workflow.suspend') {
+    // Before the terminal event and the snapshot delete. The finish event carries the run's latest saved state.
+    const data = event.data ?? {};
+    await closeStoredSignalRun({
+      mastra,
+      agentId: claim.agentId,
+      runId: event.runId,
+      input: data.stepResults?.input ?? { messageListState: data.state?.messageListState },
+      claim,
+      state: data.state,
+    });
   }
   if (event.type === 'workflow.fail' && !released) {
     const error = getErrorFromUnknown(failure ?? 'Workflow execution failed');
