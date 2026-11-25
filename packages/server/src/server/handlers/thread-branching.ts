@@ -2,6 +2,7 @@ import {
   assertNoReservedThreadBranchMetadata,
   createThreadBranchError,
   MASTRA_THREAD_BRANCH_METADATA_KEY,
+  MASTRA_THREAD_BRANCH_METADATA_KEYS,
 } from '@mastra/core/memory';
 import type { MastraMemory, StorageThreadType, ThreadBranchHistoryOutput } from '@mastra/core/memory';
 import {
@@ -129,12 +130,13 @@ function readStoredBranchMarker(thread: StorageThreadType): StoredBranchMarker |
 }
 
 export function sanitizeThreadForResponse(thread: StorageThreadType): StorageThreadType {
-  if (!thread.metadata || !Object.prototype.hasOwnProperty.call(thread.metadata, MASTRA_THREAD_BRANCH_METADATA_KEY)) {
+  const threadMetadata = thread.metadata;
+  if (!threadMetadata || !MASTRA_THREAD_BRANCH_METADATA_KEYS.some(key => Object.hasOwn(threadMetadata, key))) {
     return thread;
   }
 
-  const metadata = { ...thread.metadata };
-  delete metadata[MASTRA_THREAD_BRANCH_METADATA_KEY];
+  const metadata = { ...threadMetadata };
+  for (const key of MASTRA_THREAD_BRANCH_METADATA_KEYS) delete metadata[key];
   return { ...thread, metadata };
 }
 

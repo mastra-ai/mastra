@@ -1,4 +1,4 @@
-import { MASTRA_THREAD_BRANCH_METADATA_KEY } from '@mastra/core/memory';
+import { MASTRA_THREAD_BRANCH_METADATA_KEYS } from '@mastra/core/memory';
 import { z } from 'zod/v4';
 import { paginationInfoSchema, createPagePaginationSchema, paginationNumber, successResponseSchema } from './common';
 import { lastMessagesSchema, messageHistorySchema } from './message-history';
@@ -210,7 +210,7 @@ const branchThreadOutputSchema = z.object({
 });
 
 const branchMetadataInputSchema = z.record(z.string(), z.unknown()).superRefine((metadata, ctx) => {
-  for (const key of [MASTRA_THREAD_BRANCH_METADATA_KEY, 'workingMemory']) {
+  for (const key of [...MASTRA_THREAD_BRANCH_METADATA_KEYS, 'workingMemory']) {
     if (Object.prototype.hasOwnProperty.call(metadata, key)) {
       ctx.addIssue({
         code: 'custom',

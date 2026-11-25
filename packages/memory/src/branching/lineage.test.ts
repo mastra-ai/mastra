@@ -1,5 +1,9 @@
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
-import { MASTRA_THREAD_BRANCH_METADATA_KEY } from '@mastra/core/memory';
+import {
+  MASTRA_THREAD_BRANCH_METADATA_KEY,
+  MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY,
+  MASTRA_THREAD_BRANCH_STATE_METADATA_KEY,
+} from '@mastra/core/memory';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MemoryStorage } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -28,6 +32,15 @@ function branchMetadata(
     branchCreatedAt: timestamp.toISOString(),
     observationalMemoryThreadId: threadId,
     state,
+  };
+}
+
+/** Stored branch metadata as Memory writes it: the lineage record plus its indexed copies. */
+function branchFields(branch: ReturnType<typeof branchMetadata>) {
+  return {
+    [MASTRA_THREAD_BRANCH_METADATA_KEY]: branch,
+    [MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY]: branch.parentThreadId,
+    [MASTRA_THREAD_BRANCH_STATE_METADATA_KEY]: branch.state,
   };
 }
 
@@ -79,7 +92,7 @@ describe('thread branch lineage', () => {
     expect(compareMessageTuples({ id: 'a', createdAt: timestamp }, { id: 'b', createdAt: timestamp })).toBeLessThan(0);
     const raw = await saveRawThread('child', {
       ordinary: true,
-      [MASTRA_THREAD_BRANCH_METADATA_KEY]: branchMetadata('child', 'root'),
+      ...branchFields(branchMetadata('child', 'root')),
     });
     expect(parseThreadBranchMetadata(raw)?.branchPointCreatedAt).toEqual(timestamp);
     expect(sanitizeThread(raw).metadata).toEqual({ ordinary: true });
@@ -96,31 +109,44 @@ describe('thread branch lineage', () => {
     expect(() => parseThreadBranchMetadata(thread)).toThrow(expect.objectContaining({ id: 'BRANCH_LINEAGE_CORRUPT' }));
   });
 
+  it.each([
+    ['indexed keys without a lineage record', { [MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY]: 'root' }],
+    [
+      'an indexed parent that disagrees with the record',
+      { ...branchFields(branchMetadata('child', 'root')), [MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY]: 'other' },
+    ],
+    [
+      'an indexed state that disagrees with the record',
+      { ...branchFields(branchMetadata('child', 'root')), [MASTRA_THREAD_BRANCH_STATE_METADATA_KEY]: 'pending' },
+    ],
+    ['a missing indexed state', { [MASTRA_THREAD_BRANCH_METADATA_KEY]: branchMetadata('child', 'root') }],
+  ])('rejects stored lineage with %s', async (_name, metadata) => {
+    const thread = await saveRawThread('child', metadata);
+    expect(() => parseThreadBranchMetadata(thread)).toThrow(expect.objectContaining({ id: 'BRANCH_LINEAGE_CORRUPT' }));
+  });
+
   it('rejects pending, missing-parent, cycles, cross-resource, and unreachable fork lineage', async () => {
     await seedRoot();
     await saveRawThread('pending', {
-      [MASTRA_THREAD_BRANCH_METADATA_KEY]: branchMetadata('pending', 'root', 'root-message', 'pending'),
+      ...branchFields(branchMetadata('pending', 'root', 'root-message', 'pending')),
     });
     await expect(resolveThreadLineage(store, 'pending')).rejects.toMatchObject({ id: 'BRANCH_NOT_FOUND' });
 
     await saveRawThread('missing', {
-      [MASTRA_THREAD_BRANCH_METADATA_KEY]: branchMetadata('missing', 'does-not-exist'),
+      ...branchFields(branchMetadata('missing', 'does-not-exist')),
     });
     await expect(resolveThreadLineage(store, 'missing')).rejects.toMatchObject({ id: 'BRANCH_NOT_FOUND' });
 
     await saveRawThread('bad-locator', {
-      [MASTRA_THREAD_BRANCH_METADATA_KEY]: {
-        ...branchMetadata('bad-locator', 'root'),
-        observationalMemoryThreadId: 'root',
-      },
+      ...branchFields({ ...branchMetadata('bad-locator', 'root'), observationalMemoryThreadId: 'root' }),
     });
     await expect(resolveThreadLineage(store, 'bad-locator')).rejects.toMatchObject({ id: 'BRANCH_LINEAGE_CORRUPT' });
 
     await saveRawThread('cycle-a', {
-      [MASTRA_THREAD_BRANCH_METADATA_KEY]: branchMetadata('cycle-a', 'cycle-b'),
+      ...branchFields(branchMetadata('cycle-a', 'cycle-b')),
     });
     await saveRawThread('cycle-b', {
-      [MASTRA_THREAD_BRANCH_METADATA_KEY]: branchMetadata('cycle-b', 'cycle-a'),
+      ...branchFields(branchMetadata('cycle-b', 'cycle-a')),
     });
     await expect(resolveThreadLineage(store, 'cycle-a')).rejects.toMatchObject({ id: 'BRANCH_LINEAGE_CORRUPT' });
 
@@ -128,7 +154,7 @@ describe('thread branch lineage', () => {
       thread: {
         id: 'cross-resource',
         resourceId: 'other-resource',
-        metadata: { [MASTRA_THREAD_BRANCH_METADATA_KEY]: branchMetadata('cross-resource', 'root') },
+        metadata: branchFields(branchMetadata('cross-resource', 'root')),
         createdAt: timestamp,
         updatedAt: timestamp,
       },
@@ -138,7 +164,7 @@ describe('thread branch lineage', () => {
     });
 
     await saveRawThread('unreachable', {
-      [MASTRA_THREAD_BRANCH_METADATA_KEY]: branchMetadata('unreachable', 'root', 'unknown-message'),
+      ...branchFields(branchMetadata('unreachable', 'root', 'unknown-message')),
     });
     await expect(resolveThreadLineage(store, 'unreachable')).rejects.toMatchObject({
       id: 'BRANCH_LINEAGE_CORRUPT',
@@ -151,7 +177,7 @@ describe('thread branch lineage', () => {
     for (let depth = 1; depth <= MAX_THREAD_BRANCH_DEPTH + 1; depth += 1) {
       const id = `depth-${depth}`;
       await saveRawThread(id, {
-        [MASTRA_THREAD_BRANCH_METADATA_KEY]: branchMetadata(id, parent),
+        ...branchFields(branchMetadata(id, parent)),
       });
       parent = id;
     }
@@ -167,7 +193,7 @@ describe('thread branch lineage', () => {
   it('rejects child-owned physical rows at or before the lower fork bound', async () => {
     await seedRoot();
     await saveRawThread('child', {
-      [MASTRA_THREAD_BRANCH_METADATA_KEY]: branchMetadata('child', 'root'),
+      ...branchFields(branchMetadata('child', 'root')),
     });
     const invalid: MastraDBMessage = {
       id: 'a-before-root-message',
