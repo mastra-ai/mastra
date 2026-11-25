@@ -121,4 +121,7 @@
     'Commit Mono', ui-monospace, sfmono-regular, menlo, monaco, consolas, 'Liberation Mono', 'Courier New', monospace;
   /* Commit Mono's lowercase is taller than Mona Sans's; scale mono text to Mona Sans's x-height. */
   --font-mono-size-adjust: ex-height 0.508;
+  /* Mona Sans joins "tt", "ti" and "ff" only where letter-spacing is 0, so the same word looked different from one
+     text role to the next. Not `none`, which would also turn off Commit Mono's contextual spacing. */
+  font-variant-ligatures: no-common-ligatures;
 }
