@@ -82,6 +82,7 @@ import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
 import {
   compareMessageTuples,
+  listOwningResourceThreads,
   listRawThreads,
   parseThreadBranchMetadata,
   resolveThreadLineage,
@@ -1109,9 +1110,9 @@ export class Memory extends MastraMemory {
     memoryStore: MemoryStorage,
     targetThreadIds: Iterable<string | undefined>,
   ): Promise<string[]> {
-    const threads = await listRawThreads(memoryStore);
-    const threadsById = new Map(threads.map(thread => [thread.id, thread]));
     const lineageIds = new Set([...targetThreadIds].filter((id): id is string => Boolean(id)));
+    const threads = await listOwningResourceThreads(memoryStore, lineageIds);
+    const threadsById = new Map(threads.map(thread => [thread.id, thread]));
 
     for (const targetThreadId of [...lineageIds]) {
       let current = threadsById.get(targetThreadId);
@@ -1467,7 +1468,7 @@ export class Memory extends MastraMemory {
     return this.withBranchMutationLocks(
       await this.getBranchMutationThreadLockKeys(memoryStore, [thread.id]),
       async () => {
-        const threads = await listRawThreads(memoryStore);
+        const threads = await listOwningResourceThreads(memoryStore, [thread.id], [thread.resourceId]);
         const existing = threads.find(candidate => candidate.id === thread.id);
         const existingBranch = existing ? parseThreadBranchMetadata(existing) : null;
         if (existingBranch?.state === 'pending') {
@@ -1806,9 +1807,10 @@ export class Memory extends MastraMemory {
     }
 
     const memoryStore = await this.getMemoryStore();
-    await resolveThreadLineage(memoryStore, input.threadId);
+    const parentLineage = await resolveThreadLineage(memoryStore, input.threadId);
+    const parent = parentLineage.entries.at(-1)!.thread;
     const children: BranchThreadOutput[] = [];
-    for (const thread of await listRawThreads(memoryStore)) {
+    for (const thread of await listRawThreads(memoryStore, parent.resourceId)) {
       const branch = parseThreadBranchMetadata(thread);
       if (!branch || branch.state === 'pending' || branch.parentThreadId !== input.threadId) continue;
       await resolveThreadLineage(memoryStore, thread.id);
@@ -1840,7 +1842,7 @@ export class Memory extends MastraMemory {
     await this.withBranchMutationLocks(
       await this.getBranchMutationThreadLockKeys(memoryStore, [threadId]),
       async () => {
-        const threads = await listRawThreads(memoryStore);
+        const threads = await listOwningResourceThreads(memoryStore, [threadId]);
         const thread = threads.find(candidate => candidate.id === threadId);
         if (thread && parseThreadBranchMetadata(thread)?.state === 'pending') {
           throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
@@ -4440,7 +4442,8 @@ Notes:
     if (existingBranch?.state === 'pending') {
       throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
     }
-    const hasReadyDescendants = (await listRawThreads(memoryStore)).some(candidate => {
+    const ownerThreads = existingRaw ? await listRawThreads(memoryStore, existingRaw.resourceId) : [];
+    const hasReadyDescendants = ownerThreads.some(candidate => {
       const branch = parseThreadBranchMetadata(candidate);
       return branch?.state === 'ready' && branch.parentThreadId === threadId;
     });

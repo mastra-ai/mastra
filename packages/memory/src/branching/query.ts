@@ -3,6 +3,7 @@ import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type { MemoryStorage, StorageListMessagesInput, StorageListMessagesOutput } from '@mastra/core/storage';
 import {
   compareMessageTuples,
+  listOwningResourceThreads,
   listRawThreads,
   parseThreadBranchMetadata,
   resolveThreadLineageEntries,
@@ -166,7 +167,7 @@ export async function getThreadBranchParticipation(
   allThreads?: StorageThreadType[],
   options: { ignorePending?: boolean } = {},
 ): Promise<{ participant: boolean; thread: StorageThreadType | null }> {
-  const threads = allThreads ?? (await listRawThreads(memoryStore));
+  const threads = allThreads ?? (await listOwningResourceThreads(memoryStore, [threadId]));
   const thread = threads.find(candidate => candidate.id === threadId) ?? null;
   if (!thread) return { participant: false, thread: null };
   const branch = parseThreadBranchMetadata(thread);
@@ -406,7 +407,8 @@ export async function queryThreadMessages(
   memoryStore: MemoryStorage,
   args: StorageListMessagesInput,
 ): Promise<StorageListMessagesOutput> {
-  const allThreads = await listRawThreads(memoryStore);
+  const requestedThreadIds = Array.isArray(args.threadId) ? args.threadId : [args.threadId];
+  const allThreads = await listOwningResourceThreads(memoryStore, requestedThreadIds);
   const pendingThreadIds = new Set(
     allThreads.flatMap(thread => (parseThreadBranchMetadata(thread)?.state === 'pending' ? [thread.id] : [])),
   );
