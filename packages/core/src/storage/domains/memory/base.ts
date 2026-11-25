@@ -83,6 +83,7 @@ export abstract class MemoryStorage extends StorageDomain {
    * `claimPendingSignals`, `closeSignalRun`, `cancelPendingSignals` and
    * `listPendingSignals`. Adapters that set it must pass the pending-signals
    * conformance suite.
+   * @experimental
    */
   readonly supportsPendingSignals?: boolean = false;
 
@@ -90,6 +91,7 @@ export abstract class MemoryStorage extends StorageDomain {
    * Whether every process of a deployment reads and writes the same pending
    * signal rows. Defaults to `supportsPendingSignals`. An adapter whose rows
    * live in one process must override it to return false.
+   * @experimental
    */
   get pendingSignalsSharedAcrossProcesses(): boolean {
     return !!this.supportsPendingSignals;
@@ -321,8 +323,9 @@ export abstract class MemoryStorage extends StorageDomain {
   // Rules for the existing methods:
   // - `saveMessages` on an existing id: a row with a status loses the status,
   //   keeps its claimant and takes the saved message's `createdAt`. A row
-  //   without a status is saved as before and keeps its claimant. A row with
-  //   a status is never saved under another thread.
+  //   without a status is saved as before and keeps its claimant. When the
+  //   saved message names another thread than a row with a status, the store
+  //   leaves that row unchanged and saves the rest of the batch as usual.
   // - Every message read, including include windows and their neighbor
   //   counts, skips rows with a status.
   // - `updateMessages` treats a row with a status as a missing id.
@@ -348,12 +351,16 @@ export abstract class MemoryStorage extends StorageDomain {
   /**
    * Record `runId` as the thread's signal run, replacing any previous one.
    * Changes no message. Records nothing when the thread does not exist.
+   * @experimental
    */
   async setSignalRun(_args: { threadId: string; runId: string }): Promise<void> {
     throw pendingSignalsNotSupportedError(this.constructor.name);
   }
 
-  /** The thread's signal run, or null when it has none or the thread does not exist. */
+  /**
+   * The thread's signal run, or null when it has none or the thread does not exist.
+   * @experimental
+   */
   async getSignalRun(_args: { threadId: string }): Promise<string | null> {
     throw pendingSignalsNotSupportedError(this.constructor.name);
   }
@@ -373,6 +380,7 @@ export abstract class MemoryStorage extends StorageDomain {
    * Then, when a row with the message's id exists in any thread and state,
    * nothing is written. Otherwise the row is inserted as pending with the
    * message's `createdAt`. Both cases answer `accepted`.
+   * @experimental
    */
   async enqueuePendingSignal(_args: {
     message: MastraDBMessage;
@@ -387,6 +395,7 @@ export abstract class MemoryStorage extends StorageDomain {
    * `runId`, whatever its status, except the ids in `consumedIds`.
    * Otherwise, including for a missing thread, return nothing and change
    * nothing. Does not change any `createdAt`.
+   * @experimental
    */
   async claimPendingSignals(_args: {
     threadId: string;
@@ -404,6 +413,7 @@ export abstract class MemoryStorage extends StorageDomain {
    * Then clear the thread's signal run if it is still `runId`. Runs whatever
    * the thread's signal run is, leaves rows of other claimants and unclaimed
    * rows untouched, and is idempotent.
+   * @experimental
    */
   async closeSignalRun(_args: { threadId: string; runId: string; consumedIds: string[] }): Promise<void> {
     throw pendingSignalsNotSupportedError(this.constructor.name);
@@ -413,12 +423,16 @@ export abstract class MemoryStorage extends StorageDomain {
    * Delete the rows of the thread named in `ids` whose status is `pending`.
    * Claimed rows, rows without a status and unknown ids are skipped. Returns
    * the ids deleted, in the order given.
+   * @experimental
    */
   async cancelPendingSignals(_args: { threadId: string; ids: string[] }): Promise<string[]> {
     throw pendingSignalsNotSupportedError(this.constructor.name);
   }
 
-  /** The thread's rows whose status is `pending`. */
+  /**
+   * The thread's rows whose status is `pending`.
+   * @experimental
+   */
   async listPendingSignals(_args: { threadId: string }): Promise<MastraDBMessage[]> {
     throw pendingSignalsNotSupportedError(this.constructor.name);
   }
