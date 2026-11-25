@@ -20,7 +20,7 @@ function toolCall(id: string, state: 'call' | 'result'): TimelineEntry {
         ],
       },
     },
-  } as TimelineEntry;
+  };
 }
 
 describe('ActivityLine', () => {
