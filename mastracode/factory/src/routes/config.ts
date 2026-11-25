@@ -1030,6 +1030,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
     };
 
     const resolveSessionModelContext: SessionModelContextResolver = async (c, address, includeDefaultModel = true) => {
+      await auth.ensureUser(c);
       const tenant = auth.tenant(c);
       if (!tenant && auth.enabled()) return { response: c.json({ error: 'unauthorized' }, 401) };
       if (!tenant) return undefined;

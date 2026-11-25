@@ -1,10 +1,12 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 
 import type { ModelPack } from '../../model-packs.js';
 import { createSourceControlSessionLookup } from '../../session/factory-session.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { ConfigRoutes } from '../config.js';
 import type { ModelCatalog } from '../config.js';
+import type { RouteAuth } from '../route.js';
 import { fakeRouteAuth, mountApiRoutes } from '../test-utils.js';
 
 export const ownerPack: ModelPack = {
@@ -37,6 +39,18 @@ export type SessionModelApp = Hono<{
 }>;
 
 export const SESSION_ID = '00000000-0000-4000-8000-0000000000a1';
+
+function handlerContextAuth(auth: RouteAuth): RouteAuth {
+  const ensured = new WeakSet<Context>();
+  return {
+    ...auth,
+    ensureUser: c => {
+      ensured.add(c);
+      return auth.ensureUser(c);
+    },
+    tenant: c => (ensured.has(c) ? auth.tenant(c) : undefined),
+  };
+}
 
 export async function setupSessionModelRoutes(
   modelScope: 'hybrid' | 'user' | 'factory' = 'hybrid',
@@ -111,7 +125,7 @@ export async function setupSessionModelRoutes(
   mountApiRoutes(
     app,
     new ConfigRoutes({
-      auth: fakeRouteAuth({ enabled: authEnabled }),
+      auth: handlerContextAuth(fakeRouteAuth({ enabled: authEnabled })),
       controller: {
         listAvailableModels: async () => [
           { id: 'anthropic/claude-opus-4-6', provider: 'anthropic', modelName: 'Owner', hasApiKey: false },
