@@ -1649,6 +1649,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
                 .optional(),
               /** Factory tools the phase grants the session working the card there. */
               tools: z.array(z.string()).optional(),
+              /** The outcomes the phase's session may report; one per next phase when the board lists none. */
+              outcomes: z.array(z.object({ key: z.string(), label: z.string(), to: z.string() })).optional(),
               transitions: z.array(z.object({ outcome: z.string().nullable(), to: z.string() })),
             }),
           ),

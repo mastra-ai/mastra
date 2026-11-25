@@ -23,6 +23,7 @@ import {
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
+import { phaseOutcomes } from '../boards/phase-outcomes.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource, StoredBoardDetails } from '../boards/project-boards.js';
 import { EXTERNAL_SOURCE_MISSING_KEY } from '../integrations/issue-reconciler.js';
@@ -482,6 +483,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                           }
                         : {}),
                       ...(phase.tools ? { tools: [...phase.tools] } : {}),
+                      outcomes: phaseOutcomes(board, phaseId).map(({ key, label, to }) => ({ key, label, to })),
                     }
                   : {}),
                 transitions: (board.transitions[phaseId] ?? []).map(({ outcome, to }) => ({ outcome, to })),

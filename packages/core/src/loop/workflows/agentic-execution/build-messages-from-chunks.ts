@@ -202,6 +202,17 @@ export function buildMessagesFromChunks({
 
   spans.flushSpansLeftOpen(parts);
 
+  // A Responses provider (OpenAI, Azure) only keeps the items of a response that
+  // finished. Replaying the item id of an aborted or failed response fails every
+  // later turn with "Item with id '…' not found" (#31202), so its text and reasoning
+  // keep their content but drop the id: the provider then sends the text inline
+  // and skips the reasoning instead of referencing items that don't exist.
+  if (!chunks.some(chunk => chunk.type === 'finish' || chunk.type === 'step-finish')) {
+    for (const part of parts) {
+      if (part.type === 'text' || part.type === 'reasoning') dropResponseItemIds(part);
+    }
+  }
+
   // Remove text parts that ended up empty (e.g. spans where every delta was ''),
   // unless they carry providerMetadata (e.g. Gemini thought signatures, #20469) —
   // that metadata must survive to the DB so it can be sent back to the provider.
@@ -249,4 +260,19 @@ export function buildMessagesFromChunks({
   } as MastraDBMessage;
 
   return [message];
+}
+
+function dropResponseItemIds(part: { providerMetadata?: Record<string, Record<string, unknown> | undefined> }) {
+  if (!part.providerMetadata) return;
+  const providerMetadata = Object.fromEntries(
+    Object.entries(part.providerMetadata)
+      .map(([provider, value]) => {
+        if (!value || typeof value !== 'object' || !('itemId' in value)) return [provider, value] as const;
+        const { itemId: _itemId, ...rest } = value;
+        return [provider, rest] as const;
+      })
+      .filter(([, value]) => !(value && typeof value === 'object' && Object.keys(value).length === 0)),
+  );
+  if (Object.keys(providerMetadata).length > 0) part.providerMetadata = providerMetadata;
+  else delete part.providerMetadata;
 }
