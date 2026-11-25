@@ -1167,7 +1167,9 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
           }),
         ),
       );
-      assert.ok(replies.some(reply => reply.status === 200));
+      const statuses = replies.map(reply => reply.status).sort();
+      assert.equal(statuses[0], 200);
+      assert.ok(statuses[1] === 403 || statuses[1] === 409, `Unexpected resume statuses ${statuses.join(', ')}`);
       await Promise.all(replies.map(reply => reply.text()));
       const finished = await inspect(f, racing.runId);
       assert.equal(finished.result.status, 'published', JSON.stringify(finished));
