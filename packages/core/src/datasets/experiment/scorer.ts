@@ -681,6 +681,7 @@ export async function runStepScorersForItem(
             groundTruth: item.groundTruth,
             expectedTrajectory: item.expectedTrajectory,
             scoreSource: 'experiment',
+            ...(pinnedScorerVersionIds.has(scorer) ? { scorerVersion: pinnedScorerVersionIds.get(scorer) } : {}),
             targetScope: 'span',
             targetEntityType: EntityType.WORKFLOW_STEP,
             targetTraceId: traceId,
