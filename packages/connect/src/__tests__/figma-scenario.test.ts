@@ -193,6 +193,15 @@ describe('Figma smoke scenario', () => {
     });
   });
 
+  it.each([
+    ['pass', "Provider request failed (403): You don't have permission to view this style [status=403]"],
+    ['fail', 'Provider request failed (403): Invalid token [status=403]'],
+  ])('the made-up style key probe returns %s on: %s', async (status, message) => {
+    const { steps } = await runScenario({ fail: { figma_get_style: message } });
+
+    expect(steps).toContainEqual(expect.objectContaining({ name: 'style by key (made-up key)', status }));
+  });
+
   describe('a create whose outcome is unknown', () => {
     it.each([
       [
