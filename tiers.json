@@ -4557,9 +4557,9 @@
     },
     "mastracode/factory/src/routes/boards.test.ts": {
       "tier": "in",
-      "since": "2026-10-31",
-      "last_failure": "2026-11-18",
-      "reason": "pr-catch",
+      "since": "2026-11-25",
+      "last_failure": "2026-11-25",
+      "reason": "versioning-fail",
       "pr_failures": {
         "133780125354": {
           "date": "2026-11-17",
@@ -44120,6 +44120,12 @@
       "since": "2026-11-25",
       "last_failure": null,
       "reason": "new"
+    },
+    "mastracode/factory/src/storage/domains/open-runs/base.test.ts": {
+      "tier": "in",
+      "since": "2026-11-25",
+      "last_failure": "2026-11-25",
+      "reason": "versioning-fail"
     }
   },
   "inspected_runs": {
