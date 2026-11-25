@@ -422,7 +422,8 @@ async function emitAccountSwitchPart(
   // as a controller `info` event so the switch is visible live (precedent:
   // emitTransientRetry emits controller events from the retry matcher).
   const controllerContext = args.requestContext?.get('controller') as
-    { emitEvent?: (event: { type: 'info'; message: string }) => void } | undefined;
+    | { emitEvent?: (event: { type: 'info'; message: string }) => void }
+    | undefined;
   controllerContext?.emitEvent?.({ type: 'info', message: accountSwitchNoticeText(data) });
 }
 
@@ -629,7 +630,8 @@ export class AccountRotationProcessor implements Processor {
       // The retry replays the request from scratch (Q10), as a rotation does.
       args.rotateResponseMessageId?.();
       const controller = args.requestContext?.get('controller') as
-        { emitEvent?: (event: { type: 'info'; message: string }) => void } | undefined;
+        | { emitEvent?: (event: { type: 'info'; message: string }) => void }
+        | undefined;
       controller?.emitEvent?.({
         type: 'info',
         message: `The provider ended the response stream early (it may have hit a stream duration limit). Retrying (${cuts + 1}/${MAX_STREAM_CUT_RETRIES}).`,

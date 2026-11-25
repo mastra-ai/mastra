@@ -1109,7 +1109,8 @@ describe('createMastraCode', () => {
       .map(call => call?.[0] as { id?: string; signals?: unknown[] } | undefined)
       .find(config => config?.id === 'code-agent');
     const taskProvider = codeAgentConfig?.signals?.find(provider => provider instanceof TaskSignalProvider) as
-      { getTools: () => Record<string, unknown> } | undefined;
+      | { getTools: () => Record<string, unknown> }
+      | undefined;
     expect(Object.keys(taskProvider!.getTools()).sort()).toEqual(['task_complete', 'task_update']);
   });
 
@@ -1459,7 +1460,8 @@ describe('createMastraCode', () => {
     });
 
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
-      { memory?: unknown; initialState?: Record<string, unknown> } | undefined;
+      | { memory?: unknown; initialState?: Record<string, unknown> }
+      | undefined;
     expect(agentControllerConfig?.memory).toBe(customMemory);
     expect(agentControllerConfig?.initialState?.configDir).toBe('.acme-code');
     expect(getDynamicMemoryMock).not.toHaveBeenCalled();
@@ -1514,7 +1516,8 @@ describe('createMastraCode', () => {
     const built = await createMastraCode({ pluginManager: pluginManager as any });
 
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
-      { modes?: Array<{ id: string; availableTools?: string[] }>; initialState?: Record<string, unknown> } | undefined;
+      | { modes?: Array<{ id: string; availableTools?: string[] }>; initialState?: Record<string, unknown> }
+      | undefined;
     expect(agentControllerConfig?.modes?.find(mode => mode.id === 'plan')?.availableTools).toContain('plugin_tool');
     expect(agentControllerConfig?.modes?.find(mode => mode.id === 'fast')?.availableTools).toContain('plugin_tool');
     expect(agentControllerConfig?.initialState?.pluginInstructions).toEqual(['Use plugin policy.']);
@@ -1531,7 +1534,8 @@ describe('createMastraCode', () => {
     });
     const sharedDiscoveryFlag = () =>
       (createSignalsPubSubMock.mock.calls.at(-1) as unknown[] | undefined)?.[1] as
-        { sharedAgentDiscovery?: boolean } | undefined;
+        | { sharedAgentDiscovery?: boolean }
+        | undefined;
 
     beforeEach(() => {
       createSignalsPubSubMock.mockClear();
@@ -1623,7 +1627,8 @@ describe('createMastraCode', () => {
     await createMastraCode({ crossAgentSignals: true });
 
     const onSessionCreated = controllerOnSessionCreatedMock.mock.calls.find(call => call[1]?.blocking)?.[0] as
-      ((session: any) => Promise<void>) | undefined;
+      | ((session: any) => Promise<void>)
+      | undefined;
     expect(onSessionCreated).toBeDefined();
 
     let handleSessionEvent: ((event: any) => void) | undefined;
@@ -1656,7 +1661,8 @@ describe('createMastraCode', () => {
     await createMastraCode({ crossAgentSignals: true });
 
     const onSessionCreated = controllerOnSessionCreatedMock.mock.calls.find(call => call[1]?.blocking)?.[0] as
-      ((session: any) => Promise<void>) | undefined;
+      | ((session: any) => Promise<void>)
+      | undefined;
     expect(onSessionCreated).toBeDefined();
 
     let resolveClaim!: (claim: { claimed: boolean; unsubscribe: () => void }) => void;
@@ -1794,7 +1800,8 @@ describe('createMastraCode', () => {
     });
 
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
-      { modes?: { id: string; default?: boolean; defaultModelId: string }[] } | undefined;
+      | { modes?: { id: string; default?: boolean; defaultModelId: string }[] }
+      | undefined;
     expect(agentControllerConfig?.modes).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: 'review', default: true, defaultModelId: '__GATEWAY_OPENAI_MODEL__' }),
@@ -1818,7 +1825,8 @@ describe('createMastraCode', () => {
     await createMastraCode({ cwd: projectPath });
 
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
-      { initialState?: Record<string, unknown> } | undefined;
+      | { initialState?: Record<string, unknown> }
+      | undefined;
     expect(agentControllerConfig?.initialState?.projectPath).toBe(projectPath);
   });
 
@@ -1854,7 +1862,8 @@ describe('createMastraCode', () => {
       undefined,
     );
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
-      { initialState?: Record<string, unknown> } | undefined;
+      | { initialState?: Record<string, unknown> }
+      | undefined;
     expect(agentControllerConfig?.initialState?.configDir).toBe('.acme-code');
   });
 
@@ -1919,7 +1928,8 @@ describe('createMastraCode', () => {
     await createMastraCode({ pubsub, unixSocketPubSub: true });
 
     const agentControllerConfig = controllerConstructorMock.mock.calls.at(-1)?.[0] as
-      { pubsub?: unknown; threadLock?: unknown } | undefined;
+      | { pubsub?: unknown; threadLock?: unknown }
+      | undefined;
     expect(agentControllerConfig?.pubsub).toBe(pubsub);
     expect(agentControllerConfig?.threadLock).toBeDefined();
   });
@@ -1931,7 +1941,8 @@ describe('createMastraCode', () => {
     await createMastraCode({ pubsub, crossProcessPubSub: true });
 
     const agentControllerConfig = controllerConstructorMock.mock.calls.at(-1)?.[0] as
-      { pubsub?: unknown; threadLock?: unknown } | undefined;
+      | { pubsub?: unknown; threadLock?: unknown }
+      | undefined;
     expect(agentControllerConfig?.pubsub).toBe(pubsub);
     expect(agentControllerConfig?.threadLock).toBeUndefined();
   });
@@ -1970,7 +1981,8 @@ describe('createMastraCode', () => {
     await createMastraCode();
 
     const agentControllerCall = controllerConstructorMock.mock.calls[0]?.[0] as
-      { initialState?: Record<string, unknown> } | undefined;
+      | { initialState?: Record<string, unknown> }
+      | undefined;
     expect(agentControllerCall?.initialState?.observeAttachments).toBe(false);
   });
 
@@ -1980,7 +1992,8 @@ describe('createMastraCode', () => {
     await createMastraCode();
 
     const agentControllerCall = controllerConstructorMock.mock.calls[0]?.[0] as
-      { initialState?: Record<string, unknown> } | undefined;
+      | { initialState?: Record<string, unknown> }
+      | undefined;
     expect(agentControllerCall?.initialState?.observeAttachments).toBe('auto');
   });
 
@@ -2109,7 +2122,8 @@ describe('createMastraCode', () => {
 
     expect(streamErrorRetryProcessorConstructorMock).toHaveBeenCalledTimes(1);
     const options = streamErrorRetryProcessorConstructorMock.mock.calls[0]?.[0] as
-      { matchers?: Array<{ match?: unknown; maxRetries?: number; delayMs?: unknown; onRetry?: unknown }> } | undefined;
+      | { matchers?: Array<{ match?: unknown; maxRetries?: number; delayMs?: unknown; onRetry?: unknown }> }
+      | undefined;
     expect(options?.matchers).toHaveLength(4);
 
     // First matcher: stream cuts after the provider accepted the request are claimed
