@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { assertNoReservedThreadBranchMetadata, createThreadBranchError } from '@mastra/core/memory';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import {
@@ -23,6 +22,7 @@ import {
   sanitizeThreadForResponse,
   throwThreadBranchNotFound,
 } from './thread-branching';
+import { assertNoReservedThreadBranchMetadata, createThreadBranchError } from './thread-branching-compat';
 import { enforceThreadAccess, getEffectiveResourceId, validateThreadOwnership } from './utils';
 
 function buildConversationObject({ thread }: { thread: ConversationObject['thread'] }): ConversationObject {

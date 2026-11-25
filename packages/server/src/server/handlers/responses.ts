@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent, MastraDBMessage } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
-import { createThreadBranchError, stripClientAuthoredTurnMarks } from '@mastra/core/memory';
+import { stripClientAuthoredTurnMarks } from '@mastra/core/memory';
 import type { MastraMemory } from '@mastra/core/memory';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
@@ -52,6 +52,7 @@ import {
   inspectVisibleMemoryThread,
   throwThreadBranchNotFound,
 } from './thread-branching';
+import { createThreadBranchError } from './thread-branching-compat';
 import { enforceThreadAccess, getEffectiveResourceId, getEffectiveThreadId } from './utils';
 
 type AgentExecutionInput = Parameters<Agent['generate']>[0];
