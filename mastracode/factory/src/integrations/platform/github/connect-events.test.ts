@@ -99,7 +99,7 @@ function connectEvent(
     id: String(nextId),
     timestamp: SWITCHED_AT + 1,
     connectionId: 'conn-github',
-    integrationId: FACTORY_GITHUB_PROVIDER_KEY,
+    provider: FACTORY_GITHUB_PROVIDER_KEY,
     eventType,
     sourceEventId,
     payload,
@@ -138,7 +138,7 @@ describe('factory-github connect events', () => {
     const { handle, dispatch, ingestFactoryEvent } = setup();
     await handle(
       connectEvent('pull_request.opened', pullRequestPayload(), {
-        integrationId: FACTORY_REVIEWS_GITHUB_PROVIDER_KEY,
+        provider: FACTORY_REVIEWS_GITHUB_PROVIDER_KEY,
         connectionId: 'conn-reviews',
       }),
     );

@@ -36,10 +36,10 @@ export function connectGithubEventHandler(
   let refreshedAt = Number.NEGATIVE_INFINITY;
   return async event => {
     const logger = config.logger;
-    if (event.integrationId !== FACTORY_GITHUB_PROVIDER_KEY) {
+    if (event.provider !== FACTORY_GITHUB_PROVIDER_KEY) {
       logger?.debug('Platform GitHub: ignored a connect event from another GitHub app', {
         eventId: event.id,
-        integrationId: event.integrationId,
+        provider: event.provider,
       });
       return;
     }
