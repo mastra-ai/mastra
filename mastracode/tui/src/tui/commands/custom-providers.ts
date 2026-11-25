@@ -182,13 +182,18 @@ export function headersForCustomProviderUrlChange(
   };
 }
 
+/**
+ * Ask for one line of text and return it trimmed, or null when it is empty or
+ * the user cancels. `masked` hides the typed text, for secrets.
+ */
 async function askText(
   ctx: SlashCommandContext,
   question: string,
   defaultValue?: string,
   allowEmptyInput = false,
+  masked = false,
 ): Promise<string | null> {
-  const answer = await askModalQuestion(ctx.state.ui, { question, defaultValue, allowEmptyInput });
+  const answer = await askModalQuestion(ctx.state.ui, { question, defaultValue, allowEmptyInput, masked });
   const trimmed = answer?.trim() ?? '';
   return trimmed.length > 0 ? trimmed : null;
 }
@@ -607,7 +612,8 @@ async function headersFlow(ctx: SlashCommandContext, providerId: string): Promis
 }
 
 /**
- * Ask for a header name, value and secret flag, then save the header.
+ * Ask for a header name, secret flag and value, then save the header.
+ * The flag comes before the value so a secret value is typed into a masked input.
  * Returns whether the header was added, refused, or the user cancelled.
  */
 async function addHeaderFlow(ctx: SlashCommandContext, providerId: string): Promise<'added' | 'refused' | 'cancelled'> {
@@ -624,13 +630,13 @@ async function addHeaderFlow(ctx: SlashCommandContext, providerId: string): Prom
     return 'refused';
   }
 
-  const value = await askText(ctx, `Value for ${name}`);
-  if (!value) return 'cancelled';
   const visibility = await askSelect(ctx, `Is ${name} a secret?`, [
-    { label: 'Secret', value: 'secret', description: 'Hide the value in lists' },
+    { label: 'Secret', value: 'secret', description: 'Hide the value while typing and in lists' },
     { label: 'Plain', value: 'plain', description: 'Show the value in lists' },
   ]);
   if (!visibility) return 'cancelled';
+  const value = await askText(ctx, `Value for ${name}`, undefined, false, visibility === 'secret');
+  if (!value) return 'cancelled';
 
   const settings = loadSettings();
   const problem = addHeaderToCustomProviderInSettings(settings, providerId, {
