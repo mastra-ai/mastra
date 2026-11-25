@@ -322,7 +322,7 @@ export const MAX_KNOWLEDGE_NOTE_TOKENS = 250;
 export function assertKnowledgePageDescriptionWithinBound(description: string | undefined): void {
   if (description === undefined) return;
   if (estimateTokenCount(description) > MAX_KNOWLEDGE_PAGE_DESCRIPTION_TOKENS) {
-    throw new Error(
+    throw new KnowledgeTokenBoundError(
       `Knowledge page description exceeds the ${MAX_KNOWLEDGE_PAGE_DESCRIPTION_TOKENS} token limit; put long-form text in the page body`,
     );
   }
@@ -335,9 +335,21 @@ export function assertKnowledgePageDescriptionWithinBound(description: string | 
  */
 export function assertKnowledgeNoteTextWithinBound(text: string): void {
   if (estimateTokenCount(text) > MAX_KNOWLEDGE_NOTE_TOKENS) {
-    throw new Error(
+    throw new KnowledgeTokenBoundError(
       `Knowledge note text exceeds the ${MAX_KNOWLEDGE_NOTE_TOKENS} token limit; split it into separate notes or put long-form text in the page body`,
     );
+  }
+}
+
+/**
+ * Thrown when a page description or note text is over its token bound, so hosts can map it by name.
+ *
+ * @experimental
+ */
+export class KnowledgeTokenBoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'KnowledgeTokenBoundError';
   }
 }
 
