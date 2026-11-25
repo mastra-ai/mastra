@@ -130,7 +130,7 @@ export function BoardColumnEmptyState({
     );
   }
   return (
-    <div className="rounded-card flex min-h-24 flex-col justify-center border border-dashed border-border p-4">
+    <div className="flex min-h-24 flex-col justify-center rounded-card border border-dashed border-border p-4">
       <Txt tone="muted" as="p" variant="column" className="m-0">
         {copy.title}
       </Txt>

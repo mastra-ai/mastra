@@ -10,24 +10,24 @@ import { IconArrowsUpDown } from '@/ds/icons/central/IconArrowsUpDown';
 import { IconFilter1 } from '@/ds/icons/central/IconFilter1';
 import { IconLayersThree } from '@/ds/icons/central/IconLayersThree';
 
-export interface BoardPropertiesMenuProps<Sort extends string> {
+export interface BoardPropertiesMenuProps<Sort extends string, FieldId extends string = string> {
   view: BoardViewState<Sort>;
-  fields: readonly BoardFilterField[];
+  fields: readonly BoardFilterField<FieldId>[];
   sortOptions: readonly BoardSortOption<Sort>[];
   sortLabels: Readonly<Record<Sort, string>>;
   defaultSort: Sort;
   /** The host applies field rules (e.g. clearing a dependent filter) when one field's values change. */
-  onFilterChange: (fieldId: string, values: string[]) => void;
+  onFilterChange: (fieldId: FieldId, values: string[]) => void;
 }
 
-export function BoardPropertiesMenu<Sort extends string>({
+export function BoardPropertiesMenu<Sort extends string, FieldId extends string = string>({
   view,
   fields,
   sortOptions,
   sortLabels,
   defaultSort,
   onFilterChange,
-}: BoardPropertiesMenuProps<Sort>) {
+}: BoardPropertiesMenuProps<Sort, FieldId>) {
   const selected = (fieldId: string) => [...(view.filters[fieldId] ?? [])];
   const changes = [
     ...(view.sort === defaultSort ? [] : [`Sort: ${sortLabels[view.sort]}`]),

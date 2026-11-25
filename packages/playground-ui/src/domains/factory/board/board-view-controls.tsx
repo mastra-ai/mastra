@@ -16,11 +16,17 @@ import { IconListBullets } from '@/ds/icons/central/IconListBullets';
 
 const LAYOUT_LABELS: Record<BoardLayout, string> = { board: 'Board', list: 'List' };
 
-export interface BoardViewControlsProps<Sort extends string> extends BoardPropertiesMenuProps<Sort> {
+export interface BoardViewControlsProps<
+  Sort extends string,
+  FieldId extends string = string,
+> extends BoardPropertiesMenuProps<Sort, FieldId> {
   aside?: ReactNode;
 }
 
-export function BoardViewControls<Sort extends string>({ aside, ...menu }: BoardViewControlsProps<Sort>) {
+export function BoardViewControls<Sort extends string, FieldId extends string = string>({
+  aside,
+  ...menu
+}: BoardViewControlsProps<Sort, FieldId>) {
   const { view, fields, sortLabels } = menu;
   const { savedViews } = view;
 

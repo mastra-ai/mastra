@@ -35,16 +35,17 @@ export function BoardCard({
   LinkComponent?: LinkComponent;
   children: ReactNode;
 }) {
+  const draggedPayload = locked ? undefined : dragPayload;
   return (
     <article
-      draggable={dragPayload !== undefined}
+      draggable={draggedPayload !== undefined}
       aria-label={title}
       aria-busy={busy || undefined}
       data-testid="work-item-card"
       data-related={related ? 'true' : undefined}
       data-highlighted={highlighted || undefined}
       onDragStart={event => {
-        if (dragPayload) setDragPayload(event, dragPayload);
+        if (draggedPayload) setDragPayload(event, draggedPayload);
       }}
       className={cn(
         BOARD_CARD_LAYOUT_CLASS,
@@ -61,7 +62,7 @@ export function BoardCard({
         href={href}
         draggable={false}
         aria-label={`Open ${title}`}
-        className={`rounded-card absolute inset-0 cursor-pointer ${focusRingInset}`}
+        className={`absolute inset-0 cursor-pointer rounded-card ${focusRingInset}`}
       />
       {children}
     </article>

@@ -600,7 +600,7 @@ describe('Global search', () => {
     // One search for the settled text, none for the letters on the way to it.
     expect(requests.workItemQueries.filter(query => query.startsWith('started=false'))).toEqual([
       'started=false&q=',
-      'started=false&q=SIGNING+rotate',
+      'started=false&q=signing+rotate',
     ]);
   });
 
