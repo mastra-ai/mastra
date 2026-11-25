@@ -399,6 +399,38 @@ describe('KnowledgePage', () => {
     ).toBeInTheDocument();
   });
 
+  it('says the graph failed to refresh in a project that looked empty', async () => {
+    stubKnowledge({ pages: [], edges: [], pinnedIds: [], truncated: false });
+    let push: ((frame: string) => void) | undefined;
+    server.use(
+      http.get(`${KNOWLEDGE}/events`, () => {
+        const encoder = new TextEncoder();
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(encoder.encode(': connected\n\n'));
+            push = frame => controller.enqueue(encoder.encode(frame));
+          },
+        });
+        return new HttpResponse(stream, { headers: { 'Content-Type': 'text/event-stream' } });
+      }),
+    );
+    renderRoute();
+    await screen.findByText('No knowledge in this project yet. Pages appear here as factory sessions write them.');
+    await waitFor(() => expect(push).toBeDefined());
+
+    server.use(
+      http.get(`${KNOWLEDGE}/graph`, () =>
+        HttpResponse.json({ error: 'failed', message: 'The graph read timed out.' }, { status: 500 }),
+      ),
+    );
+    push!(
+      `event: change\ndata: ${JSON.stringify({ kind: 'page', op: 'create', pageId: 'runbook', at: '2026-10-28T00:00:01.000Z' })}\n\n`,
+    );
+    expect(await screen.findByRole('alert', {}, { timeout: 8_000 })).toHaveTextContent(
+      'Couldn’t refresh the graph. The graph read timed out.',
+    );
+  }, 15_000);
+
   it('says why when neither the tree nor the graph can load', async () => {
     stubKnowledge({ status: 500, message: 'Knowledge is misconfigured' });
     server.use(

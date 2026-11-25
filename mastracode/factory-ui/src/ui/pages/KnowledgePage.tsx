@@ -78,7 +78,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string }) {
     setSearchParams(next);
   };
 
-  if (graph.data?.pages.length === 0) {
+  if (graph.data?.pages.length === 0 && !graph.isError) {
     return (
       <Txt tone="muted" as="p" variant="body" className="p-4">
         No knowledge in this project yet. Pages appear here as factory sessions write them.
