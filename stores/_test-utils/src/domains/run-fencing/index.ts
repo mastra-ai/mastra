@@ -263,20 +263,23 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
 
       // Core reads `leaseExpiresAt - updatedAt` as the length of a lapsed lease, to back off on the
       // restart that takes it over. Stores that don't report `updatedAt` restart with the base length.
-      it('reports when the record last changed, so a lease reads back its own length', async ctx => {
+      it('reports when the record last changed, so a lease reads back about its own length', async ctx => {
         if (!(await workflows.supportsRunFencing())) return ctx.skip();
         const runId = `run-${randomUUID()}`;
         const claimedRecord = (await claim(runId, 'owner-a')).record!;
         if (claimedRecord.updatedAt === undefined) return ctx.skip();
-        const length = (record: RunOwnershipRecord | null) =>
-          record!.leaseExpiresAt!.getTime() - record!.updatedAt!.getTime();
-        expect(length(claimedRecord)).toBe(LEASE_MS);
-        expect(length(await workflows.getRunOwnership({ runId }))).toBe(LEASE_MS);
+        // Stores that read their clock once per value (pg's `clock_timestamp()`) can be a few ms off.
+        const expectLength = (record: RunOwnershipRecord | null, leaseMs: number) => {
+          const length = record!.leaseExpiresAt!.getTime() - record!.updatedAt!.getTime();
+          expect(Math.abs(length - leaseMs)).toBeLessThan(50);
+        };
+        expectLength(claimedRecord, LEASE_MS);
+        expectLength(await workflows.getRunOwnership({ runId }), LEASE_MS);
 
         const fenceA: RunFence = { runId, ownerId: 'owner-a', generation: claimedRecord.generation };
         await sleep(20);
         const renewed = await workflows.renewRunOwnership({ ...fenceA, leaseMs: LEASE_MS * 2 });
-        expect(length(renewed.record)).toBe(LEASE_MS * 2);
+        expectLength(renewed.record, LEASE_MS * 2);
         expect(renewed.record!.updatedAt!.getTime()).toBeGreaterThan(claimedRecord.updatedAt.getTime());
 
         await sleep(20);

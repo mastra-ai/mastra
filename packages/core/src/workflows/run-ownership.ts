@@ -16,14 +16,21 @@ export const WORKFLOW_RUN_LEASE_MAX_DOUBLINGS = 3;
 
 // The longest delay `setTimeout` honours.
 const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
+// The longest lease: renewed every third of it, it fits a timer delay.
+const MAX_LEASE_MS = 3 * MAX_TIMER_DELAY_MS;
+/** The longest `leaseTtlMs`, so that even after every doubling the lease stays within {@link MAX_LEASE_MS}. */
+export const MAX_WORKFLOW_RUN_LEASE_TTL_MS = Math.floor(MAX_LEASE_MS / 2 ** WORKFLOW_RUN_LEASE_MAX_DOUBLINGS);
 
-/** `leaseTtlMs` as configured, rounded up to whole milliseconds, or `fallback` when it is not a positive finite number. */
+/**
+ * `leaseTtlMs` as configured, rounded up to whole milliseconds and capped at
+ * {@link MAX_WORKFLOW_RUN_LEASE_TTL_MS}, or `fallback` when it is not a positive finite number.
+ */
 export function normalizeLeaseTtlMs(leaseTtlMs: unknown, fallback: number): number {
   if (typeof leaseTtlMs !== 'number' || !Number.isFinite(leaseTtlMs) || leaseTtlMs <= 0) {
     return fallback;
   }
 
-  return Math.ceil(leaseTtlMs);
+  return Math.min(Math.ceil(leaseTtlMs), MAX_WORKFLOW_RUN_LEASE_TTL_MS);
 }
 
 /** How often a lease of `leaseMs` is renewed: a third of it, or the configured interval for the default lease. */
@@ -36,7 +43,9 @@ function renewIntervalFor(leaseMs: number): number {
  * The lease a restart claims a run with. After a lease that lapsed without being released, its
  * last owner stopped renewing (it crashed, or blocked its event loop past the lease), so the
  * restart doubles that lease to give a step that blocks the same way room to finish. The previous
- * length is the owners row's `leaseExpiresAt - updatedAt`, which every store writes together.
+ * length is the owners row's `leaseExpiresAt - updatedAt`, which stores write in one statement.
+ * Stores that read their clock twice there can come out a few milliseconds short; the result
+ * never drops below `baseMs` or the previous length, so that only trims the doubling.
  */
 export function leaseAfterTakeover(
   baseMs: number,
@@ -46,11 +55,12 @@ export function leaseAfterTakeover(
   const previousLeaseMs = previous.leaseExpiresAt.getTime() - previous.updatedAt.getTime();
   if (!(previousLeaseMs > 0)) return { leaseMs: baseMs };
   const capMs = baseMs * 2 ** WORKFLOW_RUN_LEASE_MAX_DOUBLINGS;
-  return { leaseMs: Math.max(baseMs, previousLeaseMs, Math.min(previousLeaseMs * 2, capMs)), previousLeaseMs };
+  const leaseMs = Math.max(baseMs, previousLeaseMs, Math.min(previousLeaseMs * 2, capMs));
+  return { leaseMs: Math.min(leaseMs, MAX_LEASE_MS), previousLeaseMs };
 }
 
-// When the last stall warning was logged. Every renewal timer a stall delayed fires in the same
-// burst once the event loop is free, each due before that warning, so one stall logs once per process.
+// When the last stall warning was logged. Every run a stall delayed last renewed before that
+// warning, so one stall logs once per process; a later stall follows a renewal made after it.
 let lastStallWarningAt = -Infinity;
 
 export interface WorkflowRunOwnership {
@@ -129,13 +139,16 @@ export function repeatAfterSettled(
  * previous renewal. Stops by itself after the first renewal that finds the
  * claim superseded, reporting it through `onLost`.
  *
- * A renewal that runs so late the lease may have lapsed meanwhile reports the
- * stall through `onStall`, once per stall in this process.
+ * When a renewal, or the returned function, finds that a lease length passed
+ * since the last renewal (or the claim, sent at `since`) that succeeded, the
+ * lease may have lapsed meanwhile: that is reported through `onStall`, once
+ * per stall in this process. Gaps after a failed renewal are left to `onError`.
  */
 export function renewWorkflowLease({
   store,
   fence,
   leaseMs = WORKFLOW_RUN_LEASE_TTL_MS,
+  since = Date.now(),
   onLost,
   onError,
   onStall,
@@ -143,42 +156,58 @@ export function renewWorkflowLease({
   store: WorkflowsStorage;
   fence: RunFence;
   leaseMs?: number;
+  since?: number;
   onLost: (owner: RunOwnershipRecord | null) => void;
   onError: (error: unknown) => void;
-  onStall?: (blockedMs: number) => void;
+  onStall?: (sinceRenewalMs: number) => void;
 }): () => void {
   const intervalMs = renewIntervalFor(leaseMs);
-  let armedAt = Date.now();
+  // When the renewal that set the current lease was sent: the store counts the lease from there.
+  let renewedAt = since;
+  let inFlightSince: number | undefined;
+  let failing = false;
+  let lost = false;
+
+  const checkStall = (sentAt: number) => {
+    const now = Date.now();
+    if (!onStall || failing || lost || now - sentAt < leaseMs || sentAt < lastStallWarningAt) return;
+    lastStallWarningAt = now;
+    onStall(now - sentAt);
+  };
+
   // Not setInterval: it fires on schedule while the previous renewal is still pending, so a slow
   // store would get concurrent renewals piling up, and an older one could land after a newer one.
   // Waiting for each renewal stretches the gap to the interval plus one write, still well inside
   // the TTL (the interval defaults to a third of it).
   const stop = repeatAfterSettled(async () => {
-    const dueAt = armedAt + intervalMs;
-    const now = Date.now();
-    // A tick this late means the event loop was blocked: the last renewal ended a lease ago.
-    if (onStall && now - dueAt >= leaseMs - intervalMs && dueAt > lastStallWarningAt) {
-      lastStallWarningAt = now;
-      onStall(now - dueAt);
-    }
+    checkStall(renewedAt);
+    const sentAt = (inFlightSince = Date.now());
     try {
       const result = await store.renewRunOwnership({ ...fence, leaseMs });
+      failing = false;
       if (result.renewed) {
+        renewedAt = sentAt;
         return;
       }
 
       // Another claim superseded this one; renewing again could only fail the same way.
+      lost = true;
       stop();
       onLost(result.record);
     } catch (error) {
       // A failed write may be transient, so the next tick tries again.
+      failing = true;
       onError(error);
     } finally {
-      armedAt = Date.now();
+      inFlightSince = undefined;
     }
   }, intervalMs);
 
-  return stop;
+  return () => {
+    // A run that blocks and then settles releases before any late renewal could notice the gap.
+    checkStall(inFlightSince ?? renewedAt);
+    stop();
+  };
 }
 
 /**
@@ -223,6 +252,7 @@ export async function claimWorkflowRunOwnership({
   }
   const { leaseMs, previousLeaseMs } = leaseAfterTakeover(baseLeaseMs, previous);
 
+  const claimedAt = Date.now();
   const claim = await store.claimRunOwnership({ runId, ownerId: crypto.randomUUID(), leaseMs, force });
   if (!claim.acquired) return { owner: claim.record };
 
@@ -240,12 +270,13 @@ export async function claimWorkflowRunOwnership({
     store,
     fence,
     leaseMs,
-    onStall: blockedMs =>
+    since: claimedAt,
+    onStall: sinceRenewalMs =>
       logger?.warn(
-        `The event loop was blocked for at least ${blockedMs} ms, so this process may have lost the ${leaseMs} ms ownership ` +
-          'leases of the workflow runs it drives, and other processes may take them over. Move blocking work off ' +
-          'the event loop, or raise the workflow leaseTtlMs option.',
-        { runId, blockedMs, leaseMs },
+        `This process went ${sinceRenewalMs} ms without renewing the ${leaseMs} ms ownership lease of a workflow ` +
+          'run, so other processes may take over the runs it drives. Its event loop was most likely blocked: move ' +
+          'blocking work off the event loop, or raise the workflow leaseTtlMs option.',
+        { runId, sinceRenewalMs, leaseMs },
       ),
     onLost: owner => {
       // A renewal in flight when the claim was released finds that release.

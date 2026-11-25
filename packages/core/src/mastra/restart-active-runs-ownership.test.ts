@@ -10,7 +10,7 @@ import type { IMastraLogger } from '../logger';
 import { InMemoryStore } from '../storage/mock';
 import { createStep, createWorkflow } from '../workflows';
 import type { WorkflowOptions } from '../workflows';
-import { WORKFLOW_RUN_LEASE_TTL_MS } from '../workflows/run-ownership';
+import { MAX_WORKFLOW_RUN_LEASE_TTL_MS, WORKFLOW_RUN_LEASE_TTL_MS } from '../workflows/run-ownership';
 import { Mastra } from './index';
 
 function buildReplica(
@@ -505,10 +505,12 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
 
       const workflowLease = await replica.getWorkflow('workflow').createRun();
       const ownLease = await replica.getWorkflow('workflow').createRun({ leaseTtlMs: 90_000 });
-      const results = [workflowLease.start({ inputData: {} }), ownLease.start({ inputData: {} })];
-      await until(() => gates.length === 2);
+      const hugeLease = await replica.getWorkflow('workflow').createRun({ leaseTtlMs: Number.MAX_SAFE_INTEGER });
+      const results = [workflowLease, ownLease, hugeLease].map(run => run.start({ inputData: {} }));
+      await until(() => gates.length === 3);
       expect(await leaseOf(storage, workflowLease.runId)).toEqual({ live: true, ms: 3_000 });
       expect(await leaseOf(storage, ownLease.runId)).toEqual({ live: true, ms: 90_000 });
+      expect(await leaseOf(storage, hugeLease.runId)).toEqual({ live: true, ms: MAX_WORKFLOW_RUN_LEASE_TTL_MS });
 
       // Renewals keep the length and come often enough for a lease shorter than the default renew interval.
       for (let second = 0; second < 10; second++) {
@@ -517,7 +519,7 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
       }
 
       gates.forEach(open => open());
-      expect((await Promise.all(results)).map(result => result.status)).toEqual(['success', 'success']);
+      expect((await Promise.all(results)).map(result => result.status)).toEqual(['success', 'success', 'success']);
     });
 
     it('doubles the lease of a run restarted over a lapsed one, up to 8 times its base, and warns each time', async () => {
@@ -568,6 +570,91 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
       for (const stale of settled.slice(0, -1)) {
         expect(stale).toMatchObject({ status: 'rejected', reason: { id: 'STORAGE_RUN_FENCE_CONFLICT' } });
       }
+    });
+
+    const tookOver = (warnings: { message: string }[]) =>
+      warnings.filter(({ message }) => message.startsWith('Took over'));
+
+    it('restarts with the base lease when the previous lease cannot be read, and still refuses a live run', async () => {
+      fakeTimers();
+      const storage = new InMemoryStore();
+      const gates: (() => void)[] = [];
+      const warnings: { message: string; context: unknown }[] = [];
+      const logger = { ...noopLogger, warn: (message: string) => warnings.push({ message, context: undefined }) };
+      const replica = (options: Partial<ConstructorParameters<typeof Mastra>[0]> = {}) => {
+        const mastra = buildReplica(
+          storage,
+          () => new Promise<void>(resolve => gates.push(resolve)),
+          undefined,
+          { recovery: { workflows: 'off' }, ...options },
+          { leaseTtlMs: 1_000 },
+        );
+        replicas.push(mastra);
+        return mastra;
+      };
+      const run = await replica().getWorkflow('workflow').createRun();
+      const first = run.start({ inputData: {} });
+      await until(() => gates.length === 1);
+      const store = (await storage.getStore('workflows'))!;
+      const read = vi.spyOn(store, 'getRunOwnership').mockRejectedValue(new Error('storage unavailable'));
+      const other = await replica({ logger: logger as IMastraLogger })
+        .getWorkflow('workflow')
+        .createRun({ runId: run.runId });
+
+      await expect(other.restart()).rejects.toMatchObject({ id: 'WORKFLOW_RESTART_RUN_OWNED' });
+      vi.setSystemTime(Date.now() + 10_000);
+      const restarted = other.restart();
+      await until(() => gates.length === 2);
+      expect(read).toHaveBeenCalled();
+      read.mockRestore();
+      expect(await leaseOf(storage, run.runId)).toEqual({ live: true, ms: 1_000 });
+      expect(tookOver(warnings)).toEqual([]);
+
+      gates.forEach(open => open());
+      expect((await restarted).status).toBe('success');
+      await expect(first).rejects.toMatchObject({ id: 'STORAGE_RUN_FENCE_CONFLICT' });
+    });
+
+    it('starts and resumes with the base lease, without reading the previous one', async () => {
+      const storage = new InMemoryStore();
+      const warnings: { message: string }[] = [];
+      const logger = { ...noopLogger, warn: (message: string) => warnings.push({ message }) } as IMastraLogger;
+      const resumed = Promise.withResolvers<void>();
+      const finish = Promise.withResolvers<void>();
+      let executions = 0;
+      const replica = buildReplica(
+        storage,
+        async (_runId, suspend) => {
+          if (executions++ === 0) {
+            await suspend({});
+            return;
+          }
+          resumed.resolve();
+          await finish.promise;
+        },
+        undefined,
+        { logger, recovery: { workflows: 'off' } },
+        { leaseTtlMs: 1_000 },
+      );
+      replicas.push(replica);
+      const store = (await storage.getStore('workflows'))!;
+      const reads = vi.spyOn(store, 'getRunOwnership');
+
+      const run = await replica.getWorkflow('workflow').createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+      expect(reads).not.toHaveBeenCalled();
+      // A lapsed lease, as a crashed owner leaves it.
+      await store.claimRunOwnership({ runId: run.runId, ownerId: 'crashed', leaseMs: 1, force: true });
+      await vi.waitFor(async () => expect((await store.getRunOwnership({ runId: run.runId }))?.live).toBe(false));
+      reads.mockClear();
+
+      const resuming = run.resume({ step: 'side-effect', resumeData: {} });
+      await resumed.promise;
+      expect(reads).not.toHaveBeenCalled();
+      expect(await leaseOf(storage, run.runId)).toEqual({ live: true, ms: 1_000 });
+      expect(tookOver(warnings)).toEqual([]);
+      finish.resolve();
+      expect((await resuming).status).toBe('success');
     });
   });
 });
