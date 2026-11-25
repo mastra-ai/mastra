@@ -468,6 +468,7 @@ export class BackgroundTaskManager {
       // the shared dispatch topic while this process holds no closure for it.
       throw new Error('pinToWorker requires a task context');
     }
+    if (context) this.#assertCanRunLocalTasks('enqueue');
 
     // Mastra fires `init` as fire-and-forget. If a caller hits enqueue
     // before init completes, the dispatch publish fires before the worker
@@ -685,6 +686,7 @@ export class BackgroundTaskManager {
     }
 
     const isProcessAffine = this.taskContexts.has(taskId);
+    if (isProcessAffine) this.#assertCanRunLocalTasks('resume');
     const canRun = isProcessAffine ? this.reserveLocalSlot(task) : await this.checkConcurrency(task.agentId);
     if (!canRun) {
       if (options?.onNoSlot === 'queue') {
@@ -770,6 +772,7 @@ export class BackgroundTaskManager {
       throw new Error(`Cannot restart task in status '${task.status}' (expected 'pending' or 'running')`);
     }
     const isRestart = task.status === 'running';
+    if (context || this.taskContexts.has(taskId)) this.#assertCanRunLocalTasks('restart');
 
     if (context) {
       this.registerTaskContext(task.id, context);
@@ -1380,6 +1383,23 @@ export class BackgroundTaskManager {
   }
 
   // --- Internal ---
+
+  /**
+   * A task with a registered context runs from this process's closures, so it
+   * is published to this process's own dispatch topic. A producer-mode manager
+   * never consumes that topic, and no other process can run those closures, so
+   * the task would sit unclaimed (#31089). Refuse before anything is persisted
+   * or published; agent runs then execute the tool without a background task.
+   */
+  #assertCanRunLocalTasks(action: 'enqueue' | 'restart' | 'resume'): void {
+    if (this.config.mode !== 'producer') return;
+    throw new Error(
+      `Cannot ${action} a background task with an in-process executor: this process doesn't run background tasks ` +
+        `(workers are disabled or MASTRA_WORKERS excludes backgroundTasks), and other processes can't run its executor. ` +
+        `Run the backgroundTasks worker on this process, or pass \`disableBackgroundTasks: true\` to agent runs here so their tools run inline. ` +
+        `Tasks enqueued directly can omit the task context to let a dedicated worker run the tool by name.`,
+    );
+  }
 
   /**
    * Lazily start Mastra's execution workers before publishing. In "library
