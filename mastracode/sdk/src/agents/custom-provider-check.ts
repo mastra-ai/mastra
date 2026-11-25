@@ -10,7 +10,11 @@ import { STATUS_CODES } from 'node:http';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { OpenAICompatibleProvider } from '@ai-sdk/openai-compatible';
 import { APICallError, JSONParseError, RetryError, StreamProviderError, streamText, TypeValidationError } from 'ai';
-import { customProviderAuthHeaderName, mergeHeadersIgnoringCase } from '../onboarding/custom-provider-headers.js';
+import {
+  CONTROL_CHARACTER_PATTERN,
+  customProviderAuthHeaderName,
+  mergeHeadersIgnoringCase,
+} from '../onboarding/custom-provider-headers.js';
 import type { CustomProviderAuthScheme, CustomProviderHeader } from '../onboarding/settings.js';
 
 export { customProviderHeaderProblem } from '../onboarding/custom-provider-headers.js';
@@ -153,9 +157,8 @@ function finishFailure(failure: CustomProviderCheckFailure, secrets: SentSecrets
   return { ...rest, message: redact(failure.message, secrets), ...(detail ? { detail } : {}) };
 }
 
-/** C0 and C1 control characters, including the ESC that starts a terminal escape sequence. */
-// oxlint-disable-next-line no-control-regex -- matching control characters is the point.
-const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/g;
+/** Every control character, for `replace`. */
+const CONTROL_CHARACTERS = new RegExp(CONTROL_CHARACTER_PATTERN.source, 'g');
 
 /**
  * Collapse a text into one line. Control characters become spaces: the TUI
@@ -388,8 +391,7 @@ const MAX_MODEL_ID_LENGTH = 256;
  */
 function isUsableModelId(id: string, sentSecrets: string[]): boolean {
   if (!id || id.length > MAX_MODEL_ID_LENGTH) return false;
-  // oxlint-disable-next-line no-control-regex -- matching control characters is the point.
-  if (/[\u0000-\u001f\u007f-\u009f]/.test(id)) return false;
+  if (CONTROL_CHARACTER_PATTERN.test(id)) return false;
   return !sentSecrets.some(secret => id.includes(secret));
 }
 

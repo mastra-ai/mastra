@@ -48,13 +48,21 @@ const INVALID_HEADER_VALUE_CHARACTER = /[^\t\x20-\x7e\xa0-\xff]/;
 const MAX_QUOTED_NAME_LENGTH = 100;
 
 /**
+ * A C0 or C1 control character, including the ESC and CSI that start terminal
+ * escape sequences. Text from an endpoint or a request body is printed in the
+ * TUI, so every place that shows it uses this one definition. Not global, so
+ * `test` keeps no state; derive a global copy for `replace`.
+ */
+// oxlint-disable-next-line no-control-regex -- matching control characters is the point.
+export const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f]/;
+
+/**
  * A refused header name made safe to show. The name may come from a request
  * body and end up in a terminal, so it is cut short and its control
  * characters become spaces.
  */
 function quotableName(name: string): string {
-  // oxlint-disable-next-line no-control-regex -- matching control characters is the point.
-  const shown = name.slice(0, MAX_QUOTED_NAME_LENGTH).replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ');
+  const shown = name.slice(0, MAX_QUOTED_NAME_LENGTH).replace(new RegExp(CONTROL_CHARACTER_PATTERN.source, 'g'), ' ');
   return name.length > MAX_QUOTED_NAME_LENGTH ? `${shown}...` : shown;
 }
 
