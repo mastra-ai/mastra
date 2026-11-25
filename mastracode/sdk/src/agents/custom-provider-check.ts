@@ -535,7 +535,10 @@ function modelTestFailure(args: {
 }): CustomProviderCheckFailure {
   const error = RetryError.isInstance(args.error) ? args.error.lastError : args.error;
   if (APICallError.isInstance(error)) {
-    if (error.statusCode !== undefined) {
+    // Some AI SDK versions wrap a stream that breaks after a 200 in an error that keeps the 200.
+    // The endpoint did not refuse the call, so that is a transport failure, not "HTTP 200 OK".
+    const refused = error.statusCode !== undefined && (error.statusCode < 200 || error.statusCode >= 300);
+    if (refused && error.statusCode !== undefined) {
       return httpFailure({
         status: error.statusCode,
         url: error.url,
@@ -544,6 +547,10 @@ function modelTestFailure(args: {
         summaryOnly: args.summaryOnly,
         secrets: args.secrets,
       });
+    }
+    if (error.statusCode !== undefined && !args.abort.aborted) {
+      const reason = causeMessages(error).at(-1) ?? 'the connection closed';
+      return { kind: 'network', message: `The answer from ${error.url} broke off: ${reason}` };
     }
     return connectionFailure(error, error.url, args.abort);
   }

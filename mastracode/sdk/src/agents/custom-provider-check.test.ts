@@ -509,6 +509,33 @@ describe('sending a test message to a custom endpoint model', () => {
     });
   });
 
+  it('does not report a stream that breaks after a 200 as an HTTP error', async () => {
+    const endpoint = await startEndpoint((_, res) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.write(
+        `data: ${JSON.stringify({
+          id: 'chatcmpl-test',
+          object: 'chat.completion.chunk',
+          created: 0,
+          model: 'model-x',
+          choices: [{ index: 0, delta: { role: 'assistant', content: 'Ye' }, finish_reason: null }],
+        })}\n\n`,
+      );
+      setTimeout(() => res.socket?.destroy(), 20);
+    });
+
+    const result = await testModel({ url: endpoint.url });
+
+    expect(result).toEqual({
+      ok: false,
+      failure: {
+        kind: 'network',
+        message: `The answer from ${endpoint.url}/chat/completions broke off: other side closed`,
+      },
+      latencyMs: expect.any(Number),
+    });
+  });
+
   it('refuses a redirect', async () => {
     const target = await startEndpoint(chatStream('Yes'));
     const endpoint = await startEndpoint((request, res) => {
