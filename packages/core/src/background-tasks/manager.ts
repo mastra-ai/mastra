@@ -2509,14 +2509,16 @@ export class BackgroundTaskManager {
         Math.max(PIN_SWEEP_PAGE_SIZE, this.config.globalConcurrency),
         RUNNING_SWEEP_MAX_PAGE_SIZE,
       );
-      const { tasks: running } = await storage.listTasks({
+      const { tasks: running, total: runningTotal } = await storage.listTasks({
         status: 'running',
         orderBy: 'createdAt',
         orderDirection: 'asc',
         page: this.runningSweepPage,
         perPage: runningPageSize,
       });
-      this.runningSweepPage = running.length < runningPageSize ? 0 : this.runningSweepPage + 1;
+      // Move on only when rows exist past this page, so a full last page doesn't make the next tick read nothing.
+      this.runningSweepPage =
+        (this.runningSweepPage + 1) * runningPageSize < runningTotal ? this.runningSweepPage + 1 : 0;
       for (const task of running) {
         if (this.shuttingDown) return;
         if (isLiveRunning(task, now)) continue;
