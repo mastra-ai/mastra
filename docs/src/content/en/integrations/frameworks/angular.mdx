@@ -111,10 +111,11 @@ import { DefaultChatTransport } from 'ai'
 const RESOURCE_ID = 'example-user'
 
 function getThreadId(): string {
-  let threadId = localStorage.getItem('mastra-thread-id')
+  const key = `mastra-thread-id:${RESOURCE_ID}`
+  let threadId = localStorage.getItem(key)
   if (!threadId) {
     threadId = crypto.randomUUID()
-    localStorage.setItem('mastra-thread-id', threadId)
+    localStorage.setItem(key, threadId)
   }
   return threadId
 }
@@ -265,7 +266,7 @@ Older Angular projects may name the root component file `app.component.ts` and i
 
 The weather agent has [memory](/docs/memory/overview), but it only saves a conversation when a request names one. The `prepareSendMessagesRequest` function adds a `memory` object to every request:
 
-- `thread` identifies the conversation. The component creates one ID and keeps it in `localStorage`, so reloading the page continues the same conversation. Create a new ID to start a new conversation.
+- `thread` identifies the conversation. The component creates one ID and keeps it in `localStorage` under a key that includes the resource ID, so reloading the page continues the same conversation. Create a new ID to start a new conversation. Never reuse a thread ID for a different resource: Mastra rejects the request.
 - `resource` identifies the user who owns the conversation. In a real app, take it from your authentication, such as the signed-in user's ID. Don't use one constant for every user in production, or all users share the same memory.
 
 Mastra loads earlier messages from memory on the server. The transport only needs to send the newest message. Visit [Using Mastra Memory](/integrations/agentic-ui/ai-sdk-ui#using-mastra-memory) for details.
