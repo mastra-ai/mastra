@@ -233,8 +233,27 @@ export async function listRawThreads(memoryStore: MemoryStorage, resourceId?: st
     perPage: false,
     ...(resourceId !== undefined ? { filter: { resourceId } } : {}),
   });
-  return threads.sort((a, b) => {
-    const timeDifference = a.createdAt.getTime() - b.createdAt.getTime();
-    return timeDifference === 0 ? a.id.localeCompare(b.id) : timeDifference;
-  });
+  return threads.sort(compareThreadsByCreation);
+}
+
+function compareThreadsByCreation(a: StorageThreadType, b: StorageThreadType): number {
+  const timeDifference = a.createdAt.getTime() - b.createdAt.getTime();
+  return timeDifference === 0 ? a.id.localeCompare(b.id) : timeDifference;
+}
+
+/**
+ * Lists the threads of every resource that owns one of `threadIds`, plus any extra `resourceIds`.
+ * Branch lineages never cross resources, so the result holds every ancestor, child and descendant
+ * of each existing thread without enumerating other resources' threads.
+ */
+export async function listOwningResourceThreads(
+  memoryStore: MemoryStorage,
+  threadIds: Iterable<string>,
+  resourceIds: Iterable<string | undefined> = [],
+): Promise<StorageThreadType[]> {
+  const owners = new Set([...resourceIds].filter((id): id is string => id !== undefined));
+  const threads = await Promise.all([...new Set(threadIds)].map(threadId => memoryStore.getThreadById({ threadId })));
+  for (const thread of threads) if (thread) owners.add(thread.resourceId);
+  const listed = await Promise.all([...owners].map(owner => listRawThreads(memoryStore, owner)));
+  return listed.flat().sort(compareThreadsByCreation);
 }
