@@ -368,6 +368,7 @@ describe('ProviderList custom endpoints', () => {
     headers: [],
     models: ['model-a', 'model-b'],
     scope: 'user',
+    lastCheck: { at: '2026-11-26T10:00:00.000Z', ok: true },
   };
 
   it('lists an endpoint with its URL and model count, with its own actions instead of key actions', async () => {
