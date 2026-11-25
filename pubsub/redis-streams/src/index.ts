@@ -273,10 +273,11 @@ export interface RedisStreamsPubSubConfig {
    *
    * Applies to every topic except those carrying a single agent run's or
    * thread's events (`agent.stream.*`, `agent.control.*`,
-   * `agent.thread-stream.*`), which take the much shorter retention their
-   * cached replay log uses — one hour by default. This value still caps
-   * those, so lowering it lowers them too, and `0` disables expiry for every
-   * topic.
+   * `agent.thread-stream.*`), which take the shorter retention their cached
+   * replay log uses — a day for run topics, matching the lifetime of the
+   * record that authorizes reading them, and an hour for thread streams.
+   * This value still caps those, so lowering it lowers them too, and `0`
+   * disables expiry for every topic.
    *
    * Why a TTL matters: topics fall into two classes.
    * - *Lifecycle-owned* topics (workflow/agent run streams, request/reply
@@ -606,7 +607,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
    * `streamIdleTtlMs` is sized for the topics that need it: work queues whose
    * grouped consumers must still find their backlog after an outage. A topic
    * belonging to one agent run or thread has no such consumer, so it takes the
-   * much shorter retention its cached replay log already uses — otherwise a
+   * shorter retention its cached replay log already uses — otherwise a
    * finished run's stream sits in Redis for the full backstop.
    *
    * A configured `streamIdleTtlMs` still caps every topic, so lowering it

@@ -2,9 +2,9 @@
 '@mastra/core': minor
 ---
 
-Reclaimed a finished agent run's stream state in about an hour instead of leaving it for days (COR-1534), and made replay cursors survive an expired log.
+Reclaimed a finished agent run's stream state within a day instead of leaving it for a week, and made replay cursors survive an expired log.
 
-**Run and thread event retention is now one hour.** A run's events are retained for an hour after the last append, in both the replay cache and the transport that carries them. Deleting them when the run ends is still the fast path; the retention is what bounds them when the owning process restarts before its cleanup timer fires. Size it with `runLogTtlMs` and `threadStreamLogTtlMs` on `CachingPubSub`. A run's ownership record keeps its own 24-hour lifetime, so a run parked overnight on a tool approval stays authorizable for observe and resume long after its replay log has gone.
+**A run's events now share the 24-hour lifetime of its ownership record** — in the replay cache and on the transport that carries them. Deleting them when the run ends is still the fast path (30 seconds after the run settles); the retention is what bounds them when the owning process restarts before its cleanup timer fires. The two lifetimes match deliberately: a run parked on a tool approval appends nothing while it waits, so its events must stay replayable for every moment the record still authorizes `observe()` and resume — otherwise a reader reattaching to a parked run would hang without ever receiving the approval request. Thread stream logs are retained for one hour, since an idle thread's tail only needs to survive a reconnect. Size both with `runLogTtlMs` and `threadStreamLogTtlMs` on `CachingPubSub`.
 
 **Replay indexes are opaque cursors, not positions.** A fresh log starts at a clock-derived value rather than zero, so a log recreated after expiry or eviction normally numbers above what it issued before and an attached observer keeps receiving frames instead of dropping them as already seen. It isn't a guarantee — the numbering follows the cache's clock — so treat storage as the source of truth for a run's messages.
 

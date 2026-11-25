@@ -34,19 +34,28 @@ it('bounds a run’s topics by the run-log retention, not the idle backstop', as
   const runId = randomUUID();
   const runTopic = `agent.stream.${runId}`;
   const controlTopic = `agent.control.${runId}`;
+  const threadStream = `agent.thread-stream.${randomUUID()}`;
   const workQueue = `work-queue-${randomUUID()}`;
   const pubsub = new ValkeyStreamsPubSub({ url: 'valkey://localhost:6381', keyPrefix });
   const ONE_HOUR = 60 * 60 * 1000;
+  const ONE_DAY = 24 * 60 * 60 * 1000;
   try {
-    for (const topic of [runTopic, controlTopic, workQueue]) {
+    for (const topic of [runTopic, controlTopic, threadStream, workQueue]) {
       await pubsub.publish(topic, { type: 'finish', runId, data: {} });
     }
+    // Run topics live a day, matching the record that authorizes reading
+    // them: a run parked on a tool approval appends nothing, so this must
+    // cover the record's full window. Thread streams only need to survive a
+    // reconnect, so they keep an hour.
     for (const topic of [runTopic, controlTopic]) {
       const ttl = await pttlOf(`${keyPrefix}:${topic}`);
-      expect(ttl).toBeGreaterThan(0);
-      expect(ttl).toBeLessThanOrEqual(ONE_HOUR);
+      expect(ttl).toBeGreaterThan(ONE_HOUR);
+      expect(ttl).toBeLessThanOrEqual(ONE_DAY);
     }
-    expect(await pttlOf(`${keyPrefix}:${workQueue}`)).toBeGreaterThan(ONE_HOUR);
+    const threadTtl = await pttlOf(`${keyPrefix}:${threadStream}`);
+    expect(threadTtl).toBeGreaterThan(0);
+    expect(threadTtl).toBeLessThanOrEqual(ONE_HOUR);
+    expect(await pttlOf(`${keyPrefix}:${workQueue}`)).toBeGreaterThan(ONE_DAY);
 
     // Subscription setup stamps the TTL because MKSTREAM may have just created
     // the key; it must not promote a run topic to the backstop. A bare upper
@@ -55,9 +64,9 @@ it('bounds a run’s topics by the run-log retention, not the idle backstop', as
     await pubsub.subscribe(runTopic, (_event, ack) => void ack?.());
     const afterSubscribe = await pttlOf(`${keyPrefix}:${runTopic}`);
     expect(afterSubscribe).toBeGreaterThan(0);
-    expect(afterSubscribe).toBeLessThanOrEqual(ONE_HOUR);
+    expect(afterSubscribe).toBeLessThanOrEqual(ONE_DAY);
   } finally {
-    for (const topic of [runTopic, controlTopic, workQueue]) await pubsub.clearTopic(topic);
+    for (const topic of [runTopic, controlTopic, threadStream, workQueue]) await pubsub.clearTopic(topic);
     await pubsub.close();
   }
 });

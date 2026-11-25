@@ -31,16 +31,23 @@ export function isRunLocalTopic(topic: string): boolean {
  * How long a run's stream log (`agent.stream.<runId>`) is retained after its
  * last append, by default.
  *
- * The log is what `observe({ offset })` replays from — a delivery buffer, not
- * the system of record: messages and suspension snapshots live in storage. It
- * only needs to outlive the longest quiet gap of a run that is still
- * executing (a slow tool call) plus a reconnect window. An expired log is
- * recreated on the next append with indices past every index it could have
- * issued before (see `MastraServerCache.listPushIndexed`), so attached
- * observers resynchronise instead of dropping frames. Run cleanup deletes the
- * log when the run ends; this retention bounds it when cleanup never runs.
+ * This MUST match `AGENT_RUN_RECORD_TTL_MS` (`agent/streams/run-records.ts`;
+ * events cannot import from agent). A run parked on a tool approval appends
+ * nothing while it waits, so its retention is never refreshed — and its
+ * ownership record authorizes `observe()` for 24 hours. A log that expires
+ * sooner leaves that window authorized but empty: the observer hangs without
+ * ever receiving the approval request it is waiting to act on. The two
+ * lifetimes expire together, so an authorized run always still has its
+ * events.
+ *
+ * The log is a delivery buffer, not the system of record: messages and
+ * suspension snapshots live in storage. An expired log is recreated on the
+ * next append with indices past every index it could have issued before (see
+ * `MastraServerCache.listPushIndexed`), so attached observers resynchronise
+ * instead of dropping frames. Run cleanup deletes the log when the run ends;
+ * this retention bounds it when cleanup never runs.
  */
-export const DEFAULT_RUN_LOG_TTL_MS = 60 * 60 * 1000;
+export const DEFAULT_RUN_LOG_TTL_MS = 24 * 60 * 60 * 1000;
 
 /** @deprecated Use {@link DEFAULT_RUN_LOG_TTL_MS}, or configure `runLogTtlMs` on `CachingPubSub`. */
 export const RUN_LOG_TTL_MS = DEFAULT_RUN_LOG_TTL_MS;
@@ -91,8 +98,10 @@ export function cachedLogTtlMs(topic: string, ttls?: CachedLogTtls): number | un
  * backlog after an outage. A run's topics have no such consumer: they are
  * fan-out, their replay history is bounded by {@link cachedLogTtlMs} in the
  * server cache, and the run record that authorizes reading them expires in a
- * day. So they only need to outlive the same quiet gap plus reconnect window
- * their cached log does, and holding them for the transport's backstop just
+ * day. So they share the retention of the cached log they mirror — a day for
+ * run topics, matching the record (a run parked on an approval must stay
+ * readable for as long as it is authorizable), and an hour for thread
+ * streams. Holding them for the transport's multi-day backstop instead just
  * leaves finished runs in the store for days.
  *
  * Run cleanup deletes these topics promptly when the owning process survives;

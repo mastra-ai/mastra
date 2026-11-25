@@ -1109,13 +1109,6 @@ describe('CachingPubSub', () => {
         },
       ])('reads the whole log when hole metadata is unavailable ($label)', async ({ breakMetadata }) => {
         const { cache, pubsub, base } = await setupWithHole();
-        // Turn off the tail-read fast path (negative-range reads fail) so the
-        // listLength+counter fallback is what this exercises.
-        const realListFromTo = cache.listFromTo.bind(cache);
-        vi.spyOn(cache, 'listFromTo').mockImplementation(async (key: string, from: number, to?: number) => {
-          if (from < 0) throw new Error('negative ranges unsupported');
-          return realListFromTo(key, from, to);
-        });
         breakMetadata(cache);
 
         expect((await pubsub.getHistory(topic, base + 3)).map(e => e.index)).toEqual([base + 3]);
@@ -1128,36 +1121,28 @@ describe('CachingPubSub', () => {
       });
     });
 
-    it('returns log entries in index order when concurrent appends store them out of order', async () => {
+    it('returns log entries in index order when appends were stored out of order', async () => {
       const topic = 'out-of-order-topic';
-      // Non-atomic append whose next push can be held back, so a later
-      // publish lands in the list first.
-      class DelayedPushCache extends InMemoryServerCache {
-        holdNextPush: Promise<void> | undefined;
-        override async listPush(key: string, value: unknown) {
-          const hold = this.holdNextPush;
-          this.holdNextPush = undefined;
-          if (hold) await hold;
-          return super.listPush(key, value);
-        }
-        override listPushIndexed(listKey: string, counterKey: string, value: Record<string, unknown>) {
-          return MastraServerCache.prototype.listPushIndexed.call(this, listKey, counterKey, value);
-        }
-      }
-      const cache = new DelayedPushCache();
+      // In-process appends through the composed fallback are serialized (see
+      // MastraServerCache.listPushIndexed), but a writer in another process
+      // can still interleave with ours and leave the stored order different
+      // from index order. Build the state such a writer would leave behind.
+      const cache = new InMemoryServerCache();
       const pubsub = new CachingPubSub(new EventEmitterPubSub(), cache);
-
-      await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { n: 0 } });
-      let release!: () => void;
-      cache.holdNextPush = new Promise(resolve => (release = resolve));
-      const delayed = pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { n: 1 } });
-      await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { n: 2 } });
-      release();
-      await delayed;
-      await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { n: 3 } });
+      const base = 9_000;
+      for (const n of [0, 2, 1, 3]) {
+        await cache.listPush(`pubsub:${topic}`, {
+          type: 'test',
+          runId: 'run-1',
+          data: { n },
+          id: `frame-${n}`,
+          createdAt: new Date(),
+          index: base + n,
+        });
+      }
+      await cache.set(`pubsub:${topic}:counter`, base + 4);
 
       const log = (await cache.listFromTo(`pubsub:${topic}`, 0)) as Event[];
-      const base = log[0]!.index!;
       expect(log.map(e => e.index)).toEqual([base, base + 2, base + 1, base + 3]);
 
       expect((await pubsub.getHistory(topic, 0)).map(e => e.index)).toEqual([base, base + 1, base + 2, base + 3]);
@@ -1864,6 +1849,66 @@ describe('CachingPubSub', () => {
 
       expect((await pubsub.getHistory(outOfOrder, 2)).map(event => event.index)).toEqual([2, 3, 4]);
       expect((await pubsub.getHistory(outOfOrder, 0)).map(event => event.index)).toEqual([0, 1, 2, 3, 4]);
+    });
+
+    it('serializes the composed fallback so concurrent appends cannot out-publish an in-flight one', async () => {
+      // The gap backfill assumes every index below a published one is already
+      // in the log. The composed base fallback allocates and appends in
+      // separate round trips, so without serialization a second writer could
+      // append and publish while the first writer's append was still in
+      // flight — the backfill would find nothing, adopt the higher cursor,
+      // and drop the first writer's frame when it finally arrived.
+      class ComposedCache extends InMemoryServerCache {
+        /** Resolves once the first append has started (and parked). */
+        firstAppendStarted!: () => void;
+        started = new Promise<void>(resolve => (this.firstAppendStarted = resolve));
+        releaseFirstAppend!: () => void;
+        #held: Promise<void> | undefined = new Promise<void>(resolve => (this.releaseFirstAppend = resolve));
+        override async listPush(key: string, value: unknown): Promise<void> {
+          const held = this.#held;
+          if (held) {
+            this.#held = undefined;
+            this.firstAppendStarted();
+            await held;
+          }
+          return super.listPush(key, value);
+        }
+        override listPushIndexed(
+          listKey: string,
+          counterKey: string,
+          value: Record<string, unknown>,
+          ttlMs?: number,
+        ): Promise<number> {
+          // Exercise the base class's composed fallback, the path a cache
+          // without an atomic indexed append (e.g. Convex before its handler
+          // is redeployed) actually runs.
+          return MastraServerCache.prototype.listPushIndexed.call(this, listKey, counterKey, value, ttlMs);
+        }
+      }
+
+      const composed = new ComposedCache();
+      const pubsub = new CachingPubSub(new EventEmitterPubSub(), composed);
+      const serializedTopic = 'composed-serialized-topic';
+
+      const seen: string[] = [];
+      await pubsub.subscribeFromOffset(serializedTopic, 0, event => {
+        seen.push((event.data as { tag: string }).tag);
+      });
+
+      const first = pubsub.publish(serializedTopic, { type: 'chunk', runId: 'run-1', data: { tag: 'first' } });
+      await composed.started;
+      // The second publish must queue behind the parked first append instead
+      // of overtaking it; give it room to misbehave before releasing.
+      const second = pubsub.publish(serializedTopic, { type: 'chunk', runId: 'run-1', data: { tag: 'second' } });
+      await new Promise(resolve => setTimeout(resolve, 30));
+      composed.releaseFirstAppend();
+      await Promise.all([first, second]);
+      await flush();
+
+      expect(seen).toEqual(['first', 'second']);
+      // The log itself is in index order, so positional reads stay sound.
+      const indices = (await pubsub.getHistory(serializedTopic, 0)).map(event => event.index!);
+      expect(indices).toEqual([...indices].sort((a, b) => a - b));
     });
 
     it('misses a log reseeded below the cursor, so a reader must reattach to see it', async () => {

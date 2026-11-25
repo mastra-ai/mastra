@@ -73,12 +73,18 @@ export abstract class MastraServerCache extends MastraBase {
    *   a retention bound for this log, and a log that never expires is never
    *   reclaimed. When omitted, the cache's default TTL applies.
    *
-   * The default implementation composes `increment()` + `listPush()` (two
-   * round-trips) and is therefore NOT atomic, and ignores `ttlMs`. It is a
-   * compatibility path, not a supported basis for resumable replay: concurrent
-   * appends can interleave, an append can fail after its index is allocated,
-   * and the seed can race. Overrides should perform allocation, the seed check
-   * and the append in one server-side operation.
+   * The default implementation composes `increment()` + `listPush()` (multiple
+   * round-trips) and ignores `ttlMs`. Replay reads depend on every index below
+   * a published one already being in the log (the subscriber backfills gaps
+   * from it), which an atomic allocate-and-append provides for free and
+   * separate round-trips do not: a writer could publish its frame while an
+   * earlier allocation's append is still in flight, and the gap backfill would
+   * come up empty. So this fallback serializes appends per counter within the
+   * process — sibling producers for one run share the process, so that covers
+   * the writers that actually race. Appends from *other* processes can still
+   * interleave with these; overrides should perform allocation, the seed check
+   * and the append in one server-side operation instead (see the Redis and
+   * Valkey caches).
    */
   async listPushIndexed(
     listKey: string,
@@ -86,18 +92,38 @@ export abstract class MastraServerCache extends MastraBase {
     value: Record<string, unknown>,
     _ttlMs?: number,
   ): Promise<number> {
-    let index = (await this.increment(counterKey)) - 1;
-    if (index === 0) {
-      // The counter was absent. Reseed so a log recreated after expiry is
-      // unlikely to reissue indices a subscriber already consumed. Not atomic,
-      // like the rest of this fallback: a concurrent append between the
-      // increment and this set loses its allocation. `MastraServerCache`
-      // subclasses that care about replay seed inside one server-side
-      // operation instead (see the Redis and Valkey caches).
-      index = Date.now() * 1000;
-      await this.set(counterKey, index + 1);
+    const prior = this.#indexedAppends.get(counterKey);
+    const run = (prior ?? Promise.resolve()).then(async () => {
+      let index = (await this.increment(counterKey)) - 1;
+      if (index === 0) {
+        // The counter was absent. Reseed so a log recreated after expiry is
+        // unlikely to reissue indices a subscriber already consumed. Within
+        // this process the serialization above makes the seed safe; a write
+        // from another process can still land between the increment and this
+        // set and lose its allocation.
+        index = Date.now() * 1000;
+        await this.set(counterKey, index + 1);
+      }
+      await this.listPush(listKey, { ...value, index });
+      return index;
+    });
+    // Chain past failures so one failed append does not wedge the counter.
+    const settled = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.#indexedAppends.set(counterKey, settled);
+    try {
+      return await run;
+    } finally {
+      if (this.#indexedAppends.get(counterKey) === settled) this.#indexedAppends.delete(counterKey);
     }
-    await this.listPush(listKey, { ...value, index });
-    return index;
   }
+
+  /**
+   * Per-counter chains serializing the composed fallback above. Entries are
+   * removed as soon as their chain drains, so idle counters hold no memory.
+   * Subclasses that override `listPushIndexed` never populate this.
+   */
+  #indexedAppends = new Map<string, Promise<void>>();
 }

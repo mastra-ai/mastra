@@ -79,9 +79,9 @@ const pubsub = withCaching(new EventEmitterPubSub(), new InMemoryServerCache())
         name: 'runLogTtlMs',
         type: 'number',
         description:
-          'Minimum retention requested for `agent.stream.*` run logs with every append. Size it to the longest quiet gap of a run that is still executing plus a reconnect window; storage holds the messages, and once a log expires there is nothing left to replay, so a reconnecting observer reads what it missed from storage. A cache whose own TTL is longer keeps that instead.',
+          "Minimum retention requested for `agent.stream.*` run logs with every append. The default matches the run record's 24-hour lifetime: a run parked on a tool approval appends nothing while it waits, so its log must outlive every moment the record still authorizes observing it, or the approval request expires out of an authorized run. Storage holds the messages, and once a log expires there is nothing left to replay, so a reconnecting observer reads what it missed from storage. A cache whose own TTL is longer keeps that instead.",
         isOptional: true,
-        defaultValue: '3600000 (1 hour)',
+        defaultValue: '86400000 (24 hours)',
       },
       {
         name: 'threadStreamLogTtlMs',
