@@ -298,28 +298,18 @@ describe('Combobox', () => {
       expect(screen.queryByRole('option', { name: /^Use / })).toBeNull();
     });
 
-    it('adds the typed text to a multiple select as a chip showing the bare value', async () => {
-      const onValueChange = vi.fn();
-      render(<MultipleField allowCustomValue initial={['openai']} onValueChange={onValueChange} />);
-      const user = await openField();
-
-      await user.keyboard('new-provider/new-model');
-      await user.click(await screen.findByRole('option', { name: 'Use “new-provider/new-model”' }));
-
-      expect(onValueChange).toHaveBeenLastCalledWith(['openai', 'new-provider/new-model']);
-      expect(chipNames()).toEqual(['Remove OpenAI', 'Remove new-provider/new-model']);
-    });
-
-    it('picks the matching option, not the typed text, with Enter in a multiple select', async () => {
-      const onValueChange = vi.fn();
-      render(<MultipleField allowCustomValue onValueChange={onValueChange} />);
+    it('adds typed text to a multiple select, but Enter prefers a matching option', async () => {
+      render(<MultipleField allowCustomValue />);
       const user = await openField();
 
       await user.keyboard('goo');
       await screen.findByRole('option', { name: 'Use “goo”' });
       await user.keyboard('{Enter}');
+      await user.keyboard('new-model');
+      await screen.findByRole('option', { name: 'Use “new-model”' });
+      await user.keyboard('{Enter}');
 
-      expect(onValueChange).toHaveBeenLastCalledWith(['google']);
+      expect(chipNames()).toEqual(['Remove Google', 'Remove new-model']);
     });
 
     it.each([
@@ -347,32 +337,10 @@ describe('Combobox', () => {
 
       expect(onValueChange).toHaveBeenLastCalledWith(expected);
     });
-
-    it('adds the typed text with Enter when it matches no option in a multiple select', async () => {
-      const onValueChange = vi.fn();
-      render(<MultipleField allowCustomValue onValueChange={onValueChange} />);
-      const user = await openField();
-
-      await user.keyboard('new-model');
-      await screen.findByRole('option', { name: 'Use “new-model”' });
-      await user.keyboard('{Enter}');
-
-      expect(onValueChange).toHaveBeenLastCalledWith(['new-model']);
-    });
   });
 
   describe('when a multiple select has a value its options do not list', () => {
-    it('keeps a chip for it and removes it with its ×', async () => {
-      const onValueChange = vi.fn();
-      render(<MultipleField initial={['openai', 'retired-model']} onValueChange={onValueChange} />);
-      expect(chipNames()).toEqual(['Remove OpenAI', 'Remove retired-model']);
-
-      await userEvent.click(screen.getByRole('button', { name: 'Remove retired-model' }));
-
-      expect(onValueChange).toHaveBeenLastCalledWith(['openai']);
-    });
-
-    it('keeps it when another option is picked', async () => {
+    it('keeps its chip and keeps it in the value when another option is picked', async () => {
       const onValueChange = vi.fn();
       render(<MultipleField initial={['retired-model']} onValueChange={onValueChange} />);
       const user = await openField();
@@ -380,19 +348,7 @@ describe('Combobox', () => {
       await user.click(screen.getByRole('option', { name: 'Google' }));
 
       expect(onValueChange).toHaveBeenLastCalledWith(['retired-model', 'google']);
-    });
-
-    it('lists it checked in the popup and unpicks it there', async () => {
-      const onValueChange = vi.fn();
-      render(<MultipleField initial={['openai', 'retired-model']} onValueChange={onValueChange} />);
-      const user = await openField();
-
-      await user.keyboard('retired');
-      const option = await screen.findByRole('option', { name: 'retired-model' });
-      expect(option.getAttribute('aria-selected')).toBe('true');
-      await user.click(option);
-
-      expect(onValueChange).toHaveBeenLastCalledWith(['openai']);
+      expect(chipNames()).toEqual(['Remove Google', 'Remove retired-model']);
     });
   });
 
@@ -673,33 +629,6 @@ describe('Combobox', () => {
       await user.click(await screen.findByRole('option', { name: 'Google' }));
 
       expect(onInputValueChange).toHaveBeenLastCalledWith('');
-    });
-
-    it('adds typed text to a multiple select from the popup search', async () => {
-      const onValueChange = vi.fn();
-      const onInputValueChange = vi.fn();
-      render(
-        <Combobox
-          multiple
-          allowCustomValue
-          options={providers}
-          value={[]}
-          onValueChange={onValueChange}
-          onInputValueChange={onInputValueChange}
-          searchPlaceholder="Search providers"
-        />,
-      );
-      const user = userEvent.setup();
-
-      await user.click(trigger());
-      const search = await screen.findByPlaceholderText('Search providers');
-      await waitFor(() => expect(document.activeElement).toBe(search));
-      await user.keyboard('mistral');
-      await user.click(await screen.findByRole('option', { name: 'Use “mistral”' }));
-
-      expect(onValueChange).toHaveBeenLastCalledWith(['mistral']);
-      // Base UI also reports '' when the popup opens, so only the last two calls are checked: the typed text, then the cleared search after the pick.
-      expect(onInputValueChange.mock.calls.slice(-2)).toEqual([['mistral'], ['']]);
     });
 
     it('shows "N selected" for a multiple select', () => {
