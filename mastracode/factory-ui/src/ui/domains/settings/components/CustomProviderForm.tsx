@@ -64,6 +64,12 @@ function modelOptions(models: string[], listed: string[] | undefined, flagUnlist
   ];
 }
 
+/** The label of the button that adds the listed models not picked yet: all of them, or the rest. */
+function addListedLabel(unpicked: number, listed: number): string {
+  if (unpicked === listed) return `Add all ${listed} listed models`;
+  return `Add ${unpicked} more listed model${unpicked === 1 ? '' : 's'}`;
+}
+
 /**
  * Adds or edits a custom OpenAI-compatible endpoint inside a dialog: renders the dialog's body and footer. Test
  * lists the endpoint's models without saving, Test & save refuses to save an endpoint that fails the test, and
@@ -262,7 +268,7 @@ export function CustomProviderForm({
                 icon={<IconPlusMedium />}
                 onClick={() => update({ models: [...draft.models, ...unpickedListed] })}
               >
-                Add all {unpickedListed.length} listed models
+                {addListedLabel(unpickedListed.length, listedModels?.length ?? 0)}
               </Button>
             </div>
           )}

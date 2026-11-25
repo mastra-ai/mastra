@@ -25,7 +25,7 @@ export function CustomProviderModelTest({
   const labelId = useId();
   return (
     <div className="flex flex-col gap-2">
-      <Txt as="span" id={labelId} variant="label">
+      <Txt as="span" id={labelId} variant="label" tone="ink">
         Test a model
       </Txt>
       <div className="flex flex-wrap items-center gap-2">

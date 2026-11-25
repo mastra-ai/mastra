@@ -704,7 +704,7 @@ describe('Custom endpoint form', () => {
     await user.click(within(form).getByRole('combobox', { name: 'Models' }));
     await user.click(await screen.findByRole('option', { name: 'gpt-b' }));
     await user.keyboard('{Escape}');
-    await user.click(within(form).getByRole('button', { name: 'Add all 2 listed models' }));
+    await user.click(within(form).getByRole('button', { name: 'Add 2 more listed models' }));
     await user.click(within(form).getByRole('button', { name: 'Test & save' }));
 
     await waitFor(() => expect(saves).toHaveLength(1));
