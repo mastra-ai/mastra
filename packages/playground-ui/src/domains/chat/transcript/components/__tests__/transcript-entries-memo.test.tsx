@@ -1,15 +1,16 @@
+// @vitest-environment jsdom
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
+import { render } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { describe, expect, it, vi } from 'vitest';
 
-import { renderWithProviders } from '../../../../../../e2e/ui/render';
+import { describe, expect, it, vi } from 'vitest';
 import type { TimelineEntry } from '../../services/transcript';
-import { TranscriptEntries } from '../Transcript';
+import { TranscriptEntries } from '../transcript-entries';
 
 const drawn: string[] = [];
 
-vi.mock('@mastra/playground-ui/components/MarkdownRenderer', async importOriginal => ({
-  ...(await importOriginal<typeof import('@mastra/playground-ui/components/MarkdownRenderer')>()),
+vi.mock('@/ds/components/MarkdownRenderer', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/ds/components/MarkdownRenderer')>()),
   MarkdownRenderer: ({ children }: { children: ReactNode }) => {
     drawn.push(String(children));
     return <div>{children}</div>;
@@ -36,7 +37,7 @@ function assistant(
 describe('transcript entry rendering', () => {
   it('redraws only the reply a delta touched, not the settled ones above it', () => {
     const settled = assistant('assistant-1', 'the first answer');
-    const { rerender } = renderWithProviders(
+    const { rerender } = render(
       <TranscriptEntries entries={[settled, assistant('assistant-2', 'writ')]} onApprove={noop} onRespond={noop} />,
     );
 
@@ -56,7 +57,7 @@ describe('transcript entry rendering', () => {
         toolInvocation: { state: 'result', toolCallId: 'call-1', toolName: 'view', args: {}, result: 'ok' },
       },
     ]);
-    const { rerender } = renderWithProviders(
+    const { rerender } = render(
       <TranscriptEntries
         entries={[settled, assistant('assistant-2', 'writ')]}
         running
