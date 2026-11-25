@@ -35,6 +35,7 @@ import {
 } from './execution-fence';
 import { withExecutionStreamProducer } from './execution-stream-publisher';
 import { openStepsOfCrashedSegment } from './segment-spans';
+import { closeStoredSignalRun } from './stored-signal-drain';
 import { createSupersededEventFilter, emitAbortEvent, newestLogIndex } from './stream-adapter';
 import type {
   DurableAgentActiveRun,
@@ -428,6 +429,28 @@ export class DefaultAgentExecutionEngine {
       expectedStatus: 'suspended',
     });
     return written !== false;
+  }
+
+  /**
+   * Close the stored signals of a parked run that was aborted, reading what it
+   * consumed from its suspended snapshot. Call it before the snapshot is deleted
+   * and before the abort terminal is published.
+   */
+  async closeParkedRunSignals(runId: string): Promise<void> {
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    const snapshot = await workflowsStore
+      ?.loadWorkflowSnapshot({ workflowName: DurableStepIds.AGENTIC_LOOP, runId })
+      .catch(() => null);
+    if (!snapshot) return;
+    const context = snapshot.context as Record<string, any> | undefined;
+    await closeStoredSignalRun({
+      mastra: this.mastra,
+      agentId: this.id,
+      runId,
+      input: context?.input,
+      claim: undefined,
+      state: context?.__state ?? snapshot.value,
+    });
   }
 
   /**

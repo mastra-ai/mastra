@@ -86,17 +86,27 @@ export async function storeMessageListState(
 export async function openMessageListState(
   params: TranscriptParams,
   stepPayload: MessageListStateCarrier,
-): Promise<{ read(): SerializedMessageListState; write(next: SerializedMessageListState): void }> {
+): Promise<{
+  read(): SerializedMessageListState;
+  /** `extraState` lands in workflow state with the transcript, as in {@link storeMessageListState}. */
+  write(next: SerializedMessageListState, extraState?: Record<string, unknown>): void;
+  writeState(extraState: Record<string, unknown>): void;
+}> {
   // The predicate can't call setState, so `write` edits the state object itself:
   // only the whole state is that object, a picked key would be a copy.
   const workflowState = (await params.getState()) as StoredMessageListStateCarrier | undefined;
+  const writeState = (extraState: Record<string, unknown> | undefined) => {
+    if (extraState && workflowState) Object.assign(workflowState, extraState);
+  };
   if (workflowState?.messageListState === undefined) {
     stepPayload.messageListState = await readMessageListState(params, stepPayload);
     return {
       read: () => stepPayload.messageListState as SerializedMessageListState,
-      write: next => {
+      write: (next, extraState) => {
         stepPayload.messageListState = next;
+        writeState(extraState);
       },
+      writeState,
     };
   }
   const run = runTranscriptRefs(params);
@@ -104,12 +114,14 @@ export async function openMessageListState(
   let current = await hydrateMidRun(run, workflowState.messageListState, params.abortSignal);
   return {
     read: () => current,
-    write: next => {
+    write: (next, extraState) => {
       current = next;
       // The messages the run recalled were restored (or verified) on the way
       // in, and saved ones were recorded when saved, so storing needs no reads.
       workflowState.messageListState = state?.fixedMemory ? run.refs.dehydrate(next) : next;
+      writeState(extraState);
     },
+    writeState,
   };
 }
 
