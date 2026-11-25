@@ -101,20 +101,21 @@ const model = {
   },
 };
 
-const agent = createEventedAgent({
-  agent: new Agent({
-    id: 'full-restart-agent',
-    name: 'full-restart-agent',
-    instructions: 'Sleep as asked.',
-    model,
-    tools: { sleepTool: tool },
-    memory: new Memory({ storage, options: { generateTitle: false } }),
-  }),
+const base = new Agent({
+  id: 'full-restart-agent',
+  name: 'full-restart-agent',
+  instructions: 'Sleep as asked.',
+  model,
+  tools: { sleepTool: tool },
+  memory: new Memory({ storage, options: { generateTitle: false } }),
 });
+const native = process.env.RESTART_NATIVE === '1';
+const agent = native ? base : createEventedAgent({ agent: base });
 const mastra = new Mastra({
   storage,
   pubsub,
   agents: { [agent.id]: agent },
+  ...(native ? { durable: { executionEngine: /** @type {const} */ ('evented') } } : {}),
   recovery: { durableAgents: 'auto' },
   ...(process.env.RESTART_LOG_LEVEL
     ? { logger: new ConsoleLogger({ name: role, level: /** @type {any} */ (process.env.RESTART_LOG_LEVEL) }) }
@@ -136,13 +137,15 @@ if (role === 'api') {
     const result = await mastra.recoverAllDurableAgents();
     console.info(`recovery-result:${JSON.stringify(result)}`);
   } else {
-    const { output } = await agent.stream('Sleep repeatedly.', { runId, memory });
+    const result = await agent.stream('Sleep repeatedly.', { runId, memory });
+    const output = 'output' in result ? result.output : result;
     console.info(`caller-completed:${await output.text}`);
   }
 } else if (role === 'followup') {
   // A second run on the same thread, like Doctor re-diagnosing a stuck deploy.
   try {
-    const { output } = await agent.stream('Diagnose again.', { runId: process.env.RESTART_FOLLOWUP_RUN_ID, memory });
+    const result = await agent.stream('Diagnose again.', { runId: process.env.RESTART_FOLLOWUP_RUN_ID, memory });
+    const output = 'output' in result ? result.output : result;
     console.info(`followup-completed:${await output.text}`);
   } catch (error) {
     const reason = error instanceof Error ? `${error.name}:${error.message}` : String(error);

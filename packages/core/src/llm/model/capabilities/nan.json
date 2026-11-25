@@ -24,15 +24,16 @@
   ],
   "structuredOutput": ["deepseek-v4-flash", "gemma4", "glm5.3", "glm5.3-flash", "qwen3.6", "qwen3.8-flash"],
   "reasoning": {
-    "qwen3.8-flash": [
+    "kimi-k3.1-pro": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      },
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm5.3": [
       {
-        "type": "budget_tokens",
-        "min": 0,
-        "max": 32768
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "qwen3.6": [
@@ -46,10 +47,21 @@
         "max": 32768
       }
     ],
-    "glm5.3": [
+    "deepseek-v4-pro": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "gemma4": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 0,
+        "max": 32768
       }
     ],
     "deepseek-v4-flash": [
@@ -64,21 +76,10 @@
         "values": ["none", "low", "high"]
       }
     ],
-    "kimi-k3.1-pro": [
+    "qwen3.8-flash": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "mimo-v2.6-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "gemma4": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       },
       {
         "type": "budget_tokens",
@@ -92,16 +93,15 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "deepseek-v4-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
     "glm5.3-flash": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "mimo-v2.6-flash": [
+      {
+        "type": "toggle"
       }
     ]
   }

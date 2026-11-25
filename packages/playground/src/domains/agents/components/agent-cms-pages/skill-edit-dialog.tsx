@@ -328,9 +328,10 @@ export function SkillEditDialog({
                 variant="primary"
                 size="sm"
                 onClick={handleSave}
-                disabled={!name.trim() || isPending}
+                disabled={!name.trim()}
+                loading={isPending}
               >
-                {isPending ? 'Saving...' : isExistingSkill ? 'Save' : 'Create'}
+                {isExistingSkill ? 'Save' : 'Create'}
               </Button>
             </>
           )}

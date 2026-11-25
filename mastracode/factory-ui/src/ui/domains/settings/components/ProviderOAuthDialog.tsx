@@ -92,8 +92,8 @@ function PasteCodeDialog({ provider, session, onClose, onComplete, scopeNotice }
         </DialogBody>
         <DialogFooter>
           <DialogCancel>Cancel</DialogCancel>
-          <DialogAction disabled={!code.trim()} onConfirm={() => void complete()}>
-            {completeMutation.isPending ? 'Completing…' : 'Complete sign in'}
+          <DialogAction disabled={!code.trim()} onConfirm={() => void complete()} loading={completeMutation.isPending}>
+            Complete sign in
           </DialogAction>
         </DialogFooter>
       </DialogContent>

@@ -137,8 +137,8 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
           {error}
         </Txt>
       ) : null}
-      <Button type="submit" variant="primary" size="lg" className="w-full" disabled={pending}>
-        {pending ? 'Please wait…' : mode === 'sign-up' ? 'Create account' : 'Sign in'}
+      <Button type="submit" variant="primary" size="lg" className="w-full" loading={pending}>
+        {mode === 'sign-up' ? 'Create account' : 'Sign in'}
       </Button>
       {!signUpDisabled ? (
         <Button
@@ -179,7 +179,6 @@ export function SignInPage() {
       authError === CUSTOM_DOMAIN_UNSUPPORTED_ERROR ||
       !isPlatformAuthSupportedHost(window.location.hostname));
   const hostedLoginLabel = studioAuth ? 'Sign in with Mastra Platform' : 'Continue with GitHub';
-  const hostedLoginPendingLabel = studioAuth ? 'Opening Mastra Platform…' : 'Opening GitHub…';
 
   // A cached signed-in result may predate the redirect here. Check the cookie
   // again before sending the user back into the protected app.
@@ -221,7 +220,7 @@ export function SignInPage() {
                 <Txt as="p" variant="body" tone="muted">
                   Unable to check your sign-in status. Check your connection and try again.
                 </Txt>
-                <Button onClick={() => void auth.refetch()} disabled={auth.isFetching}>
+                <Button onClick={() => void auth.refetch()} loading={auth.isFetching}>
                   Try again
                 </Button>
               </div>
@@ -244,18 +243,15 @@ export function SignInPage() {
                 variant="primary"
                 size="lg"
                 className="w-80 max-w-full"
-                disabled={redirecting || auth.isPending}
+                icon={studioAuth ? <LogoWithoutText /> : <GithubIcon />}
+                loading={redirecting}
+                disabled={auth.isPending}
                 onClick={() => {
                   setRedirecting(true);
                   redirectToLogin(baseUrl, returnTo);
                 }}
               >
-                {studioAuth ? (
-                  <LogoWithoutText className="w-4" aria-hidden="true" />
-                ) : (
-                  <GithubIcon aria-hidden="true" />
-                )}
-                {redirecting ? hostedLoginPendingLabel : hostedLoginLabel}
+                {hostedLoginLabel}
               </Button>
             )}
           </section>

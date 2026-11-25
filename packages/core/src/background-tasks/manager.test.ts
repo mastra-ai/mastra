@@ -1578,6 +1578,145 @@ describe('BackgroundTaskManager', () => {
       }
     });
 
+    // A task that takes its worker down (OOM, native crash) used to be re-pended
+    // by every server that started, without spending a retry, so it crashed each
+    // one in turn. Stale-running recovery must consume a retry like a lapsed pin
+    // does, and fail the task once retries are used up. (#30977)
+    it('spends a retry when it recovers a task whose worker crashed', async () => {
+      const seedStorage = new MockStore();
+      const local = new Mastra({
+        logger: false,
+        storage: seedStorage,
+        backgroundTasks: { enabled: true },
+      });
+
+      const bgStore = await seedStorage.getStore('backgroundTasks');
+      await bgStore!.createTask({
+        id: 'crashed-once',
+        status: 'running',
+        ownerId: 'dead-worker',
+        leaseExpiresAt: new Date(Date.now() - 30_000),
+        toolName: 't',
+        toolCallId: 'c',
+        args: {},
+        agentId: 'a',
+        runId: 'r',
+        retryCount: 0,
+        maxRetries: 1,
+        timeoutMs: 5000,
+        createdAt: new Date(),
+        startedAt: new Date(Date.now() - 60_000),
+      });
+
+      local.backgroundTaskManager!.registerTaskContext(
+        'crashed-once',
+        ctx(async () => 'recovered'),
+      );
+      await local.startWorkers();
+
+      try {
+        await tick(200);
+
+        const task = await local.backgroundTaskManager!.getTask('crashed-once');
+        expect(task?.status).toBe('completed');
+        expect(task?.result).toBe('recovered');
+        expect(task?.retryCount).toBe(1);
+      } finally {
+        await local.backgroundTaskManager?.shutdown();
+        await local.stopWorkers();
+      }
+    });
+
+    it('fails a task whose worker crashed once it has used its retries, instead of running it again (#30977)', async () => {
+      const seedStorage = new MockStore();
+      const local = new Mastra({
+        logger: false,
+        storage: seedStorage,
+        backgroundTasks: { enabled: true },
+      });
+
+      const bgStore = await seedStorage.getStore('backgroundTasks');
+      await bgStore!.createTask({
+        id: 'crashed-twice',
+        status: 'running',
+        ownerId: 'dead-worker',
+        leaseExpiresAt: new Date(Date.now() - 30_000),
+        toolName: 't',
+        toolCallId: 'c',
+        args: {},
+        agentId: 'a',
+        runId: 'r',
+        retryCount: 1,
+        maxRetries: 1,
+        timeoutMs: 5000,
+        createdAt: new Date(),
+        startedAt: new Date(Date.now() - 60_000),
+      });
+
+      const execute = vi.fn(async () => 'ran again');
+      local.backgroundTaskManager!.registerTaskContext('crashed-twice', ctx(execute));
+      await local.startWorkers();
+
+      try {
+        await tick(200);
+
+        const task = await local.backgroundTaskManager!.getTask('crashed-twice');
+        expect(task?.status).toBe('failed');
+        expect(task?.error?.message).toBe('Worker process terminated before task completed');
+        expect(task?.retryCount).toBe(1);
+        expect(execute).not.toHaveBeenCalled();
+      } finally {
+        await local.backgroundTaskManager?.shutdown();
+        await local.stopWorkers();
+      }
+    });
+
+    it('does not spend a retry when a graceful shutdown handed the task back', async () => {
+      // Shutdown releases the lease of a retryable running task and leaves it
+      // `running` for the next process. A deploy is not the task's fault, so
+      // even a task with no retries left resumes without spending one.
+      const seedStorage = new MockStore();
+      const local = new Mastra({
+        logger: false,
+        storage: seedStorage,
+        backgroundTasks: { enabled: true },
+      });
+
+      const bgStore = await seedStorage.getStore('backgroundTasks');
+      await bgStore!.createTask({
+        id: 'handed-back',
+        status: 'running',
+        toolName: 't',
+        toolCallId: 'c',
+        args: {},
+        agentId: 'a',
+        runId: 'r',
+        retryCount: 1,
+        maxRetries: 1,
+        timeoutMs: 5000,
+        createdAt: new Date(),
+        startedAt: new Date(Date.now() - 60_000),
+      });
+
+      local.backgroundTaskManager!.registerTaskContext(
+        'handed-back',
+        ctx(async () => 'resumed'),
+      );
+      await local.startWorkers();
+
+      try {
+        await tick(200);
+
+        const task = await local.backgroundTaskManager!.getTask('handed-back');
+        expect(task?.status).toBe('completed');
+        expect(task?.result).toBe('resumed');
+        expect(task?.retryCount).toBe(1);
+      } finally {
+        await local.backgroundTaskManager?.shutdown();
+        await local.stopWorkers();
+      }
+    });
+
     it('re-dispatches stale pending tasks on init', async () => {
       const seedStorage = new MockStore();
       const local = new Mastra({

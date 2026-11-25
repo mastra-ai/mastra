@@ -37,10 +37,11 @@ export const DeleteAgentConfirmation = ({
           icon={<TrashIcon />}
           variant="destructive"
           data-testid="agent-builder-delete-agent-confirm"
-          disabled={isPending || isDependentsLoading}
+          disabled={isDependentsLoading}
           onClick={onConfirm}
+          loading={isPending}
         >
-          {isPending ? 'Deleting…' : 'Delete agent'}
+          Delete agent
         </Button>
       </AlertDialog.Footer>
     </AlertDialog.Content>

@@ -1,10 +1,12 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createClient } from '@libsql/client';
-import type { MemoryStorage, RunFence, WorkflowsStorage } from '@mastra/core/storage';
-import { isRunFenceConflictError } from '@mastra/core/storage';
+import { MastraError } from '@mastra/core/error';
+import type { MemoryStorage, RunFence, RunFenceScope, WorkflowsStorage } from '@mastra/core/storage';
+import { isRunFenceConflictError, setRunFenceContext } from '@mastra/core/storage';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { resetConnectionsAfterBusy } from '../../shared/reset-after-busy-client';
 import { LibSQLStore } from '../index';
@@ -209,6 +211,44 @@ describe('LibSQL run fencing: a takeover racing an in-flight write', () => {
       }),
     );
     expect((await workflowsB.loadWorkflowSnapshot({ workflowName, runId }))?.value).toEqual({});
+  });
+
+  // A writer that lost the run must learn so even when its value can't be serialized, as when the
+  // fence was checked before serializing. A current writer gets the store's own error.
+  it('workflows: a draft that cannot be serialized reports a stale fence first, and writes nothing', async () => {
+    const workflowsA = (await storeA.getStore('workflows')) as WorkflowsStorage;
+    const workflowName = 'run-fence-unserializable';
+    const runId = randomUUID();
+    await workflowsA.appendWorkflowRunEntries({ workflowName, runId, header: snapshot(runId, {}), steps: {} });
+    const claim = async (ownerId: string): Promise<RunFence> => {
+      const { record } = await workflowsA.claimRunOwnership({ runId, ownerId, leaseMs: LEASE_MS, force: true });
+      return { runId, ownerId, generation: record!.generation };
+    };
+    const stale = await claim('a');
+    const current = await claim('b');
+    const stored = await workflowsA.loadWorkflowRunHeader({ workflowName, runId });
+    const scopes = new AsyncLocalStorage<RunFenceScope | undefined>();
+    const context = setRunFenceContext({ current: () => scopes.getStore(), run: (s, f) => scopes.run(s, f) });
+    const draft = (fence: RunFence) =>
+      context.run({ fenceFor: () => fence }, () =>
+        workflowsA.appendWorkflowRunStateDraft({
+          workflowName,
+          runId,
+          state: {
+            value: {
+              toJSON() {
+                throw new Error('cannot serialize');
+              },
+            },
+          },
+        }),
+      );
+
+    await expectFenceConflict(draft(stale));
+    await expect(draft(current)).rejects.toSatisfy(
+      error => error instanceof MastraError && !isRunFenceConflictError(error),
+    );
+    expect((await workflowsA.loadWorkflowRunHeader({ workflowName, runId }))!.lastSeq).toBe(stored!.lastSeq);
   });
 
   it('memory: raising the fence waits for the in-flight write, and later writes are rejected', async () => {

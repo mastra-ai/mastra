@@ -1,0 +1,57 @@
+/* What a loading button shows waits for `--button-loading-delay`, so an action that finishes sooner changes nothing
+ * on screen, the hover look of the pointer that started it included. Blocking clicks and `aria-busy` don't wait. */
+[data-button-loading] {
+  --button-loading-delay: 150ms;
+
+  transition:
+    color var(--duration-fast) var(--ease-out-custom) var(--button-loading-delay),
+    background-color 0s var(--button-loading-delay),
+    box-shadow 0s var(--button-loading-delay);
+}
+
+/* The loader lies over the icon, which keeps its box: nothing moves. */
+[data-loader-slot] {
+  display: grid;
+  place-items: center;
+}
+
+[data-loader-slot] > * {
+  grid-area: 1 / 1;
+  opacity: 0;
+  transition: opacity 1ms var(--button-loading-delay);
+
+  @starting-style {
+    opacity: 1;
+  }
+}
+
+[data-loader-slot] > [data-slot='button-loader'] {
+  opacity: 1;
+  transition-duration: var(--duration-fast);
+
+  @starting-style {
+    opacity: 0;
+  }
+}
+
+/* A button with no icon makes room on the left. The margins give back the gap and the 2px inset that Button's icon
+ * slot brings, so nothing moves before the delay is over. */
+[data-loader-slot='added'] {
+  overflow: hidden;
+  max-width: 2rem;
+  transition:
+    max-width var(--duration-fast) var(--ease-out-custom) var(--button-loading-delay),
+    margin var(--duration-fast) var(--ease-out-custom) var(--button-loading-delay);
+
+  @starting-style {
+    max-width: 0;
+    margin-inline: var(--control-icon-inset, 0px) calc(-1 * var(--control-gap));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-loader-slot='added'],
+  [data-loader-slot] > [data-slot='button-loader'] {
+    transition-duration: 1ms;
+  }
+}

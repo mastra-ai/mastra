@@ -213,7 +213,7 @@ describe('feedback tabs delete', () => {
 
     await waitFor(() => expect(onDelete).toHaveBeenCalled());
     expect(onDelete.mock.calls[0][0]).toEqual({ feedbackIds: ['span-a-feedback'] });
-    expect(screen.getByRole('button', { name: 'Deleting…' }).getAttribute('disabled')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Delete', busy: true })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Delete feedback?' })).toBeTruthy();
 
     resolveDelete?.();
@@ -283,8 +283,8 @@ describe('feedback tabs delete', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
 
     await waitFor(() => expect(onDelete).toHaveBeenCalled());
-    // The button reads "Deleting…" until the failed request (and its retries) settle.
-    const retryButton = await screen.findByRole('button', { name: 'Delete' }, { timeout: 5000 });
+    // The button is busy until the failed request (and its retries) settle.
+    const retryButton = await screen.findByRole('button', { name: 'Delete', busy: false }, { timeout: 5000 });
     expect(screen.getByRole('heading', { name: 'Delete feedback?' })).toBeTruthy();
     expect(screen.getByRole('alert').textContent).toContain('Could not delete feedback');
 

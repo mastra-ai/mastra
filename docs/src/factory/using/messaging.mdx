@@ -1,0 +1,62 @@
+---
+title: Work across sessions | Core concepts
+description: Start side sessions, send messages between sessions, and follow work items and get progress reports in the session you're in.
+---
+
+# Work across sessions
+
+[Sessions](/using/sessions) in a Factory can talk to each other. From one chat in the web app or [Slack](/configure/slack), you can hand a task to a side session or message the session working on a [work item](/using/work-and-approvals), then get a report when the work finishes. Ask the agent in plain language and it uses its Factory tools to do the rest.
+
+These messages arrive as signals. A signal is a message added to a session's transcript by Factory instead of by a person, such as a report from a side session or a reply to a message the session sent. Signals show up as their own rows in the transcript, so you can see what the agent received and when.
+
+## Start a side session
+
+A side session runs a self-contained task on its own sandbox and branch while you keep working. It runs as you and reports back to the session that started it. It uses the same model as that session unless you ask for another.
+
+```text
+Start a side session to find every caller of the old billing client and list them by package.
+```
+
+Use a side session for investigations and other work you don't need to watch. When the result should become a pull request, file a Work card instead so the work goes through review.
+
+To run a role like planning on an existing card, give the agent the card number and the role. Starting a role this way leaves the card in its current stage, and your session follows the card.
+
+## Get reports back
+
+Sessions report with one of four statuses:
+
+| Status | Meaning |
+| - | - |
+| Progress | An update while work continues |
+| Blocked | The session needs an answer to go on |
+| Done | The work is finished |
+| Failed | The session can't finish |
+
+Reports go to whoever follows the work: the session that started it, or every session following its card.
+
+Ask the agent to list your side sessions with their current state, such as running or waiting on an answer. To stop getting reports from a side session, ask the agent to unsubscribe from it. The session keeps working, but its reports no longer come to you. Approval requests and blocked reports still come through because the session can't continue without an answer. If you subscribe again later, reports sent in between aren't replayed.
+
+## Answer approvals from your chat
+
+A side session or followed card can stop on a tool call that needs approval. When that happens, your session gets the request with the tool and its arguments. Tell the agent to approve or decline, with a reason if you decline. The decision is recorded as yours.
+
+The agent answers approvals and changes subscriptions only on a turn you started. A report from another session can't make it approve something on its own.
+
+## Message another session
+
+Ask the agent to send a message to the session working on a card, or to a teammate's session you can see. The message arrives as written, without your conversation around it. Replies come back to your session.
+
+Each message has a priority that sets when the other session reads it:
+
+| Priority | Effect |
+| - | - |
+| Low | Doesn't wake the session. The session gets a summary the next time it runs. |
+| Medium | Wakes an idle session. A busy session finishes its current step and learns about the message from a summary. Medium is the default. |
+| High | Wakes an idle session. A busy session sees a summary right away and gets the full message as soon as possible. |
+| Urgent | Delivered right away, stopping a busy session so it changes course. |
+
+Keep **Urgent** for corrections that can't wait, like stopping work that's going the wrong way.
+
+## Follow a work item
+
+Your session follows every card it files or starts. To hear about a card you didn't start, ask the agent to follow it by number, such as `#123`. Your session then gets its stage changes and the reports from its sessions. Ask the agent to stop following it when you no longer need the updates.

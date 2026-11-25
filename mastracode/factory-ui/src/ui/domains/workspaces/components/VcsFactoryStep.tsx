@@ -173,12 +173,12 @@ export function VcsFactoryStep({
               Manage access
             </Button>
             <Button
-              icon={<IconArrowRotateClockwise className={refreshRepos.isPending ? 'animate-spin' : undefined} />}
               variant="ghost"
               size="sm"
               aria-label="Refresh GitHub repositories"
-              disabled={refreshRepos.isPending}
               onClick={refreshGithub}
+              icon={<IconArrowRotateClockwise />}
+              loading={refreshRepos.isPending}
             >
               Refresh
             </Button>

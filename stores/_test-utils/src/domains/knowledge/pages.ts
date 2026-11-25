@@ -638,6 +638,17 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
     });
 
     describe('pages', () => {
+      it('rejects a list cursor it cannot decode with KnowledgeInvalidCursorError', async () => {
+        const acme = await scope('org:acme', ORG);
+        const invalid = { name: 'KnowledgeInvalidCursorError' };
+        // `0x10` is a number to `Number()` and 400 nines is `Infinity`; no store issues either.
+        for (const cursor of ['not-a-cursor', '0x10', '9'.repeat(400)]) {
+          await expect(store.listChildPages({ parentId: acme.id, read: 'all', cursor })).rejects.toMatchObject(invalid);
+          await expect(store.listPages({ read: 'all', cursor })).rejects.toMatchObject(invalid);
+          await expect(store.listPageActivity({ read: 'all', cursor })).rejects.toMatchObject(invalid);
+        }
+      });
+
       it('creates pages in their home scope, ordered by position, with name order for listPages', async () => {
         const acme = await scope('org:acme', ORG);
         const b = await page(acme.id, 'beta');
@@ -1170,6 +1181,9 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         const label = (hit: Awaited<ReturnType<typeof store.searchPages>>[number]) =>
           hit.type === 'page' ? hit.page.name : hit.note.text;
         const r = read(['org:acme']);
+        // Compatibility (r397): a body-only hit carries the page body, which knowledge_search snippets are cut from.
+        const giraffeHit = (await store.searchPages({ query: 'grazes', read: r })).find(hit => hit.type === 'page');
+        expect(giraffeHit?.page.body).toBe('A giraffe grazes.');
         // Words matched first, then points, then newest. Safari matches 2 words (zebra, giraffe), the others 1:
         // Zebra care 3 points, Stripes 2, Savanna 1. Two body words beat one name word.
         expect((await store.searchPages({ query: 'zebra giraffe lion', read: r })).map(label)).toEqual([
