@@ -35,7 +35,7 @@ import type {
 } from '@mastra/core/memory';
 import { SpanType, EntityType } from '@mastra/core/observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '@mastra/core/observability';
-import { TokenLimiterProcessor } from '@mastra/core/processors';
+import { isProcessorWorkflow, TokenLimiterProcessor } from '@mastra/core/processors';
 import type {
   ErrorProcessor,
   ErrorProcessorOrWorkflow,
@@ -496,6 +496,38 @@ const invalidMerge = (text: string) =>
     category: ErrorCategory.USER,
     text,
   });
+
+type ProcessorGraphEntry = { type: string; step?: unknown; steps?: ProcessorGraphEntry[] };
+
+/**
+ * Whether a processor with `id` is configured, either at the top level or as a step
+ * anywhere inside a processor workflow (sequential, branch, parallel, loop, nested workflow).
+ * Workflow steps built with `createStep(processor)` carry the id `processor:<id>`.
+ */
+function hasConfiguredProcessorId(processors: readonly unknown[], id: string): boolean {
+  const seen = new Set<unknown>();
+
+  const matchesStep = (step: unknown): boolean => {
+    if (!step || typeof step !== 'object' || seen.has(step)) return false;
+    seen.add(step);
+    if ((step as { id?: unknown }).id === `processor:${id}`) return true;
+    // Plain steps also pass `isProcessorWorkflow`; only nested workflows have a step graph.
+    const graph = (step as { stepGraph?: ProcessorGraphEntry[] }).stepGraph;
+    return Array.isArray(graph) && graph.some(matchesEntry);
+  };
+
+  // `loop` and `foreach` wrap a nested graph entry in `step` rather than a step.
+  const isEntry = (value: unknown): value is ProcessorGraphEntry =>
+    !!value && typeof value === 'object' && 'type' in value && 'step' in value;
+
+  const matchesEntry = (entry: ProcessorGraphEntry): boolean =>
+    (isEntry(entry.step) ? matchesEntry(entry.step) : matchesStep(entry.step)) ||
+    (entry.steps ?? []).some(matchesEntry);
+
+  return processors.some(processor =>
+    isProcessorWorkflow(processor) ? matchesStep(processor) : (processor as { id?: unknown }).id === id,
+  );
+}
 
 export class Memory extends MastraMemory {
   protected override createMemoryTokenCounter() {
@@ -4023,10 +4055,8 @@ Notes:
     configuredProcessors: (InputProcessorOrWorkflow | OutputProcessorOrWorkflow | ErrorProcessorOrWorkflow)[] = [],
     context?: RequestContext,
   ): Promise<InputProcessor | null> {
-    const hasObservationalMemory = configuredProcessors.some(
-      p => !('workflow' in p) && p.id === 'observational-memory',
-    );
-    if (hasObservationalMemory) return null;
+    // The user's OM processor wins wherever they placed it, including inside a processor workflow.
+    if (hasConfiguredProcessorId(configuredProcessors, 'observational-memory')) return null;
 
     // Note: attachment is intentionally permissive — `MastraMemory` may not be
     // populated in the request context at discovery time (or at all, for direct
