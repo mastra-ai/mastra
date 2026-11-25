@@ -116,6 +116,44 @@ describe('listing the models of a custom endpoint', () => {
     expect(endpoint.requests.map(request => `${request.method} ${request.path}`)).toEqual(['GET /v1/models']);
   });
 
+  // The TUI prints ids and may save them, so an id with a control character could reach the terminal.
+  it('drops ids with control characters or an absurd length, and keeps the clean ones', async () => {
+    const hostile = ['gpt\u001b]52;c;cm0gLXJmIH4K\u0007', '\u001b[2J\u001b[Hx', `m${'x'.repeat(256)}`];
+    const mixed = await startEndpoint(json(200, { data: [{ id: 'model-x' }, ...hostile.map(id => ({ id }))] }));
+    const onlyHostile = await startEndpoint(json(200, { data: hostile.map(id => ({ id })) }));
+
+    const mixedResult = await listCustomProviderModels({ url: mixed.url });
+    const hostileResult = await listCustomProviderModels({ url: onlyHostile.url });
+
+    expect(mixedResult).toMatchObject({ ok: true, models: ['model-x'] });
+    expect(hostileResult).toMatchObject({ ok: false, failure: { kind: 'invalid_response' } });
+  });
+
+  // A caller may run a check with a saved key it is not allowed to read.
+  it('drops ids that echo the key or a secret header', async () => {
+    const endpoint = await startEndpoint((request, res) =>
+      json(200, {
+        data: [
+          { id: 'model-x' },
+          { id: `echo ${request.headers.authorization}` },
+          { id: `tenant-${request.headers['x-tenant']}` },
+          { id: `pin-${request.headers['x-pin']}` },
+        ],
+      })(request, res),
+    );
+
+    const result = await listCustomProviderModels({
+      url: endpoint.url,
+      apiKey: 'sk-echoed-key',
+      headers: [
+        { name: 'X-Tenant', value: 'tenant-secret', secret: true },
+        { name: 'X-Pin', value: '7q9', secret: true },
+      ],
+    });
+
+    expect(result).toMatchObject({ ok: true, models: ['model-x'] });
+  });
+
   it('reports a 200 that is not a model list', async () => {
     const endpoint = await startEndpoint(
       text(200, '<html><title>Welcome</title><p>Router admin</p></html>', 'text/html'),
@@ -417,6 +455,31 @@ describe('sending a test message to a custom endpoint model', () => {
     expect(request!.headers).toMatchObject({ 'x-api-key': 'gw-key', 'x-org-id': 'org-1' });
     expect(request!.headers.authorization).toBeUndefined();
     expect(JSON.parse(request!.body)).toMatchObject({ model: 'model-x', stream: true });
+  });
+
+  // A caller may run a check with a saved key it is not allowed to read.
+  it('redacts the key and a secret header that the endpoint echoes into the reply', async () => {
+    const endpoint = await startEndpoint((request, res) =>
+      chatStream(`auth=${request.headers.authorization} tenant=${request.headers['x-tenant']}`)(request, res),
+    );
+
+    const result = await testModel({
+      url: endpoint.url,
+      apiKey: 'sk-echoed-key',
+      headers: [{ name: 'X-Tenant', value: 'tenant-secret', secret: true }],
+    });
+
+    expect(result).toMatchObject({ ok: true, reply: 'auth=Bearer [redacted] tenant=[redacted]' });
+  });
+
+  it('returns an empty reply when it echoes a secret too short to redact', async () => {
+    const endpoint = await startEndpoint((request, res) =>
+      chatStream(`your pin is ${request.headers['x-pin']}`)(request, res),
+    );
+
+    const result = await testModel({ url: endpoint.url, headers: [{ name: 'X-Pin', value: '7q9', secret: true }] });
+
+    expect(result).toMatchObject({ ok: true, reply: '', finishReason: 'stop' });
   });
 
   it('passes when the model answers with no text', async () => {

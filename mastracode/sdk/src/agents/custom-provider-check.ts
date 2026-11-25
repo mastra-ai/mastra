@@ -374,11 +374,33 @@ async function readCappedBody(response: Response, maxBytes: number): Promise<{ t
 }
 
 /**
- * The model ids in a model list body, trimmed, deduplicated and sorted, or
- * undefined when the body is not a model list. A non-empty list that yields no
- * id is not a model list either.
+ * The longest model id kept. Real ids are well under this; a longer one is
+ * noise or an attempt to flood the lists that show it.
  */
-function modelIdsFromList(body: unknown): string[] | undefined {
+const MAX_MODEL_ID_LENGTH = 256;
+
+/**
+ * Whether an id from a model list may be shown and saved. Ids are dropped,
+ * never cleaned, because a cleaned id is no longer the one the endpoint
+ * expects. The TUI prints ids, so one with a control character could inject a
+ * terminal escape sequence. An id that contains a secret the check sent is an
+ * echo of the request and would hand that secret to whoever reads the list.
+ */
+function isUsableModelId(id: string, sentSecrets: string[]): boolean {
+  if (!id || id.length > MAX_MODEL_ID_LENGTH) return false;
+  // oxlint-disable-next-line no-control-regex -- matching control characters is the point.
+  if (/[\u0000-\u001f\u007f-\u009f]/.test(id)) return false;
+  return !sentSecrets.some(secret => id.includes(secret));
+}
+
+/**
+ * The model ids in a model list body, trimmed, deduplicated and sorted, or
+ * undefined when the body is not a model list. Ids that fail
+ * {@link isUsableModelId} are dropped, and a non-empty list that yields no id
+ * is not a model list either.
+ */
+function modelIdsFromList(body: unknown, secrets: SentSecrets): string[] | undefined {
+  const sent = [...secrets.redacted, ...secrets.tooShort];
   let entries: unknown[];
   let nameIsId = false;
   if (Array.isArray(body)) entries = body;
@@ -394,8 +416,11 @@ function modelIdsFromList(body: unknown): string[] | undefined {
     let id: unknown;
     if (typeof entry === 'string') id = Array.isArray(body) ? entry : undefined;
     else if (isRecord(entry)) id = typeof entry.id === 'string' ? entry.id : nameIsId ? entry.name : undefined;
-    if (typeof id === 'string' && id.trim()) ids.add(id.trim());
+    if (typeof id !== 'string') continue;
+    const trimmed = id.trim();
+    if (isUsableModelId(trimmed, sent)) ids.add(trimmed);
   }
+  // A list whose every id was dropped proves nothing about the endpoint, the same as a list without ids.
   if (entries.length > 0 && ids.size === 0) return undefined;
   return [...ids].sort();
 }
@@ -500,7 +525,7 @@ export async function listCustomProviderModels(
   } catch {
     parsed = undefined;
   }
-  const models = modelIdsFromList(parsed);
+  const models = modelIdsFromList(parsed, secrets);
   if (!models) {
     return fail({
       kind: 'invalid_response',
@@ -639,7 +664,6 @@ export async function testCustomProviderModel(
       if (part.type === 'text-delta') {
         reply += part.text;
         if (reply.length >= MAX_REPLY_CHARS) {
-          reply = reply.slice(0, MAX_REPLY_CHARS);
           replyCut = true;
           // Leaving the loop alone does not close the request, so the stream is aborted too.
           stopReading.abort();
@@ -673,5 +697,24 @@ export async function testCustomProviderModel(
     });
     return { ok: false, failure: finishFailure(failure, secrets), latencyMs: latencyMs() };
   }
-  return { ok: true, reply: reply.trim(), ...(finishReason ? { finishReason } : {}), latencyMs: latencyMs() };
+  return {
+    ok: true,
+    reply: safeReply(reply, secrets),
+    ...(finishReason ? { finishReason } : {}),
+    latencyMs: latencyMs(),
+  };
+}
+
+/**
+ * The reply as it may be returned. An endpoint that echoes request headers
+ * into its completion would hand a saved secret to someone allowed to run the
+ * check but not to read the secret, so the reply is redacted like failure
+ * text. Redaction runs before the cut to the reply budget so the cut cannot
+ * split a secret, and a reply that holds a secret too short to redact is
+ * returned empty.
+ */
+function safeReply(reply: string, secrets: SentSecrets): string {
+  const redacted = redact(reply, secrets);
+  if (secrets.tooShort.some(secret => redacted.includes(secret))) return '';
+  return redacted.slice(0, MAX_REPLY_CHARS).trim();
 }
