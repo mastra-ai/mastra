@@ -90,8 +90,8 @@ describe('useChat once its thread stream broke (a phone locked, the network gone
     ]);
   });
 
-  // A reply under way when the phone locks: the page saw its first word, then lost the stream.
-  async function givenReplyCut(props: Partial<MastraChatProps> = { initialMessages: opened }, seen = ['Half']) {
+  // A reply under way: the page sees its first words.
+  async function givenReplyUnderWay(props: Partial<MastraChatProps> = { initialMessages: opened }, seen = ['Half']) {
     const threads = givenThreadStreams();
     const page = followThread(props);
     unmount = page.unmount;
@@ -104,6 +104,12 @@ describe('useChat once its thread stream broke (a phone locked, the network gone
     );
     await waitFor(() => expect(texts(page.result.current.messages)).toEqual(['Tell me more', seen.join('')]));
     expect(page.result.current.isRunning).toBe(true);
+    return { ...threads, page };
+  }
+
+  // Then the phone locks: the page loses the stream, and follows the thread again once it can.
+  async function givenReplyCut(props: Partial<MastraChatProps> = { initialMessages: opened }, seen = ['Half']) {
+    const { page, ...threads } = await givenReplyUnderWay(props, seen);
     threads.breakStream(0);
     await threads.followedAgain(2);
     return { ...threads, page };
@@ -361,6 +367,51 @@ describe('useChat once its thread stream broke (a phone locked, the network gone
 
     await waitFor(() => expect(texts(page.result.current.messages)).toContain('Then.'));
     expect(page.result.current.tasks.map(t => t.content)).toEqual(['Plan']);
+  });
+
+  const askApproval = chunk('tool-call-approval', {
+    toolName: 'weatherTool',
+    toolCallId: 'call-approve',
+    args: { city: 'London' },
+  });
+
+  it('asks for the approval the run asked for while the stream was down', async () => {
+    const { send, page } = await givenReplyCut();
+
+    // The paused run keeps the thread, and the server sends a pending approval again.
+    await send(1, historyOf([question, stored('a1', 'assistant', 'Half')], 'run-1'), askApproval);
+
+    await waitFor(() => expect(page.result.current.isAwaitingToolApproval).toBe(true));
+    expect(page.result.current.isRunning).toBe(false);
+  });
+
+  it('asks no more for an approval answered elsewhere while the stream was down, its run over', async () => {
+    const { send, breakStream, followedAgain, page } = await givenReplyUnderWay();
+    await send(0, askApproval);
+    await waitFor(() => expect(page.result.current.isAwaitingToolApproval).toBe(true));
+    breakStream(0);
+    await followedAgain(2);
+
+    await send(1, historyOf([question, stored('a1', 'assistant', 'Half, approved, then whole.')]));
+
+    await waitFor(() => expect(page.result.current.isAwaitingToolApproval).toBe(false));
+    expect(page.result.current.isRunning).toBe(false);
+  });
+
+  it('goes on with a reply still running without writing it twice, when the server stores no history', async () => {
+    const { send, page } = await givenReplyCut();
+
+    // An agent without memory: the history is empty, and the server sends the running reply again from its start.
+    await send(
+      1,
+      historyOf([], 'run-1'),
+      chunk('start', { messageId: 'a1' }),
+      chunk('text-start', { id: 't1' }),
+      chunk('text-delta', { id: 't1', text: 'Half' }),
+      chunk('text-delta', { id: 't1', text: ', then whole.' }),
+    );
+
+    await waitFor(() => expect(texts(page.result.current.messages)).toEqual(['Tell me more', 'Half, then whole.']));
   });
 
   it('follows the thread no more once the page leaves, though it followed it again before', async () => {
