@@ -68,13 +68,6 @@
     composer-fade 180ms linear backwards;
 }
 
-.starter-enter {
-  animation:
-    composer-rise 760ms cubic-bezier(0.16, 1, 0.3, 1) backwards,
-    composer-fade 340ms linear backwards;
-  animation-delay: calc(80ms + var(--i, 0) * 50ms);
-}
-
 @keyframes composer-rise {
   from {
     transform: translateY(1.25rem);
@@ -97,8 +90,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .chat-surface-enter,
-  .composer-enter,
-  .starter-enter {
+  .composer-enter {
     animation: none;
   }
 
