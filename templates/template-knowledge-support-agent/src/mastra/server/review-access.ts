@@ -87,13 +87,7 @@ const restartRun: WritePolicy = ({ body, owner, actorId, run }) => {
   if (!decision || Array.isArray(decision) || decision.status !== 'success') return false;
 
   const approved = approvalSchema.safeParse(decision.output);
-  if (
-    !approved.success ||
-    approved.data.decision.decision !== 'approve' ||
-    approved.data.proposal.owner !== owner ||
-    approved.data.reviewerId !== actorId
-  )
-    return false;
+  if (!approved.success || approved.data.proposal.owner !== owner || approved.data.reviewerId !== actorId) return false;
 
   // Native persistence has running checkpoints both before and after the publication step.
   const publication = run.steps?.['publish-review'];
@@ -105,9 +99,12 @@ const restartRun: WritePolicy = ({ body, owner, actorId, run }) => {
   const completed = publicationSchema.safeParse(publication.output);
   if (!completed.success) return false;
   const { proposal } = approved.data;
-  const expectedStatus = ['page', 'note', 'update'].includes(proposal.candidate.action)
-    ? 'published'
-    : proposal.candidate.action;
+  const expectedStatus =
+    approved.data.decision.decision === 'reject'
+      ? 'rejected'
+      : ['page', 'note', 'update'].includes(proposal.candidate.action)
+        ? 'published'
+        : proposal.candidate.action;
   const reference = `${proposal.destination.scope}#${proposal.destination.path}`;
   return (
     completed.data.proposalId === proposal.id &&

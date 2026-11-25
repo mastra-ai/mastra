@@ -1193,6 +1193,7 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
       expectedVersion?: number,
       afterCommit?: () => Promise<unknown>,
       superseded = false,
+      rejected = false,
     ) {
       const marker = `knowledge-review:${interrupted.proposal.id}:`;
       const note = interrupted.proposal.candidate.action === 'note';
@@ -1216,22 +1217,26 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
       );
       const request = post(f, `/workflows/review/resume-async?runId=${interrupted.runId}`, {
         step: ['review-decision'],
-        resumeData: decision(interrupted.proposal),
+        resumeData: { ...decision(interrupted.proposal), decision: rejected ? 'reject' : 'approve' },
       }).catch(() => undefined);
       let written: Awaited<ReturnType<typeof effects>> = [];
-      for (let attempt = 0; attempt < 100; attempt++) {
+      for (let attempt = 0; !rejected && attempt < 100; attempt++) {
         written = await effects();
         if (written.length) break;
         await setTimeout(100);
       }
-      assert.equal(written.length, 1, 'Native write must precede the injected audit failure');
-      if (!note) assert.equal(written[0]!.version, expectedVersion, 'A page publication increments the version once');
+      assert.equal(written.length, rejected ? 0 : 1, 'Only approved reviews write Knowledge');
+      if (!rejected && !note)
+        assert.equal(written[0]!.version, expectedVersion, 'A page publication increments the version once');
       // Wait for the native run to finish trying its terminal checkpoint. Core can suppress
       // persistence errors with logging disabled; the durable checkpoint must still be running.
       const transport = await request;
       assert.ok(transport);
       const transportBody = await transport.text();
-      assert.match(transportBody, /published|synthetic terminal audit outage/u);
+      assert.match(
+        transportBody,
+        rejected ? /rejected|synthetic terminal audit outage/u : /published|synthetic terminal audit outage/u,
+      );
       await assert.rejects(
         sql(
           f,
@@ -1290,7 +1295,12 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
         'success',
         JSON.stringify({ runId: interrupted.runId, status: recovered.status, error: recovered.error }),
       );
-      assert.equal(recovered.result.status, 'published', JSON.stringify(recovered));
+      assert.equal(recovered.result.status, rejected ? 'rejected' : 'published', JSON.stringify(recovered));
+      if (rejected) {
+        assert.equal(recovered.result.reference, null);
+        assert.deepEqual(await effects(), []);
+        return null;
+      }
       const { scope, path } = interrupted.proposal.destination;
       const originalRef = `${scope}#${path}${note ? `?note=${written[0]!.id}` : ''}`;
       assert.equal(recovered.result.reference, originalRef);
@@ -1302,7 +1312,9 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
       return originalRef;
     }
     const interrupted = await next({ evidence: [] }, freshInput);
-    const originalRef = await interruptAndRecover(interrupted, 1);
+    const originalRef = (await interruptAndRecover(interrupted, 1))!;
+    const interruptedRejection = await next({ evidence: [] }, freshInput);
+    await interruptAndRecover(interruptedRejection, undefined, undefined, false, true);
     const original = (await snapshot(f)).find(item =>
       item.page.body?.includes(`knowledge-review:${interrupted.proposal.id}:`),
     )!.page;
