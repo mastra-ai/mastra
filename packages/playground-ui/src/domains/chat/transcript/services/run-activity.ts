@@ -68,7 +68,9 @@ function partActivity(part: MastraMessagePart): RunActivity {
  * spoke. A prompt lands after the message holding its call, so walking back meets the prompt first.
  */
 export function runActivity(entries: TimelineEntry[], lastEntryBeforeRun?: string): RunActivity {
-  for (const entry of entries.toReversed()) {
+  for (let index = entries.length - 1; index >= 0; index--) {
+    const entry = entries[index];
+    if (!entry) continue;
     if (entry.id === lastEntryBeforeRun) return 'thinking';
     if (entry.kind === 'approval' || entry.kind === 'suspension') return 'waiting';
     if (entry.kind === 'notice' && entry.level === 'error') return 'error';
