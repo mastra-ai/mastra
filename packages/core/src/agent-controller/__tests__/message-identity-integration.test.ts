@@ -92,7 +92,10 @@ function createModelStoppedMidReply(identity: { provider: string; modelId: strin
 }
 
 type AgentOverrides = Partial<
-  Pick<AgentConfig, 'model' | 'tools' | 'inputProcessors' | 'errorProcessors' | 'errorProcessorDefaults'>
+  Pick<
+    AgentConfig,
+    'model' | 'tools' | 'inputProcessors' | 'errorProcessors' | 'errorProcessorDefaults' | 'maxProcessorRetries'
+  >
 >;
 type Engine = 'default' | 'durable';
 
@@ -252,4 +255,45 @@ describe('stream ↔ persisted message identity', () => {
     },
     30000,
   );
+
+  it('keeps the hop notice in the saved reply when the fallback is retried', async () => {
+    let fallbackCalls = 0;
+    const fallback = createTextStreamModel('Good to hear.', {
+      provider: 'fallback-provider',
+      modelId: 'fallback-model',
+    });
+    const answer = fallback.doStream.bind(fallback);
+    fallback.doStream = async options => {
+      fallbackCalls++;
+      if (fallbackCalls === 1) throw new Error('rate limited');
+      return answer(options);
+    };
+    let apiErrors = 0;
+    const { persistedAssistant } = await sendOneMessage({
+      errorProcessorDefaults: false,
+      maxProcessorRetries: 1,
+      errorProcessors: [
+        {
+          id: 'announce-hop-then-retry',
+          processAPIError: async ({ writer }) => {
+            apiErrors++;
+            if (apiErrors > 1) return { retry: true };
+            await writer?.custom({ type: 'data-model-fallback', data: { to: 'fallback-model' } });
+            return { retry: false };
+          },
+        },
+      ],
+      model: [
+        { model: createFailingModel({ provider: 'primary-provider', modelId: 'primary-model' }), maxRetries: 0 },
+        { model: fallback, maxRetries: 0 },
+      ],
+    });
+
+    expect(fallbackCalls).toBe(2);
+    expect(persistedAssistant).toHaveLength(1);
+    expect(persistedAssistant[0]!.content.parts.filter(part => part.type !== 'step-start')).toEqual([
+      expect.objectContaining({ type: 'data-model-fallback', data: { to: 'fallback-model' } }),
+      expect.objectContaining({ type: 'text', text: 'Good to hear.' }),
+    ]);
+  }, 30000);
 });

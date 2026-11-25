@@ -205,6 +205,29 @@ describe('a Factory session whose model is rate-limited, with a host fallback co
     ]);
   });
 
+  it('retries the last model of the route once after the provider asks to wait', async () => {
+    mock.on({ model: /claude/ }, ANTHROPIC_RATE_LIMIT);
+    mock.on(
+      { model: /gpt/, sequenceIndex: 0 },
+      { error: { message: 'Rate limit reached', type: 'requests' }, status: 429, retryAfter: 1 },
+    );
+    mock.on({ model: /gpt/, sequenceIndex: 1 }, { content: 'Reviewed after the wait' });
+    const { send, lastReply, errors, savedHops } = await startSession([{ modelId: PRIMARY }, { modelId: FALLBACK }]);
+
+    await send('Review the diff.');
+
+    expect(errors).toEqual([]);
+    expect(await lastReply()).toBe('Reviewed after the wait');
+    expect(mock.getRequests().map(request => `${request.path} ${request.response.status}`)).toEqual([
+      '/v1/messages 429',
+      '/v1/responses 429',
+      '/v1/responses 200',
+    ]);
+    expect(await savedHops()).toMatchObject([
+      { from: { entryId: PRIMARY }, to: { entryId: FALLBACK }, failure: { kind: 'rate_limited' } },
+    ]);
+  });
+
   it('streams the hop at the start of the reply, under the id the reply is saved with', async () => {
     mock.on({ model: /claude/ }, ANTHROPIC_RATE_LIMIT);
     mock.on({ model: /gpt/ }, { content: 'Reviewed on the fallback' });

@@ -2,7 +2,7 @@ import { classifyProviderError } from '@mastra/core/error';
 import { StreamErrorRetryProcessor } from '@mastra/core/processors';
 import type { ProcessAPIErrorArgs, ProcessAPIErrorResult } from '@mastra/core/processors';
 
-import { requestModelRoute } from '../agents/model.js';
+import { requestRouteHasNextModel } from '../agents/model.js';
 import type { RoutingControllerContext } from '../auth/account-rotation-processor.js';
 
 export class RouteAwareStreamErrorRetryProcessor extends StreamErrorRetryProcessor {
@@ -14,5 +14,5 @@ export class RouteAwareStreamErrorRetryProcessor extends StreamErrorRetryProcess
 
 function routeCanHop({ requestContext }: ProcessAPIErrorArgs): boolean {
   const controller = requestContext?.get('controller') as RoutingControllerContext | undefined;
-  return requestModelRoute(requestContext, controller).entries.length > 1;
+  return requestRouteHasNextModel(requestContext, controller);
 }
