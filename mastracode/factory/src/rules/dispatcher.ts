@@ -53,6 +53,7 @@ import {
   recordSessionRunStart,
   waitForSessionRunAudit,
 } from '../session/run-audit.js';
+import type { OpenRunLedger } from '../session/run-audit.js';
 import { sessionHoldsWork } from '../session/session-unloader.js';
 import { resolvePromptInvocation, resolveSkillInvocation, resolveSkillResumeInvocation } from '../skills/service.js';
 import type { SkillSession } from '../skills/service.js';
@@ -274,6 +275,7 @@ function watchRun(
     onAgentEnd,
     label,
     runStillActive,
+    storedRunEnd,
     stopRequested,
   }: {
     timeoutMs: number;
@@ -287,6 +289,12 @@ function watchRun(
     label: string;
     /** Level-triggered check against the run registry, consulted at every heartbeat the edge-triggered wait misses. */
     runStillActive: () => boolean;
+    /**
+     * What the stored run records say once the run is not active here: still running in another
+     * process, ended (and how), or unknown. A run that moved to another worker ends there, so its
+     * `agent_end` never reaches this process.
+     */
+    storedRunEnd?: () => Promise<'running' | 'complete' | 'aborted' | 'error' | undefined>;
     stopRequested?: () => Promise<boolean>;
   },
 ) {
@@ -350,7 +358,14 @@ function watchRun(
     while (Date.now() < deadline) {
       const heartbeatMs = Math.min(RUN_REGISTRY_HEARTBEAT_MS, deadline - Date.now());
       if (await waitForAgentEndOrTimeout(agentEnd, heartbeatMs)) return true;
-      if (!runStillActive()) return false;
+      if (runStillActive()) continue;
+      const stored = await storedRunEnd?.();
+      if (stored === 'running') continue;
+      if (!stored) return false;
+      // Another process saw the run end; take its record as this run's `agent_end`.
+      endReason = stored;
+      supersededAtEnd = onAgentEnd?.();
+      return true;
     }
     throw new FactoryDispatchError(
       'run_overdue',
@@ -538,6 +553,8 @@ export type FactoryReviewStatusReporter = (event: FactoryReviewStatusEvent) => P
 
 export interface FactoryDecisionDispatcherOptions {
   audit?: AuditRecorder;
+  /** The shared open-run ledger. Without it, runs are neither recorded on it nor resumed from it. */
+  openRuns?: OpenRunLedger;
   controller: FactoryController;
   transitionService: Pick<FactoryTransitionService, 'transition' | 'configVersion'>;
   /** The engine the dispatcher's own stage moves go through; defaults to one over `transitionService`. */
@@ -794,6 +811,7 @@ function linkFacts(card: Card, trusted: boolean, trustKey: string): LinkFacts {
 
 export class FactoryDecisionDispatcher {
   readonly #audit?: AuditRecorder;
+  readonly #openRuns?: OpenRunLedger;
   readonly #controller: FactoryController;
   readonly #boardEngine: FactoryBoardEngine;
   readonly #boards: ProjectBoardSource;
@@ -860,6 +878,7 @@ export class FactoryDecisionDispatcher {
 
   constructor(options: FactoryDecisionDispatcherOptions) {
     this.#audit = options.audit;
+    this.#openRuns = options.openRuns;
     this.#controller = options.controller;
     this.#boardEngine =
       options.boardEngine ?? new DispatcherBoardEngine({ transitionService: options.transitionService });
@@ -1805,6 +1824,13 @@ export class FactoryDecisionDispatcher {
             onAgentEnd: () => this.#roleSuperseded(record, decision.role),
             label: 'Factory skill run',
             runStillActive,
+            storedRunEnd: async () => {
+              // The run's end and its owner's heartbeat sit on one row, so a single read sees
+              // either the end or the run still live; no end can land between two reads.
+              const stored = await this.#openRuns?.get(deliveryId);
+              if (stored?.end) return stored.end.reason;
+              return stored && isOpenRunLiveElsewhere(stored.run, this.#ownerId) ? 'running' : undefined;
+            },
             stopRequested,
           });
 
@@ -1894,7 +1920,7 @@ export class FactoryDecisionDispatcher {
                     (await run.supersededAtEnd()) ?? (await this.#roleSuperseded(record, decision.role)),
                 },
                 async () => {
-                  await this.#withOpenRunHeartbeat(session, deliveryId, () => run.settle());
+                  await this.#withOpenRunHeartbeat(deliveryId, () => run.settle());
                   if (run.endReason() !== 'complete' || workingRevision === null || (await run.supersededAtEnd()))
                     return;
                   // A final tool result can persist after agent_end. Read this binding's trailing
@@ -3196,7 +3222,11 @@ export class FactoryDecisionDispatcher {
    * binding's own thread, which the session may have switched away from.
    */
   async #hasRunInFlight(session: BoundDispatcherSession, binding: FactoryRunBindingRecord): Promise<boolean> {
-    const open = (await listThreadOpenRuns(session, binding.threadId)).filter(entry => entry.bindingId === binding.id);
+    const open = this.#openRuns
+      ? (await listThreadOpenRuns(session, this.#openRuns, binding.threadId)).filter(
+          entry => entry.bindingId === binding.id,
+        )
+      : [];
     if (open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) return true;
     // A run with no ledger entry (one the dispatcher didn't record) is still live here.
     return this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
@@ -3233,7 +3263,9 @@ export class FactoryDecisionDispatcher {
         runStillActive,
       });
       try {
-        const open = (await listSessionOpenRuns(session)).filter(entry => entry.bindingId === binding.id);
+        const open = this.#openRuns
+          ? (await listSessionOpenRuns(session, this.#openRuns)).filter(entry => entry.bindingId === binding.id)
+          : [];
         const waitsOnLiveRun = afterOwnMove && runStillActive();
         if (open.length === 0 && !waitsOnLiveRun) break;
         if (!waitsOnLiveRun && open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) {
@@ -3311,14 +3343,11 @@ export class FactoryDecisionDispatcher {
   }
 
   /** Keep this process's claim on an open run fresh for as long as it is watching the run. */
-  async #withOpenRunHeartbeat<T>(
-    session: BoundDispatcherSession,
-    kickoffId: string,
-    effect: () => Promise<T>,
-  ): Promise<T> {
-    if (!this.#audit) return effect();
+  async #withOpenRunHeartbeat<T>(kickoffId: string, effect: () => Promise<T>): Promise<T> {
+    const openRuns = this.#openRuns;
+    if (!this.#audit || !openRuns) return effect();
     const timer = setInterval(
-      () => void heartbeatSessionOpenRun(session, kickoffId),
+      () => void heartbeatSessionOpenRun(openRuns, { kickoffId, ownerId: this.#ownerId }),
       Math.floor(FACTORY_OPEN_RUN_STALE_MS / 3),
     );
     timer.unref?.();
@@ -3406,10 +3435,11 @@ export class FactoryDecisionDispatcher {
     observedEnd: ReturnType<typeof watchRun>['endReason'],
     workItemName: string | undefined,
   ): Promise<void> {
-    if (!this.#audit) return;
+    if (!this.#audit || !this.#openRuns) return;
     const humanApproved = isHumanActorId(approvedBy);
     await recordSessionRunStart(session, {
       audit: this.#audit,
+      openRuns: this.#openRuns,
       actorType: humanApproved ? 'human' : 'system',
       observedEnd,
       run: {

@@ -30,7 +30,14 @@ import { prepareFactoryRuleBinding } from '../routes/surface.js';
 import { fakeRouteAuth, mountApiRoutes } from '../routes/test-utils.js';
 import { WorkItemRoutes } from '../routes/work-items.js';
 import { resolveFactoryCredentialTenant } from '../session/credential-policy.js';
-import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd, waitForSessionRunAudit } from '../session/run-audit.js';
+import {
+  FACTORY_OPEN_RUNS_SETTING,
+  listThreadOpenRuns,
+  observeSessionRunEnd,
+  waitForSessionRunAudit,
+} from '../session/run-audit.js';
+import { factoryOpenRunSchema } from '../storage/domains/open-runs/base.js';
+import type { OpenRunsStorage } from '../storage/domains/open-runs/base.js';
 import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { Cards } from '../storage/domains/work-items/cards.js';
@@ -199,6 +206,9 @@ function createSession(
       getSetting: vi.fn(async ({ key }: { key: string }) => settings[key]),
       getSettingOn: vi.fn(async ({ key }: { threadId: string; key: string }) => settings[key]),
       setSetting: vi.fn(async ({ key, value }: { key: string; value: unknown }) => {
+        settings[key] = value;
+      }),
+      setSettingOn: vi.fn(async ({ key, value }: { threadId: string; key: string; value: unknown }) => {
         settings[key] = value;
       }),
       rename: vi.fn(async () => {}),
@@ -462,6 +472,19 @@ async function decisionByKey(storage: WorkItemsStorage, idempotencyKey: string) 
   return rows.find(row => row.idempotencyKey === idempotencyKey);
 }
 
+/** Open runs a dispatcher recorded on the shared ledger. */
+/**
+ * Lets a dispatch reach `reached` without moving the fake clock. Storage I/O (a Postgres round
+ * trip) happens outside fake time, so one `advanceTimersByTimeAsync(0)` can return before it lands.
+ */
+async function untilFakeClockSettles(reached: () => unknown): Promise<void> {
+  await vi.waitFor(reached, { interval: 0, timeout: 5_000 });
+}
+
+async function seedOpenRuns(seed: { openRuns: OpenRunsStorage }, runs: Array<Record<string, unknown>>) {
+  for (const run of runs) await seed.openRuns.open(factoryOpenRunSchema.parse(run));
+}
+
 describe('FactoryDecisionDispatcher', () => {
   it.each(['complete', 'suspended'] as const)(
     'audits an approved kickoff on an existing session through %s',
@@ -476,13 +499,14 @@ describe('FactoryDecisionDispatcher', () => {
       });
       await bindWorkRun(storage, item.id);
       const { controller, session, emitAgentEnd } = createSession(undefined, { agentEndReason: reason });
-      observeSessionRunEnd(session, { audit: seed.audit });
+      observeSessionRunEnd(session, { audit: seed.audit, openRuns: seed.openRuns });
       const prepareBinding = vi.fn();
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
         storage,
         transitionService,
         audit: seed.audit,
+        openRuns: seed.openRuns,
         prepareBinding,
       });
       await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -545,6 +569,7 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       transitionService,
       audit: seed.audit,
+      openRuns: seed.openRuns,
       boards: autoStartingBoards(),
     });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -3215,6 +3240,7 @@ describe('FactoryDecisionDispatcher', () => {
       },
       storage,
       audit: seed.audit,
+      openRuns: seed.openRuns,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -3249,31 +3275,29 @@ describe('FactoryDecisionDispatcher', () => {
       agentEndReason: 'complete',
       streamActive: true,
     });
-    await session.thread.setSetting({
-      key: FACTORY_OPEN_RUNS_SETTING,
-      value: [
-        {
-          kickoffId: 'earlier-kickoff',
-          bindingId: binding.id,
-          role: binding.role,
-          startedBy: 'factory-rule-dispatcher',
-          orgId: binding.orgId,
-          factoryProjectId: binding.factoryProjectId,
-          workItemId: binding.workItemId,
-          sessionId: binding.sessionId,
-          threadId: binding.threadId,
-          branch: binding.branch,
-        },
-      ],
-    });
+    await seedOpenRuns(seed, [
+      {
+        kickoffId: 'earlier-kickoff',
+        bindingId: binding.id,
+        role: binding.role,
+        startedBy: 'factory-rule-dispatcher',
+        orgId: binding.orgId,
+        factoryProjectId: binding.factoryProjectId,
+        workItemId: binding.workItemId,
+        sessionId: binding.sessionId,
+        threadId: binding.threadId,
+        branch: binding.branch,
+      },
+    ]);
     controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: binding.threadId }]);
-    observeSessionRunEnd(session, { audit: seed.audit });
+    observeSessionRunEnd(session, { audit: seed.audit, openRuns: seed.openRuns });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
       boards: autoStartingBoards(),
       transitionService,
       storage,
       audit: seed.audit,
+      openRuns: seed.openRuns,
       ownerId: 'worker-1',
     });
 
@@ -3370,33 +3394,31 @@ describe('FactoryDecisionDispatcher', () => {
         streamActive: true,
       });
       if (ledger !== 'none') {
-        await session.thread.setSetting({
-          key: FACTORY_OPEN_RUNS_SETTING,
-          value: [
-            {
-              kickoffId: 'previous-kickoff',
-              bindingId: previous.id,
-              role: previous.role,
-              startedBy: 'factory-rule-dispatcher',
-              orgId: previous.orgId,
-              factoryProjectId: previous.factoryProjectId,
-              workItemId: previous.workItemId,
-              sessionId: previous.sessionId,
-              threadId: previous.threadId,
-              branch: previous.branch,
-              ...(ledger === 'elsewhere' ? { ownerId: 'factory-tools:other', heartbeatAt: Date.now() } : {}),
-            },
-          ],
-        });
+        await seedOpenRuns(seed, [
+          {
+            kickoffId: 'previous-kickoff',
+            bindingId: previous.id,
+            role: previous.role,
+            startedBy: 'factory-rule-dispatcher',
+            orgId: previous.orgId,
+            factoryProjectId: previous.factoryProjectId,
+            workItemId: previous.workItemId,
+            sessionId: previous.sessionId,
+            threadId: previous.threadId,
+            branch: previous.branch,
+            ...(ledger === 'elsewhere' ? { ownerId: 'factory-tools:other', heartbeatAt: Date.now() } : {}),
+          },
+        ]);
       }
       controller.listActiveThreadRuns.mockReturnValue([{ runId: 'previous-run', threadId: previous.threadId }]);
-      observeSessionRunEnd(session, { audit: seed.audit });
+      observeSessionRunEnd(session, { audit: seed.audit, openRuns: seed.openRuns });
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
         boards: autoStartingBoards(),
         transitionService,
         storage,
         audit: seed.audit,
+        openRuns: seed.openRuns,
         ownerId: 'worker-1',
       });
 
@@ -3433,25 +3455,22 @@ describe('FactoryDecisionDispatcher', () => {
       const { controller, session, emitAgentEnd, getAgentEndListenerCount } = createSession(undefined, {
         streamActive: true,
       });
-      await session.thread.setSetting({
-        key: FACTORY_OPEN_RUNS_SETTING,
-        value: [
-          {
-            kickoffId: 'running-kickoff',
-            bindingId: binding.id,
-            role: binding.role,
-            startedBy: 'factory-rule-dispatcher',
-            orgId: binding.orgId,
-            factoryProjectId: binding.factoryProjectId,
-            workItemId: binding.workItemId,
-            sessionId: binding.sessionId,
-            threadId: binding.threadId,
-            branch: binding.branch,
-          },
-        ],
-      });
+      await seedOpenRuns(seed, [
+        {
+          kickoffId: 'running-kickoff',
+          bindingId: binding.id,
+          role: binding.role,
+          startedBy: 'factory-rule-dispatcher',
+          orgId: binding.orgId,
+          factoryProjectId: binding.factoryProjectId,
+          workItemId: binding.workItemId,
+          sessionId: binding.sessionId,
+          threadId: binding.threadId,
+          branch: binding.branch,
+        },
+      ]);
       controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: binding.threadId }]);
-      observeSessionRunEnd(session, { audit: seed.audit });
+      observeSessionRunEnd(session, { audit: seed.audit, openRuns: seed.openRuns });
       const running = (await storage.get({ orgId: 'org-1', id: item.id }))!;
       await storage.commitRuleEvaluation({
         ...scope,
@@ -3480,6 +3499,7 @@ describe('FactoryDecisionDispatcher', () => {
         }),
         storage,
         intakeRoutes: seed.boards,
+        openRuns: seed.openRuns,
         ownerId: 'worker-1',
       });
       return { storage, item, running, dispatcher, controller, emitAgentEnd, getAgentEndListenerCount };
@@ -3529,24 +3549,21 @@ describe('FactoryDecisionDispatcher', () => {
       const item = await createItem(storage);
       const binding = await bindWorkRun(storage, item.id);
       const { controller, session } = createSession(undefined, { streamActive: live });
-      await session.thread.setSetting({
-        key: FACTORY_OPEN_RUNS_SETTING,
-        value: [
-          {
-            kickoffId: 'running-kickoff',
-            bindingId: binding.id,
-            role: binding.role,
-            startedBy: 'factory-rule-dispatcher',
-            orgId: binding.orgId,
-            factoryProjectId: binding.factoryProjectId,
-            workItemId: binding.workItemId,
-            sessionId: binding.sessionId,
-            threadId: binding.threadId,
-            branch: binding.branch,
-            ...entry,
-          },
-        ],
-      });
+      await seedOpenRuns(seed, [
+        {
+          kickoffId: 'running-kickoff',
+          bindingId: binding.id,
+          role: binding.role,
+          startedBy: 'factory-rule-dispatcher',
+          orgId: binding.orgId,
+          factoryProjectId: binding.factoryProjectId,
+          workItemId: binding.workItemId,
+          sessionId: binding.sessionId,
+          threadId: binding.threadId,
+          branch: binding.branch,
+          ...entry,
+        },
+      ]);
       controller.listActiveThreadRuns.mockReturnValue(live ? [{ runId: 'run-1', threadId: binding.threadId }] : []);
       // The transition service asks the dispatcher, as the Factory wires them.
       let dispatcher: FactoryDecisionDispatcher | undefined;
@@ -3561,6 +3578,7 @@ describe('FactoryDecisionDispatcher', () => {
         transitionService,
         storage,
         audit: seed.audit,
+        openRuns: seed.openRuns,
         ownerId: 'worker-1',
       });
       const card = (await storage.get({ orgId: 'org-1', id: item.id }))!;
@@ -3585,11 +3603,8 @@ describe('FactoryDecisionDispatcher', () => {
         false,
       );
       // The session's current thread is another one: only the binding's thread holds the run.
-      const ledger = await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING });
-      session.thread.getSetting.mockImplementation(async () => undefined);
-      session.thread.getSettingOn.mockImplementation(async ({ threadId }: { threadId: string; key: string }) =>
-        threadId === binding.threadId ? ledger : undefined,
-      );
+      session.thread.getId.mockReturnValue('another-thread');
+      expect(session.thread.getId()).not.toBe(binding.threadId);
 
       await expect(personMoves('planning', 'other-thread')).resolves.toMatchObject({
         status: 'rejected',
@@ -3667,9 +3682,9 @@ describe('FactoryDecisionDispatcher', () => {
       );
       const { controller, session, emitAgentEnd } = createSession(undefined, { streamActive: true });
       // Without a ledger entry: a run the dispatcher didn't record, as one a person starts in the session.
-      await session.thread.setSetting({
-        key: FACTORY_OPEN_RUNS_SETTING,
-        value: ledger
+      await seedOpenRuns(
+        seed,
+        ledger
           ? [
               {
                 kickoffId: 'running-kickoff',
@@ -3685,9 +3700,9 @@ describe('FactoryDecisionDispatcher', () => {
               },
             ]
           : [],
-      });
+      );
       controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: binding.threadId }]);
-      observeSessionRunEnd(session, { audit: seed.audit });
+      observeSessionRunEnd(session, { audit: seed.audit, openRuns: seed.openRuns });
       let deliveries = 0;
       const update = async (added: string[], removed: string[], at: string, fromCardSession: boolean) => {
         deliveries += 1;
@@ -3722,6 +3737,7 @@ describe('FactoryDecisionDispatcher', () => {
         }),
         storage,
         intakeRoutes: seed.boards,
+        openRuns: seed.openRuns,
         ownerId: 'worker-1',
       });
       const stages = async () => (await storage.get({ orgId: 'org-1', id: item.id }))!.stages;
@@ -3813,34 +3829,32 @@ describe('FactoryDecisionDispatcher', () => {
         emitAgentEndDuringSignal: true,
         agentEndReason: 'complete',
       });
-      await session.thread.setSetting({
-        key: FACTORY_OPEN_RUNS_SETTING,
-        value: [
-          {
-            kickoffId: 'earlier-kickoff',
-            bindingId: binding.id,
-            role: binding.role,
-            startedBy: 'factory-rule-dispatcher',
-            orgId: binding.orgId,
-            factoryProjectId: binding.factoryProjectId,
-            workItemId: binding.workItemId,
-            sessionId: binding.sessionId,
-            threadId: binding.threadId,
-            branch: binding.branch,
-            ...entry,
-          },
-        ],
-      });
+      await seedOpenRuns(seed, [
+        {
+          kickoffId: 'earlier-kickoff',
+          bindingId: binding.id,
+          role: binding.role,
+          startedBy: 'factory-rule-dispatcher',
+          orgId: binding.orgId,
+          factoryProjectId: binding.factoryProjectId,
+          workItemId: binding.workItemId,
+          sessionId: binding.sessionId,
+          threadId: binding.threadId,
+          branch: binding.branch,
+          ...entry,
+        },
+      ]);
       // Nothing live in this process's registry: the entry is either an orphan
       // or a run another replica is hosting.
       controller.listActiveThreadRuns.mockReturnValue([]);
-      observeSessionRunEnd(session, { audit: seed.audit });
+      observeSessionRunEnd(session, { audit: seed.audit, openRuns: seed.openRuns });
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
         boards: autoStartingBoards(),
         transitionService,
         storage,
         audit: seed.audit,
+        openRuns: seed.openRuns,
         ownerId: 'worker-1',
       });
       return { storage, session, dispatcher };
@@ -3890,23 +3904,26 @@ describe('FactoryDecisionDispatcher', () => {
           streamActive: true,
         });
         controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: binding.threadId }]);
-        observeSessionRunEnd(session, { audit: seed.audit });
+        observeSessionRunEnd(session, { audit: seed.audit, openRuns: seed.openRuns });
         const dispatcher = new FactoryDecisionDispatcher({
           controller: controller as never,
           boards: autoStartingBoards(),
           transitionService,
           storage,
           audit: seed.audit,
+          openRuns: seed.openRuns,
           ownerId: 'worker-1',
         });
 
         const dispatch = dispatcher.runOnce();
-        await vi.advanceTimersByTimeAsync(0);
-        expect(session.sendSignal).toHaveBeenCalledTimes(1);
+        await untilFakeClockSettles(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
         const startedAt = Date.now();
-        expect(await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING })).toEqual([
-          expect.objectContaining({ bindingId: binding.id, ownerId: 'worker-1', heartbeatAt: startedAt }),
-        ]);
+        // The run is recorded open after its kickoff is delivered.
+        await untilFakeClockSettles(async () =>
+          expect(await seed.openRuns.listByThread(session.thread.getId())).toEqual([
+            expect.objectContaining({ bindingId: binding.id, ownerId: 'worker-1', heartbeatAt: startedAt }),
+          ]),
+        );
 
         // A remote replica reading the ledger during the run must keep seeing a fresh claim.
         // The heartbeat interval is armed and its ledger write lands through
@@ -3916,18 +3933,16 @@ describe('FactoryDecisionDispatcher', () => {
         const heartbeatPeriodMs = Math.floor(FACTORY_DISPATCH_CONSTANTS.openRunStaleMs / 3);
         await vi.waitFor(async () => {
           await vi.advanceTimersByTimeAsync(heartbeatPeriodMs);
-          const [entry] = (await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING })) as Array<{
-            heartbeatAt: number;
-          }>;
-          expect(entry.heartbeatAt).toBeGreaterThan(startedAt);
-          expect(Date.now() - entry.heartbeatAt).toBeLessThan(FACTORY_DISPATCH_CONSTANTS.openRunStaleMs);
+          const [entry] = await seed.openRuns.listByThread(session.thread.getId());
+          expect(entry?.heartbeatAt).toBeGreaterThan(startedAt);
+          expect(Date.now() - entry!.heartbeatAt!).toBeLessThan(FACTORY_DISPATCH_CONSTANTS.openRunStaleMs);
         });
 
         controller.listActiveThreadRuns.mockReturnValue([]);
         emitAgentEnd('complete');
         await dispatch;
         await waitForSessionRunAudit(session);
-        expect(await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING })).toEqual([]);
+        expect(await seed.openRuns.listByThread(session.thread.getId())).toEqual([]);
       } finally {
         vi.useRealTimers();
       }
@@ -3989,6 +4004,242 @@ describe('FactoryDecisionDispatcher', () => {
     ]);
   });
 
+  describe('a run that ends in another process', () => {
+    async function remoteRun(key: string) {
+      const seed = await createFactoryStorageForTests();
+      const storage = seed.workItems;
+      const { item, transitionService } = await queueDecision(storage, {
+        type: 'invokeSkill',
+        role: 'work',
+        skillName: 'understand-issue',
+        idempotencyKey: key,
+      });
+      const binding = await bindWorkRun(storage, item.id);
+      // Delivered here, but the run steps elsewhere: this process never sees its `agent_end`.
+      const { controller, session } = createSession(undefined, {
+        signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        boards: autoStartingBoards(),
+        transitionService,
+        storage,
+        openRuns: seed.openRuns,
+        ownerId: 'worker-1',
+      });
+      const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      const openRunOf = (kickoffId: string) => ({
+        kickoffId,
+        bindingId: binding.id,
+        role: binding.role,
+        startedBy: 'factory-rule-dispatcher',
+        orgId: binding.orgId,
+        factoryProjectId: binding.factoryProjectId,
+        workItemId: binding.workItemId,
+        sessionId: binding.sessionId,
+        threadId: binding.threadId,
+        branch: binding.branch,
+        ownerId: 'worker-2',
+        // The other worker renews every few seconds; stamp the beat it sends just before this check.
+        heartbeatAt: Date.now() + FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs - 1_000,
+      });
+      // Each registry heartbeat the dispatcher reads the run from storage. Real storage I/O spans
+      // real time while the fake clock jumps, so the clock only moves between reads, a stale
+      // window's fraction at a time, as it would for a read that takes milliseconds.
+      const get = seed.openRuns.get.bind(seed.openRuns);
+      const reads = { inFlight: 0, before: async () => {}, after: async () => {} };
+      vi.spyOn(seed.openRuns, 'get').mockImplementation(async id => {
+        reads.inFlight += 1;
+        try {
+          await reads.before();
+          const read = await get(id);
+          await reads.after();
+          return read;
+        } finally {
+          reads.inFlight -= 1;
+        }
+      });
+      const step = Math.floor(FACTORY_DISPATCH_CONSTANTS.openRunStaleMs / 3);
+      const beat = async () => {
+        for (let elapsed = 0; elapsed < FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs; elapsed += step) {
+          await untilFakeClockSettles(() => expect(reads.inFlight).toBe(0));
+          await vi.advanceTimersByTimeAsync(step);
+        }
+        await untilFakeClockSettles(() => expect(reads.inFlight).toBe(0));
+      };
+      return { storage, openRuns: seed.openRuns, session, dispatcher, kickoffId: record!.id, openRunOf, reads, beat };
+    }
+
+    it('settles the run from its recorded end', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+      try {
+        const { storage, openRuns, session, dispatcher, kickoffId, openRunOf, beat } = await remoteRun('remote-end');
+
+        const dispatch = dispatcher.runOnce();
+        await untilFakeClockSettles(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
+        // The run moved to another worker, which owns it on the shared ledger.
+        await openRuns.open(openRunOf(kickoffId));
+        await openRuns.end(kickoffId, { reason: 'complete', endedAt: Date.now() });
+        await beat();
+        await dispatch;
+
+        expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('fails the run with the error its recorded end names', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+      try {
+        const { storage, openRuns, session, dispatcher, kickoffId, openRunOf, beat } = await remoteRun('remote-error');
+
+        const dispatch = dispatcher.runOnce();
+        await untilFakeClockSettles(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
+        // The run moved to another worker, which owns it on the shared ledger.
+        await openRuns.open(openRunOf(kickoffId));
+        await openRuns.end(kickoffId, { reason: 'error', endedAt: Date.now() });
+        await beat();
+        await dispatch;
+
+        expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).not.toMatchObject({
+          status: 'succeeded',
+        });
+        expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.failureCode).not.toBe(
+          'run_terminal_event_missing',
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('keeps waiting while another process heartbeats the run, then settles from its end', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+      try {
+        const { storage, openRuns, session, dispatcher, kickoffId, openRunOf, beat } = await remoteRun('remote-live');
+
+        const dispatch = dispatcher.runOnce();
+        await untilFakeClockSettles(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
+        // The run moved to another worker, which owns it on the shared ledger.
+        await openRuns.open(openRunOf(kickoffId));
+        for (let round = 0; round < 3; round += 1) {
+          await openRuns.heartbeat(kickoffId, 'worker-2', openRunOf(kickoffId).heartbeatAt);
+          await beat();
+        }
+        const pending = (await storage.listDeferredDecisions('org-1', PROJECT_ID))[0];
+        expect(pending).toMatchObject({ status: 'leased', lastError: null });
+
+        await openRuns.end(kickoffId, { reason: 'complete', endedAt: Date.now() });
+        await beat();
+        await dispatch;
+
+        expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+    it('settles from the end the other process records right after a read that found the run live', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+      try {
+        const { storage, openRuns, session, dispatcher, kickoffId, openRunOf, reads, beat } =
+          await remoteRun('remote-end-between-reads');
+
+        const dispatch = dispatcher.runOnce();
+        await untilFakeClockSettles(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
+        // The run moved to another worker, which owns it on the shared ledger.
+        await openRuns.open(openRunOf(kickoffId));
+        // The other worker finishes right after the dispatcher read its run as live. The end and
+        // the heartbeat share one row, so there is no second read for the end to slip between.
+        let finished = false;
+        // Live until it finishes: the other worker beats just before each read.
+        reads.before = async () => {
+          if (!finished) await openRuns.heartbeat(kickoffId, 'worker-2', Date.now());
+        };
+        reads.after = async () => {
+          if (finished) return;
+          finished = true;
+          await openRuns.end(kickoffId, { reason: 'complete', endedAt: Date.now() });
+        };
+        await beat();
+        expect(finished).toBe(true);
+        await beat();
+        await dispatch;
+
+        expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not settle a run from thread metadata a client wrote', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+      try {
+        const { storage, openRuns, session, dispatcher, kickoffId, openRunOf, beat } =
+          await remoteRun('remote-forged-end');
+
+        const dispatch = dispatcher.runOnce();
+        await untilFakeClockSettles(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
+        // The run moved to another worker, which owns it on the shared ledger.
+        await openRuns.open(openRunOf(kickoffId));
+        // Thread metadata is client-writable (PATCH /api/memory/threads/:id): forge an end there,
+        // and, in the pre-storage ledger setting, a stale copy of the run, a run planted on another
+        // thread, and one that would read as live forever.
+        await session.thread.setSetting({
+          key: 'factoryRunEnds',
+          value: [{ kickoffId, reason: 'complete', endedAt: Date.now() }],
+        });
+        const threadId = session.thread.getId()!;
+        await session.thread.setSetting({
+          key: FACTORY_OPEN_RUNS_SETTING,
+          value: [
+            { ...openRunOf(kickoffId), ownerId: 'forged', heartbeatAt: 0 },
+            { ...openRunOf('planted'), threadId: 'victim-thread', ownerId: 'forged', heartbeatAt: 0 },
+            { ...openRunOf('forever'), ownerId: 'forged', heartbeatAt: Number.MAX_SAFE_INTEGER },
+          ],
+        });
+        // What the dispatcher's in-flight checks read.
+        const read = await listThreadOpenRuns(session, openRuns, threadId);
+        expect(read.find(run => run.kickoffId === kickoffId)).toMatchObject({ ownerId: 'worker-2' });
+        expect(read.map(run => run.kickoffId)).toEqual([kickoffId]);
+        await expect(openRuns.listByThread('victim-thread')).resolves.toEqual([]);
+        await expect(openRuns.get('planted')).resolves.toBeUndefined();
+        await expect(openRuns.get('forever')).resolves.toBeUndefined();
+        for (let round = 0; round < 3; round += 1) {
+          await openRuns.heartbeat(kickoffId, 'worker-2', openRunOf(kickoffId).heartbeatAt);
+          await beat();
+        }
+
+        expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+          status: 'leased',
+          lastError: null,
+        });
+        expect(session.sendSignal).toHaveBeenCalledTimes(1);
+        await expect(openRuns.get(kickoffId)).resolves.toMatchObject({ run: { ownerId: 'worker-2' } });
+        await expect(openRuns.get(kickoffId)).resolves.not.toHaveProperty('end');
+
+        // Long after, the forged entries still plant nothing.
+        await listThreadOpenRuns(session, openRuns, threadId);
+        await expect(openRuns.get('forever')).resolves.toBeUndefined();
+        await expect(openRuns.get('planted')).resolves.toBeUndefined();
+
+        await openRuns.end(kickoffId, { reason: 'error', endedAt: Date.now() });
+        await beat();
+        await dispatch;
+
+        expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).not.toMatchObject({
+          status: 'succeeded',
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   it('fails a wake dispatch terminally when the terminal event is not observed', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
@@ -4032,8 +4283,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
 
       const dispatch = dispatcher.runOnce();
-      await vi.advanceTimersByTimeAsync(0);
-      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      await untilFakeClockSettles(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
 
       await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs);
       await dispatch;
@@ -4097,8 +4347,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
 
       const dispatch = dispatcher.runOnce();
-      await vi.advanceTimersByTimeAsync(0);
-      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      await untilFakeClockSettles(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
 
       // Two heartbeats elapse; the run is slow, not stalled.
       await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs * 2);
@@ -4166,8 +4415,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
 
       const dispatch = dispatcher.runOnce();
-      await vi.advanceTimersByTimeAsync(0);
-      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      await untilFakeClockSettles(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
 
       await vi.advanceTimersByTimeAsync(heartbeat * 3);
       await dispatch;
