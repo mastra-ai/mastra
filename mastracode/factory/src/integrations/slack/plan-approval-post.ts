@@ -4,6 +4,7 @@ import type { NotificationsStorage } from '@mastra/core/notifications';
 import type { SentMessage } from 'chat';
 
 import type { SourceControlSessionLookup } from '../../session/factory-session.js';
+import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import { FACTORY_SESSION_NOTIFICATION_SOURCE } from '../../tools/deliver.js';
 import type { PlanDigestResult } from '../../tools/plan-digest.js';
 import type { FactoryPlanApprovalRequest } from '../../tools/reports.js';
@@ -16,6 +17,22 @@ import type { PlanCardResolution, PlanCardTarget } from './plan-approval-card.js
 /** How many recent reports on a thread the restart-safe check reads for an earlier card. */
 const POSTED_SCAN = 100;
 
+/** Where the durable record of each posted card lives, keyed per call. */
+const planCardTarget = (toolCallId: string) => `factory-plan-card:${toolCallId}`;
+
+/** What a stored card record keeps: enough to find the card and settle it after a restart. */
+interface StoredPlanCard {
+  messageId: string;
+  title?: string;
+  path: string;
+  subject: string;
+  sessionId: string;
+  sessionUrl?: string;
+}
+
+/** Durable records of posted cards, so a card can be settled from another process or after a restart. */
+export type PlanCardStore = Pick<IntegrationStorageHandle['subscriptions'], 'create' | 'listByTarget' | 'delete'>;
+
 interface PostedPlanCard {
   message: Pick<SentMessage, 'edit'>;
   plan: PlanDigestResult;
@@ -27,6 +44,8 @@ export interface PlanApprovalCardsDependencies {
   sessions: Pick<SourceControlSessionLookup, 'getBySessionId'>;
   /** Where earlier reports are kept, so a card posted before a restart is not posted again. */
   notifications?: () => Promise<Pick<NotificationsStorage, 'listNotifications'> | null>;
+  /** Keeps where each card was posted, so it can lose its Approve button after a restart. */
+  store?: () => PlanCardStore | null | undefined;
 }
 
 /**
@@ -52,7 +71,7 @@ export class PlanApprovalCards {
     const carded = new Set<string>();
     const channels = this.#deps.channels();
     if (!channels) return carded;
-    const target = await this.#target(request);
+    const { target, orgId } = await this.#target(request);
     for (const recipient of request.recipients) {
       const key = `${request.toolCallId}:${recipient.threadId}`;
       if (this.#posting.has(key)) continue;
@@ -75,6 +94,7 @@ export class PlanApprovalCards {
           });
           this.#remember(request.toolCallId, recipient.threadId, { message, plan: request.plan, target });
           carded.add(recipient.threadId);
+          if (orgId) await this.#store(orgId, request, recipient.threadId, message.id, target);
         } catch (error) {
           console.warn('[Factory Slack] Unable to post a plan approval card; posting it as text.', error);
           await render.chatThread.post({ markdown: planApprovalText(request.plan, target) });
@@ -96,11 +116,11 @@ export class PlanApprovalCards {
     const by = this.#approvers.get(toolCallId);
     this.#approvers.delete(toolCallId);
     if (resolution.kind === 'approved' && !resolution.by && by) resolution = { kind: 'approved', by };
-    const cards = this.#posted.get(toolCallId);
-    if (!cards) return;
+    const cards = this.#posted.get(toolCallId) ?? new Map<string, PostedPlanCard>();
     this.#posted.delete(toolCallId);
-    await Promise.all(
-      [...cards].map(async ([threadId, card]) => {
+    const stored = await this.#stored(toolCallId);
+    await Promise.all([
+      ...[...cards].map(async ([threadId, card]) => {
         if (threadId === except) return;
         try {
           await card.message.edit(planResolvedCard(card.plan, card.target, resolution));
@@ -108,7 +128,27 @@ export class PlanApprovalCards {
           console.warn('[Factory Slack] Unable to settle a plan approval card.', error);
         }
       }),
-    );
+      // Cards this process didn't post, or posted before a restart: edit them through the thread.
+      ...stored.map(async record => {
+        const threadId = record.threadId;
+        try {
+          if (threadId && threadId !== except && !cards.has(threadId)) {
+            const render = await this.#deps.channels()?.buildRenderContextForThread(threadId);
+            if (render?.platform === 'slack') {
+              const { plan, target } = storedCard(toolCallId, record.data);
+              await render.adapter.editMessage(
+                render.chatThread.id,
+                record.data.messageId,
+                planResolvedCard(plan, target, resolution),
+              );
+            }
+          }
+          await this.#deps.store?.()?.delete(record.id);
+        } catch (error) {
+          console.warn('[Factory Slack] Unable to settle a plan approval card.', error);
+        }
+      }),
+    ]);
   }
 
   /**
@@ -134,7 +174,52 @@ export class PlanApprovalCards {
     this.#posted.set(toolCallId, cards);
   }
 
-  async #target(request: FactoryPlanApprovalRequest): Promise<PlanCardTarget> {
+  async #store(
+    orgId: string,
+    request: FactoryPlanApprovalRequest,
+    threadId: string,
+    messageId: string,
+    target: PlanCardTarget,
+  ): Promise<void> {
+    const store = this.#deps.store?.();
+    if (!store) return;
+    const data: StoredPlanCard = {
+      messageId,
+      path: request.plan.path,
+      ...(request.plan.ok && request.plan.title ? { title: request.plan.title } : {}),
+      subject: target.subject,
+      sessionId: target.sessionId,
+      ...(target.sessionUrl ? { sessionUrl: target.sessionUrl } : {}),
+    };
+    await store
+      .create({
+        orgId,
+        targetKey: planCardTarget(request.toolCallId),
+        sessionId: request.sender.sessionId,
+        threadId,
+        data: data as unknown as Record<string, unknown>,
+      })
+      .catch(error => console.warn('[Factory Slack] Unable to record a posted plan approval card.', error));
+  }
+
+  async #stored(toolCallId: string): Promise<{ id: string; threadId: string | null; data: StoredPlanCard }[]> {
+    const store = this.#deps.store?.();
+    if (!store) return [];
+    try {
+      const records = await store.listByTarget(planCardTarget(toolCallId));
+      return records.flatMap(record => {
+        const data = record.data as Partial<StoredPlanCard>;
+        return typeof data.messageId === 'string' && typeof data.path === 'string'
+          ? [{ id: record.id, threadId: record.threadId, data: data as StoredPlanCard }]
+          : [];
+      });
+    } catch (error) {
+      console.warn('[Factory Slack] Unable to read the posted plan approval cards.', error);
+      return [];
+    }
+  }
+
+  async #target(request: FactoryPlanApprovalRequest): Promise<{ target: PlanCardTarget; orgId?: string }> {
     const { sender } = request;
     const row = await this.#deps.sessions.getBySessionId(sender.sessionId).catch(() => null);
     const sessionUrl = sessionLink({
@@ -144,10 +229,13 @@ export class PlanApprovalCards {
       factoryProjectId: row?.factoryProjectId ?? undefined,
     });
     return {
-      sessionId: sender.sessionId,
-      toolCallId: request.toolCallId,
-      subject: request.subject,
-      ...(sessionUrl ? { sessionUrl } : {}),
+      target: {
+        sessionId: sender.sessionId,
+        toolCallId: request.toolCallId,
+        subject: request.subject,
+        ...(sessionUrl ? { sessionUrl } : {}),
+      },
+      ...(row?.orgId ? { orgId: row.orgId } : {}),
     };
   }
 
@@ -164,6 +252,19 @@ export class PlanApprovalCards {
       record => record.attributes?.['plan-card'] === 'posted' && record.attributes?.['tool-call-id'] === toolCallId,
     );
   }
+}
+
+/** The plan and target a stored card record settles with: its title and link are all a settled card shows. */
+function storedCard(toolCallId: string, data: StoredPlanCard): { plan: PlanDigestResult; target: PlanCardTarget } {
+  return {
+    plan: { ok: true, path: data.path, ...(data.title ? { title: data.title } : {}), phases: [], body: '' },
+    target: {
+      sessionId: data.sessionId,
+      toolCallId,
+      subject: data.subject,
+      ...(data.sessionUrl ? { sessionUrl: data.sessionUrl } : {}),
+    },
+  };
 }
 
 /** How a `submit_plan` result says the plan was answered. */
@@ -186,12 +287,16 @@ export function observeSessionPlanCards(session: RunReportSession, cards: PlanAp
       plans.add(event.toolCallId);
       return;
     }
+    // A call parked before a restart is not in `plans`; its answer still says it was a plan.
     if (event.type === 'tool_suspension_cancelled' && plans.delete(event.toolCallId)) {
       void cards.resolve(event.toolCallId, { kind: 'stale' });
       return;
     }
-    if (event.type === 'tool_end' && plans.delete(event.toolCallId)) {
-      void cards.resolve(event.toolCallId, planResolution(event.result) ?? { kind: 'stale' });
+    if (event.type === 'tool_end') {
+      const resolution = planResolution(event.result);
+      if (plans.delete(event.toolCallId) || resolution) {
+        void cards.resolve(event.toolCallId, resolution ?? { kind: 'stale' });
+      }
     }
   });
 }

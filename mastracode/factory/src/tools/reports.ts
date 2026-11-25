@@ -348,7 +348,11 @@ export async function sendRunEndReport(
   const cardedNotification = reportNotification({
     sender,
     status: outcome.status,
-    message: `${message}\n\nAn approval card with this plan and an Approve button is already in this thread: don't repeat the plan there. A reply asking for changes is a decline with those changes as the reason.`,
+    message: `${message}\n\n${
+      plan?.ok
+        ? 'An approval card with this plan and an Approve button is already in this thread'
+        : 'A card saying this plan could not be read and must be approved in the session is already in this thread'
+    }: don't repeat the plan there. A reply asking for changes is a decline with those changes as the reason.`,
     attributes: { ...notification.attributes!, 'plan-card': 'posted' },
   });
   const report = (recipient: FactoryDeliveryTarget, reportKinds: string[], agentOnly = false) =>

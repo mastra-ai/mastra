@@ -1489,6 +1489,8 @@ export class MastraFactory {
       channels: () => this.#prepared?.base.controller.getChannels(),
       sessions: sourceControlSessions,
       notifications: async () => (await factoryMessaging())?.notifications ?? null,
+      store: () =>
+        storage.isDomainReady('integrations') ? integrationStorage.forIntegration('slack').subscriptions : null,
     });
     this.#planCards = planCards;
     const factoryReporting = async (): Promise<FactoryReporting | null> => {

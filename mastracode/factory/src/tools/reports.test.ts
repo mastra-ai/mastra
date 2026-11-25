@@ -412,6 +412,29 @@ describe('sendRunEndReport', () => {
     expect(env.deliveries[0]!.notification.attributes).toMatchObject({ 'plan-card': 'posted' });
   });
 
+  it('tells a thread whose card has no Approve button, because the plan was unreadable, to approve in the session', async () => {
+    const env = reporting();
+    const postPlanApproval = vi.fn(async () => new Set([PARENT.threadId]));
+    await sendRunEndReport(
+      { ...env.reporting, postPlanApproval },
+      {
+        sender: SENDER,
+        recipients: [PARENT],
+        since: new Date(Date.now() - 1000),
+        outcome: {
+          ...PLAN_OUTCOME,
+          plan: { ok: false, path: '.artifacts/plans/a.md', reason: 'Session workspace is not available' },
+        },
+        subject: 'The work session for #7',
+      },
+    );
+    const summary = env.deliveries[0]!.notification.summary!;
+    expect(summary).not.toContain('Approve button');
+    expect(summary).toContain(
+      'A card saying this plan could not be read and must be approved in the session is already in this thread',
+    );
+  });
+
   it('still reports the plan when posting its cards fails', async () => {
     const env = reporting();
     const postPlanApproval = vi.fn(async () => {
