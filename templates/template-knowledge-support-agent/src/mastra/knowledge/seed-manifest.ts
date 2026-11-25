@@ -394,6 +394,7 @@ export async function prepareDataset(
     remaining -= length;
   }
   const pages: PreparedPage[] = [];
+  const policyIssues: string[] = [];
   for (const [alias, page] of aliases) {
     const lookup = (ref: string) => {
       const target = aliases.get(ref) ?? byRef.get(ref);
@@ -467,7 +468,7 @@ export async function prepareDataset(
     retain(body.length);
     if (mandatoryPolicyKeys.has(alias) || page.ref === requiredPolicyReference(page.placement.profile)) {
       const issue = requiredPolicyContentIssue(body, page.ref, approved);
-      if (issue) throw new Error(`Invalid required policy ${page.ref} in ${page.file}. ${issue}.`);
+      if (issue) policyIssues.push(`Invalid required policy ${page.ref} in ${page.file}. ${issue}.`);
     }
     const noteKeys = new Set<string>();
     const notes = (page.input.notes === undefined ? [] : array(page.input.notes, 'notes', 100)).map(value => {
@@ -505,5 +506,6 @@ export async function prepareDataset(
       notes,
     });
   }
+  if (policyIssues.length) throw new Error(policyIssues.join('\n'));
   return { id: config.id, version, pages };
 }
