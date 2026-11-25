@@ -556,7 +556,7 @@ A run's lease is renewed from the event loop of the process that runs it, every 
 
 Keep the event loop free first. Move CPU-heavy or synchronous work to a worker thread, a child process or another service, or split it into chunks that yield between them:
 
-```typescript
+```typescript title="src/mastra/workflows/render.ts"
 import { Worker } from 'node:worker_threads'
 import { createStep } from '@mastra/core/workflows'
 import { z } from 'zod'
@@ -576,11 +576,22 @@ export const render = createStep({
 })
 ```
 
+The worker does the blocking work and sends the step's output back:
+
+```javascript title="src/mastra/workflows/render-worker.js"
+import { parentPort, workerData } from 'node:worker_threads'
+
+// Synchronous work here blocks this thread only, not the event loop that renews the lease.
+const pdf = `report with ${workerData.pages} pages`
+
+parentPort.postMessage({ pdf })
+```
+
 If the work has to block, split it into several steps that each block for well under half the lease, for example a third of it. On Postgres, two blocks can pass between renewals. Start each blocking step with `await new Promise(resolve => setImmediate(resolve))` too, because stores that don't wait on the network, such as the in-memory store or a local LibSQL file, give the renewal no other chance to run between steps.
 
 Raise the lease only when neither is possible. Set `leaseTtlMs` on the workflow, or on one run. This example reuses the `render` step above:
 
-```typescript
+```typescript title="src/mastra/workflows/report.ts"
 import { createWorkflow } from '@mastra/core/workflows'
 import { z } from 'zod'
 import { render } from './render'
