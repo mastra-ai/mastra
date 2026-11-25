@@ -15,6 +15,7 @@
  * the barrier's model call arrives, any follow-up turn has already run.
  */
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 
 import { createEventedAgent } from '@mastra/core/agent/durable';
 import { UnixSocketPubSub } from '@mastra/core/events';
@@ -45,15 +46,22 @@ async function guarded<T>(promise: Promise<T>, what: string, context: () => stri
   }
 }
 
-function buildApp(env: XprocEnv, agentId: string, role: string, pubsub = env.pubsub()) {
+function buildApp(env: XprocEnv, agentId: string, role: string, pubsub = env.pubsub(), memoryDbUrl?: string) {
   const storage = new LibSQLStore({ id: `signal-active-run-${role}`, url: env.dbUrl });
+  const memoryStorage = memoryDbUrl
+    ? new LibSQLStore({ id: `signal-active-run-${role}-memory`, url: memoryDbUrl })
+    : storage;
   const memory = new MockMemory();
-  memory.setStorage(storage);
+  memory.setStorage(memoryStorage);
   // This process never runs steps (workers are off), so its model is never called.
   const { agent } = createStepAgent({ id: agentId, steps: 1, memory });
   const runner = createEventedAgent({ agent });
   const mastra = new Mastra({ agents: { [agentId]: runner }, storage, pubsub, logger: false, workers: false });
-  return { storage, runner, mastra };
+  const close = async () => {
+    await storage.close();
+    if (memoryStorage !== storage) await memoryStorage.close();
+  };
+  return { storage, memoryStorage, runner, mastra, close };
 }
 
 /** Text of the prompt's user messages, in order. */
@@ -67,21 +75,25 @@ async function runCase({
   messages,
   sender,
   closeBeforeSend = false,
+  memoryDb = false,
 }: {
   messages: string[];
   sender: 'starter' | 'other-instance';
   /** Close the run's stored signals before sending, as the executing process does right before the run ends. */
   closeBeforeSend?: boolean;
+  /** Every process's agent memory uses a second database, while workflows use the instance's storage. */
+  memoryDb?: boolean;
 }) {
   const env = await createXprocEnv({ workers: false });
   const agentId = `signal-active-run-${randomUUID()}`;
   const scope = { resourceId: `resource-${randomUUID()}`, threadId: `thread-${randomUUID()}` };
-  const starter = buildApp(env, agentId, 'starter');
+  const memoryDbUrl = memoryDb ? `file:${path.join(env.dir, 'memory.db')}` : undefined;
+  const starter = buildApp(env, agentId, 'starter', undefined, memoryDbUrl);
   let other: ReturnType<typeof buildApp> | undefined;
   let otherPubsub: UnixSocketPubSub | undefined;
   const chunks: Array<{ type: string }> = [];
   try {
-    const peer = await env.spawnPeer(WORKER, { agentId } satisfies SignalActiveRunPeerArgs, {
+    const peer = await env.spawnPeer(WORKER, { agentId, memoryDbUrl } satisfies SignalActiveRunPeerArgs, {
       role: 'signal-active-run-worker',
       workers: true,
     });
@@ -89,7 +101,7 @@ async function runCase({
     if (sender === 'other-instance') {
       // Its own pubsub client gives it its own thread runtime, as a separate process would have.
       otherPubsub = new UnixSocketPubSub(env.socketPath);
-      other = buildApp(env, agentId, 'other-instance', otherPubsub);
+      other = buildApp(env, agentId, 'other-instance', otherPubsub, memoryDbUrl);
     }
     const context = () => `${JSON.stringify({ chunks: chunks.map(chunk => chunk.type) })}\n${env.describe()}`;
 
@@ -130,19 +142,28 @@ async function runCase({
     for (let call = 1; !calls.some(report => userTexts(report.prompt).at(-1)?.includes(BARRIER)); call++) {
       calls.push(await peer.waitFor<ModelCallReport>(`model-call-${call}`, { timeoutMs: DEFAULT_HANG_GUARD_MS }));
     }
-    const memoryStore = await starter.storage.getStore('memory');
+    const memoryStore = await starter.memoryStorage.getStore('memory');
     const stored = (await memoryStore!.listMessages({ threadId: scope.threadId, perPage: false })).messages;
+    const pending = await memoryStore!.listPendingSignals({ threadId: scope.threadId });
+    // The instance's own memory domain, which the agent's memory does not use when it has a database of its own.
+    const instanceMemoryStore = await starter.storage.getStore('memory');
+    const instance = memoryDb
+      ? {
+          stored: (await instanceMemoryStore!.listMessages({ threadId: scope.threadId, perPage: false })).messages,
+          pending: await instanceMemoryStore!.listPendingSignals({ threadId: scope.threadId }),
+        }
+      : undefined;
 
     observer?.unsubscribe();
     peer.send('finish');
     await peer.result();
-    return { runId, accepted: accepted.map(stripOutput), calls, stored };
+    return { runId, accepted: accepted.map(stripOutput), calls, stored, pending, instance };
   } finally {
     await other?.mastra.shutdown();
-    await other?.storage.close();
+    await other?.close();
     await otherPubsub?.close();
     await starter.mastra.shutdown();
-    await starter.storage.close();
+    await starter.close();
     await env.cleanup();
   }
 }
@@ -295,6 +316,19 @@ describe('message sent to an evented run whose steps run in another process', ()
         await starter.storage.close();
         await env.cleanup();
       }
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "stores the message in the database of the agent's memory when it is not the instance's storage",
+    async () => {
+      const messages = ['Kept with the memory'];
+      const result = await runCase({ messages, sender: 'starter', memoryDb: true });
+      expectDeliveredInTheRun(result, messages);
+      const observed = JSON.stringify({ instance: result.instance, pending: result.pending });
+      expect(result.pending, observed).toEqual([]);
+      expect(result.instance, observed).toEqual({ stored: [], pending: [] });
     },
     TIMEOUT,
   );
