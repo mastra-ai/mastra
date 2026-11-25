@@ -67,7 +67,7 @@ Stop Studio and run these commands from the project directory in a local shell. 
 ```sh
 export SUPPORT_MODE=local DATABASE_PROVIDER=local
 export SUPPORT_EXAMPLE=software-integration
-export SUPPORT_DATABASE_URL="file:$PWD/.local/integration.db"
+export SUPPORT_DATABASE_URL=file:./.local/integration.db
 npm run knowledge:seed
 npm run dev
 ```
@@ -81,7 +81,7 @@ Stop Studio and run these commands from the project directory in a local shell. 
 ```sh
 export SUPPORT_MODE=local DATABASE_PROVIDER=local
 export SUPPORT_EXAMPLE=it-helpdesk
-export SUPPORT_DATABASE_URL="file:$PWD/.local/helpdesk.db"
+export SUPPORT_DATABASE_URL=file:./.local/helpdesk.db
 npm run knowledge:seed
 npm run dev
 ```
