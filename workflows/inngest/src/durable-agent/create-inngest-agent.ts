@@ -1136,6 +1136,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         name: input.modelSpanData?.name ?? "llm: ''",
         attributes: input.modelSpanData?.attributes ?? {},
         metadata: { runId, resumed: true },
+        tracingPolicy: agent.getTracingPolicy?.(),
         requestContext,
       });
       return {

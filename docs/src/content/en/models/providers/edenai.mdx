@@ -7,7 +7,7 @@ description: "Browse Eden AI model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/edenai.svg" alt="Eden AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Eden AI
 
-Access 392 Eden AI models through Mastra's model router. Authentication is handled automatically using the `EDENAI_API_KEY` environment variable.
+Access 393 Eden AI models through Mastra's model router. Authentication is handled automatically using the `EDENAI_API_KEY` environment variable.
 
 Learn more in the [Eden AI documentation](https://docs.edenai.co).
 
@@ -2766,8 +2766,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 104857,
-    "inputCost": 0.44,
-    "outputCost": 2.2
+    "inputCost": 1.5,
+    "outputCost": 7.5
   },
   {
     "model": "edenai/mistral/mistral-medium-3-5",
@@ -2802,8 +2802,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 104857,
-    "inputCost": 0.484,
-    "outputCost": 2.42
+    "inputCost": 1.65,
+    "outputCost": 8.25
   },
   {
     "model": "edenai/mistral/mistral-medium-latest",
@@ -3512,6 +3512,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 100000,
     "inputCost": 20,
     "outputCost": 80
+  },
+  {
+    "model": "edenai/ovhcloud/DeepSeek-V4.1-Flash-1017",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 384000,
+    "inputCost": 0.31,
+    "outputCost": 1.25
   },
   {
     "model": "edenai/ovhcloud/gpt-oss-120b",

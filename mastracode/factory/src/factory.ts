@@ -22,6 +22,7 @@
 import { existsSync } from 'node:fs';
 
 import { MastraAuthStudio } from '@mastra/auth-studio';
+import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import type { MastraCodeConfig } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
@@ -49,6 +50,7 @@ import type { FactorySandbox, FactorySandboxDescription, WorkspaceSandbox } from
 import {
   buildAuthDisabledRoutes,
   buildAuthRoutes,
+  authProviders,
   createFactoryAuthGate,
   createFactoryInteractiveMarker,
   createFactoryRouteAuth,
@@ -57,6 +59,8 @@ import {
   getFactoryAuthUserId,
 } from './auth.js';
 import { publishBoardChange, subscribeBoardChanges } from './board-changes.js';
+import { createDispatcherBoardEngine } from './board-engine/engine.js';
+import type { FactoryBoardEngineFactory } from './board-engine/engine.js';
 import { BoardWriteError, BoardWrites } from './boards/board-writes.js';
 import type { BoardWriter } from './boards/board-writes.js';
 import { isDefinedBoard } from './boards/define-board.js';
@@ -120,8 +124,10 @@ import { logIntegrationSummary } from './integrations/startup-summary.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { SELECT_VANTA_VULNERABILITIES_MIGRATION, vantaOrgsSyncingWithoutSource } from './integrations/vanta/sync.js';
 import { shareLinkedRepositoryChanges } from './linked-repositories-changed.js';
-import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
+import { createWorkosMcpCallerResolver } from './mcp/caller.js';
+import { buildFactoryMcpRoutes, factoryMcpResource, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
+import { createMcpTokenVerifier } from './mcp/token.js';
 import { resolveFactoryEmbedder } from './memory-embedder.js';
 import {
   FactoryMetrics,
@@ -227,6 +233,7 @@ import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
 import { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import { ModelDefaultsStorage } from './storage/domains/model-defaults/base.js';
+import { OpenRunsStorage } from './storage/domains/open-runs/base.js';
 import { factoryProjectSettingsUserId, FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SandboxEnvsStorage } from './storage/domains/sandbox-envs/base.js';
@@ -360,8 +367,10 @@ export interface MastraFactoryConfig {
    */
   publicUrl?: string;
   /**
-   * The Factory MCP server at `/web/factory/projects/:projectId/mcp`, which lets
-   * MCP clients such as ChatGPT use the Factory tools as the signed-in user.
+   * The Factory MCP server at `<publicUrl>/mcp`, which lets MCP clients such
+   * as Claude and ChatGPT use the Factory tools as the signed-in user. It
+   * serves the organization's only Factory project, and accepts only access
+   * tokens issued for this URL (RFC 8707 Resource Indicators).
    * On by default with Mastra Platform auth; other providers need
    * `authorizationServers` set. Pass `false` to turn it off.
    */
@@ -422,6 +431,13 @@ export interface MastraFactoryConfig {
   tools?: FactoryTools;
   /** Background Factory dispatcher configuration. */
   dispatcher?: MastraFactoryDispatcherConfig;
+  /**
+   * Builds the board engine every stage move goes through: a person's move, the chat move tool,
+   * card creation, a run start, an agent's move or verdict and tool-result rules. Defaults to
+   * `createDispatcherBoardEngine`, which commits each move at once and runs its follow-up work on
+   * the decision dispatcher.
+   */
+  boardEngine?: FactoryBoardEngineFactory;
   /**
    * Deployment-stable secret for signing integration OAuth `state` values.
    * Omitted → a per-process random secret, which is fine for single-process
@@ -922,7 +938,20 @@ export class MastraFactory {
     const deploymentModelProviders = resolveDeploymentModelProviders(this.#config.deploymentModelProviders);
     // One RouteAuth seam per boot, closed over the resolved provider. Every
     // factory route module receives this handle — no service locator.
-    const routeAuth = createFactoryRouteAuth(auth);
+    // Tokens issued for the MCP endpoint are refused on every other route, and
+    // so is any audience-bound token where the provider doesn't check `aud`.
+    const authOptions = {
+      mcpResource: factoryMcpResource(publicOrigin),
+      refuseAudienceBoundTokens: (provider: IMastraAuthProvider) =>
+        provider instanceof MastraAuthWorkos || provider instanceof MastraAuthStudio,
+    };
+    // Inside a `CompositeAuth` too: the MCP endpoint resolves WorkOS callers
+    // through WorkOS, and honors Platform auth's pinned organization.
+    const workosAuth = authProviders(auth).find((p): p is MastraAuthWorkos => p instanceof MastraAuthWorkos);
+    const pinnedOrganizationId = authProviders(auth).find(
+      (p): p is MastraAuthStudio => p instanceof MastraAuthStudio,
+    )?.pinnedOrganizationId;
+    const routeAuth = createFactoryRouteAuth(auth, authOptions);
     const mcpConfig = this.#config.mcp;
     const mcpAuthorizationServers =
       mcpConfig === false || mcpConfig?.enabled === false ? [] : resolveMcpAuthorizationServers(auth?.name, mcpConfig);
@@ -1080,6 +1109,7 @@ export class MastraFactory {
     const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
     const skillOverridesStorage = storage.registerDomain(new SkillOverridesStorage());
     const voiceSettingsStorage = storage.registerDomain(new VoiceSettingsStorage());
+    const openRunsStorage = storage.registerDomain(new OpenRunsStorage());
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -1593,6 +1623,9 @@ export class MastraFactory {
             : {}),
         })
       : undefined;
+    const boardEngine = transitionService
+      ? (this.#config.boardEngine ?? createDispatcherBoardEngine)({ transitionService })
+      : undefined;
     // Set once the API routes mount with the live controller; tools and processors read parked runs through it.
     let liveSessions: LiveSessions | undefined;
     // One set of storage and services behind the Factory tools, shared by agent sessions and the MCP endpoint.
@@ -1607,7 +1640,7 @@ export class MastraFactory {
             intakeRoutes: storedBoardsStorage,
           }
         : {}),
-      transitionService,
+      boardEngine,
       auditRecorder: auditDomain,
       sessions: sourceControlSessions,
       sessionModel: {
@@ -1805,7 +1838,7 @@ export class MastraFactory {
           onBoundThreadRun: () => this.#dispatcher?.noteBoundThreadRun(),
           isThreadRunning: threadId =>
             this.#prepared?.base.controller.listActiveThreadRuns().some(run => run.threadId === threadId) ?? false,
-          ...(transitionService ? { transitionService } : {}),
+          ...(boardEngine ? { boardEngine } : {}),
           ...(githubIntegration
             ? {
                 recordPullRequestProvenance: (input: Parameters<typeof recordFactoryPullRequestProvenance>[4]) =>
@@ -2153,13 +2186,13 @@ export class MastraFactory {
               }),
             );
           }
-          if (workItemsStorage && transitionService) {
+          if (workItemsStorage && boardEngine) {
             mergeTools(
               'factory',
               await createFactoryTransitionTools({
                 requestContext,
                 storage: workItemsStorage,
-                transitionService,
+                boardEngine,
                 boards: boards,
                 // Heals crash-resumed sessions: recovered addresses re-seed
                 // projectRepositoryId/baseRef from the source session record.
@@ -2307,12 +2340,19 @@ export class MastraFactory {
           // `apiRoutes` (not plain Hono routes) because the entry can't touch the
           // Hono app the deployer generates. `requiresAuth: false`; the gate
           // skips `/auth/*`. Auth-disabled mode still answers `/auth/me` (404).
-          ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : buildAuthDisabledRoutes()),
+          ...(auth ? buildAuthRoutes(auth, { ...authOptions, publicUrl: publicOrigin }) : buildAuthDisabledRoutes()),
           ...(mcpEnabled
             ? buildFactoryMcpRoutes({
-                auth: routeAuth,
+                verifyAccessToken: createMcpTokenVerifier({
+                  authorizationServers: mcpAuthorizationServers,
+                  resource: authOptions.mcpResource,
+                  ...(workosAuth
+                    ? { resolveCaller: createWorkosMcpCallerResolver(workosAuth.getWorkOS().userManagement) }
+                    : {}),
+                }),
                 publicOrigin,
                 authorizationServers: mcpAuthorizationServers,
+                ...(pinnedOrganizationId ? { organizationId: pinnedOrganizationId } : {}),
                 projects: factoryProjectsStorage,
                 sourceControls: sourceControlHandles,
                 tools: factoryToolDeps,
@@ -2409,13 +2449,20 @@ export class MastraFactory {
                 }
               : {}),
             factoryTransitionService: transitionService,
+            factoryBoardEngine: boardEngine,
             runSlots: () => this.#dispatcher?.runSlots(),
-            onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
+            onFactoryRuntime: ({
+              transitionService: runtimeTransitionService,
+              boardEngine: runtimeBoardEngine,
+              prepareBinding,
+            }) => {
               this.#dispatcher ??= new FactoryDecisionDispatcher({
                 controller,
                 transitionService: runtimeTransitionService,
+                boardEngine: runtimeBoardEngine,
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
                 audit: auditDomain,
+                openRuns: openRunsStorage,
                 boards: boards,
                 // Kept without stored boards too, so intake order defers arrivals it can't decide.
                 intakeEvaluator: this.#forcedIntake,
@@ -2563,7 +2610,7 @@ export class MastraFactory {
             auth,
             middleware: [
               ...timing,
-              createFactoryAuthGate(auth),
+              createFactoryAuthGate(auth, authOptions),
               createSessionAccessGuard({
                 auth: routeAuth,
                 sessions: sourceControlSessions,
@@ -2604,7 +2651,7 @@ export class MastraFactory {
       observeSessionThreadTitle(session, {
         sourceControl: { sessions: sourceControlSessions },
       });
-      observeSessionRunEnd(session, { audit: auditDomain });
+      observeSessionRunEnd(session, { audit: auditDomain, openRuns: openRunsStorage });
       // Every run end of a work or side session, and every tool call it holds for
       // approval, reaches whoever follows it, however the run started;
       // re-attached when a session is created again.

@@ -171,6 +171,22 @@ describe('Factory route auth organization selection', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ orgId: 'org_cookie', userId: 'user_123' });
   });
+
+  it('refusing audience-bound bearers still lets logins without an audience in', async () => {
+    const provider = fakeProvider();
+    const app = new Hono();
+    const auth = createFactoryRouteAuth(provider, { refuseAudienceBoundTokens: () => true });
+    app.get('/web/projects', async c => c.json({ ok: Boolean(await auth.ensureUser(c)) }));
+    const jwt = (claims: object) =>
+      ['{"alg":"none"}', JSON.stringify({ sub: 'user_fake', ...claims }), 'sig']
+        .map(part => Buffer.from(part).toString('base64url'))
+        .join('.');
+    const ok = async (token: string) =>
+      (await (await app.request('/web/projects', { headers: { Authorization: `Bearer ${token}` } })).json()).ok;
+
+    expect(await ok(jwt({}))).toBe(true);
+    expect(await ok(jwt({ aud: 'https://other.example.com' }))).toBe(false);
+  });
 });
 
 describe('mountFactoryAuth with an explicit custom provider', () => {

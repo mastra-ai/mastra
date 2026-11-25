@@ -7,6 +7,7 @@
 import { randomUUID } from 'node:crypto';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+import type { FactoryBoardEngine } from '../board-engine/engine.js';
 import { boardForWorkItem } from '../boards/index.js';
 
 import type { BoardRegistry } from '../boards/index.js';
@@ -16,7 +17,6 @@ import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { factoryWorkItemUrl } from '../links.js';
 import { transitionBodySchema } from '../routes/contracts.js';
-import type { FactoryTransitionService } from '../rules/transition-service.js';
 import { MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
 import { resolveWorkItemRepository } from '../session/work-item-repository.js';
@@ -45,8 +45,8 @@ export interface FactoryWorkItemToolDependencies {
   intakeRoutes?: IntakeRoutesReader;
   /** Which evaluator places a filed card; the old `route-list` by default. */
   intakeEvaluator?: IntakeEvaluator;
-  /** Governed stage moves; filing and moving items refuse while it is unavailable. */
-  transitionService: Pick<FactoryTransitionService, 'transition'> | undefined;
+  /** The board engine every stage move goes through; filing and moving items refuse while it is unavailable. */
+  boardEngine: Pick<FactoryBoardEngine, 'requestMove'> | undefined;
   /** Writes audit rows with an explicit actor; tool calls have no HTTP request to read one from. */
   auditRecorder: AuditRecorder;
   /** Finds the caller session's source-control provider, whose linked repositories a card can name. */
@@ -207,7 +207,7 @@ export function createFactoryWorkItemTools(
         const created = await createFactoryWorkItem({
           workItems: deps.workItems,
           boards: await toBoardSource(deps.boards).load(project),
-          transitionService: deps.transitionService,
+          boardEngine: deps.boardEngine,
           intakeRoutes: deps.intakeRoutes,
           intakeEvaluator: deps.intakeEvaluator,
           audit,
@@ -264,7 +264,7 @@ export function createFactoryWorkItemTools(
         })
         .strict(),
       execute: async ({ workItem, stage, rerun: rerunRequested }) => {
-        if (!deps.transitionService) throw new Error('Factory stage transitions are not available right now.');
+        if (!deps.boardEngine) throw new Error('Factory stage transitions are not available right now.');
         const item = await requireItem(workItem);
         // Following the card is what lets this session hear when its run waits on someone, and
         // answer it from here. It comes after the request: a failed follow is reported with it.
@@ -326,7 +326,7 @@ export function createFactoryWorkItemTools(
           ...(rerun ? { reenter: true } : {}),
         });
         if (!parsed.success) throw new Error(`"${stage}" is not a valid stage name.`);
-        const result = await deps.transitionService.transition({
+        const result = await deps.boardEngine.requestMove({
           ...parsed.data,
           ...project,
           workItemId: item.id,
