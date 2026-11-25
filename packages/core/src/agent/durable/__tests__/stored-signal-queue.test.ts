@@ -125,8 +125,18 @@ class NoPendingSignalsMemory extends InMemoryMemory {
   }
 }
 
-/** A pubsub whose first release of a thread's lease waits for the test, as a slow lease provider's does. */
-class HeldReleasePubSub extends EventEmitterPubSub {
+/** A pubsub that reaches other processes and redelivers, as a broker does. Lease owners carry a generation. */
+class BrokerLikePubSub extends EventEmitterPubSub {
+  override get deliversAcrossProcesses(): boolean {
+    return true;
+  }
+  override get redeliversUnacked(): boolean {
+    return true;
+  }
+}
+
+/** A broker-like pubsub whose first release of a thread's lease waits for the test, as a slow lease provider's does. */
+class HeldReleasePubSub extends BrokerLikePubSub {
   /** The thread whose lease release is held. */
   holdReleaseOf?: string;
   readonly releaseReached = gate();
@@ -551,7 +561,8 @@ describe('signals of a running evented agent kept in memory storage', () => {
   });
 
   it('starts the next turn for a send that lands as the run ends, before the run gave its lease back', async () => {
-    const memoryStore = new ObservedMemory();
+    // Shared by every process, as a store behind a pubsub that reaches other processes is.
+    const memoryStore = new SharedObservedMemory();
     // The send's insert waits until the run ended and its own end-of-run check read the store.
     const firstInsert = gate();
     let held = false;
@@ -1148,6 +1159,38 @@ describe('a parked run that is aborted', () => {
       });
     },
   );
+
+  it("starts the thread's next turn with a signal pending for it before its lease release landed", async () => {
+    const memoryStore = new SharedObservedMemory();
+    const pubsub = new HeldReleasePubSub();
+    const { agent, mastra, scope, prompts, promptsReached, toolGate, start } = setup({
+      memoryStore,
+      pubsub,
+      park: true,
+    });
+    pubsub.holdReleaseOf = scope.threadId;
+    const suspended = gate();
+    let runId: string | undefined;
+    await mastra.pubsub.subscribe('workflows', event => {
+      if (event.type === 'workflow.suspend' && event.runId === runId) suspended.release();
+    });
+    const { stream } = await start();
+    runId = stream.runId;
+    toolGate.release();
+    await stream.output.suspendPayload;
+    await suspended.promise;
+
+    const pending = agent.sendSignal({ type: 'user', contents: 'PENDING_ON_THE_ABORTED_RUN' }, scope);
+    await expect(pending.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
+    expect(agent.abortRunStream(stream.runId)).toBe(true);
+    // The aborted run's release of the thread lease has not landed; the next turn takes the lease over from it.
+    await pubsub.releaseReached.promise;
+    await promptsReached(3);
+    pubsub.releaseHeld.release();
+
+    expect(occurrences(prompts[1], 'PENDING_ON_THE_ABORTED_RUN')).toBe(0);
+    expect(occurrences(prompts[2], 'PENDING_ON_THE_ABORTED_RUN')).toBe(1);
+  });
 });
 
 describe('a processor signal sent after its step ended', () => {
@@ -1252,16 +1295,6 @@ describe('a processor signal sent after its step ended', () => {
     expect(memoryStore.calls.filter(call => call.op === 'enqueue' && call.toRunId === stream.runId)).toHaveLength(1);
   });
 });
-
-/** A pubsub that reaches other processes and redelivers, as a broker does. */
-class BrokerLikePubSub extends EventEmitterPubSub {
-  override get deliversAcrossProcesses(): boolean {
-    return true;
-  }
-  override get redeliversUnacked(): boolean {
-    return true;
-  }
-}
 
 describe('evented agents whose signals stay in the process that runs them', () => {
   it.each([
