@@ -59,6 +59,21 @@ describe('planTurnActivity', () => {
     expect(stretches(plan)).toEqual([['a'], ['b']]);
   });
 
+  it('splits stretches at a saved model hop', () => {
+    const hop: MessagePart = {
+      type: 'data-mastracode-model-fallback',
+      data: {
+        from: { entryId: 'anthropic/claude-opus-5.5', label: 'anthropic/claude-opus-5.5' },
+        to: { entryId: 'openai/gpt-5.6-sol', label: 'openai/gpt-5.6-sol' },
+        reason: 'pool-exhausted',
+        at: '2026-11-23T10:00:00.000Z',
+        failure: { kind: 'rate_limited' },
+      },
+    };
+    const plan = planTurnActivity([assistant('s1', [tool('a'), hop, tool('b')])], NO_SUSPENSIONS, false);
+    expect(stretches(plan)).toEqual([['a'], ['b']]);
+  });
+
   it('keeps a stretch together across text that draws nothing', () => {
     const plan = planTurnActivity(
       [assistant('s1', [tool('a')]), assistant('s2', [text('\u200B'), tool('b')])],

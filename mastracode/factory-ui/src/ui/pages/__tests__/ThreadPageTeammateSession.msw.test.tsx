@@ -250,7 +250,7 @@ describe("a teammate's Factory session", () => {
       serveModelCatalogs({ sessionScope: 'user', viewerModels: [openAIKeyModel] });
       openWardSessionAs('user-damien');
       server.use(
-        http.post(`${AC}/sessions/:resourceId/model`, async ({ request }) => {
+        http.put(`${TEST_BASE_URL}/web/config/session-model`, async ({ request }) => {
           modelSwitches.push(await request.json());
           return HttpResponse.json({ ok: true });
         }),

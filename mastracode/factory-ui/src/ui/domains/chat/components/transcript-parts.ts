@@ -1,3 +1,4 @@
+import { MODEL_FALLBACK_PART_TYPE, parseModelFallbackPart } from '@mastra/code-sdk/model-fallback';
 import { exitedWithFailure, isTaskTool } from '@mastra/playground-ui/components/ai/tool-call';
 import type { ReasoningPart, ToolInvocationPart } from '@mastra/react/ui';
 import { getReasoningContent } from '@mastra/playground-ui/domains/chat/messages/reasoning-content';
@@ -57,6 +58,7 @@ function keepsSlot(part: MessagePart): boolean {
     case 'reasoning':
     case 'file':
     case 'error':
+    case MODEL_FALLBACK_PART_TYPE:
       return true;
     case 'tool-invocation':
       return !isTaskTool(part.toolInvocation.toolName);
@@ -88,6 +90,8 @@ export function draws(
       return true;
     case 'error':
       return true;
+    case MODEL_FALLBACK_PART_TYPE:
+      return 'data' in part && parseModelFallbackPart(part.data) !== null;
     default:
       return false;
   }
