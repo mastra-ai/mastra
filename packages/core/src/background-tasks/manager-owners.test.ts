@@ -1075,9 +1075,6 @@ describe('BackgroundTaskManager: a running task whose worker dies after startup'
   });
 });
 
-// The process that dispatched a task records its open request on the tool call through
-// its task context. Another process can cancel that task, so the owner has to hear about
-// it to drop the request. (#28986)
 describe('BackgroundTaskManager: reporting a task it fails because its worker is gone (#28331)', () => {
   const TERMINATED = 'Worker process terminated before task completed';
 
@@ -1183,6 +1180,9 @@ describe('BackgroundTaskManager: reporting a task it fails because its worker is
   });
 });
 
+// The process that dispatched a task records its open request on the tool call through
+// its task context. Another process can cancel that task, so the owner has to hear about
+// it to drop the request. (#28986)
 describe('BackgroundTaskManager: cancelling a suspended task from another process', () => {
   it("runs the owner's execution hook so it can drop the open request", async () => {
     const pubsub = new EventEmitterPubSub();
