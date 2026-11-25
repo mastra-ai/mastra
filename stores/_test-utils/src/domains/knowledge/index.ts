@@ -139,6 +139,7 @@ export function createKnowledgeLegacyUpgradeTests(fixture: KnowledgeLegacyUpgrad
 
 export { createKnowledgeHostWriteTests } from './host-writes';
 export { createKnowledgePageStoreTests } from './pages';
+export { createKnowledgeSearchSnippetTests } from './search-snippets';
 export { createKnowledgeTransactionTests, knowledgeStoreThroughTransactions } from './transaction';
 export type { KnowledgeTransactionFixture, KnowledgeTransactionImporterRows } from './transaction';
 export { createKnowledgeImportersStorageTests } from './importers';
