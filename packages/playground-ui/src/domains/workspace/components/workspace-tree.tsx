@@ -93,7 +93,7 @@ export function WorkspaceTree() {
 }
 
 function DeleteDialog({ entry, onClose }: { entry?: WorkspaceEntryRef; onClose: () => void }) {
-  const { workspaceId, activeFilePath, setActiveFilePath, onDelete } = useWorkspaceContext();
+  const { workspaceId, activeFilePath, setActiveFilePath, onDelete, setFolderOpen } = useWorkspaceContext();
   const queryClient = useQueryClient();
   const [isDeleting, setIsDeleting] = useState(false);
   const name = entry?.path.split('/').pop();
@@ -110,6 +110,7 @@ function DeleteDialog({ entry, onClose }: { entry?: WorkspaceEntryRef; onClose: 
       setIsDeleting(false);
     }
     if (activeFilePath === entry.path || activeFilePath?.startsWith(`${entry.path}/`)) setActiveFilePath(undefined);
+    if (entry.type === 'directory') setFolderOpen(entry.path, false);
     queryClient.removeQueries({ queryKey: ['workspace', workspaceId, 'fs', 'list', entry.path] });
     await queryClient.invalidateQueries({ queryKey: ['workspace', workspaceId, 'fs', 'list', parentOf(entry.path)] });
     onClose();

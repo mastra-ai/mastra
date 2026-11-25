@@ -131,6 +131,7 @@ function Explorer({ initialFile }: { initialFile?: string }) {
               onActiveFileChange={setActiveFilePath}
               searchFiles={false}
               searchSkills={false}
+              onCreateDirectory={() => {}}
             />
           </div>
         </TooltipProvider>

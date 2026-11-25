@@ -44,17 +44,17 @@ export function buildWorkspaceTreeRows(root: WorkspaceEntry[], rootPath: string,
       const expanded = state.open.has(path);
       const listing = expanded ? state.listings.get(path) : undefined;
       rows.push({ kind: 'entry', ...place, expanded, loading: listing?.isLoading ?? false });
-      if (!listing || listing.isLoading) return;
-      if (listing.data) addLevel(listing.data, path, level + 1);
-      else
-        rows.push({
-          kind: 'error',
-          id: `${path}/\0error`,
-          error: listing.error,
-          level: level + 1,
-          posInSet: 1,
-          setSize: 1,
-        });
+      if (!listing) return;
+      addLevel(listing.data ?? [], path, level + 1);
+      if (listing.data || listing.isLoading) return;
+      rows.push({
+        kind: 'error',
+        id: `${path}/\0error`,
+        error: listing.error,
+        level: level + 1,
+        posInSet: 1,
+        setSize: 1,
+      });
     });
   };
 

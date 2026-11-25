@@ -1,4 +1,4 @@
-import { observeElementRect, useVirtualizer } from '@tanstack/react-virtual';
+import { defaultRangeExtractor, observeElementRect, useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron/disclosure-chevron';
@@ -47,6 +47,10 @@ export function VirtualTree<Row extends VirtualTreeRow>({
   const pendingFocus = useRef<string | undefined>(undefined);
   const revealed = useRef<string | undefined>(undefined);
 
+  const selectedIndex = selectedId === undefined ? -1 : rows.findIndex(row => row.id === selectedId);
+  const focusIndex = focusedId === undefined ? -1 : rows.findIndex(row => row.id === focusedId);
+  const tabStopIndex = focusIndex >= 0 ? focusIndex : Math.max(selectedIndex, 0);
+
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollElement ?? null,
@@ -56,13 +60,14 @@ export function VirtualTree<Row extends VirtualTreeRow>({
     paddingEnd: EDGE_PADDING,
     overscan: 10,
     initialRect: FALLBACK_RECT,
+    rangeExtractor: range => {
+      const indexes = defaultRangeExtractor(range);
+      if (tabStopIndex >= rows.length || indexes.includes(tabStopIndex)) return indexes;
+      return [...indexes, tabStopIndex].toSorted((a, b) => a - b);
+    },
     observeElementRect: (instance, onRect) =>
       observeElementRect(instance, rect => onRect(rect.height > 0 ? rect : FALLBACK_RECT)),
   });
-
-  const selectedIndex = selectedId === undefined ? -1 : rows.findIndex(row => row.id === selectedId);
-  const focusIndex = focusedId === undefined ? -1 : rows.findIndex(row => row.id === focusedId);
-  const tabStopIndex = focusIndex >= 0 ? focusIndex : Math.max(selectedIndex, 0);
 
   useEffect(() => {
     if (selectedId === undefined) revealed.current = undefined;
@@ -97,7 +102,7 @@ export function VirtualTree<Row extends VirtualTreeRow>({
         break;
       case 'ArrowRight':
         if (row.expanded === false) onExpandedChange(row, true);
-        else if (row.expanded) moveTo(index + 1);
+        else if (row.expanded && (rows[index + 1]?.level ?? -1) > row.level) moveTo(index + 1);
         break;
       case 'ArrowLeft':
         if (row.expanded) onExpandedChange(row, false);
@@ -145,9 +150,7 @@ export function VirtualTree<Row extends VirtualTreeRow>({
                 aria-expanded={row.expanded}
                 aria-selected={selected}
                 tabIndex={item.index === tabStopIndex ? 0 : -1}
-                onFocus={event => {
-                  if (event.target === event.currentTarget) setFocusedId(row.id);
-                }}
+                onFocus={() => setFocusedId(row.id)}
                 onKeyDown={event => onKeyDown(event, item.index)}
                 onClick={() => {
                   setFocusedId(row.id);

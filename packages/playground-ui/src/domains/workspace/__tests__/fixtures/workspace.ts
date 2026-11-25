@@ -36,6 +36,18 @@ export const guidesListing: WorkspaceFsListResponse = {
   entries: [{ name: 'intro.md', type: 'file', size: 12 }],
 };
 
+export const LOG_COUNT = 3_000;
+
+export const logsListing: WorkspaceFsListResponse = {
+  path: 'logs',
+  entries: Array.from({ length: LOG_COUNT }, (_, i) => ({ name: `run-${i}.json`, type: 'file' })),
+};
+
+export const rootWithLogsListing: WorkspaceFsListResponse = {
+  ...rootListing,
+  entries: [{ name: 'logs', type: 'directory' }, ...rootListing.entries],
+};
+
 export const fileContents: Record<string, string> = {
   'README.md': '# Hello workspace',
   'docs/guides/intro.md': '# Intro',
