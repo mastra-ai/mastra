@@ -1023,6 +1023,13 @@ export interface RunRegistryEntry {
    */
   interruptStepForSignals?: PendingSignalListener;
   /**
+   * Hears `signal-available` hints for the latest LLM step of a run that keeps
+   * its signals in storage, from whichever process stored them. Cleared when
+   * that step ends.
+   * @internal
+   */
+  onSignalAvailable?: (signalId: string) => void;
+  /**
    * Thread title generation closure — mirrors the non-durable `#executeOnFinish`
    * title-generation branch, which was never ported to the durable finish step
    * (so `memory.options.generateTitle` never fired for durable/evented agents).
