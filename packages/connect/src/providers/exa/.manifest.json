@@ -1,0 +1,21 @@
+{
+  "providerId": "exa",
+  "localId": "exa",
+  "templateSha": "bb789a55bfcf744b3c83aa9132e4ffa562106aa3",
+  "templateRepo": "NangoHQ/integration-templates",
+  "generatedAt": "2026-11-25T19:24:41.414Z",
+  "toolCount": 3,
+  "skippedActions": [
+    {
+      "action": "find-similar",
+      "reason": "excluded: Exa deprecated /findSimilar in favor of /search"
+    }
+  ],
+  "files": {
+    "index.ts": "5b6472297e33470cb1efdba7f13bfd7ac0b9efd564260728d11554d0a2c5c7f1",
+    "tools.ts": "ab9f7e7f0ef648874dbd1b35666a60e077d0e2f79ecd3280fface4e01b877f1b",
+    "tools/answer.ts": "ac41348a8fed94049ed211f770b8cbbc3ba295ad2fdc30f941fad556dd179635",
+    "tools/get-contents.ts": "e12ef80ad3064f904b227e06b6ea62c8f8d820c4a2df486c50460a7d9779c816",
+    "tools/search.ts": "0c16a9f6ac046e4331d0dd89f73158119b18be01932c0a408a8157ac161c149d"
+  }
+}
