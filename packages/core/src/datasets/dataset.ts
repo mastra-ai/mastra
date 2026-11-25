@@ -34,7 +34,7 @@ import { assertAgentModelTarget, withAgentModelMetadata } from './experiment/age
 import { durableRunOptions } from './experiment/durable.js';
 import { runExperiment, resolveTarget, executeExperimentItem } from './experiment/index.js';
 import type { ExperimentItemRunOptions } from './experiment/item.js';
-import { experimentScoreId } from './experiment/scorer.js';
+import { assertExperimentScorersExist, experimentScoreId } from './experiment/scorer.js';
 import type {
   ExperimentConfig,
   StartExperimentAsyncConfig,
@@ -412,6 +412,7 @@ export class Dataset {
     const { durable, ...config } = asyncConfig;
     assertAgentModelTarget(config);
     const durableRun = durable ? durableRunOptions(config) : undefined;
+    await assertExperimentScorersExist(this.#mastra, config.scorers);
     const persistExperiments = config.persistence?.experiments !== 'none';
     const experimentsStore = persistExperiments ? await this.#getExperimentsStore() : undefined;
     const datasetsStore = await this.#getDatasetsStore();
@@ -816,6 +817,8 @@ export class Dataset {
         };
       }
     }
+
+    await assertExperimentScorersExist(this.#mastra, args?.scorers);
 
     const targetVersion = args?.version ?? dataset.version;
     const totalItems = await this.#countItems(targetVersion);
