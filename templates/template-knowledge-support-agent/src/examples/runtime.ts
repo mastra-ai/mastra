@@ -141,9 +141,8 @@ export const examples: Record<string, RuntimeExample> = {
   },
 };
 export function selectExample(name = process.env.SUPPORT_EXAMPLE ?? 'retail-pos'): RuntimeExample {
-  const example = examples[name];
-  if (!example) throw new Error(`Choose SUPPORT_EXAMPLE ${Object.keys(examples).join(', ')}`);
-  return example;
+  if (!Object.hasOwn(examples, name)) throw new Error(`Choose SUPPORT_EXAMPLE ${Object.keys(examples).join(', ')}`);
+  return examples[name]!;
 }
 export function selectProfile(example: RuntimeExample, id: string): Profile {
   const profile = [...example.profiles, ...example.reviewers].find(profile => profile.id === id);
