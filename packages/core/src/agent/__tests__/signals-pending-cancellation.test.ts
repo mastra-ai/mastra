@@ -2515,7 +2515,8 @@ describe('Agent signals: pending cancellation', () => {
           }
           return cb(event);
         });
-      const follower = new AgentThreadStreamRuntime();
+      // The production topology: one runtime per process, so the run its drain starts is the one it tracks.
+      const follower = agentThreadStreamRuntime;
       const observer = await follower.subscribeToThread(agent, scope, pubsub);
       try {
         await forwardOnRunEnd('first-ending-run', 'first message', 'run-r');
@@ -2557,6 +2558,9 @@ describe('Agent signals: pending cancellation', () => {
         for (let i = 0; i < 8; i++) await tick();
         expect(probes()).toBe(probesHeld);
         expect(turns('first message')).toBe(1);
+        await vi.waitFor(() => expect(turns('second message')).toBe(1));
+        for (let i = 0; i < 4; i++) await tick();
+        expect(turns('second message')).toBe(1);
       } finally {
         observer.unsubscribe();
         follower.resetForTests();
