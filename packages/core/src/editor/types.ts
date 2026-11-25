@@ -245,7 +245,7 @@ export interface MastraEditorConfig {
    * surfaced in Studio.
    *
    * - `'code'` — overrides live as deterministic per-agent JSON files on disk
-   *   (default `./mastra/editor/`). Studio replaces Save/Publish with
+   *   (default `./mastra/editor`). Studio replaces Save/Publish with
    *   filesystem/PR actions and routes editor storage domains through a local
    *   `FilesystemStore` at `codePath`.
    * - `'db'` — overrides live in the configured storage backend. Studio shows
@@ -254,7 +254,7 @@ export interface MastraEditorConfig {
   source?: 'code' | 'db';
   /**
    * Filesystem path used by the `'code'` source for per-agent JSON files.
-   * Defaults to `./mastra/editor/`. Ignored when `source` is not `'code'`.
+   * Defaults to `./mastra/editor`. Ignored when `source` is not `'code'`.
    */
   codePath?: string;
   /**

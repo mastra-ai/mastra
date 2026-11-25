@@ -35,6 +35,7 @@ function createHarness() {
     },
     buildStreamOptions: async () => ({}),
     buildSharedRunOptions: () => ({}),
+    resolveModeActiveTools: () => undefined,
     buildToolsets: async () => ({}),
     buildRequestContext: async requestContext => requestContext ?? new RequestContext(),
     persistTokenUsage: vi.fn(async () => {}),
@@ -153,6 +154,33 @@ describe('SessionRunEngine — abort deadline', () => {
     expect(events.filter(event => event.type === 'agent_end')).toEqual([
       { type: 'agent_end', reason: 'aborted' },
       { type: 'agent_end', reason: 'complete' },
+    ]);
+  });
+
+  it('Given a subscribed run stopped by a memory failure, Then its end names the memory failure and the next run ends plainly', async () => {
+    const { engine, events, session } = createHarness();
+
+    const subscription = {
+      stream: (async function* () {
+        yield chunk({ type: 'text-start', payload: { id: 't1' }, runId: 'run-1' });
+        yield chunk({
+          type: 'data-om-observation-failed',
+          data: { cycleId: 'c1', operationType: 'observation', error: 'insufficient_quota', durationMs: 5 },
+          runId: 'run-1',
+        } as unknown as StreamChunk);
+        yield chunk({ type: 'text-start', payload: { id: 't2' }, runId: 'run-2' });
+        session.run.requestAbort();
+        yield chunk({ type: 'abort', payload: {}, runId: 'run-2' });
+      })(),
+      unsubscribe: vi.fn(),
+    };
+    session.stream.attach({ subscription, key: 'thread-1' });
+
+    await engine.processSubscribedThreadStream(subscription);
+
+    expect(events.filter(event => event.type === 'agent_end')).toEqual([
+      { type: 'agent_end', reason: 'aborted', abortReason: 'memory-failure' },
+      { type: 'agent_end', reason: 'aborted' },
     ]);
   });
 

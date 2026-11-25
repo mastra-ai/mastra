@@ -40,6 +40,11 @@ export interface RunOwnershipRecord {
   leaseExpiresAt: Date | null;
   /** Whether the owner holds an unexpired lease, judged on the store's clock. */
   live: boolean;
+  /**
+   * When the record last changed (claim, renewal or release), on the store's clock. Absent on
+   * stores that don't report it.
+   */
+  updatedAt?: Date;
 }
 
 export interface ClaimRunOwnershipInput {
@@ -65,6 +70,10 @@ export interface RenewRunOwnershipInput extends RunFence {
   leaseMs: number;
 }
 
+/**
+ * A failed renewal returns the run's current record, or `null` when there is none. Core reads it to tell the claim's
+ * own release (same owner and generation, `leaseExpiresAt: null`) from a takeover.
+ */
 export type RenewRunOwnershipResult =
   | { renewed: true; record: RunOwnershipRecord }
   | { renewed: false; record: RunOwnershipRecord | null };
@@ -189,6 +198,15 @@ export function runOutsideRunFenceScope<T>(fn: () => T): T {
  */
 export function coverNestedRun(parentRunId: string, nestedRunId: string): void {
   getRunFenceContext()?.current()?.coverNestedRun?.(parentRunId, nestedRunId);
+}
+
+/**
+ * The claim generation the current run fence scope holds for `runId`, if any.
+ *
+ * @internal
+ */
+export function currentRunGeneration(runId: string): number | undefined {
+  return getRunFenceContext()?.current()?.generationFor?.(runId);
 }
 
 /**

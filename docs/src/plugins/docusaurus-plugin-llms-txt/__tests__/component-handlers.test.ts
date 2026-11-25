@@ -4,7 +4,13 @@ import rehypeParse from 'rehype-parse'
 import remarkStringify from 'remark-stringify'
 import type { Element } from 'hast'
 
-import { isCardGridItems, handleCardGridItems, isPropertiesTable, handlePropertiesTable } from '../component-handlers'
+import {
+  isCardGridItems,
+  handleCardGridItems,
+  isPropertiesTable,
+  handlePropertiesTable,
+  handleTabsContainer,
+} from '../component-handlers'
 
 // Helper: parse HTML fragment into a hast Element
 function parseHtml(html: string): Element {
@@ -386,5 +392,58 @@ describe('handlePropertiesTable', () => {
     const node = parseHtml(html)
     const result = handlePropertiesTable(mockState, node)
     expect(Array.isArray(result) ? result : [result]).toHaveLength(0)
+  })
+})
+
+describe('Tabs container', () => {
+  const tabsState = {
+    one: (child: any) => ({
+      type: 'paragraph' as const,
+      children: [{ type: 'text' as const, value: textContent(child) }],
+    }),
+  } as any
+
+  function textContent(node: any): string {
+    if (node.type === 'text') return node.value
+    if (node.type === 'element') return (node.children ?? []).map(textContent).join('')
+    return ''
+  }
+
+  it('only pairs labels with the panels owned by the container', () => {
+    const node = parseHtml(`
+      <div class="theme-tabs-container">
+        <ul role="tablist">
+          <li role="tab">Elysia</li>
+          <li role="tab">Express</li>
+        </ul>
+        <div class="margin-top--md">
+          <div role="tabpanel">
+            <div class="theme-tabs-container">
+              <ul role="tablist">
+                <li role="tab">npm</li>
+                <li role="tab">pnpm</li>
+              </ul>
+              <div class="margin-top--md">
+                <div role="tabpanel">npm install @mastra/elysia@latest elysia</div>
+                <div role="tabpanel">pnpm add @mastra/elysia@latest elysia</div>
+              </div>
+            </div>
+          </div>
+          <div role="tabpanel">
+            npm install @mastra/express@latest
+          </div>
+        </div>
+      </div>
+    `)
+
+    const markdown = toMarkdown(handleTabsContainer(tabsState, node))
+
+    expect(markdown).toContain('**Elysia**:')
+    expect(markdown).toContain('**Express**:')
+    expect(markdown).toContain('npm install @mastra/express@latest')
+    expect(markdown).not.toContain('Tab 1')
+    // The Express panel must not inherit the first panel's Elysia content.
+    const expressSection = markdown.slice(markdown.indexOf('**Express**:'))
+    expect(expressSection).not.toContain('@mastra/elysia')
   })
 })

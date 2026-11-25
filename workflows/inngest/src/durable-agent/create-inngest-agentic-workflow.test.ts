@@ -319,6 +319,7 @@ describe('createInngestDurableAgenticWorkflow tool-call tracing (#19842)', () =>
         ],
         stepSpanData,
       },
+      getInitData: () => ({}),
     });
 
     expect(result).toHaveLength(2);

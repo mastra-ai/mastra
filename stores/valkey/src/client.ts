@@ -1,4 +1,5 @@
-import { Batch, Decoder, GlideClient, type GlideClientConfiguration, type GlideString } from '@valkey/valkey-glide';
+import { Batch, Decoder, GlideClient } from '@valkey/valkey-glide';
+import type { GlideClientConfiguration, GlideString } from '@valkey/valkey-glide';
 
 export interface ValkeyMulti {
   del(key: string): ValkeyMulti;
@@ -142,7 +143,10 @@ export class GlideValkeyClient implements ValkeyClient {
 
   private getClient(): Promise<GlideClient> {
     if (this.suppliedClient) return Promise.resolve(this.suppliedClient);
-    this.clientPromise ??= GlideClient.createClient(this.config!);
+    this.clientPromise ??= GlideClient.createClient({
+      ...this.config!,
+      clientInfoTag: this.config?.clientInfoTag ?? 'mastra',
+    });
     return this.clientPromise;
   }
 

@@ -1,8 +1,8 @@
+import type { WorkspacesRoot } from '@internal/find-workspaces';
+import { findWorkspacesRoot, findWorkspaces } from '@internal/find-workspaces';
 import type { IMastraLogger } from '@mastra/core/logger';
 import * as pkg from 'empathic/package';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { WorkspacesRoot } from './find-workspaces';
-import { findWorkspacesRoot, findWorkspaces } from './find-workspaces';
 import {
   collectTransitiveWorkspaceDependencies,
   packWorkspaceDependencies,
@@ -10,7 +10,7 @@ import {
   hasRootExport,
 } from './workspaceDependencies';
 
-vi.mock('./find-workspaces', () => ({
+vi.mock('@internal/find-workspaces', () => ({
   findWorkspacesRoot: vi.fn().mockReturnValue({ location: '/mock-root' }),
   findWorkspaces: vi.fn(),
   createWorkspacesCache: vi.fn(),

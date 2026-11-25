@@ -59,6 +59,7 @@ export type FilesystemIcon =
   | 'azure'
   | 'azure-blob'
   | 'minio'
+  | 'neon'
   | 'local'
   | 'folder'
   | 'database'

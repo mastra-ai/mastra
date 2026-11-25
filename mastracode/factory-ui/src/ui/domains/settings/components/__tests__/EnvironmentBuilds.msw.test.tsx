@@ -1,3 +1,4 @@
+import type { EnvironmentBuild } from '@mastra/playground-ui/components/EnvironmentBuild';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -7,12 +8,8 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
-import type {
-  FactoryEnvironmentBuild,
-  FactoryEnvironmentPatch,
-  FactoryEnvironmentPayload,
-} from '../../../workspaces/services/environment';
-import { EnvironmentSection } from '../EnvironmentSection';
+import type { FactoryEnvironmentPatch, FactoryEnvironmentPayload } from '../../../workspaces/services/environment';
+import { FactoryManagementSection } from '../FactoryManagementSection';
 import {
   buildHistory,
   buildTriggers,
@@ -27,12 +24,11 @@ const ENVIRONMENT_URL = `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/env
 function useFactory() {
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme' }] }),
+      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme', repositories: [] }] }),
     ),
   );
 }
 
-/** Serves the environment from a mutable holder so a handler can change what the next GET returns. */
 function useEnvironment(holder: { environment: FactoryEnvironmentPayload }) {
   const reads = { count: 0 };
   server.use(
@@ -47,8 +43,8 @@ function useEnvironment(holder: { environment: FactoryEnvironmentPayload }) {
 function recordPatches(holder: { environment: FactoryEnvironmentPayload }) {
   const patches: FactoryEnvironmentPatch[] = [];
   server.use(
-    http.patch(ENVIRONMENT_URL, async ({ request }) => {
-      const patch = (await request.json()) as FactoryEnvironmentPatch;
+    http.patch<never, FactoryEnvironmentPatch>(ENVIRONMENT_URL, async ({ request }) => {
+      const patch = await request.json();
       patches.push(patch);
       const schedule = patch.buildTriggers?.schedule;
       if (schedule && holder.environment.buildTriggers) {
@@ -72,9 +68,9 @@ function recordPatches(holder: { environment: FactoryEnvironmentPayload }) {
 
 function renderEnvironmentSettings() {
   renderWithProviders(
-    <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/settings/environment`]}>
+    <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/settings/factory`]}>
       <Routes>
-        <Route path="/factories/:factoryId/settings/environment" element={<EnvironmentSection />} />
+        <Route path="/factories/:factoryId/settings/factory" element={<FactoryManagementSection />} />
       </Routes>
       <Toaster position="bottom-right" />
     </MemoryRouter>,
@@ -88,7 +84,7 @@ describe('Environment builds', () => {
 
     renderEnvironmentSettings();
 
-    expect(await screen.findByRole('heading', { name: 'Configuration' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Environment' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /build now/i })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Builds' })).toBeNull();
     expect(screen.queryByRole('switch', { name: 'Rebuild on push' })).toBeNull();
@@ -100,7 +96,7 @@ describe('Environment builds', () => {
     const reads = useEnvironment(holder);
     let posts = 0;
     let historyReads = 0;
-    const statuses: FactoryEnvironmentBuild['status'][] = ['building', 'ready'];
+    const statuses: EnvironmentBuild['status'][] = ['building', 'ready'];
     server.use(
       http.post(`${ENVIRONMENT_URL}/build`, () => {
         posts += 1;
@@ -115,7 +111,7 @@ describe('Environment builds', () => {
         return HttpResponse.json({ error: 'no_history' }, { status: 404 });
       }),
       http.get(`${ENVIRONMENT_URL}/builds/:buildId`, ({ params }) => {
-        const status = statuses.length > 1 ? statuses.shift()! : statuses[0]!;
+        const status = statuses.length > 1 ? statuses.shift()! : statuses[0];
         return HttpResponse.json({ build: { buildId: params.buildId, status, templateId: 'tpl-1' } });
       }),
     );
@@ -128,12 +124,8 @@ describe('Environment builds', () => {
     expect(await screen.findByText('Build started')).toBeInTheDocument();
     expect(posts).toBe(1);
     expect(await screen.findByText('Building')).toBeInTheDocument();
-    // The second status read answers ready; the poll interval is 10 s, so force the refetch React Query
-    // does when the tab becomes visible again.
     window.dispatchEvent(new Event('visibilitychange'));
     expect(await screen.findByText('Ready', {}, { timeout: 5_000 })).toBeInTheDocument();
-    // The workflow pins the template on its own poll after the provider reports
-    // ready, so the environment keeps refetching every 5 s until the pin shows.
     const readsAtReady = reads.count;
     holder.environment = { ...holder.environment, activeTemplateId: 'tpl-1' };
     await waitFor(() => expect(reads.count).toBeGreaterThan(readsAtReady), { timeout: 8_000 });

@@ -19,7 +19,7 @@ Use this when you already have the messages in hand and want explicit control ov
 import { summarizeConversation } from '@mastra/memory'
 
 const result = await summarizeConversation({
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   messages,
   instructions: 'Summarize this voicemail call for the business owner.',
 })
@@ -33,7 +33,7 @@ const result = await summarizeConversation({
     name: 'model',
     type: 'string | LanguageModel | DynamicModel | ModelWithRetries[]',
     description:
-      "Model that runs the summarization, such as a router string like '__GATEWAY_OPENAI_MODEL_MINI__'. Pass an array of `{ model, maxRetries }` entries to fall back to the next model when one fails.",
+      "Model that runs the summarization, such as a router string like '__GATEWAY_OPENAI_MODEL_LUNA__'. Pass an array of `{ model, maxRetries }` entries to fall back to the next model when one fails.",
     isOptional: false,
   },
   {
@@ -154,7 +154,7 @@ const sessionSummary = new Extractor({
 
 export async function onSessionEnd(messages: MastraDBMessage[]) {
   const { summary, extracted, extractionFailures } = await summarizeConversation({
-    model: '__GATEWAY_OPENAI_MODEL_MINI__',
+    model: '__GATEWAY_OPENAI_MODEL_LUNA__',
     messages,
     instructions: 'Summarize this support session for the account manager.',
     extract: [sessionSummary],

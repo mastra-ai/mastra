@@ -57,11 +57,14 @@
  * default and reach for `viaPublish` only where a case has to match the
  * harness exactly.
  *
- * Redelivering the step.run of a step that already *completed* re-executes it
- * (F4). The only thing dropping a duplicate today is the id-keyed step lease
- * (`STEP_FENCE_TTL_MS`), which covers an immediate redelivery but not a late
- * one. That is owned by COR-1307 and is red until the fix lands, so only use
- * the driver for completed-step outcome assertions alongside it.
+ * Redelivering the step.run of a step that already *completed* is dropped, or
+ * continues the run from the saved result, when the processor checks for
+ * finished steps (see `#finishedCheckStore` in the processor: the store
+ * supports run fencing, and the workflow is not a processor workflow and
+ * keeps `autoRestartActiveRuns`). Otherwise, as for durable agent workflows,
+ * it re-executes the step (F4, COR-1307): only the id-keyed step fence
+ * (`STEP_FENCE_TTL_MS`) drops a duplicate there, which covers an immediate
+ * redelivery but not a late one.
  */
 import EventEmitter from 'node:events';
 import { vi } from 'vitest';
@@ -288,6 +291,15 @@ export class RedeliveryDriver {
       );
     }
 
+    return this.redeliverEvent(original, options);
+  }
+
+  /** Re-delivers a captured control or step event through the real worker subscription. */
+  async redeliverEvent(
+    original: Event,
+    options: { deliveryAttempt?: number; viaPublish?: boolean } = {},
+  ): Promise<RedeliveryOutcome> {
+    if (this.#disposed) throw new Error('RedeliveryDriver is disposed');
     const before = this.#handled.length;
     let event: Event;
     if (options.viaPublish) {
@@ -296,7 +308,7 @@ export class RedeliveryDriver {
       const capturedBefore = this.events.length;
       await this.pubsub.publish(WORKFLOWS_TOPIC, snapshotClone(original));
       const published = this.events[capturedBefore];
-      if (!published) throw new Error(`Replaying "${match.spec}" did not publish a workflows event`);
+      if (!published) throw new Error(`Replaying ${original.type} did not publish a workflows event`);
       event = published;
     } else {
       event = {
@@ -317,7 +329,7 @@ export class RedeliveryDriver {
     const calls = this.#handled.slice(before).filter(h => h.event.id === event.id);
     if (calls.length === 0) {
       throw new Error(
-        `Redelivered workflow.step.run for "${match.spec}" was not consumed by any workflow event processor (are workers started?)`,
+        `Redelivered ${original.type} was not consumed by any workflow event processor (are workers started?)`,
       );
     }
     const handled = await Promise.all(calls.map(async c => ({ event: c.event, result: await c.result })));

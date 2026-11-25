@@ -1,0 +1,42 @@
+{
+  "name": "accounts-payable-invoice-processing",
+  "version": "1.0.0",
+  "private": true,
+  "description": "An accounts payable agent that extracts invoices, matches POs and receipts, routes approvals, and optionally posts bills to QuickBooks.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build",
+    "format": "oxfmt --config .oxfmtrc.json .",
+    "format:check": "oxfmt --config .oxfmtrc.json --check .",
+    "lint": "oxlint --config .oxlintrc.json --deny-warnings src test integration",
+    "test:integration": "node --experimental-strip-types --test integration/quickbooks.ts"
+  },
+  "dependencies": {
+    "@mastra/core": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/mcp": "latest",
+    "@mastra/memory": "latest",
+    "currency-codes": "2.2.0",
+    "decimal.js": "10.6.0",
+    "dotenv": "16.6.1",
+    "zod": "^4.2.0"
+  },
+  "devDependencies": {
+    "@mastra/deployer": "latest",
+    "@types/node": "^22.0.0",
+    "mastra": "latest",
+    "oxfmt": "0.74.0",
+    "oxlint": "1.89.0",
+    "typescript": "^5.9.3",
+    "vitest": "4.1.12"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

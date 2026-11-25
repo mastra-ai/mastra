@@ -1,5 +1,6 @@
 import type { Agent, MastraDBMessage } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
+import { stripClientAuthoredTurnMarks } from '@mastra/core/memory';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
 import { MastraFGAPermissions } from '../fga-permissions';
@@ -292,9 +293,11 @@ function createExecutionMemory(threadContext: ThreadExecutionContext | null) {
 async function resolveResponseAgent({
   mastra,
   agentId,
+  requestContext,
 }: {
   mastra: Mastra | undefined;
   agentId?: string;
+  requestContext: RequestContext;
 }): Promise<Agent<any, any, any, any>> {
   if (!agentId) {
     throw new HTTPException(400, {
@@ -306,7 +309,7 @@ async function resolveResponseAgent({
     throw new HTTPException(500, { message: 'Mastra instance is required for agent-backed responses' });
   }
 
-  return getAgentFromSystem({ mastra, agentId });
+  return getAgentFromSystem({ mastra, agentId, requestContext });
 }
 
 async function resolveAgentMemoryStore({
@@ -353,6 +356,7 @@ async function executeGenerate({
   threadContext: ThreadExecutionContext | null;
 }) {
   const executionMemory = createExecutionMemory(threadContext);
+  stripClientAuthoredTurnMarks(input);
   const structuredOutput = createStructuredOutput(text);
   const modelOption = modelOverride ? { model: modelOverride } : {};
   const commonOptions = {
@@ -419,6 +423,7 @@ async function executeStream({
   threadContext: ThreadExecutionContext | null;
 }) {
   const executionMemory = createExecutionMemory(threadContext);
+  stripClientAuthoredTurnMarks(input);
   const structuredOutput = createStructuredOutput(text);
   const modelOption = modelOverride ? { model: modelOverride } : {};
   const commonOptions = {
@@ -640,7 +645,7 @@ async function prepareCreateResponseRequest({
 
   if (body.previous_response_id) {
     if (body.agent_id) {
-      resolvedAgent = await resolveResponseAgent({ mastra, agentId: body.agent_id });
+      resolvedAgent = await resolveResponseAgent({ mastra, agentId: body.agent_id, requestContext });
       previousResponseTurnRecord = await findResponseTurnRecord({
         agent: resolvedAgent,
         responseId: body.previous_response_id,
@@ -690,6 +695,7 @@ async function prepareCreateResponseRequest({
     (await resolveResponseAgent({
       mastra,
       agentId: body.agent_id ?? previousResponseTurnRecord?.metadata.agentId,
+      requestContext,
     }));
   const resolvedModel = await agent.getModel({
     requestContext,

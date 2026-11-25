@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join, sep } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { getPackageInfo } from 'local-pkg';
 
 interface PackageJson {
@@ -13,9 +15,17 @@ export interface MastraPackageInfo {
   version: string;
 }
 
-async function getResolvedVersion(packageName: string, specifiedVersion: string): Promise<string> {
+/**
+ * `local-pkg` resolution options that resolve from inside `rootDir`. The trailing separator matters: without it the
+ * directory is treated as a file and resolution starts in its parent, skipping the project's own `node_modules`.
+ */
+export function resolveFrom(rootDir: string): { paths: string[] } {
+  return { paths: [pathToFileURL(`${rootDir}${sep}`).href] };
+}
+
+async function getResolvedVersion(packageName: string, specifiedVersion: string, rootDir: string): Promise<string> {
   try {
-    const packageInfo = await getPackageInfo(packageName);
+    const packageInfo = await getPackageInfo(packageName, resolveFrom(rootDir));
     return packageInfo?.version ?? specifiedVersion;
   } catch {
     // Fall back to the specified version if we can't resolve the installed version
@@ -42,7 +52,7 @@ export async function getMastraPackages(rootDir: string): Promise<MastraPackageI
     const packages = await Promise.all(
       mastraDeps.map(async ([name, specifiedVersion]) => ({
         name,
-        version: await getResolvedVersion(name, specifiedVersion),
+        version: await getResolvedVersion(name, specifiedVersion, rootDir),
       })),
     );
 
@@ -50,4 +60,17 @@ export async function getMastraPackages(rootDir: string): Promise<MastraPackageI
   } catch {
     return [];
   }
+}
+
+/** File name of the packages manifest, shared by `mastra dev` and `mastra build`. */
+export const MASTRA_PACKAGES_FILE_NAME = 'mastra-packages.json';
+
+/**
+ * Writes the resolved Mastra package versions next to the built server, so a
+ * deployed server can report what it runs without access to the project's
+ * package.json or node_modules.
+ */
+export async function writeMastraPackagesManifest(outputDir: string, packages: MastraPackageInfo[]): Promise<void> {
+  await mkdir(outputDir, { recursive: true });
+  await writeFile(join(outputDir, MASTRA_PACKAGES_FILE_NAME), JSON.stringify(packages, null, 2));
 }

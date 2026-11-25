@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CheckIcon } from 'lucide-react';
 import { DropdownMenu } from '../DropdownMenu/dropdown-menu';
 import { Avatar } from './Avatar';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { focusRingOffset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -54,7 +54,7 @@ export const Basic: Story = {
 export const Sizes: Story = {
   render: () => (
     <div className="flex items-center gap-6">
-      {(['xs', 'sm', 'control', 'md', 'lg'] as const).map(size => (
+      {(['xs', 'inline', 'sm', 'control', 'md', 'lg'] as const).map(size => (
         <Avatar key={size} size={size}>
           <Avatar.Image src={people.alex.src} alt={`${people.alex.name}, ${size}`} />
           <Avatar.Fallback>{people.alex.initials}</Avatar.Fallback>
@@ -80,7 +80,7 @@ export const BadgeWithIcon: Story = {
       <Avatar.Image src={people.sam.src} alt={people.sam.name} />
       <Avatar.Fallback>{people.sam.initials}</Avatar.Fallback>
       <Avatar.Badge tone="success">
-        <CheckIcon />
+        <IconCheckmark2Medium />
       </Avatar.Badge>
     </Avatar>
   ),

@@ -1,85 +1,61 @@
-import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import type { ReactNode, RefObject } from 'react';
+import { TranscriptAnnotations } from '@mastra/playground-ui/components/ai/annotations';
+import { SessionSurface } from '@mastra/playground-ui/domains/chat/transcript';
+import type { ReactNode } from 'react';
 
-import { composerColumnClass } from '../../workspace-viewer/layout';
+import { chatColumnClass, composerColumnClass, reservedSpaceClass } from '../../workspace-viewer/layout';
 import { ActivityLine } from './ActivityLine';
-import { ComposerPanel } from './ComposerPanel';
-import { SessionPreparationOverlay } from './SessionPreparationOverlay';
-import { TaskPanel } from './TaskPanel';
+import { Composer } from './Composer';
 import { Transcript } from './Transcript';
+import type { TranscriptTail } from './Transcript';
 import { TranscriptHistoryLoader } from './TranscriptHistoryLoader';
 import { ChatMessageBoundary } from '../context/ChatSessionProvider';
 import { useChatMessagePreparation } from '../context/useChatMessagePreparation';
 import { useChatTranscript } from '../context/useChatTranscript';
 
+const activityTail: TranscriptTail = stretchLive => <ActivityLine stretchLive={stretchLive} />;
+
 interface SessionChatSurfaceProps {
-  header?: ReactNode;
   secondaryBar?: ReactNode;
   emptyState: ReactNode;
+  openingSession?: boolean;
   composerLabel: string;
-  composerFooter?: ReactNode;
-  className?: string;
-  contentRef?: RefObject<HTMLDivElement | null>;
+  /** Leads the status row below the composer. */
+  composerStatus?: ReactNode;
   contentOverlay?: ReactNode;
-  stageSurface?: ReactNode;
 }
 
 export function SessionChatSurface({
-  header,
   secondaryBar,
   emptyState,
+  openingSession = false,
   composerLabel,
-  composerFooter,
-  className,
-  contentRef,
+  composerStatus,
   contentOverlay,
-  stageSurface,
 }: SessionChatSurfaceProps) {
   const { busy, loadMore, transcript } = useChatTranscript();
-  const { historyInitializing, preparing } = useChatMessagePreparation();
-  const canLoadMore = loadMore.hasMore && !loadMore.isLoading;
+  const { preparing: threadPreparing } = useChatMessagePreparation();
+  const conversationStarted = transcript.entries.some(entry => entry.kind !== 'notice');
 
   return (
-    <ChatShell
-      className={cn('chat-surface-enter flex-1', className)}
-      scroller={{
-        autoScroll: true,
-        defaultScrollPosition: busy ? 'end' : 'last-anchor',
-        preserveScrollOnPrepend: true,
-        onReachStart: canLoadMore ? loadMore.load : undefined,
-      }}
+    <SessionSurface
+      busy={busy}
+      preparing={threadPreparing || openingSession}
+      tasks={transcript.tasks}
+      loadMore={loadMore}
+      composer={<Composer variant="inline" statusLead={composerStatus} />}
+      composerLabel={composerLabel}
+      secondaryBar={secondaryBar}
+      contentOverlay={contentOverlay}
+      className={chatColumnClass}
+      viewportClassName={reservedSpaceClass.viewport}
+      composerColumnClassName={composerColumnClass}
     >
-      {header && <ChatShell.Bar>{header}</ChatShell.Bar>}
-      {secondaryBar && <ChatShell.Bar>{secondaryBar}</ChatShell.Bar>}
-      <ChatShell.Stage>
-        <ChatShell.Viewport>
-          <SessionPreparationOverlay historyInitializing={historyInitializing} preparing={preparing} />
-          <div ref={contentRef} className="relative flex min-h-full min-w-0 flex-1 flex-col">
-            {contentOverlay}
-            <ChatShell.Content className="gap-0 pt-6">
-              <ChatShell.Column className="flex-1">
-                <ChatMessageBoundary showPreparation={false}>
-                  <TranscriptHistoryLoader />
-                  {transcript.entries.length === 0 && emptyState}
-                  <Transcript tail={<ActivityLine />} />
-                </ChatMessageBoundary>
-              </ChatShell.Column>
-            </ChatShell.Content>
-            <ChatShell.Dock>
-              <ChatShell.ScrollButton aria-label="Jump to latest message" />
-              <ChatShell.Column className={cn('gap-2', composerColumnClass)}>
-                <TaskPanel />
-                <div role="region" aria-label={composerLabel} className="flex flex-col gap-2">
-                  <ComposerPanel />
-                  {composerFooter}
-                </div>
-              </ChatShell.Column>
-            </ChatShell.Dock>
-          </div>
-        </ChatShell.Viewport>
-        {stageSurface}
-      </ChatShell.Stage>
-    </ChatShell>
+      <TranscriptAnnotations />
+      <ChatMessageBoundary showPreparation={false}>
+        <TranscriptHistoryLoader />
+        {!conversationStarted && emptyState}
+        <Transcript tail={activityTail} />
+      </ChatMessageBoundary>
+    </SessionSurface>
   );
 }

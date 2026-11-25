@@ -19,7 +19,7 @@ export function SavedViewNameInput({ name, onCommit }: { name: string; onCommit:
           event.currentTarget.blur();
         }
       }}
-      className="field-sizing-content min-w-12 bg-transparent text-foreground outline-hidden"
+      className="field-sizing-content min-w-12 bg-transparent zoom-safe-text text-foreground outline-hidden"
     />
   );
 }

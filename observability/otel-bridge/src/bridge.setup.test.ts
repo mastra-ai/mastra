@@ -12,7 +12,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { Observability, TestExporter } from '@mastra/observability';
 import { context, trace } from '@opentelemetry/api';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
-import { tracing } from '@opentelemetry/sdk-node';
+import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OtelBridge } from './bridge.js';
 
@@ -31,9 +31,9 @@ function createModel() {
 }
 
 function createInMemoryProvider() {
-  const exporter = new tracing.InMemorySpanExporter();
-  const provider = new tracing.BasicTracerProvider({
-    spanProcessors: [new tracing.SimpleSpanProcessor(exporter)],
+  const exporter = new InMemorySpanExporter();
+  const provider = new BasicTracerProvider({
+    spanProcessors: [new SimpleSpanProcessor(exporter)],
   });
   return { exporter, provider };
 }

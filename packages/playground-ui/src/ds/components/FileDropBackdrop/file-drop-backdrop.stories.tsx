@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ArrowUp, Paperclip } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 import { Button } from '../Button';
@@ -9,6 +8,8 @@ import { FileDropBackdrop } from './file-drop-backdrop';
 import { FileChipEntry } from '@/domains/chat/attachments/attachment-preview-dialog';
 import { ComposerAttachment } from '@/domains/chat/attachments/composer-attachment';
 import { ComposerAttachmentList } from '@/domains/chat/attachments/composer-attachment-list';
+import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
+import { IconPaperclip1 } from '@/ds/icons/central/IconPaperclip1';
 
 const meta: Meta<typeof FileDropBackdrop> = {
   title: 'Elements/FileDropBackdrop',
@@ -33,7 +34,7 @@ const InputDemo = () => {
   return (
     <FileDropBackdrop onFilesDrop={files => setFileNames(files.map(file => file.name).join(', '))}>
       <div className="w-80">
-        <Input readOnly aria-label="Dropped files" placeholder="Drag a file anywhere…" value={fileNames} />
+        <Input readOnly aria-label="Dropped files" placeholder="Drag a file anywhere" value={fileNames} />
       </div>
     </FileDropBackdrop>
   );
@@ -66,7 +67,7 @@ const ComposerDemo = ({ accept, label, description }: { accept?: string; label?:
               ))}
             </ComposerAttachmentList>
           )}
-          <ComposerInput aria-label="Message" placeholder="Drop files anywhere to attach them…" />
+          <ComposerInput aria-label="Message" placeholder="Drop files anywhere to attach them" />
           <ComposerActions>
             <input
               ref={fileInputRef}
@@ -80,10 +81,10 @@ const ComposerDemo = ({ accept, label, description }: { accept?: string; label?:
               }}
             />
             <Button type="button" size="icon-md" aria-label="Attach file" onClick={() => fileInputRef.current?.click()}>
-              <Paperclip />
+              <IconPaperclip1 />
             </Button>
             <Button type="submit" size="icon-md" aria-label="Send message">
-              <ArrowUp />
+              <IconArrowUp />
             </Button>
           </ComposerActions>
         </ComposerBox>

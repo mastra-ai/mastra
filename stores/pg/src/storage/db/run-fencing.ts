@@ -36,6 +36,77 @@ export async function assertRunFence(
 }
 
 /**
+ * The `claim` CTE of a single-statement fenced write: one row while `fence`,
+ * bound at `$first` (runId), `$first + 1` (generation) and `$first + 2`
+ * (ownerId), is the run's current claim. Gate the write on
+ * `EXISTS (SELECT 1 FROM claim)` and end the statement with
+ * {@link fencedResultSql}. The lock lasts only as long as the statement, so a
+ * client cut mid-write never leaves the claim row locked: a concurrent claim
+ * either commits first, and the recheck after the wait finds no row, or waits
+ * for this one statement.
+ */
+export function runFenceCte(claimsTable: string, first: number): string {
+  return `claim AS (
+    SELECT 1 FROM ${claimsTable}
+    WHERE "runId" = $${first} AND generation = $${first + 1}::bigint AND "ownerId" = $${first + 2}
+    FOR SHARE
+  )`;
+}
+
+/** The values {@link runFenceCte} binds, in order. */
+export function runFenceParams(fence: RunFence): unknown[] {
+  return [fence.runId, fence.generation, fence.ownerId];
+}
+
+/**
+ * The final SELECT of a single-statement fenced write: always one row, with
+ * `fenced`, `written` (whether the CTE `cte` returned a row) and `columns` of
+ * that row, if any.
+ */
+export function fencedResultSql(cte: string, columns = `${cte}.*`): string {
+  return `SELECT EXISTS (SELECT 1 FROM claim) AS fenced, EXISTS (SELECT 1 FROM ${cte}) AS written${columns ? `, ${columns}` : ''}
+    FROM (SELECT 1) AS one LEFT JOIN ${cte} ON true`;
+}
+
+/**
+ * Runs a statement built with {@link runFenceCte} and {@link fencedResultSql}.
+ * Returns the written row, or null when the write's own conditions left it
+ * unwritten, as `oneOrNone` does for the unfenced statement.
+ */
+export async function runFencedStatement<T>(
+  q: Queryable,
+  fence: RunFence,
+  operation: string,
+  sql: string,
+  values: unknown[],
+): Promise<T | null> {
+  const { fenced, written, ...row } = await q.one<{ fenced: boolean; written: boolean }>(sql, values);
+  if (!fenced) throw new RunFenceConflictError(fence, operation);
+  return written ? (row as T) : null;
+}
+
+/**
+ * `serialize()` for a single-statement fenced write, whose values are
+ * serialized before the statement checks the fence. When serializing throws
+ * and `fence` is not the run's current claim, throws
+ * {@link RunFenceConflictError} instead, as when the fence was checked first.
+ */
+export async function serializeFenced<T>(
+  q: Queryable,
+  claimsTable: string,
+  fence: RunFence | undefined,
+  operation: string,
+  serialize: () => T,
+): Promise<T> {
+  try {
+    return serialize();
+  } catch (error) {
+    if (fence) await assertRunFence(q, claimsTable, fence, operation);
+    throw error;
+  }
+}
+
+/**
  * Runs `write` directly when it carries no fence, or in a transaction behind
  * the fence check when it does.
  */

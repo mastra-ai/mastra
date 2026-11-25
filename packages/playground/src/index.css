@@ -1,4 +1,4 @@
-@import './fonts.css';
+@import '@mastra/playground-ui/fonts.css';
 @import '../../playground-ui/src/index.css';
 @import '@mastra/playground-ui/sources.css';
 
@@ -10,7 +10,6 @@
     --color-track: transparent;
   }
   html {
-    font-feature-settings: 'ss06' on;
     scrollbar-color: var(--color-thumb) var(--color-track);
     scrollbar-width: thin;
   }

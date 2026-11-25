@@ -18,6 +18,20 @@ export interface EventEmitterPubSubOptions {
 // to module scope so we don't allocate two new closures per emitted event.
 const NOOP_ACK = async (): Promise<void> => {};
 
+/**
+ * The default pubsub: delivers events inside the process that published them.
+ * It needs no external service, and nothing it holds outlives the process.
+ *
+ * Evented workflows and evented agents run on it in one process: local
+ * development, tests, and a single server. It is not a transport for running
+ * them on several instances. Each instance has its own emitter, so an event
+ * never reaches another instance, and instances that share one storage each
+ * treat the others' runs as their own to recover. Use a pubsub that redelivers
+ * unacknowledged events for that.
+ *
+ * The leases, consumer groups and nack redelivery here coordinate subscribers
+ * of this one process. They give no guarantee across processes.
+ */
 export class EventEmitterPubSub extends PubSub implements LeaseProvider {
   // EventEmitter dispatches synchronously to listeners, so it can serve both
   // a push consumer (no worker) and a pull-style worker that simply calls
@@ -37,6 +51,19 @@ export class EventEmitterPubSub extends PubSub implements LeaseProvider {
    */
   override get supportsNativeBatching(): boolean {
     return true;
+  }
+
+  /** Every subscriber is a listener on this process's emitter. */
+  override get deliversAcrossProcesses(): boolean {
+    return false;
+  }
+
+  /**
+   * Ack and nack are no-ops here: a message lives only in the process that
+   * published it, so nothing redelivers it once that process stops.
+   */
+  override get redeliversUnacked(): boolean {
+    return false;
   }
 
   private emitter: EventEmitter;

@@ -9,6 +9,14 @@ export const PROVIDER_AUTH_REQUIRED_ERROR = 'ProviderAuthRequiredError';
  */
 export class ProviderAuthRequiredError extends Error {
   readonly name = PROVIDER_AUTH_REQUIRED_ERROR;
+
+  static notSignedIn(providerName: string): ProviderAuthRequiredError {
+    return new ProviderAuthRequiredError(`Not logged in to ${providerName}.`);
+  }
+
+  static signInExpired(providerName: string): ProviderAuthRequiredError {
+    return new ProviderAuthRequiredError(`${providerName} sign-in expired.`);
+  }
 }
 
 function providerErrorMessage(body: string): string | undefined {

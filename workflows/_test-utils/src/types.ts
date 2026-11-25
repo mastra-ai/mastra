@@ -2,14 +2,25 @@
  * Types for workflow test factory
  */
 
-import type { Workflow } from '@mastra/core/workflows';
-import type { MastraStorage } from '@mastra/core/storage';
+import type { AgentConfig, PublicStructuredOutputOptions, ToolsInput } from '@mastra/core/agent';
+import type { DurableAgentStreamOptions } from '@mastra/core/agent/durable';
+import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { RequestContext } from '@mastra/core/di';
 import type { PubSub } from '@mastra/core/events';
-import type { ToolsInput } from '@mastra/core/agent';
+import type { MastraStorage } from '@mastra/core/storage';
+import type { Workflow } from '@mastra/core/workflows';
 
 // ============================================================================
 // Durable Agent Test Types
 // ============================================================================
+
+/**
+ * Stream options accepted by every DurableAgent-like implementation. Structured
+ * output is per call here, so any object schema is accepted.
+ */
+export type DurableAgentLikeStreamOptions = Omit<DurableAgentStreamOptions, 'structuredOutput'> & {
+  structuredOutput?: PublicStructuredOutputOptions<{}>;
+};
 
 /**
  * Common interface for DurableAgent-like classes.
@@ -17,12 +28,12 @@ import type { ToolsInput } from '@mastra/core/agent';
  *
  * This interface focuses on observable behavior, not implementation details.
  */
-export interface DurableAgentLike<TOutput = undefined> {
+export interface DurableAgentLike {
   id: string;
   name: string;
   stream(
-    messages: any,
-    options?: any,
+    messages: MessageListInput,
+    options?: DurableAgentLikeStreamOptions,
   ): Promise<{
     output: any;
     runId: string;
@@ -87,10 +98,10 @@ export interface DurableAgentLike<TOutput = undefined> {
  * Configuration passed to createAgent factory.
  * Extends AgentConfig but makes pubsub optional (provided by context) and name optional.
  */
-export interface CreateAgentConfig<TTools extends ToolsInput = ToolsInput, TOutput = undefined> {
+export interface CreateAgentConfig<TTools extends ToolsInput = ToolsInput> {
   id: string;
   name?: string;
-  instructions: string;
+  instructions: AgentConfig['instructions'];
   model: any;
   tools?: TTools;
   /**
@@ -142,10 +153,12 @@ export interface CreateAgentConfig<TTools extends ToolsInput = ToolsInput, TOutp
 }
 
 /**
- * Test domains that can be selectively skipped
+ * Test domains that can be selectively skipped. Keys must not shadow
+ * Object.prototype members (e.g. `constructor`, `toString`): an omitted key
+ * would resolve to the inherited value and silently skip the domain.
  */
 export type DurableAgentTestDomain =
-  | 'constructor'
+  | 'agentCreation'
   | 'prepare'
   | 'registry'
   | 'workflow'
@@ -357,6 +370,11 @@ export type CreateStepFn = typeof import('@mastra/core/workflows').createStep;
 export type AgentClass = typeof import('@mastra/core/agent').Agent;
 
 /**
+ * Mastra class type for tests that host a workflow on their own Mastra instance
+ */
+export type MastraClass = typeof import('@mastra/core/mastra').Mastra;
+
+/**
  * Function type for creating a workflow
  */
 export type CreateWorkflowFn = typeof import('@mastra/core/workflows').createWorkflow;
@@ -404,6 +422,8 @@ export type WorkflowTestDomain =
 export type SkippableTest =
   // State-related tests (evented engine WIP)
   | 'state'
+  // setState rejecting updates that break stateSchema (the evented engine never validates setState)
+  | 'stateValidation'
   // Error identity preservation (some engines serialize errors)
   | 'errorIdentity'
   // Schema validation throwing errors
@@ -416,6 +436,9 @@ export type SkippableTest =
   | 'schemaNestedValidation'
   // ZodError cause preservation when validation fails
   | 'schemaZodErrorCause'
+  // Known failure, pinned with it.fails instead of skipped: getInitData() returns the
+  // validated input after inputSchema defaults apply (#29424)
+  | 'schemaInitDataDefaultFails'
   // waitForEvent removed error
   | 'schemaWaitForEvent'
   // Abort returning 'canceled' status
@@ -456,6 +479,10 @@ export type SkippableTest =
   | 'requestContextPropagation'
   // getInitData helper (some engines have memoization issues with getInitData across steps)
   | 'getInitData'
+  // Deprecated sync getStepResult (throws on storageVersion: 2 runs)
+  | 'getStepResultSync'
+  // Reading the sync `state` field (throws on storageVersion: 2 runs)
+  | 'stateSync'
   // Error cause chain preservation (some engines have memoization issues with error cause chains)
   | 'errorCauseChain'
   // Variable resolution error handling (Inngest has race condition with snapshot persistence)
@@ -492,6 +519,13 @@ export type SkippableTest =
   | 'perStepConditional'
   | 'perStepNested'
   | 'perStepContinue'
+  | 'perStepRetry'
+  | 'perStepLoop'
+  | 'perStepBail'
+  | 'perStepBailRetry'
+  | 'perStepCancel'
+  | 'perStepNoBranch'
+  | 'perStepNestedBail'
   // Tracing tests
   | 'tracingContext'
   | 'tracingMultistep'
@@ -530,6 +564,8 @@ export type SkippableTest =
   // Run count tests
   | 'runCount'
   | 'retryCount'
+  // Retry of a resumed step keeps its resume data
+  | 'retryAfterResume'
   // Error persistence tests (require storage spy access)
   | 'errorPersistWithoutStack'
   | 'errorPersistMastraError'
@@ -569,6 +605,8 @@ export type SkippableTest =
   // Clone tests
   | 'cloneWorkflows'
   | 'specResultVariables'
+  // Direct nested child resume is not implemented by every workflow engine
+  | 'directNestedChildResume'
   // Advanced variable resolution tests
   | 'mapRequestContextPath'
   | 'mapDynamicFn'
@@ -605,6 +643,8 @@ export type SkippableTest =
   | 'streamingTripwireOutputStream'
   // Streaming detailed event structure (exact event count/structure assertions)
   | 'streamingDetailedEvents'
+  // Exact streamLegacy event sequence for an agent used as a step
+  | 'streamingAgentDetailedEventsLegacy'
   // Streaming suspend/resume with streamLegacy API
   | 'streamingSuspendResumeLegacy'
   // Auto-resume without specifying step parameter (single suspended step)
@@ -625,6 +665,8 @@ export type SkippableTest =
   | 'resumeForeachPartial'
   // Foreach suspend/resume with partial concurrency and index
   | 'resumeForeachPartialIndex'
+  // Foreach resume hands each item its own suspend data
+  | 'resumeForeachSuspendData'
   // Branching - nested else/if-branch
   | 'branchingNestedConditions'
   // Foreach state batch and bail tests
@@ -680,6 +722,13 @@ export interface WorkflowTestConfig {
     createStep: CreateStepFn;
     createTool?: CreateToolFn;
     Agent?: AgentClass;
+    /**
+     * The Mastra class from the same copy of core as the engine under test. Tests that
+     * host a workflow themselves use this one: a host from another copy of core (source
+     * next to a built `dist`) runs steps with classes the engine's `instanceof` checks
+     * don't recognize.
+     */
+    Mastra?: MastraClass;
   };
 
   /**
@@ -814,7 +863,7 @@ export interface WorkflowTestConfig {
 export interface ExecuteWorkflowOptions {
   runId?: string;
   resourceId?: string;
-  requestContext?: Record<string, unknown>;
+  requestContext?: RequestContext;
   initialState?: Record<string, unknown>;
   perStep?: boolean;
   /** Close stream when workflow suspends (for streaming tests) */
@@ -921,6 +970,12 @@ export interface WorkflowCreatorContext {
  * Context passed to domain test creators
  */
 export interface WorkflowTestContext extends WorkflowCreatorContext {
+  /**
+   * Mastra class from the engine factory, for tests that host a workflow themselves
+   * (optional - tests that need it skip when the factory does not provide it)
+   */
+  Mastra?: MastraClass;
+
   /**
    * Execute a workflow and return the result
    */

@@ -1,74 +1,109 @@
+import { defaultModelPack } from '@mastra/factory/model-packs';
+import type { ModelPackSet, ModelSelectionRequest } from '@mastra/factory/model-packs';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
 import { useDefaultModelQuery } from '../../../../hooks/use-default-model';
-import { useChatModelScope } from './useChatModelScope';
-import { useSwitchAgentControllerModelMutation } from '../../../../hooks/useAgentControllerStateMutations';
-import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { useFallbackModelQuery } from '../../../../hooks/useAvailableModels';
+import { usePendingSessionModel, useSetSessionModelMutation } from '../../../../hooks/useSessionModel';
+import { DEFAULT_MODEL_SELECTION, selectionPack } from '../services/modelSelection';
+import { routedModelDefaults } from './chatDefaultModel';
 import { ChatModelsContext } from './ChatModelsContext';
 import type { ChatModelsApi } from './ChatModelsContext';
 import { useChatConnection } from './useChatConnection';
+import { useChatModelScope } from './useChatModelScope';
 import { useChatSessionContext } from './useChatSessionContext';
 
-interface ChatModelsProviderProps {
+/** One provider for a draft and its thread, so a Start keeps the picked model on screen. */
+export function ChatModelsProvider({
+  children,
+  initialDraftSelection,
+}: {
   children: ReactNode;
-}
-
-export function ChatModelsProvider({ children }: ChatModelsProviderProps) {
+  initialDraftSelection?: ModelSelectionRequest;
+}) {
   const { draftSessionId } = useChatSessionContext();
-  return draftSessionId ? (
-    <DraftChatModelsProvider>{children}</DraftChatModelsProvider>
-  ) : (
-    <LiveChatModelsProvider>{children}</LiveChatModelsProvider>
+  const [draftSelection, setDraftSelection] = useState(initialDraftSelection ?? DEFAULT_MODEL_SELECTION);
+  const draft = useDraftModels(draftSelection, setDraftSelection);
+  const live = useLiveModels(draft.activeModelId);
+  return (
+    <ChatModelsContext.Provider value={draftSessionId ? draft : { ...live, selection: draftSelection }}>
+      {children}
+    </ChatModelsContext.Provider>
   );
 }
 
-function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
-  const { projectQuery: factoryProjectQuery, modelScope } = useChatModelScope();
+function useDraftModels(
+  selection: ModelSelectionRequest,
+  setSelection: (selection: ModelSelectionRequest) => void,
+): ChatModelsApi {
+  const { projectQuery, modelScope, catalogTarget } = useChatModelScope();
   const defaultModelQuery = useDefaultModelQuery();
-  const [draftModelId, setDraftModelId] = useState<string>();
-  const defaultModelId =
-    (modelScope === 'factory' ? factoryProjectQuery.data?.defaultModelId : defaultModelQuery.data?.modelId) ??
-    undefined;
-  const value: ChatModelsApi = {
-    activeModelId: draftModelId ?? defaultModelId ?? factoryProjectQuery.data?.defaultModelId ?? undefined,
-    defaultModelId,
-    isLoading: factoryProjectQuery.isPending || defaultModelQuery.isPending,
-    error: defaultModelQuery.error ?? factoryProjectQuery.error ?? undefined,
-    setModel: modelId => {
-      setDraftModelId(modelId);
-      return Promise.resolve();
+  const fallbackModelQuery = useFallbackModelQuery(catalogTarget);
+  const defaults = routedModelDefaults(modelScope, projectQuery.data, defaultModelQuery.data);
+  const selectedPack = selectionPack(selection, defaults);
+  const exactModelId = selection.kind === 'model' ? selection.modelId : undefined;
+  const personalDefaultUsed = modelScope !== 'factory';
+  const usesFallback = !selectedPack && !exactModelId;
+  const activeModelId = selectedPack?.models[0]?.modelId ?? exactModelId ?? fallbackModelQuery.data;
+  return {
+    activeModelId,
+    modelPacks: defaults.modelPacks,
+    defaultModelPack: defaultModelPack(defaults),
+    selectedPack,
+    selection,
+    selectedThinkingLevel:
+      selectedPack?.models[0]?.thinkingLevel ?? (selection.kind === 'model' ? selection.thinkingLevel : undefined),
+    switching: false,
+    isLoading:
+      projectQuery.isPending ||
+      (personalDefaultUsed && defaultModelQuery.isPending) ||
+      (usesFallback && fallbackModelQuery.isPending),
+    error:
+      projectQuery.error ??
+      (personalDefaultUsed ? defaultModelQuery.error : null) ??
+      (usesFallback ? fallbackModelQuery.error : null) ??
+      undefined,
+    select: async next => {
+      setSelection(next);
     },
   };
-
-  return <ChatModelsContext.Provider value={value}>{children}</ChatModelsContext.Provider>;
 }
 
-function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
-  const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
+function useLiveModels(draftModelId: string | undefined): Omit<ChatModelsApi, 'selection'> {
+  const { sessionId, resourceId, sessionThreadId } = useChatSessionContext();
   const { state } = useChatConnection();
-  const { projectQuery, modelScope, sessionModelsQuery } = useChatModelScope();
-  const defaultModelQuery = useDefaultModelQuery();
-  const localDefaultModelId =
-    modelScope === 'factory' ? projectQuery.data?.defaultModelId : defaultModelQuery.data?.modelId;
-  const defaultModelId = sessionModelsQuery.isSuccess
-    ? (('defaultModelId' in sessionModelsQuery.data ? sessionModelsQuery.data.defaultModelId : localDefaultModelId) ??
-      undefined)
-    : undefined;
-  const { mutateAsync: switchModel } = useSwitchAgentControllerModelMutation({
-    agentControllerId: AGENT_CONTROLLER_ID,
+  const { catalogTarget, sessionModelsQuery } = useChatModelScope();
+  const catalog = sessionModelsQuery.data;
+  const packSet: ModelPackSet = {
+    modelPacks: catalog?.modelPacks ?? [],
+    defaultModelPackId: catalog?.defaultModelPackId ?? null,
+  };
+  const { mutateAsync: setSessionModel } = useSetSessionModelMutation({
     resourceId,
-    scope: projectPath,
-    baseUrl,
-    enabled: sessionEnabled,
+    threadId: catalogTarget.threadId ?? sessionThreadId ?? sessionId,
+    sessionId,
   });
-  const value: ChatModelsApi = {
-    activeModelId: state?.modelId,
-    defaultModelId,
+  const pending = usePendingSessionModel(sessionId);
+  const stored = catalog?.modelSelection;
+  const selectedPack = pending
+    ? selectionPack(pending, packSet)
+    : stored?.kind === 'pack'
+      ? packSet.modelPacks.find(pack => pack.id === stored.packId)
+      : undefined;
+  const pendingModel = pending?.kind === 'model' ? pending : undefined;
+  const activeModelId = selectedPack?.models[0]?.modelId ?? pendingModel?.modelId ?? state?.modelId ?? draftModelId;
+  return {
+    activeModelId,
+    modelPacks: packSet.modelPacks,
+    defaultModelPack: defaultModelPack(packSet),
+    selectedPack,
+    selectedThinkingLevel: selectedPack?.models[0]?.thinkingLevel ?? pendingModel?.thinkingLevel,
+    switching: pending !== undefined,
     isLoading: sessionModelsQuery.isPending,
     error: sessionModelsQuery.error ?? undefined,
-    setModel: modelId => switchModel({ modelId }),
+    select: async next => {
+      await setSessionModel(next);
+    },
   };
-
-  return <ChatModelsContext.Provider value={value}>{children}</ChatModelsContext.Provider>;
 }

@@ -444,19 +444,6 @@ describe('Plan pieces on their own', () => {
     expect(screen.getByText('Migration plan')).toBeTruthy();
     expect(screen.queryByText('Plan')).toBeNull();
   });
-
-  it('names the plan file it came from', () => {
-    renderPlan(
-      <Plan>
-        <PlanBody>
-          <PlanFile>docs/plans/2026-06-migration.md</PlanFile>
-        </PlanBody>
-      </Plan>,
-    );
-
-    expect(screen.getByText('Plan file')).toBeTruthy();
-    expect(screen.getByText('docs/plans/2026-06-migration.md')).toBeTruthy();
-  });
 });
 
 describe('PlanPath', () => {

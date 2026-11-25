@@ -1,61 +1,58 @@
-import { NotificationActivity } from '@mastra/playground-ui/components/ai/activity';
+import {
+  notificationLinkLabel,
+  notificationMetadata,
+  notificationSourceName,
+  notificationUrl,
+  isSkillNotificationSignal,
+} from '@mastra/playground-ui/domains/chat/transcript/components/notifications';
+import {
+  Activity,
+  ActivityHeader,
+  ActivityIcon,
+  ActivityLabel,
+  NotificationActivity,
+} from '@mastra/playground-ui/components/ai/activity';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Bell, CircleDot } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { CircleDotIcon } from '@mastra/playground-ui/icons/CircleDotIcon';
 import type { ReactNode } from 'react';
+import { Link, useParams } from 'react-router';
+
+import { useApiConfig } from '../../../../api/config';
+import { queryKeys } from '../../../../api/keys';
+import { useSessionActivityQuery } from '../../../../hooks/useSessionRows';
+import { invalidateSessionQueries } from '../../../../hooks/useWorkspaces';
+import { threadPath } from '../../workspaces/services/factoryPaths';
+import { answerParkedApproval } from '../../workspaces/services/user-sessions';
 
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
-import type { MessageEntry, NotificationEntry, NotificationSummaryEntry } from '../services/transcript';
-import { parseSkillActivation } from '@mastra/playground-ui/domains/chat/messages/skill-activation';
-import { isRecord } from './transcript-shared';
-import { signalPartsText } from './TranscriptSignals';
+import type { NotificationEntry, NotificationSummaryEntry } from '../services/transcript';
+import { IconBell2 } from '@mastra/playground-ui/icons/central/IconBell2';
 
 /** Where a notification's "Open on …" link points; GitHub and GitLab name the provider. */
-export function notificationLinkLabel(entry: Pick<NotificationEntry, 'source'>): string {
-  if (entry.source === 'gitlab') return 'Open on GitLab';
-  if (entry.source === 'github') return 'Open on GitHub';
-  return 'Open notification target';
-}
-
-export function notificationUrl(entry: Pick<NotificationEntry, 'source' | 'metadata'>): string | undefined {
-  const targetUrl = entry.metadata?.targetUrl;
-  if (typeof targetUrl === 'string' && /^https:\/\/github\.com\//.test(targetUrl)) return targetUrl;
-  // GitLab instances live on any host, so the server-supplied target is trusted
-  // only when it is an https merge-request or issue page.
-  if (
-    entry.source === 'gitlab' &&
-    typeof targetUrl === 'string' &&
-    /^https:\/\/[^/\s]+\/.+\/-\/(merge_requests|issues)\/\d+/.test(targetUrl)
-  ) {
-    return targetUrl;
-  }
-
-  const repository = entry.metadata?.repository;
-  if (typeof repository !== 'string' || !/^[^/]+\/[^/]+$/.test(repository)) return undefined;
-  const pullRequestNumber = entry.metadata?.pullRequestNumber;
-  if (typeof pullRequestNumber === 'number') return `https://github.com/${repository}/pull/${pullRequestNumber}`;
-  const issueNumber = entry.metadata?.issueNumber;
-  if (typeof issueNumber === 'number') return `https://github.com/${repository}/issues/${issueNumber}`;
-  return undefined;
-}
-
 function notificationPresentation(entry: NotificationEntry): { state: string; icon: ReactNode; className?: string } {
   const action = entry.metadata?.action;
   if (entry.notifKind === 'pull-request-merged') {
-    return { state: 'merged', icon: <PullRequestStatusIcon status="merged" size={13} decorative /> };
+    return { state: 'merged', icon: <PullRequestStatusIcon status="merged" decorative /> };
   }
   if (entry.notifKind === 'pull-request-closed') {
-    return { state: 'closed', icon: <PullRequestStatusIcon status="closed" size={13} decorative /> };
+    return { state: 'closed', icon: <PullRequestStatusIcon status="closed" decorative /> };
   }
   if (action === 'opened' || action === 'reopened') {
-    return { state: 'open', icon: <CircleDot size={13} />, className: 'text-success-indicator' };
+    return { state: 'open', icon: <CircleDotIcon />, className: 'text-success-indicator' };
   }
-  return { state: 'notification', icon: <Bell size={13} />, className: 'text-warning-foreground' };
+  return { state: 'notification', icon: <IconBell2 />, className: 'text-warning-foreground' };
 }
 
 export function NotificationCard({ entry }: { entry: NotificationEntry }) {
   const presentation = notificationPresentation(entry);
   const url = notificationUrl(entry);
-  return (
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const waiting = waitingSession(entry);
+  const activity = (
     <NotificationActivity
       state={presentation.state}
       label={entry.source ?? 'notification'}
@@ -64,109 +61,131 @@ export function NotificationCard({ entry }: { entry: NotificationEntry }) {
       link={url ? { href: url, label: notificationLinkLabel(entry) } : undefined}
     />
   );
+  if (!waiting || !factoryId) return activity;
+  return (
+    <div className="flex flex-col gap-1.5">
+      {activity}
+      <WaitingSessionActions factoryId={factoryId} waiting={waiting} />
+    </div>
+  );
+}
+
+/** The session a notification says is waiting on someone, and the call a yes or no would answer. */
+interface WaitingSession {
+  sessionId: string;
+  threadId: string;
+  /** Set when the session waits on a bare yes or no; a typed answer is given in the session itself. */
+  toolCallId?: string;
+}
+
+function waitingSession(entry: NotificationEntry): WaitingSession | undefined {
+  if (entry.notifKind !== 'approval' && entry.notifKind !== 'blocked') return undefined;
+  const sessionId = entry.attributes?.['from-session'];
+  if (typeof sessionId !== 'string' || !sessionId) return undefined;
+  const threadId = entry.attributes?.['from-thread'];
+  const toolCallId = entry.attributes?.['tool-call-id'];
+  return {
+    sessionId,
+    threadId: typeof threadId === 'string' && threadId ? threadId : sessionId,
+    ...(entry.attributes?.['waiting-for'] === 'approval' && typeof toolCallId === 'string' && toolCallId
+      ? { toolCallId }
+      : {}),
+  };
+}
+
+/**
+ * Opens the waiting session, and answers its call from here where a yes or no is all it needs.
+ * The server decides who may answer; its refusal is shown in place of the buttons.
+ */
+function WaitingSessionActions({ factoryId, waiting }: { factoryId: string; waiting: WaitingSession }) {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  const parked = useSessionActivityQuery(factoryId).data?.parkedSessionIds.includes(waiting.sessionId);
+  const { toolCallId } = waiting;
+  const answer = useMutation({
+    mutationKey: ['answer-parked-approval', waiting.sessionId, toolCallId],
+    mutationFn: (decision: 'approve' | 'decline') =>
+      answerParkedApproval(baseUrl, waiting.sessionId, decision, toolCallId),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryId) });
+      void invalidateSessionQueries(queryClient, factoryId);
+    },
+  });
+  const outcome = answer.isSuccess
+    ? answer.variables === 'approve'
+      ? 'Approved'
+      : 'Declined'
+    : answer.isError
+      ? answer.error.message
+      : parked === false
+        ? 'Answered'
+        : undefined;
+
+  return (
+    <div role="group" aria-label="Waiting session" className="flex flex-wrap items-center gap-2 pl-6">
+      {toolCallId && !outcome && parked && (
+        <>
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={answer.isPending}
+            loading={answer.isPending && answer.variables === 'approve'}
+            onClick={() => answer.mutate('approve')}
+          >
+            Approve
+          </Button>
+          <Button
+            size="sm"
+            disabled={answer.isPending}
+            loading={answer.isPending && answer.variables === 'decline'}
+            onClick={() => answer.mutate('decline')}
+          >
+            Decline
+          </Button>
+        </>
+      )}
+      {toolCallId && outcome && (
+        <Txt variant="caption" tone="muted" role="status">
+          {outcome}
+        </Txt>
+      )}
+      <Button size="sm" variant="ghost" render={<Link to={threadPath(factoryId, waiting)} />}>
+        Open session
+      </Button>
+    </div>
+  );
 }
 
 export function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry }) {
-  return <NotificationActivity state="summary" label="Notification summary" message={entry.message} />;
-}
+  const sources = Object.entries(entry.bySource).filter(([, count]) => count > 0);
+  const counted = entry.pending > 0 && sources.length > 0;
+  const urgent = (entry.byPriority.urgent ?? 0) > 0 || (entry.byPriority.high ?? 0) > 0;
 
-export function notificationMetadata(entry: MessageEntry): Array<NotificationEntry | NotificationSummaryEntry> {
-  if (entry.message.role === 'signal') return signalNotifications(entry);
-
-  const harnessContent = entry.message.content.metadata?.harnessContent;
-  if (!Array.isArray(harnessContent)) return [];
-
-  const notifications: Array<NotificationEntry | NotificationSummaryEntry> = [];
-  for (const [index, part] of harnessContent.entries()) {
-    if (typeof part !== 'object' || part === null || !('type' in part)) continue;
-    if (!('message' in part) || typeof part.message !== 'string') continue;
-
-    if (part.type === 'notification') {
-      notifications.push({
-        kind: 'notification',
-        id: `${entry.id}-notification-${index}`,
-        notificationId:
-          'notificationId' in part && typeof part.notificationId === 'string' ? part.notificationId : undefined,
-        message: part.message,
-        source: 'source' in part && typeof part.source === 'string' ? part.source : undefined,
-        notifKind: 'kind' in part && typeof part.kind === 'string' ? part.kind : undefined,
-        priority: 'priority' in part && typeof part.priority === 'string' ? part.priority : undefined,
-        metadata: 'metadata' in part && isRecord(part.metadata) ? part.metadata : undefined,
-      });
-      continue;
-    }
-
-    if (part.type !== 'notification_summary') continue;
-    const pending = 'pending' in part && typeof part.pending === 'number' ? part.pending : 0;
-    const bySource = 'bySource' in part && isNumberRecord(part.bySource) ? part.bySource : {};
-    const byPriority = 'byPriority' in part && isNumberRecord(part.byPriority) ? part.byPriority : {};
-    const notificationIds =
-      'notificationIds' in part && Array.isArray(part.notificationIds)
-        ? part.notificationIds.filter((id: unknown): id is string => typeof id === 'string')
-        : [];
-    notifications.push({
-      kind: 'notification_summary',
-      id: `${entry.id}-notification-summary-${index}`,
-      message: part.message,
-      pending,
-      bySource,
-      byPriority,
-      notificationIds,
-    });
-  }
-  return notifications;
-}
-
-export function isSkillNotificationSignal(entry: MessageEntry): boolean {
-  if (entry.message.role !== 'signal') return false;
-  const signal = entry.message.content.metadata?.signal;
-  return isRecord(signal) && signal.type === 'notification' && Boolean(parseSkillActivation(signalPartsText(entry)));
-}
-
-function signalNotifications(entry: MessageEntry): Array<NotificationEntry | NotificationSummaryEntry> {
-  const signal = entry.message.content.metadata?.signal;
-  if (!isRecord(signal) || signal.type !== 'notification') return [];
-  if (isSkillNotificationSignal(entry)) return [];
-
-  const text = signalPartsText(entry);
-  const attributes = isRecord(signal.attributes) ? signal.attributes : {};
-  const metadata = isRecord(signal.metadata) ? signal.metadata : {};
-
-  if (signal.tagName === 'notification-summary') {
-    const summary = isRecord(metadata.notificationSummary) ? metadata.notificationSummary : {};
-    return [
-      {
-        kind: 'notification_summary',
-        id: `${entry.id}-signal-summary`,
-        message: text,
-        pending: typeof summary.pending === 'number' ? summary.pending : 0,
-        bySource: isNumberRecord(summary.bySource) ? summary.bySource : {},
-        byPriority: isNumberRecord(summary.byPriority) ? summary.byPriority : {},
-        notificationIds: Array.isArray(summary.notificationIds)
-          ? summary.notificationIds.filter((id: unknown): id is string => typeof id === 'string')
-          : [],
-      },
-    ];
-  }
-
-  return [
-    {
-      kind: 'notification',
-      id: `${entry.id}-signal-notification`,
-      notificationId: typeof attributes.id === 'string' ? attributes.id : undefined,
-      message: text,
-      source: typeof attributes.source === 'string' ? attributes.source : undefined,
-      notifKind: typeof attributes.kind === 'string' ? attributes.kind : undefined,
-      priority: typeof attributes.priority === 'string' ? attributes.priority : undefined,
-      metadata,
-    },
-  ];
-}
-
-function isNumberRecord(value: unknown): value is Record<string, number> {
   return (
-    typeof value === 'object' &&
-    value !== null &&
-    Object.values(value).every(candidate => typeof candidate === 'number')
+    <Activity foldable={false} appearance="inline" data-notification-state="summary" aria-label="Notification summary">
+      <ActivityHeader>
+        <ActivityIcon className="[&_svg]:size-icon-md">
+          <IconBell2 className={cn(urgent && 'text-warning-foreground')} aria-hidden />
+        </ActivityIcon>
+        <ActivityLabel className="text-subheading">Notifications</ActivityLabel>
+        <ActivityLabel wrap className="text-body">
+          {counted ? `${entry.pending} new` : entry.message}
+        </ActivityLabel>
+        {counted &&
+          sources.map(([source, count]) => (
+            <Badge key={source} size="xs">
+              {sources.length > 1 ? `${notificationSourceName(source)} ${count}` : notificationSourceName(source)}
+            </Badge>
+          ))}
+      </ActivityHeader>
+    </Activity>
   );
 }
+
+export {
+  isSkillNotificationSignal,
+  notificationLinkLabel,
+  notificationMetadata,
+  notificationSourceName,
+  notificationUrl,
+};

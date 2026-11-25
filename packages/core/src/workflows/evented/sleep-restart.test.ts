@@ -78,18 +78,16 @@ describe('evented workflow durable sleep recovery', () => {
     const storage = new MockStore();
     const beforeSleep = vi.fn(async () => ({ value: 'persist me' }));
     const afterSleep = vi.fn(async ({ inputData }: { inputData: { value: string } }) => inputData);
-    const workflow = createSleepingWorkflow({
-      id: 'sleep-restart-workflow',
-      duration: 5_000,
-      beforeSleep,
-      afterSleep,
-    });
+    const definition = { id: 'sleep-restart-workflow', duration: 5_000, beforeSleep, afterSleep };
+    const workflow = createSleepingWorkflow(definition);
     const workflowsStore = await startSleepingRun({ storage, workflow, runId: 'sleep-restart-run' });
+    // The replacement process builds its own workflow object, as a real restart does.
+    const rebuilt = createSleepingWorkflow(definition);
     const replacementRuntime = new Mastra({
       logger: false,
       storage,
       pubsub: new EventEmitterPubSub(),
-      workflows: { [workflow.id]: workflow },
+      workflows: { [rebuilt.id]: rebuilt },
     });
     await replacementRuntime.startWorkers();
     await replacementRuntime.restartAllActiveWorkflowRuns();
@@ -103,6 +101,7 @@ describe('evented workflow durable sleep recovery', () => {
     });
     expect(beforeSleep).toHaveBeenCalledTimes(1);
     expect(afterSleep).toHaveBeenCalledTimes(1);
+    expect(afterSleep.mock.calls[0]![0].inputData).toEqual({ value: 'persist me' });
     await replacementRuntime.stopWorkers();
   });
 
@@ -110,20 +109,16 @@ describe('evented workflow durable sleep recovery', () => {
     const storage = new MockStore();
     const beforeSleep = vi.fn(async () => ({ value: 'persist me' }));
     const afterSleep = vi.fn(async ({ inputData }: { inputData: { value: string } }) => inputData);
-    const workflow = createSleepingWorkflow({
-      id: 'sleep-until-restart-workflow',
-      duration: 5_000,
-      beforeSleep,
-      afterSleep,
-      until: true,
-    });
+    const definition = { id: 'sleep-until-restart-workflow', duration: 5_000, beforeSleep, afterSleep, until: true };
+    const workflow = createSleepingWorkflow(definition);
     const workflowsStore = await startSleepingRun({ storage, workflow, runId: 'sleep-until-restart-run' });
 
+    const rebuilt = createSleepingWorkflow(definition);
     const replacementRuntime = new Mastra({
       logger: false,
       storage,
       pubsub: new EventEmitterPubSub(),
-      workflows: { [workflow.id]: workflow },
+      workflows: { [rebuilt.id]: rebuilt },
     });
     await replacementRuntime.startWorkers();
     await replacementRuntime.restartAllActiveWorkflowRuns();
@@ -137,6 +132,7 @@ describe('evented workflow durable sleep recovery', () => {
     });
     expect(beforeSleep).toHaveBeenCalledTimes(1);
     expect(afterSleep).toHaveBeenCalledTimes(1);
+    expect(afterSleep.mock.calls[0]![0].inputData).toEqual({ value: 'persist me' });
     await replacementRuntime.stopWorkers();
   });
 

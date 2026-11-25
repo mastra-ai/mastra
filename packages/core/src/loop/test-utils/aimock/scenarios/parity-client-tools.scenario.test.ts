@@ -10,8 +10,10 @@
  * `generate`. The parity helper only drives streaming turns, so the `generate`
  * variant is driven per engine directly.
  *
- * Harness exclusions: the client answering the call on a later turn, and recovery
- * while a client call is outstanding (the run has ended).
+ * The client answering the call on a later turn is covered too: the outcome must complete
+ * the stored call rather than be saved as a second copy of it.
+ *
+ * Harness exclusion: recovery while a client call is outstanding (the run has ended).
  */
 
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
@@ -21,7 +23,6 @@ import { Agent } from '../../../../agent';
 import { createDurableAgent } from '../../../../agent/durable/create-durable-agent';
 import { createEventedAgent } from '../../../../agent/durable/create-evented-agent';
 import type { DurableAgent } from '../../../../agent/durable/durable-agent';
-import { EventEmitterPubSub } from '../../../../events/event-emitter';
 import { Mastra } from '../../../../mastra';
 import { MockMemory } from '../../../../memory/mock';
 import { InMemoryStore } from '../../../../storage';
@@ -131,6 +132,243 @@ describeParity('client-tools parity', target => {
     expect(plain.streamedText).toBe('');
   });
 
+  // The continuations @mastra/client-js sends once the browser has run the tool: the thread
+  // subscription answers with an assistant message, the stream route with a tool message. Neither
+  // carries the id of the stored message that holds the pending call.
+  const continuations = {
+    'an assistant message': (call: { toolCallId: string; toolName: string; args: unknown }) => ({
+      role: 'assistant' as const,
+      content: [
+        { type: 'tool-call' as const, toolCallId: call.toolCallId, toolName: call.toolName, input: call.args },
+        {
+          type: 'tool-result' as const,
+          toolCallId: call.toolCallId,
+          toolName: call.toolName,
+          output: { type: 'json' as const, value: { colour: 'teal' } },
+        },
+      ],
+    }),
+    'a tool message': (call: { toolCallId: string; toolName: string; args: unknown }) => ({
+      role: 'tool' as const,
+      content: [
+        {
+          type: 'tool-result' as const,
+          toolCallId: call.toolCallId,
+          toolName: call.toolName,
+          output: { type: 'json' as const, value: { colour: 'teal' } },
+        },
+      ],
+    }),
+  };
+
+  for (const [shape, continuation] of Object.entries(continuations)) {
+    it(`a client answering the call with ${shape} completes the stored call instead of saving a second copy`, async () => {
+      const memories = new Map<ParityEngine, MockMemory>();
+      await expectParity(target, {
+        model: { respond },
+        buildAgent: ({ engine, model }) => {
+          const memory = new MockMemory();
+          memories.set(engine, memory);
+          return new Agent({ id: 't33-agent', name: 'T33 Agent', instructions: 'Follow the script.', model, memory });
+        },
+        run: async handle => {
+          const first = await handle.turn('Go.', { ...TURN_OPTIONS, clientTools: CLIENT_TOOLS });
+          await handle.turn([continuation(first.toolCalls[0]!)], { ...TURN_OPTIONS, clientTools: CLIENT_TOOLS });
+        },
+      });
+
+      for (const engine of ['plain', target] as const) {
+        const { messages } = await memories.get(engine)!.recall({ threadId: THREAD, resourceId: RESOURCE });
+        const invocations = toolParts(messages).map(part => part.toolInvocation as Record<string, unknown>);
+        expect(invocations.map(({ state, toolCallId, result }) => ({ state, toolCallId, result }))).toEqual([
+          { state: 'result', toolCallId: 'parity-call-1', result: { colour: 'teal' } },
+        ]);
+        expect(messages.map(message => message.role)).toEqual(['user', 'assistant']);
+      }
+    });
+  }
+
+  // The model calls a server tool and a client tool in the same step: the server call is stored
+  // completed next to the pending client call, and the client sends both back once it has run.
+  // Technical: the stored id was only reused when every tool part advanced a stored call, and the
+  // already completed server call never does, so the client call was saved a second time.
+  it('a client answering its call next to a completed server call completes the stored call instead of saving a second copy', async () => {
+    const lookup = createTool({
+      id: 'lookup',
+      description: 'runs on the server',
+      inputSchema: z.object({ city: z.string() }),
+      execute: async () => ({ temperature: 21 }),
+    });
+    const serverCall = { toolCallId: 'parity-call-server', toolName: 'lookup', args: { city: 'Paris' } };
+    const memories = new Map<ParityEngine, MockMemory>();
+    await expectParity(target, {
+      model: {
+        respond: request => {
+          const prompt = request.prompt as Array<{ content?: unknown }>;
+          const answered = prompt.some(
+            message =>
+              Array.isArray(message.content) &&
+              message.content.some(
+                part =>
+                  (part as { type?: string; toolCallId?: string }).type === 'tool-result' &&
+                  (part as { toolCallId?: string }).toolCallId === 'parity-call-1',
+              ),
+          );
+          if (answered) return textOnlyTape('client answered');
+          return [
+            ...toolCallTape(serverCall.toolName, serverCall.args, serverCall.toolCallId).slice(0, 3),
+            ...toolCallTape('askClient', { question: 'colour?' }).slice(2),
+          ];
+        },
+      },
+      buildAgent: ({ engine, model }) => {
+        const memory = new MockMemory();
+        memories.set(engine, memory);
+        return new Agent({
+          id: 't33-agent',
+          name: 'T33 Agent',
+          instructions: 'Follow the script.',
+          model,
+          memory,
+          tools: { lookup },
+        });
+      },
+      run: async handle => {
+        const first = await handle.turn('Go.', { ...TURN_OPTIONS, clientTools: CLIENT_TOOLS });
+        const clientCall = first.toolCalls.find(call => call.toolName === 'askClient')!;
+        await handle.turn(
+          [
+            {
+              role: 'assistant' as const,
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: serverCall.toolCallId,
+                  toolName: serverCall.toolName,
+                  input: serverCall.args,
+                },
+                {
+                  type: 'tool-result' as const,
+                  toolCallId: serverCall.toolCallId,
+                  toolName: serverCall.toolName,
+                  output: { type: 'json' as const, value: { temperature: 21 } },
+                },
+                ...continuations['an assistant message'](clientCall).content,
+              ],
+            },
+          ],
+          { ...TURN_OPTIONS, clientTools: CLIENT_TOOLS },
+        );
+      },
+    });
+
+    for (const engine of ['plain', target] as const) {
+      const { messages } = await memories.get(engine)!.recall({ threadId: THREAD, resourceId: RESOURCE });
+      const invocations = toolParts(messages).map(part => part.toolInvocation as Record<string, unknown>);
+      expect(invocations.map(({ state, toolCallId, result }) => ({ state, toolCallId, result }))).toEqual([
+        { state: 'result', toolCallId: 'parity-call-server', result: { temperature: 21 } },
+        { state: 'result', toolCallId: 'parity-call-1', result: { colour: 'teal' } },
+      ]);
+      expect(messages.map(message => message.role)).toEqual(['user', 'assistant']);
+    }
+  });
+
+  // Observational memory can observe the message holding the pending call before the client
+  // answers it, and seals it so nothing more is merged into what was observed. The answer then
+  // belongs in a new message, but it must still reach the model and be saved.
+  // Technical: the incoming message took the sealed message's id, so the stored copy replaced it
+  // and the client's result was dropped.
+  it('a client answering a call whose stored message was sealed by observation keeps its result', async () => {
+    const memories = new Map<ParityEngine, MockMemory>();
+    const results = await expectParity(target, {
+      model: { respond },
+      buildAgent: ({ engine, model }) => {
+        const memory = new MockMemory();
+        memories.set(engine, memory);
+        return new Agent({ id: 't33-agent', name: 'T33 Agent', instructions: 'Follow the script.', model, memory });
+      },
+      run: async handle => {
+        const first = await handle.turn('Go.', { ...TURN_OPTIONS, clientTools: CLIENT_TOOLS });
+
+        const memory = memories.get(handle.engine)!;
+        const { messages } = await memory.recall({ threadId: THREAD, resourceId: RESOURCE });
+        const pending = messages.find(message => message.role === 'assistant')!;
+        const lastPart = pending.content.parts.at(-1)! as { metadata?: Record<string, unknown> };
+        lastPart.metadata = { ...lastPart.metadata, mastra: { sealedAt: Date.now() } };
+        pending.content.metadata = { ...pending.content.metadata, mastra: { sealed: true } };
+        await memory.saveMessages({ messages: [pending] });
+
+        await handle.turn([continuations['an assistant message'](first.toolCalls[0]!)], {
+          ...TURN_OPTIONS,
+          clientTools: CLIENT_TOOLS,
+        });
+      },
+    });
+
+    for (const engine of ['plain', target] as const) {
+      expect(results[engine]!.turns[1]!.streamedText).toBe('client answered');
+
+      const { messages } = await memories.get(engine)!.recall({ threadId: THREAD, resourceId: RESOURCE });
+      const invocations = toolParts(messages).map(part => part.toolInvocation as Record<string, unknown>);
+      expect(invocations.filter(invocation => invocation.state === 'result')).toEqual([
+        expect.objectContaining({ toolCallId: 'parity-call-1', result: { colour: 'teal' } }),
+      ]);
+    }
+  });
+
+  // The user sends something else while the client tool is still pending, and the client answers
+  // afterwards. Only the latest stored message is matched against the client's answer, so the
+  // answer is saved as a new message: it must still reach the model and be kept, and the message
+  // stored in between is left as it was.
+  // Technical: answeringStoredCalls only compares against the newest stored row, so this locks in
+  // the fallback (outcomes keep their own id) rather than a re-key onto an unrelated message.
+  it('a client answering a call that is no longer the latest stored message keeps its result', async () => {
+    const memories = new Map<ParityEngine, MockMemory>();
+    const results = await expectParity(target, {
+      model: { respond },
+      buildAgent: ({ engine, model }) => {
+        const memory = new MockMemory();
+        memories.set(engine, memory);
+        return new Agent({ id: 't33-agent', name: 'T33 Agent', instructions: 'Follow the script.', model, memory });
+      },
+      run: async handle => {
+        const first = await handle.turn('Go.', { ...TURN_OPTIONS, clientTools: CLIENT_TOOLS });
+
+        await memories.get(handle.engine)!.saveMessages({
+          messages: [
+            {
+              id: 'later-note',
+              role: 'user',
+              createdAt: new Date(Date.now() + 1_000),
+              threadId: THREAD,
+              resourceId: RESOURCE,
+              content: { format: 2, parts: [{ type: 'text', text: 'Make it quick.' }] },
+            },
+          ],
+        });
+
+        await handle.turn([continuations['an assistant message'](first.toolCalls[0]!)], {
+          ...TURN_OPTIONS,
+          clientTools: CLIENT_TOOLS,
+        });
+      },
+    });
+
+    for (const engine of ['plain', target] as const) {
+      expect(results[engine]!.turns[1]!.streamedText).toBe('client answered');
+
+      const { messages } = await memories.get(engine)!.recall({ threadId: THREAD, resourceId: RESOURCE });
+      const invocations = toolParts(messages).map(part => part.toolInvocation as Record<string, unknown>);
+      expect(invocations.map(({ state, toolCallId }) => ({ state, toolCallId }))).toEqual([
+        { state: 'call', toolCallId: 'parity-call-1' },
+        { state: 'result', toolCallId: 'parity-call-1' },
+      ]);
+      expect(invocations.at(-1)).toMatchObject({ result: { colour: 'teal' } });
+      const note = messages.find(message => message.id === 'later-note');
+      expect(note?.content.parts).toEqual([{ type: 'text', text: 'Make it quick.' }]);
+    }
+  });
+
   it('generate: each engine returns the client tool call with reason tool-calls', async () => {
     const records = [];
     for (const engine of ['plain', target] as const) records.push(await driveGenerate(engine));
@@ -162,6 +400,7 @@ function createClientToolModel() {
           toolCallId: 'parity-call-1',
           toolName: 'askClient',
           input: JSON.stringify({ question: 'colour?' }),
+          providerExecuted: false,
         },
       ],
       finishReason: 'tool-calls',
@@ -185,7 +424,7 @@ async function driveGenerate(engine: ParityEngine) {
 
   let wrapper: DurableAgent<string, any, any> | undefined;
   if (engine === 'durable') {
-    wrapper = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+    wrapper = createDurableAgent({ agent });
   } else if (engine === 'evented') {
     wrapper = createEventedAgent({ agent });
   }

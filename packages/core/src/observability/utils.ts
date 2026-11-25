@@ -7,7 +7,16 @@
  */
 
 import { EntityType, SpanType } from './types';
-import type { Span, GetOrCreateSpanOptions, AnySpan, TracingOptions, TracingProperties } from './types';
+import type {
+  Span,
+  GetOrCreateSpanOptions,
+  AnySpan,
+  AnyExportedSpan,
+  ResumeTracingContext,
+  SpanSnapshot,
+  TracingOptions,
+  TracingProperties,
+} from './types';
 
 const entityTypeValues = new Set<EntityType>(Object.values(EntityType));
 let currentSpanResolver: (() => AnySpan | undefined) | undefined;
@@ -125,6 +134,58 @@ export function resolveExportedSpanId(
   return typeof span.getExportedSpanId === 'function' ? span.getExportedSpanId() : span.id;
 }
 
+const NO_OP_TRACE_ID = 'no-op-trace';
+const NO_OP_SPAN_ID = 'no-op';
+
+/**
+ * The lineage a suspending run saves so that its resume continues it (see `resumeFrom`).
+ * Takes the run's live span, or its exported span when another process persisted it.
+ * An unsampled run saves nothing: its no-op span has no real trace for a resume to join.
+ */
+export function getResumeTracingContext(span: AnySpan | AnyExportedSpan | undefined): ResumeTracingContext | undefined {
+  if (!span) return undefined;
+  const live = 'exportSpan' in span;
+  if (live ? !span.isValid : span.id === NO_OP_SPAN_ID) return undefined;
+  const exported = live ? span.exportSpan(span.observabilityInstance?.getConfig?.().includeInternalSpans) : span;
+  return {
+    traceId: span.traceId,
+    spanId: live ? resolveExportedSpanId(span) : span.id,
+    parentSpanId: exported?.parentSpanId,
+    resumedFromSpanId: exported && (exported.resumedFromSpanId ?? exported.id),
+    externalParentSpanId: exported?.externalParentSpanId,
+  };
+}
+
+/**
+ * The context a suspending workflow run saves: its lineage plus the trace's sampling decision and
+ * state, so a resume continues the trace as it was instead of deciding again. An unsampled run
+ * saves only that decision, since its no-op span has no trace for a resume to join. Agent runs
+ * save `getResumeTracingContext` alone and decide on resume.
+ */
+export function getWorkflowResumeTracingContext(
+  span: AnySpan | AnyExportedSpan | undefined,
+): ResumeTracingContext | undefined {
+  if (!span) return undefined;
+  const lineage = getResumeTracingContext(span);
+  if (!lineage) return { sampled: false };
+  const traceState = 'exportSpan' in span ? span.traceState : (span as SpanSnapshot<SpanType>).traceState;
+  if (!traceState) return { ...lineage, sampled: true };
+  // `nestedUnderParent` describes the original call's own parent; a resume supplies its own.
+  const { nestedUnderParent: _nested, ...ownTraceState } = traceState;
+  return { ...lineage, sampled: true, traceState: ownTraceState };
+}
+
+function resumeInSavedTrace(saved: ResumeTracingContext | undefined, targetTraceId: string | undefined) {
+  if (!saved?.traceId || saved.traceId === NO_OP_TRACE_ID) return undefined;
+  if ((targetTraceId ?? saved.traceId) !== saved.traceId) return undefined;
+  return {
+    traceId: saved.traceId,
+    parentSpanId: saved.spanId,
+    resumedFromSpanId: saved.resumedFromSpanId ?? saved.spanId,
+    externalParentSpanId: saved.externalParentSpanId,
+  };
+}
+
 /**
  * Creates or gets a child span from existing tracing context or starts a new trace.
  * This helper consolidates the common pattern of creating spans that can either be:
@@ -135,7 +196,17 @@ export function resolveExportedSpanId(
  * @returns The created Span or undefined if tracing is disabled
  */
 export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOptions<T>): Span<T> | undefined {
-  const { type, attributes, tracingContext, requestContext, tracingOptions, resumedFromSpanId, ...rest } = options;
+  const {
+    type,
+    attributes,
+    tracingContext,
+    requestContext,
+    tracingOptions,
+    resumeFrom,
+    resumedFromSpanId,
+    samplingDecision,
+    ...rest
+  } = options;
 
   // tracingOptions.metadata takes precedence, but a key it merely names with
   // an `undefined` value must not erase the span's own metadata value.
@@ -143,6 +214,11 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
     ...(rest.metadata ?? {}),
     ...Object.fromEntries(Object.entries(tracingOptions?.metadata ?? {}).filter(([, value]) => value !== undefined)),
   };
+  const resumed = resumeInSavedTrace(resumeFrom, tracingContext?.currentSpan?.traceId ?? tracingOptions?.traceId);
+  // The saved decision holds when the resume continues the saved trace, or when the original was unsampled and
+  // the resume names no trace of its own. An explicit caller decision wins, as it does for resumed agent runs.
+  const staysUnsampled = resumeFrom?.sampled === false && !tracingOptions?.traceId;
+  const saved = resumeFrom && (resumed || staysUnsampled) ? resumeFrom : undefined;
 
   // If we have a current span, create a child span
   if (tracingContext?.currentSpan) {
@@ -152,11 +228,28 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
       ...rest,
       metadata,
       requestContext,
+      resumedFromSpanId: resumed?.resumedFromSpanId,
     });
   }
 
   // Otherwise, try to create a new root span
   const instance = options.mastra?.observability?.getSelectedInstance({ requestContext });
+  // The resume call's own tracing options win field by field; the saved trace state fills what it left unset.
+  const savedState = saved?.traceState;
+  const rootTracingOptions: TracingOptions | undefined =
+    resumed || savedState
+      ? {
+          ...tracingOptions,
+          ...(resumed ? { traceId: resumed.traceId } : {}),
+          ...(savedState
+            ? {
+                hideInput: tracingOptions?.hideInput ?? savedState.hideInput,
+                hideOutput: tracingOptions?.hideOutput ?? savedState.hideOutput,
+                requestContextKeys: tracingOptions?.requestContextKeys ?? savedState.requestContextKeys,
+              }
+            : {}),
+        }
+      : tracingOptions;
 
   return instance?.startSpan<T>({
     type,
@@ -164,13 +257,15 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
     ...rest,
     metadata,
     requestContext,
-    tracingOptions,
-    traceId: tracingOptions?.traceId,
+    tracingOptions: rootTracingOptions,
+    traceId: rootTracingOptions?.traceId,
+    samplingDecision: samplingDecision ?? saved?.sampled,
     // A resumed run's parent is the suspended span, a Mastra span in the trace.
-    parentSpanId: resumedFromSpanId,
+    parentSpanId: resumed ? resumed.parentSpanId : resumedFromSpanId,
+    resumedFromSpanId: resumed?.resumedFromSpanId,
     // tracingOptions.parentSpanId is the public external-correlation channel;
     // the id belongs to the caller's tracing system, not Mastra's own parentage.
-    externalParentSpanId: tracingOptions?.parentSpanId,
+    externalParentSpanId: tracingOptions?.parentSpanId ?? resumed?.externalParentSpanId,
     customSamplerOptions: {
       requestContext,
       metadata,
@@ -250,6 +345,8 @@ export function getEntityTypeForSpan(span: {
       return EntityType.MCP_SERVER;
     case SpanType.PROCESSOR_RUN:
       return EntityType.OUTPUT_PROCESSOR;
+    case SpanType.CLASSIFIER_EVALUATION:
+      return EntityType.CLASSIFIER;
     default:
       return undefined;
   }

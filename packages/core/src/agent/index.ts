@@ -2,6 +2,7 @@ export { TripWire } from './trip-wire';
 export { MessageList, convertMessages, aiV5ModelMessageToV2PromptMessage, TypeDetector } from './message-list';
 export type { OutputFormat } from './message-list';
 export * from './types';
+export type { AgentStreamsConfig } from './streams/types';
 export * from './signals';
 export * from '../signals/signal-provider';
 export * from '../signals/webhook-signal-provider';
@@ -41,6 +42,7 @@ export * from './fs-routing';
 export type {
   AgentExecutionOptions,
   AgentExecutionOptionsBase,
+  AgentStreamOutput,
   InnerAgentExecutionOptions,
   MultiPrimitiveExecutionOptions,
   // Delegation hook types

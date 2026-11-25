@@ -1,8 +1,11 @@
 import { describe, expectTypeOf, it } from 'vitest';
+import { z as z3 } from 'zod/v3';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import { createTool } from '../tools';
 import { createWorkflow } from './create';
+import { createStep as createEventedStep } from './evented';
+import type { Step } from './step';
 import { createStep } from './workflow';
 
 describe('Workflow schema type inference', () => {
@@ -553,6 +556,56 @@ describe('Workflow schema type inference', () => {
     });
   });
 
+  // parallel() required each step's input to equal the previous output exactly,
+  // while then() only requires the previous output to satisfy the step's input.
+  // Both run the same way: every parallel step receives the full previous output.
+  describe('step input compatibility in parallel', () => {
+    const workflowInput = z.object({ value: z.number(), prompt: z.string() });
+
+    it('parallel should accept steps whose input is a subset of the previous output', () => {
+      const readsValue = createStep({
+        id: 'reads-value',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ doubled: z.number() }),
+        execute: async ({ inputData }) => ({ doubled: inputData.value * 2 }),
+      });
+
+      const readsPrompt = createStep({
+        id: 'reads-prompt',
+        inputSchema: z.object({ prompt: z.string() }),
+        outputSchema: z.object({ text: z.string() }),
+        execute: async ({ inputData }) => ({ text: inputData.prompt }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'parallel-subset-input',
+        inputSchema: workflowInput,
+        outputSchema: z.object({}),
+      });
+
+      const chained = workflow.parallel([readsValue, readsPrompt]);
+      expectTypeOf(chained).not.toBeNever();
+    });
+
+    it('parallel should still reject a step whose input the previous output does not satisfy', () => {
+      const needsMissingField = createStep({
+        id: 'needs-missing-field',
+        inputSchema: z.object({ missing: z.boolean() }),
+        outputSchema: z.object({ ok: z.boolean() }),
+        execute: async ({ inputData }) => ({ ok: inputData.missing }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'parallel-incompatible-input',
+        inputSchema: workflowInput,
+        outputSchema: z.object({}),
+      });
+
+      // @ts-expect-error - previous output has no `missing` field
+      workflow.parallel([needsMissingField]);
+    });
+  });
+
   // Regression: https://github.com/mastra-ai/mastra/issues/14627
   // createWorkflow must infer the workflow state type from stateSchema so that
   // `state` in dowhile/dountil condition callbacks is typed from the schema,
@@ -660,6 +713,22 @@ describe('declarative builder output inference', () => {
         expectTypeOf(inputData).toEqualTypeOf<{ score: number }>();
         return inputData;
       });
+  });
+
+  // zod v3 schemas have no `~standard.jsonSchema`, so options typed as StandardSchemaWithJSON rejected them (#29574)
+  it('agent steps infer the structured type from a zod v3 schema (#29574)', () => {
+    const schema = z3.object({ score: z3.number() });
+    type StructuredStep = Step<'typed-agent', unknown, { prompt: string }, { score: number }, unknown, unknown, any>;
+
+    createWorkflow({ id: 'wf', inputSchema: z.object({ prompt: z.string() }), outputSchema: z.any() })
+      .agent(agent, { structuredOutput: { schema } })
+      .map(async ({ inputData }) => {
+        expectTypeOf(inputData).toEqualTypeOf<{ score: number }>();
+        return inputData;
+      });
+
+    expectTypeOf(createStep(agent, { structuredOutput: { schema } })).toExtend<StructuredStep>();
+    expectTypeOf(createEventedStep(agent, { structuredOutput: { schema } })).toExtend<StructuredStep>();
   });
 
   it('.tool() advances prev schema to the tool output type', () => {

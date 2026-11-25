@@ -362,6 +362,32 @@ export interface AgentControllerConfig<TState = {}> {
   gateways?: MastraModelGatewayInterface[];
 
   /**
+   * Whether the model catalog and auth checks also consult the router's
+   * default gateways, which read provider credentials from the process
+   * environment. Set to `false` when only `gateways` may be used.
+   * @default true
+   */
+  includeDefaultGateways?: boolean;
+
+  /**
+   * Whether runs add automatic provider-side fallback models for the selected
+   * model, such as retrying a blocked `claude-fable-5` turn on
+   * `claude-opus-4-8`. Set to `false` when only the agent's own model may run.
+   * @default true
+   */
+  modelFallbacks?: boolean;
+
+  /**
+   * Whether backing agents are registered on the controller's Mastra, which
+   * lists them in `listAgents()` and lets the generic `/agents` server routes
+   * run them outside the controller. Set to `false` so they only run through
+   * this controller. Unregistered agents don't take the Mastra instance's
+   * `durable` defaults, and deferred notification delivery can't resolve them.
+   * @default true
+   */
+  registerAgents?: boolean;
+
+  /**
    * Observational Memory configuration defaults.
    * The AgentController auto-manages OM state (model IDs, thresholds) internally
    * and provides accessors that Memory's dynamic model functions can close over.
@@ -485,6 +511,8 @@ export interface AvailableModel {
   provider: string;
   /** Model name without provider prefix */
   modelName: string;
+  /** ISO release date, when supplied by the model catalog. */
+  releaseDate?: string;
   /** Whether the provider has valid authentication */
   hasApiKey: boolean;
   /** Environment variable for the provider's API key */
@@ -845,7 +873,16 @@ export type AgentControllerEvent =
   | { type: 'thread_owner_changed'; threadId: string; fromOwnerId: string | undefined; toOwnerId: string }
   | { type: 'state_changed'; state: Record<string, unknown>; changedKeys: string[] }
   | { type: 'agent_start' }
-  | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended' }
+  | {
+      type: 'agent_end';
+      reason?: 'complete' | 'aborted' | 'error' | 'suspended';
+      /**
+       * Why an aborted run stopped, when the abort said: `'thread-lease-lost'` when another run holds its thread
+       * lease, `'memory-failure'` when an observational-memory observer or reflector failure stopped it (the
+       * failure is emitted as an `error` event just before).
+       */
+      abortReason?: string;
+    }
   | { type: 'message_start'; message: MastraDBMessage }
   | {
       type: 'message_update';
@@ -916,9 +953,25 @@ export type AgentControllerEvent =
         }
       | { type: 'tool_input_end'; toolCallId: string; messageId?: string }
       | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
-      | { type: 'command_exit'; toolCallId: string; exitCode: number; success: boolean }
+      | {
+          /** Also sent by `kill_process` and `get_process_output`, for the process they stopped or waited on. */
+          type: 'command_exit';
+          toolCallId: string;
+          exitCode: number;
+          success: boolean;
+          killed?: boolean;
+          timedOut?: boolean;
+          /** Why the command could not run or be observed; its `exitCode` is then -1. */
+          error?: string;
+        }
     ))
-  | { type: 'usage_update'; usage: TokenUsage }
+  | {
+      type: 'usage_update';
+      /** This step's usage. */
+      usage: TokenUsage;
+      /** The active thread's running total after this step. Absent from servers that predate it. */
+      total?: TokenUsage;
+    }
   | { type: 'info'; message: string }
   | {
       type: 'error';
@@ -1162,11 +1215,11 @@ export interface AgentControllerRequestContext<TState = unknown> {
   /** Thread owner captured once when this run starts. */
   threadOwnerId?: string;
 
-  /** Current resource ID */
+  /** Current resource ID: whose threads and memory this session uses. Several sessions may share it. */
   resourceId: string;
 
-  /** Optional isolation scope used to identify this session within its resource. */
-  scope?: string;
+  /** ID of the session handling this request. Look the session up with `AgentController.getSession(sessionId)`. */
+  sessionId: string;
 
   /**
    * Snapshot of the relevant session-owned values for this request.

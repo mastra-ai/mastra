@@ -243,6 +243,34 @@ describe.each([
   });
 });
 
+describe.each([
+  ['workflow', createStep],
+  ['evented workflow', createEventedStep],
+] as const)('%s processor inputStep output', (_executor, makeStep) => {
+  it('hands on the list without the messages the processor removed through the messageList', async () => {
+    const messageList = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    messageList.add({ role: 'user', content: 'old note' }, 'input');
+    messageList.add({ role: 'user', content: 'current request' }, 'input');
+    const handedIn = messageList.get.all.db();
+    const oldId = handedIn.find(m => JSON.stringify(m.content).includes('old note'))!.id;
+
+    const step = makeStep({
+      id: 'pruner',
+      processInputStep: async ({ messageList: list }) => {
+        list.removeByIds([oldId]);
+        return list;
+      },
+    } satisfies Processor);
+
+    const result = (await step.execute({
+      inputData: { phase: 'inputStep', messages: handedIn, messageList, stepNumber: 1, systemMessages: [] },
+    } as any)) as { messages: MastraDBMessage[] };
+
+    expect(result.messages.map(m => m.id)).not.toContain(oldId);
+    expect(result.messages).toHaveLength(1);
+  });
+});
+
 describe('isProcessor', () => {
   it('should return true for object with processInput method', () => {
     const processor: Processor = {
@@ -1222,6 +1250,79 @@ describe('createStep with Processor', () => {
 
       await expect(step.execute({ inputData } as any)).rejects.toThrow('Unexpected error');
     });
+  });
+});
+
+describe('Processor workflow with ProcessorStepOutputSchema', () => {
+  it('passes providerMetadata to processOutputStep in the outputStep phase', async () => {
+    let receivedProviderMetadata: Record<string, unknown> | undefined;
+    const processor: Processor = {
+      id: 'provider-metadata-reader',
+      processOutputStep: async ({ messages, providerMetadata }) => {
+        receivedProviderMetadata = providerMetadata;
+        return messages;
+      },
+    };
+
+    const workflow = createWorkflow({
+      id: 'processor-output-schema-workflow',
+      inputSchema: ProcessorStepOutputSchema,
+      outputSchema: ProcessorStepOutputSchema,
+    })
+      .then(createStep(processor))
+      .commit();
+
+    const providerMetadata = { bedrock: { trace: { guardrail: { action: 'BLOCKED' } } } };
+    const run = await workflow.createRun();
+    const result = await run.start({
+      inputData: {
+        phase: 'outputStep',
+        messages: [],
+        messageList: createMockMessageList(),
+        stepNumber: 0,
+        providerMetadata,
+      },
+    });
+
+    expect(result.status).toBe('success');
+    expect(receivedProviderMetadata).toEqual(providerMetadata);
+  });
+});
+
+describe('Processor Step in Workflow - abort signal', () => {
+  it('passes the abort signal to every processor in a chain (#29208)', async () => {
+    const received: Array<AbortSignal | undefined> = [];
+    const recorder = (id: string): Processor => ({
+      id,
+      processInputStep: async ({ messageList, abortSignal }) => {
+        received.push(abortSignal);
+        return messageList;
+      },
+    });
+    const workflow = createWorkflow({
+      id: 'processor-abort-signal-chain',
+      inputSchema: ProcessorStepSchema,
+      outputSchema: ProcessorStepOutputSchema,
+      options: { validateInputs: false },
+    })
+      .then(createStep(recorder('first')))
+      .then(createStep(recorder('second')))
+      .commit();
+
+    const controller = new AbortController();
+    const run = await workflow.createRun();
+    const result = await run.start({
+      inputData: {
+        phase: 'inputStep',
+        messages: [],
+        messageList: createMockMessageList(),
+        stepNumber: 0,
+        abortSignal: controller.signal,
+      } as any,
+    });
+
+    expect(result.status).toBe('success');
+    expect(received).toEqual([controller.signal, controller.signal]);
   });
 });
 

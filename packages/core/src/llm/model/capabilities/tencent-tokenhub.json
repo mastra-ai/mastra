@@ -1,31 +1,213 @@
 {
-  "temperature": ["hy3", "hy3-preview", "hy4-preview"],
+  "attachment": [
+    "deepseek-v4.1-flash",
+    "deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-flash",
+    "glm-5.3-flash",
+    "hy4",
+    "hy4-flash",
+    "kimi-k2.6",
+    "kimi-k2.7-code",
+    "kimi-k2.7-code-highspeed",
+    "kimi-k2.8-preview",
+    "kimi-k3",
+    "kimi-k3.1-pro",
+    "mimo-v2.6-flash",
+    "mimo-v2.6-pro",
+    "minimax-m3",
+    "minimax-m3.1-flash",
+    "step-5-preview"
+  ],
+  "temperature": [
+    "deepseek-v4-pro",
+    "deepseek-v4-pro-0813",
+    "deepseek-v4.1-flash",
+    "deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-flash",
+    "deepseek/deepseek-v4-pro",
+    "glm-5.2",
+    "glm-5.3",
+    "glm-5.3-flash",
+    "hy3",
+    "hy4",
+    "hy4-flash",
+    "hy4-preview",
+    "kimi-k2.6",
+    "mimo-v2.6-flash",
+    "mimo-v2.6-pro",
+    "minimax-m3",
+    "minimax-m3.1-flash",
+    "step-5-preview"
+  ],
+  "structuredOutput": [
+    "deepseek-v4-pro",
+    "deepseek-v4-pro-0813",
+    "deepseek-v4.1-flash",
+    "deepseek-v4.1-flash-1017",
+    "deepseek/deepseek-flash",
+    "deepseek/deepseek-v4-pro",
+    "glm-5.2",
+    "glm-5.3",
+    "glm-5.3-flash",
+    "hy3",
+    "hy4",
+    "hy4-flash",
+    "hy4-preview",
+    "kimi-k2.6",
+    "kimi-k2.7-code",
+    "kimi-k2.7-code-highspeed",
+    "kimi-k2.8-preview",
+    "kimi-k3",
+    "kimi-k3.1-pro",
+    "mimo-v2.6-flash",
+    "mimo-v2.6-pro",
+    "step-5-preview"
+  ],
   "reasoning": {
-    "hy3-preview": [
+    "kimi-k2.6": [
       {
         "type": "toggle"
-      },
+      }
+    ],
+    "step-5-preview": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "hy3": [
+    "kimi-k3": [
       {
-        "type": "toggle"
-      },
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "hy4-flash": [
       {
         "type": "effort",
         "values": ["none", "high"]
       }
     ],
-    "hy4-preview": [
+    "deepseek-v4-pro": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "hy4": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "deepseek-v4.1-flash": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "mimo-v2.6-pro": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "deepseek-v4.1-flash-1017": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "hy4-preview": [
+      {
+        "type": "effort",
         "values": ["none", "high"]
+      }
+    ],
+    "deepseek-v4-pro-0813": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "minimax-m3.1-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "hy3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "glm-5.2": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "mimo-v2.6-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "kimi-k2.8-preview": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "kimi-k3.1-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4-pro": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek/deepseek-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

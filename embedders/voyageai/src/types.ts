@@ -16,6 +16,7 @@ export type VoyageTextModel =
   | 'voyage-3-large'
   | 'voyage-3.5'
   | 'voyage-3.5-lite'
+  | 'voyage-code-4'
   | 'voyage-code-3'
   | 'voyage-finance-2'
   | 'voyage-law-2';
@@ -254,6 +255,13 @@ export const TEXT_MODEL_INFO: Record<VoyageTextModel, Omit<VoyageModelInfo, 'id'
     isMultimodal: false,
     isContextualized: false,
   },
+  'voyage-code-4': {
+    maxInputTokens: 32000,
+    defaultDimension: 1024,
+    supportedDimensions: [256, 512, 1024, 2048],
+    isMultimodal: false,
+    isContextualized: false,
+  },
   'voyage-code-3': {
     maxInputTokens: 32000,
     defaultDimension: 1024,
@@ -379,6 +387,8 @@ export interface VoyageContextualizedEmbeddingResponse {
  * VoyageAI reranking models
  */
 export type VoyageRerankerModel =
+  | 'rerank-3'
+  | 'rerank-3-lite'
   | 'rerank-2.5'
   | 'rerank-2.5-lite'
   | 'rerank-2'
@@ -428,6 +438,14 @@ export interface VoyageRerankResponse {
  * Model metadata for VoyageAI reranker models
  */
 export const RERANKER_MODEL_INFO: Record<VoyageRerankerModel, { contextLength: number; description: string }> = {
+  'rerank-3': {
+    contextLength: 32000,
+    description: 'Highest accuracy, recommended for most applications',
+  },
+  'rerank-3-lite': {
+    contextLength: 32000,
+    description: 'Fast and cost-effective, latency-optimized',
+  },
   'rerank-2.5': {
     contextLength: 32000,
     description: 'Best quality with instruction-following support',

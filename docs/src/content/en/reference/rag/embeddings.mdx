@@ -9,6 +9,24 @@ packages:
 
 Mastra uses the AI SDK's `embed` and `embedMany` functions to generate vector embeddings for text inputs, enabling similarity search and RAG workflows.
 
+## Supported embedding models
+
+Memory and RAG vector query tools accept embedding models with specification versions `v1`, `v2`, `v3`, and `v4`. Mastra selects the matching AI SDK implementation from the model's `specificationVersion`. Existing model configurations remain unchanged.
+
+For direct calls, use the matching export from `@mastra/core/vector`: `embedV1`, `embedV2`, `embedV3`, or `embedV4`. For example, an AI SDK v7 provider exposes a specification `v4` embedding model:
+
+```typescript
+import { openai } from '@ai-sdk/openai'
+import { embedV4 } from '@mastra/core/vector'
+
+const { embedding } = await embedV4({
+  model: openai.embedding('text-embedding-3-small'),
+  value: 'Your text to embed',
+})
+```
+
+This example requires `@ai-sdk/openai` v4. The model specification version and AI SDK package version are different: AI SDK v4 uses embedding specification `v1`, v5 uses `v2`, v6 uses `v3`, and v7 uses `v4`.
+
 ## Single embedding
 
 The `embed` function generates a vector embedding for a single text input:

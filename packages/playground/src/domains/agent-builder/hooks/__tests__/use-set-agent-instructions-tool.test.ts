@@ -31,14 +31,14 @@ describe('useSetAgentInstructionsTool', () => {
 
   it('writes instructions to the form', async () => {
     const { tool, form } = renderTool();
-    await tool.execute!({ instructions: 'Be helpful and concise.' } as any);
+    await tool.execute!({ instructions: 'Be helpful and concise.' });
     expect(form().getValues('instructions')).toBe('Be helpful and concise.');
   });
 
   it('supports multi-paragraph markdown', async () => {
     const { tool, form } = renderTool();
     const body = '# Role\nYou are a helpful agent.\n\n## Style\nBe concise.';
-    await tool.execute!({ instructions: body } as any);
+    await tool.execute!({ instructions: body });
     expect(form().getValues('instructions')).toBe(body);
   });
 
@@ -54,7 +54,7 @@ describe('useSetAgentInstructionsTool', () => {
     form().setValue('instructions', seeded);
 
     const body = 'a'.repeat(MAX_GENERATED_INSTRUCTIONS_CHARS + 500);
-    const result: any = await tool.execute!({ instructions: body } as any);
+    const result: any = await tool.execute!({ instructions: body });
 
     expect(form().getValues('instructions')).toBe(seeded);
     expect(result.success).toBe(false);

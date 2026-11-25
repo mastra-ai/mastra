@@ -18,7 +18,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
  * is the user's own permissions (GET /auth/capabilities).
  *
  * Behavior under test:
- * - While the user's permissions are still loading, the guard shows a spinner
+ * - While the user's permissions are still loading, the guard shows the loader
  *   and never leaks the protected children.
  * - Once resolved, it applies normal gating: allows accessible routes,
  *   redirects denied routes to the first accessible route, and avoids an
@@ -41,10 +41,6 @@ vi.mock('react-router', async importOriginal => {
     },
   };
 });
-
-vi.mock('@mastra/playground-ui/components/Spinner', () => ({
-  Spinner: () => <div data-testid="route-guard-spinner" />,
-}));
 
 import { RoutePermissionGuard } from '../route-permission-guard';
 import { server } from '@/test/msw-server';
@@ -71,6 +67,15 @@ const agentsOnlyCapabilities: AuthCapabilities = {
   user: { id: 'user-1', email: 'user@example.com' },
   capabilities: { user: true, session: true, sso: false, rbac: true, acl: false },
   access: { roles: ['member'], permissions: ['agents:read'] },
+};
+
+// An authenticated, RBAC-enabled user that can read agents and observability data.
+const observabilityReaderCapabilities: AuthCapabilities = {
+  enabled: true,
+  login: { type: 'credentials' },
+  user: { id: 'user-3', email: 'observer@example.com' },
+  capabilities: { user: true, session: true, sso: false, rbac: true, acl: false },
+  access: { roles: ['observer'], permissions: ['agents:read', 'observability:read'] },
 };
 
 // An authenticated, RBAC-enabled user with no gated-route permissions at all.
@@ -117,14 +122,14 @@ describe('RoutePermissionGuard', () => {
     vi.clearAllMocks();
   });
 
-  it('shows a spinner (not the protected children) while the user permissions load', async () => {
+  it('shows the loader (not the protected children) while the user permissions load', async () => {
     server.use(authHandler(adminCapabilities, { hang: true }));
 
     renderGuard('/agents');
 
     // The capabilities request hangs, so the guard stays in its loading branch
     // and never leaks the children.
-    expect(await screen.findByTestId('route-guard-spinner')).toBeTruthy();
+    expect(await screen.findByRole('status', { name: 'Loading' })).toBeTruthy();
     expect(screen.queryByTestId('protected-content')).toBeNull();
   });
 
@@ -134,7 +139,7 @@ describe('RoutePermissionGuard', () => {
     renderGuard('/agents');
 
     expect(await screen.findByTestId('protected-content')).toBeTruthy();
-    expect(screen.queryByTestId('route-guard-spinner')).toBeNull();
+    expect(screen.queryByRole('status', { name: 'Loading' })).toBeNull();
     expect(navigateSpy).not.toHaveBeenCalled();
   });
 
@@ -163,5 +168,31 @@ describe('RoutePermissionGuard', () => {
     expect(await screen.findByTestId('protected-content')).toBeTruthy();
     expect(navigateSpy).not.toHaveBeenCalled();
     expect(screen.getByTestId('pathname').textContent).toBe('/resources');
+  });
+
+  describe.each(['/traces', '/spans', '/threads'])('when the user opens the %s observability page', path => {
+    describe('when the user cannot read observability data', () => {
+      it('redirects them to their first accessible route', async () => {
+        server.use(authHandler(agentsOnlyCapabilities));
+
+        renderGuard(path);
+
+        await waitFor(() => {
+          expect(navigateSpy).toHaveBeenCalledWith('/agents');
+        });
+        expect(screen.queryByTestId('protected-content')).toBeNull();
+      });
+    });
+
+    describe('when the user can read observability data', () => {
+      it('renders the page', async () => {
+        server.use(authHandler(observabilityReaderCapabilities));
+
+        renderGuard(path);
+
+        expect(await screen.findByTestId('protected-content')).toBeTruthy();
+        expect(navigateSpy).not.toHaveBeenCalled();
+      });
+    });
   });
 });

@@ -1,6 +1,5 @@
-import { createClient } from '@libsql/client';
-import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { IMastraLogger } from '@mastra/core/logger';
 import {
   createStorageErrorId,
   getSqlType,
@@ -13,9 +12,11 @@ import type {
   TABLE_NAMES,
   TABLE_MEMORY_RUN_FENCES,
   TABLE_WORKFLOW_RUN_OWNERS,
+  TABLE_WORKFLOW_RUNS,
   StorageColumn,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
+import { createClient } from '../../shared/create-client';
 import type { SqliteClient as Client, SqliteInValue as InValue } from './client';
 import { withRunFence } from './run-fencing';
 import type { RunFenceCheck } from './run-fencing';
@@ -28,8 +29,12 @@ import {
 } from './utils';
 import { withClientWriteLock } from './write-lock';
 
-/** Tables retention can prune: the core tables plus the run fencing tables, which aren't in TABLE_NAMES. */
-export type PrunableTable = TABLE_NAMES | typeof TABLE_WORKFLOW_RUN_OWNERS | typeof TABLE_MEMORY_RUN_FENCES;
+/** Tables retention can prune: the core tables plus the run fencing and storage v2 run tables, which aren't in TABLE_NAMES. */
+export type PrunableTable =
+  | TABLE_NAMES
+  | typeof TABLE_WORKFLOW_RUN_OWNERS
+  | typeof TABLE_WORKFLOW_RUNS
+  | typeof TABLE_MEMORY_RUN_FENCES;
 
 /**
  * Base configuration options shared across LibSQL domain configurations
@@ -120,7 +125,31 @@ function assertPositiveLimit(limit: number): void {
   }
 }
 
-export class LibSQLDB extends MastraBase {
+/**
+ * Parses JSON object/array text in the table's `jsonb` columns only. A `text` column, such as a
+ * span preview of `{}`, must read back as the stored string.
+ */
+function parseJsonColumns(tableName: TABLE_NAMES, row: Record<string, unknown>): Record<string, unknown> {
+  const schema = TABLE_SCHEMAS[tableName];
+  return Object.fromEntries(
+    Object.entries(row).map(([k, v]) => {
+      if (schema[k]?.type !== 'jsonb' || typeof v !== 'string' || !(v.startsWith('{') || v.startsWith('['))) {
+        return [k, v];
+      }
+      try {
+        return [k, JSON.parse(v)];
+      } catch {
+        return [k, v];
+      }
+    }),
+  );
+}
+
+/**
+ * Shared database layer for the LibSQL domains. It has no logger of its own: every log goes
+ * through the owning domain's logger via `getLogger`, so the logger Mastra sets applies here.
+ */
+export class LibSQLDB {
   private client: Client;
   maxRetries: number;
   initialBackoffMs: number;
@@ -129,29 +158,39 @@ export class LibSQLDB extends MastraBase {
   /** Cache of actual table columns: tableName -> Promise<Set<columnName>> (stores in-flight promise to coalesce concurrent calls) */
   private tableColumnsCache = new Map<string, Promise<Set<string>>>();
 
+  /** Returns the owning domain's current logger; see the constructor's `getLogger`. */
+  readonly #getLogger: () => IMastraLogger;
+
+  /**
+   * @param getLogger - Returns the logger of the domain that owns this layer. It is read on
+   * every log call, so a logger set on the domain later (by `new Mastra({ logger })` or
+   * `mastra.setLogger()`) also covers write retries and failures here (#29885).
+   */
   constructor({
     client,
     maxRetries,
     initialBackoffMs,
+    getLogger,
   }: {
     client: Client;
     maxRetries?: number;
     initialBackoffMs?: number;
+    getLogger: () => IMastraLogger;
   }) {
-    super({
-      component: 'STORAGE',
-      name: 'LIBSQL_DB_LAYER',
-    });
-
     this.client = client;
     this.maxRetries = maxRetries ?? 5;
     this.initialBackoffMs = initialBackoffMs ?? 100;
+    this.#getLogger = getLogger;
 
     this.executeWriteOperationWithRetry = createExecuteWriteOperationWithRetry({
-      logger: this.logger,
+      getLogger,
       maxRetries: this.maxRetries,
       initialBackoffMs: this.initialBackoffMs,
     });
+  }
+
+  get #logger(): IMastraLogger {
+    return this.#getLogger();
   }
 
   /**
@@ -423,6 +462,55 @@ export class LibSQLDB extends MastraBase {
   }
 
   /**
+   * Updates multiple records in one write batch, with the same retry behavior as
+   * {@link batchUpdate}. Returns, in input order, whether each update changed a row,
+   * so callers can put extra conditions in `keys` (for example `{ endedAt: null }`).
+   */
+  public async batchUpdateReportingChanges({
+    tableName,
+    updates,
+  }: {
+    tableName: TABLE_NAMES;
+    updates: Array<{
+      keys: Record<string, any>;
+      data: Record<string, any>;
+    }>;
+  }): Promise<boolean[]> {
+    return this.executeWriteOperationWithRetry(async () => {
+      const changed = updates.map(() => false);
+      const statements: ReturnType<typeof prepareUpdateStatement>[] = [];
+      const statementIndexes: number[] = [];
+      for (const [index, { keys, data }] of updates.entries()) {
+        // Filter out columns that don't exist in the actual database table
+        const filteredData = await this.filterRecordToKnownColumns(tableName, data);
+        if (Object.keys(filteredData).length === 0) continue;
+        statements.push(prepareUpdateStatement({ tableName, updates: filteredData, keys }));
+        statementIndexes.push(index);
+      }
+      if (statements.length === 0) return changed;
+
+      const results = await withClientWriteLock(this.client, () => this.client.batch(statements, 'write'));
+      results.forEach((result, i) => {
+        const index = statementIndexes[i];
+        if (index !== undefined) changed[index] = result.rowsAffected > 0;
+      });
+      return changed;
+    }, `batch update in table ${tableName}`).catch(error => {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'BATCH_UPDATE_REPORTING_CHANGES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
+    });
+  }
+
+  /**
    * Internal batch delete implementation without retry logic.
    * Each record can be deleted based on single or composite keys.
    */
@@ -515,7 +603,7 @@ export class LibSQLDB extends MastraBase {
   /**
    * Selects a single record from the specified table by key(s).
    * Returns the most recently created record if multiple matches exist.
-   * Automatically parses JSON string values back to objects/arrays.
+   * Parses `jsonb` column values back to objects/arrays.
    *
    * @typeParam R - The expected return type of the record
    * @param args - The select arguments
@@ -541,21 +629,7 @@ export class LibSQLDB extends MastraBase {
       return null;
     }
 
-    const row = result.rows[0];
-    // Checks whether the string looks like a JSON object ({}) or array ([])
-    // If the string starts with { or [, it assumes it's JSON and parses it
-    // Otherwise, it just returns, preventing unintended number conversions
-    const parsed = Object.fromEntries(
-      Object.entries(row || {}).map(([k, v]) => {
-        try {
-          return [k, typeof v === 'string' ? (v.startsWith('{') || v.startsWith('[') ? JSON.parse(v) : v) : v];
-        } catch {
-          return [k, v];
-        }
-      }),
-    );
-
-    return parsed as R;
+    return parseJsonColumns(tableName, result.rows[0] ?? {}) as R;
   }
 
   /**
@@ -612,18 +686,7 @@ export class LibSQLDB extends MastraBase {
       args: [...(whereClause?.args ?? []), ...(args ?? [])],
     });
 
-    // Parse JSON columns (same as select())
-    return (result.rows ?? []).map(row => {
-      return Object.fromEntries(
-        Object.entries(row || {}).map(([k, v]) => {
-          try {
-            return [k, typeof v === 'string' ? (v.startsWith('{') || v.startsWith('[') ? JSON.parse(v) : v) : v];
-          } catch {
-            return [k, v];
-          }
-        }),
-      );
-    }) as R[];
+    return (result.rows ?? []).map(row => parseJsonColumns(tableName, row ?? {})) as R[];
   }
 
   /**
@@ -643,7 +706,7 @@ export class LibSQLDB extends MastraBase {
   }): Promise<number> {
     const parsedTableName = parseSqlIdentifier(tableName, 'table name');
 
-    const statement = `SELECT COUNT(*) as count FROM ${parsedTableName} ${whereClause ? `${whereClause.sql}` : ''}`;
+    const statement = `SELECT COUNT(*) as count FROM ${parsedTableName} ${whereClause ? whereClause.sql : ''}`;
 
     const result = await this.client.execute({
       sql: statement,
@@ -739,7 +802,7 @@ export class LibSQLDB extends MastraBase {
       const sql = `CREATE TABLE IF NOT EXISTS ${parsedTableName} (\n  ${allDefinitions}\n)`;
 
       await executor.execute(sql);
-      this.logger.debug(`LibSQLDB: Created table ${tableName}`);
+      this.#logger.debug(`LibSQLDB: Created table ${tableName}`);
 
       // Run migrations for Spans table to add any new columns
       if (tableName === TABLE_SPANS) {
@@ -783,7 +846,7 @@ export class LibSQLDB extends MastraBase {
           const alterSql = `ALTER TABLE "${TABLE_SPANS}" ADD COLUMN "${columnName}" ${sqlType}`;
           await this.client.execute(alterSql);
           addedColumns = true;
-          this.logger.debug(`LibSQLDB: Added column '${columnName}' to ${TABLE_SPANS}`);
+          this.#logger.debug(`LibSQLDB: Added column '${columnName}' to ${TABLE_SPANS}`);
         }
       }
       if (addedColumns) {
@@ -831,7 +894,7 @@ export class LibSQLDB extends MastraBase {
           await this.client.execute(
             `CREATE UNIQUE INDEX IF NOT EXISTS "mastra_ai_spans_spanid_traceid_idx" ON "${TABLE_SPANS}" ("spanId", "traceId")`,
           );
-          this.logger.debug(`LibSQLDB: Created unique index on (spanId, traceId) for ${TABLE_SPANS}`);
+          this.#logger.debug(`LibSQLDB: Created unique index on (spanId, traceId) for ${TABLE_SPANS}`);
         }
       }
 
@@ -848,16 +911,16 @@ export class LibSQLDB extends MastraBase {
       await this.client.execute(
         `CREATE INDEX IF NOT EXISTS "mastra_ai_spans_trace_started_at_idx" ON "${TABLE_SPANS}" ("traceId", "startedAt")`,
       );
-      this.logger.debug(`LibSQLDB: Ensured trace read indexes for ${TABLE_SPANS}`);
+      this.#logger.debug(`LibSQLDB: Ensured trace read indexes for ${TABLE_SPANS}`);
 
-      this.logger.info(`LibSQLDB: Migration completed for ${TABLE_SPANS}`);
+      this.#logger.info(`LibSQLDB: Migration completed for ${TABLE_SPANS}`);
     } catch (error) {
       // Rethrow MastraError (especially for migration required errors) - these must stop init
       if (error instanceof MastraError) {
         throw error;
       }
       // Log warning but don't fail for other errors - schema migrations should be best-effort
-      this.logger.warn(`LibSQLDB: Failed to migrate spans table ${TABLE_SPANS}:`, error);
+      this.#logger.warn(`LibSQLDB: Failed to migrate spans table ${TABLE_SPANS}:`, error);
     }
   }
 
@@ -902,7 +965,7 @@ export class LibSQLDB extends MastraBase {
       };
     } catch (error) {
       // If table doesn't exist or other error, assume no duplicates
-      this.logger.debug(`LibSQLDB: Could not check for duplicates: ${error}`);
+      this.#logger.debug(`LibSQLDB: Could not check for duplicates: ${error}`);
       return { hasDuplicates: false, duplicateCount: 0 };
     }
   }
@@ -934,14 +997,14 @@ export class LibSQLDB extends MastraBase {
     const duplicateInfo = await this.checkForDuplicateSpans();
 
     if (duplicateInfo.hasDuplicates) {
-      this.logger.info(
+      this.#logger.info(
         `Found ${duplicateInfo.duplicateCount} duplicate (traceId, spanId) combinations. Starting deduplication...`,
       );
 
       // Run deduplication
       await this.deduplicateSpans();
     } else {
-      this.logger.info(`No duplicate spans found.`);
+      this.#logger.info(`No duplicate spans found.`);
     }
 
     // Add unique index
@@ -1013,11 +1076,11 @@ export class LibSQLDB extends MastraBase {
 
       const duplicateCount = Number(duplicateCheck.rows?.[0]?.duplicate_count ?? 0);
       if (duplicateCount === 0) {
-        this.logger.debug(`LibSQLDB: No duplicate spans found, skipping deduplication`);
+        this.#logger.debug(`LibSQLDB: No duplicate spans found, skipping deduplication`);
         return;
       }
 
-      this.logger.warn(`LibSQLDB: Found ${duplicateCount} duplicate (spanId, traceId) combinations, deduplicating...`);
+      this.#logger.warn(`LibSQLDB: Found ${duplicateCount} duplicate (spanId, traceId) combinations, deduplicating...`);
 
       // Delete duplicate spans, keeping the "best" record for each (spanId, traceId) pair.
       // Priority: completed spans > most recently updated > most recently created
@@ -1051,10 +1114,10 @@ export class LibSQLDB extends MastraBase {
       `);
 
       const deletedCount = deleteResult.rowsAffected ?? 0;
-      this.logger.warn(`LibSQLDB: Deleted ${deletedCount} duplicate span records`);
+      this.#logger.warn(`LibSQLDB: Deleted ${deletedCount} duplicate span records`);
     } catch (error) {
       // Log but continue - deduplication should be best-effort
-      this.logger.warn(`LibSQLDB: Failed to deduplicate spans:`, error);
+      this.#logger.warn(`LibSQLDB: Failed to deduplicate spans:`, error);
     }
   }
 
@@ -1117,10 +1180,15 @@ export class LibSQLDB extends MastraBase {
           // Nullable columns use DEFAULT NULL; non-nullable use the type's default.
           const defaultValue = columnDef.nullable ? 'DEFAULT NULL' : this.getDefaultValue(columnDef.type);
 
-          // SQLite doesn't support ADD COLUMN IF NOT EXISTS, but we checked above
+          // SQLite has no ADD COLUMN IF NOT EXISTS. Another connection can add the column
+          // between the check above and this ALTER, in which case the column exists.
           const alterSql = `ALTER TABLE ${parsedTableName} ADD COLUMN "${columnName}" ${sqlType} ${defaultValue}`;
-          await this.client.execute(alterSql);
-          this.logger.debug(`LibSQLDB: Added column ${columnName} to table ${tableName}`);
+          try {
+            await this.client.execute(alterSql);
+            this.#logger.debug(`LibSQLDB: Added column ${columnName} to table ${tableName}`);
+          } catch (error) {
+            if (!(error instanceof Error && /duplicate column name/i.test(error.message))) throw error;
+          }
         }
       }
     } catch (error) {
@@ -1162,8 +1230,8 @@ export class LibSQLDB extends MastraBase {
         },
         e,
       );
-      this.logger?.trackException?.(mastraError);
-      this.logger?.error?.(mastraError.toString());
+      this.#logger.trackException?.(mastraError);
+      this.#logger.error?.(mastraError.toString());
     }
   }
 

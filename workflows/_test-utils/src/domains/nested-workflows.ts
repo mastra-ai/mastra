@@ -4,6 +4,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
+import { stepsOf } from '../steps';
 import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 
 /**
@@ -12,6 +13,43 @@ import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } fr
 export function createNestedWorkflowsWorkflows(ctx: WorkflowCreatorContext) {
   const { createWorkflow, createStep } = ctx;
   const workflows: WorkflowRegistry = {};
+
+  // A suspended child resumed through its own run must wake the parent and run its next step.
+  {
+    const approval = createStep({
+      id: 'direct-child-approval',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData) await suspend({ value: inputData.value });
+        return { value: `${inputData.value}-${resumeData?.approved ? 'approved' : 'rejected'}` };
+      },
+    });
+    const child = createWorkflow({
+      id: 'nested-direct-resume-child',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+    })
+      .then(approval)
+      .commit();
+    const afterChild = createStep({
+      id: 'direct-child-after',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: async ({ inputData }) => ({ value: `${inputData.value}-continued` }),
+    });
+    const parent = createWorkflow({
+      id: 'nested-direct-resume-parent',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+    })
+      .then(child)
+      .then(afterChild)
+      .commit();
+    workflows['nested-direct-resume-child'] = { workflow: child, mocks: {} };
+    workflows['nested-direct-resume-parent'] = { workflow: parent, mocks: {} };
+  }
 
   // Test: should execute nested workflow as a step
   {
@@ -270,7 +308,8 @@ export function createNestedWorkflowsWorkflows(ctx: WorkflowCreatorContext) {
   {
     const step1 = createStep({
       id: 'step1',
-      execute: async ({ state }: any) => {
+      execute: async ({ getState }: any) => {
+        const state = await getState();
         return { result: 'success', value: state.value };
       },
       inputSchema: z.object({}),
@@ -308,7 +347,8 @@ export function createNestedWorkflowsWorkflows(ctx: WorkflowCreatorContext) {
   {
     const step1 = createStep({
       id: 'step1',
-      execute: async ({ state, setState }: any) => {
+      execute: async ({ getState, setState }: any) => {
+        const state = await getState();
         await setState({ ...state, value: state.value + '!!!' });
         return {};
       },
@@ -319,7 +359,8 @@ export function createNestedWorkflowsWorkflows(ctx: WorkflowCreatorContext) {
 
     const step2 = createStep({
       id: 'step2',
-      execute: async ({ state }: any) => {
+      execute: async ({ getState }: any) => {
+        const state = await getState();
         return { result: 'success', value: state.value };
       },
       inputSchema: z.object({}),
@@ -360,7 +401,8 @@ export function createNestedWorkflowsWorkflows(ctx: WorkflowCreatorContext) {
 
     const bodyStep = createStep({
       id: 'body',
-      execute: async ({ inputData, state, setState }: any) => {
+      execute: async ({ inputData, getState, setState }: any) => {
+        const state = await getState();
         const n = inputData.n + 1;
         await setState({ ...state, log: [...state.log, `body${n}`] });
         return { n };
@@ -382,7 +424,7 @@ export function createNestedWorkflowsWorkflows(ctx: WorkflowCreatorContext) {
 
     const finalStep = createStep({
       id: 'final',
-      execute: async ({ state }: any) => ({ log: state.log }),
+      execute: async ({ getState }: any) => ({ log: (await getState()).log }),
       inputSchema: z.object({ n: z.number() }),
       outputSchema: z.object({ log: z.array(z.string()) }),
       stateSchema,
@@ -411,6 +453,32 @@ export function createNestedWorkflowsTests(ctx: WorkflowTestContext, registry?: 
   const { execute, skipTests } = ctx;
 
   describe('Nested workflows', () => {
+    it.skipIf(skipTests.directNestedChildResume)(
+      'continues the parent after resuming a nested child directly',
+      async () => {
+        const parent = registry!['nested-direct-resume-parent']!.workflow;
+        const child = registry!['nested-direct-resume-child']!.workflow;
+        const parentRun = await parent.createRun();
+        const suspended = await parentRun.start({ inputData: { value: 'request' } });
+        expect(suspended.status).toBe('suspended');
+        const childRunId = ((await stepsOf(suspended))[child.id] as any)?.suspendPayload?.__workflow_meta
+          ?.runId as string;
+        expect(childRunId).toEqual(expect.any(String));
+
+        const childRun = await child.createRun({ runId: childRunId });
+        expect(await childRun.resume({ step: 'direct-child-approval', resumeData: { approved: true } })).toMatchObject({
+          status: 'success',
+        });
+        await expect
+          .poll(async () => (await parent.getWorkflowRunById(parentRun.runId))?.status, { timeout: 10_000 })
+          .toBe('success');
+        expect(await parent.getWorkflowRunById(parentRun.runId)).toMatchObject({
+          status: 'success',
+          steps: { 'direct-child-after': { status: 'success', output: { value: 'request-approved-continued' } } },
+        });
+      },
+    );
+
     it('should execute nested workflow as a step', async () => {
       const { workflow, mocks, nestedWorkflowId } = registry!['nested-basic']!;
 

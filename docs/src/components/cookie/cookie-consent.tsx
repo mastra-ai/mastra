@@ -12,6 +12,8 @@ declare global {
   }
 }
 
+const GTM_CONTAINER_ID = 'GTM-N9L98T2X'
+const GTM_SCRIPT_ID = 'mastra-gtm'
 const REO_SCRIPT_ID = 'reo-script'
 const REO_CLIENT_ID = 'fdd9258c52d6769'
 
@@ -29,6 +31,19 @@ export const CookieConsent = () => {
       setHasGottenConsentForGoogleTracking(true)
       setHasGottenConsentForHubspotTracking(true)
     }
+  }, [cookieConsent])
+
+  useEffect(() => {
+    if (!cookieConsent || document.getElementById(GTM_SCRIPT_ID)) return
+
+    window.dataLayer = window.dataLayer || []
+    window.dataLayer.push({ 'gtm.start': Date.now(), event: 'gtm.js' })
+
+    const script = document.createElement('script')
+    script.id = GTM_SCRIPT_ID
+    script.async = true
+    script.src = `https://www.googletagmanager.com/gtm.js?id=${GTM_CONTAINER_ID}`
+    document.head.appendChild(script)
   }, [cookieConsent])
 
   return (

@@ -1,0 +1,316 @@
+// @vitest-environment jsdom
+import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { HttpResponse } from 'msw';
+import type { ReactElement } from 'react';
+import { beforeEach, describe, expect, it } from 'vitest';
+import type { PropertyFilterToken } from '../../../../ds/components/PropertyFilter/types';
+import { MetricsProvider } from '../../hooks/use-metrics';
+import { DistinctIdsCard } from '../distinct-ids-card';
+import {
+  distinctIdsSeriesFixture,
+  distinctIdsTotalsFixture,
+  distinctIdsWithUsersTotalsFixture,
+  emptyTraceAggregateFixture,
+  olderServerCapabilities,
+  traceAggregateCapabilities,
+  traceAggregateErrorFixture,
+} from './fixtures/trace-aggregate';
+import { seedMetrics, serveCapabilities, serveTraceAggregate } from './metrics-msw';
+import type { TraceAggregateRequest } from './metrics-msw';
+import { renderWithProviders } from '@/test/render';
+
+const ERROR = "Couldn't load this data. Try again in a moment.";
+const MEASURES = [
+  'countDistinct.resourceId',
+  'countDistinct.threadId',
+  'countDistinct.userId',
+  'countDistinct.sessionId',
+];
+
+let requests: TraceAggregateRequest[] = [];
+
+/** Legend text only: each total also names its id, for screen readers. */
+const LEGEND = { ignore: 'script, style, .sr-only' };
+
+/** A legend entry's text: its label alone, e.g. `Resources`. */
+const legendEntry = (label: string) => screen.getByText(label, LEGEND).parentElement?.textContent;
+
+/** A card header total for one series, e.g. `Resources5`: its label is screen-reader only. */
+const headerTotal = (label: string) =>
+  screen.getByText(label, { selector: '.sr-only' }).parentElement?.textContent?.replace(/\s+/g, '');
+
+type Served = { empty?: boolean; totals?: typeof distinctIdsTotalsFixture };
+
+function respond(request: TraceAggregateRequest, { empty = false, totals = distinctIdsTotalsFixture }: Served = {}) {
+  if (empty) return emptyTraceAggregateFixture;
+  return request.interval ? distinctIdsSeriesFixture(request.timeRange) : totals;
+}
+
+function serveCard(served?: Served) {
+  serveTraceAggregate(request => {
+    requests.push(request);
+    return respond(request, served);
+  });
+}
+
+/**
+ * Fails every request until `recover()` is called, then serves the card. Failing by state, not by a
+ * count of requests, keeps the test independent of how often the client retries a 500 on its own.
+ */
+function failUntilRecovered() {
+  let failing = true;
+  const failed = new Set<'series' | 'totals'>();
+  serveTraceAggregate(request => {
+    if (!failing) return respond(request);
+    failed.add(request.interval ? 'series' : 'totals');
+    return HttpResponse.json(traceAggregateErrorFixture, { status: 500 });
+  });
+  return {
+    failed,
+    recover: () => {
+      failing = false;
+    },
+  };
+}
+
+/**
+ * Fails the range-totals request once — a 4xx fails at once — then serves them, and keeps the
+ * bucket request in flight until `release()`: one request has failed while the other still runs.
+ */
+function failTotalsWhileBucketsLoad() {
+  let totalsCalls = 0;
+  let release = () => {};
+  const held = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  serveTraceAggregate(async request => {
+    requests.push(request);
+    if (request.interval) {
+      await held;
+      return HttpResponse.json(respond(request));
+    }
+    totalsCalls++;
+    return totalsCalls === 1
+      ? HttpResponse.json(traceAggregateErrorFixture, { status: 400 })
+      : HttpResponse.json(respond(request));
+  });
+  return {
+    release: () => release(),
+    totalsCalls: () => totalsCalls,
+  };
+}
+
+function render(ui: ReactElement, filterTokens: PropertyFilterToken[] = []) {
+  return renderWithProviders(
+    <MetricsProvider preset="24h" filterTokens={filterTokens} onPresetChange={() => {}} onFilterTokensChange={() => {}}>
+      {ui}
+    </MetricsProvider>,
+  );
+}
+
+/** The card inside a dashboard pinned to `preset`, for re-rendering it onto another scope. */
+function atPreset(preset: '24h' | '7d') {
+  return (
+    <MetricsProvider preset={preset} filterTokens={[]} onPresetChange={() => {}} onFilterTokensChange={() => {}}>
+      <DistinctIdsCard />
+    </MetricsProvider>
+  );
+}
+
+/**
+ * Serves the first scope, then — once `nextScope()` is called — fails that scope's range totals
+ * while holding its bucket request open. A new scope keeps the previous answer on screen, so the
+ * totals failure lands with the buckets still fetching rather than still loading.
+ */
+function failTotalsOfNextScope() {
+  let next = false;
+  let release = () => {};
+  const held = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  serveTraceAggregate(async request => {
+    requests.push(request);
+    if (!next) return HttpResponse.json(respond(request));
+    if (request.interval) {
+      await held;
+      return HttpResponse.json(respond(request));
+    }
+    return HttpResponse.json(traceAggregateErrorFixture, { status: 400 });
+  });
+  return { nextScope: () => (next = true), release: () => release() };
+}
+
+beforeEach(() => {
+  requests = [];
+  seedMetrics();
+});
+
+describe('when the server answers aggregateTraces()', () => {
+  beforeEach(() => serveCapabilities(traceAggregateCapabilities));
+
+  it('labels each id in the legend, without its range total', async () => {
+    serveCard();
+    render(<DistinctIdsCard />);
+
+    await screen.findByText('Resources', LEGEND);
+    expect(legendEntry('Resources')).toBe('Resources');
+    expect(legendEntry('Threads')).toBe('Threads');
+  });
+
+  it("shows each id's range total top right, from the range request", async () => {
+    serveCard();
+    render(<DistinctIdsCard />);
+
+    // 5 and 14 for the range, not the sum of the hourly counts.
+    expect(await screen.findByText((_, el) => el?.textContent === 'Resources 5')).toBeDefined();
+    expect(screen.getByText((_, el) => el?.textContent === 'Threads 14')).toBeDefined();
+  });
+
+  it('asks for all four distinct ids once per hour and once for the range', async () => {
+    serveCard();
+    render(<DistinctIdsCard />);
+    await screen.findByText('Resources', LEGEND);
+
+    expect(requests).toHaveLength(2);
+    expect(requests.find(r => r.interval)).toMatchObject({
+      interval: '1h',
+      measures: MEASURES,
+      groupBy: [],
+      limit: 10,
+    });
+    expect(requests.find(r => !r.interval)).toMatchObject({ measures: MEASURES, groupBy: [] });
+  });
+
+  describe('when the traces set no user or session ids', () => {
+    it('leaves users and sessions out of the legend', async () => {
+      serveCard();
+      render(<DistinctIdsCard />);
+      await screen.findByText('Resources', LEGEND);
+
+      expect(screen.getByText('Threads', LEGEND)).toBeDefined();
+      expect(screen.queryByText('Users', LEGEND)).toBeNull();
+      expect(screen.queryByText('Sessions', LEGEND)).toBeNull();
+    });
+  });
+
+  describe('when the traces also set user and session ids', () => {
+    it('adds them to the legend', async () => {
+      serveCard({ totals: distinctIdsWithUsersTotalsFixture });
+      render(<DistinctIdsCard />);
+      await screen.findByText('Resources', LEGEND);
+
+      expect(legendEntry('Users')).toBe('Users');
+      expect(legendEntry('Sessions')).toBe('Sessions');
+    });
+  });
+
+  it('says when no traces in the range set any of the ids', async () => {
+    serveCard({ empty: true });
+    render(<DistinctIdsCard />);
+
+    expect(await screen.findByText('No data in this range')).toBeDefined();
+  });
+
+  it('loads after Retry when both requests failed', async () => {
+    const outage = failUntilRecovered();
+    const { queryClient } = render(<DistinctIdsCard />);
+
+    expect(await screen.findByText(ERROR, undefined, { timeout: 5000 })).toBeDefined();
+    // The card reports the error once both requests have failed, so Retry has to send both again.
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0), { timeout: 5000 });
+    expect([...outage.failed].sort()).toEqual(['series', 'totals']);
+    outage.recover();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByText('Resources', LEGEND)).toBeDefined();
+    expect(screen.getByText('Threads', LEGEND)).toBeDefined();
+  }, 15_000);
+
+  it('keeps loading until both requests settle, then loads again after Retry', async () => {
+    // One request failed while the other is still loading: the card must not report a failure
+    // Retry cannot fix, and Retry must re-request both once it does.
+    const card = failTotalsWhileBucketsLoad();
+    const { queryClient } = render(<DistinctIdsCard />);
+
+    await waitFor(() => {
+      const totals = queryClient
+        .getQueryCache()
+        .findAll({ queryKey: ['trace-aggregate'] })
+        .find(query => !(query.queryKey[1] as { interval?: string }).interval);
+      expect(totals?.state.status).toBe('error');
+    });
+    expect(screen.queryByText(ERROR)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+
+    // The buckets answer: now both requests have settled, so the totals failure is the card's.
+    card.release();
+    await waitFor(() => expect(screen.getByText(ERROR)).toBeDefined(), { timeout: 5000 });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByText('Resources', LEGEND, { timeout: 5000 })).toBeDefined();
+    expect(card.totalsCalls()).toBe(2);
+    expect(headerTotal('Resources')).toBe('Resources5');
+  }, 15_000);
+
+  it('keeps the loaded card on a new scope until that scope’s requests settle', async () => {
+    // A new scope keeps the previous answer on screen while it fetches, so the card is not
+    // loading when the totals of the new scope fail: the buckets are still running, and reporting
+    // the failure now would leave Retry unable to recover the card.
+    const card = failTotalsOfNextScope();
+    const { rerender, queryClient } = renderWithProviders(atPreset('24h'));
+    await screen.findByText('Resources', LEGEND);
+
+    // The buckets must finish before the scope changes: the retained answer is what makes the
+    // next totals failure land while the buckets are fetching instead of loading.
+    await waitFor(() => {
+      const buckets = queryClient
+        .getQueryCache()
+        .findAll({ queryKey: ['trace-aggregate'] })
+        .find(query => (query.queryKey[1] as { interval?: string }).interval);
+      expect(buckets?.state.status).toBe('success');
+      expect(buckets?.state.fetchStatus).toBe('idle');
+    });
+
+    card.nextScope();
+    rerender(atPreset('7d'));
+
+    await waitFor(() => {
+      const totals = queryClient
+        .getQueryCache()
+        .findAll({ queryKey: ['trace-aggregate'] })
+        .filter(query => !(query.queryKey[1] as { interval?: string }).interval);
+      expect(totals.some(query => query.state.status === 'error')).toBe(true);
+    });
+    expect(screen.queryByText(ERROR)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    // The totals are in error, so they carry no data to show; without the error gate that would
+    // read as an empty range and claim the range sets no ids, which is not known yet.
+    expect(screen.queryByText(/No data in this range/)).toBeNull();
+
+    card.release();
+    expect(await screen.findByText(ERROR, undefined, { timeout: 5000 })).toBeDefined();
+  }, 15_000);
+
+  it('says a service filter has no trace equivalent, and sends nothing', async () => {
+    serveCard();
+    render(<DistinctIdsCard />, [{ fieldId: 'serviceName', value: 'checkout' }]);
+
+    expect(await screen.findByText('Not available with a service filter.')).toBeDefined();
+    expect(requests).toHaveLength(0);
+  });
+});
+
+describe.each([
+  ['the server is older than aggregateTraces()', olderServerCapabilities] as const,
+  ['the capabilities request fails', 'missing'] as const,
+])('when %s', (_, capabilities) => {
+  it('hides the card and sends no aggregate request', async () => {
+    serveCapabilities(capabilities);
+    serveCard();
+    const { container } = render(<DistinctIdsCard />);
+
+    await waitFor(() => expect(container.textContent).toBe(''));
+    expect(requests).toHaveLength(0);
+  });
+});
