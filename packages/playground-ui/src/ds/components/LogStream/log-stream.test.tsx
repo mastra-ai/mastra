@@ -88,18 +88,21 @@ describe('LogStream', () => {
     expect(screen.getByText(/at d \(d\.js:4:4\)/)).toBeTruthy();
   });
 
-  it('shows build output without a time or level, with labels and terminal colors', () => {
+  it('shows build output without a time or level, with a named origin icon and terminal colors', () => {
     const esc = String.fromCharCode(27);
     render(
       <LogStream>
         <LogStream.Row>
-          <LogStream.Line message={`${esc}[32mCompiled successfully${esc}[0m`} labels={[{ text: 'build' }]} />
+          <LogStream.Line
+            message={`${esc}[32mCompiled successfully${esc}[0m`}
+            origin={{ icon: <svg />, label: 'Build' }}
+          />
         </LogStream.Row>
       </LogStream>,
     );
 
     expect(screen.queryByText((_, element) => element?.tagName === 'TIME')).toBeNull();
-    expect(screen.getByText('build')).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'Build' })).toBeTruthy();
     const colored = screen.getByText('Compiled successfully');
     expect(colored.textContent).not.toContain(esc);
   });

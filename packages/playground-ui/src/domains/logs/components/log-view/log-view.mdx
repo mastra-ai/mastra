@@ -135,13 +135,13 @@ Keep the empty check tied to `hasNextPage`. While older pages are left, render `
 
 A line is a `LogViewLine`. Only `message` is required, so build output with no time or level still lines up in the same columns; its level bar is neutral. An Observe `LogRecord` is a `LogViewLine` too.
 
-| Field       | Shows                                                                                                                                                     |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `message`   | The text. Terminal color and bold codes render with theme colors; other escape codes are dropped.                                                         |
-| `timestamp` | The time to the hundredth of a second; `timeFractionDigits` on `LogView.List` changes the digits. Hover it for the date and time in your zone and in UTC. |
-| `level`     | The level word in its color, and the color of the bar.                                                                                                    |
-| `labels`    | Small badges before the message, such as the log source (`build`, `runtime`) or the agent's name. Each takes a badge `variant`.                           |
-| `data`      | `key: value` fields after the message, which also become filter chips.                                                                                    |
+| Field       | Shows                                                                                                                                                                                       |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `message`   | The text. Terminal color and bold codes render with theme colors; other escape codes are dropped.                                                                                           |
+| `timestamp` | The time to the hundredth of a second; `timeFractionDigits` on `LogView.List` changes the digits. Hover it for the date and time in your zone and in UTC.                                   |
+| `level`     | The level word in its color, and the color of the bar.                                                                                                                                      |
+| `source`    | A muted icon before the message for where the line came from, such as build or runtime, with its `label` on hover and for screen readers. Leave it out when every line has the same source. |
+| `data`      | `key: value` fields after the message, which also become filter chips.                                                                                                                      |
 
 <Canvas of={LogViewStories.BuildOutput} />
 

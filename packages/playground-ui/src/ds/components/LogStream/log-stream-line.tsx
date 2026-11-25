@@ -1,23 +1,18 @@
 import { logLevelTextClass } from './log-level-styles';
 import type { LogLevel } from './log-level-styles';
 import { LogStreamFields, LogStreamMessage } from './log-stream-message';
+import { LogStreamOriginIcon } from './log-stream-origin';
+import type { LogStreamOrigin } from './log-stream-origin';
 import { LogStreamTime } from './log-stream-time';
-import { Badge } from '@/ds/components/Badge';
-import type { BadgeVariant } from '@/ds/components/Badge';
 import { cn } from '@/lib/utils';
 import type { FractionDigits } from '@/utils/date-format';
-
-export interface LogStreamLabel {
-  text: string;
-  variant?: BadgeVariant;
-}
 
 export interface LogStreamLineProps {
   message: string;
   timestamp?: Date | string;
   fractionDigits?: FractionDigits;
   level?: LogLevel;
-  labels?: LogStreamLabel[];
+  origin?: LogStreamOrigin;
   fields?: Record<string, unknown>;
   wrap?: boolean;
   collapse?: boolean;
@@ -28,7 +23,7 @@ export function LogStreamLine({
   timestamp,
   fractionDigits,
   level,
-  labels,
+  origin,
   fields,
   wrap = true,
   collapse = true,
@@ -47,17 +42,7 @@ export function LogStreamLine({
           wrap ? 'wrap-anywhere whitespace-pre-wrap' : 'whitespace-pre',
         )}
       >
-        {labels?.map(label => (
-          <Badge
-            key={label.text}
-            variant={label.variant}
-            emphasis="subtle"
-            size="xs"
-            className="mr-1.5 align-text-bottom"
-          >
-            {label.text}
-          </Badge>
-        ))}
+        {origin && <LogStreamOriginIcon icon={origin.icon} label={origin.label} />}
         <LogStreamMessage message={message} collapse={collapse} />
         {fieldEntries.length > 0 && (
           <span className="ml-3">

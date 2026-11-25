@@ -7,6 +7,8 @@ import { LogView, filterLogsByFields } from './index';
 import type { LogViewHeight } from './index';
 import type { FilterBarItem } from '@/ds/components/FilterBar';
 import { TooltipProvider } from '@/ds/components/Tooltip';
+import { IconHammer } from '@/ds/icons/central/IconHammer';
+import { IconServer } from '@/ds/icons/central/IconServer';
 
 const LEVELS: LogLevel[] = ['debug', 'info', 'warn', 'error'];
 
@@ -214,30 +216,33 @@ export const NoFilters: Story = {
 };
 
 const ESC = String.fromCharCode(27);
+const build = { icon: <IconHammer />, label: 'Build' };
+const runtime = { icon: <IconServer />, label: 'Runtime' };
 
 const buildOutput: LogViewLine[] = [
-  { message: 'Cloning github.com/acme/agent-app (branch: main)', labels: [{ text: 'build' }] },
-  { message: `${ESC}[1mmastra build${ESC}[0m`, labels: [{ text: 'build' }] },
-  { message: `${ESC}[90mResolving dependencies${ESC}[0m`, labels: [{ text: 'build' }] },
+  { message: 'Cloning github.com/acme/agent-app (branch: main)', origin: build },
+  { message: `${ESC}[1mmastra build${ESC}[0m`, origin: build },
+  { message: `${ESC}[90mResolving dependencies${ESC}[0m`, origin: build },
   {
-    message: `${ESC}[33mwarn${ESC}[0m deprecated inflight@1.0.6: This module is not supported`,
-    labels: [{ text: 'build' }],
+    level: 'warn',
+    message: 'deprecated inflight@1.0.6: This module is not supported',
+    origin: build,
   },
   {
     message: `${ESC}[32m✓${ESC}[0m Bundled 42 modules in ${ESC}[1m1.8s${ESC}[0m`,
-    labels: [{ text: 'build' }, { text: 'success', variant: 'success' }],
+    origin: build,
   },
   {
     timestamp: '2026-11-24T09:36:01.956Z',
     level: 'info',
     message: 'Server listening on :4111',
-    labels: [{ text: 'runtime' }],
+    origin: runtime,
   },
   {
     timestamp: '2026-11-24T09:36:04.103Z',
     level: 'error',
     message: `${ESC}[31mError: connect ECONNREFUSED 127.0.0.1:5432${ESC}[0m`,
-    labels: [{ text: 'runtime' }, { text: 'error', variant: 'destructive' }],
+    origin: runtime,
   },
 ];
 
@@ -257,7 +262,7 @@ export const BuildOutput: Story = {
     </LogView>
   ),
   parameters: describe(
-    'Deploy output: lines without a time or level, terminal colors, labels for the log source, and the line count and copy in the header.',
+    'Deploy output: lines without a time or level, terminal colors, an icon for where each line came from, named on hover, and the line count and copy in the header.',
   ),
 };
 

@@ -31,7 +31,7 @@ export function LogViewRow<T extends LogViewLine>({
       timestamp={log.timestamp}
       fractionDigits={timeFractionDigits}
       level={log.level}
-      labels={log.labels}
+      origin={log.origin}
       message={log.message}
       fields={log.data ?? undefined}
       wrap={wrap}
