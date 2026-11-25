@@ -16,6 +16,9 @@
  * don't).
  */
 
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -26,6 +29,7 @@ import { InMemoryServerCache } from '../../../cache/inmemory';
 import type { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { PubSub } from '../../../events/pubsub';
+import { UnixSocketPubSub } from '../../../events/unix-socket-pubsub';
 import { ConsoleLogger } from '../../../logger';
 import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
@@ -2826,4 +2830,72 @@ describe.each(['durable', 'evented'] as const)('%s agent: the storage fence cove
     started.cleanup();
     await pubsub.close();
   });
+});
+
+describe('evented agent on a shared bus: the caller stream ends after its execution detaches', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    globalRunRegistry.clear();
+    __resetExecutionFencesForTests();
+  });
+
+  // The caller detaches when the run ends and leaves settlement to the workers. Its reader must
+  // still deliver the terminal event, whichever comes first.
+  it.each(['before the terminal event arrives', 'while the run record write waits'] as const)(
+    'detach lands %s',
+    async when => {
+      const directory = await mkdtemp(join(tmpdir(), 'detached-reader-'));
+      const pubsub = new UnixSocketPubSub(join(directory, 'bus.sock'));
+      const model = gatedModel('detached answer');
+      const agent = createEventedAgent({
+        agent: new Agent({
+          id: 'detached-agent',
+          name: 'Detached Agent',
+          instructions: 'Answer.',
+          model: model.model as LanguageModelV2,
+        }),
+      });
+      const mastra = new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore(), pubsub });
+      const runId = `detached-reader-${when.replace(/\W+/g, '-')}`;
+      const publish = pubsub.publish.bind(pubsub);
+      let deliverTerminal: (() => Promise<void>) | undefined;
+      vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event, options) => {
+        if (topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.FINISH) {
+          deliverTerminal = () => publish(topic, event, options);
+          return;
+        }
+        return publish(topic, event, options);
+      });
+      try {
+        const result = await agent.stream('Answer me.', { runId });
+        const fence = ExecutionFence.getLocalActive(runId)!;
+        let detachLater: (() => void) | undefined;
+        if (when === 'while the run record write waits') {
+          // Hold the detach until the reader's write checks ownership.
+          const detach = fence.detach.bind(fence);
+          const throwIfLost = fence.throwIfLost.bind(fence);
+          vi.spyOn(fence, 'detach').mockImplementation(() => {
+            detachLater = detach;
+          });
+          vi.spyOn(fence, 'throwIfLost').mockImplementation(() => {
+            detachLater?.();
+            return throwIfLost();
+          });
+        }
+        model.release();
+        await vi.waitFor(() => expect(fence.detached || detachLater).toBeTruthy());
+        await vi.waitFor(() => expect(deliverTerminal).toBeDefined());
+        await deliverTerminal!();
+        expect(await result.output.text).toBe('detached answer');
+        expect(fence.detached).toBe(true);
+        result.cleanup();
+      } finally {
+        model.release();
+        await mastra.shutdown();
+        await pubsub.close();
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+    20_000,
+  );
 });

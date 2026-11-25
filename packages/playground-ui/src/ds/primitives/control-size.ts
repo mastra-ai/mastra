@@ -58,9 +58,13 @@ export type ControlTriggerVisualVariant = 'default' | 'ghost';
 // layer its raised material expresses every other state in: its fill is a pinned card
 // colour, and swapping that would drop the control out of the material it shares with a
 // field. `ghost` has no material to wash, so it takes a fill rung.
+// `aria-expanded=false` is a closed trigger whose tooltip is open: Base UI sets `data-popup-open`
+// for that too. `:where` keeps the weight of the plain attribute, so a press still wins.
 export const controlTriggerOpenState: Record<ControlTriggerVisualVariant, string> = {
-  default: 'data-[popup-open]:[--surface-tint:var(--fill)] data-[popup-open]:text-foreground',
-  ghost: 'data-[popup-open]:bg-fill-subtle data-[popup-open]:text-foreground',
+  default:
+    '[&[data-popup-open]:where(:not([aria-expanded=false]))]:[--surface-tint:var(--field-open)] [&[data-popup-open]:where(:not([aria-expanded=false]))]:text-foreground',
+  ghost:
+    '[&[data-popup-open]:where(:not([aria-expanded=false]))]:bg-fill-subtle [&[data-popup-open]:where(:not([aria-expanded=false]))]:text-foreground',
 };
 
 // Open-state classes for a trigger rendered with any Button variant; only the

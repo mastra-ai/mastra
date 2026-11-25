@@ -34,7 +34,7 @@ export function ThinkingLevelUnavailable<T extends string>({
             aria-disabled="true"
             aria-label={`${label}: ${levelInEffect ?? 'unavailable'}. ${reason}`}
             className={cn(
-              'inline-flex h-control-sm shrink-0 cursor-not-allowed items-center rounded-full border border-transparent px-2.5 text-placeholder',
+              'inline-flex h-control-sm shrink-0 cursor-not-allowed items-center rounded-full border border-transparent px-2.5 text-subtle-foreground',
               focusRing,
             )}
           />

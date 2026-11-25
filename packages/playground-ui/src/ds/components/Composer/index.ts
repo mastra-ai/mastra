@@ -1,6 +1,7 @@
 export {
   Composer,
   ComposerActions,
+  ComposerActionsDetail,
   ComposerActionsEnd,
   ComposerActionsStart,
   ComposerAttachments,
@@ -8,6 +9,8 @@ export {
   ComposerInput,
   ComposerRing,
   ComposerStatus,
+  ComposerStatusEnd,
+  ComposerStatusStart,
   ComposerToneLabel,
 } from './composer';
 export type {

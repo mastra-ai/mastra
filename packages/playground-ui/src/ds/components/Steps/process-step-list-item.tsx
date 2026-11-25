@@ -9,7 +9,7 @@ type ProcessStepListItemVariant = 'default' | 'plain';
 /** Same ring geometry and stroke as `<Spinner size="sm" />`, so pending and running read as one shape. */
 function PendingRing() {
   return (
-    <svg viewBox="0 0 24 24" className="text-placeholder" aria-hidden>
+    <svg viewBox="0 0 24 24" className="text-subtle-foreground" aria-hidden>
       <circle
         cx="12"
         cy="12"

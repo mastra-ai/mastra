@@ -31,6 +31,7 @@ const PLAIN_FINISH_KEYS = [
   'processorRetryCount',
   'response',
   'stepResult',
+  'stopCause',
 ];
 const PLAIN_FULL_OUTPUT_KEYS = [
   'error',

@@ -129,6 +129,7 @@ import { createGitHubCopilotGateway } from './providers/github-copilot-gateway.j
 import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
 import { createGoogleVertexGateway } from './providers/google-vertex-gateway.js';
 import { setAuthStorage as setKimiCodingAuthStorage } from './providers/kimi-coding.js';
+import { parseCodexModelSelection } from './providers/model-ids.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 import { setAuthStorage as setXAIAuthStorage } from './providers/xai.js';
 
@@ -146,6 +147,7 @@ import type { MastraCodeState } from './schema.js';
 import { mastraBrand } from './theme-palette.js';
 import { isThinkingLevelSetting } from './thinking.js';
 import type { ThinkingLevelSetting } from './thinking.js';
+import { createSubmitPlanTool } from './tools/index.js';
 import { DiscardingScoresStorage } from './utils/discarding-scores-storage.js';
 import { syncGateways } from './utils/gateway-sync.js';
 import { openLocalObservabilityStore } from './utils/local-observability.js';
@@ -1828,6 +1830,17 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // allow the same plans directory the prompts tell the agent to write to.
   const defaultWorkspace = (args: { requestContext: RequestContext; mastra?: Mastra }) =>
     getDynamicWorkspace({ ...args, backgroundToolsEnabled, plansDir: config?.plansDir });
+  // `submit_plan` ships as a filesystem-free builtin: it only knows the plan file path and
+  // expects the host to read the plan and fill `title`/`plan` on the suspension. The host tool
+  // below does that, so approval cards render the plan inline instead of re-reading a file that
+  // a sandbox restart, a plans-directory move or a later edit can break. Registering it also
+  // disables the builtin outright, instead of leaving both registered for the toolset merge to
+  // drop by name. The session's own `disabledBuiltinTools` set is left alone: plan mode and the
+  // plan-file prompt guidance read that one, not the controller's list.
+  const registersSubmitPlanTool = !disabledBuiltinTools.has('submit_plan');
+  const controllerDisabledBuiltinTools: BuiltinToolId[] | undefined = registersSubmitPlanTool
+    ? [...(config?.disableBuiltinTools ?? []), 'submit_plan']
+    : config?.disableBuiltinTools;
   let controller: AgentController<MastraCodeState>;
   controller = new AgentController<MastraCodeState>({
     id: 'mastra-code',
@@ -1857,7 +1870,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     },
     agent: codeAgent,
     subagents,
-    ...(config?.disableBuiltinTools?.length ? { disableBuiltinTools: config.disableBuiltinTools } : {}),
+    ...(controllerDisabledBuiltinTools?.length ? { disableBuiltinTools: controllerDisabledBuiltinTools } : {}),
+    ...(registersSubmitPlanTool
+      ? { tools: { submit_plan: createSubmitPlanTool({ plansDir: config?.plansDir }) } }
+      : {}),
     // Subagents resolve like the main agent: tenant credentials and
     // request-scoped custom providers come from the calling run's context.
     // Ids the model router would hand to another registered gateway (by
@@ -1905,7 +1921,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     modelUseCountTracker: modelId => {
       try {
         const settings = loadSettings();
-        settings.modelUseCounts[modelId] = (settings.modelUseCounts[modelId] ?? 0) + 1;
+        const { modelId: canonicalModelId } = parseCodexModelSelection(modelId);
+        settings.modelUseCounts[canonicalModelId] = (settings.modelUseCounts[canonicalModelId] ?? 0) + 1;
         saveSettings(settings);
       } catch (error) {
         console.error('Failed to persist model usage count', error);

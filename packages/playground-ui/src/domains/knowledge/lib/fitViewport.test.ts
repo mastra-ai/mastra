@@ -42,6 +42,18 @@ describe('fitViewport', () => {
     expect(view.x).toBeCloseTo(insets.left + (WIDTH - insets.left - insets.right) / 2, 5);
   });
 
+  it('centres a floored focus below the floating toolbar', () => {
+    const top = 80;
+    const view = fitViewport({
+      bounds: ring,
+      width: WIDTH,
+      height: HEIGHT,
+      anchor,
+      insets: { left: 0, right: 0, top },
+    });
+    expect(view.y).toBeCloseTo(top + (HEIGHT - top) / 2, 5);
+  });
+
   it('centres in the whole pane when the drawers are wider than it', () => {
     const narrow = 600;
     const insets = { left: 296, right: 392 };
@@ -148,6 +160,16 @@ describe('fitAllViewport', () => {
       const at = screen(view, n);
       expect(at.left).toBeGreaterThanOrEqual(insets.left);
       expect(at.right).toBeLessThanOrEqual(WIDTH - insets.right);
+    }
+  });
+
+  it('frames every node below the floating toolbar', () => {
+    const top = 180;
+    const view = fitAllViewport({ bounds, nodes, width: WIDTH, height: HEIGHT, insets: { left: 0, right: 0, top } });
+    for (const n of nodes) {
+      const at = screen(view, n);
+      expect(at.top).toBeGreaterThanOrEqual(top);
+      expect(at.bottom).toBeLessThanOrEqual(HEIGHT);
     }
   });
 

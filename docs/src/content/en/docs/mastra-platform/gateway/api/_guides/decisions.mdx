@@ -1,0 +1,38 @@
+Compatible with the OpenAI Decisions API. Ask a model up to 400 structured questions about one input and get a typed answer for each. Use it for classification, routing, moderation, and grading. Decisions doesn't stream.
+
+## Example
+
+```bash
+curl https://gateway-api.mastra.ai/v1/decisions \
+  -H "Authorization: Bearer $MASTRA_GATEWAY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "openai/gpt-6-luna-decisions",
+    "input": "My order arrived broken and I want my money back.",
+    "questions": [
+      { "type": "predicate", "name": "is_complaint", "instructions": "Is the customer complaining?" },
+      {
+        "type": "choice",
+        "name": "intent",
+        "instructions": "What does the customer want?",
+        "choices": [{ "value": "refund" }, { "value": "replacement" }, { "value": "information" }]
+      },
+      {
+        "type": "score",
+        "name": "urgency",
+        "instructions": "How urgent is this?",
+        "levels": [{ "label": "low" }, { "label": "medium" }, { "label": "high" }]
+      }
+    ]
+  }'
+```
+
+Question types:
+
+- `predicate`: Answers with a `probability` between 0 and 1.
+- `choice`: Picks one of 2 to 255 `choices`. Values can be strings or booleans.
+- `score`: Picks one of 2 to 10 ordered `levels`.
+
+## Response
+
+The response has one entry in `answers` per question, in the same order. Answers keep the question's `name`, or `null` if it had none. A model can return an answer of type `refusal` instead of the requested type.

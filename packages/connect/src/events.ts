@@ -93,7 +93,7 @@ export interface SubscribeOptions {
   /**
    * Where to keep the last processed event. Loaded when iteration starts;
    * an id resumes exactly, a time alone resumes by time, nothing starts at
-   * the tail. Without a store, persist `subscription.cursor` yourself.
+   * the tail. Without a store, persist the subscription's `cursor` yourself.
    */
   cursorStore?: EventCursorStore;
   /**
@@ -181,40 +181,21 @@ function assertPositiveMs(name: string, value: number | undefined): void {
 }
 
 /**
- * Client for the Mastra platform events service: reads a project's topics as
- * server-sent events, reconnecting and resuming from the last event.
- *
- * Pass a `cursorStore` to keep the last processed event across restarts, and
- * `onGap` to resync when events after the cursor can no longer be delivered.
- * Delivery is at-least-once, so handlers should be idempotent.
- *
- * @example
- * ```ts
- * const events = new EventsClient();
- * const subscription = events.connectEvents({
- *   cursorStore: { load: () => db.get('cursor'), save: cursor => db.set('cursor', cursor) },
- *   onGap: () => resync(),
- * });
- * for await (const event of subscription) {
- *   await handle(event);
- * }
- * ```
+ * Internal client for the Mastra platform events service: reads a project's
+ * topics as server-sent events, reconnecting and resuming from the last
+ * event. Not exported from the package; `ConnectEvents` builds on it.
  */
 export class EventsClient {
   readonly #client: ResolvedClient;
   readonly #eventsUrl: string;
   readonly #options: EventsClientOptions;
 
-  /**
-   * @param resolved Internal: the identity a `ConnectClient` already resolved,
-   * so its `events` never re-reads options or the environment.
-   */
-  constructor(options: EventsClientOptions = {}, resolved?: { client: ResolvedClient; eventsUrl: string }) {
+  constructor(options: EventsClientOptions = {}) {
     assertPositiveMs('reconnectDelayMs', options.reconnectDelayMs);
     assertPositiveMs('maxReconnectDelayMs', options.maxReconnectDelayMs);
     assertPositiveMs('idleTimeoutMs', options.idleTimeoutMs);
-    this.#client = resolved?.client ?? resolveClient(options);
-    this.#eventsUrl = resolved?.eventsUrl ?? resolveEventsUrl(options);
+    this.#client = resolveClient(options);
+    this.#eventsUrl = resolveEventsUrl(options);
     this.#options = options;
   }
 
@@ -224,16 +205,7 @@ export class EventsClient {
   }
 
   /** Subscribes to a project topic. The connection opens when iteration starts. */
-  subscribe(topic: string, options: SubscribeOptions = {}): EventSubscription<TopicEvent> {
-    return this.#subscribe(topic, options, event => event);
-  }
-
-  /** Subscribes to the project's `connect` topic of provider events. */
-  connectEvents(options: SubscribeOptions = {}): EventSubscription<ConnectEvent> {
-    return this.#subscribe('connect', options, toConnectEvent);
-  }
-
-  #subscribe<T>(topic: string, options: SubscribeOptions, map: (event: TopicEvent) => T): EventSubscription<T> {
+  subscribe(topic: string, options: SubscribeOptions = {}): EventSubscription {
     if (!TOPIC_PATTERN.test(topic)) {
       throw new MastraConnectError(
         'invalid_options',
@@ -260,7 +232,7 @@ export class EventsClient {
       );
     }
     const url = `${this.#eventsUrl}/v1/projects/${encodeURIComponent(projectId)}/topics/${encodeURIComponent(topic)}`;
-    return new EventSubscription<T>({
+    return new EventSubscription({
       url,
       projectId,
       client: this.#client,
@@ -269,7 +241,6 @@ export class EventsClient {
       cursorStore: options.cursorStore,
       onGap: options.onGap,
       signal: options.signal,
-      map,
       reconnectDelayMs: this.#options.reconnectDelayMs,
       maxReconnectDelayMs: this.#options.maxReconnectDelayMs ?? DEFAULT_MAX_RECONNECT_DELAY_MS,
       idleTimeoutMs: this.#options.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
@@ -277,33 +248,7 @@ export class EventsClient {
   }
 }
 
-function toConnectEvent(event: TopicEvent): ConnectEvent {
-  const { fields } = event;
-  const raw = fields.payload;
-  let payload: unknown = null;
-  let payloadParseError = false;
-  if (raw !== undefined) {
-    try {
-      payload = JSON.parse(raw);
-    } catch {
-      payload = raw;
-      payloadParseError = true;
-    }
-  }
-  return {
-    id: event.id,
-    timestamp: event.timestamp,
-    connectionId: fields.connectionId ?? '',
-    integrationId: fields.integrationId ?? '',
-    eventType: fields.eventType ?? '',
-    sourceEventId: fields.sourceEventId || null,
-    payload,
-    ...(payloadParseError ? { payloadParseError: true as const } : {}),
-    unverified: fields.unverified === 'true',
-  };
-}
-
-interface SubscriptionInit<T> {
+interface SubscriptionInit {
   url: string;
   projectId: string;
   client: ResolvedClient;
@@ -312,7 +257,6 @@ interface SubscriptionInit<T> {
   cursorStore?: EventCursorStore;
   onGap?: (gap: EventStreamGap) => void | Promise<void>;
   signal?: AbortSignal;
-  map: (event: TopicEvent) => T;
   reconnectDelayMs?: number;
   maxReconnectDelayMs: number;
   idleTimeoutMs: number;
@@ -325,8 +269,8 @@ interface SubscriptionInit<T> {
  * 400 it can't recover from by time. Errors thrown by `cursorStore` or
  * `onGap` end it too, thrown from the loop.
  */
-export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
-  readonly #init: SubscriptionInit<T>;
+export class EventSubscription implements AsyncIterable<TopicEvent> {
+  readonly #init: SubscriptionInit;
   readonly #abort = new AbortController();
   readonly #ready: Promise<string>;
   #resolveReady!: (cursor: string) => void;
@@ -343,7 +287,7 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
   #iterating = false;
   readonly #onCallerAbort = () => this.close();
 
-  constructor(init: SubscriptionInit<T>) {
+  constructor(init: SubscriptionInit) {
     this.#init = init;
     this.#cursor = init.after;
     this.#afterTimestamp = init.afterTimestamp;
@@ -381,7 +325,7 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
     this.#rejectReady(new MastraConnectError('invalid_options', 'Event subscription closed before it was ready.'));
   }
 
-  [Symbol.asyncIterator](): AsyncIterator<T> {
+  [Symbol.asyncIterator](): AsyncIterator<TopicEvent> {
     if (this.#iterating) {
       throw new MastraConnectError('invalid_options', 'An event subscription can only be iterated once.');
     }
@@ -394,7 +338,7 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
     return this.#run();
   }
 
-  async *#run(): AsyncGenerator<T, void, undefined> {
+  async *#run(): AsyncGenerator<TopicEvent, void, undefined> {
     const closed = this.#abort.signal;
     let attempt = 0;
     let serverRetryMs: number | undefined;
@@ -465,7 +409,7 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
     idle: { touch: () => void; pause: () => void },
     onRetry: (ms: number) => void,
     onReady: () => void,
-  ): AsyncGenerator<T, void, undefined> {
+  ): AsyncGenerator<TopicEvent, void, undefined> {
     const closed = this.#abort.signal;
     try {
       for await (const frame of parseServerSentEvents(body, idle.touch)) {
@@ -490,12 +434,11 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
           await this.#reportGap(idle, { reason: 'trimmed', ...gap });
         } else if (frame.event === 'event') {
           const event = parseTopicEvent(frame.data);
-          const mapped = this.#init.map(event);
           this.#cursor = event.id;
           this.#timestamp = event.timestamp;
           this.#fellBack = false;
           idle.pause();
-          yield mapped;
+          yield event;
           // Saved even when the subscription closed during handling: the consumer finished with the event.
           await this.#save({ eventId: event.id, timestamp: event.timestamp });
           if (closed.aborted) return;
@@ -638,6 +581,131 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
     const delay = Math.max(jittered, Math.min(retryAfterMs ?? 0, maxReconnectDelayMs));
     await sleep(delay, this.#abort.signal);
   }
+}
+
+/** The topic the platform publishes provider events to. */
+const CONNECT_TOPIC = 'connect';
+
+/**
+ * Options for {@link ConnectEvents}: the client configuration (credentials,
+ * project, events URL, reconnect timing) and where the subscription starts.
+ */
+export interface ConnectEventsOptions extends EventsClientOptions, Omit<SubscribeOptions, 'projectId'> {}
+
+/**
+ * A subscription to a project's provider events: webhooks the platform
+ * received for the project's connections. Iterate it once; it reconnects and
+ * resumes from the last event on its own.
+ *
+ * Credentials and project fall back to the same environment variables as
+ * `ConnectClient`. Pass a `cursorStore` to keep the last processed event
+ * across restarts, and `onGap` to resync when events after the cursor can no
+ * longer be delivered. Delivery is at-least-once, so handlers should be
+ * idempotent.
+ *
+ * Ends with a `MastraConnectError` on 401, 403 and 404 responses, on a cursor
+ * it can't recover from, and when `cursorStore` or `onGap` throws. Stop it
+ * with `close()`, `signal`, or by breaking out of the loop.
+ *
+ * @example
+ * ```ts
+ * const events = new ConnectEvents({
+ *   cursorStore: { load: () => db.get('events-cursor'), save: cursor => db.set('events-cursor', cursor) },
+ *   onGap: () => resyncFromProviders(),
+ * });
+ * for await (const event of events) {
+ *   await handle(event.integrationId, event.eventType, event.payload);
+ * }
+ * ```
+ */
+export class ConnectEvents implements AsyncIterable<ConnectEvent> {
+  readonly #subscription: EventSubscription;
+  #iterating = false;
+
+  constructor(options: ConnectEventsOptions = {}) {
+    const { after, afterTimestamp, cursorStore, onGap, signal, ...clientOptions } = options;
+    this.#subscription = new EventsClient(clientOptions).subscribe(CONNECT_TOPIC, {
+      after,
+      afterTimestamp,
+      cursorStore,
+      onGap,
+      signal,
+    });
+  }
+
+  /**
+   * The last delivered event id, or the start cursor before any event.
+   * Undefined while resuming by time, until the new stream is ready.
+   */
+  get cursor(): string | undefined {
+    return this.#subscription.cursor;
+  }
+
+  /**
+   * Resolves to the start cursor once the first stream opens (after iteration
+   * starts). Rejects if the subscription fails or closes before that.
+   */
+  get ready(): Promise<string> {
+    return this.#subscription.ready;
+  }
+
+  /** Ends the subscription; a pending iteration finishes cleanly. */
+  close(): void {
+    this.#subscription.close();
+  }
+
+  [Symbol.asyncIterator](): AsyncIterator<ConnectEvent> {
+    if (this.#iterating) {
+      throw new MastraConnectError(
+        'invalid_options',
+        'ConnectEvents can only be iterated once. Create a new ConnectEvents to subscribe again.',
+      );
+    }
+    this.#iterating = true;
+    return mapEvents(this.#subscription[Symbol.asyncIterator]());
+  }
+}
+
+/**
+ * Maps topic events to connect events one at a time, so the subscription
+ * still saves an event only when the consumer asks for the next one.
+ */
+async function* mapEvents(events: AsyncIterator<TopicEvent>): AsyncGenerator<ConnectEvent, void, undefined> {
+  try {
+    while (true) {
+      const next = await events.next();
+      if (next.done) return;
+      yield toConnectEvent(next.value);
+    }
+  } finally {
+    await events.return?.();
+  }
+}
+
+function toConnectEvent(event: TopicEvent): ConnectEvent {
+  const { fields } = event;
+  const raw = fields.payload;
+  let payload: unknown = null;
+  let payloadParseError = false;
+  if (raw !== undefined) {
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      payload = raw;
+      payloadParseError = true;
+    }
+  }
+  return {
+    id: event.id,
+    timestamp: event.timestamp,
+    connectionId: fields.connectionId ?? '',
+    integrationId: fields.integrationId ?? '',
+    eventType: fields.eventType ?? '',
+    sourceEventId: fields.sourceEventId || null,
+    payload,
+    ...(payloadParseError ? { payloadParseError: true as const } : {}),
+    unverified: fields.unverified === 'true',
+  };
 }
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {

@@ -60,8 +60,7 @@ export function LoginButton({ config, redirectUri, className, loginUrl = '/login
     };
 
     return (
-      <Button onClick={handleSSOLogin} disabled={isPending} className={className}>
-        {sso?.icon && <span className="mr-2">{sso.icon}</span>}
+      <Button icon={sso?.icon} onClick={handleSSOLogin} loading={isPending} className={className}>
         {sso?.text || 'Sign in'}
       </Button>
     );

@@ -532,4 +532,27 @@ describe('AskUser', () => {
       expect(screen.getByRole('textbox')).toBeTruthy();
     });
   });
+
+  describe.each(['single_select', 'multi_select'] as const)(
+    'when the agent recommends an option (%s)',
+    selectionMode => {
+      const payload: AskUserPayload = {
+        question: 'Pick a fruit',
+        options: [{ label: 'Apple' }, { label: 'Banana', recommended: true }],
+        selectionMode,
+      };
+      const role = selectionMode === 'multi_select' ? 'checkbox' : 'radio';
+
+      it('tags only that option and selects nothing for the user', () => {
+        const { onSubmit } = renderAskUser(payload);
+
+        const tags = screen.getAllByText('Recommended');
+        expect(tags).toHaveLength(1);
+        expect(tags[0]?.closest('label')?.textContent).toContain('Banana');
+        expect(screen.getByRole(role, { name: /Banana/ }).getAttribute('aria-checked')).toBe('false');
+        expect(screen.getByRole(role, { name: /Apple/ }).getAttribute('aria-checked')).toBe('false');
+        expect(onSubmit).not.toHaveBeenCalled();
+      });
+    },
+  );
 });

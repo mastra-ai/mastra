@@ -20,12 +20,12 @@ export const inputFocusBorderWithin = 'focus-within:border-border-focus';
 // whose focus lives on a nested control use `inputFocusBorderWithin` instead.
 export const controlFocusBorderVisible = `outline-hidden focus-visible:outline-hidden ${inputFocusBorderVisible}`;
 
-// A field is the same material as a card: `bg-card` plus `shadow-raised`, which
-// carries the 1px rim, so a field draws no border of its own. That is what makes a
-// filter input and the panel beside it read as one system — in light the field is
-// white on the off-white canvas, in dark it is the same step above it.
+// On the page a field is the same fill as a card, so a filter input and the panel beside
+// it read as one system. Inside a card or dialog it is a light tint, which the surface
+// sets through `--field`. `shadow-input` carries the 1px rim, so a field draws no border
+// of its own.
 //
-// Hover washes the fill, focus repaints the rim. Both go through `shadow-raised`:
+// Hover washes the fill, focus repaints the rim. Both go through `shadow-input`:
 // an `<input>` cannot carry a pseudo-element, so `--surface-tint` reaches into an
 // inset layer of that utility and gives a field the same state layer a `Card` gets
 // from `state-layer` — the rung a filter chip's segments already wear, which is the
@@ -41,17 +41,19 @@ export const controlFocusBorderVisible = `outline-hidden focus-visible:outline-h
 //
 // Caller appends a radius (`rounded-full` for single-line inputs, `rounded-xl` for
 // textareas).
-// `:not([data-popup-open])` because a trigger's open rung is a plain attribute
+// `:not([data-popup-open]…)` because a trigger's open rung is a plain attribute
 // selector and would otherwise lose to this compound one while the pointer is
-// still on the trigger that opened the popup.
+// still on the trigger that opened the popup. `data-popup-open` alone is not enough:
+// Base UI also sets it while a tooltip or hover card is open. A menu, select or popover
+// trigger is `aria-expanded` as well, and a combobox's input group is a `group`.
 const surfaceTintHover =
-  '[&:hover:not(:focus-visible):not(:disabled):not([data-popup-open])]:[--surface-tint:var(--fill-subtle)]';
+  '[&:hover:not(:focus-visible):not(:disabled):not([data-popup-open]:where([aria-expanded=true],[role=group]))]:[--surface-tint:var(--field-hover)]';
 export const surfaceRimFocus = 'focus-visible:outline-hidden focus-visible:[--surface-rim:var(--border-focus)]';
 
 // The wrapper itself is never `:disabled` — the control it wraps is — so both
 // guards have to ask about descendants.
 const surfaceTintHoverWithin =
-  '[&:hover:not(:has(:focus-visible)):not(:has(:disabled))]:[--surface-tint:var(--fill-subtle)]';
+  '[&:hover:not(:has(:focus-visible)):not(:has(:disabled))]:[--surface-tint:var(--field-hover)]';
 const fieldRimFocus = 'focus-visible:outline-hidden focus-visible:[--surface-rim:var(--field-rim-focus)]';
 // `:has(:focus-visible)`, not `:focus-within`: focus moved in code after a click (a filter chip's
 // neighbour once it is removed) must not light the rim. Text fields always match `:focus-visible`.
@@ -68,7 +70,7 @@ export const fieldTriggerErrorBorder =
 // A field shows a value, so its text is the 400-weight `text-body-sm` (13px), like Input and Textarea;
 // the 500-weight `text-label` it would get from Button's size recipe is for labels and button text.
 export const fieldTriggerStyle =
-  'bg-field shadow-input text-body-sm ' +
+  'bg-field shadow-input text-body-sm [--control-icon-rest:var(--muted-icon)] ' +
   fieldRimFocus +
   ' disabled:bg-field-disabled aria-disabled:bg-field-disabled data-[disabled]:bg-field-disabled aria-invalid:[--field-rim:var(--destructive-indicator)] aria-invalid:[--field-rim-focus:var(--destructive-indicator)]';
 
@@ -101,7 +103,7 @@ export const inputSurfaceAndFocusWithinStyle =
 // other's specificity: they are both arbitrary property setters, so whichever matched last
 // would otherwise decide the press.
 const controlTintHover =
-  '[&:hover:not(:active):not(:disabled):not([data-popup-open])]:[--surface-tint:var(--fill-subtle)]';
+  '[&:hover:not(:active):not(:disabled):not([data-popup-open]:where([aria-expanded=true],[role=group]))]:[--surface-tint:var(--field-hover)]';
 const controlTintActive = '[&:active:not(:disabled)]:[--surface-tint:var(--fill)]';
 
 export const raisedControlSurfaceStyle =

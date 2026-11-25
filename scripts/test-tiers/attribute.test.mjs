@@ -13,6 +13,7 @@ import {
   ghAll,
   goodRunFor,
   nextBisectStep,
+  needsStandIns,
   prForCommit,
   standIns,
   verdictFor,
@@ -88,11 +89,12 @@ test('a culprit needs two failing runs and a passing parent', () => {
 });
 
 /** A fake checkout: each file starts failing at the commit given, or flips per call. */
-const fakeRepo = (breaksAt, commits, { flaky = {}, errorAt = [] } = {}) => {
+const fakeRepo = (breaksAt, commits, { flaky = {}, errorAt = [], unbuildableAt = [] } = {}) => {
   const calls = [];
   const runFileAt = async (sha, files) => {
     calls.push({ sha, files: [...files] });
     if (errorAt.includes(sha)) return Object.fromEntries(files.map(f => [f, 'error']));
+    if (unbuildableAt.includes(sha)) return Object.fromEntries(files.map(f => [f, 'unbuildable']));
     const at = sha === 'good' ? -1 : commits.indexOf(sha);
     return Object.fromEntries(
       files.map(f => {
@@ -161,12 +163,81 @@ test('a file that stops failing on the confirmation run is unconfirmed, never ta
   );
 });
 
-test('a commit that cannot be built leaves its files unconfirmed', async () => {
+test('a commit where the file could not run leaves it unconfirmed', async () => {
   const commits = ['m0', 'm1', 'm2', 'm3'];
   const { runFileAt } = fakeRepo({ a: 3 }, commits, { errorAt: ['m1'] });
   assert.deepEqual(await attribute({ files: ['a'], good: 'good', commits, runFileAt }), [
     { file: 'a', verdict: 'unconfirmed', reason: 'could not run the file at m1' },
   ]);
+});
+
+test('a merge that does not build is skipped and the bisect tests its neighbours instead', async () => {
+  const commits = ['m0', 'm1', 'm2', 'm3', 'm4'];
+  const { runFileAt, calls } = fakeRepo({ a: 3 }, commits, { unbuildableAt: ['m1'] });
+  assert.deepEqual(await attribute({ files: ['a'], good: 'good', commits, runFileAt }), [
+    { file: 'a', verdict: 'culprit', culprit: 'm3', parent: 'm2' },
+  ]);
+  assert.deepEqual(
+    calls.map(c => c.sha),
+    ['m4', 'good', 'm1', 'm2', 'm3', 'm3'],
+  );
+});
+
+test('a skip step picks the untested merge nearest the middle, for every file whose range holds it', () => {
+  assert.deepEqual(nextBisectStep({ a: { lo: -1, hi: 4, skipped: [1] }, b: { lo: 1, hi: 4 } }), {
+    index: 2,
+    files: ['a', 'b'],
+  });
+  assert.deepEqual(nextBisectStep({ a: { lo: -1, hi: 4, skipped: [1, 2] } }), { index: 0, files: ['a'] });
+  assert.equal(nextBisectStep({ a: { lo: -1, hi: 2, skipped: [0, 1] } }), null);
+});
+
+// Versioning run 44311103514: provider regen 0410aad (no PR, [skip ci]) broke two tests and did not
+// build; #30826 (4aa2a60) fixed the build. Every merge between the green and the red commit is a
+// candidate once the only untested ones could not be built.
+test('when only unbuildable merges are left, the files get the candidate merges instead of nothing', async () => {
+  const commits = ['0410aad', '4aa2a60'];
+  const { runFileAt, calls } = fakeRepo({ a: 0, b: 0 }, commits, { unbuildableAt: ['0410aad'] });
+  assert.deepEqual(await attribute({ files: ['a', 'b'], good: '8f7ac95', commits, runFileAt }), [
+    {
+      file: 'a',
+      verdict: 'candidates',
+      candidates: ['0410aad', '4aa2a60'],
+      unbuildable: ['0410aad'],
+      parent: '8f7ac95',
+    },
+    {
+      file: 'b',
+      verdict: 'candidates',
+      candidates: ['0410aad', '4aa2a60'],
+      unbuildable: ['0410aad'],
+      parent: '8f7ac95',
+    },
+  ]);
+  // red, green, the unbuildable middle, then the confirmation rerun at the red end of the range.
+  assert.deepEqual(
+    calls.map(c => c.sha),
+    ['4aa2a60', '8f7ac95', '0410aad', '4aa2a60'],
+  );
+});
+
+test('candidates still need the red end to fail again on the confirmation run', async () => {
+  const commits = ['m0', 'm1'];
+  const seq = ['fail', 'pass', 'pass'];
+  const { runFileAt } = fakeRepo({}, commits, { flaky: { a: () => seq.shift() }, unbuildableAt: ['m0'] });
+  assert.deepEqual(await attribute({ files: ['a'], good: 'good', commits, runFileAt }), [
+    { file: 'a', verdict: 'unconfirmed', reason: 'passed when rerun at m1' },
+  ]);
+});
+
+test('the red or green commit not building still leaves the files unconfirmed', async () => {
+  const commits = ['m0', 'm1'];
+  for (const at of ['m1', 'good']) {
+    const { runFileAt } = fakeRepo({ a: 0 }, commits, { unbuildableAt: [at] });
+    assert.deepEqual(await attribute({ files: ['a'], good: 'good', commits, runFileAt }), [
+      { file: 'a', verdict: 'unconfirmed', reason: `could not build ${at}` },
+    ]);
+  }
 });
 
 test('files left when the deadline passes are unconfirmed', async () => {
@@ -245,6 +316,85 @@ test('one message per culprit PR; mapped authors are tagged, bots and unmapped a
   assert.match(unmapped[0], /by @tony\./);
 });
 
+test('an unmapped person who opened the PR is named, and whoever merged it is tagged', () => {
+  const ctx = {
+    repo: 'mastra-ai/mastra',
+    runUrl: 'https://run',
+    good: 'g000000000',
+    bad: 'b000000000',
+    results: [{ file: 'a.test.ts', verdict: 'culprit', culprit: 'c1111111111', parent: 'p' }],
+    jobs: [],
+  };
+  const pr = { number: 1, title: 't', author: 'daneatmastra', bot: false };
+  const [merged] = alertMessages({
+    ...ctx,
+    slackUsers: { NikAiyer: 'U085YNHJM7Y' },
+    prs: { c1111111111: { ...pr, standIns: { role: 'merged by', logins: ['NikAiyer'] } } },
+  });
+  assert.match(merged, /by @daneatmastra, merged by <@U085YNHJM7Y>\./);
+
+  const [unmappedMerger] = alertMessages({
+    ...ctx,
+    slackUsers: {},
+    prs: { c1111111111: { ...pr, standIns: { role: 'merged by', logins: ['NikAiyer'] } } },
+  });
+  assert.match(unmappedMerger, /by @daneatmastra, merged by @NikAiyer\./);
+
+  const [selfMerged] = alertMessages({
+    ...ctx,
+    slackUsers: {},
+    prs: { c1111111111: { ...pr, standIns: { role: 'merged by', logins: ['daneatmastra'] } } },
+  });
+  assert.match(selfMerged, /by @daneatmastra\./);
+
+  const [nobody] = alertMessages({
+    ...ctx,
+    slackUsers: {},
+    prs: { c1111111111: { ...pr, standIns: { role: null, logins: [] } } },
+  });
+  assert.match(nobody, /by @daneatmastra\./);
+  assert.doesNotMatch(nobody, /<!here>/);
+});
+
+test('stand-ins are looked up for bot PRs and unmapped authors only', () => {
+  const users = { tony: 'U1' };
+  assert.equal(needsStandIns({ author: 'mastra-platform[bot]', bot: true }, users), true);
+  assert.equal(needsStandIns({ author: 'daneatmastra', bot: false }, users), true);
+  assert.equal(needsStandIns({ author: 'tony', bot: false }, users), false);
+  assert.equal(needsStandIns({ author: null, bot: false }, users), false);
+  assert.equal(needsStandIns(null, users), false);
+});
+
+test('a mapped person who opened the PR is tagged alone', () => {
+  const [message] = alertMessages({
+    repo: 'mastra-ai/mastra',
+    runUrl: 'https://run',
+    slackUsers: { tony: 'U1', NikAiyer: 'U085YNHJM7Y' },
+    results: [{ file: 'a.test.ts', verdict: 'culprit', culprit: 'c1111111111', parent: 'p' }],
+    jobs: [],
+    prs: {
+      c1111111111: {
+        number: 1,
+        title: 't',
+        author: 'tony',
+        bot: false,
+        standIns: { role: 'merged by', logins: ['NikAiyer'] },
+      },
+    },
+  });
+  assert.match(message, /by <@U1>\./);
+});
+
+test('the Slack map tags Nik and the active committers found in Slack', () => {
+  const users = JSON.parse(fs.readFileSync(new URL('../../.github/slack-users.json', import.meta.url), 'utf8'));
+  assert.equal(users.NikAiyer, 'U085YNHJM7Y');
+  assert.equal(users['shreyas-mastra'], 'U0BVCSJ18MR');
+  assert.equal(users.YujohnNattrass, 'U08C10D1ETH');
+  assert.equal(users.PaulieScanlon, 'U08SDV7MY05');
+  assert.equal(users.labifrancis, 'U0BA2UQG7GU');
+  assert.equal(users.internetburrito, 'U0B583A0LR5');
+});
+
 test('unconfirmed files and escaped jobs go in one unattributed message with the range', () => {
   const messages = alertMessages({
     repo: 'mastra-ai/mastra',
@@ -265,6 +415,36 @@ test('unconfirmed files and escaped jobs go in one unattributed message with the
   assert.match(
     messages[0],
     /<https:\/\/github\.com\/mastra-ai\/mastra\/compare\/g000000000\.\.\.b000000000\|g000000\.\.\.b000000>/,
+  );
+});
+
+test('candidate merges are listed with their PRs or subjects, without tagging anyone', () => {
+  const [message] = alertMessages({
+    repo: 'mastra-ai/mastra',
+    runUrl: 'https://run',
+    good: '8f7ac9531dda',
+    bad: '4aa2a601665',
+    slackUsers: { wardpeet: 'U1' },
+    results: ['a.test.ts', 'b.test.ts'].map(file => ({
+      file,
+      verdict: 'candidates',
+      candidates: ['0410aadf076', '4aa2a601665'],
+      unbuildable: ['0410aadf076'],
+      parent: '8f7ac9531dda',
+    })),
+    jobs: [],
+    prs: {
+      '0410aadf076': null,
+      '4aa2a601665': { number: 30826, title: 'fix(core): fix TS2590 <!here>', author: 'wardpeet', bot: false },
+    },
+    subjects: { '0410aadf076': 'chore: regenerate providers, docs and pricing [skip ci]' },
+  });
+  assert.equal(
+    message,
+    'Test-tier escape: `a.test.ts`, `b.test.ts` (skipped on PRs, no failure in 30 days) started failing on main with one of ' +
+      '<https://github.com/mastra-ai/mastra/commit/0410aadf076|0410aad> "chore: regenerate providers, docs and pricing [skip ci]" (does not build, so not tested on its own), ' +
+      '<https://github.com/mastra-ai/mastra/pull/30826|#30826> "fix(core): fix TS2590 &lt;!here&gt;". ' +
+      'Fails on `4aa2a60`, passes on `8f7ac95`. <https://run|Versioning run>. They now run on every PR again for 30 days.',
   );
 });
 
@@ -515,4 +695,34 @@ test('a vitest run cut off by the deadline is an error, even if a partial report
     [file],
   );
   assert.deepEqual(got, { [file]: 'error' });
+});
+
+test('an install or build that fails is unbuildable; a checkout failure or timeout is an error', async () => {
+  const file = 'packages/core/src/a.test.ts';
+  const failing = (failOn, error = new Error('exited 2')) => {
+    const { dir, calls, exec } = runnerFixture([file], [[file, 'failed']]);
+    const run = (cmd, args, opts) => {
+      if (args.includes(failOn)) throw error;
+      return exec(cmd, args, opts);
+    };
+    return { dir, calls, run };
+  };
+  for (const step of ['install', 'build']) {
+    const { dir, calls, run } = failing(step);
+    assert.deepEqual(await checkoutRunner(dir, { exec: run, log: () => {} })('c'.repeat(40), [file]), {
+      [file]: 'unbuildable',
+    });
+    assert.ok(!calls.some(c => c.includes('vitest')), step);
+  }
+  const checkout = failing('checkout');
+  assert.deepEqual(await checkoutRunner(checkout.dir, { exec: checkout.run, log: () => {} })('c'.repeat(40), [file]), {
+    [file]: 'error',
+  });
+  const slow = failing('build', Object.assign(new Error('spawnSync pnpm ETIMEDOUT'), { code: 'ETIMEDOUT' }));
+  assert.deepEqual(
+    await checkoutRunner(slow.dir, { exec: slow.run, log: () => {}, deadline: Date.now() + 60_000 })('c'.repeat(40), [
+      file,
+    ]),
+    { [file]: 'error' },
+  );
 });

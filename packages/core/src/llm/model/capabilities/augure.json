@@ -22,16 +22,16 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "ossington-5": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
     "rosedale-1": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "ossington-5": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
       }
     ]
   }

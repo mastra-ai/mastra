@@ -101,8 +101,8 @@ export function RenameSessionDialog({
         </DialogBody>
         <DialogFooter>
           <DialogCancel>Cancel</DialogCancel>
-          <DialogAction disabled={!title} onConfirm={() => void save()}>
-            {isPending ? 'Saving…' : 'Save'}
+          <DialogAction disabled={!title} onConfirm={() => void save()} loading={isPending}>
+            Save
           </DialogAction>
         </DialogFooter>
       </DialogContent>

@@ -16,7 +16,7 @@ Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
-A durable agent wraps a regular [`Agent`](/docs/agents/overview) so the agentic loop runs inside a workflow. Events flow through [PubSub](/docs/server/pubsub), which means a client can disconnect and reconnect without missing chunks. The run state is persisted, so it survives process restarts.
+A durable agent runs the [agentic loop](/docs/agents/overview) inside a workflow. Clients can reconnect over [PubSub](/docs/server/pubsub) and replay retained stream events. With persistent storage and recovery configured, the agent can continue from a checkpoint after a process restart.
 
 ## When to use durable agents
 
@@ -31,46 +31,42 @@ For short-lived, request-scoped calls where the client stays connected, a regula
 
 ## Quickstart
 
-Wrap an existing agent with `createDurableAgent()` from `@mastra/core/agent/durable`:
+Set `durable.executionEngine` to `'default'` on your agent to run it in the current process. This example uses an `OPENAI_API_KEY` for the model:
 
 ```typescript title="src/mastra/agents/researcher.ts"
 import { Agent } from '@mastra/core/agent'
-import { createDurableAgent } from '@mastra/core/agent/durable'
 
-const agent = new Agent({
+export const researcher = new Agent({
   id: 'researcher',
   name: 'Researcher',
   instructions: 'You research topics thoroughly.',
   model: '__GATEWAY_OPENAI_MODEL__',
+  durable: { executionEngine: 'default' },
 })
-
-export const durableResearcher = createDurableAgent({ agent })
 ```
 
-Register the durable agent with Mastra and call `stream()`:
+Register the agent with Mastra and call `stream()`:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
-import { durableResearcher } from './agents/researcher'
+import { researcher } from './agents/researcher'
 
-const mastra = new Mastra({
-  agents: { durableResearcher },
+export const mastra = new Mastra({
+  agents: { researcher },
 })
 
-const { output, runId, cleanup } = await durableResearcher.stream(
-  'Research quantum computing advances in 2025',
-)
+const output = await mastra
+  .getAgent('researcher')
+  .stream('Research quantum computing advances in 2025')
 
 for await (const chunk of output.fullStream) {
   // Process each chunk as it arrives
 }
-
-// Release PubSub subscriptions and clear the run from the registry.
-// If you skip this, an automatic cleanup timer fires after the stream ends.
-cleanup()
 ```
 
-The returned `runId` identifies the execution. Pass it to `observe()` to reconnect from a different client. Visit the [DurableAgent reference](/reference/agents/durable-agent) for the full configuration and method API.
+The native `stream()` returns the model output directly. Use `output.runId` to [reconnect](#resumable-streams). With a wrapper, `stream()` returns a handle with the model output in `.output`. See the [wrapper example](/reference/agents/durable-agent#usage-example).
+
+To continue a run after a process restart, configure persistent storage and [crash recovery](#crash-recovery).
 
 ## How it works
 
@@ -84,32 +80,23 @@ A durable agent adds three layers on top of a regular agent:
 
 ## Execution variants
 
-Mastra provides three factory functions that produce durable agents. They differ in how the workflow is executed:
+Choose the engine based on where the agent should run:
 
-| Factory | Package | Best for |
+| Native agent setting | Wrapper equivalent | Best for |
 | - | - | - |
-| `createDurableAgent()` | `@mastra/core` | Local development and single-process servers. You get a stream you can await directly. |
-| `createEventedAgent()` | `@mastra/core` | Background execution. The workflow starts without blocking, and you consume chunks through PubSub. |
-| `createInngestAgent()` | `@mastra/inngest` | Production deployments. Inngest adds step memoization, retries, and a monitoring dashboard. |
+| `durable.executionEngine: 'default'` | `createDurableAgent()` from `@mastra/core/agent/durable` | Local development and single-process servers. You get a stream you can await directly. |
+| `durable.executionEngine: 'evented'` | `createEventedAgent()` from `@mastra/core/agent/durable` | Runs in the background, and you can follow the run through PubSub. It can run in one process or across multiple processes with a [supported PubSub backend and storage adapter](/docs/server/pubsub#evented-workflows-and-agents). |
+| No native setting | `createInngestAgent()` from `@mastra/inngest` | On Inngest, with step memoization, retries, and a monitoring dashboard. |
 
-All three return an object you register with `Mastra` the same way as a regular agent. `createDurableAgent()` and `createEventedAgent()` return class instances that extend `Agent`. `createInngestAgent()` returns a Proxy-backed object that forwards `Agent` methods to the underlying agent. When a signal wakes an idle thread, all three start that run with the durable `stream()`. `sendSignal()` and `sendNotificationSignal()` both work this way.
+To set a default for registered native agents, use `durable.executionEngine` on [Mastra](/reference/core/mastra-class). An explicit agent setting overrides it. The choice is fixed at registration or first execution. Wrapper factories select their own engine without changing the wrapped agent's selection.
+
+Before switching engines, stop sending new runs to the old engine and let its active runs finish. Resolve suspended runs on the old engine too. Don't rely on the new engine to resume or recover them.
+
+Register a wrapper with `Mastra` the same way as a regular agent. The Core wrappers return `Agent` subclasses. `createInngestAgent()` returns a proxy that forwards `Agent` methods to the underlying agent. When `sendSignal()` or `sendNotificationSignal()` wakes an idle thread, the registered agent starts a run with its configured engine.
 
 ### In-process with `createDurableAgent()`
 
-Wrap your agent and call `stream()`. You get a `DurableAgentStreamResult` back in the same process. No external infrastructure is required, so this is the fastest way to get started:
-
-```typescript title="src/mastra/agents/durable.ts"
-import { Agent } from '@mastra/core/agent'
-import { createDurableAgent } from '@mastra/core/agent/durable'
-
-const agent = new Agent({
-  id: 'helper',
-  instructions: 'You are a helpful assistant.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-})
-
-export const durableHelper = createDurableAgent({ agent })
-```
+For wrapper setup, see [`createDurableAgent()`](/reference/agents/durable-agent#createdurableagentoptions) in the API reference.
 
 ### Fire-and-forget with `createEventedAgent()`
 
@@ -128,9 +115,13 @@ const agent = new Agent({
 export const eventedWriter = createEventedAgent({ agent })
 ```
 
+In one process, an evented agent runs on the default PubSub backend with no extra setup, which is how you try it locally. To run its steps on several processes, such as dedicated [workers](/docs/deployment/workers), configure a PubSub backend that redelivers unacknowledged events and a storage adapter with workflow step guards. `EventEmitterPubSub` and `UnixSocketPubSub` don't qualify. See [evented workflows and agents](/docs/server/pubsub#evented-workflows-and-agents) for the supported backends and adapters.
+
 ### Resumable streams for stored agents
 
-Agents created with [`createStoredAgent()`](/reference/client-js/agents#createstoredagent) use the `durable` field to configure resumable streams only. The server hydrates a plain `Agent` with stream publishing and replay enabled:
+Stored agents inherit the server's `Mastra.durable.executionEngine` default when registered, unless their `durable` field is `false`. Loading a specific `versionId` of an already registered stored agent creates a separate instance that doesn't inherit the engine default. When no engine default applies, `durable: true` enables resumable streams without checkpointing.
+
+Enable the stored agent's `durable` setting with [`createStoredAgent()`](/reference/client-js/agents#createstoredagent):
 
 ```typescript
 await mastraClient.createStoredAgent({
@@ -142,7 +133,7 @@ await mastraClient.createStoredAgent({
 })
 ```
 
-`durable` also accepts `{ cleanupTimeoutMs }`. Cache and pubsub are inherited from the server's `Mastra` instance. Existing stored agents with `durable: true` now load with resumable streams but without durable execution or checkpoint recovery. To retain durable execution, define a code agent wrapped with `createDurableAgent({ agent })` and pass `maxSteps` and snapshot persistence options to the factory.
+`durable` also accepts `{ cleanupTimeoutMs }`. Stored agents inherit the server's replay cache and PubSub transport. To select an engine per agent, use a [code-defined agent](#quickstart).
 
 ### Inngest-powered with `createInngestAgent()`
 
@@ -168,10 +159,10 @@ Visit the [`createInngestAgent()` reference](/reference/agents/inngest-agent) fo
 
 ## Resumable streams
 
-Durable agents support resumable streams through PubSub and an event cache. When a client disconnects mid-stream, the cache continues storing events. The same client can reconnect by calling `observe()` with the `runId`:
+Durable agents support resumable streams through PubSub and an event cache. When a client disconnects mid-stream, the cache continues storing events. To reconnect, pass the run ID to `observe()` and read the stream from the returned handle's `.output`:
 
 ```typescript title="src/server/reconnect.ts"
-const { output } = await durableResearcher.observe(runId)
+const { output } = await mastra.getAgent('researcher').observe(runId)
 
 for await (const chunk of output.fullStream) {
   // Chunks from the run, including any missed while disconnected
@@ -182,12 +173,12 @@ Calling `observe(runId)` without an offset is the supported general reconnect fl
 
 The optional `offset` is a run-log position, which chunks report as `chunk.index`. To resume after a dropped connection, pass `index + 1` of the last chunk that has an `index`, or omit `offset` if nothing arrived. This works the same with `stream()` and `observe()`, over HTTP, and in `@mastra/client-js`. See [`observe(runId, options?)`](/reference/agents/durable-agent#observerunid-options) for which chunks carry no index, structured output, and transport limits.
 
-Replay isn't a permanent execution archive. Events remain available only until [cleanup](#cleanup) clears them or the cache removes them. A workflow snapshot can't reconstruct cleared stream events, and disabling caching prevents historical replay.
+Replay isn't a permanent execution archive. Events remain available only until [cleanup](#cleanup) clears them or the cache removes them. A workflow snapshot can't reconstruct cleared stream events, and disabling the replay cache doesn't disable history retained by a transport such as Redis Streams.
 
 Observing doesn't own the run. When the loop ends, or you leave it early with `break`, `return`, or an error, the observer unsubscribes and the run keeps going for anyone else watching it. To stop observing from outside the loop, for example when the client disconnects, call `detach()`:
 
 ```typescript title="src/server/reconnect.ts"
-const { output, detach } = await durableResearcher.observe(runId)
+const { output, detach } = await mastra.getAgent('researcher').observe(runId)
 
 request.signal.addEventListener('abort', detach, { once: true })
 
@@ -261,11 +252,11 @@ Background tasks have their own execution lease, stored on each task record, sep
 
 ## Cleanup
 
-Every `stream()` and `observe()` call returns a `cleanup` function that tears the run down: it unsubscribes from PubSub, removes the run from the internal registry, and deletes the run's cached events so nobody can replay it afterward.
+Call `cleanup()` from the process that started the run to release its resources and clear its cached stream events. Wrapper `stream()` and `observe()` handles expose `cleanup()`. On native durable stream output, use the optional `cleanup()` method on [`AgentStreamOutput`](/reference/agents/durable-agent#native-agent-execution).
 
 When you don't call `cleanup()` yourself, Mastra calls it `cleanupTimeoutMs` after the run finishes, errors, or is aborted. The default is 30 seconds, so completed-run replay is limited to that window unless you configure a different value or call `cleanup()` sooner. Detaching an observer or reaching a plain `idleTimeoutMs` doesn't start this timer. Set `cleanupTimeoutMs: 0` to turn the timer off. The cache's own TTL and eviction still apply.
 
-Call `cleanup()` from the process that started the run. To stop watching a run from `observe()`, use `detach()` or leave the loop instead.
+To stop watching a run from `observe()` without clearing it, call `detach()` or leave the loop.
 
 ## Tool approval
 
@@ -341,7 +332,7 @@ export const mastra = new Mastra({
 })
 ```
 
-On startup, this discovers every registered durable agent with runs stuck in `running` status and re-drives them from the last persisted snapshot.
+At boot, Mastra recovers `running` runs for registered durable agents from their last persisted snapshots. If a stored agent loads after boot recovery, follow the [manual recovery](#manual-recovery) steps.
 
 Recovery processes up to five agents concurrently, with up to five run waits per agent. Each wait covers both `recover()` setup and settlement of the whole recovered workflow and lasts at most 30 seconds. If it expires, the attempt continues in the background and frees a slot for another run. These limits bound waiting, not the number of live executions. Discovery and overridden custom recovery methods aren't bounded by this budget.
 
@@ -372,7 +363,9 @@ for (const run of recovered) {
 await durableAgent.recoverActiveRuns({ runId: 'run-abc-123' })
 ```
 
-`recoverAllDurableAgents()` returns counts and schedules eligible ownership re-checks itself. `recoverActiveRuns()` returns each run's outcome as `success`, `failed`, or `skipped`, and doesn't re-check skipped runs. A run skipped because another process drives it carries `retryAt`, the time after which its claim lapses unless renewed. A timed-out attempt instead returns `status: 'skipped'` with `reason: 'recovery-timeout'` and no `retryAt`, so Mastra doesn't automatically retry it. Only the `skipped` count includes this attempt; the `recovered`, `succeeded`, and `failed` counts exclude it even if it settles later.
+To recover a stored agent that wasn't registered at boot, first load it with `await mastra.getEditor()?.agent.getById(agentId)` without a `versionId`. Once it loads, call `mastra.recoverAllDurableAgents()`.
+
+`recoverActiveRuns()` reports `success`, `failed`, or `skipped` for each run. If a skipped run returns `retryAt`, schedule your own re-check when calling `recoverActiveRuns()` directly. `mastra.recoverAllDurableAgents()` schedules that re-check for you and counts timed-out attempts only as `skipped`.
 
 Manual recovery reads the same `running` checkpoints as automatic recovery. For a `DurableAgent` using the default snapshot policy with `recovery.durableAgents` set to `'off'`, in-flight runs are only checkpointed at step boundaries reached after `mastra.shutdown()` starts. A run that crashes before then, or doesn't reach a step boundary during the drain, has no checkpoint, so `listActiveRuns()` and `recoverActiveRuns()` don't find it. See [snapshot persistence](#snapshot-persistence).
 
@@ -427,6 +420,8 @@ Recovery can start the same tool call before the previous execution detects owne
 
 Every replica can start with `recovery.durableAgents: 'auto'`. Replicas that boot together race to recover the same orphaned runs, but only one claim succeeds per run and the other replicas skip it. This requires a claim that every replica shares: a workflows store that supports run fencing, or a PubSub backend whose lease every replica shares. Without either, gate recovery behind your own leader election or run it from a single replica.
 
+Evented agents whose steps run on several processes have further requirements. See [evented workflows and agents](/docs/server/pubsub#evented-workflows-and-agents).
+
 ## Database load
 
 Mastra doesn't publish a benchmarked hardware reference for durable agents, so size your database from your own workload. This section covers what drives the load and what to watch.
@@ -469,7 +464,7 @@ A durable or evented agent can run the same tool call more than once. A tool cal
 
 - The process stops while the tool runs, or after the tool returns but before Mastra saves its result. When the run is [recovered](#crash-recovery), the tool runs again.
 - The server shuts down gracefully while the tool runs, and the tool is still running when the [drain timeout](/docs/deployment/mastra-server#graceful-shutdown-and-rolling-deploys) ends. Mastra discards the tool's result, and recovery runs the tool again. A tool whose result Mastra saves within the drain timeout keeps it.
-- With Postgres storage and Redis Streams PubSub, an evented worker stops before it publishes the tool's result. Another worker [reclaims the step](/reference/pubsub/redis-streams#evented-agent-worker-takeover) and runs the tool again.
+- With Postgres or libSQL storage and Redis Streams PubSub, an evented worker stops before it publishes the tool's result. Another worker [reclaims the step](/reference/pubsub/redis-streams#evented-agent-worker-takeover) and runs the tool again.
 - Recovery takes over a run while the previous execution is still running the tool, for example with [`recover()` and `force: true`](#manual-recovery). Both executions can run the tool concurrently. See [stop work after ownership loss](#stop-work-after-ownership-loss).
 
 [Inngest agents](#inngest-powered-with-createinngestagent) configured with `retries` also run an interrupted tool step again.

@@ -74,6 +74,8 @@ export interface ConnectSession {
   connectUrl: string;
   /** Nango connect session token for the headless auth flow. */
   sessionToken: string;
+  /** Nango API host for this session (self-hosted Nango). Absent on older platforms. */
+  apiBaseUrl?: string | null;
   expiresAt: string;
 }
 

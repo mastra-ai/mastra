@@ -1,6 +1,6 @@
 {
   "name": "@internal/types-builder",
-  "version": "0.0.126",
+  "version": "0.0.127",
   "description": "",
   "type": "module",
   "main": "src/index.js",
@@ -21,6 +21,12 @@
         "types": "./src/compile-zod.d.ts",
         "default": "./src/compile-zod.js"
       }
+    },
+    "./check-ascii-output": {
+      "import": {
+        "types": "./src/check-ascii-output.d.ts",
+        "default": "./src/check-ascii-output.js"
+      }
     }
   },
   "scripts": {
@@ -30,6 +36,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
+    "@babel/core": "^8.0.9",
     "@microsoft/api-extractor": "catalog:",
     "local-pkg": "^1.2.1",
     "resolve.exports": "^2.0.4",

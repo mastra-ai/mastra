@@ -1,6 +1,6 @@
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { DatasetVersions } from '@mastra/playground-ui/domains/datasets';
 import { useDataset } from '@mastra/react/hooks/datasets';
-import { DatasetVersions } from '../dataset-versions';
 import type { FieldPopupContainer } from './experiment-trigger-options';
 
 /** Versions are numbered from 1, so a current version above 1 means there are older ones to pick. */

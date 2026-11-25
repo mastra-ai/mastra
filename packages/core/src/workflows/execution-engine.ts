@@ -67,6 +67,9 @@ export interface ExecutionEngineOptions {
    */
   pruneSnapshot?: (params: { snapshot: WorkflowRunState; workflowStatus: WorkflowRunStatus }) => WorkflowRunState;
 
+  /** The workflow's `storageVersion` option: storage v2 runs prune only when it is 2. */
+  storageVersion?: 1 | 2;
+
   /**
    * Called and awaited before a run starts executing. Errors are propagated, which
    * aborts the run before any step executes.

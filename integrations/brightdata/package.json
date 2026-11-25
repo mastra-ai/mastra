@@ -1,12 +1,13 @@
 {
   "name": "@mastra/brightdata",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Bright Data web search and web fetch tools for Mastra agents",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "exports": {
     ".": {

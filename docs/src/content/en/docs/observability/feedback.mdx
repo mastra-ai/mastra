@@ -195,7 +195,7 @@ Studio sends feedback to the backend serving its trace reads. For HTTP creates h
 
 ## Export feedback to external platforms
 
-Feedback flows through the observability event bus, so exporters that support feedback forward it automatically. The [PostHog exporter](/reference/observability/tracing/exporters/posthog#feedback-export) sends feedback as native `$ai_feedback` events that appear on the linked trace in PostHog.
+Feedback flows through the observability event bus, so exporters that support feedback forward it automatically. The [PostHog exporter](/reference/observability/tracing/exporters/posthog#feedback-export) sends feedback as native `$ai_feedback` events that appear on the linked trace in PostHog. The [Datadog exporter](/reference/observability/tracing/exporters/datadog#feedback-export) and [bridge](/reference/observability/tracing/bridges/datadog#feedback-export) send it as end-user feedback on the linked trace in Datadog LLM Observability.
 
 ## Related
 

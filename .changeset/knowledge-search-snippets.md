@@ -1,0 +1,5 @@
+---
+'@mastra/core': minor
+---
+
+`knowledge_search` page results now show where the search words are in the page body, so an agent can see why a page was found and read on from the right place without reading the whole page. A page result carries a `snippet` of about 60 tokens around the words that matched (counted with the same estimator `knowledge_read` uses), the `line` the snippet is centred on, numbered as `knowledge_read` numbers lines, and `matchingLines`, how many lines contain a matched word. Every snippet line is numbered the way `knowledge_read` numbers lines, and a heading above the snippet is added the same way when it is not inside it. The matching is the keyword search's own (quotes removed, case-insensitive), and these fields are left out when the body contains none of the words, for example when only the name or description matched. When any page result has them, the result's `more` says how to read on with `knowledge_read` (`from`, or `match` to see every match). They are only built for pages the run can read.

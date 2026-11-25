@@ -61,52 +61,60 @@ export function BoardConfigPage() {
       ) : undefined,
   });
 
-  const header =
+  const configHeader =
     query.isSuccess && (!phaseKey || shownPhase) ? (
-      <div className={cn(SETTINGS_COLUMN, phaseKey ? 'pb-8' : 'pb-3')}>
-        <BoardConfigHeader
-          key={`${boardId}:${query.data.board.revision ?? 'code'}`}
-          factoryId={factory.id}
-          boardId={boardId}
-          phaseKey={phaseKey}
-          response={query.data}
-        />
-      </div>
+      <BoardConfigHeader
+        key={`${boardId}:${query.data.board.revision ?? 'code'}`}
+        factoryId={factory.id}
+        boardId={boardId}
+        phaseKey={phaseKey}
+        response={query.data}
+      />
     ) : undefined;
 
+  const body = query.isPending ? (
+    <SettingsContainer>
+      <SettingsSkeleton label="Loading board" rows={3} />
+    </SettingsContainer>
+  ) : query.isError && query.error instanceof BoardRequestError && query.error.code === 'board_not_found' ? (
+    <EmptyState variant="fill" titleSlot={<span role="alert">Board unavailable: this board is not installed.</span>} />
+  ) : query.isError ? (
+    <LoadErrorState
+      title="Couldn’t load this board"
+      error={query.error}
+      onRetry={() => void query.refetch()}
+      retrying={query.isFetching}
+    />
+  ) : (
+    <BoardConfigEditor
+      key={`${boardId}:${query.data.board.revision ?? 'code'}`}
+      factory={factory}
+      boardId={boardId}
+      phaseKey={phaseKey}
+      response={query.data}
+      skills={skills.data?.skills}
+      skillsEditable={skills.data?.canEdit ?? false}
+      sidebarHidden={sidebarHidden}
+      onReload={() => void query.refetch()}
+    />
+  );
+
+  if (phaseKey) {
+    return (
+      <PageLayout variant="settings" header={configHeader} {...slots}>
+        {body}
+      </PageLayout>
+    );
+  }
+
   return (
-    <PageLayout variant={phaseKey ? 'narrow' : 'fit'} header={header} {...slots}>
-      <div className={phaseKey || !query.isSuccess ? cn(SETTINGS_COLUMN, !phaseKey && 'px-4') : OVERVIEW_SURFACE}>
-        {query.isPending ? (
-          <SettingsContainer>
-            <SettingsSkeleton label="Loading board" rows={3} />
-          </SettingsContainer>
-        ) : query.isError && query.error instanceof BoardRequestError && query.error.code === 'board_not_found' ? (
-          <EmptyState
-            variant="fill"
-            titleSlot={<span role="alert">Board unavailable: this board is not installed.</span>}
-          />
-        ) : query.isError ? (
-          <LoadErrorState
-            title="Couldn’t load this board"
-            error={query.error}
-            onRetry={() => void query.refetch()}
-            retrying={query.isFetching}
-          />
-        ) : (
-          <BoardConfigEditor
-            key={`${boardId}:${query.data.board.revision ?? 'code'}`}
-            factory={factory}
-            boardId={boardId}
-            phaseKey={phaseKey}
-            response={query.data}
-            skills={skills.data?.skills}
-            skillsEditable={skills.data?.canEdit ?? false}
-            sidebarHidden={sidebarHidden}
-            onReload={() => void query.refetch()}
-          />
-        )}
-      </div>
+    <PageLayout
+      variant="page"
+      body="fixed"
+      header={configHeader && <div className={SETTINGS_COLUMN}>{configHeader}</div>}
+      {...slots}
+    >
+      <div className={query.isSuccess ? OVERVIEW_SURFACE : cn(SETTINGS_COLUMN, 'px-4')}>{body}</div>
     </PageLayout>
   );
 }

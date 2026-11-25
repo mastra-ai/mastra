@@ -1,6 +1,6 @@
 import { useChatRuntime } from '../../context/useChatRuntime';
 
-const statusItem = 'inline-flex items-center gap-1 text-muted-foreground [&_svg]:text-placeholder';
+const statusItem = 'inline-flex items-center gap-1 text-muted-foreground [&_svg]:text-subtle-foreground';
 
 /** Count of queued follow-up messages, shown only when work is pending. */
 export function QueuedFollowUps() {

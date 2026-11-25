@@ -195,7 +195,7 @@ describe('Workflow debug step controls', () => {
   describe('when an advance is already streaming', () => {
     it('disables both advancement actions', async () => {
       await renderControls(debugRun, twoStepWorkflow, true);
-      expect(screen.getByRole<HTMLButtonElement>('button', { name: /run next step/i }).disabled).toBe(true);
+      expect(screen.getByRole('button', { name: /run next step/i }).getAttribute('aria-busy')).toBe('true');
       expect(screen.getByRole<HTMLButtonElement>('button', { name: /continue full run/i }).disabled).toBe(true);
     });
   });

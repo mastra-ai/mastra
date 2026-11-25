@@ -20,8 +20,8 @@ export function CloneThreadControl({ isCloning = false, disabled = false, onClon
             Create a copy of this conversation
           </Txt>
         </div>
-        <Button onClick={onClone} disabled={isCloning || disabled} icon={<IconFork />}>
-          {isCloning ? 'Cloning...' : 'Clone'}
+        <Button onClick={onClone} disabled={disabled} icon={<IconFork />} loading={isCloning}>
+          Clone
         </Button>
       </div>
     </div>

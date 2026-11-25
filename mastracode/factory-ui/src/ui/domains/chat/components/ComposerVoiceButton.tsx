@@ -8,7 +8,6 @@ import type { VoiceDictation, VoiceDictationState } from './useVoiceDictation';
 import { IconMicrophone } from '@mastra/playground-ui/icons/central/IconMicrophone';
 import { IconMicrophoneOff } from '@mastra/playground-ui/icons/central/IconMicrophoneOff';
 import { IconStop } from '@mastra/playground-ui/icons/central/IconStop';
-import { IconLoadingCircle } from '@mastra/playground-ui/icons/central/IconLoadingCircle';
 
 const TOOLTIPS: Record<VoiceDictationState, string> = {
   idle: 'Dictate',
@@ -25,8 +24,6 @@ interface ComposerVoiceButtonProps {
 
 function VoiceIcon({ state }: { state: VoiceDictationState }) {
   if (state === 'recording') return <IconStop className="size-icon-sm" />;
-  if (state === 'transcribing')
-    return <IconLoadingCircle className="size-icon-sm motion-safe:animate-spin motion-reduce:animate-none" />;
   return <IconMicrophone className="size-icon-sm" />;
 }
 
@@ -63,6 +60,7 @@ function VoiceButton({ factoryId, disabled, dictation }: ComposerVoiceButtonProp
       variant="ghost"
       size="icon-sm"
       disabled={blocked}
+      loading={state === 'transcribing'}
       onClick={recording ? stop : () => void start()}
       aria-label="Dictate"
       aria-pressed={recording}

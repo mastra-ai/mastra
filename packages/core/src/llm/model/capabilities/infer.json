@@ -19,36 +19,6 @@
     "infer/grok-4.7:low-cost"
   ],
   "reasoning": {
-    "infer/grok-4.7:low-cost": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "infer/gpt-6.1-sol:low-cost": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "infer/claude-opus-5-5:low-cost": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "infer/claude-fable-5-1:low-cost": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "infer/claude-sonnet-5-5:low-cost": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
     "infer/gemini-3.1-pro-preview:low-cost": [
       {
         "type": "effort",
@@ -59,6 +29,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "infer/grok-4.7:low-cost": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "infer/gpt-5.6-sol:official": [
@@ -73,10 +49,34 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
+    "infer/claude-opus-5-5:low-cost": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "infer/gemini-3.8-flash:low-cost": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "infer/claude-sonnet-5-5:low-cost": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "infer/gpt-6.1-sol:low-cost": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "infer/claude-fable-5-1:low-cost": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

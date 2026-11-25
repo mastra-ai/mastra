@@ -5,18 +5,20 @@ import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 /** Removes a board the project added, after asking. */
 export function BoardDeleteButton({
   name,
-  pending,
+  disabled,
+  loading,
   onDelete,
 }: {
   name: string;
-  pending: boolean;
+  disabled: boolean;
+  loading: boolean;
   onDelete: () => void;
 }) {
   return (
     <AlertDialog>
       <AlertDialog.Trigger
         render={
-          <Button variant="ghost" size="sm" icon={<TrashIcon />} disabled={pending}>
+          <Button variant="ghost" size="sm" icon={<TrashIcon />} disabled={disabled} loading={loading}>
             Delete
           </Button>
         }

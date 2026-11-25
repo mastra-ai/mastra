@@ -83,6 +83,7 @@ exceptions:
   - 'GET'
   - 'GitHub'
   - 'Google'
+  - 'Google Analytics'
   - 'Google Calendar'
   - 'Google Docs'
   - 'Google Gemini'
@@ -198,6 +199,8 @@ exceptions:
   - 'Discord'
   - 'Drive'
   - 'Excel'
+  - 'Factory'
+  - 'Factory Server'
   - 'Firecrawl'
   - 'Helm'
   - 'Inworld'
@@ -260,5 +263,6 @@ exceptions:
   # the `[A-Z][a-z]+(?:[A-Z][a-z]+)+` identifier pattern matches "TanStack"
   # and "GitHub", so multi-word exceptions for them never apply.
   - 'Vercel Files'
+  - 'WBX Sandbox'
   - 'Weaviate Cloud'
   - 'Connect'

@@ -233,13 +233,13 @@ type RingWebhookEvent = {
   }
   data: {
     id: string
-    type: RingEventType
+    type: RingEventType | (string & {})
     attributes: {
       source: string
       source_id?: string
       source_type?: string
       timestamp?: number
-      sub_type?: RingMotionType | RingSubscriptionType
+      sub_type?: RingMotionType | RingSubscriptionType | (string & {})
       plan_id?: string | null
       expires_at?: string
       component_ids?: string[]
@@ -249,12 +249,12 @@ type RingWebhookEvent = {
 ```
 
 - `meta.account_id`: The Ring account associated with the event.
-- `data.type`: The event type, from the table above.
+- `data.type`: The event type. Usually one from the table above, but typed as any string so that event types Ring adds later still arrive.
 - `data.attributes.source`: The device ID for device events, the account ID for `app_integration_added` and `app_integration_removed`, or `subscriptions` for subscription events.
 - `data.attributes.source_id`: The subscription ID, on subscription events.
 - `data.attributes.source_type`: The kind of source: `devices` for device events, `users` for app integration events.
 - `data.attributes.timestamp`: When the event happened, in epoch milliseconds. It's missing on subscription events.
-- `data.attributes.sub_type`: What caused a motion event: `human`, `vehicle`, `package_delivery`, `other_motion`, or `motion` when Smart Alerts are off. `paid` or `trial` on subscription events.
+- `data.attributes.sub_type`: What caused a motion event: `human`, `vehicle`, `package_delivery`, `other_motion`, or `motion` when Smart Alerts are off. `paid` or `trial` on subscription events. Typed as any string, so it can also hold values Ring adds later.
 - `data.attributes.plan_id`: The subscription plan ID, on subscription events. `null` for trials.
 - `data.attributes.expires_at`: When the billing cycle or trial ends, as an ISO 8601 date. Always present on `subscription_activated`.
 - `data.attributes.component_ids`: The cameras involved, on devices with more than one.

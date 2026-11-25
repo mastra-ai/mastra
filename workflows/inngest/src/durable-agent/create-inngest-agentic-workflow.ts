@@ -338,14 +338,27 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
     .then(llmExecutionStep)
     // Step 2: Extract tool calls as array for foreach (forward model_step span for nesting)
     .map(
-      async ({ inputData }) => {
+      async ({ inputData, getInitData }) => {
         const llmOutput = inputData as DurableLLMStepOutput;
-        return (llmOutput.toolCalls ?? []).map(toolCall => ({
+        const toolCalls = llmOutput.toolCalls ?? [];
+        const state = getInitData() as IterationState | undefined;
+        // More than one of these calls can suspend at once, on workers that share no memory, so
+        // none of them reports the step's model usage. The last execution of the run does.
+        const sideBySide =
+          toolCalls.length > 1 &&
+          resolveDurableToolCallConcurrency({
+            options: state?.options,
+            toolsMetadata: state?.toolsMetadata,
+            toolCalls,
+          }) > 1;
+        return toolCalls.map(toolCall => ({
           ...toolCall,
           stepSpanData: llmOutput.stepSpanData,
           completionStartTime: llmOutput.completionStartTime,
           timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,
           stepUsage: llmOutput.stepResult?.totalUsage,
+          response: llmOutput.response,
+          ...(sideBySide ? { sideBySide } : {}),
         })) as DurableToolCallInput[];
       },
       { id: 'extract-tool-calls' },
@@ -474,6 +487,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
               outputTokens: 0,
               totalTokens: 0,
             },
+            generationReportedUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
             lastStepResult: undefined,
             agentSpanData,
             modelSpanData,
@@ -564,8 +578,8 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
         const effectiveMaxSteps = state.options?.maxSteps ?? maxSteps;
         const underMaxSteps = state.iterationCount < effectiveMaxSteps;
 
-        if (!shouldContinue || !underMaxSteps) {
-          recordStopCause(shouldContinue ? 'max_steps' : 'model_finished');
+        if (!shouldContinue) {
+          recordStopCause('model_finished');
           await emitStepFinish(false);
           return false;
         }
@@ -586,31 +600,105 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
           // Hand stopWhen the full step content stream.steps reports, not the
           // compacted snapshot records, with AI SDK tool-result parts as toolResults.
           const steps = durableStopConditionSteps(state.accumulatedSteps) as any;
-          const conditions = await Promise.all(
-            (Array.isArray(stopWhen) ? stopWhen : [stopWhen]).map(async condition => {
-              try {
-                return await condition({ steps });
-              } catch (error) {
-                const originalError = getErrorFromUnknown(error);
-                throw new MastraError(
-                  {
-                    id: DURABLE_STOP_WHEN_ERROR_ID,
-                    domain: ErrorDomain.AGENT,
-                    category: ErrorCategory.USER,
-                    text: originalError.message,
-                    details: { name: originalError.name, message: originalError.message },
-                  },
-                  originalError,
-                );
-              }
-            }),
-          );
-          return conditions.some(Boolean);
+          const conditionList = Array.isArray(stopWhen) ? stopWhen : [stopWhen];
+          if (underMaxSteps) {
+            const conditions = await Promise.all(
+              conditionList.map(async condition => {
+                try {
+                  return await condition({ steps });
+                } catch (error) {
+                  const originalError = getErrorFromUnknown(error);
+                  throw new MastraError(
+                    {
+                      id: DURABLE_STOP_WHEN_ERROR_ID,
+                      domain: ErrorDomain.AGENT,
+                      category: ErrorCategory.USER,
+                      text: originalError.message,
+                      details: { name: originalError.name, message: originalError.message },
+                    },
+                    originalError,
+                  );
+                }
+              }),
+            );
+            return conditions.some(Boolean);
+          }
+
+          if (conditionList.length === 0) {
+            return false;
+          }
+
+          // On the last allowed step the run stops either way; conditions only decide
+          // whether the caller or the budget gets the credit. Bound evaluation so a
+          // throwing or pending predicate cannot block terminal finish delivery.
+          const POST_BUDGET_STOP_WHEN_TIMEOUT_MS = 250;
+          const safeWarn = (message: string, details?: Record<string, unknown>) => {
+            try {
+              mastra?.getLogger?.()?.warn(message, details);
+            } catch {
+              // A failing logger must never block terminal delivery or leak an unhandled rejection.
+            }
+          };
+          let loggedRejection = false;
+          const logPostBudgetFailure = (reason: unknown) => {
+            if (loggedRejection) return;
+            loggedRejection = true;
+            safeWarn('A stopWhen condition failed after the step budget ran out; ignoring its result', {
+              runId: state.runId,
+              error: reason,
+            });
+          };
+
+          return await new Promise<boolean>(resolve => {
+            let settled = false;
+            let remaining = conditionList.length;
+            const finish = (matched: boolean) => {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timeout);
+              resolve(matched);
+            };
+
+            const timeout = setTimeout(() => {
+              safeWarn(
+                'A stopWhen condition did not settle after the step budget ran out; attributing stop to maxSteps',
+                { runId: state.runId },
+              );
+              finish(false);
+            }, POST_BUDGET_STOP_WHEN_TIMEOUT_MS);
+
+            for (const condition of conditionList) {
+              const evalPromise = (async () => Boolean(await condition({ steps })))();
+              void evalPromise.then(
+                matched => {
+                  remaining -= 1;
+                  if (matched) {
+                    finish(true);
+                  } else if (remaining === 0) {
+                    finish(false);
+                  }
+                },
+                reason => {
+                  logPostBudgetFailure(reason);
+                  remaining -= 1;
+                  if (remaining === 0) {
+                    finish(false);
+                  }
+                },
+              );
+            }
+          });
         });
 
-        if (stopped) recordStopCause('stop_condition');
-        await emitStepFinish(!stopped);
-        return !stopped;
+        // stopWhen also runs on the last allowed step: the run stops there either way, but a
+        // match says the caller ended it, not the step budget (#29612).
+        if (stopped || !underMaxSteps) {
+          recordStopCause(stopped ? 'stop_condition' : 'max_steps');
+          await emitStepFinish(false);
+          return false;
+        }
+        await emitStepFinish(true);
+        return true;
       })
       // Map final state to output format, close agent span, and emit finish event
       .map(
@@ -780,6 +868,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
                 `[InngestDurableAgent] Run ${state.runId} has no recorded stop cause; its span outcome is unknown`,
               );
           }
+          const runTripwire = tripwire ?? state.lastStepResult?.tripwire ?? initData.inputTripwire;
           const termination = deadlineTermination
             ? deadlineTermination
             : ['tripwire', 'error'].includes(finishReason ?? '') && recordedTermination
@@ -788,13 +877,15 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
                   stopCause,
                   delegationFailure: state.tracingDelegationFailure ?? registry?.tracingDelegationFailure,
                   finishReason,
-                  tripwire: tripwire ?? state.lastStepResult?.tripwire,
+                  tripwire: runTripwire,
                   maxSteps: state.options?.maxSteps ?? maxSteps,
                 });
           if (modelSpanData) {
             const modelSpan =
               liveSegmentSpan(modelSpanData, registry?.resumeModelSpan, registry?.modelSpan) ??
               (observability?.rebuildSpan(modelSpanData) as AIModelGenerationSpan | undefined);
+            // A hidden generation reports its usage on its parent; a rebuilt one has no live parent.
+            if (modelSpan?.isInternal) modelSpan.parent ??= agentSpan;
             const toolCalls = state.accumulatedSteps.flatMap(step =>
               ((step.toolCalls ?? []) as DurableToolCallInput[]).map(tc => ({
                 toolCallId: tc.toolCallId,
@@ -802,30 +893,57 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
                 args: tc.args,
               })),
             );
-            const { usageIncomplete, usage } = generationUsage(state.accumulatedUsage, state.accumulatedSteps);
+            const { usageIncomplete, usage } = generationUsage(
+              state.accumulatedUsage,
+              state.accumulatedSteps,
+              state.generationReportedUsage,
+            );
+            // The span was opened for the run's first model, maybe on another worker. Name the
+            // model that answered, so the generation and its cost are not booked on a model that failed.
+            const servedBy = state.lastResponse?.servedBy;
+            const servedName = servedBy && `llm: '${servedBy.modelId}'`;
+            if (servedName && modelSpan && modelSpan.name !== servedName) modelSpan.update({ name: servedName });
             modelSpan?.createTracker()?.endGeneration({
               ...termination,
-              output: { text: finalText, ...(toolCalls.length ? { toolCalls } : {}) },
+              output: { text: finalText, object: finishResult.object, ...(toolCalls.length ? { toolCalls } : {}) },
               attributes: {
                 finishReason: state.lastStepResult?.reason || 'stop',
                 ...(usageIncomplete ? { usageIncomplete: true } : {}),
                 ...clocks,
                 responseId: state.lastResponse?.id,
                 responseModel: state.lastResponse?.modelId,
+                ...(servedBy ? { model: servedBy.modelId, provider: servedBy.provider } : {}),
               },
               usage,
+              // Cost the provider reported itself is used in place of an estimate.
+              stepProviderMetadata: state.reportedCosts
+                ?.slice(state.generationReportedSteps ?? 0)
+                .map(cost => cost ?? undefined),
             });
           }
 
           // End AGENT_RUN span with final output
           if (agentSpanData) {
-            const agentSpan =
-              liveSegmentSpan(agentSpanData, registry?.resumeAgentSpan, registry?.agentSpan) ??
-              observability?.rebuildSpan(agentSpanData);
             agentSpan?.end({
               ...termination,
-              output: { text: finalText },
-              ...(Object.keys(clocks).length ? { attributes: clocks } : {}),
+              output: {
+                text: finalText,
+                object: finishResult.object,
+                ...(runTripwire ? { tripwire: runTripwire } : {}),
+              },
+              attributes: {
+                ...clocks,
+                ...(runTripwire
+                  ? {
+                      tripwireAbort: {
+                        reason: runTripwire.reason,
+                        processorId: runTripwire.processorId,
+                        retry: runTripwire.retry,
+                        metadata: runTripwire.metadata,
+                      },
+                    }
+                  : {}),
+              },
             });
           }
 
@@ -838,6 +956,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
               output: finalOutput.output,
               stepResult: finalOutput.stepResult,
               ...(textRewritten && { textRewritten }),
+              ...(stopCause && { stopCause }),
             });
           }
 

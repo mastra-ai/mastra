@@ -11,6 +11,7 @@ import type {
   Processor,
 } from '@mastra/core/processors';
 
+import type { FactoryBoardEngine } from '../board-engine/engine.js';
 import {
   boardFlow,
   boardForWorkItem,
@@ -25,8 +26,7 @@ import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { FactoryRunBindingRecord, WorkItemsStorage, Card } from '../storage/domains/work-items/base.js';
-import { findSessionRunBinding, getFactorySessionCoordinates } from './binding-context.js';
-import type { FactoryTransitionService } from './transition-service.js';
+import { findSessionRunBinding, getFactorySessionCoordinates, getFactoryToolsRole } from './binding-context.js';
 import { workItemSource } from './types.js';
 import type {
   FactoryCommitDecision,
@@ -382,7 +382,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       onBoundThreadRun?: () => void;
       /** Whether a run is going on this thread in this process; its binding stays due for reconcile until it stops. */
       isThreadRunning?: (threadId: string) => boolean;
-      transitionService?: Pick<FactoryTransitionService, 'transition'>;
+      boardEngine?: Pick<FactoryBoardEngine, 'requestMove'>;
       messageReader?: PersistedMessageReader;
       recordPullRequestProvenance?: (input: {
         binding: FactoryRunBindingRecord;
@@ -520,6 +520,8 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const boards = await this.boards.load(binding);
     const stage = ruleStage(boards, item);
     if (!item || !stage) return;
+    // A request keeps the role it was built with: see setFactoryToolsRole.
+    const runRole = getFactoryToolsRole(args.requestContext) ?? binding.role;
     const linked = await this.options.storage.listLinked({ item, limit: MAX_LINKED_ITEMS });
     const board = boardForWorkItem(item);
     const baseValue: ActivePhaseSnapshotBase = {
@@ -528,7 +530,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       itemId: item.id,
       revision: item.revision,
       stage,
-      role: binding.role,
+      role: runRole,
       configVersion: this.options.configVersion,
     };
     const flow = boardFlow(boards.get(board));
@@ -590,9 +592,9 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     // The card moved to a phase another context works; this session's tools for it are gone.
     const handedOnText =
       phase?.kind === 'working' &&
-      phase.runner.context !== binding.role &&
+      phase.runner.context !== runRole &&
       // A Work card planned before Planning ran in `work` keeps its `plan` session there.
-      workStageCarries(definition, stage, binding.role, undefined) !== true
+      workStageCarries(definition, stage, runRole, undefined) !== true
         ? `This card is now in ${escapeText(phaseLabel)}, which runs in the ${escapeText(phase.runner.context)} context in another session. Your part is done: do not continue its work here. Answer questions, and move the card only if it must come back to you.\n`
         : '';
     const runtime =
@@ -600,7 +602,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const snapshotContents =
       `Factory ${board} phase: ${escapeText(phaseLabel)} (${escapeText(stage)})\n` +
       `Work item: ${escapeText(item.title)} (${item.id})\n` +
-      `Role: ${escapeText(binding.role)}\nRevision: ${item.revision}\nConfig: ${escapeText(this.options.configVersion)}\n` +
+      `Role: ${escapeText(runRole)}\nRevision: ${item.revision}\nConfig: ${escapeText(this.options.configVersion)}\n` +
       (runtime
         ? `Runtime: model=${escapeText(runtime.modelId)}, reasoning-setting=${escapeText(runtime.thinkingLevel)}\n`
         : '') +
@@ -625,7 +627,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         status: 'active',
         board,
         stage,
-        role: binding.role,
+        role: runRole,
         revision: item.revision,
         ...(runtime ?? {}),
       },
@@ -958,10 +960,11 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       // The bound agent's own tool call carries the same consent as its governed moves.
       consentedBy: `agent:${binding.id}`,
     });
-    if (committed.status !== 'committed' || !this.options.transitionService) return;
+    if (committed.status !== 'committed' || !this.options.boardEngine) return;
     for (const entry of decisions) {
       if (entry.type !== 'transition') continue;
-      await this.options.transitionService.transition({
+      const ingress = { type: 'rule' as const, identity: `decision:${entry.idempotencyKey}` };
+      const result = await this.options.boardEngine.requestMove({
         orgId: binding.orgId,
         factoryProjectId: binding.factoryProjectId,
         workItemId: item.id,
@@ -970,12 +973,28 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         ...(entry.reenter ? { reenter: true } : {}),
         expectedRevision: item.revision,
         actor: { type: 'system', id: 'factory-tool-result-rule' },
-        ingress: { type: 'rule', identity: `decision:${entry.idempotencyKey}` },
+        ingress,
         cause: 'tool_result_rule',
         causalChain: [{ ingressId, decisionType: entry.type }],
         ...(isApprovedPlanResult(toolResult) ? { planApproved: true } : {}),
         ...(toolResult.status === 'success' ? { completedTool: toolResult.toolName } : {}),
       });
+      // The dispatcher replays this same decision later. Record the engine's refusal under its
+      // ingress so the replay keeps it instead of asking again without this tool result's context.
+      // A lost revision race is not a refusal and stays unrecorded, like the transition service.
+      if (result.status === 'rejected' && result.code !== 'stale') {
+        await this.options.storage.commitTransition({
+          orgId: binding.orgId,
+          factoryProjectId: binding.factoryProjectId,
+          workItemId: item.id,
+          expectedRevision: item.revision,
+          destinationStage: entry.stage,
+          actorId: 'factory-tool-result-rule',
+          ingress: { identity: ingress.identity, transitionId: result.transitionId },
+          causalChain: [{ ingressId, decisionType: entry.type }],
+          evaluation: { outcome: 'rejected', code: result.code, reason: result.reason },
+        });
+      }
     }
   }
 }

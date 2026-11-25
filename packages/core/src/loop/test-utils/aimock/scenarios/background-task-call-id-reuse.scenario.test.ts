@@ -59,6 +59,7 @@ describeForAllEngines(
 
       const memory = new MockMemory();
       const shared = await createSharedAgent(getMock(), {
+        engine,
         memory,
         tools: { 'background-work': backgroundTool },
         agentBackgroundTasks: { tools: { 'background-work': true } },

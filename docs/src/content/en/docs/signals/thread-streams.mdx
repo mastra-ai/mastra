@@ -80,7 +80,7 @@ const chunk = {
 }
 ```
 
-`status` is `success`, `failed`, `aborted`, or `suspended`. Live output arrives before its status. A suspension is resumable: the same run can later produce more output and a final status. A run outcome doesn't close the thread subscription, which continues listening for later runs.
+`status` is `success`, `failed`, `aborted`, `suspended`, or `interrupted`. Live output arrives before its status. A suspension is resumable: the same run can later produce more output and a final status. `interrupted` means `mastra.shutdown()` stopped a durable agent's run mid-run. A process that crashes doesn't report it. If recovery is enabled, it can continue that run under the same `runId`, so it isn't final either. If nothing recovers the run, `interrupted` is the last status it reports. A run outcome doesn't close the thread subscription, which continues listening for later runs.
 
 With `withInitialHistory`, the first chunk's payload is `{ messages, hasMore, activeRunId }`. `activeRunId` identifies the run holding thread ownership during hydration, or is `null` when idle. Use `thread-run-status` to determine the outcome. An idle thread alone doesn't indicate success.
 
