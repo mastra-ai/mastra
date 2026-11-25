@@ -4,7 +4,7 @@ import { once } from 'node:events';
 import { cp, link, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import test from 'node:test';
+import test, { after, before } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { KnowledgeLibSQL, LibSQLStore } from '@mastra/libsql';
@@ -15,10 +15,18 @@ import { seedDataset, type SeedReport } from '../../src/mastra/knowledge/seed.ts
 import { datasets } from '../../src/examples/datasets.ts';
 import { principals } from '../../src/mastra/identity.ts';
 import { exampleProfiles } from '../../src/examples/retail-pos/profiles.ts';
-import { approvePolicyRevision } from '../fixtures/runtime.ts';
+import { approvePolicyRevision, localTestDatabaseEnvironment } from '../fixtures/runtime.ts';
 
 const execute = promisify(execFile);
 const template = fileURLToPath(new URL('../..', import.meta.url));
+const originalDatabaseEnvironment = { ...process.env };
+before(() => Object.assign(process.env, localTestDatabaseEnvironment));
+after(() => {
+  for (const key of Object.keys(localTestDatabaseEnvironment)) {
+    if (originalDatabaseEnvironment[key] === undefined) delete process.env[key];
+    else process.env[key] = originalDatabaseEnvironment[key];
+  }
+});
 
 interface Manifest {
   schemaVersion: number;
@@ -58,6 +66,7 @@ async function fixture() {
   const manifestFile = join(root, 'knowledge-datasets/retail-pos/manifest.json');
   const environment = {
     ...process.env,
+    ...localTestDatabaseEnvironment,
     PATH: `${dirname(process.execPath)}:${process.env.PATH}`,
     SUPPORT_DATABASE_URL: url,
     SUPPORT_POLICY_APPROVAL_FILE: policyApprovalFile,
