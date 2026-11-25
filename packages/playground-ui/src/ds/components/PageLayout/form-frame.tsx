@@ -34,7 +34,7 @@ export function FormFrame({
         <div
           data-slot="form-layout"
           className={cn(
-            'mx-auto grid w-full max-w-160 min-w-0 grid-cols-1 gap-8 py-6',
+            'mx-auto grid w-full max-w-160 min-w-0 grid-cols-1 gap-8 pt-6',
             !hasAside
               ? 'grid-rows-[auto_1fr]'
               : 'grid-rows-[auto_auto_1fr] @4xl:max-w-7xl @4xl:grid-cols-[minmax(0,--spacing(160))_minmax(--spacing(64),1fr)] @4xl:grid-rows-[auto_1fr] @4xl:gap-x-10',
@@ -62,7 +62,7 @@ export function FormFrame({
           )}
           <div
             data-slot="form-layout-content"
-            className="grid min-w-0 grid-cols-1 content-start gap-7 has-[>[data-slot=empty-state-fill]:only-child]:content-stretch @4xl:col-start-1 @4xl:row-start-2"
+            className="grid min-w-0 grid-cols-1 content-start gap-6 has-[>[data-slot=empty-state-fill]:only-child]:content-stretch @4xl:col-start-1 @4xl:row-start-2"
           >
             {children}
           </div>

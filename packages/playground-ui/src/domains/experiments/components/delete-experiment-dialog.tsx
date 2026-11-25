@@ -53,8 +53,8 @@ export function DeleteExperimentDialog({
         </AlertDialog.Header>
         <AlertDialog.Footer>
           <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-          <Button icon={<TrashIcon />} variant="primary" onClick={handleDelete} disabled={isDeleting}>
-            {isDeleting ? 'Deleting...' : 'Delete'}
+          <Button icon={<TrashIcon />} variant="primary" onClick={handleDelete} loading={isDeleting}>
+            Delete
           </Button>
         </AlertDialog.Footer>
       </AlertDialog.Content>

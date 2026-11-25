@@ -14,12 +14,7 @@ import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import type { ChunkType } from '../../../../stream/types';
 import { createTool } from '../../../../tools';
-import {
-  createSharedAgent,
-  describeForAllEngines,
-  isDurableEngineVariant,
-  useLoopScenarioAimock,
-} from '../aimock-scenario';
+import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
 
 describeForAllEngines('AIMock loop scenario: onChunk tool-error', engine => {
   const getMock = useLoopScenarioAimock();
@@ -49,7 +44,7 @@ describeForAllEngines('AIMock loop scenario: onChunk tool-error', engine => {
         onChunkChunks.push(chunk);
       },
     });
-    const output = isDurableEngineVariant(engine) ? result.output : result;
+    const output = result.output ?? result;
     const text = await output.text;
     result.cleanup?.();
 

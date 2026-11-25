@@ -12,7 +12,7 @@ export interface SettingsFrameProps {
   action?: ReactNode;
   /** A header of the app's own in place of `title` (a `PageHeader` whose title takes focus), with the same inset. */
   header?: ReactNode;
-  /** `SettingsGroup`s, 28px apart. */
+  /** `SettingsGroup`s, 24px apart. */
   children: ReactNode;
 }
 
@@ -32,7 +32,7 @@ export function SettingsFrame({
       <div
         data-slot="settings-layout"
         className={cn(
-          'mx-auto grid min-h-full w-full max-w-160 min-w-0 gap-8 py-6',
+          'mx-auto grid min-h-full w-full max-w-160 min-w-0 gap-8 pt-6',
           header != null || title != null ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr]',
         )}
       >
@@ -50,7 +50,7 @@ export function SettingsFrame({
         )}
         <div
           data-slot="settings-layout-content"
-          className="grid min-w-0 content-start gap-7 has-[>[data-slot=empty-state-fill]:only-child]:content-stretch"
+          className="grid min-w-0 content-start gap-6 has-[>[data-slot=empty-state-fill]:only-child]:content-stretch"
         >
           {children}
         </div>

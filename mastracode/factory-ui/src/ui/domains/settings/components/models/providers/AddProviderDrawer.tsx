@@ -240,8 +240,9 @@ function AddProviderRow({
           aria-label={`Connect ${displayName}`}
           disabled={starting}
           onClick={onConnectGateway}
+          loading={startingProvider === provider.provider}
         >
-          {startingProvider === provider.provider ? 'Connecting…' : 'Connect'}
+          Connect
         </Button>
       )}
       {provider.oauth?.supported === true && (
@@ -251,8 +252,9 @@ function AddProviderRow({
           aria-label={`Sign in to ${displayName}`}
           disabled={starting}
           onClick={() => onSignIn(provider)}
+          loading={startingProvider === provider.provider}
         >
-          {startingProvider === provider.provider ? 'Starting…' : 'Sign in'}
+          Sign in
         </Button>
       )}
     </ProviderOptionRow>

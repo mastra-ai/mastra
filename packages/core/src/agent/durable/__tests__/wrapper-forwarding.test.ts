@@ -80,6 +80,7 @@ const RUNS_ON_WRAPPER = new Set([
   'getProcessorRunner',
   'getSkillsProcessors',
   'getSubAgentToolSchemas',
+  'getThreadRunTarget',
   'getToolsForExecution',
   'getWorkspaceInstructionsProcessors',
   'guardrailLogger',

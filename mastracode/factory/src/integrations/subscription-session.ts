@@ -6,7 +6,7 @@ import { hasResolvedOrg, seedSessionOrg } from '../session/org-seed.js';
 import type { IntegrationSubscription } from '../storage/domains/integrations/base.js';
 
 /** The Factory session row fields a woken session has to run as. */
-export type FactorySessionOwner = { userId: string; orgId: string };
+export type FactorySessionOwner = { userId: string; orgId: string; projectRepositoryId?: string | null };
 
 export interface SubscriptionSessionLookup {
   sessions: { getBySessionId(sessionId: string): Promise<FactorySessionOwner | null> };
@@ -145,10 +145,6 @@ export async function resolveSubscriptionSession(
   const ownerResourceId = thread.resourceId || resourceId;
   let session = await controller.getSession(sessionId);
   if (!session) {
-    const tags = {
-      factoryProjectId: resourceId,
-      projectRepositoryId: subscription.data.projectRepositoryId,
-    };
     // Creating the session resolves its workspace, which authorizes the caller
     // against the Factory session row — no signed-in user, so run as its owner.
     // The session is created under the resource that owns the thread, so the
@@ -162,7 +158,14 @@ export async function resolveSubscriptionSession(
       sessionId,
       ownerResourceId,
       row: sessionRow,
-      tags,
+      // The repository the session is filed under, not the subscribed pull
+      // request's: a session can follow a pull request in another repository of
+      // its environment, and source-control tools refuse a state that disagrees
+      // with the row.
+      tags: {
+        factoryProjectId: resourceId,
+        ...(sessionRow.projectRepositoryId ? { projectRepositoryId: sessionRow.projectRepositoryId } : {}),
+      },
     });
   } else if (!hasResolvedOrg(session.state?.get()?.factoryOrgId)) {
     // A session created before the org seed existed carries the project tag and

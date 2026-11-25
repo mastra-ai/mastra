@@ -57,6 +57,13 @@ export interface KnowledgeRemovePageInput {
   scope: string;
   path: string;
   author?: string;
+  /**
+   * The page as the caller read it, by id and version, as in {@link KnowledgeUpsertPageInput}. The
+   * call refuses unless `scope#path` holds that page at that version, and deletes it guarded by that
+   * version. If the page was edited, removed, or replaced by a new page at the same path, before or
+   * after the lookup, it throws `KnowledgeConflictError` and deletes nothing.
+   */
+  expected?: { id: string; version: number };
 }
 
 /** @experimental */
@@ -286,8 +293,11 @@ export async function removeKnowledgePage(
   await host.runtime.checkDeclarations();
   const storage = await host.getStorage();
   const [scope] = await storage.getScopesByAddress([input.scope]);
-  if (!scope) return null;
-  const page = await storage.getPageByPath({ scopeId: scope.id, path: keys, read: 'all' });
+  const page = scope ? await storage.getPageByPath({ scopeId: scope.id, path: keys, read: 'all' }) : null;
+  const expected = input.expected;
+  if (expected && (page?.id !== expected.id || page.version !== expected.version)) {
+    throw new KnowledgeConflictError(expected.id);
+  }
   if (!page) return null;
   const template = await host.runtime.templatePageRef(page);
   if (template) throw new Error(`"${template}" is declared in config; change the scope's pages to remove it.`);
@@ -299,6 +309,10 @@ export async function removeKnowledgePage(
       deletedBy: input.author ?? 'host',
     });
   } catch (error) {
+    // Removed after the read: a lost race when the caller named the page it read.
+    if (expected && (error as Error | undefined)?.name === 'KnowledgeNotFoundError') {
+      throw new KnowledgeConflictError(expected.id);
+    }
     if ((error as Error | undefined)?.name === 'KnowledgePageHasChildrenError') {
       throw new Error(`"${input.scope}#${input.path}" has child pages; remove them first.`);
     }
