@@ -1,6 +1,6 @@
 import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { MemoryStorage } from '@mastra/core/storage';
+import type { MemoryStorage, StorageListThreadsOutput } from '@mastra/core/storage';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import {
@@ -214,6 +214,50 @@ export async function loadLegacyThreadAvailableOrThrow({
     perPage: 1,
   });
   return assertLegacyThreadAvailableOrThrow({ threadId, threads: [row, ...readyChildren.threads] });
+}
+
+type ListThreadsArgs = Parameters<MemoryStorage['listThreads']>[0];
+
+/**
+ * Lists one page of threads for memory that cannot branch, with the same result as
+ * `sanitizeLegacyThreadListOrThrow` over the whole listing. Two indexed one-row queries
+ * look for branch rows in the filter's scope: a ready branch refuses the listing. Returns
+ * null when a pending branch exists, since hiding it from a page would make the counts wrong;
+ * the caller then lists the whole scope and sanitizes it.
+ */
+export async function listLegacyThreadsPageOrThrow({
+  store,
+  filter,
+  page,
+  perPage,
+  orderBy,
+}: {
+  store: LegacyThreadReader;
+  filter: ListThreadsArgs['filter'];
+  page?: number;
+  perPage?: number | false;
+  orderBy?: ListThreadsArgs['orderBy'];
+}): Promise<StorageListThreadsOutput | null> {
+  const hasBranchRow = async (state: 'ready' | 'pending') => {
+    const result = await store.listThreads({
+      filter: { ...filter, metadata: { ...filter?.metadata, [MASTRA_THREAD_BRANCH_STATE_METADATA_KEY]: state } },
+      page: 0,
+      perPage: 1,
+    });
+    return result.threads.length > 0;
+  };
+
+  if (await hasBranchRow('ready')) {
+    throw createThreadBranchError(
+      'BRANCHING_UNSUPPORTED',
+      'Thread branching requires a branching-capable memory implementation.',
+    );
+  }
+
+  if (await hasBranchRow('pending')) return null;
+
+  const result = await store.listThreads({ filter, page, perPage, orderBy });
+  return { ...result, threads: result.threads.map(sanitizeThreadForResponse) };
 }
 
 function isAccessDenied(error: unknown): boolean {

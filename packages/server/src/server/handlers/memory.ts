@@ -92,6 +92,7 @@ import {
   createMemoryThreadIfAbsent,
   filterThreadsByBranchAccess,
   inspectVisibleMemoryThread,
+  listLegacyThreadsPageOrThrow,
   sanitizeLegacyThreadListOrThrow,
   sanitizeThreadForResponse,
   throwThreadBranchNotFound,
@@ -1385,8 +1386,27 @@ export const LIST_THREADS_ROUTE = createRoute({
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
 
       if (memory) {
+        const filterWithFGA = shouldFilterThreadsWithFGA(mastra, requestContext);
+        if (!filterWithFGA) {
+          if (memory.supportsThreadBranching) {
+            // Branch lineage stays inside one resource, so without FGA the ancestry check only
+            // drops broken lineages; checking the requested page keeps storage pagination.
+            const result = await memory.listThreads({ filter, page, perPage, orderBy });
+            const ancestryAuthorizedThreads = await filterThreadsByBranchAccess({
+              mastra,
+              requestContext,
+              memory,
+              threads: result.threads,
+              effectiveResourceId,
+            });
+            return { ...result, threads: ancestryAuthorizedThreads.map(sanitizeThreadForResponse) };
+          }
+          const legacyPage = await listLegacyThreadsPageOrThrow({ store: memory, filter, page, perPage, orderBy });
+          if (legacyPage) return legacyPage;
+        }
+
         const result = await memory.listThreads({ filter, perPage: false, orderBy });
-        const authorizedThreads = shouldFilterThreadsWithFGA(mastra, requestContext)
+        const authorizedThreads = filterWithFGA
           ? await filterAccessibleThreads({ mastra, requestContext, threads: result.threads })
           : result.threads;
         const ancestryAuthorizedThreads = await filterThreadsByBranchAccess({
@@ -1414,8 +1434,19 @@ export const LIST_THREADS_ROUTE = createRoute({
       if (storage) {
         const memoryStore = await storage.getStore('memory');
         if (memoryStore) {
+          const filterWithFGA = shouldFilterThreadsWithFGA(mastra, requestContext);
+          if (!filterWithFGA) {
+            const legacyPage = await listLegacyThreadsPageOrThrow({
+              store: memoryStore,
+              filter,
+              page,
+              perPage,
+              orderBy,
+            });
+            if (legacyPage) return legacyPage;
+          }
           const result = await memoryStore.listThreads({ filter, perPage: false, orderBy });
-          const authorizedThreads = shouldFilterThreadsWithFGA(mastra, requestContext)
+          const authorizedThreads = filterWithFGA
             ? await filterAccessibleThreads({ mastra, requestContext, threads: result.threads })
             : result.threads;
           return paginateThreads({
