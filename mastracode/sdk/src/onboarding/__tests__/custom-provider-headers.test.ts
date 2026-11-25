@@ -41,7 +41,7 @@ describe('customProviderHeaderProblem', () => {
     ['an empty name', [{ name: '', value: 'v' }], undefined, /not a valid header name/],
     ['a name that is a number', [{ name: 123, value: 'v' }], undefined, /name must be text/],
     ['a value that is a number', [{ name: 'X-A', value: 123 }], undefined, /value must be text/],
-    ['an entry that is not an object', [null as never], undefined, /needs a name and a value/],
+    ['an entry that is not an object', [null] as unknown as Headers, undefined, /needs a name and a value/],
     ['Authorization with a missing scheme', [{ name: 'authorization', value: 'x' }], undefined, /carries the API key/],
     ['Authorization with bearer', [{ name: 'Authorization', value: 'x' }], 'bearer', /carries the API key/],
     ['x-api-key with x-api-key', [{ name: 'X-API-Key', value: 'x' }], 'x-api-key', /carries the API key/],
@@ -66,5 +66,14 @@ describe('customProviderHeaderProblem', () => {
     ['21 headers', Array.from({ length: 21 }, (_, i) => ({ name: `X-H${i}`, value: 'v' })), undefined, /at most 20/],
   ])('refuses %s', (_, headers, scheme, problem) => {
     expect(customProviderHeaderProblem(headers, scheme)).toMatch(problem);
+  });
+
+  // The problem text reaches terminals and logs, so it must not echo control characters or a huge name.
+  it('quotes at most 100 characters of a bad name, without control characters', () => {
+    const name = `X\u001b[2J${'a'.repeat(200)}`;
+
+    expect(customProviderHeaderProblem([{ name, value: 'v' }], undefined)).toBe(
+      `"X [2J${'a'.repeat(95)}..." is not a valid header name.`,
+    );
   });
 });

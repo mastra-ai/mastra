@@ -41,6 +41,20 @@ const HEADER_NAME_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
  */
 const INVALID_HEADER_VALUE_CHARACTER = /[^\t\x20-\x7e\x80-\xff]/;
 
+/** The longest part of a refused header name repeated in the problem text. */
+const MAX_QUOTED_NAME_LENGTH = 100;
+
+/**
+ * A refused header name made safe to show. The name may come from a request
+ * body and end up in a terminal, so it is cut short and its control
+ * characters become spaces.
+ */
+function quotableName(name: string): string {
+  // oxlint-disable-next-line no-control-regex -- matching control characters is the point.
+  const shown = name.slice(0, MAX_QUOTED_NAME_LENGTH).replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ');
+  return name.length > MAX_QUOTED_NAME_LENGTH ? `${shown}...` : shown;
+}
+
 /**
  * The header the auth scheme writes the key into. A missing scheme means
  * `bearer`, which is how providers saved before schemes existed authenticate.
@@ -77,7 +91,7 @@ export function customProviderHeaderProblem(
     const { name, value } = header as { name: unknown; value?: unknown };
     if (typeof name !== 'string') return 'Each custom header name must be text.';
     if (!HEADER_NAME_PATTERN.test(name)) {
-      return `"${name}" is not a valid header name.`;
+      return `"${quotableName(name)}" is not a valid header name.`;
     }
     const lowerName = name.toLowerCase();
     if (REFUSED_CUSTOM_PROVIDER_HEADER_NAMES.includes(lowerName)) {
