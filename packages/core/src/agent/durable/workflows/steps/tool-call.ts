@@ -114,7 +114,8 @@ import { serializeError } from '../../utils/serialize-state';
 import { recordBackgroundResult } from '../shared/background-results';
 import { calculateAccumulatedUsage, carriedSpanClocks } from '../shared/iteration-state';
 import { readMessageListState } from '../shared/message-list-state';
-import type { AccumulatedUsage } from '../shared/schemas';
+import { responseRecordSchema } from '../shared/schemas';
+import type { AccumulatedUsage, BaseIterationState } from '../shared/schemas';
 
 /**
  * Input schema for the durable tool call step.
@@ -143,6 +144,8 @@ const durableToolCallInputSchema = z.object({
   stepUsage: z.any().optional(),
   // Other tool calls of the step run at the same time, so a suspension reports no model usage
   sideBySide: z.boolean().optional(),
+  // The model that answered the step that produced this call, and the cost its provider reported
+  response: responseRecordSchema.optional(),
 });
 
 /**
@@ -518,6 +521,8 @@ export function createDurableToolCallStep() {
         timeToFirstTokenMs?: number;
         accumulatedUsage: AccumulatedUsage;
         generationReportedUsage?: AccumulatedUsage;
+        generationReportedSteps?: number;
+        reportedCosts?: BaseIterationState['reportedCosts'];
       }>();
 
       const { runId, options: agentOptions, state } = initData;
@@ -600,8 +605,22 @@ export function createDurableToolCallStep() {
             const modelSpan = obs.rebuildSpan(modelSpanData) as AIModelGenerationSpan | undefined;
             // A hidden generation reports its usage on its parent; a rebuilt one has no live parent.
             if (modelSpan?.isInternal) modelSpan.parent ??= agentSpan;
-            if (usage) modelSpan?.createTracker()?.endGeneration({ ...end, attributes: { ...attributes }, usage });
-            else modelSpan?.end(end);
+            if (usage) {
+              // As at the end of the run: the model that answered, and the cost its provider reported.
+              const servedBy = typedInput.response?.servedBy;
+              const servedName = servedBy && `llm: '${servedBy.modelId}'`;
+              if (servedName && modelSpan && modelSpan.name !== servedName) modelSpan.update({ name: servedName });
+              const costs = initData.reportedCosts?.slice(initData.generationReportedSteps ?? 0) ?? [];
+              modelSpan?.createTracker()?.endGeneration({
+                ...end,
+                attributes: {
+                  ...attributes,
+                  ...(servedBy ? { model: servedBy.modelId, provider: servedBy.provider } : {}),
+                },
+                usage,
+                stepProviderMetadata: [...costs, typedInput.response?.reportedCost].map(cost => cost ?? undefined),
+              });
+            } else modelSpan?.end(end);
           }
           agentSpan?.end({
             output,

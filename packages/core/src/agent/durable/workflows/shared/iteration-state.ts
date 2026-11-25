@@ -107,7 +107,12 @@ export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput):
     toolCalls: executionOutput.output.toolCalls,
     // Tracing facts stay off the step records, which `stream.steps` and the finish payload expose.
     toolResults: executionOutput.toolResults?.map(
-      ({ stepSpanData: _stepSpanData, tracingDelegationFailure: _tracingDelegationFailure, ...result }) => result,
+      ({
+        stepSpanData: _stepSpanData,
+        tracingDelegationFailure: _tracingDelegationFailure,
+        response: _response,
+        ...result
+      }) => result,
     ),
     usage: executionOutput.output.usage,
     finishReason: executionOutput.stepResult.reason,
@@ -217,10 +222,12 @@ export function createBaseIterationStateUpdate(
     usageAggregationVersion: signalPreempted ? currentState.usageAggregationVersion : 1,
     // The suspension that ended this step reported the run total so far on its MODEL_GENERATION,
     // unless the provider left part of that total unknown: then it reported nothing.
-    generationReportedUsage:
-      currentState.generationReportedUsage && executionOutput.suspensionReportedUsage && !isUsageIncomplete(newUsage)
-        ? newUsage
-        : currentState.generationReportedUsage,
+    ...(currentState.generationReportedUsage && executionOutput.suspensionReportedUsage && !isUsageIncomplete(newUsage)
+      ? { generationReportedUsage: newUsage, generationReportedSteps: previousSteps.length + 1 }
+      : {
+          generationReportedUsage: currentState.generationReportedUsage,
+          generationReportedSteps: currentState.generationReportedSteps,
+        }),
     lastStepResult,
     deferredStepFinishChunk: executionOutput.deferredStepFinishChunk,
     backgroundTaskPending: executionOutput.backgroundTaskPending,

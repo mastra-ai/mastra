@@ -644,6 +644,7 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
               timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,
               // A suspended step never emits step-finish, so its usage rides on the suspension chunk.
               stepUsage: llmOutput.stepResult?.totalUsage,
+              response: llmOutput.response,
               ...(sideBySide ? { sideBySide } : {}),
             })) as DurableToolCallInput[];
           },
@@ -1349,7 +1350,9 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
                       state.generationReportedUsage,
                     ),
                     // Cost the provider reported itself is used in place of an estimate.
-                    stepProviderMetadata: state.reportedCosts?.map(cost => cost ?? undefined),
+                    stepProviderMetadata: state.reportedCosts
+                      ?.slice(state.generationReportedSteps ?? 0)
+                      .map(cost => cost ?? undefined),
                   });
                 }
                 agentSpan?.end({

@@ -216,6 +216,8 @@ export const baseIterationStateSchema = z.object({
   // segment that finishes the run reports the rest. Absent on runs that started before this
   // field existed, whose final step reports the whole run as before.
   generationReportedUsage: accumulatedUsageSchema.optional(),
+  // How many of the run's steps that usage covers.
+  generationReportedSteps: z.number().optional(),
   // Last step result for continuation check
   lastStepResult: z.any().optional(),
   // Step-finish waits here until the loop's continuation policy resolves.

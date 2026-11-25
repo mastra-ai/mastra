@@ -489,6 +489,8 @@ export interface DurableToolCallInput {
   stepSpanData?: unknown;
   /** Model usage of the step that produced this call, reported on its suspension chunk */
   stepUsage?: LanguageModelUsage;
+  /** Response of that step: the model that answered and the cost its provider reported */
+  response?: ResponseRecord;
   /** Other tool calls of the step run at the same time, so a suspension of this one reports no model usage */
   sideBySide?: boolean;
 }

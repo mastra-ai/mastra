@@ -357,6 +357,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
           completionStartTime: llmOutput.completionStartTime,
           timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,
           stepUsage: llmOutput.stepResult?.totalUsage,
+          response: llmOutput.response,
           ...(sideBySide ? { sideBySide } : {}),
         })) as DurableToolCallInput[];
       },
@@ -915,7 +916,9 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
               },
               usage,
               // Cost the provider reported itself is used in place of an estimate.
-              stepProviderMetadata: state.reportedCosts?.map(cost => cost ?? undefined),
+              stepProviderMetadata: state.reportedCosts
+                ?.slice(state.generationReportedSteps ?? 0)
+                .map(cost => cost ?? undefined),
             });
           }
 
