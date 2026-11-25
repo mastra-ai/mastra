@@ -616,24 +616,32 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     return resolved && { claimsTable: TABLE_WORKFLOW_RUN_OWNERS, fence: resolved, operation };
   }
 
+  /** The fence to gate a storage v2 write's statements on: set when `#writeRun` sends them as one fenced batch. */
+  #batchGate(
+    check: RunFenceCheck | undefined,
+    { expectedStatus, stateBase }: { expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[]; stateBase?: StateRef },
+  ): RunFenceCheck | undefined {
+    return expectedStatus === undefined && stateBase === undefined ? check : undefined;
+  }
+
   /**
    * Runs a storage v2 write's statements behind the run's fence. With `expectedStatus` or
    * `stateBase`, in a write transaction that first reads the stored run: it writes nothing
    * (resolving to null) when the run is stored and its status doesn't match `expectedStatus`, and
    * throws when the state version `stateBase` names isn't stored. Without either, a fenced write is
-   * one batch, its statements built with the fence to gate them on.
+   * one batch, its statements gated on `#batchGate`'s fence.
    */
   #writeRun(
     check: RunFenceCheck | undefined,
     run: RunWrite,
     { expectedStatus, stateBase }: { expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[]; stateBase?: StateRef },
-    build: (gate?: RunFenceCheck) => SqliteStatement[],
+    statements: SqliteStatement[],
   ): Promise<SqliteResultSet[] | null> {
+    const gate = this.#batchGate(check, { expectedStatus, stateBase });
+    if (gate) return runFencedBatch(this.#client, gate, statements);
     if (expectedStatus === undefined && stateBase === undefined) {
-      if (check) return runFencedBatch(this.#client, check, build(check));
-      return withRunFence(this.#client, undefined, writer => writer.batch(build()));
+      return withRunFence(this.#client, undefined, writer => writer.batch(statements));
     }
-    const statements = build();
     return inWriteTransaction(this.#client, async tx => {
       if (check) await assertRunFence(tx, check);
       if (expectedStatus !== undefined) {
@@ -1015,32 +1023,29 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     const check = this.#runFenceCheck(fence, run.runId, 'writeWorkflowRunCheckpoint');
     try {
       const base = state === undefined ? stateBase : undefined;
-      const upsert = base ? 1 : 0;
-      const build = (gate?: RunFenceCheck) => {
-        const gated = (statement: SqliteStatement) => (gate ? gateOnRunFence(statement, gate) : statement);
-        const statements: SqliteStatement[] = [];
-        if (base) {
-          statements.push(
-            gated({
-              sql: `UPDATE ${TABLE_WORKFLOW_RUNS} SET stateShared = 1 WHERE workflow_name = ? AND run_id = ? AND NOT stateShared`,
-              args: [base.workflowName, base.runId],
-            }),
-          );
-        }
+      const gate = this.#batchGate(check, { expectedStatus, stateBase: base });
+      const gated = (statement: SqliteStatement) => (gate ? gateOnRunFence(statement, gate) : statement);
+      const statements: SqliteStatement[] = [];
+      if (base) {
         statements.push(
-          upsertHeader(run, entries.length, { checkpoint: true }, gate),
-          gated(updateStateColumns(run, stateColumnsWrite({ state, stateBase, statePatch }, true)!)),
           gated({
-            sql: `DELETE FROM ${TABLE_WORKFLOW_RUN_ENTRIES} WHERE workflow_name = ? AND run_id = ?
-            AND (kind IN ('step', 'step-patch') OR NOT (SELECT stateShared FROM ${TABLE_WORKFLOW_RUNS} WHERE workflow_name = ? AND run_id = ?))`,
-            args: [run.workflowName, run.runId, run.workflowName, run.runId],
+            sql: `UPDATE ${TABLE_WORKFLOW_RUNS} SET stateShared = 1 WHERE workflow_name = ? AND run_id = ? AND NOT stateShared`,
+            args: [base.workflowName, base.runId],
           }),
-          gated(insertEntries(run, entries)),
         );
-        return statements;
-      };
+      }
+      const upsert = statements.push(upsertHeader(run, entries.length, { checkpoint: true }, gate)) - 1;
+      statements.push(
+        gated(updateStateColumns(run, stateColumnsWrite({ state, stateBase, statePatch }, true)!)),
+        gated({
+          sql: `DELETE FROM ${TABLE_WORKFLOW_RUN_ENTRIES} WHERE workflow_name = ? AND run_id = ?
+            AND (kind IN ('step', 'step-patch') OR NOT (SELECT stateShared FROM ${TABLE_WORKFLOW_RUNS} WHERE workflow_name = ? AND run_id = ?))`,
+          args: [run.workflowName, run.runId, run.workflowName, run.runId],
+        }),
+        gated(insertEntries(run, entries)),
+      );
       const results = await this.executeWithRetry(
-        () => this.#writeRun(check, run, { expectedStatus, stateBase: base }, build),
+        () => this.#writeRun(check, run, { expectedStatus, stateBase: base }, statements),
         'writeWorkflowRunCheckpoint',
       );
       if (!results) return null;
@@ -1089,17 +1094,15 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
           threadId: args.threadId,
           header: args.header,
         };
-        const build = (gate?: RunFenceCheck) => {
-          const gated = (statement: SqliteStatement) => (gate ? gateOnRunFence(statement, gate) : statement);
-          const statements = [upsertHeader(run, entries.length, { checkpoint: false, startStateSeq }, gate)];
-          if (write) statements.push(gated(updateStateColumns(run, write)));
-          statements.push(gated(insertEntries(run, entries)));
-          const replaced = deleteReplacedSteps(run, entries);
-          if (replaced) statements.push(gated(replaced));
-          return statements;
-        };
+        const gate = this.#batchGate(check, { expectedStatus });
+        const gated = (statement: SqliteStatement) => (gate ? gateOnRunFence(statement, gate) : statement);
+        const statements = [upsertHeader(run, entries.length, { checkpoint: false, startStateSeq }, gate)];
+        if (write) statements.push(gated(updateStateColumns(run, write)));
+        statements.push(gated(insertEntries(run, entries)));
+        const replaced = deleteReplacedSteps(run, entries);
+        if (replaced) statements.push(gated(replaced));
         const results = await this.executeWithRetry(
-          () => this.#writeRun(check, run, { expectedStatus }, build),
+          () => this.#writeRun(check, run, { expectedStatus }, statements),
           'appendWorkflowRunEntries',
         );
         if (!results) return null;
