@@ -105,5 +105,10 @@ describeForAllEngines('AIMock loop scenario: abort keeps no item ids of the unfi
     const messages = await nextTurn(agent);
     expect(messages).not.toContainEqual(ITEM_REFERENCE);
     expect(messages.at(-1)).toMatchObject({ role: 'user', content: 'next' });
+    // The plain loop does not save an aborted step; the other engines keep its text inline.
+    if (engine !== 'normal' && engine !== 'fs') {
+      const partial = messages.find((m: any) => m.role === 'assistant');
+      expect(partial?.content).toEqual(expect.stringMatching(/^Here/));
+    }
   });
 });
