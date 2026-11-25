@@ -982,7 +982,7 @@ try {
   const original = join(lab, 'primary');
   const db = await database(original);
   const seed = () =>
-    exec('npm', ['run', 'knowledge:seed'], {
+    exec(process.execPath, ['scripts/seed-knowledge.ts'], {
       cwd: template,
       env: { ...env, ...databaseEnv(db) },
       timeout: 30000,
