@@ -7,29 +7,38 @@ import { LogView, filterLogsByFields } from './index';
 import type { LogViewHeight } from './index';
 import type { FilterBarItem } from '@/ds/components/FilterBar';
 import { TooltipProvider } from '@/ds/components/Tooltip';
+import { IconConsole } from '@/ds/icons/central/IconConsole';
 import { IconHammer } from '@/ds/icons/central/IconHammer';
 import { IconServer } from '@/ds/icons/central/IconServer';
 
 const LEVELS: LogLevel[] = ['debug', 'info', 'warn', 'error'];
 
-const logs: LogRecord[] = [
+type SandboxLine = LogRecord & Pick<LogViewLine, 'origin'>;
+
+const sandboxOrigin = { icon: <IconServer />, label: 'Sandbox' };
+const processOrigin = { icon: <IconConsole />, label: 'Process' };
+
+const logs: SandboxLine[] = [
   {
     timestamp: '2026-11-24T09:29:30.956Z',
     level: 'warn',
     message: 'Memory usage above 80% of limit',
     data: { used_mb: '842', limit_mb: '1024' },
+    origin: sandboxOrigin,
   },
   {
     timestamp: '2026-11-24T09:31:07.956Z',
     level: 'info',
     message: 'Process.Start stream ended',
     data: { operation_id: 'op_8f21', exit_code: '0' },
+    origin: processOrigin,
   },
   {
     timestamp: '2026-11-24T09:32:44.956Z',
     level: 'debug',
     message: 'envd: received exec request',
     data: { cmd: 'pnpm install --frozen-lockfile', cwd: '/home/user/app' },
+    origin: processOrigin,
   },
   {
     timestamp: '2026-11-24T09:35:58.956Z',
@@ -37,6 +46,7 @@ const logs: LogRecord[] = [
     message:
       "Command failed: node server.js, Error: Cannot find module '/home/user/app/dist/server-with-a-really-long-filename-that-should-wrap.js'",
     data: { operation_id: 'op_a771', exit_code: '1' },
+    origin: processOrigin,
   },
   {
     timestamp: '2026-11-24T09:36:01.956Z',
@@ -48,11 +58,12 @@ const logs: LogRecord[] = [
       '    at Module.load (node:internal/modules/cjs/loader:1119:32)',
       '    at node:internal/main/run_main_module:28:49',
     ].join('\n'),
+    origin: processOrigin,
   },
 ];
 
 interface CompositionProps {
-  logs: LogRecord[];
+  logs: SandboxLine[];
   order?: LogViewOrder;
   wrap?: boolean;
   search?: boolean;
@@ -64,7 +75,7 @@ interface CompositionProps {
   isFetchingNextPage?: boolean;
   onFetchNextPage?: () => void;
   onRefresh: () => void;
-  onLogClick?: (log: LogRecord) => void;
+  onLogClick?: (log: SandboxLine) => void;
   height?: LogViewHeight;
 }
 
@@ -72,8 +83,8 @@ type CompositionBodyProps = Omit<
   CompositionProps,
   'logs' | 'filters' | 'search' | 'fieldChips' | 'initialFilters' | 'onRefresh' | 'height'
 > & {
-  lines: LogRecord[];
-  logIdMap: Map<LogRecord, string>;
+  lines: SandboxLine[];
+  logIdMap: Map<SandboxLine, string>;
   onClearFilters?: () => void;
 };
 
