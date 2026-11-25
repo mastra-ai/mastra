@@ -95,7 +95,9 @@ export function unwrapKnowledgeStorage(storage: KnowledgeStorage): KnowledgeStor
  * on a `transaction` view are held until that transaction commits and dropped if it rolls back; a
  * nested `transaction` hands its writes to the outer one when it succeeds. While a nested
  * transaction is open, writes through the outer view belong to it too (they run inside its
- * savepoint), so they are kept or dropped with it. Every other member passes
+ * savepoint), so they are kept or dropped with it. Each view tracks one open nested transaction,
+ * so concurrent nested transactions opened from the same view are not supported: their events
+ * would cross. Every other member passes
  * through, bound to the real store so adapters' private fields keep working. Nothing extra happens
  * while `listening()` is false. Describing or emitting an event never fails a write that committed:
  * errors go to `onError`.
