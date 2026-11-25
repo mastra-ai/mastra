@@ -198,6 +198,25 @@ describe('stream execution cancellation over HTTP', () => {
     expect(new Set(aborts)).toEqual(new Set([runId]));
   });
 
+  it('keeps the cancellation cap when onChunk throws during a caller cancellation', async () => {
+    attemptsBeforeAck = Infinity;
+    firstChunk = true;
+    const ac = new AbortController();
+    const response = await start('stream', ac.signal);
+    await expect(
+      response.processDataStream({
+        onChunk: () => {
+          ac.abort();
+          throw new Error('handler failed');
+        },
+      }),
+    ).rejects.toThrow('handler failed');
+    await new Promise(resolve => setTimeout(resolve, 10_500));
+    const count = aborts.length;
+    await new Promise(resolve => setTimeout(resolve, 250));
+    expect(aborts).toHaveLength(count);
+  }, 13_000);
+
   it('stops registration retries when the observer is cancelled', async () => {
     attemptsBeforeAck = Infinity;
     const ac = new AbortController();

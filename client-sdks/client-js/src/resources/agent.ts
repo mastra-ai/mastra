@@ -2346,9 +2346,9 @@ export class Agent extends BaseResource {
     let cancelling = false;
     // A consumer detach ends the retry; the SDK's own cancel after an onChunk failure must not end
     // a cancellation the caller already started, which keeps running until acknowledged or the cap.
+    const keepCancelling = () => cancelling && isHandlerFailure(detachSignal?.reason);
     const stopCancellation = () => {
-      if (cancelling && isHandlerFailure(detachSignal?.reason)) return;
-      cancellationAbort.abort();
+      if (!keepCancelling()) cancellationAbort.abort();
     };
     const cancelExecution = () => {
       cancelling = true;
@@ -2395,6 +2395,8 @@ export class Agent extends BaseResource {
     const cleanupCancellation = () => {
       callerSignal?.removeEventListener('abort', cancelExecution);
       detachSignal?.removeEventListener('abort', stopCancellation);
+      // The in-flight retry clears its own cap when it ends.
+      if (keepCancelling()) return;
       clearTimeout(cancellationTimer);
       stopCancellation();
     };
