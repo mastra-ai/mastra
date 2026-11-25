@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { ApiError } from '../api/client';
 import { useApiConfig } from '../api/config';
@@ -29,10 +29,14 @@ export function useCustomProvidersQuery() {
   });
 }
 
+const SAVE_CUSTOM_PROVIDER_KEY = ['save-custom-provider'] as const;
+
+/** Saves a custom provider, or refuses with the failure when `check` is set and the connection test fails. */
 export function useSaveCustomProvider() {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey: SAVE_CUSTOM_PROVIDER_KEY,
     mutationFn: (body: SaveCustomProviderBody) =>
       client.post<{ ok: true; provider: CustomProviderInfo }>('/web/config/custom-providers', body),
     onSuccess: () =>
@@ -42,6 +46,21 @@ export function useSaveCustomProvider() {
         queryClient.invalidateQueries({ queryKey: queryKeys.availableModels() }),
       ]),
   });
+}
+
+/**
+ * Whether a custom provider save is in flight. A dialog holding the form reads this to refuse closing until the
+ * save settles, as the other credential dialogs do, so a save never lands after its dialog is gone.
+ */
+export function useCustomProviderSavePending(): boolean {
+  return useIsMutating({ mutationKey: SAVE_CUSTOM_PROVIDER_KEY }) > 0;
+}
+
+/** The machine code of a refused request (`header_refused`, `api_key_required`, ...), when the server sent one. */
+export function refusalCode(error: unknown): string | undefined {
+  if (!(error instanceof ApiError) || !error.body || typeof error.body !== 'object') return undefined;
+  const code = 'error' in error.body ? error.body.error : undefined;
+  return typeof code === 'string' ? code : undefined;
 }
 
 /**
