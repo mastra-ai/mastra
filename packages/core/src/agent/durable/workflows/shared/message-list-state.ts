@@ -60,16 +60,21 @@ export async function readMessageListState(
  * Stores an updated transcript where this run keeps it. Returns the fields to
  * spread into the step output: nothing when it went to workflow state,
  * `{ messageListState }` when the run threads it through step payloads.
+ *
+ * `extraState` goes to workflow state in the same write, for values that must
+ * be saved together with the transcript they describe.
  */
 export async function storeMessageListState(
   params: WritableTranscriptParams,
   messageListState: SerializedMessageListState,
+  extraState?: Record<string, unknown>,
 ): Promise<MessageListStateCarrier> {
   const stored = (await params.getState(['messageListState'])) as StoredMessageListStateCarrier | undefined;
   if (stored?.messageListState === undefined) {
+    if (extraState) await params.setState(extraState);
     return { messageListState };
   }
-  await params.setState({ messageListState: await dehydrateMessageListState(params, messageListState) });
+  await params.setState({ ...extraState, messageListState: await dehydrateMessageListState(params, messageListState) });
   return {};
 }
 
