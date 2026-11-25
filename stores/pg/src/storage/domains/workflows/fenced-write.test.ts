@@ -169,6 +169,10 @@ describe('Postgres single-statement fenced writes', () => {
       const padding = 'x'.repeat(256 * 1024);
       const runId = `run-${crypto.randomUUID()}`;
       let fence = await claim(runId, 'owner-0');
+      const storedRound = async () =>
+        ((await claimer.loadWorkflowSnapshot({ workflowName, runId })) as { value?: { round: number } } | null)?.value
+          ?.round;
+      let accepted: number | undefined;
       for (let round = 1; round <= 400; round++) {
         const save = writer
           .persistWorkflowSnapshot({ workflowName, runId, snapshot: snapshot(runId, { round, padding }), fence })
@@ -182,12 +186,15 @@ describe('Postgres single-statement fenced writes', () => {
         // Spread the claim's start over the save's flight, so rounds land on every interleaving.
         await new Promise(resolve => setTimeout(resolve, round % 4));
         const next = await claim(runId, `owner-${round}`);
-        const seen = (await claimer.loadWorkflowSnapshot({ workflowName, runId })) as { value?: { round: number } };
+        const seen = await storedRound();
         if (await save) {
           landed++;
-          expect(seen?.value?.round).toBe(round);
+          accepted = round;
+          expect(seen).toBe(round);
         } else {
           refused++;
+          // A refused save wrote nothing, also after it settled.
+          expect(await storedRound()).toBe(accepted);
         }
         fence = next;
       }
