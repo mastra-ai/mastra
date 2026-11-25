@@ -153,6 +153,8 @@ describe('toAISdkFormat', () => {
 
     it('keeps user text that starts with a quoted tag but is not a reminder element', () => {
       expect(toAISdkV5Messages('<system-reminder> shows up in my logs, what is it?')).toHaveLength(1);
+      expect(toAISdkV5Messages('<system-reminder means what?</system-reminder>')).toHaveLength(1);
+      expect(toAISdkV5Messages('<system-reminder/help</system-reminder>')).toHaveLength(1);
     });
 
     it('keeps a full reminder block pasted inside a longer user message', () => {

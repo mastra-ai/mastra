@@ -28,7 +28,7 @@ function isSystemReminderUIMessage(message: {
   return isSystemReminderElement(message.content);
 }
 
-const SYSTEM_REMINDER_ELEMENT = /^<system-reminder(?:[\s>/][\s\S]*)?(?:<\/system-reminder>|\/>)$/;
+const SYSTEM_REMINDER_ELEMENT = /^<system-reminder(?:\s[^<>]*)?(?:>[\s\S]*<\/system-reminder>|\/>)$/;
 
 function isSystemReminderElement(text: unknown) {
   return typeof text === 'string' && SYSTEM_REMINDER_ELEMENT.test(text.trim());
