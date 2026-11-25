@@ -5,11 +5,19 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../../e2e/ui/render';
-import type { CustomProviderInfo, OAuthStartResponse, ProviderInfo } from '../../../../../../../api/types';
+import type {
+  CustomProviderCheckFailedResponse,
+  CustomProviderCheckFailure,
+  CustomProviderCheckResponse,
+  CustomProviderInfo,
+  OAuthStartResponse,
+  ProviderInfo,
+} from '../../../../../../../api/types';
 import { useAvailableModelsQuery } from '../../../../../../../hooks/useAvailableModels';
 import type { AvailableModelOption } from '../../../../../../../hooks/useAvailableModels';
 import { ProviderList } from '../ProviderList';
 import {
+  CHECK_URL,
   CUSTOM_PROVIDERS_URL,
   PROVIDERS_URL,
   customProviderUrl,
@@ -556,4 +564,386 @@ describe('ProviderList custom endpoints', () => {
     await waitFor(() => expect(removedWith).toBe('?scope=user'));
     await waitFor(() => expect(screen.queryByText('my-llm')).not.toBeInTheDocument());
   });
+
+  it.each([
+    {
+      state: 'never tested',
+      lastCheck: undefined,
+      status: 'Not verified',
+      reason: undefined,
+    },
+    {
+      state: 'that failed its last test',
+      lastCheck: {
+        at: '2026-11-26T10:00:00.000Z',
+        ok: false,
+        message: 'HTTP 401 Unauthorized from https://api.example.com/v1/models',
+      },
+      status: 'Check failed',
+      reason: 'HTTP 401 Unauthorized from https://api.example.com/v1/models',
+    },
+  ])('shows an endpoint $state as unverified, never as connected', async ({ lastCheck, status, reason }) => {
+    stubProviders([]);
+    stubCustomProviders([{ ...myLlm, lastCheck }]);
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    const row = await findCustomRow('my-llm');
+    expect(within(row).getByText(status)).toBeInTheDocument();
+    expect(within(row).queryByText('2 models')).not.toBeInTheDocument();
+    if (reason) expect(within(row).getByText(reason)).toBeInTheDocument();
+  });
+
+  it('tests a saved endpoint from its row menu and shows the recorded result', async () => {
+    let saved: CustomProviderInfo = { ...myLlm, lastCheck: undefined };
+    let checkBody: unknown;
+    const failure: CustomProviderCheckFailure = {
+      kind: 'http',
+      status: 403,
+      message: 'HTTP 403 Forbidden from https://api.example.com/v1/models',
+    };
+    stubProviders([]);
+    server.use(
+      http.get(CUSTOM_PROVIDERS_URL, () => HttpResponse.json({ providers: [saved] })),
+      http.post(CHECK_URL, async ({ request }) => {
+        checkBody = await request.json();
+        saved = { ...saved, lastCheck: { at: '2026-11-26T10:00:00.000Z', ok: false, message: failure.message } };
+        const response: CustomProviderCheckResponse = {
+          ok: true,
+          check: { models: { ok: false, failure, latencyMs: 30 } },
+          provider: saved,
+        };
+        return HttpResponse.json(response);
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    expect(within(await findCustomRow('my-llm')).getByText('Not verified')).toBeInTheDocument();
+    await pickCustomRowAction(user, 'my-llm', 'Test connection');
+
+    await waitFor(() => expect(within(rowForCustom()).getByText('Check failed')).toBeInTheDocument());
+    expect(within(rowForCustom()).getByText(failure.message)).toBeInTheDocument();
+    expect(checkBody).toEqual({ previousId: 'my-llm', scope: 'user' });
+  });
 });
+
+/** The row of the `my-llm` endpoint, read again after a refetch replaces it. */
+function rowForCustom(): HTMLElement {
+  const row = screen.getByText('my-llm').closest('li');
+  if (!(row instanceof HTMLElement)) throw new Error('Custom endpoint row not found for my-llm');
+  return row;
+}
+
+describe('Custom endpoint form', () => {
+  const URL_UNDER_TEST = 'https://api.example.com/v1';
+
+  /** Opens the form for a new endpoint from the Add provider dialog. */
+  async function openNewEndpointForm() {
+    stubProviders([{ provider: 'openai', source: 'none' }]);
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+    const form = await openCustomEndpointForm(user, await openAddProvider(user));
+    return { user, form };
+  }
+
+  /** Records every save request and answers it with the saved endpoint. */
+  function recordSaves() {
+    const bodies: unknown[] = [];
+    server.use(
+      http.post(CUSTOM_PROVIDERS_URL, async ({ request }) => {
+        bodies.push(await request.json());
+        const provider: CustomProviderInfo = {
+          id: 'my-llm',
+          name: 'my-llm',
+          url: URL_UNDER_TEST,
+          hasApiKey: false,
+          authScheme: 'bearer',
+          headers: [],
+          models: [],
+          scope: 'user',
+        };
+        return HttpResponse.json({ ok: true, provider });
+      }),
+    );
+    return bodies;
+  }
+
+  it('lists the endpoint models after Test for the user to pick, keeping an id they typed', async () => {
+    let checkBody: unknown;
+    const listed: CustomProviderCheckResponse = {
+      ok: true,
+      check: { models: { ok: true, models: ['gpt-a', 'gpt-b', 'gpt-c'], latencyMs: 85 } },
+    };
+    server.use(
+      http.post(CHECK_URL, async ({ request }) => {
+        checkBody = await request.json();
+        return HttpResponse.json(listed);
+      }),
+    );
+    const saves = recordSaves();
+    const { user, form } = await openNewEndpointForm();
+
+    await fillCustomEndpoint(user, form, { name: 'my-llm', url: URL_UNDER_TEST, models: ['my-finetune'] });
+    await user.type(within(form).getByPlaceholderText('Paste API key'), 'sk-test');
+    await user.click(within(form).getByRole('button', { name: 'Test' }));
+
+    expect(
+      await within(form).findByText('Endpoint answered in 85 ms and lists 3 models. This check does not call a model.'),
+    ).toBeInTheDocument();
+    expect(checkBody).toEqual({
+      url: URL_UNDER_TEST,
+      apiKey: 'sk-test',
+      authScheme: 'bearer',
+      headers: [],
+      scope: 'user',
+    });
+    // Listed ids are offered, not picked for the user.
+    expect(within(form).queryByRole('button', { name: 'Remove gpt-a' })).not.toBeInTheDocument();
+    expect(within(form).getByText('Not listed by the endpoint: my-finetune.')).toBeInTheDocument();
+
+    await user.click(within(form).getByRole('combobox', { name: 'Models' }));
+    await user.click(await screen.findByRole('option', { name: 'gpt-b' }));
+    await user.keyboard('{Escape}');
+    await user.click(within(form).getByRole('button', { name: 'Add all 2 listed models' }));
+    await user.click(within(form).getByRole('button', { name: 'Test & save' }));
+
+    await waitFor(() => expect(saves).toHaveLength(1));
+    expect(saves[0]).toMatchObject({ name: 'my-llm', check: true });
+    expect(modelsOf(saves[0])).toEqual(['gpt-a', 'gpt-b', 'gpt-c', 'my-finetune']);
+  });
+
+  it('marks a test result out of date once the connection settings change', async () => {
+    const listed: CustomProviderCheckResponse = {
+      ok: true,
+      check: { models: { ok: true, models: ['gpt-a'], latencyMs: 12 } },
+    };
+    server.use(http.post(CHECK_URL, () => HttpResponse.json(listed)));
+    const { user, form } = await openNewEndpointForm();
+
+    await user.type(within(form).getByPlaceholderText('https://api.example.com/v1'), URL_UNDER_TEST);
+    await user.click(within(form).getByRole('button', { name: 'Test' }));
+    expect(await within(form).findByText(/Endpoint answered in 12 ms/)).toBeInTheDocument();
+
+    await user.type(within(form).getByPlaceholderText('Paste API key'), 'sk-other');
+
+    expect(within(form).queryByText(/Endpoint answered in 12 ms/)).not.toBeInTheDocument();
+    expect(
+      within(form).getByText('The settings changed after the last test. Test again to check them.'),
+    ).toBeInTheDocument();
+  });
+
+  it('shows the upstream status and detail when the test fails', async () => {
+    const failed: CustomProviderCheckResponse = {
+      ok: true,
+      check: {
+        models: {
+          ok: false,
+          latencyMs: 40,
+          failure: {
+            kind: 'http',
+            status: 403,
+            message: 'HTTP 403 Forbidden from https://api.example.com/v1/models',
+            detail: 'Access denied Your IP is not on the allow list for this gateway.',
+          },
+        },
+      },
+    };
+    server.use(http.post(CHECK_URL, () => HttpResponse.json(failed)));
+    const { user, form } = await openNewEndpointForm();
+
+    await user.type(within(form).getByPlaceholderText('https://api.example.com/v1'), URL_UNDER_TEST);
+    await user.click(within(form).getByRole('button', { name: 'Test' }));
+
+    const alert = await within(form).findByRole('alert');
+    expect(alert).toHaveTextContent('HTTP 403 Forbidden from https://api.example.com/v1/models');
+    expect(alert).toHaveTextContent('Access denied Your IP is not on the allow list for this gateway.');
+    expect(within(form).queryByRole('button', { name: 'Save anyway' })).not.toBeInTheDocument();
+  });
+
+  it('saves nothing when Test & save fails, then saves untested with Save anyway', async () => {
+    const bodies: unknown[] = [];
+    const failure: CustomProviderCheckFailure = {
+      kind: 'network',
+      message: 'Could not reach https://api.example.com/v1/models: ENOTFOUND',
+    };
+    server.use(
+      http.post(CUSTOM_PROVIDERS_URL, async ({ request }) => {
+        const body = await request.json();
+        bodies.push(body);
+        if (body && typeof body === 'object' && 'check' in body) {
+          const refused: CustomProviderCheckFailedResponse = {
+            error: 'custom_endpoint_check_failed',
+            message: 'The connection test failed, so the provider was not saved.',
+            failure,
+          };
+          return HttpResponse.json(refused, { status: 422 });
+        }
+        const provider: CustomProviderInfo = {
+          id: 'my-llm',
+          name: 'my-llm',
+          url: URL_UNDER_TEST,
+          hasApiKey: false,
+          authScheme: 'bearer',
+          headers: [],
+          models: ['m'],
+          scope: 'user',
+        };
+        return HttpResponse.json({ ok: true, provider });
+      }),
+    );
+    const { user, form } = await openNewEndpointForm();
+
+    await fillCustomEndpoint(user, form, { name: 'my-llm', url: URL_UNDER_TEST, models: ['m'] });
+    await user.click(within(form).getByRole('button', { name: 'Test & save' }));
+
+    expect(await within(form).findByRole('alert')).toHaveTextContent(failure.message);
+    expect(within(form).getByText(/Nothing was saved/)).toBeInTheDocument();
+
+    await user.click(within(form).getByRole('button', { name: 'Save anyway' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add custom endpoint' })).not.toBeInTheDocument());
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]).toMatchObject({ check: true });
+    expect(bodies[1]).toEqual({
+      name: 'my-llm',
+      url: URL_UNDER_TEST,
+      authScheme: 'bearer',
+      headers: [],
+      models: ['m'],
+      scope: 'user',
+    });
+  });
+
+  it('sends a test message to a chosen model and shows its reply', async () => {
+    let checkBody: unknown;
+    const replied: CustomProviderCheckResponse = {
+      ok: true,
+      check: {
+        models: { ok: true, models: ['m'], latencyMs: 10 },
+        reply: { ok: true, reply: 'yes', finishReason: 'stop', latencyMs: 640 },
+      },
+    };
+    server.use(
+      http.post(CHECK_URL, async ({ request }) => {
+        checkBody = await request.json();
+        return HttpResponse.json(replied);
+      }),
+    );
+    const { user, form } = await openNewEndpointForm();
+
+    await fillCustomEndpoint(user, form, { name: 'my-llm', url: URL_UNDER_TEST, models: ['m'] });
+    await user.click(within(form).getByRole('button', { name: 'Send test message' }));
+
+    expect(await within(form).findByText('m replied in 640 ms')).toBeInTheDocument();
+    expect(within(form).getByText('yes')).toBeInTheDocument();
+    expect(checkBody).toMatchObject({ url: URL_UNDER_TEST, model: 'm' });
+  });
+
+  it('adds a custom header that starts secret and can be made plain', async () => {
+    const saves = recordSaves();
+    const { user, form } = await openNewEndpointForm();
+
+    await fillCustomEndpoint(user, form, { name: 'my-llm', url: URL_UNDER_TEST, models: ['m'] });
+    await user.click(within(form).getByRole('button', { name: 'Auth scheme and headers' }));
+    await user.click(within(form).getByRole('button', { name: 'Add header' }));
+    await user.type(within(form).getByRole('textbox', { name: 'Header 1 name' }), 'X-Org');
+    const secretToggle = within(form).getByRole('button', { name: 'Header 1 is secret' });
+    expect(secretToggle).toHaveAttribute('aria-pressed', 'true');
+    // A secret value is masked while it is typed.
+    expect(within(form).getByLabelText('Header 1 value')).toHaveAttribute('type', 'password');
+    await user.type(within(form).getByLabelText('Header 1 value'), 'org-7');
+    await user.click(within(form).getByRole('button', { name: 'Add header' }));
+    await user.type(within(form).getByRole('textbox', { name: 'Header 2 name' }), 'X-Team');
+    await user.type(within(form).getByLabelText('Header 2 value'), 'research');
+    await user.click(within(form).getByRole('button', { name: 'Header 2 is secret' }));
+    expect(within(form).getByRole('button', { name: 'Header 2 is secret' })).toHaveAttribute('aria-pressed', 'false');
+    await user.click(within(form).getByRole('button', { name: 'Test & save' }));
+
+    await waitFor(() => expect(saves).toHaveLength(1));
+    expect(saves[0]).toMatchObject({
+      headers: [
+        { name: 'X-Org', value: 'org-7', secret: true },
+        { name: 'X-Team', value: 'research', secret: false },
+      ],
+    });
+  });
+
+  it('keeps a saved secret header on edit without sending a value for it', async () => {
+    let postBody: unknown;
+    const withHeaders: CustomProviderInfo = {
+      id: 'my-llm',
+      name: 'my-llm',
+      url: URL_UNDER_TEST,
+      hasApiKey: true,
+      authScheme: 'x-api-key',
+      headers: [
+        { name: 'X-Org', secret: true },
+        { name: 'X-Team', secret: false, value: 'research' },
+      ],
+      models: ['m'],
+      scope: 'user',
+    };
+    stubProviders([]);
+    stubCustomProviders([withHeaders]);
+    server.use(
+      http.post(CUSTOM_PROVIDERS_URL, async ({ request }) => {
+        postBody = await request.json();
+        return HttpResponse.json({ ok: true, provider: withHeaders });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    await pickCustomRowAction(user, 'my-llm', 'Edit');
+    const form = await screen.findByRole('dialog', { name: 'Edit my-llm' });
+    // A provider that already sends headers opens with them in view.
+    const savedSecret = within(form).getByLabelText('Header 1 value');
+    expect(savedSecret).toHaveValue('');
+    expect(savedSecret).toHaveAttribute('placeholder', 'Saved. Type to replace.');
+    expect(within(form).getByLabelText('Header 2 value')).toHaveValue('research');
+    await user.click(within(form).getByRole('button', { name: 'Test & save' }));
+
+    // `objectContaining` compares `headers` exactly, so a value sent for X-Org fails it.
+    await waitFor(() =>
+      expect(postBody).toEqual(
+        expect.objectContaining({
+          authScheme: 'x-api-key',
+          headers: [
+            { name: 'X-Org', secret: true },
+            { name: 'X-Team', value: 'research', secret: false },
+          ],
+        }),
+      ),
+    );
+  });
+
+  it('asks for a value before a saved secret header is made plain', async () => {
+    const withSecret: CustomProviderInfo = {
+      id: 'my-llm',
+      name: 'my-llm',
+      url: URL_UNDER_TEST,
+      hasApiKey: true,
+      authScheme: 'bearer',
+      headers: [{ name: 'X-Org', secret: true }],
+      models: ['m'],
+      scope: 'user',
+    };
+    stubProviders([]);
+    stubCustomProviders([withSecret]);
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    await pickCustomRowAction(user, 'my-llm', 'Edit');
+    const form = await screen.findByRole('dialog', { name: 'Edit my-llm' });
+    await user.click(within(form).getByRole('button', { name: 'Header 1 is secret' }));
+    await user.click(within(form).getByRole('button', { name: 'Test & save' }));
+
+    expect(await within(form).findByRole('alert')).toHaveTextContent('Enter a value for X-Org to make it plain.');
+  });
+});
+
+/** The `models` a save request sent, sorted, since the order picks were made in is not part of the contract. */
+function modelsOf(body: unknown): string[] {
+  if (!body || typeof body !== 'object' || !('models' in body) || !Array.isArray(body.models)) return [];
+  return body.models.filter((model): model is string => typeof model === 'string').toSorted();
+}

@@ -40,6 +40,7 @@ export async function openAddProvider(user: UserEvent, container: HTMLElement = 
 
 export const CUSTOM_PROVIDERS_URL = `${TEST_BASE_URL}/web/config/custom-providers`;
 export const customProviderUrl = (id: string) => `${CUSTOM_PROVIDERS_URL}/${encodeURIComponent(id)}`;
+export const CHECK_URL = `${CUSTOM_PROVIDERS_URL}/check`;
 
 export function stubCustomProviders(providers: CustomProviderInfo[]) {
   server.use(http.get(CUSTOM_PROVIDERS_URL, () => HttpResponse.json({ providers })));

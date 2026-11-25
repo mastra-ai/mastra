@@ -69,8 +69,7 @@ function rowDetail(provider: CustomProviderInfo) {
   return (
     <>
       {provider.url}
-      <br />
-      {failure}
+      <span className="block">{failure}</span>
     </>
   );
 }
