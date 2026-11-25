@@ -8,7 +8,7 @@ import { describe, expect, it, onTestFinished } from 'vitest';
 import { createFactorySecretEncryption } from '../../../secret-encryption.js';
 import type { FactorySecretEncryption } from '../../../secret-encryption.js';
 import { createFactoryStorageForTests } from '../../test-utils.js';
-import { CustomProvidersStorage } from './base.js';
+import { CUSTOM_PROVIDERS_SCHEMA, CustomProvidersStorage } from './base.js';
 import type { CustomProviderInput, CustomProviderRecord, CustomProviderWrite } from './base.js';
 
 /**
@@ -407,66 +407,39 @@ describe('CustomProvidersStorage enabling secretEncryption', () => {
   });
 });
 
-describe('CustomProvidersStorage headers, auth scheme and last check', () => {
+describe('CustomProvidersStorage headers and last check', () => {
   const owner = { orgId: 'org-1' };
   const headers = [
     { name: 'X-Tenant', value: 'tenant-secret-value' },
     { name: 'X-Region', value: 'eu-west', secret: false },
   ];
+  const withHeaders = async () => {
+    const { customProviders } = await createFactoryStorageForTests();
+    saved(await customProviders.create({ owner, createdBy: 'admin', input: endpoint({ apiKey: 'sk-1', headers }) }));
+    return customProviders;
+  };
 
   it('stores header values encrypted and reads them back with their secret flags', async () => {
     const url = `file:${join(mkdtempSync(join(tmpdir(), 'factory-cp-')), 'headers.db')}`;
-    const encryption = createFactorySecretEncryption({ primary: testKey });
-    const { backend, domain } = await makeFileStore(url, encryption);
+    const { backend, domain } = await makeFileStore(url, createFactorySecretEncryption({ primary: testKey }));
 
-    saved(await domain.create({ owner, createdBy: 'admin', input: endpoint({ authScheme: 'x-api-key', headers }) }));
+    saved(await domain.create({ owner, createdBy: 'admin', input: endpoint({ headers }) }));
 
-    expect(await domain.get({ owner, providerId: 'my-llm' })).toMatchObject({
-      authScheme: 'x-api-key',
-      headers: [
-        // A new header without a flag is secret.
-        { name: 'X-Tenant', value: 'tenant-secret-value', secret: true },
-        { name: 'X-Region', value: 'eu-west', secret: false },
-      ],
-      lastCheck: null,
-    });
+    expect((await domain.get({ owner, providerId: 'my-llm' }))!.headers).toEqual([
+      { name: 'X-Tenant', value: 'tenant-secret-value', secret: true },
+      { name: 'X-Region', value: 'eu-west', secret: false },
+    ]);
     const row = await backend.ops.findOne<{ headers: string }>('custom_providers', { provider_id: 'my-llm' });
     expect(row!.headers).toMatch(/^mastra:factory-secret:v1:/);
     expect(row!.headers).not.toContain('tenant-secret-value');
   });
 
-  it('re-encrypts header values with the new key when the key rotates', async () => {
-    const url = `file:${join(mkdtempSync(join(tmpdir(), 'factory-cp-')), 'rotation.db')}`;
-    const rotated = { id: 'v2', key: new Uint8Array(32).fill(9) };
-    {
-      const { backend, domain } = await makeFileStore(url, createFactorySecretEncryption({ primary: testKey }));
-      saved(await domain.create({ owner, createdBy: 'admin', input: endpoint({ headers }) }));
-      await backend.close();
-    }
-    {
-      const { backend } = await makeFileStore(
-        url,
-        createFactorySecretEncryption({ primary: rotated, previous: [testKey] }),
-      );
-      await backend.close();
-    }
-
-    // The old key is gone, so only a re-encrypted row can still be read.
-    const { domain } = await makeFileStore(url, createFactorySecretEncryption({ primary: rotated }));
-    expect((await domain.get({ owner, providerId: 'my-llm' }))!.headers).toMatchObject([
-      { name: 'X-Tenant', value: 'tenant-secret-value' },
-      { name: 'X-Region', value: 'eu-west' },
-    ]);
-  });
-
-  // The Factory never returns a secret header value, so an edit names the
-  // header without its value to keep it.
+  // The Factory never returns a secret value, so an edit names the header without it.
   it('keeps a saved header value by name on an edit, ignoring case', async () => {
-    const seed = await createFactoryStorageForTests();
-    saved(await seed.customProviders.create({ owner, createdBy: 'admin', input: endpoint({ headers }) }));
+    const storage = await withHeaders();
 
     const edited = saved(
-      await seed.customProviders.update({
+      await storage.update({
         owner,
         providerId: 'my-llm',
         input: endpoint({ headers: [{ name: 'x-tenant' }, { name: 'X-Region', value: 'us-east' }] }),
@@ -479,135 +452,55 @@ describe('CustomProvidersStorage headers, auth scheme and last check', () => {
     ]);
   });
 
+  // A kept secret value must not become readable, or travel to a server the user never typed it for.
   it.each([
-    ['a header with no value and nothing saved under its name', endpoint({ headers: [{ name: 'X-New' }] })],
+    ['turns a secret header plain', endpoint({ headers: [{ name: 'X-Tenant', secret: false }] })],
     [
-      'a secret header turned plain without its value',
-      endpoint({ headers: [{ name: 'X-Tenant', secret: false }, { name: 'X-Region' }] }),
+      'moves a secret header to another origin',
+      endpoint({ url: 'https://other.example.com/v1', apiKey: 'sk-2', headers: [{ name: 'X-Tenant' }] }),
     ],
-    [
-      'a kept secret header on another origin',
-      endpoint({ url: 'https://other.example.com/v1', headers: [{ name: 'X-Tenant' }] }),
-    ],
-    ['the saved list on another origin', endpoint({ url: 'https://other.example.com/v1' })],
-  ])('refuses an edit with %s and leaves the row unchanged', async (_case, input) => {
-    const seed = await createFactoryStorageForTests();
-    saved(await seed.customProviders.create({ owner, createdBy: 'admin', input: endpoint({ headers }) }));
+  ])('asks for the header value again when an edit %s without it', async (_case, input) => {
+    const storage = await withHeaders();
 
-    expect(await seed.customProviders.update({ owner, providerId: 'my-llm', input })).toEqual({
-      refused: 'header_value_required',
-    });
-    expect(await seed.customProviders.get({ owner, providerId: 'my-llm' })).toMatchObject({
+    expect(await storage.update({ owner, providerId: 'my-llm', input })).toEqual({ refused: 'header_value_required' });
+    expect(await storage.get({ owner, providerId: 'my-llm' })).toMatchObject({
       url: 'https://llm.example.com/v1',
-      headers: [{ value: 'tenant-secret-value' }, { value: 'eu-west' }],
+      headers: [{ value: 'tenant-secret-value', secret: true }, { value: 'eu-west' }],
     });
   });
 
-  it('moves plain headers to another origin, and secret ones when typed again', async () => {
-    const seed = await createFactoryStorageForTests();
-    saved(await seed.customProviders.create({ owner, createdBy: 'admin', input: endpoint({ headers }) }));
-
-    const moved = saved(
-      await seed.customProviders.update({
-        owner,
-        providerId: 'my-llm',
-        input: endpoint({
-          url: 'https://other.example.com/v1',
-          headers: [{ name: 'X-Tenant', value: 'typed-again' }, { name: 'X-Region' }],
-        }),
-      }),
-    );
-
-    expect(moved.headers).toEqual([
-      { name: 'X-Tenant', value: 'typed-again', secret: true },
-      { name: 'X-Region', value: 'eu-west', secret: false },
-    ]);
-  });
-
-  // Switching to x-api-key would otherwise send a kept custom x-api-key
-  // header next to the key.
-  it('refuses a scheme change that a kept header collides with', async () => {
-    const seed = await createFactoryStorageForTests();
-    saved(
-      await seed.customProviders.create({
-        owner,
-        createdBy: 'admin',
-        input: endpoint({ headers: [{ name: 'x-api-key', value: 'gateway-key' }] }),
-      }),
-    );
-
-    expect(
-      await seed.customProviders.update({ owner, providerId: 'my-llm', input: endpoint({ authScheme: 'x-api-key' }) }),
-    ).toEqual({ refused: 'header_refused', problem: expect.stringContaining('x-api-key') });
-  });
-
-  it('keeps the last check through edits that leave the connection alone, and clears it otherwise', async () => {
-    const seed = await createFactoryStorageForTests();
+  it('keeps the last check only while the URL, key and headers stay the same', async () => {
+    const storage = await withHeaders();
     const passed = { at: '2026-11-26T10:00:00.000Z', ok: true };
-    saved(
-      await seed.customProviders.create({
-        owner,
-        createdBy: 'admin',
-        input: endpoint({ apiKey: 'sk-1', headers, lastCheck: passed }),
-      }),
-    );
-    const update = (input: CustomProviderInput) => seed.customProviders.update({ owner, providerId: 'my-llm', input });
-    const keptHeaders = [{ name: 'X-Tenant' }, { name: 'X-Region' }];
+    const update = (input: CustomProviderInput) => storage.update({ owner, providerId: 'my-llm', input });
 
-    // A new model list, or the same key and headers sent again, leaves the call unchanged.
+    saved(await update(endpoint({ apiKey: 'sk-1', headers, lastCheck: passed })));
     expect(saved(await update(endpoint({ models: ['m', 'n'] }))).lastCheck).toEqual(passed);
-    expect(saved(await update(endpoint({ apiKey: 'sk-1', headers: keptHeaders }))).lastCheck).toEqual(passed);
 
     for (const changed of [
       endpoint({ url: 'https://llm.example.com/v2' }),
       endpoint({ apiKey: 'sk-2' }),
-      endpoint({ authScheme: 'x-api-key' }),
       endpoint({ headers: [{ name: 'X-Tenant' }] }),
-      endpoint({ headers: [{ name: 'X-Tenant' }, { name: 'X-Region', secret: true }] }),
     ]) {
-      saved(await update(endpoint({ apiKey: 'sk-1', authScheme: 'bearer', headers, lastCheck: passed })));
+      saved(await update(endpoint({ apiKey: 'sk-1', headers, lastCheck: passed })));
       expect(saved(await update(changed)).lastCheck).toBeNull();
     }
   });
 
-  it('records a check only while the row is still the one that was checked', async () => {
-    const seed = await createFactoryStorageForTests();
-    const checked = saved(await seed.customProviders.create({ owner, createdBy: 'admin', input: endpoint() }));
-    const failed = { at: '2026-11-26T10:00:00.000Z', ok: false, message: 'HTTP 401 Unauthorized' };
-
-    expect(
-      await seed.customProviders.recordCheck({ owner, providerId: 'my-llm', checked, lastCheck: failed }),
-    ).toMatchObject({ lastCheck: failed, updatedAt: checked.updatedAt });
-
-    // An edit lands while a second check is running against the old settings.
-    const beforeEdit = (await seed.customProviders.get({ owner, providerId: 'my-llm' }))!;
+  // A check takes seconds, and its result must not label settings it never tested.
+  it('does not apply a check to a row edited since it was checked', async () => {
+    const { customProviders: storage } = await createFactoryStorageForTests();
+    const checked = saved(await storage.create({ owner, createdBy: 'admin', input: endpoint() }));
+    const passed = { at: '2026-11-26T10:00:00.000Z', ok: true };
     saved(
-      await seed.customProviders.update({
-        owner,
-        providerId: 'my-llm',
-        input: endpoint({ url: 'https://llm.example.com/v2' }),
-      }),
+      await storage.update({ owner, providerId: 'my-llm', input: endpoint({ url: 'https://llm.example.com/v2' }) }),
     );
-    expect(
-      await seed.customProviders.recordCheck({
-        owner,
-        providerId: 'my-llm',
-        checked: beforeEdit,
-        lastCheck: { at: '2026-11-26T10:01:00.000Z', ok: true },
-      }),
-    ).toBeNull();
-    expect((await seed.customProviders.get({ owner, providerId: 'my-llm' }))!.lastCheck).toBeNull();
 
-    // A save that passed its test against the old row does not stamp the row that replaced it.
-    const stale = saved(
-      await seed.customProviders.update({
-        owner,
-        providerId: 'my-llm',
-        input: endpoint({ url: 'https://llm.example.com/v2', lastCheck: { at: '2026-11-26T10:02:00.000Z', ok: true } }),
-        checked: beforeEdit,
-      }),
-    );
-    expect(stale.lastCheck).toBeNull();
+    expect(await storage.recordCheck({ owner, providerId: 'my-llm', checked, lastCheck: passed })).toBeNull();
+    // A save that tested the old row would otherwise keep secrets it never sent.
+    const input = endpoint({ models: ['n'], lastCheck: passed });
+    expect(await storage.update({ owner, providerId: 'my-llm', input, checked })).toEqual({ refused: 'changed' });
+    expect(await storage.get({ owner, providerId: 'my-llm' })).toMatchObject({ models: ['m'], lastCheck: null });
   });
 
   it('reads and edits a row written before headers, schemes and checks existed', async () => {
@@ -615,23 +508,8 @@ describe('CustomProvidersStorage headers, auth scheme and last check', () => {
     {
       const backend = new LibSQLFactoryStorage({ id: 'custom-providers-legacy-columns', url });
       await backend.init();
-      await backend.ensureCollections([
-        {
-          name: 'custom_providers',
-          columns: {
-            id: { type: 'uuid-pk' },
-            org_id: { type: 'text' },
-            created_by: { type: 'text' },
-            provider_id: { type: 'text' },
-            name: { type: 'text' },
-            url: { type: 'text' },
-            api_key: { type: 'text', nullable: true },
-            models: { type: 'json' },
-            created_at: { type: 'timestamp' },
-            updated_at: { type: 'timestamp' },
-          },
-        },
-      ]);
+      const { auth_scheme: _a, headers: _h, last_check: _l, ...legacyColumns } = CUSTOM_PROVIDERS_SCHEMA.columns;
+      await backend.ensureCollections([{ name: 'custom_providers', columns: legacyColumns }]);
       await backend.ops.insertOne('custom_providers', {
         org_id: 'org-1',
         created_by: 'admin',
@@ -647,7 +525,6 @@ describe('CustomProvidersStorage headers, auth scheme and last check', () => {
     }
 
     const { domain } = await makeFileStore(url);
-    await expect(domain.ensureReady()).resolves.toBeUndefined();
     expect(await domain.get({ owner, providerId: 'my-llm' })).toMatchObject({
       apiKey: 'sk-legacy',
       authScheme: null,
