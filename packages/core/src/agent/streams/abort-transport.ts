@@ -26,6 +26,19 @@ export async function publishAbortRequest(pubsub: PubSub, runId: string): Promis
 }
 
 /**
+ * Tell whichever process is executing `runId` that a signal for it was stored.
+ * Must only be called after the insert committed: the receiver may claim the
+ * run's rows as soon as it hears this.
+ */
+export async function publishSignalAvailable(pubsub: PubSub, runId: string, signalId: string): Promise<void> {
+  await pubsub.publish(AGENT_CONTROL_TOPIC(runId), {
+    type: AgentControlEventTypes.SIGNAL_AVAILABLE,
+    runId,
+    data: { signalId },
+  });
+}
+
+/**
  * Topic on which the process executing a run acknowledges abort requests that
  * carried a `requestId`. Kept apart from the control topic so a requester never
  * has to read (or replay) the control history to wait for its own reply.

@@ -82,7 +82,7 @@ import type { AgentSignalInput, PendingSignalListener } from '../../../signals';
 import { toStoredSignalPayload } from '../../../stored-signal-payload';
 import { TripWire } from '../../../trip-wire';
 import { isSupportedLanguageModel } from '../../../utils';
-import { ensureRemoteAbortListener, readRunDeadline } from '../../abort-transport';
+import { ensureRemoteAbortListener, publishSignalAvailable, readRunDeadline } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
 import { ExecutionFence, getExecutionClaim, getExecutionOwnershipGuard } from '../../execution-fence';
 import { endRunSpansWithError, getRunRegistryEntry, markRunActive } from '../../run-registry';
@@ -400,6 +400,16 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               getRunRegistryEntry(runId, mastra as Mastra | undefined)?.interruptStepForSignals?.([
                 signal.toDataPart().data,
               ]);
+              // The run's next request may execute in another process.
+              if (pubsub) {
+                void publishSignalAvailable(pubsub, runId, signal.id).catch(error =>
+                  logger?.warn?.('Could not announce a stored signal to the run executing it', {
+                    runId,
+                    signalId: signal.id,
+                    error,
+                  }),
+                );
+              }
               return signal;
             }
           : undefined);

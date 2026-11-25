@@ -32,6 +32,15 @@ export const AgentControlEventTypes = {
    * executing the run's steps.
    */
   ABORT_REQUEST: 'abort-request',
+  /**
+   * A signal for the run was stored. Published by the sender once the insert
+   * committed, carrying only the signal's id; handled by whichever process is
+   * executing the run's model request, which may stop it to ask again with the
+   * signal. Only a hint: the stored row reaches the run at its next drain
+   * either way.
+   * @internal Only Mastra publishes and handles it.
+   */
+  SIGNAL_AVAILABLE: 'signal-available',
 } as const;
 
 /**
