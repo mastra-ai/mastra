@@ -34,6 +34,7 @@ import { isPersistedCopy } from './conversion/utils';
 import { TypeDetector } from './detection/TypeDetector';
 import type { StoredMessageLoader } from './memory-message-refs';
 import { MessageMerger } from './merge';
+import { startProcessorCall } from './processor-writes';
 import { convertImageFilePart } from './prompt/convert-file';
 import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
 import { downloadAssetsFromMessages, getAssetUrl } from './prompt/download-assets';
@@ -785,15 +786,10 @@ export class MessageList {
     output: Set<string>;
     context: Set<string>;
     getSource: (message: MastraDBMessage) => MessageSource | null;
-    /** The `data-*` parts each message held when the checker was made, keyed by message id. */
-    dataParts?: Map<string, Set<MastraDBMessage['content']['parts'][number]>>;
   } {
-    const dataParts = new Map(
-      this.messages
-        .filter(message => message.role === 'assistant')
-        .map(message => [message.id, new Set(message.content.parts.filter(part => part.type.startsWith('data-')))]),
-    );
-    return { ...this.stateManager.createSourceChecker(), dataParts };
+    const checker = this.stateManager.createSourceChecker();
+    startProcessorCall(this, checker, this.messages);
+    return checker;
   }
 
   /**

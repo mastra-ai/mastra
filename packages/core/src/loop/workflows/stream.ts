@@ -2,6 +2,7 @@ import { ReadableStream } from 'node:stream/web';
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { beginGoalActivity, stopGoalActivity } from '../../agent/goal';
 import type { MastraDBMessage } from '../../agent/message-list';
+import { addWriterDataPart } from '../../agent/message-list/processor-writes';
 import { getErrorFromUnknown } from '../../error';
 import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 import { ConsoleLogger } from '../../logger';
@@ -132,20 +133,17 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
               // Persistence failures must not drop the frame from the stream —
               // delivery to the client takes priority over saving to memory.
               try {
-                messageList.add(
-                  {
-                    id: emittedMessageId,
-                    role: 'assistant',
-                    content: {
-                      format: 2,
-                      parts: [{ type: data.type as `data-${string}`, data: data.data }],
-                    },
-                    createdAt: new Date(),
-                    threadId: _internal?.threadId,
-                    resourceId: _internal?.resourceId,
+                addWriterDataPart(messageList, {
+                  id: emittedMessageId,
+                  role: 'assistant',
+                  content: {
+                    format: 2,
+                    parts: [{ type: data.type as `data-${string}`, data: data.data }],
                   },
-                  'response',
-                );
+                  createdAt: new Date(),
+                  threadId: _internal?.threadId,
+                  resourceId: _internal?.resourceId,
+                });
               } catch (persistError) {
                 rest.logger?.warn('Failed to persist data chunk to message list; streaming it anyway', {
                   chunkType: data.type,
@@ -263,7 +261,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             // Persistence failures must not drop the frame from the stream —
             // delivery to the client takes priority over saving to memory.
             try {
-              messageList.add(message, 'response');
+              addWriterDataPart(messageList, message);
             } catch (persistError) {
               rest.logger?.warn('Failed to persist data chunk to message list; streaming it anyway', {
                 chunkType: processedChunk.type,

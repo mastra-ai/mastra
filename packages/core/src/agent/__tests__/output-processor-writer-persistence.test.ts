@@ -290,3 +290,56 @@ describe('output processor writer.custom() parts survive a returned message arra
     }
   }
 });
+
+describe('parts held before the call follow the returned copy when the processor clones live parts', () => {
+  type Part = { type: string; data?: unknown };
+  for (const phase of ['processOutputResult', 'processOutputStep'] as const) {
+    for (const keep of [['a'], ['a', 'b']]) {
+      it(`${phase}: clone live parts, return a copy keeping ${keep.join(',')}, saves exactly that`, async () => {
+        const earlier = {
+          id: 'writes-earlier',
+          [phase]: async ({ messageList, writer }: any) => {
+            await writer?.custom({ type: 'data-e', data: { v: 'a' } });
+            await writer?.custom({ type: 'data-e', data: { v: 'b' } });
+            return messageList;
+          },
+        } as OutputProcessor;
+        const cloner = {
+          id: 'clones-live-parts',
+          [phase]: async ({ messageList }: any) => {
+            const live = messageList.get.all.db() as MastraDBMessage[];
+            for (const message of live) message.content.parts = structuredClone(message.content.parts);
+            return (structuredClone(live) as MastraDBMessage[]).map(m => ({
+              ...m,
+              content: {
+                ...m.content,
+                parts: m.content.parts.filter(
+                  p => p.type !== 'data-e' || keep.includes((p as Part).data && ((p as Part).data as any).v),
+                ),
+              },
+            }));
+          },
+        } as OutputProcessor;
+        const memory = new MockMemory();
+        const agent = new Agent({
+          id: 'cloner',
+          name: 'cloner',
+          instructions: 'x',
+          model: model(),
+          memory,
+          outputProcessors: [earlier, cloner],
+        });
+        const thread = `clone-${phase}-${keep.join('')}`;
+        const stream = await agent.stream('hi', { memory: { thread, resource: 'r' } });
+        await stream.consumeStream();
+        const { messages } = await memory.recall({ threadId: thread, resourceId: 'r' });
+        const saved = messages
+          .filter(m => m.role === 'assistant')
+          .flatMap(m => m.content.parts as Part[])
+          .filter(p => p.type === 'data-e')
+          .map(p => p.data);
+        expect(saved).toEqual(keep.map(v => ({ v })));
+      });
+    }
+  }
+});

@@ -2,7 +2,9 @@ import type { LanguageModelV2Prompt, LanguageModelV2CallWarning } from '@ai-sdk/
 import type { StepResult } from '@internal/ai-sdk-v5';
 import type { Agent } from '../agent';
 import type { MastraDBMessage, MessageInput } from '../agent/message-list';
-import { CacheKeyGenerator, MessageList, messagesAreEqual } from '../agent/message-list';
+import { MessageList, messagesAreEqual } from '../agent/message-list';
+import { getProcessorCall, recordDataPart } from '../agent/message-list/processor-writes';
+import type { DataPartRecord, ProcessorCallRecord } from '../agent/message-list/processor-writes';
 import type { AgentStateSignalInput } from '../agent/signals';
 import { applyStateSignal, getStateSignalsMetadata, resolveStateSignalHistory } from '../agent/state-signals';
 import { TripWire } from '../agent/trip-wire';
@@ -81,56 +83,49 @@ async function invokeOnViolation(processor: Processor, error: TripWire): Promise
   }
 }
 
-type DBPart = MastraDBMessage['content']['parts'][number];
-
 /**
- * The message a processor returned, plus the `data-*` parts the live message gained while the processor ran
- * (`writer.custom()` merges its part into the list during the call) that the returned copy does not have.
- * A copy keeps a part's type and id but not its object identity, and an edit changes its data. So per type and id:
- * copy parts with unchanged content account for the matching parts first, and each copy part left over beyond
- * the unmatched parts held before the call accounts for one more written part, earliest first (a copy is a
- * snapshot, so the writes it saw came first). Parts the message held before the call follow the processor's
- * result, so it can still remove them.
+ * The message a processor returned, plus the `data-*` parts `writer.custom()` merged into it during the call
+ * (recorded by the writer) that the returned copy does not have. A copy keeps a part's type and id but not its
+ * object identity, and an edit changes its data. So per type and id: copy parts with unchanged content account
+ * for the matching parts first, and each copy part left over beyond the unmatched parts held before the call
+ * accounts for one more written part, earliest first (a copy is a snapshot, so the writes it saw came first).
+ * Parts the message held before the call follow the processor's result, so it can still remove them.
  */
 function withDataPartsWrittenDuringCall(
   returned: MastraDBMessage,
-  current: MastraDBMessage | undefined,
-  dataPartsBefore: Map<string, Set<DBPart>> | undefined,
+  call: ProcessorCallRecord | undefined,
+  writtenByMessage: Map<string, DataPartRecord[]> | undefined,
 ): MastraDBMessage {
-  if (!current || !dataPartsBefore || returned.role !== 'assistant') return returned;
-  const before = dataPartsBefore.get(returned.id) ?? new Set();
-  const written = current.content.parts.filter(part => part.type.startsWith('data-') && !before.has(part));
-  if (!written.length) return returned;
-  const keyOf = (part: DBPart) => `${part.type}|${JSON.stringify('id' in part ? (part.id ?? null) : null)}`;
-  const contentOf = (part: DBPart) => CacheKeyGenerator.fromDBParts([part]);
+  const written = writtenByMessage?.get(returned.id);
+  if (!call || !written?.length || returned.role !== 'assistant') return returned;
   // Copy parts not yet accounted for, per key and content.
   const unclaimed = new Map<string, string[]>();
   for (const part of returned.content.parts) {
     if (!part.type.startsWith('data-')) continue;
-    const pool = unclaimed.get(keyOf(part)) ?? [];
-    pool.push(contentOf(part));
-    unclaimed.set(keyOf(part), pool);
+    const { key, content } = recordDataPart(part);
+    unclaimed.set(key, [...(unclaimed.get(key) ?? []), content]);
   }
-  const claim = (part: DBPart) => {
-    const pool = unclaimed.get(keyOf(part));
-    const at = pool?.indexOf(contentOf(part)) ?? -1;
+  const claim = ({ key, content }: DataPartRecord) => {
+    const pool = unclaimed.get(key);
+    const at = pool?.indexOf(content) ?? -1;
     if (at === -1) return false;
     pool!.splice(at, 1);
     return true;
   };
   const beforeUnmatched = new Map<string, number>();
-  for (const part of before) {
-    if (!claim(part)) beforeUnmatched.set(keyOf(part), (beforeUnmatched.get(keyOf(part)) ?? 0) + 1);
+  for (const part of call.before.get(returned.id) ?? []) {
+    if (!claim(part)) beforeUnmatched.set(part.key, (beforeUnmatched.get(part.key) ?? 0) + 1);
   }
   const unmatchedWrites = written.filter(part => !claim(part));
   const covered = new Map<string, number>();
-  const missing = unmatchedWrites.filter(part => {
-    const key = keyOf(part);
-    const index = (covered.get(key) ?? 0) + 1;
-    covered.set(key, index);
-    // Edited copies of written parts: copy parts left over after the edited parts held before the call.
-    return index > (unclaimed.get(key)?.length ?? 0) - (beforeUnmatched.get(key) ?? 0);
-  });
+  const missing = unmatchedWrites
+    .filter(({ key }) => {
+      const index = (covered.get(key) ?? 0) + 1;
+      covered.set(key, index);
+      // Edited copies of written parts: copy parts left over after the edited parts held before the call.
+      return index > (unclaimed.get(key)?.length ?? 0) - (beforeUnmatched.get(key) ?? 0);
+    })
+    .map(({ part }) => part);
   if (!missing.length) return returned;
   const parts = [...returned.content.parts, ...missing];
   return { ...returned, content: { ...returned.content, parts } };
@@ -985,11 +980,12 @@ export class ProcessorRunner {
             messageList.removeByIds(deletedIds);
           }
           processableMessages = processResult || [];
-          const currentById = new Map(messageList.get.all.db().map(message => [message.id, message]));
+          const call = getProcessorCall(check);
+          const written = call?.written();
           for (const message of processResult) {
             messageList.removeByIds([message.id]);
             messageList.add(
-              withDataPartsWrittenDuringCall(message, currentById.get(message.id), check.dataParts),
+              withDataPartsWrittenDuringCall(message, call, written),
               check.getSource(message) || 'response',
               { merge: false },
             );
@@ -2621,10 +2617,11 @@ export class ProcessorRunner {
           }
 
           // Re-add messages with correct sources
-          const currentById = new Map(messageList.get.all.db().map(message => [message.id, message]));
+          const call = getProcessorCall(check);
+          const written = call?.written();
           for (let message of result) {
             messageList.removeByIds([message.id]);
-            message = withDataPartsWrittenDuringCall(message, currentById.get(message.id), check.dataParts);
+            message = withDataPartsWrittenDuringCall(message, call, written);
             if (message.role === 'system') {
               const systemText =
                 (message.content.content as string | undefined) ??
@@ -3073,16 +3070,17 @@ export class ProcessorRunner {
     }
 
     const currentById = new Map(messageList.get.all.db().map(message => [message.id, message]));
+    const call = getProcessorCall(check);
+    const written = call?.written();
 
     // Re-add messages with correct sources
     for (let message of messages) {
-      const current = currentById.get(message.id);
-      if (current === message) {
+      if (currentById.get(message.id) === message) {
         continue;
       }
 
       messageList.removeByIds([message.id]);
-      message = withDataPartsWrittenDuringCall(message, current, check.dataParts);
+      message = withDataPartsWrittenDuringCall(message, call, written);
       if (message.role === 'system') {
         const systemText =
           (message.content.content as string | undefined) ??
