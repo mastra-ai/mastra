@@ -306,6 +306,18 @@ describe('Combobox', () => {
       expect(onValueChange).toHaveBeenLastCalledWith(['openai', 'new-provider/new-model']);
       expect(chipNames()).toEqual(['Remove OpenAI', 'Remove new-provider/new-model']);
     });
+
+    it('picks the matching option, not the typed text, with Enter in a multiple select', async () => {
+      const onValueChange = vi.fn();
+      render(<MultipleField allowCustomValue onValueChange={onValueChange} />);
+      const user = await openField();
+
+      await user.keyboard('goo');
+      await screen.findByRole('option', { name: 'Use “goo”' });
+      await user.keyboard('{Enter}');
+
+      expect(onValueChange).toHaveBeenLastCalledWith(['google']);
+    });
   });
 
   describe('when a multiple select has a value its options do not list', () => {

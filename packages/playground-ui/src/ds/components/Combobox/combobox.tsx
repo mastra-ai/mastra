@@ -486,7 +486,9 @@ function MultipleCombobox({
   const selectedOptions = getSelectedOptions(options, value);
   // A typed value that is already picked has its chip; offering it again would unpick it.
   const customOption = allowCustomValue ? getCustomOption([...options, ...selectedOptions], inputValue) : undefined;
-  const items = customOption ? [customOption, ...options] : options;
+  // Last, unlike the single select: `autoHighlight` highlights the first item, so someone who types "gpt-4" to
+  // narrow the list down to "gpt-4o" and presses Enter picks "gpt-4o" instead of adding the literal text.
+  const items = customOption ? [...options, customOption] : options;
 
   /** Keeps the mirrored search text in step with Base UI, which also clears it after each pick. */
   function handleInputValueChange(next: string) {
