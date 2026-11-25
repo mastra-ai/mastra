@@ -59,6 +59,7 @@ import type { PendingSignalListener, AgentMessageInput, AgentStateSignalInput, C
 import { applyStateSignal } from './state-signals';
 import { decodeStoredSignals, toStoredSignalPayload } from './stored-signal-payload';
 import { getAgentSignalsStore, getRunSignalsStore } from './stored-signals';
+import { publishSignalAvailable } from './streams/abort-transport';
 import { hasDurableExecution } from './streams/execution-capability';
 import { createThreadHistoryFilter, getPartProducedAt, stampPartProducedAt } from './thread-history';
 import { onThreadMessagesSaved } from './thread-saves';
@@ -711,6 +712,8 @@ type StoredReservationSettlement = { outcome: AgentSignalWriteResult; toRunId: s
  */
 type StoredReservation = {
   store: AgentSignalsStorage;
+  /** The reserving agent, which announces signals stored for the reservation before its run registers here. */
+  agent?: Agent<any, any, any, any>;
   /** The reserving agent's logger. */
   logger?: IMastraLogger;
   settled: Promise<StoredReservationSettlement>;
@@ -2201,7 +2204,7 @@ export class AgentThreadStreamRuntime {
     agentId: string,
     outcome: Promise<ThreadAdmissionOutcome>,
     signalsStore?: AgentSignalsStorage,
-    logger?: IMastraLogger,
+    agent?: Agent<any, any, any, any>,
   ): void {
     const pendingAdmission: PendingThreadAdmission = { runId, agentId, outcome, signalsStore };
     state.pendingThreadAdmissions.set(key, pendingAdmission);
@@ -2217,7 +2220,13 @@ export class AgentThreadStreamRuntime {
       settle = settlement => void settlement.then(resolve, reject);
     });
     void settled.catch(() => {});
-    const reservation: StoredReservation = { store: signalsStore, settled, settle, logger };
+    const reservation: StoredReservation = {
+      store: signalsStore,
+      agent,
+      settled,
+      settle,
+      logger: agent?.__getLogger?.(),
+    };
     state.storedReservations.set(runId, reservation);
     // A reservation whose admission failed has senders that cancel their own rows. One that won stays known
     // until its run registers, so a signal forwarded to it in between is stored rather than queued in memory.
@@ -3618,7 +3627,7 @@ export class AgentThreadStreamRuntime {
         owner.agent.id,
         threadAdmission,
         getAgentSignalsStore(owner.agent),
-        owner.agent.__getLogger?.(),
+        owner.agent,
       );
       let lease: { acquired: boolean; owner?: string };
       try {
@@ -5089,6 +5098,7 @@ export class AgentThreadStreamRuntime {
     }
     this.#publishPendingUserMessage(pubsub, key, record.runId, signal, 'pending');
     this.#notifyPendingSignals(state, key, signal);
+    this.#publishSignalAvailable(record.agent, record.runId, signal.id);
     this.#publish(pubsub, key, {
       type: 'signal-enqueued',
       runId: record.runId,
@@ -5149,6 +5159,9 @@ export class AgentThreadStreamRuntime {
     }
     this.#publishPendingUserMessage(pubsub, key, runId, signal, 'pending');
     this.#notifyPendingSignals(state, key, signal);
+    // A sender that stored the row announced it itself.
+    const announcer = record?.agent ?? state.storedReservations.get(runId)?.agent;
+    if (!data.stored && announcer) this.#publishSignalAvailable(announcer, runId, signal.id);
   }
 
   /**
@@ -5176,7 +5189,10 @@ export class AgentThreadStreamRuntime {
         throw error;
       },
     );
-    if (written === 'accepted') this.#notifyPendingSignals(state, key, signal);
+    if (written === 'accepted') {
+      this.#notifyPendingSignals(state, key, signal);
+      this.#publishSignalAvailable(agent, pendingAdmission.runId, signal.id);
+    }
     let admission: ThreadAdmissionOutcome;
     try {
       admission = await pendingAdmission.outcome;
@@ -5250,7 +5266,10 @@ export class AgentThreadStreamRuntime {
         throw error;
       },
     );
-    if (written === 'accepted') this.#notifyPendingSignals(state, key, signal);
+    if (written === 'accepted') {
+      this.#notifyPendingSignals(state, key, signal);
+      this.#publishSignalAvailable(agent, pendingAdmission.runId, signal.id);
+    }
     const admission = await pendingAdmission.outcome.catch(() => undefined);
     // Closed before the insert: no row exists to hand on.
     if (written === 'run-closed') return undefined;
@@ -5307,6 +5326,7 @@ export class AgentThreadStreamRuntime {
       this.#publishPendingUserMessage(pubsub, key, runId, signal, 'pending');
       this.#notifyPendingSignals(state, key, signal);
     }
+    this.#publishSignalAvailable(endedRun.agent, local ? runId : forwardedSignalRunId(runId), signal.id);
     this.#publish(pubsub, key, {
       type: 'signal-enqueued',
       runId,
@@ -5374,7 +5394,10 @@ export class AgentThreadStreamRuntime {
   ): Promise<boolean> {
     const target = forwardedSignalRunId(runId);
     const store = this.#forwardSignalsStore(state, agent, target);
-    if (store && (await this.#storeForwardedSignal(state, key, store, target, signal)) === 'run-closed') return false;
+    if (store) {
+      if ((await this.#storeForwardedSignal(state, key, store, target, signal)) === 'run-closed') return false;
+      this.#publishSignalAvailable(agent, target, signal.id);
+    }
     await this.#publishAndWait(pubsub, key, {
       type: 'signal-enqueued',
       runId,
@@ -5479,6 +5502,26 @@ export class AgentThreadStreamRuntime {
       }
       return written;
     });
+  }
+
+  /**
+   * Tell the process running `runId`'s model request that a row for it committed, on the transport its abort
+   * requests travel on, where every executing process listens. The row reaches the run's next drain either way, so
+   * a failed publish changes nothing the sender is told.
+   */
+  #publishSignalAvailable(agent: Agent<any, any, any, any>, runId: string, signalId: string): void {
+    const logWarning = (error: unknown) =>
+      agent.__getLogger?.()?.warn?.('Could not announce a stored signal to the run executing it', {
+        runId,
+        signalId,
+        error,
+      });
+    try {
+      const pubsub = agent.__getStreamBus()?.forRun(agent.__usesSharedRunLog()).pubsub;
+      if (pubsub) void publishSignalAvailable(pubsub, runId, signalId).catch(logWarning);
+    } catch (error) {
+      logWarning(error);
+    }
   }
 
   #cancelStoredSignals(state: AgentThreadRuntimeState, key: string, store: AgentSignalsStorage, ids: string[]) {
@@ -6746,7 +6789,7 @@ export class AgentThreadStreamRuntime {
           previousRun.agent.id,
           ownership.then(lease => this.#threadAdmissionOutcome(nextRunId, lease)),
           store,
-          previousRun.agent.__getLogger?.(),
+          previousRun.agent,
         );
         owns = await ownership;
         if (owns.acquired) leaseRunId = nextRunId;
@@ -6860,7 +6903,7 @@ export class AgentThreadStreamRuntime {
         pending.agent.id,
         ownership.then(lease => this.#threadAdmissionOutcome(pending.runId, lease)),
         getAgentSignalsStore(pending.agent),
-        pending.agent.__getLogger?.(),
+        pending.agent,
       );
       const owns = await ownership;
       if (!owns.acquired) {
@@ -7015,7 +7058,7 @@ export class AgentThreadStreamRuntime {
         pendingIdle.agent.id,
         ownership.then(lease => this.#threadAdmissionOutcome(pendingIdle.runId, lease)),
         signalsStore,
-        pendingIdle.agent.__getLogger?.(),
+        pendingIdle.agent,
       );
       owns = await ownership;
     } catch (err) {
@@ -9819,7 +9862,7 @@ export class AgentThreadStreamRuntime {
           throw new Error(`Unexpected ${admission.action} result while reserving ${describeThreadKey(reservedKey)}`);
         }),
         getAgentSignalsStore(agent),
-        agent.__getLogger?.(),
+        agent,
       );
     }
     void accepted.then(
