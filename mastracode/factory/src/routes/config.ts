@@ -22,6 +22,7 @@ import { registerApiRoute } from '@mastra/core/server';
 
 import type { Context } from 'hono';
 import { z } from 'zod';
+import type { ModelPackSet, ResolvedModelSelection } from '../model-packs.js';
 import { resolveFactoryModelPolicy, routedPersonalDefaults } from '../session/credential-policy.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
 import type {
@@ -45,10 +46,16 @@ import { effectiveModelScope, factoryProjectSettingsUserId } from '../storage/do
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { THINKING_LEVELS } from './contracts.js';
 import { customEndpointUrlProblem } from './custom-endpoint-url.js';
 import { customProviderOwner } from './custom-provider-source.js';
 import { createGatewayKey, getGatewayCredits, MASTRA_SIGN_IN_REQUIRED, MastraGatewayError } from './mastra-gateway.js';
+import {
+  modelPackRoutes,
+  readSessionModelSelection,
+  resolveSessionModelPackSet,
+  sessionAddressSchema,
+} from './model-pack-routes.js';
+import type { SessionAddress } from './model-pack-routes.js';
 import {
   credentialLabel,
   getAuthProviderId,
@@ -137,8 +144,15 @@ export interface ProviderInfo {
 /** Minimal session surface the config routes touch. */
 export interface OMSession {
   /** `get()` returns '' when no model is selected, so callers fall back on falsy. */
-  model: { get: () => string; switch?: (modelId: string) => Promise<void> };
-  thread?: { getId: () => string | null };
+  model: {
+    get: () => string;
+    switch?: (modelId: string, options?: { thinkingLevel?: ThinkingLevelSetting }) => Promise<void>;
+  };
+  thread?: {
+    getId: () => string | null;
+    getById?: (input: { threadId: string }) => Promise<{ metadata?: Record<string, unknown> } | null>;
+    setSettingOn?: (input: { threadId: string; key: string; value: unknown }) => Promise<void>;
+  };
 }
 
 /** Minimal controller surface this module needs (model catalog + modes + sessions). */
@@ -741,47 +755,6 @@ export async function listSessionScopedCredentials({
   return (await credentials.listCredentials(orgId, userId)).filter(record => record.scope === storedScope);
 }
 
-/** Per-user default model context for the current request. */
-export interface ModelDefaultsContext {
-  storage: ModelDefaultsStorage;
-  orgId: string;
-  userId: string;
-}
-
-/** Resolve the default-model context for a request, or a ready-to-return error response. */
-async function resolveModelDefaultsContext({
-  c,
-  auth,
-  modelDefaults,
-}: {
-  c: Context;
-  auth: RouteAuth;
-  modelDefaults?: ModelDefaultsStorage;
-}): Promise<ModelDefaultsContext | { response: Response }> {
-  await auth.ensureUser(c);
-  const tenant = auth.tenant(c);
-  if (!tenant && auth.enabled()) return { response: c.json({ error: 'unauthorized' }, 401) };
-  if (modelDefaults) {
-    try {
-      await modelDefaults.ensureReady();
-      return tenant
-        ? { storage: modelDefaults, orgId: tenantOrgId(tenant), userId: tenant.userId }
-        : { storage: modelDefaults, orgId: 'local', userId: 'local' };
-    } catch {
-      // fall through to the unavailable response
-    }
-  }
-  return {
-    response: c.json(
-      {
-        error: 'model_defaults_unavailable',
-        message: 'Default model storage is unavailable — the app database is not configured or failed to start.',
-      },
-      503,
-    ),
-  };
-}
-
 // Mirrors the TUI `/om` command. Settings are persisted per organization and
 // user in the Factory app database, then loaded into request context for each
 // invocation without copying them into mutable session state.
@@ -933,6 +906,36 @@ async function persistMemorySettings(context: MemorySettingsContext, patch: Memo
   await context.storage.patch({ orgId: context.orgId, userId: context.userId, patch });
 }
 
+export interface PersonalModelDefaultsResponse extends ModelPackSet {
+  modelId: string | null;
+  thinkingLevel: ThinkingLevelSetting | null;
+}
+
+interface SessionModelPackSelection extends ModelPackSet {
+  modelSelection: ResolvedModelSelection;
+}
+
+export interface SessionModelPolicy extends SessionModelPackSelection {
+  modelScope: 'factory' | 'user';
+  defaultModelId: string | null;
+  personalThinkingLevel: ThinkingLevelSetting | null;
+  models: ModelCatalogEntry[];
+}
+
+export interface SessionModelContext {
+  tenantCredentials: CredentialRecord[];
+  modelScope: 'factory' | 'user';
+  defaultModelId: string | null;
+  personalThinkingLevel: ThinkingLevelSetting | null;
+  credentialTenant: CredentialTenant;
+}
+
+export type SessionModelContextResolver = (
+  c: Context,
+  address: SessionAddress,
+  includeDefaultModel?: boolean,
+) => Promise<SessionModelContext | { response: Response } | undefined>;
+
 /** Dependencies injected into {@link ConfigRoutes}. */
 export interface ConfigRoutesDeps extends RouteDependencies {
   controller: ModelCatalog;
@@ -947,7 +950,6 @@ export interface ConfigRoutesDeps extends RouteDependencies {
   modelDefaults?: ModelDefaultsStorage;
   /** Source-control sessions available to config route integrations. */
   sourceControlSessions?: Pick<SourceControlStorageHandle['sessions'], 'getBySessionId'>;
-  sourceControls?: Array<Pick<SourceControlStorageHandle, 'sessions'>>;
   /** Thread membership used to resolve the same model policy as an invocation. */
   workItems?: WorkItemsStorage;
   /** Tenant memory-settings domain handle; absent in local (no-DB) mode. */
@@ -975,6 +977,9 @@ export interface ConfigRoutesDeps extends RouteDependencies {
  *   - `PUT    /web/config/providers/:provider/key` — set/update a provider's API key
  *   - `DELETE /web/config/providers/:provider/key` — remove a stored API key
  *   - `GET    /web/config/models`                  — list available models (credentialed providers)
+ *   - `GET    /web/config/default-model`           — read the caller's default model and model packs
+ *   - `PUT    /web/config/model-packs`             — replace the caller's model packs
+ *   - `PUT    /web/config/session-model`           — run a live session on a pack or an exact model
  *   - `GET    /web/config/custom-providers`        — list custom OpenAI-compatible providers
  *   - `POST   /web/config/custom-providers`        — create/update a custom provider
  *   - `DELETE /web/config/custom-providers/:id`    — remove a custom provider
@@ -1024,11 +1029,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       return { owner: ctx.lists.org, scope: 'org' as const };
     };
 
-    const resolveSessionModelContext = async (
-      c: Context,
-      address: { resourceId: string; threadId: string; sessionId: string },
-      includeDefaultModel = true,
-    ) => {
+    const resolveSessionModelContext: SessionModelContextResolver = async (c, address, includeDefaultModel = true) => {
+      await auth.ensureUser(c);
       const tenant = auth.tenant(c);
       if (!tenant && auth.enabled()) return { response: c.json({ error: 'unauthorized' }, 401) };
       if (!tenant) return undefined;
@@ -1168,6 +1170,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
     };
 
     return [
+      ...modelPackRoutes(options, resolveSessionModelContext),
       registerApiRoute('/web/config/features', {
         method: 'GET',
         requiresAuth: false,
@@ -1486,13 +1489,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             const factoryProjectId = c.req.query('factoryId') || undefined;
             const tenant = auth.tenant(c);
             let tenantCredentials = allTenantCredentials;
-            let sessionPolicy:
-              | {
-                  modelScope: 'factory' | 'user';
-                  defaultModelId: string | null;
-                  personalThinkingLevel: ThinkingLevelSetting | null;
-                }
-              | undefined;
+            let sessionPolicy: Omit<SessionModelPolicy, 'models'> | SessionModelPackSelection | undefined;
             let credentialTenant: CredentialTenant | undefined;
             let sessionTenant: CredentialTenant | undefined;
             const resourceId = c.req.query('resourceId');
@@ -1501,21 +1498,22 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             if (resourceId !== undefined || threadId !== undefined || sessionId !== undefined) {
               // A caller that names no session addresses it by the resource, which is
               // the session id for sessions that run under their own resource.
-              const address = z
-                .object({
-                  resourceId: z.string().trim().min(1),
-                  threadId: z.string().trim().min(1),
-                  sessionId: z.string().trim().min(1).optional(),
-                })
-                .transform(data => ({ ...data, sessionId: data.sessionId ?? data.resourceId }))
-                .safeParse({ resourceId, threadId, sessionId });
+              const address = sessionAddressSchema.safeParse({ resourceId, threadId, sessionId });
               if (!address.success) return c.json({ error: 'invalid_session_context' }, 400);
               const context = await resolveSessionModelContext(c, address.data);
               if (context && 'response' in context) return context.response;
+              const modelPackSet = await resolveSessionModelPackSet(options, c, address.data);
+              const packSelection: SessionModelPackSelection = {
+                modelPacks: modelPackSet.modelPacks,
+                defaultModelPackId: modelPackSet.defaultModelPackId,
+                modelSelection: await readSessionModelSelection(controller, address.data, modelPackSet),
+              };
+              sessionPolicy = packSelection;
               if (context) {
                 tenantCredentials = context.tenantCredentials;
                 sessionTenant = context.credentialTenant;
                 sessionPolicy = {
+                  ...packSelection,
                   modelScope: context.modelScope,
                   defaultModelId: context.defaultModelId,
                   personalThinkingLevel: context.personalThinkingLevel,
@@ -1574,186 +1572,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               })) ?? modeModelId;
             const fallbackModelId = models.find(model => model.id === candidate)?.id ?? null;
             return c.json({ fallbackModelId, models });
-          } catch (error) {
-            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-          }
-        },
-      }),
-
-      registerApiRoute('/web/config/default-model', {
-        method: 'GET',
-        requiresAuth: false,
-        handler: async c => {
-          const context = await resolveModelDefaultsContext({
-            c: loose(c),
-            auth,
-            modelDefaults: options.modelDefaults,
-          });
-          if ('response' in context) return context.response;
-          try {
-            const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
-            return c.json({ modelId: record?.modelId ?? null, thinkingLevel: record?.thinkingLevel ?? null });
-          } catch (error) {
-            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-          }
-        },
-      }),
-
-      registerApiRoute('/web/config/default-model/apply', {
-        method: 'POST',
-        requiresAuth: false,
-        handler: async c => {
-          const context = await resolveModelDefaultsContext({
-            c: loose(c),
-            auth,
-            modelDefaults: options.modelDefaults,
-          });
-          if ('response' in context) return context.response;
-          if (
-            !options.factoryProjects ||
-            !options.sourceControls ||
-            !options.workItems ||
-            !options.controller.getSession
-          ) {
-            return c.json({ error: 'model_apply_unavailable' }, 503);
-          }
-          const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
-          if (!record?.modelId) return c.json({ error: 'default_model_not_set' }, 400);
-
-          const applied: string[] = [];
-          const skipped: Array<{
-            sessionId: string;
-            reason: 'not-running' | 'thread-missing' | 'factory-scope' | 'apply-failed';
-          }> = [];
-          const seen = new Set<string>();
-          try {
-            await options.factoryProjects.ensureReady();
-            const projects = await options.factoryProjects.list({ orgId: context.orgId });
-            for (const project of projects) {
-              // Factory-scoped sessions bill the org and use the Factory's model, never a personal default.
-              const personal = effectiveModelScope(project.modelScope, 'session') === 'user';
-              const workerSessions = new Set(
-                (await options.workItems.listRunBindings(context.orgId, project.id)).map(binding => binding.sessionId),
-              );
-              for (const sourceControl of options.sourceControls) {
-                const sessions = await sourceControl.sessions.listByProject({
-                  orgId: context.orgId,
-                  factoryProjectId: project.id,
-                  viewerUserId: context.userId,
-                });
-                for (const row of sessions) {
-                  if (
-                    row.userId !== context.userId ||
-                    row.originSessionId ||
-                    workerSessions.has(row.sessionId) ||
-                    seen.has(row.sessionId)
-                  )
-                    continue;
-                  seen.add(row.sessionId);
-                  if (!personal) {
-                    skipped.push({ sessionId: row.sessionId, reason: 'factory-scope' });
-                    continue;
-                  }
-                  const session = await options.controller.getSession(row.sessionId);
-                  if (!session?.thread || !session.model.switch) {
-                    skipped.push({ sessionId: row.sessionId, reason: 'not-running' });
-                    continue;
-                  }
-                  if (!session.thread.getId()) {
-                    skipped.push({ sessionId: row.sessionId, reason: 'thread-missing' });
-                    continue;
-                  }
-                  try {
-                    await session.model.switch(record.modelId);
-                    applied.push(row.sessionId);
-                  } catch (error) {
-                    console.warn('[factory] apply user default model failed for session', row.sessionId, error);
-                    skipped.push({ sessionId: row.sessionId, reason: 'apply-failed' });
-                  }
-                }
-              }
-            }
-          } catch (error) {
-            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-          }
-          return c.json({ modelId: record.modelId, applied, skipped });
-        },
-      }),
-
-      registerApiRoute('/web/config/default-model', {
-        method: 'PUT',
-        requiresAuth: false,
-        handler: async c => {
-          const context = await resolveModelDefaultsContext({
-            c: loose(c),
-            auth,
-            modelDefaults: options.modelDefaults,
-          });
-          if ('response' in context) return context.response;
-          let body: unknown;
-          try {
-            body = await c.req.json();
-          } catch {
-            return c.json({ error: 'Invalid JSON body' }, 400);
-          }
-          const parsed = z.object({ modelId: z.string().trim().min(1).max(256) }).safeParse(body);
-          if (!parsed.success) return c.json({ error: 'Missing required field: modelId' }, 400);
-          const { modelId } = parsed.data;
-          try {
-            await context.storage.set({ orgId: context.orgId, userId: context.userId, modelId });
-            return c.json({ ok: true, modelId });
-          } catch (error) {
-            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-          }
-        },
-      }),
-
-      registerApiRoute('/web/config/default-model/thinking', {
-        method: 'PUT',
-        requiresAuth: false,
-        handler: async c => {
-          const context = await resolveModelDefaultsContext({
-            c: loose(c),
-            auth,
-            modelDefaults: options.modelDefaults,
-          });
-          if ('response' in context) return context.response;
-          let body: unknown;
-          try {
-            body = await c.req.json();
-          } catch {
-            return c.json({ error: 'Invalid JSON body' }, 400);
-          }
-          const parsed = z.object({ thinkingLevel: z.enum(THINKING_LEVELS).nullable() }).safeParse(body);
-          if (!parsed.success) return c.json({ error: 'Invalid thinkingLevel' }, 400);
-          const { thinkingLevel } = parsed.data;
-          try {
-            const record = await context.storage.setThinkingLevel({
-              orgId: context.orgId,
-              userId: context.userId,
-              thinkingLevel,
-            });
-            if (!record) return c.json({ error: 'default_model_not_set' }, 400);
-            return c.json({ ok: true, thinkingLevel });
-          } catch (error) {
-            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-          }
-        },
-      }),
-
-      registerApiRoute('/web/config/default-model', {
-        method: 'DELETE',
-        requiresAuth: false,
-        handler: async c => {
-          const context = await resolveModelDefaultsContext({
-            c: loose(c),
-            auth,
-            modelDefaults: options.modelDefaults,
-          });
-          if ('response' in context) return context.response;
-          try {
-            await context.storage.clear({ orgId: context.orgId, userId: context.userId });
-            return c.json({ ok: true, modelId: null });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }

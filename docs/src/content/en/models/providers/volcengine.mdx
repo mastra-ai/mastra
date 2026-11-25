@@ -7,7 +7,7 @@ description: "Browse Volcengine Ark model IDs, capabilities, context windows, an
 
 # <img src="https://models.dev/logos/volcengine.svg" alt="Volcengine Ark logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Volcengine Ark
 
-Access 16 Volcengine Ark models through Mastra's model router. Authentication is handled automatically using the `ARK_API_KEY` environment variable.
+Access 17 Volcengine Ark models through Mastra's model router. Authentication is handled automatically using the `ARK_API_KEY` environment variable.
 
 Learn more in the [Volcengine Ark documentation](https://www.volcengine.com/docs/82379/1330310).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "volcengine/deepseek-v4-flash-ga-260731"
+  model: "volcengine/deepseek-v4-1-flash-260910"
 });
 
 // Generate a response
@@ -45,6 +45,42 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
+  {
+    "model": "volcengine/deepseek-v4-1-flash-260910",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": 0.14972,
+    "outputCost": 0.59886
+  },
+  {
+    "model": "volcengine/deepseek-v4-1-flash-261017",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": 0.14972,
+    "outputCost": 0.59886
+  },
+  {
+    "model": "volcengine/deepseek-v4-1-flash-economy-261017",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": 0.11977,
+    "outputCost": 0.47909
+  },
   {
     "model": "volcengine/deepseek-v4-flash-ga-260731",
     "imageInput": false,
@@ -72,7 +108,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   {
     "model": "volcengine/doubao-seed-2-0-lite-260428",
     "imageInput": true,
-    "audioInput": false,
+    "audioInput": true,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
@@ -84,7 +120,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   {
     "model": "volcengine/doubao-seed-2-0-mini-260428",
     "imageInput": true,
-    "audioInput": false,
+    "audioInput": true,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
@@ -94,7 +130,31 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.29687
   },
   {
+    "model": "volcengine/doubao-seed-2-1-lite-260915",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1024000,
+    "maxOutput": 256000,
+    "inputCost": 0.11977,
+    "outputCost": 0.40423
+  },
+  {
     "model": "volcengine/doubao-seed-2-1-pro-260628",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 256000,
+    "inputCost": 0.8906,
+    "outputCost": 4.45301
+  },
+  {
+    "model": "volcengine/doubao-seed-2-1-pro-260915",
     "imageInput": true,
     "audioInput": false,
     "videoInput": true,
@@ -102,8 +162,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1024000,
     "maxOutput": 256000,
-    "inputCost": 0.8906,
-    "outputCost": 4.45301
+    "inputCost": 0.8983,
+    "outputCost": 4.49149
   },
   {
     "model": "volcengine/doubao-seed-2-1-turbo-260628",
@@ -124,8 +184,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 256000,
-    "maxOutput": 256000,
+    "contextWindow": 128000,
+    "maxOutput": 32000,
     "inputCost": 0.11875,
     "outputCost": 0.29687
   },
@@ -164,6 +224,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.11875,
     "outputCost": 0.41563
+  },
+  {
+    "model": "volcengine/kimi-k3-1-pro-261024",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 1.94631,
+    "outputCost": 10.18071
   }
 ]}
 />
@@ -182,7 +254,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://ark.cn-beijing.volces.com/api/v3",
-    id: "volcengine/deepseek-v4-flash-ga-260731",
+    id: "volcengine/deepseek-v4-1-flash-260910",
     apiKey: process.env.ARK_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -202,8 +274,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "volcengine/glm-5-3-flash-260828"
-      : "volcengine/deepseek-v4-flash-ga-260731";
+      ? "volcengine/kimi-k3-1-pro-261024"
+      : "volcengine/deepseek-v4-1-flash-260910";
   }
 });
 ```

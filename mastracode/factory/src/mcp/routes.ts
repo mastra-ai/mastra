@@ -9,9 +9,7 @@ import { toFetchResponse, toReqRes } from 'fetch-to-node';
 import type { Context } from 'hono';
 import { z } from 'zod';
 
-import { getFactoryAuthUser } from '../auth.js';
 import { PLATFORM_AUTH_PROVIDER } from '../platform-auth-host.js';
-import type { RouteAuth } from '../routes/route.js';
 import { ensureFactorySourceSession, FactorySourceSessionResolutionError } from '../session/factory-session.js';
 import { auditActorProfile } from '../storage/domains/audit/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
@@ -23,8 +21,9 @@ import { cardFacts } from '../work-items/card-facts.js';
 import { matchesSearch, searchTerms } from '../work-items/search-terms.js';
 import { propagateClientDisconnect } from './disconnect.js';
 import { factoryActivityEvent } from './events.js';
+import type { McpTokenVerifier } from './token.js';
 
-export const FACTORY_MCP_PATH = '/web/factory/projects/:projectId/mcp';
+export const FACTORY_MCP_PATH = '/mcp';
 const PROTECTED_RESOURCE_PREFIX = '/.well-known/oauth-protected-resource';
 
 /**
@@ -42,6 +41,12 @@ export interface FactoryMcpConfig {
    * `MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER` env var, then to Mastra Platform's
    * AuthKit when the Factory uses Platform auth. The endpoint isn't served
    * without one, since clients would have nowhere to sign in.
+   *
+   * Each server must issue JWT access tokens bound to this endpoint with RFC 8707
+   * Resource Indicators: `aud` set to `<publicUrl>/mcp`. Tokens without that
+   * audience are refused. Signing keys come from the `jwks_uri` in the server's
+   * `/.well-known/oauth-authorization-server` metadata (RFC 8414), or its
+   * `/.well-known/openid-configuration` when that answers 404.
    */
   authorizationServers?: string[];
 }
@@ -60,7 +65,7 @@ const FACTORY_MCP_INSTRUCTIONS = [
   'Every call runs as the signed-in user. When the Factory has a repository, session tools act from a private connector session of theirs.',
 ].join(' ');
 
-/** Mastra Platform's WorkOS AuthKit, which issues tokens Platform's `/auth/verify` accepts. */
+/** Mastra Platform's WorkOS AuthKit, where Platform users sign in. */
 export const PLATFORM_MCP_AUTHORIZATION_SERVER = 'https://auth-kit.mastra.ai';
 
 export function resolveMcpAuthorizationServers(
@@ -76,10 +81,16 @@ export function resolveMcpAuthorizationServers(
 }
 
 export interface FactoryMcpRoutesDeps {
-  auth: RouteAuth;
+  /** Resolves a bearer token issued for this endpoint to its caller; `null` when it isn't one. */
+  verifyAccessToken: McpTokenVerifier;
   publicOrigin: string;
   authorizationServers: string[];
-  projects: Pick<FactoryProjectsStorage, 'get'>;
+  /**
+   * The organization the deployment is pinned to, when it is. Other routes
+   * refuse anyone outside it; this endpoint refuses tokens for another org.
+   */
+  organizationId?: string;
+  projects: Pick<FactoryProjectsStorage, 'list'>;
   /** Source-control handles a connector session can be filed under, tried in order. */
   sourceControls: readonly SourceControlStorageHandle[];
   tools: FactoryToolDependencies;
@@ -202,38 +213,49 @@ export function createFactoryMcpTools(
   return tools;
 }
 
-function resourceMetadataUrl(deps: FactoryMcpRoutesDeps, mcpPath: string): string {
-  return `${deps.publicOrigin}${PROTECTED_RESOURCE_PREFIX}${mcpPath}`;
+/** The endpoint's public URL: the audience its access tokens must name. */
+export function factoryMcpResource(publicOrigin: string): string {
+  return `${publicOrigin}${FACTORY_MCP_PATH}`;
 }
 
-function unauthorized(deps: FactoryMcpRoutesDeps, mcpPath: string, error = 'unauthorized'): Response {
-  return new Response(JSON.stringify({ error }), {
+function unauthorized(deps: FactoryMcpRoutesDeps, invalidToken: boolean): Response {
+  const metadata = `resource_metadata="${deps.publicOrigin}${PROTECTED_RESOURCE_PREFIX}${FACTORY_MCP_PATH}"`;
+  return new Response(JSON.stringify({ error: invalidToken ? 'invalid_token' : 'unauthorized' }), {
     status: 401,
     headers: {
       'Content-Type': 'application/json',
-      'WWW-Authenticate': `Bearer resource_metadata="${resourceMetadataUrl(deps, mcpPath)}"`,
+      'WWW-Authenticate': invalidToken ? `Bearer error="invalid_token", ${metadata}` : `Bearer ${metadata}`,
     },
   });
 }
 
 async function handleMcp(deps: FactoryMcpRoutesDeps, c: Context): Promise<Response> {
-  const factoryProjectId = c.req.param('projectId') ?? '';
   const mcpPath = new URL(c.req.url).pathname;
 
-  await deps.auth.ensureUser(c);
-  const tenant = deps.auth.tenant(c);
-  if (!tenant) return unauthorized(deps, mcpPath);
+  const token = /^Bearer\s+(.+)$/i.exec(c.req.header('Authorization') ?? '')?.[1]?.trim();
+  const tenant = token ? await deps.verifyAccessToken(token) : null;
+  if (!tenant) return unauthorized(deps, Boolean(token));
   if (!tenant.orgId) return c.json({ error: 'organization_required' }, 403);
+  if (deps.organizationId && tenant.orgId !== deps.organizationId) {
+    return c.json({ error: 'organization_forbidden' }, 403);
+  }
 
-  const project = await deps.projects.get({ orgId: tenant.orgId, id: factoryProjectId });
+  // The endpoint URL names no project, so it serves the org's first one:
+  // an organization has one Factory project, and extra ones are deprecated.
+  const projects = await deps.projects.list({ orgId: tenant.orgId });
+  const project = projects.reduce<(typeof projects)[number] | undefined>(
+    (first, next) => (!first || next.createdAt < first.createdAt ? next : first),
+    undefined,
+  );
   if (!project) return c.json({ error: 'not_found' }, 404);
+  const factoryProjectId = project.id;
 
   const { sessionId, persisted } = await ensureConnectorSession(deps, {
     orgId: tenant.orgId,
     userId: tenant.userId,
     factoryProjectId,
   });
-  const actorProfile = auditActorProfile(getFactoryAuthUser(c));
+  const actorProfile = auditActorProfile(tenant.profile);
   const scope: FactoryToolScope = {
     orgId: tenant.orgId,
     factoryProjectId,
@@ -288,13 +310,19 @@ async function handleMcp(deps: FactoryMcpRoutesDeps, c: Context): Promise<Respon
 }
 
 /**
- * The Factory's MCP endpoint: Streamable HTTP at
- * `/web/factory/projects/:projectId/mcp`, plus its RFC 9728 protected-resource
- * metadata. Callers sign in with OAuth through the Factory's auth provider and
- * get the tools a web UI session would, under the same permissions.
+ * The Factory's MCP endpoint: Streamable HTTP at `/mcp`, plus its RFC 9728
+ * protected-resource metadata at the path-suffixed well-known URL (the root one
+ * belongs to the framework's built-in `/api/mcp`). Callers sign in with OAuth and
+ * present a token issued for this URL; they get the tools a web UI session would.
  */
 export function buildFactoryMcpRoutes(deps: FactoryMcpRoutesDeps): ApiRoute[] {
   const handler = (c: unknown) => handleMcp(deps, c as Context);
+  const metadata = {
+    resource: factoryMcpResource(deps.publicOrigin),
+    authorization_servers: deps.authorizationServers,
+    bearer_methods_supported: ['header'],
+    resource_name: 'Mastra Factory',
+  };
   return [
     ...(['POST', 'GET', 'DELETE'] as const).map(method =>
       registerApiRoute(FACTORY_MCP_PATH, { method, requiresAuth: false, handler }),
@@ -302,15 +330,7 @@ export function buildFactoryMcpRoutes(deps: FactoryMcpRoutesDeps): ApiRoute[] {
     registerApiRoute(`${PROTECTED_RESOURCE_PREFIX}${FACTORY_MCP_PATH}`, {
       method: 'GET',
       requiresAuth: false,
-      handler: c => {
-        const mcpPath = new URL(c.req.url).pathname.slice(PROTECTED_RESOURCE_PREFIX.length);
-        return c.json({
-          resource: `${deps.publicOrigin}${mcpPath}`,
-          authorization_servers: deps.authorizationServers,
-          bearer_methods_supported: ['header'],
-          resource_name: 'Mastra Factory',
-        });
-      },
+      handler: c => c.json(metadata),
     }),
   ];
 }

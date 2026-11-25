@@ -3,7 +3,6 @@ import { Field, FieldError, FieldLabel, Fieldset, FieldsetLegend } from '@mastra
 import { Input } from '@mastra/playground-ui/components/Input';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 
@@ -233,33 +232,28 @@ export function MCPClientFormSidebar({
 
               return tooltipContent ? (
                 <Button
-                  icon={isTryingConnect ? <Spinner /> : undefined}
                   onClick={onTryConnect}
                   disabled={isDisabled}
                   className="w-full"
                   tooltip={tooltipContent}
+                  loading={isTryingConnect}
                 >
-                  {isTryingConnect ? 'Connecting...' : 'Try to connect'}
+                  Try to connect
                 </Button>
               ) : (
-                <Button
-                  icon={isTryingConnect ? <Spinner /> : undefined}
-                  onClick={onTryConnect}
-                  disabled={isDisabled}
-                  className="w-full"
-                >
-                  {isTryingConnect ? 'Connecting...' : 'Try to connect'}
+                <Button onClick={onTryConnect} disabled={isDisabled} className="w-full" loading={isTryingConnect}>
+                  Try to connect
                 </Button>
               );
             })()}
           <Button
-            icon={isSubmitting ? <Spinner /> : <IconCheckmark2Medium />}
             variant="primary"
             onClick={onPublish}
-            disabled={isSubmitting}
             className="w-full"
+            icon={<IconCheckmark2Medium />}
+            loading={isSubmitting}
           >
-            {isSubmitting ? 'Creating...' : submitLabel}
+            {submitLabel}
           </Button>
         </div>
       )}

@@ -9,13 +9,13 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "dolly1-security": [
+    "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3": [
+    "dolly1-security": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

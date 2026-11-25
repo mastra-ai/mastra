@@ -1,4 +1,4 @@
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { SkillSimpleForm } from '@mastra/playground-ui/domains/skills/skill-simple-form';
 import { useAuthCapabilities, useCurrentUser } from '@mastra/react/hooks/auth';
 import { useCallback, useMemo, useRef, useState } from 'react';
@@ -44,11 +44,7 @@ export default function AgentBuilderSkillsEdit() {
   return <AgentBuilderSkillEditPage id={id!} storedSkill={storedSkill} initialUserMessage={initialUserMessage} />;
 }
 
-const AgentBuilderSkillEditSkeleton = () => (
-  <div className="flex h-screen w-screen items-center justify-center">
-    <Spinner />
-  </div>
-);
+const AgentBuilderSkillEditSkeleton = () => <BrandLoader fill />;
 
 interface PageProps {
   id: string;

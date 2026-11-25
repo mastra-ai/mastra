@@ -11,6 +11,9 @@ function build(chunks: CollectedChunk[], tools?: any) {
   });
 }
 
+// A response that finished; item ids of an unfinished one are dropped.
+const FINISH: CollectedChunk = { type: 'finish', payload: { finishReason: 'stop', usage: {} } };
+
 function parts(chunks: CollectedChunk[], tools?: any) {
   const msgs = build(chunks, tools);
   return msgs[0]?.content.parts ?? [];
@@ -105,6 +108,7 @@ describe('buildMessagesFromChunks', () => {
       { type: 'text-start', payload: { id: 't1', providerMetadata: meta } },
       { type: 'text-delta', payload: { id: 't1', text: 'hi' } },
       { type: 'text-end', payload: { id: 't1' } },
+      FINISH,
     ]);
     expect(result[0]?.providerMetadata).toEqual(meta);
   });
@@ -116,8 +120,24 @@ describe('buildMessagesFromChunks', () => {
       { type: 'text-start', payload: { id: 't1', providerMetadata: startMeta } },
       { type: 'text-delta', payload: { id: 't1', text: 'hi' } },
       { type: 'text-end', payload: { id: 't1', providerMetadata: endMeta } },
+      FINISH,
     ]);
     expect(result[0]?.providerMetadata).toEqual(endMeta);
+  });
+
+  it('drops response item ids from a response that never finished (#31202)', () => {
+    const result = parts([
+      { type: 'reasoning-start', payload: { id: 'r1', providerMetadata: { openai: { itemId: 'rs_1' } } } },
+      { type: 'reasoning-delta', payload: { id: 'r1', text: 'think' } },
+      { type: 'reasoning-end', payload: { id: 'r1', providerMetadata: { openai: { itemId: 'rs_1' } } } },
+      { type: 'text-start', payload: { id: 't1', providerMetadata: { azure: { itemId: 'msg_1', phase: 'final' } } } },
+      { type: 'text-delta', payload: { id: 't1', text: 'partial' } },
+    ]);
+    expect(result).toEqual([
+      expect.objectContaining({ type: 'reasoning', reasoning: 'think' }),
+      expect.objectContaining({ type: 'text', text: 'partial', providerMetadata: { azure: { phase: 'final' } } }),
+    ]);
+    expect(result[0]).not.toHaveProperty('providerMetadata');
   });
 
   // ── Reasoning spans ─────────────────────────────────────────
@@ -172,6 +192,7 @@ describe('buildMessagesFromChunks', () => {
       { type: 'reasoning-start', payload: { id: 'r1', providerMetadata: startMeta } },
       { type: 'reasoning-delta', payload: { id: 'r1', text: 'think' } },
       { type: 'reasoning-end', payload: { id: 'r1', providerMetadata: endMeta } },
+      FINISH,
     ]);
     expect(result[0]).toMatchObject({
       type: 'reasoning',

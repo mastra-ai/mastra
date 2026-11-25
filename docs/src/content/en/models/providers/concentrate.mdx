@@ -7,7 +7,7 @@ description: "Browse Concentrate model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/concentrate.svg" alt="Concentrate logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Concentrate
 
-Access 164 Concentrate models through Mastra's model router. Authentication is handled automatically using the `CONCENTRATE_API_KEY` environment variable.
+Access 165 Concentrate models through Mastra's model router. Authentication is handled automatically using the `CONCENTRATE_API_KEY` environment variable.
 
 Learn more in the [Concentrate documentation](https://concentrate.ai/docs).
 
@@ -221,7 +221,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1000000,
-    "maxOutput": 64000,
+    "maxOutput": 128000,
     "inputCost": 3,
     "outputCost": 15
   },
@@ -692,6 +692,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.45,
     "outputCost": 1.5
+  },
+  {
+    "model": "concentrate/glm-5.3-flashx-legal",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.37,
+    "outputCost": 1.25
   },
   {
     "model": "concentrate/gpt-4.1",
@@ -1913,7 +1925,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1000000,
-    "maxOutput": 64000,
+    "maxOutput": 131072,
     "inputCost": 0.276,
     "outputCost": 1.101
   },

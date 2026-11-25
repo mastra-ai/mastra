@@ -638,6 +638,17 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
     });
 
     describe('pages', () => {
+      it('rejects a list cursor it cannot decode with KnowledgeInvalidCursorError', async () => {
+        const acme = await scope('org:acme', ORG);
+        const invalid = { name: 'KnowledgeInvalidCursorError' };
+        // `0x10` is a number to `Number()` and 400 nines is `Infinity`; no store issues either.
+        for (const cursor of ['not-a-cursor', '0x10', '9'.repeat(400)]) {
+          await expect(store.listChildPages({ parentId: acme.id, read: 'all', cursor })).rejects.toMatchObject(invalid);
+          await expect(store.listPages({ read: 'all', cursor })).rejects.toMatchObject(invalid);
+          await expect(store.listPageActivity({ read: 'all', cursor })).rejects.toMatchObject(invalid);
+        }
+      });
+
       it('creates pages in their home scope, ordered by position, with name order for listPages', async () => {
         const acme = await scope('org:acme', ORG);
         const b = await page(acme.id, 'beta');
@@ -1170,6 +1181,9 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         const label = (hit: Awaited<ReturnType<typeof store.searchPages>>[number]) =>
           hit.type === 'page' ? hit.page.name : hit.note.text;
         const r = read(['org:acme']);
+        // Compatibility (r397): a body-only hit carries the page body, which knowledge_search snippets are cut from.
+        const giraffeHit = (await store.searchPages({ query: 'grazes', read: r })).find(hit => hit.type === 'page');
+        expect(giraffeHit?.page.body).toBe('A giraffe grazes.');
         // Words matched first, then points, then newest. Safari matches 2 words (zebra, giraffe), the others 1:
         // Zebra care 3 points, Stripes 2, Savanna 1. Two body words beat one name word.
         expect((await store.searchPages({ query: 'zebra giraffe lion', read: r })).map(label)).toEqual([
@@ -1390,6 +1404,146 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
               before: { createdAt: new Date(T0), id: 'x' },
             }),
           ).rejects.toThrow();
+        });
+
+        describe('oldest first (stores reporting supportsActivityAscending)', () => {
+          const ascending = () => store.getCapabilities().supportsActivityAscending === true;
+          const names = async (events: Array<{ pageId: string }>) =>
+            Promise.all(events.map(async event => (await store.getPage({ id: event.pageId, read: 'all' }))?.name));
+
+          it('refuses order asc and after on a store that does not report it, instead of answering newest first', async () => {
+            if (ascending()) return;
+            await expect(store.listPageActivity({ read: 'all', order: 'asc' })).rejects.toThrow(RangeError);
+            await expect(store.listPageActivity({ read: 'all', order: 'asc', after: '1' })).rejects.toThrow(RangeError);
+          });
+
+          it('lists one-after-another writes in the order they were made, not createdAt order, and pages with after positions without skipping or repeating', async () => {
+            if (!ascending()) return;
+            const acme = await scopeAt('org:acme');
+            const r = read(['org:acme']);
+            // Written one after another, so every store's feed order is this order, whatever the clocks said.
+            await at(T0 + 5000, () => page(acme.id, 'late clock'));
+            await at(T0 + 3000, async () => {
+              await page(acme.id, 'tie a');
+              await page(acme.id, 'tie b');
+              await page(acme.id, 'tie c');
+            });
+            await at(T0 + 1000, () => page(acme.id, 'stepped back'));
+            await at(T0 + 4000, () => page(acme.id, 'middle'));
+            const since = new Date(T0);
+            const whole = (await store.listPageActivity({ read: r, since, order: 'asc', limit: 100 })).events;
+            expect(await names(whole)).toEqual(['late clock', 'tie a', 'tie b', 'tie c', 'stepped back', 'middle']);
+            expect(whole.every(event => typeof event.position === 'string' && event.position.length > 0)).toBe(true);
+            expect(new Set(whole.map(event => event.position)).size).toBe(whole.length);
+
+            for (const limit of [1, 2, 4]) {
+              const walked: typeof whole = [];
+              let after: string | undefined;
+              for (let guard = 0; guard < 20; guard++) {
+                const { events } = await store.listPageActivity({ read: r, since, order: 'asc', limit, after });
+                walked.push(...events);
+                if (events.length < limit) break;
+                after = events[events.length - 1]!.position;
+              }
+              expect(walked.map(event => event.id)).toEqual(whole.map(event => event.id));
+            }
+
+            // after is exclusive: continuing from the last event returns nothing new.
+            const tail = await store.listPageActivity({ read: r, since, order: 'asc', after: whole[5]!.position });
+            expect(tail.events).toEqual([]);
+
+            // The store's own cursor pages oldest first too.
+            const first = await store.listPageActivity({ read: r, since, order: 'asc', limit: 4 });
+            const second = await store.listPageActivity({
+              read: r,
+              since,
+              order: 'asc',
+              limit: 4,
+              cursor: first.nextCursor,
+            });
+            expect([...first.events, ...second.events].map(event => event.id)).toEqual(whole.map(event => event.id));
+          });
+
+          it('picks up an event written after the reader stopped, from where it stopped', async () => {
+            if (!ascending()) return;
+            const acme = await scopeAt('org:acme');
+            const r = read(['org:acme']);
+            await at(T0 + 1000, () => page(acme.id, 'one'));
+            await at(T0 + 2000, () => page(acme.id, 'two'));
+            const seen = (await store.listPageActivity({ read: r, since: new Date(T0), order: 'asc' })).events;
+            // A clock behind the events already read: still after them in the feed.
+            const later = await at(T0 + 500, () => page(acme.id, 'three'));
+            const next = await store.listPageActivity({
+              read: r,
+              order: 'asc',
+              after: seen[seen.length - 1]!.position,
+            });
+            expect(next.events.map(event => event.pageId)).toEqual([later.id]);
+          });
+
+          it("reads only the page's current scope with a scope filter, and keeps hiding unreadable and moved-out pages", async () => {
+            if (!ascending()) return;
+            const acme = await scopeAt('org:acme');
+            const globex = await scopeAt('org:globex');
+            const secret = await scopeAt('org:secret');
+            const r = read(['org:acme', 'org:globex']);
+            const stays = await at(T0 + 1000, () => page(acme.id, 'stays'));
+            await at(T0 + 2000, () => page(globex.id, 'other scope'));
+            await at(T0 + 3000, () => page(secret.id, 'hidden'));
+            const leaves = await at(T0 + 4000, () => page(acme.id, 'leaves'));
+            await at(T0 + 5000, () =>
+              store.movePage({ id: leaves.id, expectedVersion: 1, parentId: secret.id, provenance: host }),
+            );
+            const scoped = await store.listPageActivity({
+              read: r,
+              scopeId: acme.id,
+              since: new Date(T0),
+              order: 'asc',
+            });
+            expect(scoped.events.map(event => [event.action, event.pageId])).toEqual([['page-created', stays.id]]);
+            const all = await store.listPageActivity({ read: r, since: new Date(T0), order: 'asc', limit: 1 });
+            expect(all.events.map(event => event.pageId)).toEqual([stays.id]);
+          });
+
+          it('refuses after without order asc, after with a cursor, before with order asc, and a position it did not issue', async () => {
+            if (!ascending()) return;
+            const acme = await scopeAt('org:acme');
+            await at(T0 + 1000, () => page(acme.id, 'one'));
+            const [event] = (await store.listPageActivity({ read: 'all', since: new Date(T0), order: 'asc' })).events;
+            const position = event!.position!;
+            await expect(store.listPageActivity({ read: 'all', after: position })).rejects.toThrow(RangeError);
+            await expect(
+              store.listPageActivity({ read: 'all', order: 'asc', after: position, cursor: position }),
+            ).rejects.toThrow(RangeError);
+            await expect(
+              store.listPageActivity({ read: 'all', order: 'asc', before: { createdAt: new Date(T0), id: 'x' } }),
+            ).rejects.toThrow(RangeError);
+            for (const bad of ['', 'not a position', '-1', '1.5', '99999999999999999999999999']) {
+              await expect(store.listPageActivity({ read: 'all', order: 'asc', after: bad })).rejects.toThrow(
+                RangeError,
+              );
+            }
+            // Well-formed but past anything this feed has handed out: every number in it a billion higher.
+            const ahead = position
+              .split(':')
+              .map(part => (/^\d+$/.test(part) ? String(Number(part) + 1_000_000_000) : part))
+              .join(':');
+            await expect(store.listPageActivity({ read: 'all', order: 'asc', after: ahead })).rejects.toThrow(
+              /ahead of this feed/,
+            );
+          });
+
+          it('leaves the default order newest first', async () => {
+            if (!ascending()) return;
+            const acme = await scopeAt('org:acme');
+            const r = read(['org:acme']);
+            await at(T0 + 1000, () => page(acme.id, 'older'));
+            await at(T0 + 2000, () => page(acme.id, 'newer'));
+            const desc = (await store.listPageActivity({ read: r, since: new Date(T0) })).events;
+            const asc = (await store.listPageActivity({ read: r, since: new Date(T0), order: 'asc' })).events;
+            expect(keyed(desc)).toEqual(keyed(datedOrder(desc)));
+            expect(asc.map(event => event.id)).toEqual([...desc].reverse().map(event => event.id));
+          });
         });
       });
 

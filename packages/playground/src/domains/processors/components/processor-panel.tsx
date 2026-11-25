@@ -190,10 +190,11 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
           <Button
             icon={<IconPlay />}
             onClick={handleExecute}
-            disabled={executeProcessor.isPending || selectedPhase === 'outputStream' || selectedPhase === 'llmRequest'}
+            disabled={selectedPhase === 'outputStream' || selectedPhase === 'llmRequest'}
             className="w-full"
+            loading={executeProcessor.isPending}
           >
-            {executeProcessor.isPending ? 'Running...' : 'Run processor'}
+            Run processor
           </Button>
 
           {selectedPhase === 'outputStream' && (

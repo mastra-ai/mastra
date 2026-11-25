@@ -30,6 +30,7 @@ export const MASTRA_DURABLE_SEGMENTS_KEY = 'mastra__durableSegments';
  */
 export function snapshotRequestContextEntries(
   requestContext: RequestContext | undefined,
+  onEntryOmitted?: () => void,
 ): Record<string, unknown> | undefined {
   if (!requestContext) return undefined;
   const out: Record<string, unknown> = {};
@@ -65,7 +66,10 @@ export function snapshotRequestContextEntries(
     // budget) are skipped — they wouldn't survive the wire on cross-process
     // engines anyway.
     const json = boundedStringify(value);
-    if (json === undefined) continue;
+    if (json === undefined) {
+      onEntryOmitted?.();
+      continue;
+    }
     out[key as string] = JSON.parse(json);
     any = true;
   }
@@ -81,9 +85,15 @@ export function snapshotRequestContextEntries(
  * already rebuilt in the step's scope — falling back to it is what keeps
  * request-scoped resolution (tenant/user, workspace, dynamic model/memory)
  * working for tools rebuilt on a cross-process worker, including a delegated
- * subagent's.
+ * subagent's. Pass `liveRunContext` only for the same run's original context,
+ * not an engine-rebuilt context or another caller's context.
  */
-export function restoreRequestContext(entries?: Record<string, unknown>, runLevel?: RequestContext): RequestContext {
+export function restoreRequestContext(
+  entries?: Record<string, unknown>,
+  runLevel?: RequestContext,
+  liveRunContext?: RequestContext,
+): RequestContext {
+  if (liveRunContext) return liveRunContext;
   if (entries) {
     // The snapshot entries belong to whoever started the run. Their bearer token
     // (legacy snapshots) and signed-in user are dropped, and the live ones are

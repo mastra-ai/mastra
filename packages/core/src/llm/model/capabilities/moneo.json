@@ -19,16 +19,6 @@
     "z-ai-glm-5-3-flash"
   ],
   "reasoning": {
-    "nvidia-nemotron-3-5-super-vl-120b-a12b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3-235b:web": [
-      {
-        "type": "toggle"
-      }
-    ],
     "z-ai-glm-5-3-flash": [
       {
         "type": "effort",
@@ -66,6 +56,16 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "qwen3-235b:web": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia-nemotron-3-5-super-vl-120b-a12b": [
+      {
+        "type": "toggle"
       }
     ]
   }

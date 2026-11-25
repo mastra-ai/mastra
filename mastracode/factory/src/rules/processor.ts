@@ -11,6 +11,7 @@ import type {
   Processor,
 } from '@mastra/core/processors';
 
+import type { FactoryBoardEngine } from '../board-engine/engine.js';
 import {
   boardFlow,
   boardForWorkItem,
@@ -18,15 +19,15 @@ import {
   reviewsPullRequest,
   workItemPhaseSemantics,
 } from '../boards/index.js';
-import type { BoardRegistry } from '../boards/index.js';
+import type { BoardPhaseOutcome, BoardRegistry } from '../boards/index.js';
 import { workStageCarries } from '../boards/legacy-plan-role.js';
 import { exitToolSucceeded, PHASE_EXIT_METADATA_KEY } from '../boards/phase-automation.js';
+import { exitToolOutcome, pendingPhaseOutcome, phaseOutcomes } from '../boards/phase-outcomes.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { FactoryRunBindingRecord, WorkItemsStorage, Card } from '../storage/domains/work-items/base.js';
 import { findSessionRunBinding, getFactorySessionCoordinates, getFactoryToolsRole } from './binding-context.js';
-import type { FactoryTransitionService } from './transition-service.js';
 import { workItemSource } from './types.js';
 import type {
   FactoryCommitDecision,
@@ -281,10 +282,16 @@ function latestToolResultMessage(messages: MastraDBMessage[]): MastraDBMessage |
   return undefined;
 }
 
-async function phaseCacheKey(value: ActivePhaseSnapshotValue, linked: Card[]): Promise<string> {
+async function phaseCacheKey(
+  value: ActivePhaseSnapshotValue,
+  linked: Card[],
+  outcomes: readonly BoardPhaseOutcome<string>[],
+): Promise<string> {
   const serialized = JSON.stringify({
     ...value,
     linked: linked.map(item => [item.id, item.revision, item.stages[0]]),
+    // A board edit can change a phase's outcomes without writing the card.
+    ...(outcomes.length ? { outcomes: outcomes.map(({ key, label, to }) => [key, label, to]) } : {}),
   });
   return Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(serialized))).toString(
     'hex',
@@ -382,7 +389,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       onBoundThreadRun?: () => void;
       /** Whether a run is going on this thread in this process; its binding stays due for reconcile until it stops. */
       isThreadRunning?: (threadId: string) => boolean;
-      transitionService?: Pick<FactoryTransitionService, 'transition'>;
+      boardEngine?: Pick<FactoryBoardEngine, 'requestMove'>;
       messageReader?: PersistedMessageReader;
       recordPullRequestProvenance?: (input: {
         binding: FactoryRunBindingRecord;
@@ -547,15 +554,20 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
           ),
         }
       : { ...baseValue, board };
-    const cacheKey = await phaseCacheKey(value, linked);
+    const definition = boards.get(board);
+    const phase = definition?.phases[stage];
+    // Only the session working the card in its phase reports how that phase ended.
+    const works =
+      phase?.kind === 'working' &&
+      (phase.runner.context === runRole || workStageCarries(definition, stage, runRole, undefined) === true);
+    const outcomes = definition && works ? phaseOutcomes(definition, stage) : [];
+    const cacheKey = await phaseCacheKey(value, linked, outcomes);
     if (hasBase && (args.tracking?.currentCacheKey ?? args.lastSnapshot?.metadata?.state?.cacheKey) === cacheKey)
       return;
 
     const linkedText = linked.length
       ? `\nLinked items: ${linked.map(candidate => `${workItemSource(candidate.externalSource)} ${candidate.title}`).join('; ')}`
       : '';
-    const definition = boards.get(board);
-    const phase = definition?.phases[stage];
     const phaseLabel = phase?.name ?? stage;
     const nextText = phase
       ? `Next phases: ${
@@ -566,14 +578,28 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
             : 'none'
         }\n`
       : '';
+    const phaseName = (key: string) => escapeText(definition?.phases[key]?.name ?? key);
+    const exitOutcome = definition && phase?.kind === 'working' ? exitToolOutcome(definition, stage) : undefined;
     const exitText =
       phase?.kind === 'working' && phase.exitTool
         ? `This phase ends when ${escapeText(phase.exitTool.id)} succeeds${phase.exitTool.id === 'submit_plan' ? ' with an approved plan' : ''}; until then the card stays here. ${
             definition?.tools[phase.exitTool.id]
               ? 'Its result moves the card on.'
-              : `Then move the card with factory_transition_work_item to one of: ${phase.nextPhases.map(escapeText).join(', ')}.`
+              : exitOutcome
+                ? `Its success reports ${escapeText(exitOutcome.key)} (${escapeText(exitOutcome.label)}); Factory moves the card to ${phaseName(exitOutcome.to)} once your run ends.`
+                : 'Then report an outcome with factory_report_outcome.'
           }\n`
         : '';
+    const pending = definition && outcomes.length ? pendingPhaseOutcome(definition, item) : undefined;
+    const outcomeText = outcomes.length
+      ? `Outcomes: ${outcomes
+          .map(outcome => `${escapeText(outcome.key)}: ${escapeText(outcome.label)} → ${phaseName(outcome.to)}`)
+          .join('; ')}\n` +
+        "Report one with factory_report_outcome when this phase's work ends. Factory moves the card once your run ends; you never move it yourself.\n" +
+        (pending
+          ? `Reported outcome: ${escapeText(pending.outcome)} (${escapeText(pending.label)}) → ${phaseName(pending.to)}. Report again to change it.\n`
+          : '')
+      : '';
     // Skills name phases by role in the pull request loop, never by key: this line maps them.
     const flowPhase = (key: string | undefined) =>
       key ? `${escapeText(definition?.phases[key]?.name ?? key)} (${escapeText(key)})` : undefined;
@@ -595,7 +621,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       phase.runner.context !== runRole &&
       // A Work card planned before Planning ran in `work` keeps its `plan` session there.
       workStageCarries(definition, stage, runRole, undefined) !== true
-        ? `This card is now in ${escapeText(phaseLabel)}, which runs in the ${escapeText(phase.runner.context)} context in another session. Your part is done: do not continue its work here. Answer questions, and move the card only if it must come back to you.\n`
+        ? `This card is now in ${escapeText(phaseLabel)}, which runs in the ${escapeText(phase.runner.context)} context in another session. Your part is done: do not continue its work here. Answer questions only.\n`
         : '';
     const runtime =
       value.modelId && value.thinkingLevel ? { modelId: value.modelId, thinkingLevel: value.thinkingLevel } : null;
@@ -607,13 +633,14 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         ? `Runtime: model=${escapeText(runtime.modelId)}, reasoning-setting=${escapeText(runtime.thinkingLevel)}\n`
         : '') +
       (phase?.kind === 'resting'
-        ? `This card rests in ${escapeText(phaseLabel)}: its work is paused. Answer questions without moving it; when the user asks to resume, request the transition into the working stage first, then continue the work in this session.\n`
+        ? `This card rests in ${escapeText(phaseLabel)}: its work is paused. Answer questions; a person moves it on from the Factory board when the work should resume.\n`
         : '') +
       nextText +
       flowText +
+      outcomeText +
       exitText +
       handedOnText +
-      `Use factory_transition_work_item with expectedRevision ${item.revision} to request a phase change.${escapeText(linkedText)}`;
+      escapeText(linkedText).replace(/^\n/, '');
     const isDelta = hasBase && prior?.status === 'active';
     return {
       id: STATE_ID,
@@ -960,10 +987,11 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       // The bound agent's own tool call carries the same consent as its governed moves.
       consentedBy: `agent:${binding.id}`,
     });
-    if (committed.status !== 'committed' || !this.options.transitionService) return;
+    if (committed.status !== 'committed' || !this.options.boardEngine) return;
     for (const entry of decisions) {
       if (entry.type !== 'transition') continue;
-      await this.options.transitionService.transition({
+      const ingress = { type: 'rule' as const, identity: `decision:${entry.idempotencyKey}` };
+      const result = await this.options.boardEngine.requestMove({
         orgId: binding.orgId,
         factoryProjectId: binding.factoryProjectId,
         workItemId: item.id,
@@ -972,12 +1000,28 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         ...(entry.reenter ? { reenter: true } : {}),
         expectedRevision: item.revision,
         actor: { type: 'system', id: 'factory-tool-result-rule' },
-        ingress: { type: 'rule', identity: `decision:${entry.idempotencyKey}` },
+        ingress,
         cause: 'tool_result_rule',
         causalChain: [{ ingressId, decisionType: entry.type }],
         ...(isApprovedPlanResult(toolResult) ? { planApproved: true } : {}),
         ...(toolResult.status === 'success' ? { completedTool: toolResult.toolName } : {}),
       });
+      // The dispatcher replays this same decision later. Record the engine's refusal under its
+      // ingress so the replay keeps it instead of asking again without this tool result's context.
+      // A lost revision race is not a refusal and stays unrecorded, like the transition service.
+      if (result.status === 'rejected' && result.code !== 'stale') {
+        await this.options.storage.commitTransition({
+          orgId: binding.orgId,
+          factoryProjectId: binding.factoryProjectId,
+          workItemId: item.id,
+          expectedRevision: item.revision,
+          destinationStage: entry.stage,
+          actorId: 'factory-tool-result-rule',
+          ingress: { identity: ingress.identity, transitionId: result.transitionId },
+          causalChain: [{ ingressId, decisionType: entry.type }],
+          evaluation: { outcome: 'rejected', code: result.code, reason: result.reason },
+        });
+      }
     }
   }
 }

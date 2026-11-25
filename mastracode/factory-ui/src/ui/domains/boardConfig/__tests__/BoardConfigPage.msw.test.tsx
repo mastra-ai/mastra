@@ -109,7 +109,7 @@ describe('Board configuration', () => {
     expect(screen.getByRole('button', { name: 'Back to Release Preview: Board settings' })).toBeInTheDocument();
   });
 
-  it('opens settings for the board in view from the Boards header, then switches to another board', async () => {
+  it('opens intake for the board in view from the Boards header, then switches to another board', async () => {
     stubFactory();
     serveCatalog();
     serveBoard(releaseBoard(), RELEASE_URL);
@@ -117,7 +117,7 @@ describe('Board configuration', () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole('link', { name: 'Board settings' }));
-    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/boards/release/config`);
+    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/boards/release/intake`);
 
     serveBoard(storedWorkBoard());
     await user.click(await configNav().findByRole('button', { name: 'Board: Release Preview' }));
@@ -422,6 +422,93 @@ describe('Board configuration', () => {
     await user.click(configNav().getByRole('link', { name: 'Triage' }));
     expect(await screen.findByRole('textbox', { name: 'Phase name' })).toHaveValue('Triage');
     expect(screen.getAllByRole('combobox', { name: 'Field' })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+  });
+
+  it('saves a typed condition value without leaving the field first, and warns before a reload drops it', async () => {
+    stubFactory();
+    const work = storedWorkBoard();
+    serveBoard(
+      storedWorkBoard({
+        phases: work.board.phases.map(phase =>
+          phase.key === 'pr-review'
+            ? {
+                ...phase,
+                autoStart: true,
+                autoStartWhen: {
+                  operator: 'AND',
+                  conditions: [{ field: 'pullRequest.trusted', operator: 'equals', value: true }],
+                },
+              }
+            : phase,
+        ),
+      }),
+    );
+    const saved = vi.fn();
+    server.use(
+      http.patch(BOARD_URL, async ({ request }) => {
+        const body = FACTORY_ROUTE_CONTRACTS.boardReplace.bodySchema.parse(await request.json());
+        saved(body);
+        return HttpResponse.json(storedWorkBoard({ ...body, revision: 2 }));
+      }),
+    );
+    const { client } = renderAt(`/factories/${FACTORY_ID}/work/config`);
+
+    const user = await openPhase('Review');
+    await user.click(screen.getByRole('combobox', { name: 'Field' }));
+    await user.click(await screen.findByRole('option', { name: 'Labels' }));
+    await user.type(screen.getByRole('textbox', { name: 'Value' }), 'AUTO LINE');
+
+    // Still typing: a browser doesn't move focus to a disabled button, so Save has to be ready now.
+    expect(screen.getByRole('textbox', { name: 'Value' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+    const reload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(reload);
+    expect(reload.defaultPrevented).toBe(true);
+
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(saved).toHaveBeenCalledOnce());
+    expect(saved.mock.calls[0][0].phases.find((phase: StoredPhaseInfo) => phase.key === 'pr-review')).toMatchObject({
+      autoStart: true,
+      autoStartWhen: {
+        operator: 'AND',
+        conditions: [{ field: 'item.labels', operator: 'equals', value: 'AUTO LINE' }],
+      },
+    });
+    await waitForMutationsIdle(client);
+    const afterSave = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(afterSave);
+    expect(afterSave.defaultPrevented).toBe(false);
+  });
+
+  it('puts the value from before typing back on Escape', async () => {
+    stubFactory();
+    const work = storedWorkBoard();
+    serveBoard(
+      storedWorkBoard({
+        phases: work.board.phases.map(phase =>
+          phase.key === 'pr-review'
+            ? {
+                ...phase,
+                autoStart: true,
+                autoStartWhen: {
+                  operator: 'AND',
+                  conditions: [{ field: 'item.labels', operator: 'equals', value: 'AUTO LINE' }],
+                },
+              }
+            : phase,
+        ),
+      }),
+    );
+    renderAt(`/factories/${FACTORY_ID}/work/config`);
+
+    const user = await openPhase('Review');
+    const value = screen.getByRole('textbox', { name: 'Value' });
+    await user.clear(value);
+    await user.type(value, 'OTHER');
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+    await user.keyboard('{Escape}');
+    expect(value).toHaveValue('AUTO LINE');
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
 

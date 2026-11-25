@@ -21,16 +21,6 @@
     "xiaomi/mimo-v2.6-pro"
   ],
   "reasoning": {
-    "xiaomi/mimo-v2.6-pro": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "xiaomi/mimo-v2.6-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
     "minimax/minimax-m3.1-flash": [
       {
         "type": "effort",
@@ -53,6 +43,16 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "xiaomi/mimo-v2.6-pro": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "xiaomi/mimo-v2.6-flash": [
+      {
+        "type": "toggle"
       }
     ]
   }

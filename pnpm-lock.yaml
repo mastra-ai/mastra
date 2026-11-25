@@ -2485,6 +2485,9 @@ importers:
       hono:
         specifier: 4.13.18
         version: 4.13.18
+      jose:
+        specifier: ^6.2.12
+        version: 6.2.15
       posthog-node:
         specifier: ^5.57.1
         version: 5.61.2(@opentelemetry/api@1.10.0)(rxjs@7.8.2)
@@ -2513,6 +2516,9 @@ importers:
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../stores/pg
+      '@mastra/redis-streams':
+        specifier: workspace:*
+        version: link:../../pubsub/redis-streams
       '@mastra/server':
         specifier: workspace:*
         version: link:../../packages/server

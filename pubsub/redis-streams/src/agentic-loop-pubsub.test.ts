@@ -4,10 +4,14 @@ import { LLMock } from '@copilotkit/aimock';
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { PostgresStore } from '@mastra/pg';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { createResumeContextRuntime } from '../test-fixtures/evented-resume-context';
+import { killProcess, spawnFixture, waitFor, waitForLine } from '../test-fixtures/harness';
 import { RedisStreamsPubSub } from './index';
 
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6381';
@@ -46,6 +50,211 @@ describe('AIMock loop scenario: evented + RedisStreamsPubSub', () => {
     mock = undefined;
     delete process.env.MASTRA_EVENTED_EXECUTION;
   });
+
+  it('uses resumed request context in both LLM processors after a worker restart', async () => {
+    if (!mock) throw new Error('AIMock server is not running');
+    mock.on(
+      { endpoint: 'chat', hasToolResult: false },
+      { toolCalls: [{ id: 'lookup-one', name: 'lookup', arguments: {} }] },
+    );
+    mock.on(
+      {
+        endpoint: 'chat',
+        hasToolResult: true,
+        predicate: req => !JSON.stringify(req.messages).includes('approval-one'),
+      },
+      { toolCalls: [{ id: 'approval-one', name: 'approve', arguments: {} }] },
+    );
+    mock.on(
+      {
+        endpoint: 'chat',
+        hasToolResult: true,
+        predicate: req => JSON.stringify(req.messages).includes('approval-one'),
+      },
+      { content: 'Approved.' },
+    );
+    const schemaName = `resume_${randomUUID().slice(0, 8)}`;
+    const connectionString =
+      process.env.POSTGRES_CONNECTION_STRING ?? 'postgres://postgres:postgres@localhost:5436/postgres';
+    const { agent, mastra, storage } = createResumeContextRuntime({
+      schemaName,
+      connectionString,
+      redisUrl: REDIS_URL,
+      modelUrl: mock.url,
+      worker: false,
+    });
+    const start = () =>
+      spawnFixture({
+        entry: 'test-fixtures/evented-resume-context.entry.ts',
+        env: {
+          MASTRA_WORKERS: 'orchestration',
+          RESUME_CONTEXT_SCHEMA: schemaName,
+          RESUME_CONTEXT_MODEL_URL: mock!.url,
+          POSTGRES_CONNECTION_STRING: connectionString,
+          REDIS_URL,
+        },
+      });
+    let worker: ReturnType<typeof start> | undefined;
+    const context = (marker: string) => {
+      const requestContext = new RequestContext();
+      requestContext.set('resume-marker', marker);
+      return requestContext;
+    };
+    const runId = randomUUID();
+    try {
+      await storage.init();
+      worker = start();
+      await waitForLine(worker, 'resume-context-worker-ready');
+      const output = await agent.stream('Ask for approval.', {
+        runId,
+        memory: { thread: runId, resource: 'resume-context' },
+        requestContext: context('initial'),
+      });
+      void output.consumeStream().catch(() => {});
+      const workflows = (await storage.getStore('workflows'))!;
+      await waitFor(async () => {
+        const snapshot = await workflows.loadWorkflowSnapshot({ workflowName: 'durable-agentic-loop', runId });
+        return snapshot?.status === 'suspended';
+      });
+      expect(worker.stdout).toContain('input-step:initial');
+      expect(worker.stdout).toContain('llm-request:initial');
+      await killProcess(worker);
+      worker = start();
+      await waitForLine(worker, 'resume-context-worker-ready');
+
+      const resumed = await agent.approveToolCall({
+        runId,
+        toolCallId: 'approval-one',
+        requestContext: context('resumed'),
+      });
+      await waitForLine(worker, /llm-request:(initial|resumed)/);
+      expect(worker.stdout.match(/(?:input-step|llm-request):\w+/g)).toEqual([
+        'input-step:resumed',
+        'llm-request:resumed',
+      ]);
+      expect(await resumed.text).toBe('Approved.');
+    } finally {
+      await killProcess(worker);
+      await mastra.shutdown();
+      const cleanup = new PostgresStore({ id: `${schemaName}_cleanup`, connectionString });
+      try {
+        await cleanup.db.none(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+      } finally {
+        await cleanup.close();
+      }
+    }
+  });
+
+  it('retains live request context in a native evented input-step processor', async () => {
+    if (!mock) throw new Error('AIMock server is not running');
+    const pubsub = new RedisStreamsPubSub({ url: REDIS_URL, keyPrefix: `aimock-${randomUUID()}`, blockMs: 200 });
+    pubsubs.push(pubsub);
+    mock.on({ endpoint: 'chat' }, { content: 'Processed on the owning worker.' });
+    const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${mock.url.replace(/\/+$/, '')}/v1` });
+    const getState = () => 'live-controller-state';
+    const requestContext = new RequestContext([['controller', { getState }]]);
+    const observed: string[] = [];
+    const agent = new Agent({
+      id: 'live-context',
+      name: 'Live context',
+      instructions: 'Reply to the user.',
+      model: openai(SCENARIO_MODEL_ID),
+      durable: { executionEngine: 'evented' },
+      inputProcessors: [
+        {
+          id: 'read-live-context',
+          processInputStep: async ({ requestContext }) => {
+            const controller = requestContext?.get('controller') as { getState(): string };
+            observed.push(controller.getState());
+          },
+        },
+      ],
+    });
+    const schemaName = `live_context_${randomUUID().replaceAll('-', '')}`;
+    const connectionString =
+      process.env.POSTGRES_CONNECTION_STRING ?? 'postgres://postgres:postgres@localhost:5436/postgres';
+    const storage = new PostgresStore({ id: schemaName, schemaName, connectionString });
+    let mastra: Mastra | undefined;
+    try {
+      mastra = new Mastra({ agents: { agent }, logger: false, storage, pubsub });
+      const output = await mastra.getAgent('agent').stream('Read the live state.', { requestContext });
+      await output.consumeStream();
+      expect(observed).toEqual(['live-controller-state']);
+      expect(await output.text).toBe('Processed on the owning worker.');
+    } finally {
+      try {
+        await mastra?.shutdown();
+      } finally {
+        // Mastra shuts down its own Postgres pool before the schema can be dropped.
+        const cleanup = mastra ? new PostgresStore({ id: `${schemaName}_cleanup`, connectionString }) : storage;
+        try {
+          await cleanup.db.none(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+        } finally {
+          await cleanup.close();
+        }
+      }
+    }
+  });
+
+  // COR-1659: the producer registers its loop when it starts the run, but the pull worker never calls the agent.
+  it.each(['before', 'during', 'during lazy', 'after'] as const)(
+    'runs a native evented agent registered %s pull worker startup',
+    async timing => {
+      if (!mock) throw new Error('AIMock server is not running');
+      mock.on({ endpoint: 'chat' }, { content: 'Your order has shipped.' });
+      const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${mock.url}/v1` });
+      const makeAgent = () =>
+        new Agent({
+          id: 'order-support',
+          name: 'Order support',
+          instructions: 'Help with orders.',
+          model: openai(SCENARIO_MODEL_ID),
+          durable: { executionEngine: 'evented' },
+        });
+      const keyPrefix = `aimock-${randomUUID()}`;
+      const apiPubsub = new RedisStreamsPubSub({ url: REDIS_URL, keyPrefix, blockMs: 200 });
+      const workerPubsub = new RedisStreamsPubSub({ url: REDIS_URL, keyPrefix, blockMs: 200 });
+      pubsubs.push(apiPubsub, workerPubsub);
+      const storage = new InMemoryStore();
+      const apiAgent = makeAgent();
+      const api = new Mastra({
+        agents: { support: apiAgent },
+        storage,
+        pubsub: apiPubsub,
+        workers: false,
+        logger: false,
+      });
+      const worker = new Mastra({ storage, pubsub: workerPubsub });
+      try {
+        if (timing === 'before') worker.addAgent(makeAgent(), 'support');
+        if (timing === 'during' || timing === 'during lazy') {
+          // Pull subscription starts after the initial registration pass, but before startup completes.
+          const subscribe = workerPubsub.subscribe.bind(workerPubsub);
+          const subscription = vi.spyOn(workerPubsub, 'subscribe').mockImplementation((topic, cb, options) => {
+            if (topic === 'workflows') {
+              subscription.mockRestore();
+              worker.addAgent(makeAgent(), 'support');
+            }
+            return subscribe(topic, cb, options);
+          });
+        }
+        if (timing === 'during lazy') {
+          await worker.__ensureExecutionWorkersStarted();
+        } else {
+          await worker.startWorkers();
+        }
+        if (timing === 'after') worker.addAgent(makeAgent(), 'support');
+
+        const output = await apiAgent.stream('Where is my order?');
+        await expect(output.text).resolves.toBe('Your order has shipped.');
+        expect(JSON.stringify(mock.getRequests()[0]?.body)).toContain('Where is my order?');
+      } finally {
+        await api.shutdown();
+        await worker.shutdown();
+      }
+    },
+    15_000,
+  );
 
   it('round-trips a tool result containing Date/Map/Error across the evented pubsub', async () => {
     if (!mock) throw new Error('AIMock server is not running');

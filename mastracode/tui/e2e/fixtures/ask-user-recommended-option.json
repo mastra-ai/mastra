@@ -1,0 +1,50 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Ask one ask_user question with a recommended option.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_ask_recommended",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Where should this release go?",
+              "options": [
+                { "label": "Staging", "description": "Use the staging environment" },
+                { "label": "Production", "description": "Use the production environment", "recommended": true }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_ask_recommended",
+        "hasToolResult": true,
+        "toolResultContains": "recommended"
+      },
+      "response": {
+        "content": "The answer carried the recommended tag."
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_ask_recommended",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Recommended option answer received."
+      }
+    }
+  ]
+}

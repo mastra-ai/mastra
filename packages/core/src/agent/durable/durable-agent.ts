@@ -762,24 +762,6 @@ export class DurableAgent<
     return this.#storageVersion === 2;
   }
 
-  /**
-   * Warns once when `storageVersion: 2` is set but the registered store can't
-   * store version 2 runs. The loop workflow's `autoStorageVersion` then stores
-   * new runs as version 1. An agent with no registered store isn't warned.
-   */
-  #warnIfStorageVersionUnsupported(): void {
-    if (this.#storageVersion !== 2) return;
-    // Read `stores` directly: getWorkflow() is synchronous.
-    const storage = this.#mastra?.getStorage();
-    const workflowsStore = storage?.stores?.workflows;
-    if (workflowsStore && !workflowsStore.supportsRunJournal()) {
-      this.guardrailLogger?.warn(
-        `DurableAgent '${this.id}' sets storageVersion: 2, which ${storage?.name ?? 'the configured'} storage ` +
-          `doesn't support yet; storing new runs as version 1.`,
-      );
-    }
-  }
-
   // ===========================================================================
   // Public API
   // ===========================================================================
@@ -790,7 +772,6 @@ export class DurableAgent<
    * getAgentById in execution steps).
    */
   getWorkflow(): ReturnType<typeof createDurableAgenticWorkflow> {
-    if (!this.executionEngine.workflow) this.#warnIfStorageVersionUnsupported();
     return (
       this.executionEngine.workflow ??
       this.executionEngine.getWorkflow({

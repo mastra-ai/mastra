@@ -279,6 +279,8 @@ const AGENT_THREAD_LEASE_TTL_MS = AGENT_LEASE_TTL_MS;
 const AGENT_THREAD_LEASE_RENEW_INTERVAL_MS = AGENT_LEASE_RENEW_INTERVAL_MS;
 /** Lease checks a forwarder waits for its probe to come back before publishing a new one. */
 const FORWARDED_LEASE_PROBE_RETRY_CHECKS = 5;
+const DURABLE_THREAD_CLAIM_WAIT_MS = 5_000;
+const DURABLE_THREAD_CLAIM_POLL_MS = 100;
 /**
  * TTL for a suspended run's warm in-memory state — the parked thread-run record
  * (swept by #sweepStaleSuspendedRecords). The Mastra internal-workflow registry
@@ -1281,21 +1283,33 @@ export class AgentThreadStreamRuntime {
     generation: number | undefined,
     executionId?: string,
   ): Promise<void> {
-    const lease = await this.#acquireThreadLease(
-      pubsub,
-      this.#threadKey(resourceId, threadId),
-      runId,
-      threadLeaseOwner(runId, generation, executionId),
-    );
+    const key = this.#threadKey(resourceId, threadId);
+    const owner = threadLeaseOwner(runId, generation, executionId);
+    let lease = await this.#acquireThreadLease(pubsub, key, runId, owner);
+    const previousOwner = parseThreadLeaseOwner(lease.owner);
+    if (
+      !lease.acquired &&
+      (lease.owner === undefined ||
+        (previousOwner &&
+          previousOwner[0] !== runId &&
+          (previousOwner[1] === 'generation' || previousOwner[1] === 'execution')))
+    ) {
+      // A shared evented worker can publish finish before releasing the thread. An
+      // ownerless failure can mean the lease disappeared between the claim and owner lookup.
+      // Retry within the same deadline, but don't wait behind a new owner.
+      const blockingOwner = lease.owner;
+      const deadline = Date.now() + DURABLE_THREAD_CLAIM_WAIT_MS;
+      while (!lease.acquired && (lease.owner === undefined || lease.owner === blockingOwner)) {
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) break;
+        await new Promise(resolve => setTimeout(resolve, Math.min(remaining, DURABLE_THREAD_CLAIM_POLL_MS)));
+        lease = await this.#acquireThreadLease(pubsub, key, runId, owner);
+      }
+    }
     if (!lease.acquired) throw new AgentThreadLeaseConflictError(runId, lease.owner ?? 'another owner');
     if (this.#getState(pubsub).leaseRenewalTimers.has(runId)) {
       this.#stopLeaseRenewal(pubsub, runId);
-      this.#startLeaseRenewal(
-        pubsub,
-        this.#threadKey(resourceId, threadId),
-        runId,
-        threadLeaseOwner(runId, generation, executionId),
-      );
+      this.#startLeaseRenewal(pubsub, key, runId, owner);
     }
   }
 
@@ -2524,6 +2538,20 @@ export class AgentThreadStreamRuntime {
       } catch {}
     }
     for (const key of state.threadControlSubscriptions.keys()) this.#releaseUnusedThreadControlSubscription(state, key);
+  }
+
+  /**
+   * A `runId` target that also names a `resourceId` must name the run's own resource. Without this, the signal
+   * would be created for the caller's resource and delivered into another resource's run. Core cannot know who the
+   * caller is: a target naming only a `runId` is trusted, so callers exposing `runId` targets to untrusted input
+   * must pass the caller's `resourceId` or check ownership with `getThreadRunTarget()` first.
+   */
+  #assertRunTargetOwner(state: AgentThreadRuntimeState, target: { runId?: string; resourceId?: string }): void {
+    if (!target.runId || !target.resourceId) return;
+    const owner = state.threadRunsById.get(target.runId)?.resourceId;
+    if (owner && owner !== target.resourceId) {
+      throw new Error(`Agent run ${target.runId} belongs to a different resource`);
+    }
   }
 
   #threadKey(resourceId: string | undefined, threadId: string): string {
@@ -4683,6 +4711,12 @@ export class AgentThreadStreamRuntime {
 
   hasThreadRun(runId: string, pubsub?: PubSub): boolean {
     return this.#getState(pubsub).threadRunsById.has(runId);
+  }
+
+  /** The resource and thread a `runId`-only signal or message target resolves to in this process. */
+  getThreadRunTarget(runId: string, pubsub?: PubSub): { resourceId?: string; threadId: string } | undefined {
+    const record = this.#getState(pubsub).threadRunsById.get(runId);
+    return record ? { resourceId: record.resourceId, threadId: record.threadId } : undefined;
   }
 
   /** Whether the run's original stream is still live and carries its resumed segments. */
@@ -8185,6 +8219,7 @@ export class AgentThreadStreamRuntime {
       }
     }
 
+    this.#assertRunTargetOwner(state, target);
     const resourceId = target.resourceId ?? activeRecord?.resourceId;
     const threadId = target.threadId ?? activeRecord?.threadId;
     if (!resourceId || !threadId) {
@@ -8401,6 +8436,7 @@ export class AgentThreadStreamRuntime {
       }
     }
 
+    this.#assertRunTargetOwner(state, target);
     const resourceId = target.resourceId ?? activeRecord?.resourceId;
     const threadId = target.threadId ?? activeRecord?.threadId;
     if (!resourceId || !threadId) {

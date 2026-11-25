@@ -23,6 +23,11 @@
     "qwen3.6-35b-a3b"
   ],
   "reasoning": {
+    "qwen3-30b-a3b-fp8": [
+      {
+        "type": "toggle"
+      }
+    ],
     "deepseek-v4.1-flash": [
       {
         "type": "toggle"
@@ -32,10 +37,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "gpt-5.6-luna": [
+    "gpt-5.4-nano": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
     "qwen3.6-35b-a3b": [
@@ -43,15 +48,10 @@
         "type": "toggle"
       }
     ],
-    "gpt-5.4-nano": [
+    "gpt-5.6-luna": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "qwen3-30b-a3b-fp8": [
-      {
-        "type": "toggle"
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "glm-5.3-flash": [

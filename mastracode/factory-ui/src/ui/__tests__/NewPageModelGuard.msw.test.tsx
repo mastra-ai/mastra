@@ -24,7 +24,7 @@ function stubFactoryShell() {
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ workItems: [] })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/decisions`, () => HttpResponse.json({ decisions: [] })),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-      HttpResponse.json({ modelId: null, thinkingLevel: null }),
+      HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
     ),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/fp-1/permissions`, () =>
       HttpResponse.json({ categories: {}, tools: {} }),
@@ -32,11 +32,21 @@ function stubFactoryShell() {
   );
 }
 
-function stubFactory(project: Record<string, unknown> | null) {
+function packSetFor(modelId: string | null) {
+  if (!modelId) return { modelPacks: [], defaultModelPackId: null };
+  return {
+    modelPacks: [{ id: 'default', name: 'Default', models: [{ modelId, thinkingLevel: 'medium' }] }],
+    defaultModelPackId: 'default',
+  };
+}
+
+function stubFactory(project: { defaultModelId: string | null; [field: string]: unknown } | null) {
   stubFactoryShell();
   server.use(
     project
-      ? http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () => HttpResponse.json({ project }))
+      ? http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
+          HttpResponse.json({ project: { ...project, ...packSetFor(project.defaultModelId) } }),
+        )
       : http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
           HttpResponse.json({ error: 'boom' }, { status: 500 }),
         ),
@@ -178,7 +188,11 @@ describe('NewPage credential guard', () => {
     stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'hybrid', defaultModelId: null });
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: 'anthropic/claude-sonnet-4-5', thinkingLevel: null }),
+        HttpResponse.json({
+          modelId: 'anthropic/claude-sonnet-4-5',
+          thinkingLevel: null,
+          ...packSetFor('anthropic/claude-sonnet-4-5'),
+        }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
         HttpResponse.json({

@@ -1089,6 +1089,41 @@ describe('Traces page filter bar', () => {
     });
   });
 
+  describe('when the user picks Primitive type › MCP Server', () => {
+    it('queries only traces rooted at an MCP server', async () => {
+      const onQuery = vi.fn<(body: unknown) => void>();
+      setTracePageHandlers(metricsCapableCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          onQuery(await request.json());
+          return HttpResponse.json(traceQueryPage);
+        }),
+      );
+      const { queryClient } = renderPage();
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
+
+      focusFilterInput();
+      typeInFilter('Primitive type');
+      await screen.findByRole('option', { name: 'Primitive type' });
+      pressInFilter('Enter');
+      await screen.findByRole('option', { name: 'is' });
+      pressInFilter('Enter');
+      typeInFilter('MCP Server');
+      await screen.findByRole('option', { name: 'MCP Server' });
+      pressInFilter('Enter');
+
+      await waitFor(() =>
+        expect(JSON.stringify(onQuery.mock.calls.at(-1)?.[0])).toContain(
+          '{"op":"eq","left":{"path":"entityType"},"right":{"literal":"mcp_server"}}',
+        ),
+      );
+      expect(Array.from(getFilterChips(), chip => chip.textContent)).toEqual(['Primitive typeisMCP Server']);
+    });
+  });
+
   describe('when the user commits Environment is prod through the input', () => {
     const commitEnvironmentFilter = async () => {
       const onQuery = vi.fn<(body: unknown) => void>();

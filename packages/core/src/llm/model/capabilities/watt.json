@@ -50,21 +50,6 @@
     "Qwen3.5-397B-A17B"
   ],
   "reasoning": {
-    "MiniMax-M3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "DeepSeek-V4-Flash-0731": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen3.5-397B-A17B": [
-      {
-        "type": "toggle"
-      }
-    ],
     "DeepSeek-V4.1-Flash": [
       {
         "type": "toggle"
@@ -75,14 +60,16 @@
         "type": "toggle"
       }
     ],
-    "DeepSeek-V4.1-Flash-1017": [
+    "Hy4-preview": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
-    "Qwen3.5-27B": [
+    "GLM-5.3-Flash": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "GLM-5.1": [
@@ -90,31 +77,9 @@
         "type": "toggle"
       }
     ],
-    "Qwen3.5-35B-A3B": [
+    "Qwen3.5-397B-A17B": [
       {
         "type": "toggle"
-      }
-    ],
-    "Kimi-K3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "DeepSeek-V4-Flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "GLM-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "GLM-5.3-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
     "Kimi-K2.5": [
@@ -127,13 +92,48 @@
         "type": "toggle"
       }
     ],
-    "Hy4-preview": [
+    "DeepSeek-V4.1-Flash-1017": [
       {
-        "type": "effort",
-        "values": ["none", "high"]
+        "type": "toggle"
+      }
+    ],
+    "DeepSeek-V4-Flash": [
+      {
+        "type": "toggle"
       }
     ],
     "GLM-5.2": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "Kimi-K3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Qwen3.5-27B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Qwen3.5-35B-A3B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "DeepSeek-V4-Flash-0731": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "MiniMax-M3": [
       {
         "type": "toggle"
       }
