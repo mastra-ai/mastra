@@ -145,7 +145,7 @@ Any [supported storage backend](/reference/workers/overview#supported-storage-ba
 
 Run the same build artifact in multiple containers, each with a different [`MASTRA_WORKERS`](/reference/workers/overview#mastra_workers) value to control which worker starts in each process.
 
-Split deployments require a distributed PubSub backend ([`RedisStreamsPubSub`](/reference/pubsub/redis-streams), [`ValkeyStreamsPubSub`](/reference/pubsub/valkey-streams), or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub)), a shared [storage backend](/reference/workers/overview#supported-storage-backends), and network connectivity between the orchestration worker and the API.
+Split deployments require a distributed PubSub backend ([`RedisStreamsPubSub`](/reference/pubsub/redis-streams), [`ValkeyStreamsPubSub`](/reference/pubsub/valkey-streams), or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub)), a shared [storage backend](/reference/workers/overview#supported-storage-backends), and network connectivity between the orchestration worker and the API. Messages sent to a running evented agent reach a run on a worker only with [storage that shares agent signals across processes](/docs/server/pubsub#evented-workflows-and-agents).
 
 ### Select workers
 

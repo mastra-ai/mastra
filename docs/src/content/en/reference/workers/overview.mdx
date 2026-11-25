@@ -102,3 +102,5 @@ A deployment running all worker types requires a storage backend that implements
 | Convex | [`@mastra/convex`](/integrations/databases/convex) |
 
 Other storage backends (Upstash, DynamoDB, Cloudflare D1, ClickHouse, Redis) support workflows and some worker features, but are missing the `schedules` domain. They can still be used for orchestration and background task workers if you don't deploy the scheduler.
+
+Messages sent to a running evented agent reach a run on another process only with [storage that shares agent signals across processes](/docs/server/pubsub#evented-workflows-and-agents), which `@mastra/pg` and `@mastra/libsql` provide.

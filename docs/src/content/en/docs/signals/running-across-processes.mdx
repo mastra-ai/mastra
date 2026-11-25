@@ -70,6 +70,7 @@ This doesn't guarantee exactly-once delivery for every event. If your handlers w
 What survives a crash depends on where the data lives:
 
 - Runtime queues live in process memory. A crash before the run consumes them loses those signals.
+- Evented agents on [storage that shares agent signals across processes](/docs/server/pubsub#evented-workflows-and-agents) store the signals sent to an active run until the run takes them, so those signals don't depend on the process that accepted them. Input from `queueMessage()` and `queueSignal()` still lives in process memory.
 - Signals sent with `persist` behavior are written to memory storage and survive a restart when that storage is shared.
 - [State signals](/docs/signals/state-signals) and their tracking are stored on the thread and survive a restart with shared storage.
 - [Notifications](/docs/signals/notifications) are durable records in notification storage. Their dispatcher can retry delivery after a restart.

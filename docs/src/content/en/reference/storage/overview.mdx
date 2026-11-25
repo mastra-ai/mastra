@@ -44,6 +44,7 @@ Not every storage adapter implements every domain. Composite storage lets you mi
 | `toolProviderConnections` | User-assigned names for tool provider connections. |
 | `notifications` | Notification records. |
 | `threadState` | Durable per-thread state, such as task lists and goals. |
+| `agentSignals` | Signals sent to running [evented agents](/docs/server/pubsub#evented-workflows-and-agents), kept until the run takes them. |
 | `knowledge` | Knowledge graph nodes and records (experimental). |
 
 The schema definitions below cover the built-in database-backed tables documented for `memory`, `workflows`, `scores`, and `observability`. Other domains, and non-database adapters, use implementation-specific storage structures.
