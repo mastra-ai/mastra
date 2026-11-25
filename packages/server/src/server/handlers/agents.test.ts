@@ -5859,6 +5859,24 @@ describe('Agent Routes Authorization', () => {
       });
     });
 
+    it('waits for a cancellation that completes in storage and returns every cancelled id', async () => {
+      await mockMemory.createThread({ threadId: 'cancel-stored', resourceId: 'user-a', title: 'Stored' });
+      vi.spyOn(mockAgent, 'cancelQueuedMessages').mockReturnValue({
+        cancelledSignalIds: ['queued'],
+        settled: Promise.resolve({ cancelledSignalIds: ['queued', 'stored'] }),
+      });
+      const result = await CANCEL_AGENT_PENDING_SIGNALS_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId: 'user-a', threadId: 'cancel-stored' }),
+        abortSignal: new AbortController().signal,
+        resourceId: 'user-a',
+        threadId: 'cancel-stored',
+        signalIds: ['queued', 'stored'],
+      });
+      expect(result).toEqual({ cancelledSignalIds: ['queued', 'stored'] });
+    });
+
     it('rejects cancellation on a thread belonging to another resource without mutating the queue', async () => {
       await mockMemory.createThread({ threadId: 'cancel-forbidden', resourceId: 'user-b', title: 'Other' });
       const cancelQueuedMessages = vi.spyOn(mockAgent, 'cancelQueuedMessages');
