@@ -16,7 +16,9 @@ export default defineConfig({
     setupFiles: ['./src/test/jsdom-polyfills.ts', './src/test/vitest-setup.ts'],
     // Must stay above the 3s Testing Library async timeout set in vitest-setup.ts.
     testTimeout: 15000,
-    env: { TZ: 'UTC' },
+    // Pin the zone and locale so dates and numbers format the same on every machine. Workers are
+    // started with this env, so the locale reaches ICU before anything formats.
+    env: { TZ: 'UTC', LC_ALL: 'en_US.UTF-8' },
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['**/node_modules/**'],
     // @mcp-ui/client's AppRenderer sends hostContext before its bridge connects and drops the rejected promise.
