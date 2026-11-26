@@ -292,6 +292,11 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
     checkKnowledgeSequenceReadLimit(input.limit);
     const typeFilter = knowledgeSequenceTypeFilter(input);
     const words = knowledgeSearchWords(input.query);
+    // Dates order a timeline sequence only; on a position sequence they're shown, and position decides.
+    const rankTime = (item: KnowledgeSequenceItemRecord) =>
+      this.#s.sequences.get(item.sequenceId)?.orderBy === 'timeline'
+        ? (item.occurredAt?.getTime() ?? -Infinity)
+        : -Infinity;
     if (!words.length) return [];
     const visible = new Set<string>();
     for (const id of input.sequenceIds ?? this.#s.sequences.keys()) {
@@ -319,7 +324,7 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
       .sort(
         (a, b) =>
           b.matched - a.matched ||
-          (b.item.occurredAt?.getTime() ?? -Infinity) - (a.item.occurredAt?.getTime() ?? -Infinity) ||
+          rankTime(b.item) - rankTime(a.item) ||
           byPosition(a.item.position, b.item.position) ||
           (a.item.id < b.item.id ? -1 : 1),
       )

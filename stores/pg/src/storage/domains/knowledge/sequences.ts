@@ -414,7 +414,7 @@ export class PgKnowledgeSequences implements KnowledgeSequencesStorage {
     if (typeFilter) where.push(typeSql('e.', typeFilter, value => params.add(value)));
     const matched = patterns.map(pattern => `(CASE WHEN e."searchText" LIKE ${pattern} THEN 1 ELSE 0 END)`).join(' + ');
     const rows = await this.#client.any(
-      `SELECT e.* FROM ${this.#t.items} e JOIN ${this.#t.sequences} t ON t."pageId" = e."sequenceId" JOIN ${this.#t.pages} p ON p."id" = e."sequenceId" JOIN ${this.#t.pages} s ON s."id" = p."scopeId" WHERE ${where.join(' AND ')} ORDER BY (${matched}) DESC, e."occurredAt" DESC NULLS LAST, e."position" ASC NULLS LAST, e."id" ASC LIMIT ${params.add(input.limit)}`,
+      `SELECT e.* FROM ${this.#t.items} e JOIN ${this.#t.sequences} t ON t."pageId" = e."sequenceId" JOIN ${this.#t.pages} p ON p."id" = e."sequenceId" JOIN ${this.#t.pages} s ON s."id" = p."scopeId" WHERE ${where.join(' AND ')} ORDER BY (${matched}) DESC, CASE WHEN t."orderBy" = 'timeline' THEN e."occurredAt" END DESC NULLS LAST, e."position" ASC NULLS LAST, e."id" ASC LIMIT ${params.add(input.limit)}`,
       params.values,
     );
     return rows.map(toItem);

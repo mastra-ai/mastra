@@ -730,12 +730,13 @@ export function createKnowledgeSequenceTests(createStore: () => Promise<Knowledg
         expect((await ids()).sort()).toEqual(['w', 'x', 'y', 'z']);
       });
 
-      it('breaks equal search scores between undated items by position, not id', async () => {
+      it('breaks equal search scores by position on a position sequence, whatever the items are dated', async () => {
         const { put, sequences, list } = await positioned();
-        await put('old', { position: 'z', body: 'release notes' });
-        await put('first', { position: 'b', body: 'release notes' });
+        await put('last-new', { position: 'z', body: 'release notes', occurredAt: at(9) });
+        await put('first-undated', { position: 'b', body: 'release notes' });
+        await put('middle-old', { position: 'm', body: 'release notes', occurredAt: at(1) });
         const hits = await sequences.searchItems({ query: 'release', read: 'all', sequenceIds: [list.id], limit: 10 });
-        expect(hits.map(hit => hit.externalId)).toEqual(['first', 'old']);
+        expect(hits.map(hit => hit.externalId)).toEqual(['first-undated', 'middle-old', 'last-new']);
       });
 
       it('pages by position cursor both ways with no item skipped, and refuses a time cursor', async () => {

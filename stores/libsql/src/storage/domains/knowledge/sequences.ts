@@ -456,7 +456,7 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
     }
     const matched = words.map(() => `(CASE WHEN ${has} THEN 1 ELSE 0 END)`).join(' + ');
     const { rows } = await this.#read.execute({
-      sql: `SELECT e.* FROM "${T.items}" e JOIN "${T.sequences}" t ON t.pageId = e.sequenceId JOIN "${PAGES}" p ON p.id = e.sequenceId WHERE ${where.join(' AND ')} ORDER BY (${matched}) DESC, e.occurredAt DESC, e.position IS NULL, e.position ASC, e.id ASC LIMIT ?`,
+      sql: `SELECT e.* FROM "${T.items}" e JOIN "${T.sequences}" t ON t.pageId = e.sequenceId JOIN "${PAGES}" p ON p.id = e.sequenceId WHERE ${where.join(' AND ')} ORDER BY (${matched}) DESC, CASE WHEN t."orderBy" = 'timeline' THEN e.occurredAt END DESC, e.position IS NULL, e.position ASC, e.id ASC LIMIT ?`,
       args: [...args, ...likes, input.limit],
     });
     return rows.map(toItem);
