@@ -15774,7 +15774,10 @@ export class Agent<
       reg.resumeToolCallId = resolvedOptions.toolCallId;
       // This process holds tools for the resuming caller (refreshed above, or the same caller's), so the
       // resumed segment adopts them instead of rebuilding.
-      if (!coldSnapshot) reg.toolsSegment = undefined;
+      if (!coldSnapshot) {
+        reg.toolsSegment = undefined;
+        reg.toolsRequestContext = undefined;
+      }
     }
 
     // Install a fresh abort controller for the resumed segment. The original

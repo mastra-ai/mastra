@@ -162,6 +162,7 @@ export async function rebuildToolsForSegment(
     }),
   );
   entry.baseTools = { ...keptToolsets, ...requestTools };
+  entry.toolsRequestContext = requestContext;
   return entry.baseTools;
 }
 

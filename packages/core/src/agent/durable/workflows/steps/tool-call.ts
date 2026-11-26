@@ -730,8 +730,6 @@ export function createDurableToolCallStep() {
       // resumed the run. Rebuild them for this segment's caller before resolving the approved call,
       // so nothing built for the earlier caller runs (COR-1660). A failed rebuild fails the step.
       const stepSegment = getStepSegment(runId, requestContext);
-      // The rebuilt tools close over this context and write to it (e.g. the delegation bail flag).
-      let segmentRequestContext: RequestContext | undefined;
       if (
         registryEntry &&
         mastra &&
@@ -739,14 +737,13 @@ export function createDurableToolCallStep() {
         registryEntry.toolsSegment !== undefined &&
         registryEntry.toolsSegment !== stepSegment
       ) {
-        segmentRequestContext = restoreRequestContext(initData.requestContextEntries, requestContext);
         await rebuildToolsForSegment(mastra as Mastra, registryEntry, {
           runId,
           agentId: initData.agentId,
           agentVersionId: initData.agentVersionId,
           state: state as any,
           options: agentOptions,
-          requestContext: segmentRequestContext,
+          requestContext: restoreRequestContext(initData.requestContextEntries, requestContext),
         });
         registryEntry.toolsSegment = stepSegment;
       }
@@ -2411,7 +2408,7 @@ export function createDurableToolCallStep() {
         let failure: SpanTermination | undefined;
         for (const rc of [
           registryEntry?.requestContext,
-          segmentRequestContext,
+          registryEntry?.toolsRequestContext,
           rebuiltRequestContext,
           requestContext,
         ]) {
