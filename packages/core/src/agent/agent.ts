@@ -15714,11 +15714,11 @@ export class Agent<
       await executionFence.settle(async () => {});
       throw error;
     }
-    // A warm resume reuses the tools built for the first request, which close
-    // over its request context, delegation hooks, and tool hooks (#25960). Rebuild them for
-    // this call and keep only processor-added tools, rebuilt for this call's request context
-    // (#27544). Cold resumes already rebuilt everything in prepare() above.
-    if (!coldSnapshot && (options?.requestContext || options?.delegation || options?.hooks || droppedStartingUser)) {
+    // A warm resume holds tools built for an earlier request, which close over its request context,
+    // delegation hooks, and tool hooks (#25960). Rebuild them for this call every time, so the
+    // segment never runs on tools built for anyone else. Cold resumes already rebuilt everything
+    // in prepare() above.
+    if (!coldSnapshot) {
       try {
         const requestTools = await this.agentForExecution.getToolsForExecution({
           toolsets: resolvedOptions.toolsets,

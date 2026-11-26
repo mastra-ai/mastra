@@ -409,3 +409,49 @@ describe('approving a call to a tool only the starting caller has', () => {
     expect(errors.join('\n')).toContain('alice_admin');
   });
 });
+
+describe.each(['default', 'evented'] as const)('a same-process resume whose tools cannot be built (%s)', engine => {
+  it("fails it, and a later resume without a request context does not run the earlier caller's tools", async () => {
+    globalRunRegistry.clear();
+    const log: Log = { offered: [], ran: [] };
+    const agent = new Agent({
+      id: 'matrix-agent',
+      name: 'matrix-agent',
+      instructions: 'Use your tools.',
+      model: createModel(log),
+      tools: ({ requestContext }) => {
+        const who = requestContext.get('who') as string;
+        if (who === 'unbuildable') throw new Error('tools unavailable');
+        return { approve: tool('approve', log, true, who) };
+      },
+    });
+    const durable = engine === 'evented' ? createEventedAgent({ agent }) : createDurableAgent({ agent });
+    const storage = new InMemoryStore();
+    new Mastra({ agents: { matrix: durable as any }, storage, logger: false });
+
+    const stream = await durable.stream('Go', { requestContext: caller('alice') });
+    let toolCallId: string | undefined;
+    for await (const chunk of stream.fullStream as AsyncIterable<any>) {
+      if (chunk.type === 'tool-call-approval') {
+        toolCallId = chunk.payload.toolCallId;
+        break;
+      }
+    }
+    const workflows = (await storage.getStore('workflows'))!;
+    await vi.waitFor(async () => {
+      const run = await workflows.getWorkflowRunById({
+        runId: stream.runId,
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+      });
+      expect((run?.snapshot as any)?.status).toBe('suspended');
+    });
+
+    await expect(
+      durable.approveToolCall({ runId: stream.runId, toolCallId: toolCallId!, requestContext: caller('unbuildable') }),
+    ).rejects.toThrow('tools unavailable');
+
+    const later = durable.approveToolCall({ runId: stream.runId, toolCallId: toolCallId! }).then(drain);
+    await expect(later).rejects.toThrow('tools unavailable');
+    expect(log.ran).toEqual([]);
+  });
+});
