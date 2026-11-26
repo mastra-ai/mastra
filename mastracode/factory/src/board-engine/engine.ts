@@ -22,7 +22,13 @@ export type FactoryCardPlacementResult = Awaited<ReturnType<typeof moveCardToBoa
 export type FactoryRunEndedBinding = Pick<
   FactoryRunBindingRecord,
   'id' | 'role' | 'orgId' | 'factoryProjectId' | 'workItemId'
->;
+> & {
+  /**
+   * Names the run that ended, when whoever tells of it can: every telling of one run's end
+   * carries the same name, so an engine that counts run ends counts it once.
+   */
+  runEnd?: string;
+};
 
 /**
  * Decides how a card moves across its board. Every stage change from outside the engine (a

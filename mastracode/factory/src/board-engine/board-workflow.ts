@@ -26,13 +26,18 @@ const runStateSchema = z.object({
   probes: z.number().int().nonnegative().optional(),
   lastOutcome: z.string().optional(),
   reason: z.string().optional(),
+  /** The last run end counted as ending without an outcome, so telling of it again counts nothing. */
+  countedRunEnd: z.string().optional(),
 });
 
 /**
  * What a card is doing, as its board run last recorded it: phase keys, counts and short reasons,
  * never a request or who made it. Empty until the run applied its first input.
  */
-export type FactoryCardRunState = z.infer<typeof runStateSchema>;
+export type FactoryCardRunState = Omit<FactoryCardRunRecord, 'countedRunEnd'>;
+
+/** Everything the run carries from one input to the next. */
+export type FactoryCardRunRecord = z.infer<typeof runStateSchema>;
 
 export interface FactoryBoardWorkflowDeps {
   /**
@@ -40,7 +45,7 @@ export interface FactoryBoardWorkflowDeps {
    * answers what the card is doing now. An id the engine doesn't hold for that card (a resume
    * Factory didn't make) applies nothing and answers nothing, which keeps the state as it was.
    */
-  apply(inputId: string, workItemId: string, state: FactoryCardRunState): Promise<FactoryCardRunState | undefined>;
+  apply(inputId: string, workItemId: string, state: FactoryCardRunRecord): Promise<FactoryCardRunRecord | undefined>;
 }
 
 /**

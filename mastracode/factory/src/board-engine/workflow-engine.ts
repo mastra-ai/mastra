@@ -2,13 +2,14 @@ import { isRunFenceConflictError, runOutsideRunFenceScope } from '@mastra/core/s
 
 import { boardForWorkItem } from '../boards/index.js';
 import { startsInAutoPhase } from '../boards/phase-automation.js';
+import { pendingPhaseOutcome } from '../boards/phase-outcomes.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import { moveCardToBoard } from '../boards/relocate.js';
 import { applyPhaseOutcome } from '../rules/phase-outcome-move.js';
 import type { FactoryTransitionRequest } from '../rules/transition-service.js';
 import type { FactoryTransitionResult } from '../rules/types.js';
 import { boardRunId, createFactoryBoardWorkflow, FACTORY_BOARD_WORKFLOW_ID } from './board-workflow.js';
-import type { FactoryBoardWorkflow, FactoryCardRunState } from './board-workflow.js';
+import type { FactoryBoardWorkflow, FactoryCardRunRecord, FactoryCardRunState } from './board-workflow.js';
 import type {
   FactoryBoardEngine,
   FactoryBoardEngineContext,
@@ -30,11 +31,20 @@ const ENDED_RUN_STATUSES = new Set(['success', 'failed', 'canceled', 'bailed', '
 /** Errors from `resume()` when another caller resumed the run first. */
 const RUN_TAKEN_ERROR_IDS = new Set(['WORKFLOW_RUN_NOT_SUSPENDED', 'WORKFLOW_RESUME_ALREADY_CLAIMED']);
 
-/** A move waiting for the card's run to apply it, and what applying it gave. */
-interface PendingInput {
-  request: FactoryTransitionRequest;
-  answer?: { result: FactoryTransitionResult } | { error: unknown };
-}
+/** What a card that needs attention tells the person looking at it. */
+const NO_OUTCOME_REASON = "The agent's run ended twice without reporting how the phase ended.";
+
+/** An input waiting for the card's run to apply it, and what applying it gave. */
+type PendingInput =
+  | {
+      request: FactoryTransitionRequest;
+      answer?: { result: FactoryTransitionResult } | { error: unknown };
+    }
+  | {
+      runEnded: FactoryRunEndedBinding;
+      /** Whether the card's phase holds an outcome for the engine to move it by. */
+      answer?: { outcome: boolean } | { error: unknown };
+    };
 
 type CardRef = Pick<FactoryTransitionRequest, 'workItemId'>;
 
@@ -63,7 +73,19 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     this.workflow = createFactoryBoardWorkflow({
       apply: async (inputId, workItemId, state) => {
         const pending = this.#pending.get(inputId);
-        if (!pending || pending.answer || pending.request.workItemId !== workItemId) return undefined;
+        if (!pending || pending.answer) return undefined;
+        if ('runEnded' in pending) {
+          if (pending.runEnded.workItemId !== workItemId) return undefined;
+          try {
+            const next = await this.#stateAfterRunEnd(pending.runEnded, state);
+            pending.answer = { outcome: next?.state === 'running' && next.lastOutcome !== undefined };
+            return next;
+          } catch (error) {
+            pending.answer = { error };
+            return undefined;
+          }
+        }
+        if (pending.request.workItemId !== workItemId) return undefined;
         try {
           const result = await context.transitionService.transition(pending.request);
           pending.answer = { result };
@@ -83,14 +105,8 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
   }
 
   async requestMove(request: FactoryTransitionRequest): Promise<FactoryTransitionResult> {
-    const inputId = crypto.randomUUID();
-    const pending: PendingInput = { request };
-    this.#pending.set(inputId, pending);
-    try {
-      await this.#ask(request, inputId, pending);
-    } finally {
-      this.#pending.delete(inputId);
-    }
+    const pending = { request } satisfies PendingInput as Extract<PendingInput, { request: unknown }>;
+    await this.#ask(request, pending);
     if (!pending.answer) throw new Error("The card's board run did not apply the move.");
     if ('error' in pending.answer) throw pending.answer.error;
     return pending.answer.result;
@@ -102,10 +118,17 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
   }
 
   /**
-   * Moves the card by its phase's outcome, requested through the engine Factory holds, so the move
-   * reaches this card's run as one more input (and a wrapping engine sees it).
+   * Tells the card's run that a run of its session ended. With an outcome on the card's phase, the
+   * card moves by it: the move is requested through the engine Factory holds once the card's run
+   * has answered, so it reaches that run as one more input (and a wrapping engine sees it). With
+   * none, the card's run counts the end: the first leaves the card probing, while the dispatcher
+   * runs the phase once more, and the second leaves it needing attention.
    */
-  runEnded(binding: FactoryRunEndedBinding, engine: Pick<FactoryBoardEngine, 'requestMove'>): Promise<boolean> {
+  async runEnded(binding: FactoryRunEndedBinding, engine: Pick<FactoryBoardEngine, 'requestMove'>): Promise<boolean> {
+    const pending = { runEnded: binding } satisfies PendingInput as Extract<PendingInput, { runEnded: unknown }>;
+    await this.#ask(binding, pending);
+    if (pending.answer && 'error' in pending.answer) throw pending.answer.error;
+    if (!pending.answer?.outcome) return false;
     return applyPhaseOutcome(
       { storage: this.#context.workItems, boards: this.#context.boards, boardEngine: engine },
       binding,
@@ -116,8 +139,10 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
   async describe(card: CardRef): Promise<FactoryCardRunState | undefined> {
     if (!this.workflow.mastra) return undefined;
     const run = await this.workflow.getWorkflowRunById(boardRunId(card.workItemId), { withNestedWorkflows: false });
-    const state = (run?.steps?.phase as { payload?: FactoryCardRunState } | undefined)?.payload;
-    return state?.state ? state : undefined;
+    const recorded = (run?.steps?.phase as { payload?: FactoryCardRunRecord } | undefined)?.payload;
+    if (!recorded?.state) return undefined;
+    const { countedRunEnd: _counted, ...state } = recorded;
+    return state;
   }
 
   /**
@@ -128,8 +153,8 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
   async #stateAfterMove(
     request: FactoryTransitionRequest,
     result: FactoryTransitionResult,
-    previous: FactoryCardRunState,
-  ): Promise<FactoryCardRunState | undefined> {
+    previous: FactoryCardRunRecord,
+  ): Promise<FactoryCardRunRecord | undefined> {
     const item = await this.#context.workItems.get({ orgId: request.orgId, id: request.workItemId });
     const phase = item?.stages[0];
     if (!item || !phase) return undefined;
@@ -140,17 +165,64 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
       result.status === 'accepted' ? result.decisions.find(decision => decision.type === 'invokeSkill') : undefined;
     // A refused move, or one that left the card where it was, changes nothing the card was doing there.
     if (previous.phase === phase && previous.state && !run) return previous;
-    if (kind !== 'working') return { state: kind, phase, probes: 0 };
+    // The outcome that ended the last phase, and the run end already heard, outlive the move.
+    const kept = {
+      ...(previous.lastOutcome ? { lastOutcome: previous.lastOutcome } : {}),
+      ...(previous.countedRunEnd ? { countedRunEnd: previous.countedRunEnd } : {}),
+    };
+    if (kind !== 'working') return { state: kind, phase, probes: 0, ...kept };
     const goAhead =
       run !== undefined &&
       (request.actor.type === 'human' ||
         request.actor.type === 'agent' ||
         item.autonomyArmedAt != null ||
         startsInAutoPhase(boards, item, run));
-    return { state: goAhead ? 'running' : 'awaiting_start', phase, probes: 0 };
+    return { state: goAhead ? 'running' : 'awaiting_start', phase, probes: 0, ...kept };
   }
 
-  #ask(card: CardRef, inputId: string, pending: PendingInput): Promise<void> {
+  /**
+   * What the card is doing once a run of its session ended. An end told of a phase the session's
+   * role doesn't work (a chat on a resting card) changes nothing.
+   */
+  async #stateAfterRunEnd(
+    binding: FactoryRunEndedBinding,
+    previous: FactoryCardRunRecord,
+  ): Promise<FactoryCardRunRecord | undefined> {
+    const item = await this.#context.workItems.get({ orgId: binding.orgId, id: binding.workItemId });
+    const phase = item?.stages.length === 1 ? item.stages[0] : undefined;
+    if (!item || !phase) return undefined;
+    const board = (await toBoardSource(this.#context.boards).load(binding)).get(boardForWorkItem(item));
+    if (!board || board.phaseKind(phase) !== 'working') return undefined;
+    // A phase the run never saw the card enter starts its count here.
+    const probes = previous.phase === phase ? (previous.probes ?? 0) : 0;
+    const counted = binding.runEnd ? { countedRunEnd: binding.runEnd } : {};
+    const outcome = pendingPhaseOutcome(board, item);
+    if (outcome) return { state: 'running', phase, probes, lastOutcome: outcome.outcome, ...counted };
+    // An end already counted, even on the phase the card has since left, and an end of a session
+    // that doesn't work this phase, say nothing about how the phase is going.
+    if (binding.runEnd !== undefined && previous.countedRunEnd === binding.runEnd) return undefined;
+    if (board.roleForPhase(phase) !== binding.role) return undefined;
+    return {
+      phase,
+      probes: probes + 1,
+      ...counted,
+      ...(probes === 0
+        ? { state: 'probing' as const }
+        : { state: 'needs_attention' as const, reason: NO_OUTCOME_REASON }),
+    };
+  }
+
+  async #ask(card: CardRef, pending: PendingInput): Promise<void> {
+    const inputId = crypto.randomUUID();
+    this.#pending.set(inputId, pending);
+    try {
+      await this.#queued(card, inputId, pending);
+    } finally {
+      this.#pending.delete(inputId);
+    }
+  }
+
+  #queued(card: CardRef, inputId: string, pending: PendingInput): Promise<void> {
     const previous = this.#queues.get(card.workItemId) ?? Promise.resolve();
     // A run end can be told from work a step of this same run started (the phase's session), which
     // still carries the claim that step held. The input is new work on the run: it claims it afresh.
@@ -186,8 +258,8 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
           const result = await run.resume({ step: 'phase', resumeData: { inputId } });
           // Once the move was applied its answer stands, however the run fared after it.
           if (pending.answer) return;
-          if (result.status === 'suspended') throw new Error("The card's board run did not apply the move.");
-          // The run this process held ended without taking the move (another process may have
+          if (result.status === 'suspended') throw new Error("The card's board run did not apply its input.");
+          // The run this process held ended without taking the input (another process may have
           // replaced it since); read what the card's run is now.
         } catch (error) {
           // Applied, then the run could not be saved: another process replaced it meanwhile. The

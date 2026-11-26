@@ -172,6 +172,102 @@ describe('the workflow board engine', () => {
       state: 'running',
       phase: 'execute',
       probes: 0,
+      lastOutcome: 'advance',
+    });
+  });
+
+  it('probes a run that ended without an outcome, and flags the card when the next one ends the same way', async () => {
+    const { storage, engine, item, binding } = await setup();
+
+    await expect(engine.runEnded({ ...binding, runEnd: 'run-1' }, engine)).resolves.toBe(false);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'probing',
+      phase: 'planning',
+      probes: 1,
+    });
+
+    await expect(engine.runEnded({ ...binding, runEnd: 'run-2' }, engine)).resolves.toBe(false);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'needs_attention',
+      phase: 'planning',
+      probes: 2,
+      reason: "The agent's run ended twice without reporting how the phase ended.",
+    });
+    expect((await storage.get({ orgId: ORG, id: item.id }))!.stages).toEqual(['planning']);
+  });
+
+  it('counts a run end once, however many times it is told', async () => {
+    const { engine, item, binding } = await setup();
+
+    // The dispatcher watching the run and the session itself both tell of the one end.
+    const told = await Promise.all([
+      engine.runEnded({ ...binding, runEnd: 'run-1' }, engine),
+      engine.runEnded({ ...binding, runEnd: 'run-1' }, engine),
+    ]);
+    await engine.runEnded({ ...binding, runEnd: 'run-1' }, engine);
+
+    expect(told).toEqual([false, false]);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'probing',
+      phase: 'planning',
+      probes: 1,
+    });
+  });
+
+  it("starts the count over in the card's next phase, and counts nothing for a session that doesn't work it", async () => {
+    const { storage, engine, item, binding } = await setup();
+    await engine.runEnded({ ...binding, runEnd: 'run-1' }, engine);
+
+    await engine.requestMove(await personMove(storage, item.id, 'intake', 'drag-1')());
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'resting',
+      phase: 'intake',
+      probes: 0,
+    });
+    // A chat with the card's session while it rests ends runs too.
+    await expect(engine.runEnded({ ...binding, runEnd: 'run-2' }, engine)).resolves.toBe(false);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'resting', probes: 0 });
+
+    const byRule = await personMove(storage, item.id, 'planning', 'rule-1')();
+    await engine.requestMove({
+      ...byRule,
+      actor: { type: 'system', id: 'rule' },
+      ingress: { type: 'rule', identity: 'rule-1' },
+    });
+    await expect(engine.runEnded({ ...binding, role: 'review', runEnd: 'run-3' }, engine)).resolves.toBe(false);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({
+      state: 'awaiting_start',
+      probes: 0,
+    });
+    await engine.runEnded({ ...binding, runEnd: 'run-4' }, engine);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'probing',
+      phase: 'planning',
+      probes: 1,
+    });
+  });
+
+  it('counts nothing against the next phase when the run end that moved the card there is told again', async () => {
+    const { storage, engine, item, binding } = await setup();
+    await storage.update({
+      orgId: ORG,
+      id: item.id,
+      userId: 'agent:binding',
+      patch: {
+        metadata: {
+          [PHASE_EXIT_METADATA_KEY]: { phase: 'planning', tool: 'submit_plan', at: new Date().toISOString() },
+        },
+      },
+    });
+
+    await expect(engine.runEnded({ ...binding, runEnd: 'run-1' }, engine)).resolves.toBe(true);
+    await expect(engine.runEnded({ ...binding, runEnd: 'run-1' }, engine)).resolves.toBe(false);
+
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'running',
+      phase: 'execute',
+      probes: 0,
+      lastOutcome: 'advance',
     });
   });
 
