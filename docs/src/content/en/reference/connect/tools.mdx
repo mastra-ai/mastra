@@ -75,6 +75,20 @@ See [Connect](/docs/mastra-platform/connect#add-tools-to-an-agent) to get starte
             isOptional: true,
           },
           {
+            name: 'resourceId',
+            type: 'string | ((ctx?: ToolsResolverContext) => string | undefined | Promise<string | undefined>)',
+            description:
+              "End-user resource key to resolve for. The resolver then returns tools for the project's global connections plus the connections created for this resource, and every platform call asserts the resource with the x-mastra-resource-id header. A callback derives the key per resolution; returning undefined resolves global-only. Resource-scoped resolutions add the request_connection tool. See Connect prompt below.",
+            isOptional: true,
+          },
+          {
+            name: 'connectPrompt',
+            type: 'boolean',
+            description:
+              'Whether resource-scoped resolutions include the request_connection tool. Default true. Global-only resolutions never include it, because there is no end user to scope a new connection to.',
+            isOptional: true,
+          },
+          {
             name: 'client',
             type: 'ConnectClientOptions',
             description: 'Platform client overrides. See ConnectClientOptions below.',
@@ -151,7 +165,7 @@ Each value in the `providers` record form is `true`, `false`, or a `ToolsProvide
 
 ### ConnectClientOptions
 
-Every field except `fetch` and `resourceId` falls back to an environment variable. `fetch` defaults to `globalThis.fetch`, and `resourceId` has no fallback, so a fully env-configured app that doesn't scope calls to a resource can pass nothing.
+Every field except `fetch` and `resourceId` falls back to an environment variable. `fetch` defaults to `globalThis.fetch`, and `resourceId` has no fallback, so a fully env-configured app that doesn't scope calls to a resource can pass nothing. `tools()` rejects `client.resourceId` with `invalid_options`. Set `resourceId` on the `tools()` options instead.
 
 <PropertiesTable
   content={[
@@ -287,7 +301,7 @@ The method accepts every [`createCodeMode()` option](/reference/tools/create-cod
 Some tools stay direct agent tools instead of program functions, because they pause the agent run and a call from inside a program can't:
 
 - Tools that need approval through `requireApproval`. The agent still waits for the user to approve each call.
-- The `request_connection` tool, so the connect prompt can still pause the run until the user connects.
+- The [`request_connection`](#connect-prompt) tool, so the connect prompt can still pause the run until the user connects.
 
 For [MCP providers](#mcp-providers), a `requireApproval` list keeps **all** of that provider's tools direct, including the ones the list doesn't name. Mastra discovers MCP tools at request time and checks the list on each call, so Code Mode has no way to know in advance which calls need approval and keeps every tool from that provider out of the program. Generated HTTP tools work differently, because only the tools that match the list stay direct.
 
@@ -315,6 +329,88 @@ const searching = tools().codeMode({ sandbox: new LocalSandbox(), toolSearch: tr
 // Always declare every function up front
 const declared = tools().codeMode({ sandbox: new LocalSandbox(), toolSearch: false })
 ```
+
+## Connect prompt
+
+When `resourceId` is set, the resolver adds a `request_connection` tool, unless `connectPrompt` is `false`. The agent calls it to ask the user to connect a provider account mid-conversation, for example when a task needs Linear and no Linear account is connected yet.
+
+The tool takes an optional `provider` id:
+
+- With a provider that isn't connected yet, the call pauses the run until the user connects. When it resumes, its result reports the outcome, such as "Linear connected successfully." or the reason the connection failed.
+- Without a provider, or with an unknown one, the call returns every provider the user can connect, without waiting.
+- With a provider that's already connected, the call returns right away.
+
+The connectable providers follow the `providers` allowlist when you set one. Otherwise they follow the project's provider configuration in Mastra Platform, and the full catalog when that's unset.
+
+A chat UI such as Studio renders the paused call as a connect card and resumes it when the user's connection settles, with `{ provider, status: 'active' }` or `{ provider, status: 'failed', error }`. The tool checks the platform again on resume instead of trusting that data, so a stale resume can't report a false success.
+
+### In Slack, Telegram and Teams threads
+
+{/* lint disable mastra/vale-mastra-avoid-first-person */}
+
+**Requires:** `@mastra/core` with [paused tool cards](/reference/agents/channels#paused-tool-cards).
+
+In an agent's [channel](/docs/channels) thread, the paused call shows a card with **Connect** and **Cancel** buttons:
+
+1. **Connect** starts a sign-in for the conversation's resource and sends the provider's sign-in link only to the user who selected it. Slack shows the link in a message only they can see. Where the platform can't do that, Mastra sends it as a direct message instead. The card then says the link was sent and offers **I've connected** and **Cancel**.
+1. **I've connected** checks the platform. When the connection is active, the call finishes and the agent continues. Otherwise the card keeps waiting, or the call finishes as failed when the sign-in didn't finish or its link expired.
+1. **Cancel** finishes the call as failed with "The user cancelled connecting."
+
+Each button on the current card checks the platform first. When the provider is already connected, for example from your app, the call finishes as connected, even after **Cancel**. Buttons that serve a different resource are the exception, as described below.
+
+The card needs an adapter that shows buttons and a `toolDisplay` mode other than `'text'`. In `'text'` mode no card is posted. The user's next message resumes the call through [automatic tool resumption](/docs/agents/human-in-the-loop#automatic-tool-resumption), and the model writes the resume data, for example `{ action: 'connect' }` when the user asks to connect. The same ownership rule applies, with the message's author in place of the user who selected a button. Any member's message can resume the call this way, because `toolApprovers` only applies to buttons. A resume that leaves the call paused, such as asking to connect before the account is active, gets no reply in the thread.
+
+The sign-in link is never in the thread, in the card, in the tool's result, or in logs. When Mastra can't deliver it privately, or the platform can't start a sign-in, the card asks the user to connect the provider from your app instead, and still offers **I've connected** and **Cancel**.
+
+Only the person the conversation belongs to can start a sign-in. Mastra compares that user's resource ID, [`getChannelRun().actorResourceId`](/reference/agents/channels#getchannelrun), with the conversation's resource. Anyone else who selects **Connect** gets a notice and no sign-in starts. The toolset must resolve for the conversation's resource too:
+
+- When it resolves for a different resource as the call starts, for example when another member asks in someone else's thread and the toolset follows the user who wrote, the call shows no card. It returns right away, telling the agent the provider can't be connected from this conversation and should be connected from your app.
+- When it resolves for a different resource as a button is selected, for example when another member selects it, **Connect** and **I've connected** leave the card unchanged and only **Cancel** ends the call.
+
+The call also returns without a card when the model's tool call ID is too long for a [button ID](/reference/agents/channels#toolresumebutton). Who may select the card's buttons at all follows the adapter's [`toolApprovers`](/reference/agents/channels#per-adapter-options) setting.
+
+When Mastra can't resolve the user's resource ID, ownership can't be checked, so no sign-in starts. Instead the user gets a private notice to connect from your app, and the card offers **I've connected** and **Cancel**. That happens when a `resolveResourceId` hook fails, and on every text-mode reply when a hook is configured, since for messages the hook only runs on the one that starts a conversation. The card moves to that step whoever selected **Connect**, because Mastra can't tell whether they own the conversation.
+
+By default a channel conversation's resource is `<platform>:<userId>` of the user who started it. To scope the toolset to that user, derive `resourceId` from the channel request context:
+
+```typescript title="src/mastra/agents/assistant.ts"
+import { Agent } from '@mastra/core/agent'
+import type { ChannelContext } from '@mastra/core/channels'
+import type { RequestContext } from '@mastra/core/request-context'
+import { tools } from '@mastra/connect'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+const connectTools = tools({
+  resourceId: ctx => {
+    const requestContext = ctx?.requestContext as RequestContext | undefined
+    const channel = requestContext?.get('channel') as ChannelContext | undefined
+    return channel ? `${channel.platform}:${channel.userId}` : undefined
+  },
+})
+
+export const assistant = new Agent({
+  id: 'assistant',
+  name: 'assistant',
+  instructions: 'You help the team track work in Linear.',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
+  tools: ctx => connectTools(ctx),
+  channels: { adapters: { slack: createSlackAdapter() } },
+})
+```
+
+The `request_connection` tool's resume data, exported as the `ConnectPromptResume` type, accepts the channel card's `{ action: 'connect' | 'check' | 'cancel' }` alongside the `{ provider, status }` shapes chat UIs send.
+
+### Try it in Slack
+
+1. Set `MASTRA_PLATFORM_SECRET_KEY` and `MASTRA_PROJECT_ID`, and ensure the project offers Linear and you haven't connected a Linear account for your Slack user.
+1. Add the agent above to your Mastra instance, connect it to a Slack app, and start the dev server. See [Channels](/docs/channels) for the Slack setup.
+1. In a channel, mention the bot and ask it to list your Linear issues. The bot replies with a card that offers **Connect Linear** and **Cancel**.
+1. Select **Connect Linear**. Check that the sign-in link shows in a message only you can see, and that the card now offers **I've connected**.
+1. Ask another member to select a button on the card. Nothing happens, because by default only the user who asked can answer the card.
+1. Open the link, finish signing in to Linear, then select **I've connected**. The run continues with the result "Linear connected successfully."
+1. Ask again in a new thread, then select **Cancel**. The run continues with a result that says the user cancelled connecting.
+
+{/* lint enable mastra/vale-mastra-avoid-first-person */}
 
 ## Choosing providers
 
