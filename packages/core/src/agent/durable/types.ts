@@ -834,6 +834,12 @@ export interface RunRegistryEntry {
    */
   callToolsetToolNames?: string[];
   /**
+   * The run segment (one start or one resume) `baseTools` were built for. A step from another
+   * segment rebuilds them for its own caller before the model sees them. Unset until a step
+   * adopts the segment it runs in.
+   */
+  toolsSegment?: string;
+  /**
    * The method that started the run (`stream` or `generate`). A warm resume
    * rebuilds `requestTools` for this method, so a streamed run's sub-agents keep
    * streaming whatever the resume's `closeOnSuspend` is (#29436).

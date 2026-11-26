@@ -15770,6 +15770,8 @@ export class Agent<
               );
           reg.baseTools = { ...keptToolsets, ...requestTools };
           reg.requestTools = reg.baseTools;
+          // The resumed segment's first step adopts these tools as its own.
+          reg.toolsSegment = undefined;
           if (options?.toolsets) reg.callToolsetToolNames = serializeToolsetToolNames(options.toolsets);
           if (options?.delegation) reg.delegation = resolvedOptions.delegation;
         }
