@@ -63,7 +63,7 @@ import type { SaveQueueManager } from '../save-queue';
 import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
 import type { AgentStreamsConfig } from '../streams/types';
 import type { TripwireData } from '../trip-wire';
-import type { AgentMethodType, GoalConfig, StructuredOutputOptions, ToolsInput, ToolsetsInput } from '../types';
+import type { AgentMethodType, GoalConfig, StructuredOutputOptions, ToolsInput } from '../types';
 import type { ExecutionFence } from './execution-fence';
 import type { ResponseRecord } from './workflows/shared/schemas';
 
@@ -828,11 +828,6 @@ export interface RunRegistryEntry {
    */
   requestTools?: Record<string, CoreTool>;
   /**
-   * The call-time `toolsets` the run was started (or last resumed) with. A resume does not have to
-   * repeat them, so rebuilding `requestTools` for a new caller passes these back in.
-   */
-  toolsets?: ToolsetsInput;
-  /**
    * The method that started the run (`stream` or `generate`). A warm resume
    * rebuilds `requestTools` for this method, so a streamed run's sub-agents keep
    * streaming whatever the resume's `closeOnSuspend` is (#29436).
@@ -854,10 +849,7 @@ export interface RunRegistryEntry {
   requestContext?: RequestContext;
   /** The stored context was rebuilt from a workflow snapshot, not supplied by the active caller. */
   requestContextRebuilt?: boolean;
-  /**
-   * The segment the stored context, tools, memory and workspace were built for, when the context
-   * carries no Core execution claim: the Inngest segment id, or the execution a rebuild ran in.
-   */
+  /** Segment identity for engines that do not carry a Core execution claim. */
   requestContextSegment?: string;
   /** MCP protocol context for in-process tool execution (non-serializable). */
   mcp?: MCPToolExecutionContext;

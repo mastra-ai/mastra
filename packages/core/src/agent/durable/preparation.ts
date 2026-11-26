@@ -968,7 +968,6 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     mastra,
     tools,
     requestTools: tools,
-    toolsets: execOptions?.toolsets,
     methodType,
     saveQueueManager,
     memory,

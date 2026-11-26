@@ -40,38 +40,30 @@ function createModel() {
   });
 }
 
-function createWhoami(seen: unknown[]) {
-  return createTool({
-    id: 'whoami',
-    description: 'Reports the caller',
-    inputSchema: z.object({}),
-    requireApproval: true,
-    execute: async (_input, context) => {
-      seen.push(context?.requestContext?.get('who'));
-      return { ok: true };
-    },
-  });
-}
-
-function startProcess(storage: InMemoryStore, seen: unknown[], { withholdTool = false, viaToolset = false } = {}) {
+function startProcess(storage: InMemoryStore, seen: unknown[], { withholdTool = false } = {}) {
   globalRunRegistry.clear();
-  const tools = {
-    ...(viaToolset ? {} : { whoami: createWhoami(seen) }),
-    secret: createTool({
-      id: 'secret',
-      description: 'Withheld by a processor in the withhold case',
-      inputSchema: z.object({}),
-      execute: async () => ({ ok: true }),
-    }),
-  };
   const agent = new Agent({
     id: 'who-agent',
     name: 'who-agent',
     instructions: 'Use your tools.',
     model: createModel(),
-    tools: ({ requestContext }) => {
-      if (requestContext.get('who') === 'tools-unavailable') throw new Error('tools unavailable');
-      return tools;
+    tools: {
+      whoami: createTool({
+        id: 'whoami',
+        description: 'Reports the caller',
+        inputSchema: z.object({}),
+        requireApproval: true,
+        execute: async (_input, context) => {
+          seen.push(context?.requestContext?.get('who'));
+          return { ok: true };
+        },
+      }),
+      secret: createTool({
+        id: 'secret',
+        description: 'Withheld by a processor in the withhold case',
+        inputSchema: z.object({}),
+        execute: async () => ({ ok: true }),
+      }),
     },
     inputProcessors: withholdTool
       ? [
@@ -96,14 +88,11 @@ function contextFor(who: string) {
   return requestContext;
 }
 
-async function suspendForApproval(options?: { withholdTool?: boolean; viaToolset?: boolean }) {
+async function suspendForApproval(options?: { withholdTool?: boolean }) {
   const storage = new InMemoryStore();
   const seen: unknown[] = [];
   const durableAgent = startProcess(storage, seen, options);
-  const stream = await durableAgent.stream('Who am I?', {
-    requestContext: contextFor('first'),
-    ...(options?.viaToolset ? { toolsets: { calls: { whoami: createWhoami(seen) } } } : {}),
-  });
+  const stream = await durableAgent.stream('Who am I?', { requestContext: contextFor('first') });
 
   let toolCallId: string | undefined;
   for await (const chunk of stream.fullStream as AsyncIterable<any>) {
@@ -156,43 +145,6 @@ describe('durable agent approval resume request context (#25960)', () => {
     expect(globalRunRegistry.get(run.runId)?.tools).not.toHaveProperty('secret');
     await drain(stream);
 
-    expect(run.seen).toEqual(['second']);
-  });
-
-  it('keeps a call-time toolset tool when a same-process resume does not repeat toolsets', async () => {
-    const run = await suspendForApproval({ viaToolset: true });
-
-    await drain(
-      await run.durableAgent.approveToolCall({
-        runId: run.runId,
-        toolCallId: run.toolCallId,
-        requestContext: contextFor('second'),
-      }),
-    );
-
-    expect(run.seen).toEqual(['second']);
-  });
-
-  it("fails a same-process resume whose tools cannot be rebuilt instead of running the earlier caller's tool", async () => {
-    const run = await suspendForApproval();
-
-    await expect(
-      run.durableAgent.approveToolCall({
-        runId: run.runId,
-        toolCallId: run.toolCallId,
-        requestContext: contextFor('tools-unavailable'),
-      }),
-    ).rejects.toThrow('tools unavailable');
-    expect(run.seen).toEqual([]);
-
-    // The failed resume released the run, so it can still be approved.
-    await drain(
-      await run.durableAgent.approveToolCall({
-        runId: run.runId,
-        toolCallId: run.toolCallId,
-        requestContext: contextFor('second'),
-      }),
-    );
     expect(run.seen).toEqual(['second']);
   });
 });

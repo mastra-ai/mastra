@@ -98,7 +98,6 @@ import {
   getLiveRunRequestContext,
   getRunRegistryEntry,
   globalRunRegistry,
-  isStaleRunRegistryEntry,
   markRunActive,
 } from '../../run-registry';
 import { claimSegmentEnd, liveSegmentSpan, segmentOwnsStep, segmentSpanData } from '../../segment-spans';
@@ -725,36 +724,6 @@ export function createDurableToolCallStep() {
         ? createObservabilityContext({ currentSpan: processorAgentSpan })
         : undefined;
 
-      // Tools cached for an earlier segment were built with that caller's request context, e.g. when
-      // the run parked here and another host claimed the resume. Rebuild them for this segment before
-      // resolving the tool.
-      let staleRebuildContext: RequestContext | undefined;
-      if (mastra && isStaleRunRegistryEntry(registryEntry, runId, requestContext)) {
-        const rebuilt = await rebuildRunToolsFromMastra({
-          mastra: mastra as Mastra,
-          runId,
-          agentId: initData.agentId,
-          agentVersionId: initData.agentVersionId,
-          state: state as any,
-          options: agentOptions,
-          requestContextEntries: initData.requestContextEntries,
-          requestContext,
-          rehydrateProcessors: true,
-          replaceStale: true,
-          assertOwner: () =>
-            assertExecutionOwned({ runId, agentId: initData.agentId, requestContext, mastra: mastra as Mastra }),
-          logger,
-        });
-        registryEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-        // Never fall back to a tool whose closure belongs to the earlier caller.
-        if (!rebuilt || isStaleRunRegistryEntry(registryEntry, runId, requestContext)) {
-          throw new Error(
-            `[DurableAgent:${initData.agentId}] Could not rebuild tools for the current caller of run ${runId}`,
-          );
-        }
-        staleRebuildContext = rebuilt.requestContext;
-      }
-
       let tool = registryEntry?.tools?.[toolName];
       let mastraTools: Record<string, any> | undefined;
       // Tools rebuilt from the Mastra instance when the per-process registry is
@@ -766,7 +735,7 @@ export function createDurableToolCallStep() {
       let rebuiltSaveQueueManager: any;
       // RequestContext the rebuilt tools were built with (their closures
       // capture it) — checked for the delegation bail flag after execution.
-      let rebuiltRequestContext: RequestContext | undefined = staleRebuildContext;
+      let rebuiltRequestContext: RequestContext | undefined;
 
       if (!tool) {
         tool = findProviderToolByName(registryEntry?.tools as any, toolName) as typeof tool;

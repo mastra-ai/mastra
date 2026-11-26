@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { RequestContext } from '../../../../request-context';
 import type { MCPToolExecutionContext } from '../../../../tools';
-import { DURABLE_CONTEXT_SEGMENT_KEY, globalRunRegistry } from '../../run-registry';
+import { globalRunRegistry } from '../../run-registry';
 import { createDurableToolCallStep } from './tool-call';
 
 vi.mock('../../utils/resolve-runtime', async () => ({
@@ -14,28 +13,6 @@ vi.mock('../../utils/resolve-runtime', async () => ({
 }));
 
 describe('durable tool-call context forwarding', () => {
-  it('fails instead of running a tool built for an earlier segment when the rebuild fails', async () => {
-    const runId = 'durable-tool-stale-rebuild-failed';
-    const execute = vi.fn().mockResolvedValue('ok');
-    globalRunRegistry.set(runId, { tools: { secureTool: { execute } }, requestContextSegment: 'segment-1' } as any);
-
-    try {
-      await expect(
-        (createDurableToolCallStep() as any).execute({
-          getState: async () => ({}),
-          inputData: { toolCallId: 'call-1', toolName: 'secureTool', args: {} },
-          requestContext: new RequestContext<unknown>([[DURABLE_CONTEXT_SEGMENT_KEY, 'segment-2']]),
-          mastra: { getLogger: () => undefined },
-          suspend: vi.fn(),
-          getInitData: () => ({ runId, agentId: 'agent-1', options: {}, state: {} }),
-        }),
-      ).rejects.toThrow('Could not rebuild tools for the current caller');
-      expect(execute).not.toHaveBeenCalled();
-    } finally {
-      globalRunRegistry.delete(runId);
-    }
-  });
-
   it('uses the current workflow-segment actor instead of the initial actor', async () => {
     const runId = 'durable-tool-actor-run';
     const execute = vi.fn().mockResolvedValue('ok');

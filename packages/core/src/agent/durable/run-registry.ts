@@ -7,7 +7,6 @@ import type { Mastra } from '../../mastra';
 import { unwrapMastraTracingProxy } from '../../observability/context';
 import type { RequestContext } from '../../request-context';
 import type { CoreTool } from '../../tools/types';
-import { rebindProcessorTools } from '../../utils';
 import type { MessageList } from '../message-list';
 import type { SaveQueueManager } from '../save-queue';
 import { stopDurableExecutionParticipants } from './evented-execution';
@@ -97,76 +96,6 @@ export function getLiveRunRequestContext(
     return stepSegment === entry.requestContextSegment ? live : undefined;
   }
   return runId && getExecutionClaim(live, runId)?.executionId === expectedExecutionId ? live : undefined;
-}
-
-/** The segment a step runs in: its Core execution claim, or the engine's segment id (Inngest). */
-export function getStepSegment(runId: string | undefined, stepContext: RequestContext | undefined) {
-  const executionId = runId ? getExecutionClaim(stepContext, runId)?.executionId : undefined;
-  if (executionId) return executionId;
-  const segment = stepContext?.get(DURABLE_CONTEXT_SEGMENT_KEY);
-  return typeof segment === 'string' ? segment : undefined;
-}
-
-/**
- * Whether the entry's request-scoped tools and context were built for an earlier segment than the one
- * running this step, for example when the run parked here and another host claimed the resume. An
- * entry that records no segment is not treated as stale.
- */
-export function isStaleRunRegistryEntry(
-  entry: RunRegistryEntry | undefined,
-  runId: string | undefined,
-  stepContext: RequestContext | undefined,
-) {
-  if (!entry) return false;
-  const stepSegment = getStepSegment(runId, stepContext);
-  if (!stepSegment) return false;
-  const entrySegment = getEntrySegment(entry, runId);
-  return entrySegment !== undefined && entrySegment !== stepSegment;
-}
-
-/** The segment the entry's tools and context were built for, if it records one. */
-export function getEntrySegment(entry: RunRegistryEntry | undefined, runId: string | undefined) {
-  return (
-    (runId ? getExecutionClaim(entry?.requestContext, runId)?.executionId : undefined) ?? entry?.requestContextSegment
-  );
-}
-
-/**
- * Swap in `requestTools`, rebuilt for a new caller, wherever the entry still holds a tool built for
- * an earlier request, drop request-built tools the new build omits, and rebind processor-added tools
- * to `requestContext`. Tools a processor added, replaced or withheld are kept as the processor left
- * them (#25960, #27544). A withheld tool the new build omits stays recorded, so a later build that
- * returns it again still finds it withheld.
- */
-export function refreshRunRequestTools(
-  entry: RunRegistryEntry,
-  requestTools: Record<string, CoreTool>,
-  requestContext: RequestContext,
-) {
-  const refresh = (current: Record<string, CoreTool>, previous: Record<string, CoreTool> | undefined) => {
-    const next = { ...current };
-    for (const [name, tool] of Object.entries(requestTools)) {
-      // A name missing from current but present in previous was withheld by a processor.
-      const configured = name in current ? current[name] === previous?.[name] : !previous || !(name in previous);
-      if (configured) next[name] = tool;
-    }
-    // A request-built tool the new caller's build no longer returns must not run for them.
-    for (const [name, tool] of Object.entries(previous ?? {})) {
-      if (!(name in requestTools) && next[name] === tool) delete next[name];
-    }
-    return next;
-  };
-  // Withheld tools the new build omits stay in the baseline; otherwise a later build that returns
-  // them again would no longer see them as withheld and add them back.
-  const withheld = Object.fromEntries(
-    Object.entries(entry.requestTools ?? {}).filter(
-      ([name]) => !(name in requestTools) && !(name in (entry.tools ?? {})),
-    ),
-  );
-  entry.tools = rebindProcessorTools(refresh(entry.tools ?? {}, entry.requestTools), requestContext);
-  if (entry.baseTools)
-    entry.baseTools = rebindProcessorTools(refresh(entry.baseTools, entry.requestTools), requestContext);
-  entry.requestTools = { ...withheld, ...requestTools };
 }
 
 /**

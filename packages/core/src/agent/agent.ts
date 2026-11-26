@@ -182,7 +182,7 @@ import type {
 import { validateToolInput } from '../tools/validation';
 import type { DynamicArgument } from '../types';
 import type { ToolOptions } from '../utils';
-import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
+import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge, rebindProcessorTools } from '../utils';
 import { resolveDynamicArgument } from '../utils/dynamic-argument';
 import { slugify } from '../utils/slugify';
 import type { IMastraVoice } from '../voice';
@@ -262,7 +262,6 @@ import {
   globalRunRegistry,
   markResumeInFlight,
   deleteRunRegistryEntry,
-  refreshRunRequestTools,
 } from './durable/run-registry';
 import { carrySegmentSpans, openedSegment } from './durable/segment-spans';
 import type { SegmentSpanData } from './durable/segment-spans';
@@ -13701,8 +13700,6 @@ export class Agent<
       model,
       modelList,
       tools,
-      // Request-built baseline, so a later caller's refresh can replace these closures.
-      requestTools: tools,
       workspace,
       memory,
       saveQueueManager,
@@ -15724,10 +15721,8 @@ export class Agent<
     // rebuilt everything in prepare() above.
     if (!coldSnapshot && (options?.requestContext || options?.delegation || options?.hooks || droppedStartingUser)) {
       try {
-        // A resume does not have to repeat the call-time toolsets, so rebuild those the run started with.
-        const toolsets = options?.toolsets ?? entry.toolsets;
         const requestTools = await this.agentForExecution.getToolsForExecution({
-          toolsets,
+          toolsets: resolvedOptions.toolsets,
           clientTools: resolvedOptions.clientTools,
           threadId: memoryInfo?.threadId,
           resourceId: memoryInfo?.resourceId,
@@ -15748,17 +15743,27 @@ export class Agent<
           backgroundTaskPolicy: resolvedOptions.backgroundTaskPolicy,
           model: entry.model,
         });
+        const refresh = (current: Record<string, CoreTool>, previous: Record<string, CoreTool> | undefined) => {
+          const next = { ...current };
+          for (const [name, tool] of Object.entries(requestTools)) {
+            // A name missing from current but present in previous was withheld by a processor.
+            const configured = name in current ? current[name] === previous?.[name] : !previous || !(name in previous);
+            if (configured) next[name] = tool;
+          }
+          return next;
+        };
         for (const reg of new Set([entry, getRunRegistryEntry(runId, this.#mastra)])) {
           if (!reg) continue;
-          refreshRunRequestTools(reg, requestTools, resumeRequestContext);
-          reg.toolsets = toolsets;
+          reg.tools = rebindProcessorTools(refresh(reg.tools ?? {}, reg.requestTools), resumeRequestContext);
+          if (reg.baseTools)
+            reg.baseTools = rebindProcessorTools(refresh(reg.baseTools, reg.requestTools), resumeRequestContext);
+          // Tools this rebuild did not produce still hold their earlier build, so
+          // keep that as their baseline; otherwise a later resume can never refresh them.
+          reg.requestTools = { ...reg.requestTools, ...requestTools };
           if (options?.delegation) reg.delegation = resolvedOptions.delegation;
         }
       } catch (error) {
-        // The entry's tools still close over the earlier caller; they must not run for this one.
-        this.#mastra?.getLogger?.()?.error?.(`[DurableAgent] resume(${runId}) tool resolution failed: ${error}`);
-        await executionFence.settle(async () => {});
-        throw error;
+        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] resume(${runId}) tool resolution failed: ${error}`);
       }
     }
     setExecutionClaim(resumeRequestContext, runId, executionFence.claim);

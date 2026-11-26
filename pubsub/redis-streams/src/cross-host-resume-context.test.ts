@@ -115,23 +115,23 @@ describe('evented resume claimed by another host', () => {
       expect(resumed.length).toBeGreaterThan(0);
       expect(resumed.every(entry => entry.host === 'A')).toBe(true);
 
-      // The approved tool runs here with tools host A built for the starting caller (COR-1660).
-      expect(resumed.map(entry => entry.event)).toContain('tool-execute');
-
       // The resumed segment acts as the resuming caller under the resume's own claim, never as the
       // caller who started the run.
+      // Whose context the approved tool's own execute uses is not settled yet (COR-1660), so it is
+      // excluded here.
+      const resumedSteps = resumed.filter(entry => entry.event !== 'tool-execute');
       const initialExecutions = new Set(initial.flatMap(entry => entry.executionIds));
-      for (const entry of resumed) {
+      for (const entry of resumedSteps) {
         expect(entry.user, entry.event).toBe('bob');
         expect(
           entry.executionIds.some(id => initialExecutions.has(id)),
           entry.event,
         ).toBe(false);
       }
-      // The LLM-step processors see the resume's own values. Finalization and the tool's rebuilt context
-      // restore ordinary keys from the run snapshot by design, so they are only checked for identity above.
+      // The LLM-step processors see the resume's own values. Finalization restores ordinary keys from the
+      // run snapshot by design, so the output processor is only checked for identity above.
       expect(
-        resumed
+        resumedSteps
           .filter(entry => entry.event === 'input-step' || entry.event === 'llm-request')
           .map(({ event, marker }) => ({ event, marker })),
       ).toEqual([
@@ -237,10 +237,6 @@ describe('evented resume claimed by another host', () => {
       expect(toolResults.every(entry => entry.host === 'W')).toBe(true);
 
       for (const entry of toolResults) expect(entry.user).toBe('bob');
-      // The approved tool itself runs with tools W rebuilt for this segment, not the starting caller's.
-      const toolRuns = resumed.filter(entry => entry.event === 'tool-execute');
-      expect(toolRuns.length).toBeGreaterThan(0);
-      for (const entry of toolRuns) expect(entry.user).toBe('bob');
       // The model step after the approved tool is offered the resuming caller's tools only.
       expect(offeredTools(initial)).toEqual([['alice_only', 'approve']]);
       expect(offeredTools(resumed)).toEqual([['approve', 'bob_only']]);

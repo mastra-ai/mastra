@@ -12,12 +12,9 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { Mastra } from '../../../mastra';
-import { RequestContext } from '../../../request-context';
 import { InMemoryStore } from '../../../storage';
-import { createTool } from '../../../tools';
 import type { WorkflowRunState, WorkflowRunStatus } from '../../../workflows/types';
 import { Agent } from '../../agent';
 import { DurableStepIds } from '../constants';
@@ -26,7 +23,7 @@ import { createEventedAgent } from '../create-evented-agent';
 import type { DurableAgent } from '../durable-agent';
 import { EventedAgent } from '../evented-agent';
 import { ExecutionFence } from '../execution-fence';
-import { globalRunRegistry, refreshRunRequestTools } from '../run-registry';
+import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent } from '../stream-adapter';
 
 function makeSnapshot(
@@ -721,45 +718,6 @@ describe.each(['default', 'evented'] as const)('DurableAgent.recoverActiveRuns (
     expect(succeeded).toBe(1);
     expect(globalRunRegistry.get('run-suspends')).toBeDefined();
     globalRunRegistry.delete('run-suspends');
-  });
-
-  it("records a recovered run's tools as request-built so a later caller's refresh replaces them", async () => {
-    const approve = createTool({
-      id: 'approve',
-      description: 'x',
-      inputSchema: z.object({}),
-      execute: async () => ({}),
-    });
-    const baseAgent = new Agent({
-      id: 'agent-T',
-      name: 'agent-T',
-      instructions: 'x',
-      model: makeMockModel(),
-      tools: { approve },
-    });
-    const toolStore = new InMemoryStore();
-    const toolAgent =
-      engine === 'evented' ? createEventedAgent({ agent: baseAgent }) : createDurableAgent({ agent: baseAgent });
-    new Mastra({ agents: { 'agent-T': toolAgent as any }, storage: toolStore, logger: false });
-    await seed(
-      toolStore,
-      makeSnapshot('run-tools', 'running', { agentId: 'agent-T', threadId: 't', resourceId: 'r' }),
-      'r',
-    );
-    stubWorkflow(toolAgent, { status: 'suspended' });
-
-    try {
-      await toolAgent.recoverActiveRuns();
-      const entry = globalRunRegistry.get('run-tools')!;
-      const recovered = entry.tools!.approve;
-      expect(recovered).toBeDefined();
-
-      const rebuilt = { id: 'approve', built: 'next caller' } as any;
-      refreshRunRequestTools(entry, { approve: rebuilt }, new RequestContext());
-      expect(entry.tools!.approve).toBe(rebuilt);
-    } finally {
-      globalRunRegistry.delete('run-tools');
-    }
   });
 
   it('cleans up a finished recovered run when cleanupTimeoutMs is 0 (#25891)', async () => {

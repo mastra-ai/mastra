@@ -23,17 +23,8 @@ import { liveRequestEntries, restoreRequestContext } from '../../request-context
 import { SaveQueueManager } from '../../save-queue';
 import type { ToolsInput } from '../../types';
 import { isDurableAgentLike } from '../../types';
-import { DurableExecutionFenceError } from '../execution-fence';
 import { recordRunSavedMessages } from '../run-message-refs';
-import {
-  getEntrySegment,
-  getRunRegistryEntry,
-  getStepSegment,
-  globalRunRegistry,
-  isStaleRunRegistryEntry,
-  refreshRunRequestTools,
-  setRunRegistryEntry,
-} from '../run-registry';
+import { getRunRegistryEntry, globalRunRegistry, setRunRegistryEntry } from '../run-registry';
 import type {
   RunRegistryEntry,
   SerializableDurableState,
@@ -442,8 +433,6 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       // so sibling steps in this process trust it instead of rebuilding.
       isPlaceholder: false,
       tools,
-      // Marks these as request-built, so a later segment can rebuild them for its caller.
-      requestTools: tools,
       model,
       modelList,
       workspace,
@@ -456,8 +445,6 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       processorStates,
       agent: rebuiltAgent,
       ...backgroundTasks,
-      // The tools, memory and workspace above were resolved for this segment's caller.
-      requestContextSegment: getStepSegment(runId, options.requestContext),
     };
     if (globalEntry) {
       Object.assign(globalEntry, rebuilt);
@@ -551,17 +538,6 @@ export async function rebuildRunToolsFromMastra(options: {
   requestContext?: RequestContext;
   /** Restore processors for tool execution, not persistence-only rebuilds. */
   rehydrateProcessors?: boolean;
-  /**
-   * Rebuild the entry's request-built tools and context when they were built for an earlier segment
-   * (see `isStaleRunRegistryEntry`). Memory, workspace, save queue and processor state carry across
-   * segments, as on a warm resume.
-   */
-  replaceStale?: boolean;
-  /**
-   * Throws when the step's execution no longer owns the run. Checked right before a stale entry is
-   * replaced, so a superseded segment cannot overwrite the entry a newer one already published.
-   */
-  assertOwner?: () => Promise<void>;
   logger?: { debug?: (...args: any[]) => void; error?: (...args: any[]) => void };
 }): Promise<RebuiltRunTools | undefined> {
   const {
@@ -576,9 +552,6 @@ export async function rebuildRunToolsFromMastra(options: {
   } = options;
   if (!mastra) return undefined;
 
-  // A later segment may publish its own entry while this rebuild awaits; only replace the one seen here.
-  const entryBeforeRebuild = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-  const segmentBeforeRebuild = getEntrySegment(entryBeforeRebuild, runId);
   let agentResolved = false;
   try {
     const agent = await resolveRunAgent(mastra, agentId, runId, options.agentVersionId);
@@ -597,10 +570,6 @@ export async function rebuildRunToolsFromMastra(options: {
       memoryConfig: state.memoryConfig,
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
       clientTools: execOptions?.clientTools as ToolsInput | undefined,
-      // Call-time toolsets only exist in the process that started the run.
-      toolsets: entryBeforeRebuild?.toolsets,
-      // Build for the method that started the run, as a warm resume does (#29436).
-      methodType: entryBeforeRebuild?.methodType ?? 'stream',
       backgroundTaskEnabled: Boolean(backgroundTasks.backgroundTaskManager),
       backgroundTaskPolicy: execOptions?.backgroundTaskPolicy,
     });
@@ -639,51 +608,28 @@ export async function rebuildRunToolsFromMastra(options: {
     // live per-request instances from a populated in-process entry.
     const patch: Partial<RunRegistryEntry> = {
       tools,
-      requestTools: tools,
       workspace,
       memory,
       saveQueueManager,
       agent: processorAgent,
       ...backgroundTasks,
       ...rebuiltProcessors,
-      ...(options.rehydrateProcessors
-        ? {
-            requestContext: resolveRequestContext,
-            requestContextRebuilt: true,
-            requestContextSegment: getStepSegment(runId, requestContext),
-          }
-        : {}),
+      ...(options.rehydrateProcessors ? { requestContext: resolveRequestContext, requestContextRebuilt: true } : {}),
     };
-    if (options.replaceStale) await options.assertOwner?.();
     // A sibling may have published during construction. Keep lookup, merge and return synchronous.
     existing = getRunRegistryEntry(runId, mastra as Mastra | undefined);
     if (existing) {
+      if (options.rehydrateProcessors && !existing.requestContext) {
+        existing.requestContext = resolveRequestContext;
+        existing.requestContextRebuilt = true;
+      }
       const registryModel = existing.model as { __metadataOnly?: boolean } | undefined;
       const hasAuthoritativeToolSnapshot =
         existing.isPlaceholder !== true &&
         !!registryModel &&
         registryModel.__metadataOnly !== true &&
         (existing.baseTools !== undefined || existing.tools !== undefined);
-      // Re-checked here: a sibling step of the same segment may already have replaced the entry.
-      const staleEntry = isStaleRunRegistryEntry(existing, runId, requestContext);
-      if (options.replaceStale && staleEntry && getEntrySegment(existing, runId) === segmentBeforeRebuild) {
-        // Memory and workspace stay: the save queue is bound to the entry's memory, and a warm resume
-        // keeps them too. Which thread and resource they touch comes from the run.
-        refreshRunRequestTools(existing, tools, resolveRequestContext);
-        // Cached memory permission checks passed for the earlier caller.
-        existing.memoryAuthorizationChecks = undefined;
-        existing.requestContext = resolveRequestContext;
-        existing.requestContextRebuilt = true;
-        existing.requestContextSegment = getStepSegment(runId, requestContext);
-      } else if (options.rehydrateProcessors && !existing.requestContext && !staleEntry) {
-        existing.requestContext = resolveRequestContext;
-        existing.requestContextRebuilt = true;
-        existing.requestContextSegment = getStepSegment(runId, requestContext);
-      }
-      if (!hasAuthoritativeToolSnapshot && Object.keys(existing.tools ?? {}).length === 0) {
-        existing.tools = tools;
-        existing.requestTools = tools;
-      }
+      if (!hasAuthoritativeToolSnapshot && Object.keys(existing.tools ?? {}).length === 0) existing.tools = tools;
       existing.workspace ??= workspace;
       existing.memory ??= memory;
       existing.saveQueueManager ??= saveQueueManager;
@@ -713,7 +659,7 @@ export async function rebuildRunToolsFromMastra(options: {
       requestContext: resolveRequestContext,
     };
   } catch (error) {
-    if (error instanceof DurableProcessorRebuildError || error instanceof DurableExecutionFenceError) throw error;
+    if (error instanceof DurableProcessorRebuildError) throw error;
 
     const entry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
     // Falling back would silently drop call-time toolsets, so surface the failure.
