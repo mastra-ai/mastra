@@ -32,9 +32,9 @@ export function createRecreateSandboxTool(options: RecreateSandboxToolOptions = 
     id: options.id ?? RECREATE_SANDBOX_TOOL_ID,
     description: [
       'Destroy your sandbox and replace it with a fresh one. Use it only to recover when the sandbox stops working: commands that time out even for `echo ok`, or errors like "onStart hook failed".',
-      'This deletes the VM. Everything in it that is not committed and pushed is lost for good: uncommitted and unpushed changes, untracked files, installed dependencies, build output and running processes.',
-      "Push what you can first. If the sandbox can't run commands, call it anyway without waiting for anyone, and mention what was lost in your reply.",
-      'Your next command starts the new sandbox, which runs setup again, so it takes a while. Check the branch and working tree before going on.',
+      "Everything in the sandbox's environment that is not saved elsewhere may be lost for good: changed and new files, installed dependencies, build output and running processes.",
+      "Save what you can first. If the sandbox can't run commands, call it anyway without waiting for anyone, and mention what was lost in your reply.",
+      'Your next command starts the new sandbox, which runs setup again, so it may take a while. Check the state of your files before going on.',
     ].join(' '),
     inputSchema: z
       .object({

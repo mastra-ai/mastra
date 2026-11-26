@@ -15,6 +15,9 @@ class VmSandbox extends MastraSandbox {
   destroyed: number[] = [];
   startGate?: Promise<void>;
   destroyError?: unknown;
+  /** Gates for destroy calls, by call number. */
+  destroyGates: Record<number, Promise<void>> = {};
+  destroyCalls = 0;
 
   constructor(options?: MastraSandboxOptions) {
     super({ ...options, name: 'VmSandbox' });
@@ -27,6 +30,8 @@ class VmSandbox extends MastraSandbox {
   }
 
   async destroy(): Promise<void> {
+    const gate = this.destroyGates[this.destroyCalls++];
+    if (gate) await gate;
     if (this.destroyError) throw this.destroyError;
     this.destroyed.push(this.vm);
   }
@@ -89,6 +94,32 @@ describe('MastraSandbox._reset', () => {
     const sandbox = new VmSandbox();
     await sandbox._destroy();
     await expect(sandbox._reset()).rejects.toThrow('destroyed');
+  });
+
+  it('stays destroyed when a destroy from outside finishes during the reset', async () => {
+    const sandbox = new VmSandbox();
+    let unblock!: () => void;
+    sandbox.startGate = new Promise(resolve => (unblock = resolve));
+    let releaseSecond!: () => void;
+    // The reset's second release (after the start settles) waits until the outside destroy is done.
+    sandbox.destroyGates[1] = new Promise(resolve => (releaseSecond = resolve));
+    const hung = sandbox._start();
+
+    const resetting = sandbox._reset({ timeoutMs: 1000 });
+    resetting.catch(() => {});
+    // Let the reset release the environment and start waiting on the hung start.
+    await new Promise(resolve => setTimeout(resolve, 0));
+    unblock();
+    await hung;
+    await vi.waitFor(() => expect(sandbox.destroyCalls).toBe(2));
+
+    await sandbox._destroy();
+    expect(sandbox.status).toBe('destroyed');
+    releaseSecond();
+
+    await expect(resetting).rejects.toThrow('destroyed while it was being recreated');
+    expect(sandbox.status).toBe('destroyed');
+    await expect(sandbox.ensureRunning()).rejects.toThrow();
   });
 });
 

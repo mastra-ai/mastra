@@ -43,6 +43,7 @@ import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types'
 import { shellQuote } from './utils';
 
 const DEFAULT_RESET_TIMEOUT_MS = 30_000;
+const DESTROYED_STATUSES: readonly ProviderStatus[] = ['destroying', 'destroyed'];
 
 /**
  * A provider error meaning the environment is already gone: 410, or a 404
@@ -853,6 +854,11 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
       if (!settled) throw new Error('The old sandbox is still starting. Try again.');
       // That start may have found the old environment gone and made another.
       await release();
+    }
+    // A `_destroy()` from outside may have finished while this waited; it wins.
+    // `includes` because the guard above narrowed `status`, which changes across the awaits.
+    if (DESTROYED_STATUSES.includes(this.status)) {
+      throw new Error('The sandbox was destroyed while it was being recreated.');
     }
     this.status = 'stopped';
   }
