@@ -101,6 +101,48 @@ describe('reply_in_thread', () => {
     });
   });
 
+  it('puts the session link on only one of two overlapping first replies', async () => {
+    let land!: () => void;
+    const post = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise(resolve => (land = () => resolve({}))))
+      .mockResolvedValue({});
+    const { requestContext } = channelRun({ post });
+    markNewChannelThread(requestContext);
+    const tool = await replyTool(requestContext);
+
+    const first = tool.execute({ text: 'On it.' }, {});
+    await tool.execute({ text: 'Also checking CI.' }, {});
+    land();
+    await first;
+    await tool.execute({ text: 'Done.' }, {});
+
+    const linked = post.mock.calls.filter(([arg]) => (arg as { markdown: string }).markdown.includes(SESSION_URL));
+    expect(linked).toEqual([[{ markdown: `On it.\n\n[Open session ↗](${SESSION_URL})` }]]);
+  });
+
+  it('hands the session link to the next reply when an overlapping first reply fails', async () => {
+    let fail!: () => void;
+    const post = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise((_, reject) => (fail = () => reject(new Error('rate_limited')))))
+      .mockResolvedValue({});
+    const { requestContext } = channelRun({ post });
+    markNewChannelThread(requestContext);
+    const tool = await replyTool(requestContext);
+
+    const first = tool.execute({ text: 'On it.' }, {});
+    await tool.execute({ text: 'Also checking CI.' }, {});
+    fail();
+    await expect(first).rejects.toThrow('rate_limited');
+    await tool.execute({ text: 'Done.' }, {});
+    await tool.execute({ text: 'Anything else?' }, {});
+
+    expect(post).toHaveBeenNthCalledWith(2, { markdown: 'Also checking CI.' });
+    expect(post).toHaveBeenNthCalledWith(3, { markdown: `Done.\n\n[Open session ↗](${SESSION_URL})` });
+    expect(post).toHaveBeenNthCalledWith(4, { markdown: 'Anything else?' });
+  });
+
   it('leaves the link off follow-ups in an existing session', async () => {
     const { requestContext, post } = channelRun();
     const tool = await replyTool(requestContext);

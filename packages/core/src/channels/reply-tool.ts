@@ -11,8 +11,13 @@ import type { ChannelThreadLinkProcessorOptions } from './thread-link-processor'
 
 export const REPLY_TOOL_NAME = 'reply_in_thread';
 
-/** Set once the first reply of a new session carried the session link. */
+/**
+ * Which reply carries the session link: `claimed` while that reply is posting,
+ * `posted` once it landed. Claimed before any await, so overlapping replies
+ * can't both take it; a failed post hands it back to the next reply.
+ */
 const LINKED_KEY = 'mastra__channelReplyLinked';
+type LinkState = 'claimed' | 'posted' | undefined;
 
 const replyInput = z
   .object({
@@ -46,20 +51,24 @@ export function createChannelReplyTool(requestContext: RequestContext, options: 
         'Post a message in this chat thread. Nothing you write outside this tool reaches the thread, so use it for anything the people there should see: a short note that you are starting a longer job, a question you need answered, and the outcome when you finish. Post when you have something new; do not repeat yourself or post that nothing changed. To stay quiet, do not call it.',
       inputSchema: replyInput,
       execute: async (input, context) => {
-        const link = firstReplyLink(requestContext, options.link);
+        const link = claimFirstReplyLink(requestContext, options.link);
         const suffix = link ? `\n\n[${options.link?.label ?? DEFAULT_LINK_LABEL}](${link})` : '';
         // ChannelReplyStreamProcessor may already be streaming this call's text
         // into the thread; finish that post rather than posting it again.
         const toolCallId = context?.agent?.toolCallId;
         const streamed = toolCallId ? replyStreams(requestContext).get(toolCallId) : undefined;
         if (toolCallId) replyStreams(requestContext).delete(toolCallId);
-        if (!streamed || !(await streamed.finish(input.text, suffix))) {
-          const render = await resolveRender(requestContext);
-          if (!render) throw new Error('This session is no longer linked to a chat thread.');
-          await render.chatThread.post({ markdown: `${input.text}${suffix}` });
+        try {
+          if (!streamed || !(await streamed.finish(input.text, suffix))) {
+            const render = await resolveRender(requestContext);
+            if (!render) throw new Error('This session is no longer linked to a chat thread.');
+            await render.chatThread.post({ markdown: `${input.text}${suffix}` });
+          }
+        } catch (error) {
+          if (link) requestContext.set(LINKED_KEY, undefined satisfies LinkState);
+          throw error;
         }
-        // Marked only once posted, so a failed first post still gets the link on the retry.
-        if (link) requestContext.set(LINKED_KEY, true);
+        if (link) requestContext.set(LINKED_KEY, 'posted' satisfies LinkState);
         return { posted: true };
       },
     }),
@@ -67,17 +76,21 @@ export function createChannelReplyTool(requestContext: RequestContext, options: 
 }
 
 /**
- * The session link the first reply of a new session ends with. With reply
- * text hidden, the session-link processor's text delta never
- * reaches the thread, so the tool carries the link instead.
+ * The session link the first reply of a new session ends with, claimed for
+ * this reply. With reply text hidden, the session-link processor's text delta
+ * never reaches the thread, so the tool carries the link instead.
  */
-function firstReplyLink(
+function claimFirstReplyLink(
   requestContext: RequestContext,
   link: ChannelThreadLinkProcessorOptions | undefined,
 ): string | undefined {
-  if (!link || !requestContext.get(NEW_CHANNEL_THREAD_KEY) || requestContext.get(LINKED_KEY)) return undefined;
+  if (!link || !requestContext.get(NEW_CHANNEL_THREAD_KEY) || (requestContext.get(LINKED_KEY) as LinkState)) {
+    return undefined;
+  }
   const memory = parseMemoryRequestContext(requestContext);
-  return link.link({ requestContext, threadId: memory?.thread?.id, resourceId: memory?.resourceId });
+  const url = link.link({ requestContext, threadId: memory?.thread?.id, resourceId: memory?.resourceId });
+  if (url) requestContext.set(LINKED_KEY, 'claimed' satisfies LinkState);
+  return url;
 }
 
 /** Live posts of `reply_in_thread` calls whose text is still streaming in, by tool call id. */
