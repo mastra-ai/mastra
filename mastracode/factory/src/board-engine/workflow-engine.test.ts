@@ -122,12 +122,40 @@ describe('the workflow board engine', () => {
   it('stops the run on a card a person moves into another phase that runs, and commits the move once it ended', async () => {
     const { storage, runsUrl, item } = await setup();
     const { calls, runs } = goingRun(true);
-    const { engine } = replica(storage, runsUrl, undefined, runs);
+    const { engine, mastra } = replica(storage, runsUrl, undefined, runs);
 
     const result = await engine.requestMove(await personMove(storage, item.id, 'execute', 'drag-1')());
 
     expect(result).toMatchObject({ status: 'accepted', stage: 'execute' });
     expect(calls).toEqual(['stop']);
+    // That the run was stopped for the move is told to the transition only: nothing keeps it.
+    const kept = JSON.stringify([
+      await mastra.getWorkflow('factory-board').getWorkflowRunById(boardRunId(item.id)),
+      await storage.get({ orgId: ORG, id: item.id }),
+      await storage.listDeferredDecisions(ORG, PROJECT_ID),
+      await storage.getTransitionResultByIngress(ORG, PROJECT_ID, 'drag-1'),
+    ]);
+    expect(kept).toContain('execute');
+    expect(kept).not.toContain('interruptedRun');
+  });
+
+  it("ends a deleted card's run, after the inputs asked before the delete", async () => {
+    const { storage, engine, mastra, item } = await setup();
+    const workflow = mastra.getWorkflow('factory-board');
+    await engine.requestMove(await personMove(storage, item.id, 'intake', 'drag-1')());
+    expect(await workflow.getWorkflowRunById(boardRunId(item.id))).toMatchObject({ status: 'suspended' });
+
+    const move = engine.requestMove(await personMove(storage, item.id, 'done', 'drag-2')());
+    // The move is in the card's queue once its checks, which wait on nothing here, are through.
+    await new Promise(resolve => setImmediate(resolve));
+    const deleted = engine.cardDeleted({ workItemId: item.id });
+
+    expect(await move).toMatchObject({ status: 'accepted' });
+    await deleted;
+    expect(await workflow.getWorkflowRunById(boardRunId(item.id))).toBeNull();
+    expect(await engine.describe({ workItemId: item.id })).toBeUndefined();
+    // A card with no run is nothing to end.
+    await expect(engine.cardDeleted({ workItemId: randomUUID() })).resolves.toBeUndefined();
   });
 
   it("commits a person's move anyway, giving up on the run, when the stopped run doesn't end in time", async () => {
