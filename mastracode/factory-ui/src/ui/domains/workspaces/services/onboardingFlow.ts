@@ -1,9 +1,7 @@
 /**
  * Session-scoped markers for the `/onboarding` page (`EmptyFactoryState`).
  * The draft and open section survive full-page OAuth redirects
- * (GitHub/Linear) so the flow can resume where it left off. The
- * create-Factory wizard uses separate keys (`useCreateFactoryFlow`) so
- * the two flows never collide.
+ * (GitHub/Linear) so the flow can resume where it left off.
  *
  * Every write also stamps `updated-at`: resumability is time-bound so a stale
  * tab (or markers written by an older version of the flow) can never trap the

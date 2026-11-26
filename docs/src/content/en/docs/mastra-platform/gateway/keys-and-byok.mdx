@@ -1,6 +1,6 @@
 ---
 title: "Keys and BYOK | Gateway"
-description: "Gateway API key types, model restrictions, rotation, deployment keys, and bring-your-own-key provider connections."
+description: "Gateway API key types, regions, model restrictions, rotation, deployment keys, and bring-your-own-key provider connections."
 ---
 
 # Keys and BYOK
@@ -34,11 +34,36 @@ When you create a key, you can set:
 
 You can rename project and organization keys at any time. Expiry, allowed models, and failover are fixed at creation. To change them, create a new key and revoke the old one.
 
-:::info[Rolling out]
+A key can also have a spend limit (daily, weekly, monthly, or lifetime, from $1). Gateway rejects requests with that key once the limit is reached.
 
-Per-key spend limits (daily, weekly, monthly, or lifetime, from $1) are rolling out and may not appear in your organization yet.
+## Regions
 
-:::
+Gateway runs in two regions, US and EU. Each key belongs to one region, chosen with **Region** when you create it. The default is US, and a key keeps its region for life.
+
+| Region | Key prefix | Base URL |
+| - | - | - |
+| US | `msk-gateway-` | `https://gateway-api.mastra.ai/v1` |
+| EU | `msk-gateway-eu_` | `https://gateway-api.eu.mastra.ai/v1` |
+
+To run inference in the EU, create an EU key and point your client at the EU base URL. The EU instance routes requests only to Gateway-managed provider endpoints in the EU (BYOK is the exception, see below), and it rejects US keys with a `401 key_wrong_region` error.
+
+```typescript
+import OpenAI from 'openai'
+
+const client = new OpenAI({
+  apiKey: process.env.MASTRA_GATEWAY_API_KEY, // msk-gateway-eu_...
+  baseURL: 'https://gateway-api.eu.mastra.ai/v1',
+})
+```
+
+Things to know about EU keys:
+
+- **Model catalog**: The EU serves fewer models than the US, and prices can differ. With an EU key, [`GET /v1/models`](/docs/mastra-platform/gateway/api/models) lists only EU models at EU prices. Without a key, call `GET /v1/models?region=eu` to see the EU catalog.
+- **No cross-region failover**: Requests with an EU key never fall back to the US. If no EU route can serve the request, it fails.
+- **Web search**: [Gateway-managed web search](/docs/mastra-platform/gateway/web-search) runs in the US only. With an EU key, the search tool call returns a failed search to the model.
+- **BYOK**: A [BYOK connection](#bring-your-own-key) isn't tied to a region, even when you use an EU key. OpenAI, Anthropic, and Google connections send requests to that provider's own API. Only a custom HTTPS endpoint connection lets you choose where requests go. To keep BYOK traffic in the EU, use a custom endpoint that processes requests in the EU, and confirm that it doesn't forward them to a provider outside the EU.
+
+Keys created before regions existed are US keys. [Deployment keys](#deployment-keys) follow the region the deploy runs in, so a deploy in an EU region gets an EU key.
 
 ## Rotate and revoke
 
@@ -57,7 +82,7 @@ Automatic deployment keys are rolling out by organization.
 
 When enabled, Mastra platform injects a Gateway key into each deploy as `MASTRA_GATEWAY_API_KEY`, so deployed agents can call Gateway without manual setup. The key is scoped to the deploy and is revoked when the deploy stops, fails, or is cancelled. A key you set yourself isn't replaced.
 
-Turn injection on or off, and restrict allowed models, in project settings. A deployment-key spend limit can be saved in project settings, but it isn't enforced on the key yet.
+Turn injection on or off, and restrict allowed models, in project settings. A deployment-key spend limit set in project settings applies to each deploy's key.
 
 ## Bring your own key
 
@@ -66,7 +91,7 @@ A BYOK connection routes requests through your own provider account. The provide
 | Provider | Supported endpoints |
 | - | - |
 | OpenAI | Chat Completions, Responses, Embeddings, Decisions |
-| Anthropic | Messages |
+| Anthropic | Messages and Chat Completions (OpenAI-compatible) |
 | Google | Chat Completions and Embeddings (OpenAI-compatible) |
 | Custom HTTPS endpoint | Chat Completions, Responses, and Messages |
 

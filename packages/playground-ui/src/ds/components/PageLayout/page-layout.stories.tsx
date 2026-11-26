@@ -3,6 +3,7 @@ import type { ComponentProps, ReactNode } from 'react';
 import { expect, within } from 'storybook/test';
 
 import { ActionRow } from '../ActionRow';
+import { BrandLoader } from '../BrandLoader';
 import { Breadcrumb, Crumb } from '../Breadcrumb';
 import { Button } from '../Button';
 import { EmptyState } from '../EmptyState';
@@ -45,8 +46,7 @@ const pageHeader = (
     <PageHeader.Title>Resources</PageHeader.Title>
     <PageHeader.Description>Agents, workflows and tools available in this workspace.</PageHeader.Description>
     <PageHeader.Action>
-      <Button variant="primary">
-        <IconPlusMedium />
+      <Button icon={<IconPlusMedium />} variant="primary">
         Create resource
       </Button>
     </PageHeader.Action>
@@ -151,6 +151,23 @@ export const FixedBody: Story = {
   },
 };
 
+export const LongPage: Story = {
+  args: { children: Array.from({ length: 20 }, (_, index) => <div key={index}>{resourceList}</div>) },
+  parameters: {
+    docs: {
+      description: {
+        story: 'A page taller than its frame scrolls to a plain edge, with no fade at the top or bottom.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const body = within(canvasElement).getAllByText('Research agent')[0]?.closest<HTMLElement>('[style*="overflow"]');
+    if (!body) throw new Error('Missing the scrolling body');
+    await expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+    await expect(getComputedStyle(body).maskImage).toBe('none');
+  },
+};
+
 export const PageWithActionRow: Story = {
   args: {
     actionRow: (
@@ -225,6 +242,32 @@ export const PageWithSectionsAndEmptyState: Story = {
     await expect(fill.getBoundingClientRect().top).toBeCloseTo(list.getBoundingClientRect().bottom, 0);
     await expect(body.scrollHeight).toBeLessThanOrEqual(body.clientHeight);
   },
+};
+
+async function expectLoaderInPageCenter({ canvasElement }: { canvasElement: HTMLElement }) {
+  const card = canvasElement.querySelector('[data-slot=main-card]')?.getBoundingClientRect();
+  const loader = within(canvasElement).getByRole('status').getBoundingClientRect();
+  if (!card) throw new Error('Missing the page parts');
+  await expect(loader.top + loader.height / 2).toBeCloseTo(card.top + card.height / 2, 0);
+  await expect(loader.left + loader.width / 2).toBeCloseTo(card.left + card.width / 2, 0);
+}
+
+export const PageLoading: Story = {
+  args: { children: <BrandLoader fill /> },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "A page that hasn't shown yet centers its loader on the whole page, header included, so it takes over from the route's loader without a jump.",
+      },
+    },
+  },
+  play: expectLoaderInPageCenter,
+};
+
+export const FixedPageLoading: Story = {
+  args: { body: 'fixed', children: <BrandLoader fill /> },
+  play: expectLoaderInPageCenter,
 };
 
 function ComparisonHeader({

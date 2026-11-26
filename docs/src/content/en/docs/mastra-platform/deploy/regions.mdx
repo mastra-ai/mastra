@@ -36,7 +36,7 @@ The residency selector offers four Railway regions across two zones. The `us` an
 Pass a Railway code directly when you need to pin an environment to a specific data center. Passing `us` selects `pdx`, and passing `eu` selects `ams`.
 
 :::note
-Additional Railway regions exist in the deploy pipeline (for example Singapore, `sin`) but aren't offered in the residency selector yet, because hosted databases and observability don't have local placement outside the US and EU. Passing an unrecognized region falls back to the US default rather than pinning to it.
+Additional Railway regions exist in the deploy pipeline (for example Singapore, `sin`) but aren't offered in the residency selector yet, because hosted databases and observability don't have local placement outside the US and EU. An unrecognized region isn't pinned at all: the environment gets Railway's default placement.
 :::
 
 ## Hosted database placement
@@ -45,10 +45,10 @@ When you attach an [environment-scoped database](/docs/mastra-platform/database)
 
 | Environment region | Turso region | Postgres (Neon) region |
 | - | - | - |
-| `pdx` | `sjc` (San Jose) | `aws-us-west-2` (Oregon) |
-| `iad` | `iad` (Ashburn) | `aws-us-east-1` (N. Virginia) |
-| `sfo` | `sjc` (San Jose) | `aws-us-west-2` (Oregon) |
-| `ams` | `ams` (Amsterdam) | `aws-eu-central-1` (Frankfurt) |
+| `pdx` | `aws-us-west-2` (Oregon) | `aws-us-west-2` (Oregon) |
+| `iad` | `aws-us-east-1` (N. Virginia) | `aws-us-east-1` (N. Virginia) |
+| `sfo` | `aws-us-west-2` (Oregon) | `aws-us-west-2` (Oregon) |
+| `ams` | `aws-eu-west-1` (Ireland) | `aws-eu-central-1` (Frankfurt) |
 
 Project-scoped databases (shared across environments) accept an explicit `--region` because they aren't bound to a single environment. Use a provider region ID for the flag, not the `us` / `eu` shorthand:
 

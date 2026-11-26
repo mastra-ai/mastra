@@ -29,6 +29,7 @@ export { isThinkingLevelSetting, THINKING_LEVEL_VALUES } from '../thinking.js';
 export type { ThinkingLevelSetting, ThinkingLevelSource } from '../thinking.js';
 import { getAppDataDir } from '../utils/project.js';
 import { DEFAULT_STT_PROVIDER, resolveSTTModel } from '../voice/stt-registry.js';
+import { customProviderHeaderProblem, isCustomProviderAuthScheme } from './custom-provider-headers.js';
 import { pruneUnknownModePackFallbacks, pruneUnknownPackAccountPreferences } from './packs.js';
 
 /** A saved custom pack — user-defined model selections for each mode. */
@@ -38,11 +39,25 @@ export interface CustomPack {
   createdAt: string;
 }
 
+/** How a custom provider sends its API key: `Authorization: Bearer <key>` or `x-api-key: <key>`. */
+export type CustomProviderAuthScheme = 'bearer' | 'x-api-key';
+
+/** An extra header a custom provider sends on every call. */
+export interface CustomProviderHeader {
+  name: string;
+  value: string;
+  /** Hidden in UIs and never returned by the Factory API. */
+  secret?: boolean;
+}
+
 /** A saved custom provider for OpenAI-compatible endpoints. */
 export interface CustomProviderSetting {
   name: string;
   url: string;
   apiKey?: string;
+  /** Absent means `bearer`. */
+  authScheme?: CustomProviderAuthScheme;
+  headers?: CustomProviderHeader[];
   models: string[];
 }
 
@@ -835,6 +850,33 @@ export function stripMastraCodeCustomProviderPrefix(
   return isCustomProvider ? rest : modelId;
 }
 
+/**
+ * Read the custom headers of a saved provider. An entry that breaks the header
+ * rules is dropped on its own, so one bad hand-edited header does not discard
+ * the provider or its other headers.
+ */
+function parseCustomProviderHeaders(
+  rawHeaders: unknown,
+  authScheme: CustomProviderAuthScheme | undefined,
+): CustomProviderHeader[] {
+  if (!Array.isArray(rawHeaders)) return [];
+  const headers: CustomProviderHeader[] = [];
+  for (const rawHeader of rawHeaders) {
+    if (!rawHeader || typeof rawHeader !== 'object') continue;
+    const candidate = rawHeader as Record<string, unknown>;
+    if (typeof candidate.name !== 'string' || typeof candidate.value !== 'string') continue;
+    const header: CustomProviderHeader = {
+      name: candidate.name.trim(),
+      value: candidate.value.trim(),
+      ...(typeof candidate.secret === 'boolean' ? { secret: candidate.secret } : {}),
+    };
+    // Checking the kept list plus the candidate also drops duplicates and anything past the limit.
+    if (customProviderHeaderProblem([...headers, header], authScheme) === undefined) headers.push(header);
+  }
+  return headers;
+}
+
+/** Read and sanitize the `customProviders` list of settings.json. */
 export function parseCustomProviders(rawProviders: unknown): CustomProviderSetting[] {
   if (!Array.isArray(rawProviders)) return [];
 
@@ -868,10 +910,15 @@ export function parseCustomProviders(rawProviders: unknown): CustomProviderSetti
     const apiKey =
       typeof candidate.apiKey === 'string' && candidate.apiKey.trim().length > 0 ? candidate.apiKey.trim() : undefined;
 
+    const authScheme = isCustomProviderAuthScheme(candidate.authScheme) ? candidate.authScheme : undefined;
+    const headers = parseCustomProviderHeaders(candidate.headers, authScheme);
+
     parsedProviders.push({
       name,
       url,
       ...(apiKey ? { apiKey } : {}),
+      ...(authScheme ? { authScheme } : {}),
+      ...(headers.length > 0 ? { headers } : {}),
       models,
     });
   }

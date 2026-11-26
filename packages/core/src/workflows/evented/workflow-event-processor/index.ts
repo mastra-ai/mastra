@@ -1,5 +1,7 @@
 import EventEmitter from 'node:events';
 import {
+  carryEndedSegment,
+  endFailedIteration,
   participateInDurableExecution,
   retrySettledDurableExecution,
   stopAbandonedDurableExecution,
@@ -15,11 +17,11 @@ import { currentRunFenceScope } from '../../../agent/durable/run-fence-scope';
 import type { ActorSignal, RequireFGAOptions } from '../../../auth/ee';
 import { MastraFGAPermissions, getWorkflowFGAResourceId, requireFGA } from '../../../auth/ee';
 import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../../error';
-import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { EventProcessor } from '../../../events/processor';
 import { PublisherQueueLimitError } from '../../../events/publisher-queue-limit-error';
 import { NoopLeaseProvider, isLeaseProvider } from '../../../events/pubsub';
 import type { LeaseProvider, PubSub } from '../../../events/pubsub';
+import { reachesOtherProcesses } from '../../../events/reach';
 import type { Event, EventCallback } from '../../../events/types';
 import type { Mastra } from '../../../mastra';
 import type { TracingContext } from '../../../observability';
@@ -34,6 +36,7 @@ import {
   RunFenceConflictError,
 } from '../../../storage/run-fencing';
 import type { RunFence } from '../../../storage/run-fencing';
+import type { UpdateWorkflowStateOptions } from '../../../storage/types';
 import { assertWorkflowStepGuard, isWorkflowStepConflictError } from '../../../storage/workflow-step-guard';
 import type { StepExecutionStrategy } from '../../../worker/types';
 import { getEntryId, getEntryRetries, getEntrySchemas, getEntryWorkflow } from '../../../workflows/step-entry';
@@ -86,6 +89,7 @@ import { processWorkflowConditional, processWorkflowParallel } from './parallel'
 import { resolveCompletedRestartEntry } from './restart';
 import { routeStepRun } from './routing';
 import type { LeafEntry } from './routing';
+import { hasRunEnded, isPastLastEntry, isRunEndingEvent, samePath, UNENDED_RUN_STATUSES } from './run-status';
 import { processWorkflowSleep, processWorkflowSleepUntil, processWorkflowWaitForEvent } from './sleep';
 import {
   currentStorageVersion,
@@ -1437,13 +1441,16 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowStatus: finalStatus,
       }) ?? true;
 
-    if (shouldPersist) {
-      await runStorage.updateHeader({
+    if (
+      shouldPersist &&
+      !(await this.#writeRunEnd('endWorkflow', args, runStorage, {
         status: finalStatus,
         result: normalizedPrevResult,
         activePaths: executionPath,
         activeStepsPath: activeStepsPath,
-      });
+      }))
+    ) {
+      return;
     }
 
     this.endRunSpans(args, finalStatus);
@@ -1484,6 +1491,47 @@ export class WorkflowEventProcessor extends EventProcessor {
         deleteSnapshotAfterEnd: !shouldPersist && finalStatus !== 'paused',
       },
     });
+  }
+
+  /**
+   * Stores a run's end only while the run has not ended, so a late or second end can't replace
+   * the first one. Returns true when the end is to be published: it was stored, the run is not
+   * stored (as before), or the run already ended the same way at the same path, which is this end
+   * handled again after its worker stopped before publishing it. Returns false, after logging, for
+   * any other refusal: the run ended another way, or it was reopened (time travel writes `running`
+   * on an ended run) between the write and the read, and an old end must not replace it.
+   */
+  async #writeRunEnd(
+    handler: 'endWorkflow' | 'processWorkflowFail',
+    {
+      workflowId,
+      runId,
+      executionPath,
+      eventId,
+    }: Pick<ProcessorArgs, 'workflowId' | 'runId' | 'executionPath' | 'eventId'>,
+    runStorage: RunStorage,
+    end: UpdateWorkflowStateOptions & { status: WorkflowRunStatus },
+  ): Promise<boolean> {
+    // A canceled run is stored as canceled before its end is written.
+    const expectedStatus =
+      end.status === 'canceled' ? [...UNENDED_RUN_STATUSES, 'canceled' as const] : UNENDED_RUN_STATUSES;
+    if (await runStorage.updateHeader({ ...end, expectedStatus })) return true;
+
+    const stored = await runStorage.loadHeader();
+    if (!stored) return true;
+    if (hasRunEnded(stored) && stored.status === end.status && samePath(stored.activePaths, executionPath)) return true;
+
+    this.mastra.getLogger()?.warn('Dropping a workflow end: the run already ended or was reopened', {
+      handler,
+      workflowId,
+      runId,
+      eventId,
+      executionPath,
+      status: end.status,
+      storedStatus: stored.status,
+      storedActivePaths: stored.activePaths,
+    });
+    return false;
   }
 
   private async publishFinishEvent(event: Pick<Event, 'type' | 'runId' | 'data'>) {
@@ -1720,10 +1768,24 @@ export class WorkflowEventProcessor extends EventProcessor {
     const liveParentWorkflow = this.#resolveLiveParentWorkflow(parentWorkflow);
     const step = liveParentWorkflow?.stepGraph?.[parentWorkflow.executionPath[0]!];
     if (liveParentWorkflow && step?.type === 'loop') {
+      const parentStorage = this.#runStorage(parentWorkflow.workflowId, parentWorkflow.runId);
+      // This runs the parent's loop here instead of through the parent's dispatch, so it has to
+      // drop a child end (a late or repeated one) that reaches a parent that already ended, before
+      // the loop condition runs again.
+      const parentHeader = await parentStorage.loadHeader();
+      if (hasRunEnded(parentHeader)) {
+        this.mastra.getLogger()?.warn('Dropping a nested loop iteration end: the parent run already ended', {
+          workflowId: parentWorkflow.workflowId,
+          runId: parentWorkflow.runId,
+          nestedRunId,
+          executionPath: parentWorkflow.executionPath,
+          storedStatus: parentHeader.status,
+        });
+        return;
+      }
       // The nested run's final state replaces the parent's: the parent's
       // `__state` predates this iteration and would win over `state`.
       // (On storage v2 the descriptor doesn't carry the parent's step results.)
-      const parentStorage = this.#runStorage(parentWorkflow.workflowId, parentWorkflow.runId);
       const parentSteps = parentWorkflow.stepResults ?? (await parentStorage.loadFull())?.context;
       const loopStepResults: Record<string, any> = { ...parentSteps, __state: state };
       // pick workflow information from parentWorkflow as the workflow end being processed here is actually a step in the parentWorkflow
@@ -1933,23 +1995,25 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (ownershipLost) {
       // Another execution may be driving the run from its stored snapshot:
       // neither mark that row failed nor delete it.
-    } else if (shouldPersist) {
-      await runStorage.updateHeader({
+    } else if (
+      shouldPersist &&
+      !(await this.#writeRunEnd('processWorkflowFail', args, runStorage, {
         status: 'failed',
         error: (prevResult as any).error,
         activePaths: executionPath,
         activeStepsPath: activeStepsPath,
-      });
+      }))
+    ) {
+      return;
+    } else if (shouldPersist && currentStorageVersion() === 2) {
       // Storage v1 runs pruned each step result as it was written.
-      if (currentStorageVersion() === 2) {
-        await this.pruneAndRepersistSnapshot({
-          workflow,
-          workflowId,
-          runId,
-          finished: true,
-          fence: await this.currentRunFence(runId),
-        });
-      }
+      await this.pruneAndRepersistSnapshot({
+        workflow,
+        workflowId,
+        runId,
+        finished: true,
+        fence: await this.currentRunFence(runId),
+      });
     }
 
     // handle nested workflow
@@ -2081,7 +2145,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     // A branch index with no branch behind it fails the run like a missing entry.
     if (!rawStep || route.kind === 'missing') {
       // If we're past the last step, end the workflow successfully
-      if (executionPath[0]! >= stepGraph.length) {
+      if (isPastLastEntry(stepGraph, executionPath)) {
         return this.endWorkflow({
           workflow,
           parentWorkflow,
@@ -2823,7 +2887,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         if (restart || timeTravel || resumeSteps?.length || step.type === 'foreach' || !workflowsStore) return false;
         // Redeliveries that cannot execute a child must not make a new authorization decision.
         const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId });
-        if (snapshot && ['success', 'failed', 'canceled', 'tripwire'].includes(snapshot.status)) return true;
+        if (hasRunEnded(snapshot)) return true;
         if (snapshot?.status === 'suspended' && snapshot.context[leafId]?.status === 'suspended') return true;
         if (guardStart) {
           try {
@@ -2860,8 +2924,18 @@ export class WorkflowEventProcessor extends EventProcessor {
         nestedRunId = stepResults[leafId]?.suspendPayload?.__workflow_meta?.runId;
       } else if (timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === leafId) {
         // Time travel reuses the recorded child run, or creates one if absent.
+        // A foreach's iterations use their own id. Time-travel params keep a foreach's shared
+        // `nestedRunId` only for a stored single-item foreach without per-iteration ids, and
+        // that id names item 0's child, so no other iteration may reuse it.
         nestedDispatch = 'time-travel';
-        nestedRunId = stepResults[leafId]?.metadata?.nestedRunId ?? globalThis.crypto.randomUUID();
+        const recordedMetadata = stepResults[leafId]?.metadata;
+        nestedRunId =
+          (step.type === 'foreach'
+            ? (recordedMetadata?.foreachNestedRunIds?.[executionPath[1]!] ??
+              (recordedMetadata?.foreachNestedRunIds || executionPath[1] !== 0
+                ? undefined
+                : recordedMetadata?.nestedRunId))
+            : recordedMetadata?.nestedRunId) ?? globalThis.crypto.randomUUID();
       } else if (restart && !!restart.activeStepsPath?.[leafId]) {
         // Restart reuses the iteration's or step's child run, if recorded.
         nestedDispatch = 'restart';
@@ -3109,12 +3183,26 @@ export class WorkflowEventProcessor extends EventProcessor {
       // shape restart routing expects: `createRestartExecutionParams` feeds it
       // back as the workflow.start executionPath, and parallel/conditional
       // restart routing keeps it at the same depth instead of re-appending.
-      await runStorage.updateHeader({
+      const claimed = await runStorage.updateHeader({
         status: 'running',
         activePaths: executionPath,
         activeStepsPath,
         expectedStatus: 'running',
       });
+      // The run ended after this delivery was dispatched: its step must not run. A canceled run
+      // is left to the cancel check that aborts its steps.
+      const stored = claimed ? undefined : await runStorage.loadHeader();
+      if (hasRunEnded(stored) && stored.status !== 'canceled') {
+        this.mastra.getLogger()?.warn('Not running a step: the run already ended', {
+          type: 'workflow.step.run',
+          workflowId,
+          runId,
+          eventId: args.eventId,
+          executionPath,
+          storedStatus: stored.status,
+        });
+        return;
+      }
     }
 
     // Authorization bookkeeping, not progress, and deliberately outside the
@@ -5193,14 +5281,22 @@ export class WorkflowEventProcessor extends EventProcessor {
    *   should drop the event (or return 4xx for HTTP push).
    */
   async handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
-    if (this.mastra.pubsub.__rawBus() instanceof EventEmitterPubSub) return this.#handleDelivery(event);
+    if (!reachesOtherProcesses(this.mastra.pubsub)) return this.#handleDelivery(event);
     const context = new RequestContext<unknown>(Object.entries(event.data?.requestContext ?? {}));
-    if (!isStorageFencedExecution(context, event.runId, event.data?.parentWorkflow)) return this.#handleDelivery(event);
+    if (!isStorageFencedExecution(context, event.runId, event.data?.parentWorkflow)) {
+      await carryEndedSegment(this.mastra, event);
+      const result = await this.#handleDelivery(event);
+      if (result.ok) endFailedIteration(this.mastra, event);
+      return result;
+    }
     try {
       if (await retrySettledDurableExecution(this.mastra, event)) return { ok: true };
       const execute = async () => {
         const result = await this.#handleDelivery(event);
-        if (result.ok) await settleEventedDurableExecution(this.mastra, event);
+        if (result.ok) {
+          endFailedIteration(this.mastra, event);
+          await settleEventedDurableExecution(this.mastra, event);
+        }
         // No delivery is left to settle an abandoned root terminal, so stop renewing its claim.
         else if (!result.retry)
           await stopAbandonedDurableExecution(
@@ -5656,6 +5752,26 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     const workflow = this.#resolveLiveWorkflow(workflowData);
+
+    // A step event that reaches a run that already ended, e.g. reclaimed by the broker from a
+    // worker that stopped before acking it, must not advance the run.
+    if (
+      (type === 'workflow.step.end' || type === 'workflow.step.run') &&
+      hasRunEnded(currentState) &&
+      !isRunEndingEvent(type, workflowData.executionPath, currentState, workflow?.stepGraph)
+    ) {
+      this.mastra.getLogger()?.warn('Dropping a step event: the run already ended', {
+        type,
+        workflowId: workflowData.workflowId,
+        runId: workflowData.runId,
+        eventId: event.id,
+        executionPath: workflowData.executionPath,
+        storedStatus: currentState.status,
+        storedActivePaths: currentState.activePaths,
+        deliveryAttempt: event.deliveryAttempt,
+      });
+      return;
+    }
 
     if (!workflow) {
       // For terminal/cleanup events (`workflow.fail`, `workflow.end`,

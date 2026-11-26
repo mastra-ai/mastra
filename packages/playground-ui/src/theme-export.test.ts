@@ -36,11 +36,14 @@ const semanticTokens = [
   'card',
   'popover',
   'dialog',
+  'nested',
+  'row',
   'field',
   'field-disabled',
   'muted',
   'foreground',
   'muted-foreground',
+  'subtle-foreground',
   'placeholder',
   'border',
   'border-focus',
@@ -54,6 +57,7 @@ const semanticAliases = {
   muted: 'gray-1',
   foreground: 'gray-10',
   'muted-foreground': 'gray-8',
+  'subtle-foreground': 'gray-7',
   placeholder: 'gray-7',
 } as const;
 
@@ -200,23 +204,23 @@ describe('theme.css export', () => {
 
   it('exposes the background and gray foundation scales', () => {
     const darkColors = [
-      ['background-1', 'oklch(0.1382 0 0)'],
-      ['background-2', 'oklch(0.1591 0 0)'],
-      ['background-3', 'oklch(0.1913 0 0)'],
-      ['gray-1', 'oklch(0.2178 0 0)'],
-      ['gray-2', 'oklch(0.2435 0 0)'],
-      ['gray-3', 'oklch(0.2686 0 0)'],
-      ['gray-4', 'oklch(0.3092 0 0)'],
-      ['gray-5', 'oklch(0.3715 0 0)'],
-      ['gray-6', 'oklch(0.4495 0 0)'],
-      ['gray-7', 'oklch(0.5208 0 0)'],
-      ['gray-8', 'oklch(0.65 0 0)'],
-      ['gray-9', 'oklch(0.7699 0 0)'],
-      ['gray-10', 'oklch(0.9851 0 0)'],
+      ['background-1', 'oklch(0.173 0 0)'],
+      ['background-2', 'oklch(0.1913 0 0)'],
+      ['background-3', 'oklch(0.2393 0 0)'],
+      ['gray-1', 'oklch(0.2931 0 0)'],
+      ['gray-2', 'oklch(0.3211 0 0)'],
+      ['gray-3', 'oklch(0.3485 0 0)'],
+      ['gray-4', 'oklch(0.4 0 0)'],
+      ['gray-5', 'oklch(0.47 0 0)'],
+      ['gray-6', 'oklch(0.56 0 0)'],
+      ['gray-7', 'oklch(0.7187 0 0)'],
+      ['gray-8', 'oklch(0.7984 0 0)'],
+      ['gray-9', 'oklch(0.8545 0 0)'],
+      ['gray-10', 'oklch(0.9702 0 0)'],
     ];
     const lightColors = [
-      ['background-1', 'oklch(0.9642 0 0)'],
-      ['background-2', 'oklch(0.9851 0 0)'],
+      ['background-1', 'oklch(0.9521 0 0)'],
+      ['background-2', 'oklch(0.9821 0 0)'],
       ['background-3', 'oklch(1 0 0)'],
       ['gray-1', 'oklch(0.9431 0 0)'],
       ['gray-2', 'oklch(0.9189 0 0)'],
@@ -224,10 +228,10 @@ describe('theme.css export', () => {
       ['gray-4', 'oklch(0.8452 0 0)'],
       ['gray-5', 'oklch(0.7604 0 0)'],
       ['gray-6', 'oklch(0.6201 0 0)'],
-      ['gray-7', 'oklch(0.5486 0 0)'],
-      ['gray-8', 'oklch(0.4459 0 0)'],
-      ['gray-9', 'oklch(0.3092 0 0)'],
-      ['gray-10', 'oklch(0.1286 0 0)'],
+      ['gray-7', 'oklch(0.5521 0 0)'],
+      ['gray-8', 'oklch(0.4568 0 0)'],
+      ['gray-9', 'oklch(0.3867 0 0)'],
+      ['gray-10', 'oklch(0.2264 0 0)'],
     ];
 
     for (const [token, value] of darkColors) {
@@ -274,17 +278,19 @@ describe('theme.css export', () => {
     }
   });
 
-  it('declares one interaction ladder for both themes, flipped by the tint alone', () => {
+  it('declares one interaction ladder for both themes, drawn from the tint', () => {
     const ladder = ['fill-subtle', 'fill', 'fill-hover', 'fill-active', 'fill-strong'];
     const boundaries = ['border', 'border-strong', 'border-hover'];
 
     for (const token of [...ladder, ...boundaries]) {
       expect(darkTheme).toContain(`--${token}: oklch(var(--fill-tint)`);
-      expect(lightTheme).not.toContain(`--${token}:`);
     }
+    // Fills take their own alphas in light, boundaries don't.
+    for (const token of ladder) expect(lightTheme).toContain(`--${token}: oklch(var(--fill-tint)`);
+    for (const token of boundaries) expect(lightTheme).not.toContain(`--${token}:`);
 
-    expect(darkTheme).toContain('--fill-tint: 100%');
-    expect(lightTheme).toContain('--fill-tint: 20.5%');
+    expect(darkTheme).toContain('--fill-tint: 97.02%');
+    expect(lightTheme).toContain('--fill-tint: 22.64%');
 
     // Focus is the one rung that may not follow the tint: it is pinned to a
     // contrast floor, and shade at dark's alpha falls under it (see below).
@@ -318,11 +324,11 @@ describe('theme.css export', () => {
   it('keeps display-lg a complete fixed-size role without changing display', () => {
     const variables = parseVariables(themeCss);
     expect(variables.get('text-display-lg')).toBe('1.75rem');
-    expect(variables.get('text-display-lg--line-height')).toBe('127%');
+    expect(variables.get('text-display-lg--line-height')).toBe('2.25rem');
     expect(variables.get('text-display-lg--font-weight')).toBe('var(--font-weight-medium)');
     expect(variables.get('text-display-lg--letter-spacing')).toBe('-0.01em');
     expect(variables.get('text-display')).toBe('1.375rem');
-    expect(variables.get('text-display--line-height')).toBe('127%');
+    expect(variables.get('text-display--line-height')).toBe('1.75rem');
     expect(variables.get('text-display--font-weight')).toBe('var(--font-weight-medium)');
     expect(variables.get('text-display--letter-spacing')).toBe('-0.01em');
   });
@@ -347,21 +353,19 @@ describe('theme.css export', () => {
     const compiler = await compileStylesheet(productionCss, resolve(pkgRoot, 'src'));
     const output = compiler.build(['shadow-raised', 'shadow-overlay']);
 
-    for (const elevation of ['raised', 'overlay']) {
-      const rim = 'inset 0 0 0 1px var(--surface-rim)';
+    for (const [elevation, rimToken] of [
+      ['raised', 'surface-rim'],
+      ['overlay', 'overlay-rim'],
+    ]) {
+      const rim = `inset 0 0 0 1px var(--${rimToken})`;
       const tint = 'inset 0 0 0 9999px var(--surface-tint)';
-      expect(output).toContain(`box-shadow: var(--elevation-lip), ${rim}, ${tint}, var(--elevation-${elevation});`);
+      expect(output).toContain(`box-shadow: ${rim}, ${tint}, var(--elevation-${elevation});`);
       for (const theme of [darkTheme, lightTheme]) {
         expect(theme).toMatch(new RegExp(`--elevation-${elevation}:`));
       }
     }
 
-    // The rim sits below the divider in both themes: a boundary between two
-    // surfaces needs less than a line drawn inside one.
-    for (const theme of [darkTheme, lightTheme]) {
-      expect(theme).toMatch(/--surface-rim:/);
-      expect(theme).toMatch(/--elevation-lip:/);
-    }
+    for (const token of ['surface-rim', 'overlay-rim']) expect(darkTheme).toContain(`--${token}:`);
   });
 
   it('exports semantic tokens to TypeScript consumers', () => {
@@ -516,15 +520,8 @@ describe('theme.css export', () => {
     expect(references.size).toBeGreaterThan(100);
   });
 
-  // Two tiers, because the two tones do different jobs. Ink carries the content and is held
-  // to APCA's body-text level (Lc 60). Supporting text is a deliberate step back from ink —
-  // at Lc 60 it reads as a second ink and the hierarchy collapses — so it is gated at Lc 40:
-  // `--gray-8` measures Lc 45.0 on light and 43.7 on dark. That is under APCA's Lc 45 spot
-  // reading for 13px text and is accepted knowingly: it clears WCAG AA for normal text on
-  // every product surface, and it is the level Linear's own sidebar label sits at
-  // (`lch(37.78)` light, `oklch(0.647)` dark). Supporting text never carries a fact that is
-  // not also in the ink beside it.
-  const apcaFloor: Record<string, number> = { foreground: 60, 'muted-foreground': 40 };
+  // Both tones carry content at 12-13px, so both are held to APCA's body-text level (Lc 60).
+  const apcaFloor: Record<string, number> = { foreground: 60, 'muted-foreground': 60 };
 
   it('meets text contrast gates on every neutral product surface', () => {
     const { darkVariables, lightVariables } = getThemeVariables(themeCss);

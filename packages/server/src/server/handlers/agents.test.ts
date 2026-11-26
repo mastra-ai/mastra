@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Agent, MessageList } from '@mastra/core/agent';
@@ -3323,6 +3324,155 @@ describe('Agent Routes Authorization', () => {
       vi.spyOn(mockDurableAgent, '__getRunOwner').mockReturnValue({});
     });
 
+    it('still fences a wrapper from a @mastra/core that predates engine selection', async () => {
+      // Older cores have no engine check; their wrappers are recognized by shape alone.
+      const subscribe = vi.fn(async (_runId: string, options: { onComplete?: () => void }) => {
+        options.onComplete?.();
+        return async () => {};
+      });
+      // Shaped like a pre-engine-selection DurableAgent: the wrapper contract and its fenced
+      // subscribe, everything else forwarded to the agent it wraps, and no engine check.
+      const target = {
+        id: 'test-durable-agent',
+        name: 'test-durable-agent',
+        agent: mockAgent,
+        pubsub: new EventEmitterPubSub(),
+        stream: vi.fn(),
+        recover: vi.fn(),
+        recoverActiveRuns: vi.fn(),
+        __getRunOwner: () => ({}),
+        __subscribeToRunStream: subscribe,
+      };
+      const oldCoreWrapper = new Proxy(target, {
+        get(t, prop, receiver) {
+          if (prop === '__hasDurableExecution') return undefined;
+          if (prop in t) return Reflect.get(t, prop, receiver);
+          const value = (mockAgent as any)[prop];
+          return typeof value === 'function' ? value.bind(mockAgent) : value;
+        },
+        has: (t, prop) => prop !== '__hasDurableExecution' && (prop in t || prop in mockAgent),
+      });
+      mastra = new Mastra({ agents: { 'test-durable-agent': oldCoreWrapper as any }, storage, logger: false });
+      const runId = 'observe-old-core-wrapper';
+
+      await collectWithDeadline(await observe(runId));
+
+      expect(subscribe).toHaveBeenCalledWith(runId, expect.anything(), expect.any(Function));
+    });
+
+    it.each([
+      ['no execution engine', undefined],
+      ['the default execution engine', 'default'],
+      ['the evented execution engine', 'evented'],
+    ] as const)(
+      'observes an adapter proxy (Inngest) through its own pubsub when the wrapped agent has %s',
+      async (_, executionEngine) => {
+        const inner = new Agent({
+          id: 'adapter-inner',
+          name: 'adapter-inner',
+          instructions: 'test-instructions',
+          model: { specificationVersion: 'v2' } as any,
+          ...(executionEngine ? { durable: { executionEngine } } : {}),
+        });
+        const adapterPubsub = new EventEmitterPubSub();
+        // Shaped like createInngestAgent: own durable surface, everything else forwarded to the wrapped agent.
+        const target = {
+          id: 'adapter-agent',
+          name: 'adapter-agent',
+          agent: inner,
+          pubsub: adapterPubsub,
+          stream: vi.fn(),
+          recover: vi.fn(),
+          recoverActiveRuns: vi.fn(),
+          getDurableWorkflows: () => [],
+          __getRunOwner: () => ({}),
+        };
+        const adapter = new Proxy(target, {
+          get(t, prop, receiver) {
+            if (prop in t) return Reflect.get(t, prop, receiver);
+            const value = (inner as any)[prop];
+            return typeof value === 'function' ? value.bind(inner) : value;
+          },
+          has: (t, prop) => prop in t || prop in inner,
+        });
+        mastra = new Mastra({ agents: { 'adapter-agent': adapter as any }, storage, logger: false });
+        const runId = 'observe-adapter';
+        const subscribed = vi.spyOn(adapterPubsub, 'subscribeWithReplay');
+
+        const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+          mastra,
+          agentId: 'adapter-agent',
+          runId,
+          requestContext: new RequestContext(),
+        } as any)) as ReadableStream<any>;
+        await vi.waitFor(() => expect(subscribed).toHaveBeenCalled());
+        await adapterPubsub.publish(AGENT_STREAM_TOPIC(runId), {
+          runId,
+          type: 'chunk',
+          data: { type: 'text-delta', payload: { text: 'from adapter' } },
+        } as any);
+        await adapterPubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, type: 'finish', data: {} } as any);
+
+        expect((await collectWithDeadline(stream)).map((event: any) => event.payload?.text ?? event.type)).toEqual([
+          'from adapter',
+          'finish',
+        ]);
+      },
+    );
+
+    it.each([
+      ['native default', 'default', false],
+      ['native evented', 'evented', false],
+      ['durable wrapper', 'default', true],
+      ['evented wrapper', 'evented', true],
+    ] as const)('fences a CommonJS %s when observing from the ESM server', async (_, executionEngine, wrapped) => {
+      const require = createRequire(import.meta.url);
+      const { Agent: CommonJSAgent } = require('@mastra/core/agent') as typeof import('@mastra/core/agent');
+      const { createDurableAgent, createEventedAgent } =
+        require('@mastra/core/agent/durable') as typeof import('@mastra/core/agent/durable');
+      const id = 'cross-copy-agent';
+      const inner = new CommonJSAgent({
+        id,
+        name: id,
+        instructions: 'test-instructions',
+        model: { specificationVersion: 'v2' } as any,
+        ...(wrapped ? {} : { durable: { executionEngine } }),
+      });
+      const createWrapper = executionEngine === 'default' ? createDurableAgent : createEventedAgent;
+      const agent = wrapped ? createWrapper({ agent: inner }) : inner;
+      expect(agent).not.toBeInstanceOf(Agent);
+      mastra = new Mastra({ agents: { [id]: agent }, storage, logger: false });
+      vi.spyOn(agent, '__getRunOwner').mockReturnValue({});
+
+      const runId = crypto.randomUUID();
+      const pubsub = agent.__getStreamBus(true)!.pubsub;
+      const topic = AGENT_STREAM_TOPIC(runId);
+      await pubsub.publish(topic, {
+        runId,
+        type: AgentStreamEventTypes.OWNERSHIP_CLAIMED,
+        generation: 2,
+        data: {},
+      } as any);
+      await pubsub.publish(topic, { runId, type: 'finish', generation: 1, data: {} } as any);
+      await pubsub.publish(topic, {
+        runId,
+        type: 'chunk',
+        generation: 2,
+        data: { type: 'text-delta', payload: { text: 'recovered' } },
+      } as any);
+      await pubsub.publish(topic, { runId, type: 'finish', generation: 2, data: {} } as any);
+
+      const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+        mastra,
+        agentId: id,
+        runId,
+      } as any)) as ReadableStream<any>;
+      expect((await collectWithDeadline(stream)).map(event => event.payload?.text ?? event.type)).toEqual([
+        'recovered',
+        'finish',
+      ]);
+    });
+
     describe.each(['default', 'evented'] as const)('native Agent on the %s execution engine', executionEngine => {
       let nativeAgent: Agent<any, any, any, any>;
 
@@ -3369,6 +3519,40 @@ describe('Agent Routes Authorization', () => {
         await retainReplay(runId, 'user-a');
 
         await expect(observeAs(runId, 'user-b')).rejects.toMatchObject({ status: 403 });
+      });
+
+      it('drops what a superseded execution publishes after another execution claims the run', async () => {
+        const runId = 'native-observe-takeover-run';
+        // Stream-mechanics only: the run is tracked here with no owner.
+        vi.spyOn(nativeAgent, '__getRunOwner').mockReturnValue({});
+        const pubsub = nativeAgent.__getStreamBus(true)!.pubsub;
+        const publish = (event: Record<string, unknown>) =>
+          pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, data: {}, ...event } as any);
+        const text = (value: string, generation: number) =>
+          publish({ type: 'chunk', data: { type: 'text-delta', payload: { id: 't', text: value } }, generation });
+
+        await text('before takeover ', 1);
+        await publish({ type: AgentStreamEventTypes.OWNERSHIP_CLAIMED, generation: 2 });
+        await text('stale', 1);
+        await publish({ type: 'finish', data: {}, generation: 1 });
+        await text('recovered', 2);
+        await publish({ type: 'finish', data: {}, generation: 2 });
+
+        const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+          mastra,
+          agentId: 'native-durable-agent',
+          runId,
+          abortSignal: new AbortController().signal,
+        } as any)) as ReadableStream<any>;
+
+        const events: any[] = [];
+        for await (const event of stream as any) events.push(event);
+
+        expect(events.map(event => [event.type, event.payload?.text])).toEqual([
+          ['text-delta', 'before takeover '],
+          ['text-delta', 'recovered'],
+          ['finish', undefined],
+        ]);
       });
     });
 
@@ -3440,8 +3624,10 @@ describe('Agent Routes Authorization', () => {
           type: 'error',
           data: { delivery: 'reject', error: { name: 'Error', message: 'Run superseded' } },
         });
+        // Log indices are opaque clock-seeded cursors, not positions.
+        const [chunkEntry] = await mockDurableAgent.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0);
         const reader = (await observe(runId)).getReader();
-        expect((await reader.read()).value).toEqual({ ...chunk, index: 0 });
+        expect((await reader.read()).value).toEqual({ ...chunk, index: chunkEntry!.index });
         await expect(reader.read()).rejects.toThrow('Run superseded');
         reader.releaseLock();
       });
@@ -3449,12 +3635,16 @@ describe('Agent Routes Authorization', () => {
 
     it('closes after replay even when the offset is past the terminal event', async () => {
       const runId = 'observe-past-finish';
-      await mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+      const topic = AGENT_STREAM_TOPIC(runId);
+      await mockDurableAgent.pubsub.publish(topic, {
         runId,
         type: 'finish',
         data: {},
       } as any);
-      expect(await collectWithDeadline(await observe(runId, { offset: 100 }))).toEqual([]);
+      // Past the end means past the terminal entry's own index, which is an
+      // opaque clock-seeded cursor rather than a frame count.
+      const [finishEntry] = await mockDurableAgent.pubsub.getHistory(topic, 0);
+      expect(await collectWithDeadline(await observe(runId, { offset: finishEntry!.index! + 1 }))).toEqual([]);
     });
 
     it.each(['finish', 'abort'])('forwards and closes on a chunk-enveloped %s event', async type => {
@@ -3542,23 +3732,29 @@ describe('Agent Routes Authorization', () => {
       expect(await reader.read()).toEqual({ done: true, value: undefined });
     });
 
+    // `past` is how far beyond the terminal entry's index the client resumes.
+    // Just past it, the log still answers in one read; far past it, the first
+    // read finds nothing and the reader falls back to the whole log.
     it.each([
-      { offset: 3, reads: [2] },
-      { offset: 100, reads: [99, 0] },
-    ])(
-      'closes a finished legacy run resumed at offset $offset, reading history from $reads',
-      async ({ offset, reads }) => {
-        (mockDurableAgent as any).__subscribeToRunStream = undefined;
-        const runId = `observe-legacy-past-end-${offset}`;
-        const topic = AGENT_STREAM_TOPIC(runId);
-        await mockDurableAgent.pubsub.publish(topic, { runId, type: 'chunk', data: { type: 'text-delta' } } as any);
-        await mockDurableAgent.pubsub.publish(topic, { runId, type: 'chunk', data: { type: 'text-delta' } } as any);
-        await mockDurableAgent.pubsub.publish(topic, { runId, type: 'finish', data: {} } as any);
-        const getHistory = vi.spyOn(mockDurableAgent.pubsub, 'getHistory');
-        expect(await collectWithDeadline(await observe(runId, { offset }))).toEqual([]);
-        expect(getHistory.mock.calls.filter(([t]) => t === topic).map(([, from]) => from)).toEqual(reads);
-      },
-    );
+      { past: 1, label: 'just past the end', fallsBackToWholeLog: false },
+      { past: 98, label: 'far past the end', fallsBackToWholeLog: true },
+    ])('closes a finished legacy run resumed $label', async ({ past, fallsBackToWholeLog }) => {
+      (mockDurableAgent as any).__subscribeToRunStream = undefined;
+      const runId = `observe-legacy-past-end-${past}`;
+      const topic = AGENT_STREAM_TOPIC(runId);
+      await mockDurableAgent.pubsub.publish(topic, { runId, type: 'chunk', data: { type: 'text-delta' } } as any);
+      await mockDurableAgent.pubsub.publish(topic, { runId, type: 'chunk', data: { type: 'text-delta' } } as any);
+      await mockDurableAgent.pubsub.publish(topic, { runId, type: 'finish', data: {} } as any);
+      // Indices are opaque clock-seeded cursors, so derive the offset from the
+      // terminal entry's real index instead of a frame count.
+      const history = await mockDurableAgent.pubsub.getHistory(topic, 0);
+      const offset = history.at(-1)!.index! + past;
+      const getHistory = vi.spyOn(mockDurableAgent.pubsub, 'getHistory');
+      expect(await collectWithDeadline(await observe(runId, { offset }))).toEqual([]);
+      expect(getHistory.mock.calls.filter(([t]) => t === topic).map(([, from]) => from)).toEqual(
+        fallsBackToWholeLog ? [offset - 1, 0] : [offset - 1],
+      );
+    });
 
     it('closes a legacy run whose log ends in an error event, resumed past the end', async () => {
       (mockDurableAgent as any).__subscribeToRunStream = undefined;
@@ -3566,8 +3762,9 @@ describe('Agent Routes Authorization', () => {
       const topic = AGENT_STREAM_TOPIC(runId);
       await mockDurableAgent.pubsub.publish(topic, { runId, type: 'chunk', data: { type: 'text-delta' } } as any);
       await mockDurableAgent.pubsub.publish(topic, { runId, type: 'error', data: {} } as any);
+      const history = await mockDurableAgent.pubsub.getHistory(topic, 0);
       const unsubscribe = vi.spyOn(mockDurableAgent.pubsub, 'unsubscribe');
-      expect(await collectWithDeadline(await observe(runId, { offset: 2 }))).toEqual([]);
+      expect(await collectWithDeadline(await observe(runId, { offset: history.at(-1)!.index! + 1 }))).toEqual([]);
       expect(unsubscribe.mock.calls.filter(([t]) => t === topic)).toHaveLength(1);
     });
 
@@ -3591,11 +3788,14 @@ describe('Agent Routes Authorization', () => {
       const runId = 'observe-legacy-error-chunk';
       const topic = AGENT_STREAM_TOPIC(runId);
       await mockDurableAgent.pubsub.publish(topic, { runId, type: 'chunk', data: { type: 'error' } } as any);
-      const reader = (await observe(runId, { offset: 1 })).getReader();
+      // Resume just past the error chunk's own index; the finish published
+      // afterwards takes the next consecutive index in the same log.
+      const [errorChunk] = await mockDurableAgent.pubsub.getHistory(topic, 0);
+      const reader = (await observe(runId, { offset: errorChunk!.index! + 1 })).getReader();
       const next = reader.read();
       await new Promise(resolve => setTimeout(resolve, 50));
       await mockDurableAgent.pubsub.publish(topic, { runId, type: 'finish', data: {} } as any);
-      expect((await next).value).toMatchObject({ type: 'finish', index: 1 });
+      expect((await next).value).toMatchObject({ type: 'finish', index: errorChunk!.index! + 1 });
       expect(await reader.read()).toEqual({ done: true, value: undefined });
     });
 
@@ -3742,11 +3942,16 @@ describe('Agent Routes Authorization', () => {
       await text('recovered', current);
       await publish({ type: 'finish', data: {}, generation: current });
 
+      // Resume at the stale publisher's finish — the fourth entry — using its
+      // real index, since indices are opaque clock-seeded cursors.
+      const history = await mockDurableAgent.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0);
+      const staleFinishIndex = history[3]!.index!;
+
       const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
         mastra,
         agentId: 'test-durable-agent',
         runId,
-        offset: 3,
+        offset: staleFinishIndex,
         abortSignal: new AbortController().signal,
       } as any)) as ReadableStream<any>;
 
@@ -5049,6 +5254,221 @@ describe('Agent Routes Authorization', () => {
       ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
     });
 
+    describe('runId targets on a live run owned by another resource', () => {
+      const ownerResourceId = 'run-owner-b';
+      const ownerThreadId = 'run-owner-b-thread';
+      let releaseModel: () => void;
+      let prompts: string[];
+      let liveAgent: Agent;
+      let liveMastra: Mastra;
+      let run: { runId: string; cleanup?: () => void; consumeStream?: () => Promise<void> };
+
+      beforeEach(async () => {
+        prompts = [];
+        const modelGate = new Promise<void>(resolve => {
+          releaseModel = resolve;
+        });
+        const model = {
+          specificationVersion: 'v2' as const,
+          provider: 'test',
+          modelId: 'gated-model',
+          supportedUrls: {},
+          doStream: async ({ prompt }: any) => {
+            prompts.push(JSON.stringify(prompt));
+            return {
+              stream: new ReadableStream({
+                async start(controller) {
+                  controller.enqueue({ type: 'stream-start', warnings: [] });
+                  await modelGate;
+                  controller.enqueue({ type: 'text-start', id: 't' });
+                  controller.enqueue({ type: 'text-delta', id: 't', delta: 'done' });
+                  controller.enqueue({ type: 'text-end', id: 't' });
+                  controller.enqueue({
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: { inputTokens: 1, outputTokens: 1 },
+                  });
+                  controller.close();
+                },
+              }),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            };
+          },
+        };
+        const liveStorage = new InMemoryStore();
+        const liveMemory = new MockMemory({ storage: liveStorage });
+        liveAgent = new Agent({
+          id: 'live-agent',
+          name: 'live-agent',
+          instructions: 'test',
+          model: model as any,
+          memory: liveMemory,
+        });
+        liveMastra = new Mastra({ agents: { 'live-agent': liveAgent }, storage: liveStorage, logger: false });
+        await liveMemory.createThread({ threadId: ownerThreadId, resourceId: ownerResourceId, title: 'Owner B' });
+        await liveMemory.createThread({ threadId: 'attacker-a-thread', resourceId: 'attacker-a', title: 'Attacker A' });
+
+        run = (await liveAgent.stream('owner prompt', {
+          memory: { thread: ownerThreadId, resource: ownerResourceId },
+        })) as any;
+        await vi.waitFor(() =>
+          expect(liveAgent.listActiveThreadRuns().some(active => active.runId === run.runId)).toBe(true),
+        );
+      });
+
+      afterEach(async () => {
+        releaseModel();
+        await run.consumeStream?.().catch(() => {});
+        run.cleanup?.();
+      });
+
+      const attackerCalls = (runId: string, threadId?: string) => {
+        const base = {
+          mastra: liveMastra,
+          agentId: 'live-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'attacker-a' }),
+          runId,
+          ...(threadId ? { threadId } : {}),
+        };
+        return [
+          () =>
+            SEND_AGENT_SIGNAL_ROUTE.handler({ ...base, signal: { type: 'user-message', contents: 'injected' } } as any),
+          () => SEND_AGENT_MESSAGE_ROUTE.handler({ ...base, message: 'injected' } as any),
+          () => QUEUE_AGENT_MESSAGE_ROUTE.handler({ ...base, message: 'injected' } as any),
+          () =>
+            (QUEUE_AGENT_SIGNAL_ROUTE.handler as any)({
+              ...base,
+              signal: { type: 'reactive', tagName: 'note', contents: 'injected' },
+            }),
+        ];
+      };
+
+      it('rejects every send and queue route without delivering or queueing the input', async () => {
+        const spies = (['sendSignal', 'sendMessage', 'queueMessage', 'queueSignal'] as const).map(method =>
+          vi.spyOn(liveAgent, method),
+        );
+
+        for (const call of [...attackerCalls(run.runId), ...attackerCalls(run.runId, 'attacker-a-thread')]) {
+          await expect(call()).rejects.toThrow(
+            new HTTPException(403, { message: 'Access denied: workflow run belongs to a different resource' }),
+          );
+        }
+        for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+
+        releaseModel();
+        await run.consumeStream?.();
+        expect(prompts.join('\n')).not.toContain('injected');
+      });
+
+      it('answers an unknown runId the same way as another resource’s run', async () => {
+        for (const call of attackerCalls('no-such-run')) {
+          await expect(call()).rejects.toThrow(
+            new HTTPException(403, { message: 'Access denied: workflow run belongs to a different resource' }),
+          );
+        }
+      });
+
+      it('still accepts a runId-only signal from the run’s owner', async () => {
+        await expect(
+          SEND_AGENT_SIGNAL_ROUTE.handler({
+            mastra: liveMastra,
+            agentId: 'live-agent',
+            requestContext: createContextWithReservedKeys({ resourceId: ownerResourceId }),
+            runId: run.runId,
+            signal: { type: 'user-message', contents: 'owner follow-up' },
+          } as any),
+        ).resolves.toMatchObject({ accepted: true, runId: run.runId });
+      });
+
+      const withMapper = (fga: boolean) =>
+        vi.spyOn(liveMastra, 'getServer').mockReturnValue({
+          auth: { mapUserToResourceId: (user: { id: string }) => user.id },
+          ...(fga ? { fga: {} } : {}),
+        } as any);
+
+      it('rejects another resource’s run when a resource mapper is configured', async () => {
+        withMapper(false);
+        for (const call of attackerCalls(run.runId)) {
+          await expect(call()).rejects.toMatchObject({ status: 403 });
+        }
+      });
+
+      it('rejects an unscoped caller without FGA when a resource mapper is configured', async () => {
+        withMapper(false);
+        const spies = (['sendSignal', 'sendMessage', 'queueMessage', 'queueSignal'] as const).map(method =>
+          vi.spyOn(liveAgent, method),
+        );
+        const unscoped = {
+          mastra: liveMastra,
+          agentId: 'live-agent',
+          requestContext: new RequestContext(),
+          runId: run.runId,
+        };
+        await expect(
+          SEND_AGENT_SIGNAL_ROUTE.handler({
+            ...unscoped,
+            signal: { type: 'user-message', contents: 'injected' },
+          } as any),
+        ).rejects.toMatchObject({ status: 403 });
+        await expect(
+          SEND_AGENT_MESSAGE_ROUTE.handler({ ...unscoped, message: 'injected' } as any),
+        ).rejects.toMatchObject({
+          status: 403,
+        });
+        for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+
+        releaseModel();
+        await run.consumeStream?.();
+        expect(prompts.join('\n')).not.toContain('injected');
+      });
+
+      it('accepts an unscoped caller with FGA when a resource mapper is configured', async () => {
+        withMapper(true);
+        await expect(
+          SEND_AGENT_SIGNAL_ROUTE.handler({
+            mastra: liveMastra,
+            agentId: 'live-agent',
+            requestContext: new RequestContext(),
+            runId: run.runId,
+            signal: { type: 'user-message', contents: 'service follow-up' },
+          } as any),
+        ).resolves.toMatchObject({ accepted: true, runId: run.runId });
+      });
+
+      it('sends an untracked runId with the caller’s own threadId only to the caller’s thread', async () => {
+        const sendSignal = vi.spyOn(liveAgent, 'sendSignal').mockReturnValue({
+          accepted: Promise.resolve({ action: 'persist' }),
+        } as any);
+        await expect(
+          SEND_AGENT_SIGNAL_ROUTE.handler({
+            mastra: liveMastra,
+            agentId: 'live-agent',
+            requestContext: createContextWithReservedKeys({ resourceId: 'attacker-a' }),
+            runId: 'untracked-run',
+            threadId: 'attacker-a-thread',
+            signal: { type: 'user-message', contents: 'own thread' },
+          } as any),
+        ).resolves.toMatchObject({ accepted: true });
+        expect(sendSignal).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({ runId: 'untracked-run', resourceId: 'attacker-a', threadId: 'attacker-a-thread' }),
+        );
+      });
+
+      it('leaves privileged callers without a context resource unrestricted', async () => {
+        await expect(
+          SEND_AGENT_SIGNAL_ROUTE.handler({
+            mastra: liveMastra,
+            agentId: 'live-agent',
+            requestContext: new RequestContext(),
+            runId: run.runId,
+            signal: { type: 'user-message', contents: 'service follow-up' },
+          } as any),
+        ).resolves.toMatchObject({ accepted: true, runId: run.runId });
+      });
+    });
+
     it('should reject sending a signal to a thread owned by a different resource', async () => {
       await mockMemory.createThread({
         threadId: 'signal-thread-owned-by-b',
@@ -5754,12 +6174,17 @@ describe('plain Agent resumable streams', () => {
         type: AgentStreamEventTypes.FINISH,
         data: { output: {}, stepResult: { reason: 'stop' } },
       });
+      // Far past the terminal entry's own index, which is an opaque
+      // clock-seeded cursor rather than a frame count: the first read finds
+      // nothing and the reader falls back to the whole log.
+      const [finishEntry] = await bus.getHistory(AGENT_STREAM_TOPIC(runId), 0);
+      const offset = finishEntry!.index! + 98;
       const getHistory = vi.spyOn(bus, 'getHistory');
       const stream = await OBSERVE_AGENT_STREAM_ROUTE.handler({
         mastra,
         agentId: 'plain-agent',
         runId,
-        offset: 100,
+        offset,
         requestContext: new RequestContext([[MASTRA_RESOURCE_ID_KEY, 'user-a']]),
       } as any);
       const events: any[] = [];
@@ -5767,7 +6192,7 @@ describe('plain Agent resumable streams', () => {
       for await (const event of stream as any) events.push(event);
       expect(events).toEqual([]);
       expect(Date.now() - started).toBeLessThan(1_000);
-      expect(getHistory.mock.calls.map(([, from]) => from)).toEqual([99, 0]);
+      expect(getHistory.mock.calls.map(([, from]) => from)).toEqual([offset - 1, 0]);
     });
   });
 

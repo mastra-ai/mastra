@@ -1,0 +1,165 @@
+---
+title: "Reference: BuilderAgentDefaults"
+description: "Reference for BuilderAgentDefaults, the admin defaults applied to Agent Builder agents when the user doesn't set a value."
+---
+
+# BuilderAgentDefaults
+
+`BuilderAgentDefaults` describes the admin defaults for agents the Agent Builder produces. Pass it as `builder.configuration.agent`. Each default applies only when the end user doesn't provide that value. Values the user sets on creation take precedence.
+
+See [Configuration](/configuration) and [Memory](/memory) for worked examples.
+
+## Usage example
+
+```typescript title="src/mastra/index.ts"
+import { MastraEditor } from '@mastra/editor'
+
+new MastraEditor({
+  builder: {
+    enabled: true,
+    configuration: {
+      agent: {
+        memory: { observationalMemory: true },
+        workspace: {
+          type: 'inline',
+          config: {
+            name: 'builder-workspace',
+            filesystem: {
+              provider: 'local',
+              config: { basePath: './workspace' },
+            },
+          },
+        },
+        models: {
+          allowed: [
+            { provider: 'openai', modelId: '__AI_SDK_OPENAI_MODEL_BASE__' },
+            { provider: 'anthropic', modelId: '__AI_SDK_ANTHROPIC_MODEL_SONNET__' },
+          ],
+        },
+        tools: { allowed: ['weather-info'] },
+        agents: { allowed: ['weather-agent'] },
+        workflows: { allowed: ['greet-workflow'] },
+      },
+    },
+  },
+})
+```
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'memory',
+    type: 'SerializedMemoryConfig',
+    description:
+      'Default memory configuration for new agents. Pass `{ observationalMemory: true }` to enable long-lived fact extraction. Requires `Mastra.storage`. See the SerializedMemoryConfig reference for the full schema.',
+    isOptional: true,
+  },
+  {
+    name: 'workspace',
+    type: 'StorageWorkspaceRef',
+    description:
+      "Default workspace reference for new agents. Pass `{ type: 'inline', config }` to embed a snapshot, or `{ type: 'id', workspaceId }` to point at a workspace registered on `Mastra.workspace`. See the StorageWorkspaceRef reference for both variants.",
+    isOptional: true,
+  },
+  {
+    name: 'browser',
+    type: 'StorageBrowserRef',
+    description:
+      "Default browser configuration for new agents. Pass `{ type: 'inline', config: { provider } }` to attach a registered browser provider. See the StorageBrowserRef reference for the full schema.",
+    isOptional: true,
+  },
+  {
+    name: 'models',
+    type: '{ allowed?: ProviderModelEntry[]; default?: DefaultModelEntry }',
+    description:
+      'Model allowlist and default applied to every Builder-created agent. See the BuilderModels reference for the full schema and validation rules.',
+    isOptional: true,
+    properties: [
+      {
+        type: '{ allowed?: ProviderModelEntry[]; default?: DefaultModelEntry }',
+        parameters: [
+          {
+            name: 'allowed',
+            type: 'ProviderModelEntry[]',
+            description:
+              'Allowlist of providers and models. Omit to allow every registered model. ProviderModelEntry is a discriminated union (known providers vs. custom).',
+            isOptional: true,
+          },
+          {
+            name: 'default',
+            type: 'DefaultModelEntry',
+            description:
+              "Pre-selected model on new-agent create. Required when the model picker is hidden. DefaultModelEntry requires `provider` and `modelId`. Set `kind: 'custom'` for a provider that isn't in the generated registry; omit `kind` for known providers.",
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'tools',
+    type: '{ allowed?: string[] }',
+    description:
+      'Allowlist of tool IDs visible in the Builder tools picker. Unknown IDs are dropped and surfaced as warnings.',
+    isOptional: true,
+    properties: [
+      {
+        type: '{ allowed?: string[] }',
+        parameters: [
+          {
+            name: 'allowed',
+            type: 'string[]',
+            description:
+              'Allowlist of `tool.id` values. Omit for unrestricted, pass `[]` to lock the picker down, pass `[...ids]` to restrict to the listed tools.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'agents',
+    type: '{ allowed?: string[] }',
+    description:
+      'Allowlist of agent IDs visible in the Builder sub-agents picker. Unknown IDs are dropped and surfaced as warnings.',
+    isOptional: true,
+    properties: [
+      {
+        type: '{ allowed?: string[] }',
+        parameters: [
+          {
+            name: 'allowed',
+            type: 'string[]',
+            description:
+              'Allowlist of `Agent.id` values. Omit for unrestricted, pass `[]` to lock the picker down, pass `[...ids]` to restrict to the listed agents.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'workflows',
+    type: '{ allowed?: string[] }',
+    description:
+      'Allowlist of workflow IDs visible in the Builder workflows picker. Unknown IDs are dropped and surfaced as warnings.',
+    isOptional: true,
+    properties: [
+      {
+        type: '{ allowed?: string[] }',
+        parameters: [
+          {
+            name: 'allowed',
+            type: 'string[]',
+            description:
+              'Allowlist of `workflow.id` values. Omit for unrestricted, pass `[]` to lock the picker down, pass `[...ids]` to restrict to the listed workflows.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>

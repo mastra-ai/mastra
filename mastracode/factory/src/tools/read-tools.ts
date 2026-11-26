@@ -25,9 +25,9 @@ import type {
   Card,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
-import { cardFacts } from '../work-items/card-facts.js';
 import { workItemNumber } from '../work-items/card-number.js';
 import { cardCarries, isCardFor, isSourceReference } from '../work-items/card-reference.js';
+import { closingLinksIn } from '../work-items/closing-pull-requests.js';
 import { matchesSearch, searchTerms } from '../work-items/search-terms.js';
 import { sessionActivity } from './deliver.js';
 import type { FactorySessionActivity } from './deliver.js';
@@ -244,7 +244,13 @@ const listInputSchema = z
       .describe(
         'Only items in this stage, by its key as items list it (e.g. "intake" or "planning"); a board\'s review stage key can differ from its name.',
       ),
-    board: z.string().min(1).max(64).optional().describe('Only items on this board, by its key, e.g. "work".'),
+    board: z
+      .string()
+      .trim()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe('Only items on this board: its id, e.g. "work", or its displayed name.'),
     role: z.string().min(1).max(64).optional().describe('Only items that have a session for this role.'),
     active: z.boolean().optional().describe('true: only items with an agent working now; false: only idle items.'),
     requestedBy: z.literal('me').optional().describe('"me": only items you filed.'),
@@ -256,22 +262,37 @@ const listInputSchema = z
   })
   .strict();
 
+/** A board id, or the displayed name of exactly one installed board, as the board's id. */
+export function resolveBoardRef(boards: BoardRegistry, ref: string): string {
+  if (boards.has(ref)) return ref;
+  const wanted = ref.toLowerCase();
+  const named = [...boards].filter(([, board]) => board.name.trim().toLowerCase() === wanted);
+  if (named.length > 1) {
+    const candidates = named.map(([id, board]) => `${id} (${board.name})`).join(', ');
+    throw new Error(`Board "${ref}" matches more than one board; use its id instead: ${candidates}.`);
+  }
+  // No installed board by that id or name: match the stored key as given, like before.
+  return named[0]?.[0] ?? ref;
+}
+
 export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryReadToolDependencies): IntegrationTools {
   const project = { orgId: scope.orgId, factoryProjectId: scope.factoryProjectId };
   return {
     factory_list_work_items: createTool({
       id: 'factory_list_work_items',
       description:
-        "List this Factory's work items, newest activity first, with counts per stage for the whole Factory. Filter by text or #number, stage, board, role, whether an agent is working on it, items you filed, or items this session follows. Check here for an existing item before filing a new one.",
+        "List this Factory's work items, newest activity first, with counts per stage for the whole Factory. Filter by text or #number, stage, board (id or displayed name; the result lists each board's id and name), role, whether an agent is working on it, items you filed, or items this session follows. Check here for an existing item before filing a new one.",
       inputSchema: listInputSchema,
       execute: async input => {
-        const [items, bindings, followed] = await Promise.all([
+        const [items, bindings, followed, boards] = await Promise.all([
           deps.workItems.listShared(project),
           deps.workItems.listRunBindings(scope.orgId, scope.factoryProjectId),
           input.subscribed === undefined
             ? undefined
             : deps.workItems.listSessionSubscriptions({ ...project, sessionId: scope.sessionId }),
+          toBoardSource(deps.boards).load(project),
         ]);
+        const board = input.board === undefined ? undefined : resolveBoardRef(boards, input.board);
         const followedIds = new Set(followed?.map(subscription => subscription.workItemId));
         const byStage: Record<string, number> = {};
         for (const item of items) {
@@ -280,11 +301,12 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
         }
         // The board's search, with what it computed of each card.
         const terms = searchTerms(input.query ?? '');
+        const closing = closingLinksIn(items);
         const matches = items
           .filter(item => {
-            if (!matchesSearch(cardFacts(item).search, terms)) return false;
+            if (!matchesSearch(closing.search(item), terms)) return false;
             if (input.stage && !item.stages.includes(input.stage)) return false;
-            if (input.board && boardForWorkItem(item) !== input.board) return false;
+            if (board && boardForWorkItem(item) !== board) return false;
             if (input.role && !item.sessions[input.role]) return false;
             if (input.active !== undefined && (activeWorker(bindings, item.id) !== null) !== input.active) return false;
             if (input.requestedBy === 'me' && item.createdBy !== scope.userId) return false;
@@ -297,6 +319,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
           counts: { total: items.length, byStage },
           items: matches.slice(0, limit).map(item => summarizeItem(item, bindings)),
           truncated: matches.length > limit,
+          boards: [...boards].map(([id, installed]) => ({ id, name: installed.name })),
         };
       },
     }),

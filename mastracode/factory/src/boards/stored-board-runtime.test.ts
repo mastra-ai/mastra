@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { Mastra } from '@mastra/core/mastra';
 import type { FactoryStorage } from '@mastra/core/storage';
-import { MastraSandbox } from '@mastra/core/workspace';
+import { LocalFilesystem, MastraSandbox } from '@mastra/core/workspace';
 import type { ProviderStatus } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage, PostgresStore } from '@mastra/pg';
@@ -20,6 +20,7 @@ import { GithubRules } from '../integrations/github/rules.js';
 import { mountApiRoutes } from '../routes/test-utils.js';
 import { FactoryDecisionDispatcher } from '../rules/dispatcher.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
+import { repositoryDirectoryName } from '../sandbox/workdir.js';
 import { createFactorySecretEncryption } from '../secret-encryption.js';
 import type { AuditStorage } from '../storage/domains/audit/base.js';
 import type { StoredBoardInput, StoredBoardsStorage } from '../storage/domains/boards/base.js';
@@ -30,6 +31,7 @@ import type { MemorySettingsStorage } from '../storage/domains/memory-settings/b
 import { factoryProjectSettingsUserId } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { FACTORY_PLANS_DIR } from '../workspace.js';
 import { compileBoardDefinition } from './define-board.js';
 import { ProjectBoardCache } from './project-boards.js';
 import { createBoardRegistry } from './registry.js';
@@ -40,18 +42,31 @@ import { workBoard } from './work.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
 
+/**
+ * A local sandbox over a real temp directory. `workingDirectory` lets Factory
+ * derive the session's checkout synchronously (as it does for the local
+ * sandboxes a deploy's callback hands it), and the native filesystem makes the
+ * session's file operations touch real files — a run that submits a plan reads
+ * the plan back through the workspace filesystem, so the file it names has to
+ * exist.
+ */
 class TestSandbox extends MastraSandbox {
   readonly id = randomUUID();
   readonly name = 'Stored boards test sandbox';
-  readonly provider = 'test';
+  readonly provider = 'local';
   status: ProviderStatus = 'pending';
+  /** The home directory every session sandbox of one boot shares. */
+  readonly home: string;
+  readonly filesystem: LocalFilesystem;
 
-  constructor() {
-    super({ name: 'Stored boards test sandbox' });
+  constructor(home: string) {
+    super({ name: 'Stored boards test sandbox', workingDirectory: home });
+    this.home = home;
+    this.filesystem = new LocalFilesystem({ basePath: home });
   }
 
   async executeCommand(command: string) {
-    return { exitCode: 0, stdout: command === 'pwd' ? '/home/test\n' : '', stderr: '' };
+    return { exitCode: 0, stdout: command === 'pwd' ? `${this.home}\n` : '', stderr: '' };
   }
 }
 
@@ -206,6 +221,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
     /** Boots one replica: a real `MastraFactory` with its API mounted on Hono. */
     async function boot(newStorage: () => FactoryStorage, orgId: string, options: { boards?: InstalledBoard[] } = {}) {
       const storage = newStorage();
+      // Every session sandbox of this boot shares one home directory, so a file
+      // seeded for it is where the session's own workspace filesystem reads.
+      const sandboxHome = mkdtempSync(join(tmpdir(), 'factory-board-sandbox-'));
+      onTestFinished(() => rmSync(sandboxHome, { recursive: true, force: true }));
       const github = new GithubIntegration({
         appId: '123',
         privateKey: 'test-key',
@@ -217,7 +236,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         storage,
         auth: null,
         integrations: [github],
-        sandbox: () => new TestSandbox(),
+        sandbox: () => new TestSandbox(sandboxHome),
         stateSecret: 'stored-boards-runtime-test-state-secret',
         secretEncryption: createFactorySecretEncryption({ primary: { id: 'test', key: Buffer.alloc(32, 7) } }),
         ...options,
@@ -250,6 +269,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         storage,
         github,
         send,
+        sandboxHome,
         boards: storage.getDomain<StoredBoardsStorage>('boards'),
         workItems: storage.getDomain<WorkItemsStorage>('work-items'),
       };
@@ -481,16 +501,30 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       const TRIAGE_NOTE = 'Shipyard: check the changelog.';
       const NEW_DEFAULT = 'A later release: triage by the new default.';
       const PLAN_NOTE = 'Shipyard: keep plans short.';
+      const PLAN_PATH = `${FACTORY_PLANS_DIR}/plan.md`;
+      const PLAN_MARKDOWN = '# Keep plans short\n\nThe changelog note is all the plan needs.\n';
       const EFFORT_LOW = {
         operator: 'AND',
         conditions: [{ field: 'item.labels', operator: 'contains', value: 'effort:low' }],
       };
 
       /**
+       * Seed the plan the agent submits. `submit_plan` reads the file through the session's
+       * workspace filesystem, so a run that submits a plan has to be able to read it back:
+       * the sandbox home stands in for the host's sandbox, its checkout is the session's.
+       */
+      function seedPlan(replica: Awaited<ReturnType<typeof boot>>, repoFullName: string) {
+        const target = join(replica.sandboxHome, repositoryDirectoryName(repoFullName), PLAN_PATH);
+        mkdirSync(dirname(target), { recursive: true });
+        writeFileSync(target, PLAN_MARKDOWN);
+      }
+
+      /**
        * The agent, answering only what was just asked of it (the messages after its last turn):
-       * started on the plan skill with Shipyard's instructions, it submits a plan; once the plan
-       * is approved, it moves the card to Building. Anything else gets a text answer, which ends
-       * the run.
+       * started on the plan skill with Shipyard's instructions, it submits a plan; the approved plan
+       * is Planning's outcome, so Factory moves the card to Building once the run ends. Started on
+       * the build skill, it reports Building's `done` outcome. It never moves the card itself.
+       * Anything else gets a text answer, which ends the run.
        */
       function shipyardAgent(input: string): ToolCall | undefined {
         const items = JSON.parse(input) as { type?: string; role?: string; output?: string }[];
@@ -499,14 +533,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         );
         const asked = JSON.stringify(items.slice(lastTurn + 1));
         if (asked.includes('<skill name=\\"factory-plan\\">') && asked.includes(PLAN_NOTE)) {
-          return { name: 'submit_plan', args: { path: '.mastracode/plans/plan.md' } };
+          return { name: 'submit_plan', args: { path: PLAN_PATH } };
         }
-        if (items[lastTurn]?.type === 'function_call_output' && items[lastTurn].output?.includes('Plan approved.')) {
-          const revision = Number([...input.matchAll(/expectedRevision (\d+)/g)].at(-1)?.[1]);
-          return {
-            name: 'factory_transition_work_item',
-            args: { stage: 'execute', expectedRevision: revision, rationale: 'Plan approved.' },
-          };
+        if (asked.includes('<skill name=\\"factory-build\\">') && asked.includes('Quick fix')) {
+          return { name: 'factory_report_outcome', args: { outcome: 'done', reason: 'Nothing left to change.' } };
         }
         return undefined;
       }
@@ -673,6 +703,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         const replica = await boot(database(), orgId);
         const projectId = await runnableProject(replica, orgId);
         await configureShipyard(replica, projectId);
+        // The plan the auto-approved submission names has to be readable when the plan run submits it.
+        seedPlan(replica, 'acme/shipyard');
 
         const decisionsFor = async (card: { id: string }) =>
           await replica.workItems.listDeferredDecisions(orgId, projectId, { workItemId: card.id });
@@ -702,8 +734,14 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         // card, and its plan is approved for it: the card moves on to Building.
         await ruleMoves(replica, orgId, projectId, quick, 'planning');
         await ruleMoves(replica, orgId, projectId, large, 'planning');
-        await vi.waitFor(async () => expect(await stagesOf(quick)).toEqual(['execute']), { timeout: 30_000 });
+        // Building's run reports `done`, and Factory moves the card there once that run ends. No session
+        // was offered, or called, a tool that moves the card: every move came from a reported outcome.
+        await vi.waitFor(async () => expect(await stagesOf(quick)).toEqual(['done']), { timeout: 30_000 });
         expect(runsOf(requests, 'factory-plan', 'Quick fix')[0]).toContain(PLAN_NOTE);
+        expect(runsOf(requests, 'factory-build', 'Quick fix')).not.toEqual([]);
+        const history = (await replica.workItems.get({ orgId, id: quick.id }))!.stageHistory.map(entry => entry.stage);
+        expect(history.slice(-3)).toEqual(['planning', 'execute', 'done']);
+        expect(requests.some(body => body.includes('factory_transition_work_item'))).toBe(false);
 
         // The unlabelled card's plan run waits for a person.
         expect(await stagesOf(large)).toEqual(['planning']);

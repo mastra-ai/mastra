@@ -7,7 +7,7 @@ description: "Browse DevPass (LLM Gateway) model IDs, capabilities, context wind
 
 # <img src="https://models.dev/logos/llmgateway.svg" alt="DevPass (LLM Gateway) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />DevPass (LLM Gateway)
 
-Access 218 DevPass (LLM Gateway) models through Mastra's model router. Authentication is handled automatically using the `LLMGATEWAY_API_KEY` environment variable.
+Access 219 DevPass (LLM Gateway) models through Mastra's model router. Authentication is handled automatically using the `LLMGATEWAY_API_KEY` environment variable.
 
 Learn more in the [DevPass (LLM Gateway) documentation](https://llmgateway.io/docs).
 
@@ -1540,7 +1540,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
+    "contextWindow": 1048576,
     "maxOutput": 65536,
     "inputCost": 0.07,
     "outputCost": 0.281
@@ -1553,9 +1553,21 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 64000,
+    "maxOutput": 65536,
     "inputCost": 0.834,
     "outputCost": 2.501
+  },
+  {
+    "model": "llmgateway/inkling-2-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.075,
+    "outputCost": 0.3
   },
   {
     "model": "llmgateway/kimi-k2",
@@ -2453,7 +2465,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 983616,
-    "maxOutput": 64000,
+    "maxOutput": 131072,
     "inputCost": 0.4,
     "outputCost": 1.6
   },
@@ -2645,7 +2657,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1000000,
-    "maxOutput": 1000000,
+    "maxOutput": 65536,
     "inputCost": 1,
     "outputCost": 2.7
   }

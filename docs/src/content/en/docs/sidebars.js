@@ -263,6 +263,11 @@ const sidebars = {
               label: 'Load your content',
             },
             {
+              type: 'doc',
+              id: 'knowledge/importers',
+              label: 'Importers',
+            },
+            {
               type: 'link',
               label: 'Studio',
               href: '/docs/studio/knowledge',
@@ -934,6 +939,7 @@ const sidebars = {
       collapsible: false,
       className: 'sidebar-group-name',
       items: [
+        { type: 'doc', id: 'mastra-platform/mcp', label: 'MCP server', customProps: { tags: ['new'] } },
         { type: 'doc', id: 'mastra-platform/team-members', label: 'Team members' },
         { type: 'doc', id: 'mastra-platform/access-tokens', label: 'Access tokens' },
       ],

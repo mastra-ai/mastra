@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "id": "retail-pos-history",
+  "version": "2026-11-20.1",
+  "pages": [
+    {
+      "key": "wifi-case",
+      "path": "cases/wifi-network",
+      "title": "Fictional wifi network",
+      "file": "wifi-case.md",
+      "scope": {
+        "kind": "customer",
+        "profile": "retailops-store-42"
+      },
+      "kind": "case",
+      "source": {
+        "kind": "fictional service record",
+        "license": "Apache-2.0"
+      },
+      "record": {
+        "topicTags": ["connectivity"],
+        "observedOn": "2026-11-03",
+        "state": "approved",
+        "summary": "Wi-Fi restored after selecting the intended network.",
+        "applicability": "Wi-Fi wrong-network selection only."
+      },
+      "notes": [
+        {
+          "key": "follow-up",
+          "text": "Fictional follow-up: the intended Wi-Fi connection remained available during the next opening check. RETAILOPS_STORE42_NOTE_AMBER.",
+          "author": "Alex",
+          "date": "2026-11-04"
+        }
+      ]
+    },
+    {
+      "key": "printer-case",
+      "path": "cases/printer-network",
+      "title": "Fictional printer network",
+      "file": "printer-case.md",
+      "scope": {
+        "kind": "customer",
+        "profile": "retailops-store-42"
+      },
+      "kind": "case",
+      "source": {
+        "kind": "fictional service record",
+        "license": "Apache-2.0"
+      },
+      "record": {
+        "topicTags": ["printing", "connectivity"],
+        "observedOn": "2026-11-09",
+        "state": "approved",
+        "summary": "Receipt printing restored after resolving the observed network mismatch.",
+        "applicability": "Network printers with a confirmed network mismatch only."
+      }
+    },
+    {
+      "key": "open-case",
+      "path": "cases/intermittent-open",
+      "title": "Fictional intermittent open",
+      "file": "open-case.md",
+      "scope": {
+        "kind": "customer",
+        "profile": "retailops-store-42"
+      },
+      "kind": "case",
+      "source": {
+        "kind": "fictional service record",
+        "license": "Apache-2.0"
+      },
+      "record": {
+        "topicTags": ["connectivity"],
+        "observedOn": "2026-11-17",
+        "state": "open",
+        "summary": "Intermittent Ethernet issue remains unresolved; indicator and queue checks are outstanding.",
+        "applicability": "Open observation, no verified resolution."
+      }
+    },
+    {
+      "key": "store73-case",
+      "path": "cases/hub-cable",
+      "title": "Fictional hub cable",
+      "file": "store73-case.md",
+      "scope": {
+        "kind": "customer",
+        "profile": "retailops-store-73"
+      },
+      "kind": "case",
+      "source": {
+        "kind": "fictional service record",
+        "license": "Apache-2.0"
+      },
+      "record": {
+        "topicTags": ["connectivity"],
+        "observedOn": "2026-11-11",
+        "state": "approved",
+        "summary": "Ethernet restored after reseating an observed loose Hub cable.",
+        "applicability": "Confirmed loose Hub cable only."
+      },
+      "notes": [
+        {
+          "key": "follow-up",
+          "text": "Fictional follow-up: Hub cable remained seated at the next shift check. RETAILOPS_STORE73_NOTE_SILVER.",
+          "author": "Riley",
+          "date": "2026-11-12"
+        }
+      ]
+    },
+    {
+      "key": "field-case",
+      "path": "cases/wifi-selection",
+      "title": "Fictional wifi selection",
+      "file": "field-case.md",
+      "scope": {
+        "kind": "customer",
+        "profile": "fieldretail-store-42"
+      },
+      "kind": "case",
+      "source": {
+        "kind": "fictional service record",
+        "license": "Apache-2.0"
+      },
+      "record": {
+        "topicTags": ["connectivity"],
+        "observedOn": "2026-11-12",
+        "state": "approved",
+        "summary": "Wi-Fi restored after correcting observed network selection.",
+        "applicability": "Confirmed wrong-network selection only."
+      },
+      "notes": [
+        {
+          "key": "follow-up",
+          "text": "Fictional follow-up: the intended network was still selected at the next check. FIELDRETAIL_STORE42_NOTE_TEAL.",
+          "author": "Sam",
+          "date": "2026-11-13"
+        }
+      ]
+    }
+  ]
+}

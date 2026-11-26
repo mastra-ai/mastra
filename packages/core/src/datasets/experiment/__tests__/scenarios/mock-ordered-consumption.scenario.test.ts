@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TOOL_MOCK_EXHAUSTED } from '../../tool-mocks';
-import { recordingTool, runToolMockScenario } from './scenario-helpers';
+import { EXPERIMENT_PATHS, recordingTool, runToolMockScenario } from './scenario-helpers';
 
 /**
  * BDD scenario: repeated (toolName, args) mocks are consumed in declared order.
@@ -13,11 +13,12 @@ import { recordingTool, runToolMockScenario } from './scenario-helpers';
  * This proves ordered consumption end-to-end through the real loop with
  * `toolCallConcurrency: 1` (which the executor forces when mocks are present).
  */
-describe('Tool mock scenario: ordered consumption of repeated mocks', () => {
+describe.each(EXPERIMENT_PATHS)('Tool mock scenario: ordered consumption of repeated mocks (%s)', path => {
   it('serves repeated same-args mocks in declared order across calls', async () => {
     const liveLog: string[] = [];
 
     const { item } = await runToolMockScenario({
+      path,
       tools: { appendLine: recordingTool('appendLine', liveLog) },
       turns: [
         { toolCalls: [{ id: 'c1', toolName: 'appendLine', args: { file: 'log.txt' } }] },
@@ -43,6 +44,7 @@ describe('Tool mock scenario: ordered consumption of repeated mocks', () => {
     const liveLog: string[] = [];
 
     const { item } = await runToolMockScenario({
+      path,
       tools: { appendLine: recordingTool('appendLine', liveLog) },
       turns: [{ toolCalls: [{ id: 'c1', toolName: 'appendLine', args: { file: 'log.txt' } }] }, { text: 'done' }],
       toolMocks: [
@@ -62,6 +64,7 @@ describe('Tool mock scenario: ordered consumption of repeated mocks', () => {
     const liveLog: string[] = [];
 
     const { item } = await runToolMockScenario({
+      path,
       tools: {
         appendLine: recordingTool('appendLine', liveLog),
         lookupOrder: recordingTool('lookupOrder', liveLog),
@@ -99,6 +102,7 @@ describe('Tool mock scenario: ordered consumption of repeated mocks', () => {
     const liveLog: string[] = [];
 
     const { item } = await runToolMockScenario({
+      path,
       tools: {
         writeFile: recordingTool('writeFile', liveLog),
         sendEmail: recordingTool('sendEmail', liveLog),
@@ -137,6 +141,7 @@ describe('Tool mock scenario: ordered consumption of repeated mocks', () => {
     const liveLog: string[] = [];
 
     const { item } = await runToolMockScenario({
+      path,
       tools: { appendLine: recordingTool('appendLine', liveLog) },
       // Two mocks provided, but the tool is called three times with the same args.
       turns: [

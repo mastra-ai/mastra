@@ -26,16 +26,22 @@
     "z-ai/glm-5.3-flash"
   ],
   "reasoning": {
-    "openai/gpt-6-luna": [
+    "deepseek/deepseek-v4-pro-0813": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
-    "openai/gpt-5.5": [
+    "deepseek/deepseek-v4-flash": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
+        "values": ["low", "high", "max"]
       }
     ],
     "minimax/minimax-m3.1-flash": [
@@ -44,10 +50,10 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "qwen/qwen3.8-27b": [
+    "google/gemini-3.8-flash": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "z-ai/glm-5.3-flash": [
@@ -62,28 +68,16 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "qwen/qwen3.8-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
     "x-ai/grok-4.7": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "deepseek/deepseek-v4-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek/deepseek-v4-pro-0813": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
     "anthropic/claude-haiku-5.5": [
@@ -101,10 +95,16 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "google/gemini-3.8-flash": [
+    "openai/gpt-6-luna": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "openai/gpt-5.5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ]
   }

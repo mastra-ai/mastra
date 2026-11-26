@@ -5,6 +5,7 @@ import { createRunScopeKey } from '../../mastra/run-scope';
 import { unwrapMastraTracingProxy } from '../../observability/context';
 import { RequestContext } from '../../request-context';
 import { matchesRunFence } from '../../storage/run-fencing';
+import { isWorkflowStepConflictError } from '../../storage/workflow-step-guard';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { DURABLE_STOP_WHEN_ERROR_ID, DurableStepIds } from './constants';
 import {
@@ -16,6 +17,14 @@ import {
   getExecutionClaimScope,
 } from './execution-fence';
 import { runInRunFenceScope } from './run-fence-scope';
+import { getRunRegistryEntry } from './run-registry';
+import {
+  carrySegmentSpans,
+  claimSegmentEnd,
+  endFailedSegmentSpans,
+  segmentEndedBySuspension,
+  segmentSpanData,
+} from './segment-spans';
 import { emitErrorEvent } from './stream-adapter';
 
 type Participant = { fence: Promise<ExecutionFence | undefined>; stop: (interrupt?: boolean) => Promise<void> };
@@ -126,6 +135,7 @@ export async function participateInDurableExecution<T>(
     const fence = await participant.fence;
     if (!fence) return await execute();
     await fence.verify();
+    await carryEndedSegment(mastra, event);
     let parentRunId = runId;
     for (const nestedRunId of nestedRunIds) {
       fence.coverNestedRun(parentRunId, nestedRunId);
@@ -186,6 +196,53 @@ export async function retrySettledDurableExecution(mastra: Mastra, event: Event)
   return true;
 }
 
+/**
+ * When a suspension beside the failed tool call ends the segment's spans, tell this failure and the run's own, through
+ * the request context they inherit. Called before the delivery passes that context on.
+ */
+export async function carryEndedSegment(mastra: Mastra, event: Event): Promise<void> {
+  const { workflowId, stepResults, requestContext } = event.data ?? {};
+  const state = stepResults?.input;
+  const calls = stepResults?.[DurableStepIds.TOOL_CALL];
+  if (event.type !== 'workflow.fail' || workflowId !== DurableStepIds.AGENTIC_EXECUTION || !state?.runId) return;
+  if (calls?.status !== 'failed' || (Array.isArray(calls.payload) && !calls.payload[0]?.sideBySide)) return;
+  const context = new RequestContext<unknown>(Object.entries(requestContext ?? {}));
+  const segment = segmentSpanData(context, state.runId, state);
+  if (segment.carried) return;
+  const { runId, iterationCount } = state;
+  const claimed = await claimSegmentEnd({ mastra, requestContext: context, runId, iterationCount, outcome: 'fail' });
+  // Without a claim, the failed iteration shows a suspension that was stored before it.
+  if (claimed ?? !segmentEndedBySuspension(segment, stepResults)) return;
+  event.data.requestContext = { ...requestContext };
+  carrySegmentSpans(event.data.requestContext, runId, null);
+}
+
+function endFailedSpans(mastra: Mastra, event: Event): void {
+  const { stepResults, prevResult, requestContext } = event.data ?? {};
+  const runId = stepResults?.input?.runId;
+  // An execution that lost the run leaves its spans to the owner that took it over.
+  if (!runId || isExecutionFenceError(prevResult?.error)) return;
+  endFailedSegmentSpans({
+    mastra,
+    requestContext: new RequestContext<unknown>(Object.entries(requestContext ?? {})),
+    runId,
+    state: stepResults.input,
+    steps: stepResults,
+    error: getErrorFromUnknown(prevResult?.error ?? 'Workflow execution failed'),
+    live: getRunRegistryEntry(runId, mastra),
+    // The process that resumes or recovers a run settles that segment itself.
+    firstPairOnly: true,
+  });
+}
+
+/** End the MODEL_STEP of a failed iteration. Only the iteration's own event still carries it. */
+export function endFailedIteration(mastra: Mastra, event: Event): void {
+  if (event.type !== 'workflow.fail' || event.data?.workflowId !== DurableStepIds.AGENTIC_EXECUTION) return;
+  // A late step of a run that already failed: the failure itself ends the spans.
+  if (isWorkflowStepConflictError(event.data.prevResult?.error)) return;
+  endFailedSpans(mastra, event);
+}
+
 /** Called only after the root terminal handler has persisted and published its outcome. */
 export async function settleEventedDurableExecution(mastra: Mastra, event: Event): Promise<void> {
   if (!isRootTerminal(event)) return;
@@ -225,6 +282,8 @@ export async function settleEventedDurableExecution(mastra: Mastra, event: Event
   }
   // Keep the released generation as the retry barrier before dropping the thread token.
   await ExecutionFence.releaseSharedClaim(mastra, event.runId, claim, 'settled');
+  // After that barrier, so a retry of this delivery cannot end the run's spans twice.
+  if (event.type === 'workflow.fail' && !released) endFailedSpans(mastra, event);
   if (claim.threadId && event.type !== 'workflow.suspend') {
     await agentThreadStreamRuntime.releaseDurableThreadLease(
       mastra.pubsub,

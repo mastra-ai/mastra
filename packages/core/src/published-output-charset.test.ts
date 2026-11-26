@@ -2,10 +2,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { findNonLatin1InCode } from '@internal/types-builder/check-ascii-output';
 import { Rolldown } from 'tsdown';
 import { afterAll, describe, expect, it } from 'vitest';
-
-import { findNonLatin1InCode } from '../scripts/check-ascii-output';
 
 // A Worker bundling core holds its script source in the V8 heap. V8 stores it at one byte per
 // character only if every character is Latin-1; a single wider one doubles the cost (31 -> 24 MiB

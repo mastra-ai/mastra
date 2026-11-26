@@ -12,12 +12,7 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google-v5';
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { createStep, createWorkflow } from '../../../../workflows';
-import {
-  createSharedAgent,
-  describeForAllEngines,
-  isDurableEngineVariant,
-  useLoopScenarioAimock,
-} from '../aimock-scenario';
+import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
 
 function summarizeWorkflow() {
   const step = createStep({
@@ -56,7 +51,7 @@ describeForAllEngines('AIMock loop scenario: structured output with toolChoice n
   async function run(options: Record<string, unknown>) {
     const { llm, agent } = await createGeminiAgent();
     const result = await agent.stream('Return a short structured summary about exercise.', options);
-    const output = isDurableEngineVariant(engine) ? result.output : result;
+    const output = result.output ?? result;
     await output.consumeStream();
     return { llm, output };
   }

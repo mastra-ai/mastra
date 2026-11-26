@@ -44,12 +44,13 @@ export interface ProviderDocs {
   emit?: boolean;
   /** Security concern or destructive consequence shown as a warning in the provider's page or partial. */
   warning?: string;
+  /** Account or capability limit shown in the provider's page or partial, and for toolsets in the reference. */
+  note?: string;
+  /** Approval policy the page's agent example passes to `tools()`, for providers whose warning asks for approval. */
+  requireApproval?: true;
 }
 
-export interface ToolProviderDocs extends ProviderDocs {
-  /** Account or capability limit shown in the reference and in the provider's page or partial. */
-  note?: string;
-}
+export type ToolProviderDocs = ProviderDocs;
 
 export interface McpProviderDocs extends ProviderDocs {
   /** The provider's own documentation for its hosted MCP server. */
@@ -63,21 +64,22 @@ export interface ChannelConnectionDocs {
 }
 
 /** Providers present in src/providers but not part of the documented release. */
-export const EXCLUDED_PROVIDERS: ReadonlySet<string> = new Set([
-  'anthropic',
-  'elevenlabs',
-  'gitlab',
-  'google-analytics',
-  'sendgrid',
-  'stripe',
-  'twitter-v2',
-]);
+export const EXCLUDED_PROVIDERS: ReadonlySet<string> = new Set(['confluence', 'stripe', 'twitter-v2', 'zendesk']);
 
 /** Shared Connect setup that every generated page links to as its prerequisite. */
 export const CONNECT_GUIDE_PATH = '/docs/mastra-platform/connect';
 
 /** Providers with a generated toolset in src/providers. Keys are provider IDs. */
 export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
+  anthropic: {
+    name: 'Anthropic',
+    logo: { slug: 'anthropic', mono: true },
+    canonicalPage: 'tools/anthropic.mdx',
+    ownership: 'generated-page',
+    category: 'Tools',
+    summary: 'send messages, count tokens, run message batches, read models, and manage files',
+    emit: true,
+  },
   clerk: {
     name: 'Clerk',
     logo: { slug: 'clerk', mono: true },
@@ -92,6 +94,36 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     canonicalPage: 'channels/discord.mdx',
     ownership: 'handwritten-with-partial',
     summary: 'send and manage messages, and manage channels, threads, roles, members, and webhooks',
+    emit: true,
+  },
+  elevenlabs: {
+    name: 'ElevenLabs',
+    logo: { slug: 'elevenlabs', mono: true },
+    canonicalPage: 'voice/elevenlabs.mdx',
+    ownership: 'handwritten-with-partial',
+    summary:
+      'convert text to speech, transcribe audio and video, clone voices, compose music, manage conversational AI agents, voices and voice settings, and pronunciation dictionaries, and read and delete history items, dubbing projects, conversations, and knowledge-base documents',
+    emit: true,
+  },
+  exa: {
+    name: 'Exa',
+    logo: { src: 'https://app.nango.dev/images/template-logos/exa.svg' },
+    canonicalPage: 'tools/exa.mdx',
+    ownership: 'generated-page',
+    category: 'Tools',
+    summary: 'search the web, read page contents, and answer questions with cited sources',
+    note: 'Exa bills each search, contents, and answer call to the API key on the connection. The `deep` search types run multi-step searches that take several seconds and cost more than `auto` or `lite`.',
+    emit: true,
+  },
+  figma: {
+    name: 'Figma',
+    logo: { slug: 'figma' },
+    canonicalPage: 'other/figma.mdx',
+    ownership: 'generated-page',
+    category: 'Other providers',
+    summary:
+      'read files, versions, components, and styles, render images, manage comments and dev resources, and read and update variables',
+    note: "Figma only lets full members of Enterprise organizations use the variable tools, and updating variables also needs edit access to the file. On other plans, Figma refuses those calls. Node IDs work in either the `1:2` form the API uses or the `1-2` form in Figma URLs. The toolset can't list a team's projects or files, so give the agent a file key or file URL.",
     emit: true,
   },
   fireflies: {
@@ -111,6 +143,26 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     ownership: 'handwritten-with-partial',
     summary:
       'search code and repositories, manage issues, pull requests, branches, files, and releases, and inspect and rerun workflow runs',
+    emit: true,
+  },
+  gitlab: {
+    name: 'GitLab',
+    logo: { slug: 'gitlab' },
+    canonicalPage: 'tools/gitlab.mdx',
+    ownership: 'generated-page',
+    category: 'Tools',
+    summary:
+      'manage projects, groups, issues, merge requests, branches, files, commits, and releases, and run, cancel, and retry pipelines and jobs',
+    emit: true,
+  },
+  'google-analytics': {
+    name: 'Google Analytics',
+    logo: { slug: 'googleanalytics' },
+    canonicalPage: 'other/google-analytics.mdx',
+    ownership: 'generated-page',
+    category: 'Other providers',
+    summary:
+      'run standard, pivot, realtime, and batch reports, read report metadata, and manage properties, data streams, and conversion events',
     emit: true,
   },
   'google-calendar': {
@@ -286,6 +338,16 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     note: "Connect Resend with an API key that has **Full access** permission. A **Sending access** key fails to connect because Mastra checks a new key by listing your domains, which sending access keys can't do.",
     emit: true,
   },
+  sendgrid: {
+    name: 'SendGrid',
+    logo: { src: 'https://app.nango.dev/images/template-logos/sendgrid.svg' },
+    canonicalPage: 'email-calendar/sendgrid.mdx',
+    ownership: 'generated-page',
+    category: 'Email / Calendar',
+    summary:
+      'send email, and manage marketing contacts, lists, segments, custom fields, dynamic templates, sender identities, and suppressions',
+    emit: true,
+  },
   'sharepoint-online': {
     name: 'SharePoint Online',
     logo: { src: 'https://app.nango.dev/images/template-logos/sharepoint-online.svg' },
@@ -368,6 +430,32 @@ export const MCP_PROVIDERS: Record<string, McpProviderDocs> = {
     mcpDocsUrl: 'https://university.clay.com/docs/mcp-settings',
     mcpDocsLabel: 'MCP in Clay',
   },
+  'cloudflare-mcp': {
+    name: 'Cloudflare Workers',
+    logo: { slug: 'cloudflare' },
+    canonicalPage: 'other/cloudflare-workers.mdx',
+    ownership: 'generated-page',
+    category: 'Other providers',
+    summary: 'call the tools your MCP server exposes',
+    emit: true,
+    note: 'This provider connects to an MCP server you deploy on Cloudflare Workers, not to the Cloudflare API. When you connect, enter the full URL of your Worker, such as `https://my-mcp.my-account.workers.dev/mcp`. The Worker must use OAuth, as the Cloudflare guide for remote MCP servers sets up.',
+    mcpDocsUrl: 'https://developers.cloudflare.com/agents/guides/remote-mcp-server/',
+    mcpDocsLabel: 'Build a remote MCP server',
+  },
+  'digits-mcp': {
+    name: 'Digits',
+    logo: { src: 'https://app.nango.dev/images/template-logos/digits.svg' },
+    canonicalPage: 'other/digits.mdx',
+    ownership: 'generated-page',
+    category: 'Other providers',
+    summary: 'query transactions, financial statements, and ledger data, and update accounting records',
+    emit: true,
+    warning:
+      'Digits tools can create, update, and delete records in your general ledger. The example below requires approval for every Digits tool so a person confirms each call before it runs. To let reads run without approval, list only the write tools by key in `requireApproval`. See [MCP providers](/reference/connect/tools#mcp-providers).',
+    requireApproval: true,
+    mcpDocsUrl: 'https://help.digits.com/business-connections/digits-mcp',
+    mcpDocsLabel: 'Digits MCP',
+  },
   'neon-mcp': {
     name: 'Neon',
     logo: { slug: 'neon' },
@@ -398,7 +486,8 @@ export const MCP_PROVIDERS: Record<string, McpProviderDocs> = {
     summary: 'read account and market data and place trades',
     emit: true,
     warning:
-      'These tools can place real trades with real money. Require approval for trading tools with `requireApproval` so a person confirms each order before it runs. See [MCP providers](/reference/connect/tools#mcp-providers).',
+      'These tools can place real trades with real money. The example below requires approval for every Robinhood tool so a person confirms each call before it runs. To let reads run without approval, list only the trading tools by key in `requireApproval`. See [MCP providers](/reference/connect/tools#mcp-providers).',
+    requireApproval: true,
     mcpDocsUrl: 'https://robinhood.com/us/en/support/agentic-trading',
     mcpDocsLabel: 'Agentic Trading',
   },
@@ -412,6 +501,16 @@ export const MCP_PROVIDERS: Record<string, McpProviderDocs> = {
     emit: true,
     mcpDocsUrl: 'https://www.sanity.io/docs/ai/mcp-server',
     mcpDocsLabel: 'Sanity MCP server',
+  },
+  'sentry-mcp': {
+    name: 'Sentry',
+    logo: { slug: 'sentry' },
+    canonicalPage: 'observability/sentry.mdx',
+    ownership: 'handwritten-with-partial',
+    summary: 'search issues and events, read stack traces and traces, and manage issues, projects, and teams',
+    emit: true,
+    mcpDocsUrl: 'https://docs.sentry.io/product/sentry-mcp/',
+    mcpDocsLabel: 'Sentry MCP server',
   },
 };
 

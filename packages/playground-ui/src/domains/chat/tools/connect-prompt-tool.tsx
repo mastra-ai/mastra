@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { MessageMetadata } from '../messages/message-metadata';
 import { toolInteraction } from './tool-card-kind';
 import { useToolCall } from '@/domains/chat/context/tool-call-context';
@@ -9,6 +9,7 @@ import { DataList } from '@/ds/components/DataList';
 import { Notice } from '@/ds/components/Notice';
 import { Txt } from '@/ds/components/Txt';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { Icon } from '@/ds/icons/Icon';
 
 export { CONNECT_PROMPT_TOOL_NAME } from './connect-prompt-tool-id';
@@ -43,12 +44,20 @@ function connectPromptFor({
 /** The resume tool's schema accepts; longer failure reasons are cut to fit. */
 const MAX_RESUME_ERROR_LENGTH = 500;
 
+/** What the agent is told when the user cancels the prompt. */
+const CONNECT_PROMPT_CANCELLED_ERROR = 'The user cancelled connecting.';
+
+/** Marks the user cancelling the prompt as the outcome the call was resumed with. */
+const CANCELLED = Symbol('cancelled');
+
 /**
- * What to resume the paused call with: the settled flow, or a failure when the
- * connect session couldn't even be created (e.g. the connection limit).
+ * What to resume the paused call with: the user cancelling, the settled flow,
+ * or a failure when the connect session couldn't even be created (e.g. the
+ * connection limit).
  */
 function connectPromptResumeFor(
   payload: ConnectPromptPayload,
+  cancelled: boolean,
   settled: SettledConnect | null,
   createError: Error | null,
 ): ConnectPromptResume | undefined {
@@ -57,6 +66,10 @@ function connectPromptResumeFor(
     status: 'failed',
     error: error.slice(0, MAX_RESUME_ERROR_LENGTH),
   });
+  if (cancelled) {
+    const provider = payload.requestedProvider ?? payload.providers[0]?.id;
+    return provider ? failed(provider, CONNECT_PROMPT_CANCELLED_ERROR) : undefined;
+  }
   if (createError) {
     const provider = payload.requestedProvider ?? payload.providers[0]?.id;
     return provider ? failed(provider, createError.message) : undefined;
@@ -102,11 +115,14 @@ interface ConnectPromptCardProps {
 }
 
 const ConnectPromptCard = ({ toolCallId, payload, paused, readOnly }: ConnectPromptCardProps) => {
-  const { pending, connect, connectedProviders, isCreating, createError, settled } = usePendingConnect();
+  const { pending, connect, cancel, connectedProviders, isCreating, createError, settled } = usePendingConnect();
   const { approveToolcall, isRunning, toolCallApprovals } = useToolCall();
-  // The outcome (settled flow or session-creation error) this call was resumed with.
-  const resumedRef = useRef<SettledConnect | Error | null>(null);
+  const [cancelled, setCancelled] = useState(false);
+  // The outcome (cancel, settled flow or session-creation error) this call was resumed with.
+  const resumedRef = useRef<typeof CANCELLED | SettledConnect | Error | null>(null);
   const alreadyResumed = toolCallApprovals[toolCallId] !== undefined;
+  // A paused call holds the run until it is resumed, so the user can always back out of it.
+  const canCancel = !readOnly && paused && !alreadyResumed && !cancelled;
 
   const errorMessage =
     createError?.message ??
@@ -119,20 +135,45 @@ const ConnectPromptCard = ({ toolCallId, payload, paused, readOnly }: ConnectPro
   // resumed yet, so an outcome that lands mid-run waits for it to stop.
   useEffect(() => {
     if (readOnly || !paused || alreadyResumed || isRunning) return;
-    const outcome = createError ?? settled;
+    const outcome = cancelled ? CANCELLED : (createError ?? settled);
     if (!outcome || resumedRef.current === outcome) return;
     resumedRef.current = outcome;
-    const resume = connectPromptResumeFor(payload, settled, createError);
+    const resume = connectPromptResumeFor(payload, cancelled, settled, createError);
     if (resume) approveToolcall(toolCallId, resume);
-  }, [readOnly, paused, alreadyResumed, isRunning, settled, createError, payload, approveToolcall, toolCallId]);
+  }, [
+    readOnly,
+    paused,
+    alreadyResumed,
+    isRunning,
+    cancelled,
+    settled,
+    createError,
+    payload,
+    approveToolcall,
+    toolCallId,
+  ]);
 
   return (
     <section aria-label="Connect an account" className="my-2 space-y-3">
       <DataList columns="minmax(0, 1fr)" fit="container" scrollable={false}>
-        <DataList.Subheader>
+        <DataList.Subheader className="flex items-center justify-between gap-3">
           <Txt as="h4" variant="subheading" tone="ink">
             Connect an account
           </Txt>
+          {canCancel ? (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Cancel"
+              tooltip="Cancel"
+              onClick={() => {
+                cancel();
+                setCancelled(true);
+              }}
+            >
+              <IconCrossMedium aria-hidden />
+            </Button>
+          ) : null}
         </DataList.Subheader>
         {payload.providers.map(provider => {
           const isConnected = provider.connected || connectedProviders.has(provider.id);
@@ -180,7 +221,8 @@ const ConnectPromptCard = ({ toolCallId, payload, paused, readOnly }: ConnectPro
                         variant="primary"
                         size="sm"
                         className="min-w-24"
-                        disabled={readOnly || isCreating || isPending}
+                        disabled={readOnly || isCreating}
+                        loading={isPending}
                         onClick={() => connect(provider)}
                       >
                         Connect
@@ -193,6 +235,11 @@ const ConnectPromptCard = ({ toolCallId, payload, paused, readOnly }: ConnectPro
           );
         })}
       </DataList>
+      {cancelled && isRunning && !alreadyResumed ? (
+        <Txt as="p" variant="body-sm" tone="muted" role="status">
+          Cancelled. The agent continues once its current response finishes.
+        </Txt>
+      ) : null}
       {errorMessage ? (
         <div role="alert">
           <Notice variant="destructive" title="Couldn't connect">

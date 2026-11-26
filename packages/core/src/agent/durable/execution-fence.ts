@@ -37,6 +37,7 @@ import { PUBSUB_SYMBOL } from '../../workflows/constants';
 import { MASTRA_DURABLE_EXECUTIONS_KEY } from '../request-context-snapshot';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-ownership';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
+import { DurableStepIds } from './constants';
 import { ExecutionOwnershipGuard } from './execution-ownership-guard';
 import { executionTransport, withExecutionStreamProducer } from './execution-stream-publisher';
 import { currentRunFenceScope, runInRunFenceScope } from './run-fence-scope';
@@ -46,10 +47,12 @@ import { getRunRegistryEntry } from './run-registry';
 export const EXECUTION_LEASE_TTL_MS = AGENT_LEASE_TTL_MS;
 export const EXECUTION_LEASE_RENEW_INTERVAL_MS = AGENT_LEASE_RENEW_INTERVAL_MS;
 /**
- * How long past its local lease deadline a storage-backed execution waits for a renewal still in flight. A renewal
- * queued behind other writes can still extend the lease; one that never returns must not keep the execution going.
+ * Heartbeat ticks a storage-backed execution goes without a confirmed renewal before it gives up the run: a TTL's
+ * worth while renewals fail, and one more TTL while a renewal is still in flight, since one queued behind other writes
+ * can still extend the lease. Ticks, not elapsed time, because a stalled process misses ticks without failing any.
  */
-const STORAGE_RENEWAL_GRACE_MS = EXECUTION_LEASE_TTL_MS;
+const STORAGE_FAILED_RENEWAL_TICKS = Math.ceil(EXECUTION_LEASE_TTL_MS / EXECUTION_LEASE_RENEW_INTERVAL_MS);
+const STORAGE_PENDING_RENEWAL_TICKS = 2 * STORAGE_FAILED_RENEWAL_TICKS;
 /** Allowance for the store's clock running ahead of this process when reading a renewed lease's expiry. */
 const STORE_CLOCK_SKEW_MS = EXECUTION_LEASE_RENEW_INTERVAL_MS;
 const VERIFY_RETRY_DELAY_MS = 250;
@@ -685,6 +688,7 @@ export class ExecutionFence implements RunFenceScope {
   /** The grace for a release of this claim is spent: a renewal already found it released before this fence settled. */
   #releaseSeen = false;
   #settlement?: Promise<ExecutionSettlement>;
+  #detached = false;
   #settledAs?: ExecutionSettlement;
   #resolveSettled!: () => void;
   /** Resolves once {@link settle} has finished and the claim is released or left to its new holder. */
@@ -856,30 +860,107 @@ export class ExecutionFence implements RunFenceScope {
     if (!claim.agentId) return undefined;
     const executionBackend = await resolveRemoteBackend(mastra, claim.agentId, runId, claim);
     if (!executionBackend) return undefined;
-    // Called only after run ownership was renewed for this claim. For a generation-fenced claim that renewal already
-    // excludes any successor, so the thread lease cannot have been handed on: a missing lease lapsed (e.g. Redis
-    // restarted) and is taken back unless someone else holds it, and a lease backend refusing every client (so
-    // nobody else can acquire from it either) does not fence the execution. Any other backend error still does.
-    const holdsThreadLease = async (threadId: string): Promise<boolean> => {
-      const lease = [mastra.pubsub, runId, threadId, claim.resourceId, claim.generation, claim.executionId] as const;
-      if (claim.generation === undefined) return agentThreadStreamRuntime.renewDurableThreadLease(...lease);
+    const details = { agentId: claim.agentId, runId, executionId: claim.executionId };
+    const threadId = claim.threadId;
+    const lease = threadId
+      ? ([mastra.pubsub, runId, threadId, claim.resourceId, claim.generation, claim.executionId] as const)
+      : undefined;
+    let heartbeatRenewal: Promise<void> | undefined;
+    let participant: ExecutionFence | undefined;
+    const verifyCurrent = async () => {
+      await executionBackend.verify(claim, details);
+      if (participant?.isLost()) throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, details);
+    };
+    const checkThread = async (threadLease: NonNullable<typeof lease>, heartbeatWorker?: ExecutionFence) => {
+      const stopped = () => heartbeatWorker && (!heartbeatWorker.#heartbeat || heartbeatWorker.isLost());
+      let timedOut = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const check = async () => {
+        let renewed: boolean;
+        try {
+          renewed = await agentThreadStreamRuntime.renewDurableThreadLease(...threadLease);
+        } catch (error) {
+          if (agentThreadStreamRuntime.isThreadLeaseBackendUnavailableToAll(mastra.pubsub, error)) return true;
+          throw error;
+        }
+        if (renewed) return true;
+        if (timedOut || stopped()) return undefined;
+        await verifyCurrent();
+        if (timedOut || stopped()) return undefined;
+        let acquired: boolean;
+        try {
+          acquired = await agentThreadStreamRuntime.reclaimDurableThreadLease(...threadLease);
+        } catch (error) {
+          if (agentThreadStreamRuntime.isThreadLeaseBackendUnavailableToAll(mastra.pubsub, error)) return true;
+          throw error;
+        }
+        if (acquired) {
+          try {
+            await verifyCurrent();
+          } catch (error) {
+            // Even a late grant must not leave an old generation holding the thread.
+            if (error instanceof DurableExecutionFenceError && error.id === EXECUTION_SUPERSEDED_ERROR_ID) {
+              void (async () => {
+                const store = await mastra.getStorage()?.getStore('workflows');
+                const snapshot = await store?.loadWorkflowSnapshot({
+                  workflowName: DurableStepIds.AGENTIC_LOOP,
+                  runId,
+                });
+                // A suspension releases the execution claim but retains its thread lease.
+                const parked = snapshot?.status === 'suspended' || snapshot?.status === 'waiting';
+                if (!parked || (await executionBackend.isSuperseded(claim))) {
+                  await agentThreadStreamRuntime.releaseDurableThreadLease(...threadLease);
+                }
+              })().catch(() => {});
+            }
+            throw error;
+          }
+        } else if (heartbeatWorker) {
+          if (timedOut || stopped()) return undefined;
+          // A failed reclaim alone does not identify a different run.
+          const [pubsub, , threadId, resourceId] = threadLease;
+          if (
+            !(await agentThreadStreamRuntime.isDurableThreadLeaseHeldByAnotherRun(pubsub, runId, threadId, resourceId))
+          ) {
+            return undefined;
+          }
+        }
+        return acquired;
+      };
       try {
-        return (
-          (await agentThreadStreamRuntime.renewDurableThreadLease(...lease)) ||
-          (await agentThreadStreamRuntime.reclaimDurableThreadLease(...lease))
-        );
-      } catch (error) {
-        if (!agentThreadStreamRuntime.isThreadLeaseBackendUnavailableToAll(mastra.pubsub, error)) throw error;
-        mastra
-          .getLogger()
-          ?.warn(`[DurableAgent] run ${runId}: thread lease backend unavailable, relying on run ownership`, {
-            error,
-          });
-        return true;
+        return await Promise.race([
+          check(),
+          new Promise<undefined>(resolve => {
+            timer = setTimeout(() => {
+              timedOut = true;
+              resolve(undefined);
+            }, EXECUTION_LEASE_RENEW_INTERVAL_MS);
+            timer.unref?.();
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
       }
     };
     const backend: OwnershipBackend = {
       ...executionBackend,
+      verify: async () => {
+        await verifyCurrent();
+        if (!lease || claim.generation === undefined) return;
+        for (;;) {
+          const held = await checkThread(lease);
+          await verifyCurrent();
+          if (held === true) return;
+          if (held === false) {
+            // Another run owns the thread. Release only this claim so the API's ownership watch reports an error.
+            void ExecutionFence.releaseSharedClaim(mastra, runId, claim, 'abandoned').catch(() => {});
+            throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, details);
+          }
+          // Silence is not a takeover. Keep storage renewal independent and retry before admitting work.
+          await sleep(VERIFY_RETRY_DELAY_MS);
+          await verifyCurrent();
+        }
+      },
       renew: async current => {
         const result = await executionBackend.renew(current);
         if (!result.renewed) {
@@ -892,18 +973,28 @@ export class ExecutionFence implements RunFenceScope {
           }
           return result;
         }
-        if (claim.threadId && !(await holdsThreadLease(claim.threadId))) {
-          throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, {
-            agentId: claim.agentId!,
-            runId,
-            executionId: claim.executionId,
-          });
+        if (lease) {
+          if (claim.generation === undefined) {
+            if (!(await agentThreadStreamRuntime.renewDurableThreadLease(...lease))) {
+              throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, details);
+            }
+          } else if (participant && !heartbeatRenewal) {
+            // Use the same bounded reclaim as work admission without delaying the storage heartbeat.
+            const worker = participant;
+            heartbeatRenewal = checkThread(lease, worker)
+              .then(async held => {
+                if (held !== false || !worker.#heartbeat || worker.isLost()) return;
+                worker.#markLost(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, details));
+                await ExecutionFence.releaseSharedClaim(mastra, runId, claim, 'abandoned');
+              })
+              .catch(() => {})
+              .finally(() => (heartbeatRenewal = undefined));
+          }
         }
         return result;
       },
     };
     const startedAt = Date.now();
-    const details = { agentId: claim.agentId, runId, executionId: claim.executionId };
     let deadline: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([
@@ -937,14 +1028,14 @@ export class ExecutionFence implements RunFenceScope {
     } finally {
       if (deadline) clearTimeout(deadline);
     }
-    const fence = new ExecutionFence({
+    const fence = (participant = new ExecutionFence({
       ...details,
       backend,
       generation: claim.generation,
       workflowsStore: await mastra.getStorage()?.getStore('workflows'),
       leaseExpiresAt: startedAt + EXECUTION_LEASE_TTL_MS,
       logger: mastra.getLogger(),
-    });
+    }));
     if (claim.memoryFenced) await fence.coverMemory(await mastra.getStorage()?.getStore('memory'));
     if (backend.expires) fence.#startHeartbeat();
     return fence;
@@ -973,6 +1064,11 @@ export class ExecutionFence implements RunFenceScope {
 
   get settlement(): ExecutionSettlement | undefined {
     return this.#settledAs;
+  }
+
+  /** This process stopped coordinating the run and left its settlement to the workers. */
+  get detached(): boolean {
+    return this.#detached;
   }
 
   /** An owned deadline settlement revokes writes without handing its topics to another execution. */
@@ -1197,6 +1293,7 @@ export class ExecutionFence implements RunFenceScope {
   /** Detach a coordinator without changing the claim shared with remote workers. */
   detach(): void {
     if (this.#settlement) return;
+    this.#detached = true;
     this.stopHeartbeat();
     this.#settledAs = 'superseded';
     this.#settlement = Promise.resolve('superseded');
@@ -1353,8 +1450,16 @@ export class ExecutionFence implements RunFenceScope {
 
   /**
    * Keep the claim alive between write checks. A `false` renewal marks the
-   * fence lost, which notifies {@link onLost} listeners. Backend errors are
-   * tolerated until the local lease deadline. A failed renewal can be caused
+   * fence lost, which notifies {@link onLost} listeners.
+   *
+   * A storage claim is judged by the store's conditional renewal, not the
+   * local clock: a blocked event loop moves the clock without letting this
+   * process renew, so a stall alone must not lose the run (#30669). The
+   * heartbeat counts its ticks since the last confirmed renewal instead:
+   * failed renewals are tolerated for a TTL's worth of ticks, and one still
+   * in flight for one more TTL. A pubsub lease has no generation to tell a
+   * late renewal from a later holder's, so it keeps the local deadline, and
+   * its backend errors are tolerated until then. A failed renewal can be caused
    * by this execution's own release: in this process, when the backend
    * confirmed the claim still held the run as it was released (without that
    * confirmation another execution claimed the run first); in another process,
@@ -1374,14 +1479,21 @@ export class ExecutionFence implements RunFenceScope {
     let fences = renewingFencesByClaim.get(key);
     if (!fences) renewingFencesByClaim.set(key, (fences = new Set()));
     fences.add(this);
+    const storage = this.generation !== undefined;
+    let unconfirmedTicks = 0;
+    let lastFailure: unknown;
     this.#heartbeat = setInterval(() => {
       if (this.#settlement || this.#lossError) return;
-      const now = Date.now();
-      // A storage renewal queued behind other writes can still extend this generation's lease, and a takeover
-      // makes it return false. Wait for its result, but only for a grace period past the deadline.
-      const awaitingRenewal = this.#renewalInFlight && this.generation !== undefined;
-      if (awaitingRenewal && now < this.#leaseExpiresAt + STORAGE_RENEWAL_GRACE_MS) return;
-      if (now >= this.#leaseExpiresAt) {
+      if (storage) {
+        // A storage renewal queued behind other writes can still extend this generation's lease, and a takeover
+        // makes it return false, so one in flight gets a longer allowance.
+        unconfirmedTicks++;
+        const limit = this.#renewalInFlight ? STORAGE_PENDING_RENEWAL_TICKS : STORAGE_FAILED_RENEWAL_TICKS;
+        if (unconfirmedTicks >= limit) {
+          this.#markLost(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, this.#details(), lastFailure));
+          return;
+        }
+      } else if (Date.now() >= this.#leaseExpiresAt) {
         this.#markLost(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, this.#details()));
         return;
       }
@@ -1400,6 +1512,8 @@ export class ExecutionFence implements RunFenceScope {
               ? Math.min(leaseExpiresAt.getTime() - STORE_CLOCK_SKEW_MS, Date.now() + EXECUTION_LEASE_TTL_MS)
               : 0;
             this.#leaseExpiresAt = Math.max(startedAt + EXECUTION_LEASE_TTL_MS, reported);
+            unconfirmedTicks = 0;
+            lastFailure = undefined;
             return;
           }
           if (await this.#releaseExplainsFailedRenewal(result.released)) return;
@@ -1410,7 +1524,10 @@ export class ExecutionFence implements RunFenceScope {
           // A settled fence's own confirmed release explains a renewal that errored after it. The fence may still be
           // running its terminal writes, with its release not started yet, so wait up to one renewal interval for it.
           if (this.#settlement && (await releaseAnswer(this.#ownRelease.awaitAnswer()))) return;
-          if (Date.now() >= this.#leaseExpiresAt) {
+          // An unsettled storage claim is judged by the heartbeat's tick count. A settling fence's heartbeat no
+          // longer ticks, so its renewal error is judged against the lease deadline.
+          if (storage && !this.#settlement) lastFailure = cause;
+          else if (Date.now() >= this.#leaseExpiresAt) {
             this.#markLost(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, this.#details(), cause));
             return;
           }

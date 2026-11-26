@@ -116,12 +116,12 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
             const Icon = entry.icon;
             return (
               <Button
+                icon={<Icon />}
                 key={entry.key}
                 variant={decisionGroup === entry.key ? 'primary' : 'default'}
                 aria-pressed={decisionGroup === entry.key}
                 onClick={() => setSearchParams(entry.key === 'all' ? {} : { group: entry.key }, { replace: true })}
               >
-                <Icon aria-hidden />
                 {entry.label}
               </Button>
             );
@@ -249,16 +249,16 @@ function DecisionRow({
       <div className="ml-auto flex shrink-0 items-center gap-2 pl-2">
         {decision.status === 'proposed' ? (
           <>
-            <Button variant="ghost" size="sm" disabled={approving || dismissing} onClick={onDismiss}>
-              {dismissing ? 'Dismissing…' : 'Dismiss'}
+            <Button variant="ghost" size="sm" disabled={approving} onClick={onDismiss} loading={dismissing}>
+              Dismiss
             </Button>
-            <Button size="sm" disabled={approving || dismissing} onClick={onApprove}>
-              {approving ? 'Starting…' : 'Run'}
+            <Button size="sm" disabled={dismissing} onClick={onApprove} loading={approving}>
+              Run
             </Button>
           </>
         ) : decision.status === 'failed' && decision.canRetry ? (
-          <Button size="sm" disabled={retrying} onClick={onRetry}>
-            {retrying ? 'Retrying…' : 'Retry'}
+          <Button size="sm" onClick={onRetry} loading={retrying}>
+            Retry
           </Button>
         ) : null}
         <Txt

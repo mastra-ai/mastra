@@ -1,52 +1,50 @@
 import type { PlanResume } from '@mastra/client-js';
-import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
-import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
-import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
-import { Notice } from '@mastra/playground-ui/components/Notice';
-import { groupTurns, startsUserTurn } from '@mastra/playground-ui/components/ThreadRail';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import type { ReactNode } from 'react';
-import { memo, useCallback, useMemo, useState } from 'react';
+import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
+import { TranscriptEntries as HostTranscriptEntries } from '@mastra/playground-ui/domains/chat/transcript/components/transcript-entries';
+import { TranscriptSlotsProvider } from '@mastra/playground-ui/domains/chat/transcript/components/slots';
+import type { TranscriptSlots } from '@mastra/playground-ui/domains/chat/transcript/components/slots';
+import type { ComponentProps } from 'react';
+import { useCallback } from 'react';
 
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
-import type { ThreadOwner } from '../services/reply-credential';
 import {
   useApproveAgentControllerToolMutation,
   useRespondAgentControllerSuspensionMutation,
   isEndedPrompt,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { replySteps } from '../services/turns';
-import { ArrivalScope, useArriving } from '@mastra/playground-ui/components/Arrival';
-import { ActivityWorkingDirectory } from '@mastra/playground-ui/components/ai/activity';
-import { TranscriptDivider } from '@mastra/playground-ui/components/ai/transcript-divider';
-import { ActivityDisclosureProvider } from '@mastra/playground-ui/domains/chat/activity';
-import { MessageBubble } from './MessageBubble';
-import { hasLiveStretch, planTurnActivity, sameEntryActivity } from './activity/activity-plan';
-import type { EntryActivity } from './activity/activity-plan';
+import { drawsModelFallback, ModelFallbackPart } from './ModelFallbackActivity';
 import { RunErrorNotice } from './RunErrorNotice';
-import { draws, messageText, renderableParts } from './transcript-parts';
-import { isRecord } from './transcript-shared';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
 import { ApprovalCard, SubagentCard, SuspensionCard } from './TranscriptPromptCards';
-import { agentWorkingDirectory, isTurnDivider } from './TranscriptSignals';
+import { SubmitPlanCard } from './SubmitPlanCard';
 import { FactoryKnowledgeLinks } from './knowledge/FactoryKnowledgeLinks';
-import { TurnRevealScope } from './TurnReveal';
-import { turnGaps } from './turn-gaps';
 
-import type { MessageEntry, NoticeEntry, SuspensionPrompt, TimelineEntry } from '../services/transcript';
+import type { TranscriptTail } from '@mastra/playground-ui/domains/chat/transcript/components/transcript-entries';
 
-/** The live turn's last row, told whether a live stretch above it already names what the agent is doing. */
-export type TranscriptTail = (stretchLive: boolean) => ReactNode;
+export type { TranscriptTail };
 
-/** A step ending is not the reply ending, so a running turn has no whole answer to copy yet. */
-function turnReply(steps: MessageEntry[], runningTurn: boolean): string | undefined {
-  if (runningTurn) return undefined;
-  return steps
-    .map(step => messageText(renderableParts(step)))
-    .filter(Boolean)
-    .join('\n\n');
+/** Factory's own cards for the rows that act on its backend. */
+export const FACTORY_TRANSCRIPT_SLOTS: TranscriptSlots = {
+  RunError: RunErrorNotice,
+  Notification: NotificationCard,
+  NotificationSummary: NotificationSummaryCard,
+  Approval: ApprovalCard,
+  Suspension: SuspensionCard,
+  Subagent: SubagentCard,
+  SubmitPlan: SubmitPlanCard,
+  DataPart: { draws: drawsModelFallback, Component: ModelFallbackPart },
+};
+
+export function TranscriptEntries(props: ComponentProps<typeof HostTranscriptEntries>) {
+  return (
+    <TranscriptSlotsProvider slots={FACTORY_TRANSCRIPT_SLOTS}>
+      <FactoryKnowledgeLinks>
+        <HostTranscriptEntries {...props} />
+      </FactoryKnowledgeLinks>
+    </TranscriptSlotsProvider>
+  );
 }
 
 export function Transcript({ tail }: { tail?: TranscriptTail }) {
@@ -102,236 +100,5 @@ export function Transcript({ tail }: { tail?: TranscriptTail }) {
         tail={tail}
       />
     </ArrivalScope>
-  );
-}
-
-export function TranscriptEntries({
-  entries,
-  restoredHistory = false,
-  isSubmitting = false,
-  onApprove,
-  onRespond,
-  running = false,
-  viewerId,
-  owner,
-  tail,
-}: {
-  entries: TimelineEntry[];
-  restoredHistory?: boolean;
-  isSubmitting?: boolean;
-  onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
-  onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
-  /** Holds the room open under the live turn, and releases it when the agent stops. */
-  running?: boolean;
-  /** The signed-in user; anyone else's message gets their avatar beside it. */
-  viewerId?: string;
-  /** Whose personal credentials the thread runs on; names their replies for other viewers. */
-  owner?: ThreadOwner;
-  /** Rendered inside the live turn (the activity line), so the reserved room stays under it. */
-  tail?: TranscriptTail;
-}) {
-  const prompts = entries.flatMap(entry => (entry.kind === 'suspension' ? [entry] : []));
-  // Keyed by the prompts on screen, not by the array holding them: a delta hands this
-  // component a new `entries` every token, and a map rebuilt each time would be a new
-  // prop on every settled entry, undoing the memo below.
-  const promptKey = prompts.map(prompt => prompt.id).join('\n');
-  const suspensions = useMemo(() => new Map(prompts.map(prompt => [prompt.toolCallId, prompt] as const)), [promptKey]);
-  const canonicalToolCallIds = new Set(
-    entries.flatMap(entry =>
-      entry.kind === 'message'
-        ? entry.message.content.parts.flatMap(part =>
-            isRecord(part) && part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : [],
-          )
-        : [],
-    ),
-  );
-
-  // Ignore echoed user signals that render nothing when opening a turn.
-  const drawsContent = (entry: MessageEntry): boolean =>
-    entry.message.content.parts.some(part => draws(part, entry, suspensions));
-  const opensTurn = (entry: TimelineEntry): boolean =>
-    entry.kind === 'message' && startsUserTurn(entry.message) && drawsContent(entry);
-  // A steer interjects into a reply still being written: it keeps its turn for the
-  // rail and history, but claims no room and no trip — the reader stays with the stream.
-  const steers = (entry: TimelineEntry | undefined): boolean => entry?.kind === 'message' && Boolean(entry.steer);
-
-  const turnGroups = groupTurns(entries, { key: entry => entry.id, opensTurn, introduces: isTurnDivider });
-  const [restoredTurnKey] = useState(() => (restoredHistory ? turnGroups.at(-1)?.key : undefined));
-  const gaps = turnGaps(entries, opensTurn);
-  const directories = turnGroups.reduce<(string | undefined)[]>(
-    (held, group) => [...held, agentWorkingDirectory(group.entries) ?? held.at(-1)],
-    [],
-  );
-
-  return (
-    <FactoryKnowledgeLinks>
-      <ActivityDisclosureProvider>
-        {turnGroups.map((group, index) => {
-          const isLiveTurn = index === turnGroups.length - 1;
-          const runningTurn = isLiveTurn && running;
-          // The first turn opens at the top of the transcript already, so room under it
-          // would buy no travel — only empty scroll below a fresh thread.
-          const holdsRoom =
-            runningTurn && group.opensTurn && index > 0 && !steers(group.entries.find(entry => entry.id === group.key));
-
-          const steps = replySteps(group);
-          const replyEnd = steps.at(-1);
-          const reply = turnReply(steps, runningTurn);
-          const activityByEntry = planTurnActivity(group.entries, suspensions, runningTurn);
-
-          return (
-            <ChatShell.Turn
-              key={group.key}
-              opensTurn={group.opensTurn}
-              holdsRoom={holdsRoom}
-              restored={group.key === restoredTurnKey}
-            >
-              <ActivityWorkingDirectory path={directories[index]}>
-                <TurnRevealScope>
-                  {group.entries.map(entry => {
-                    const gap = gaps.get(entry.id);
-                    return (
-                      <TranscriptItem key={entry.id} entry={entry} scrollAnchor={opensTurn(entry) && !steers(entry)}>
-                        {gap && <TranscriptDivider label={gap.label} title={gap.title} />}
-                        <TranscriptEntryContent
-                          entry={entry}
-                          suspensions={suspensions}
-                          reply={entry === replyEnd ? reply : undefined}
-                          activity={activityByEntry.get(entry.id)}
-                          redundantSuspension={
-                            entry.kind === 'suspension' &&
-                            entry.toolName !== 'request_access' &&
-                            canonicalToolCallIds.has(entry.toolCallId)
-                          }
-                          isSubmitting={isSubmitting}
-                          viewerId={viewerId}
-                          owner={owner}
-                          onApprove={onApprove}
-                          onRespond={onRespond}
-                        />
-                      </TranscriptItem>
-                    );
-                  })}
-                </TurnRevealScope>
-                {isLiveTurn && tail?.(hasLiveStretch(activityByEntry))}
-              </ActivityWorkingDirectory>
-            </ChatShell.Turn>
-          );
-        })}
-        {turnGroups.length === 0 && tail?.(false)}
-      </ActivityDisclosureProvider>
-    </FactoryKnowledgeLinks>
-  );
-}
-
-interface TranscriptEntryContentProps {
-  entry: TimelineEntry;
-  suspensions: ReadonlyMap<string, SuspensionPrompt>;
-  reply?: string;
-  redundantSuspension: boolean;
-  isSubmitting: boolean;
-  viewerId?: string;
-  owner?: ThreadOwner;
-  onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
-  onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
-  activity?: EntryActivity;
-}
-
-/** The turn's plan is rebuilt every token: compare `activity` by what it draws, the rest by identity. */
-function sameEntryContentProps(
-  { activity: prevActivity, ...prev }: TranscriptEntryContentProps,
-  { activity: nextActivity, ...next }: TranscriptEntryContentProps,
-): boolean {
-  if (!sameEntryActivity(prevActivity, nextActivity)) return false;
-  const nextProps = new Map(Object.entries(next));
-  const prevProps = Object.entries(prev);
-  return (
-    prevProps.length === nextProps.size && prevProps.every(([name, value]) => Object.is(value, nextProps.get(name)))
-  );
-}
-
-/**
- * What one entry draws. Memoized on its own props, because a token landing on the live
- * reply hands this list a new array while every settled entry in it is the same object:
- * only the entry that changed is worth drawing again.
- *
- * `redundantSuspension` arrives decided rather than as the set it was decided from —
- * the set grows with every tool call, and passing it would re-render the whole
- * transcript each time one starts.
- */
-const TranscriptEntryContent = memo(function TranscriptEntryContent({
-  entry,
-  suspensions,
-  reply,
-  redundantSuspension,
-  isSubmitting,
-  viewerId,
-  owner,
-  onApprove,
-  onRespond,
-  activity,
-}: TranscriptEntryContentProps) {
-  switch (entry.kind) {
-    case 'message':
-      return (
-        <MessageBubble
-          entry={entry}
-          suspensions={suspensions}
-          reply={reply}
-          isSubmitting={isSubmitting}
-          viewerId={viewerId}
-          owner={owner}
-          onRespond={onRespond}
-          activity={activity}
-        />
-      );
-    case 'notice':
-      return <NoticeCard entry={entry} />;
-    case 'approval':
-      return <ApprovalCard prompt={entry} isSubmitting={isSubmitting} onApprove={onApprove} />;
-    case 'notification':
-      return <NotificationCard entry={entry} />;
-    case 'notification_summary':
-      return <NotificationSummaryCard entry={entry} />;
-    case 'suspension':
-      return redundantSuspension ? null : (
-        <SuspensionCard prompt={entry} isSubmitting={isSubmitting} onRespond={onRespond} />
-      );
-    case 'subagent':
-      return <SubagentCard entry={entry} />;
-    default:
-      return null;
-  }
-}, sameEntryContentProps);
-
-function TranscriptItem({
-  entry,
-  scrollAnchor,
-  children,
-}: {
-  entry: TimelineEntry;
-  scrollAnchor: boolean;
-  children: ReactNode;
-}) {
-  const arriving = useArriving();
-
-  return (
-    <MessageScrollerItem
-      messageId={entry.id}
-      scrollAnchor={scrollAnchor}
-      // Prepend anchoring needs real item heights, not off-screen estimates.
-      className={cn('[content-visibility:visible] empty:hidden', arriving)}
-    >
-      <ArrivalScope>{children}</ArrivalScope>
-    </MessageScrollerItem>
-  );
-}
-
-function NoticeCard({ entry }: { entry: NoticeEntry }) {
-  if (entry.error) return <RunErrorNotice error={entry.error} entryId={entry.id} />;
-  return (
-    <Notice className="my-2" variant={entry.level === 'error' ? 'destructive' : 'info'}>
-      <MarkdownRenderer className="text-current">{entry.text}</MarkdownRenderer>
-    </Notice>
   );
 }

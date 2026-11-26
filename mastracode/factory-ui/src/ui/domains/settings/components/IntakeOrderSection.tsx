@@ -178,7 +178,7 @@ function OrderEditor({ factoryId, order }: { factoryId: string; order: IntakeOrd
           <Button size="sm" variant="ghost" onClick={() => setDraft(undefined)} disabled={save.isPending}>
             Discard
           </Button>
-          <Button size="sm" variant="primary" onClick={onSave} disabled={save.isPending}>
+          <Button size="sm" variant="primary" onClick={onSave} loading={save.isPending}>
             Save order
           </Button>
         </div>

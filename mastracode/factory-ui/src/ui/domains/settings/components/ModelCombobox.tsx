@@ -1,12 +1,12 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption, ComboboxSingleProps } from '@mastra/playground-ui/components/Combobox';
 import { compareModelReleaseDates, formatModelName } from '@mastra/playground-ui/utils/model';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
-import { DEFAULT_SOURCE_LABELS } from '../../chat/services/thinkingLevels';
 import { ProviderBrandIcon } from '../../workspaces/components/ProviderBrandIcon';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
+import { MODEL_ID_PATTERN } from '@mastra/factory/model-packs';
 import { IconBox } from '@mastra/playground-ui/icons/central/IconBox';
 import { IconSparklesTwo } from '@mastra/playground-ui/icons/central/IconSparklesTwo';
 
@@ -65,7 +65,6 @@ export function ModelCombobox({
   value,
   onValueChange,
   auto,
-  fallbackModelId,
   placeholder,
   disabled,
   className,
@@ -77,7 +76,6 @@ export function ModelCombobox({
   value: string;
   onValueChange: (value: string) => void;
   auto?: { effectiveModelId?: string | null };
-  fallbackModelId?: string;
   placeholder?: string;
   disabled?: boolean;
   className?: string;
@@ -85,6 +83,8 @@ export function ModelCombobox({
   size?: ComboboxSingleProps['size'];
   'aria-label'?: string;
 }) {
+  const [query, setQuery] = useState('');
+  const customId = query.trim();
   const autoEffectiveModelId = auto ? (auto.effectiveModelId ?? null) : undefined;
   const options = useMemo(() => {
     const catalog = models
@@ -107,14 +107,11 @@ export function ModelCombobox({
       options={options}
       value={value}
       onValueChange={onValueChange}
-      placeholder={
-        fallbackModelId
-          ? `${formatModelName(fallbackModelId)} (${DEFAULT_SOURCE_LABELS['built-in']})`
-          : (placeholder ?? 'Select model')
-      }
+      placeholder={placeholder ?? 'Select model'}
       searchPlaceholder="Search models"
       emptyText="No matching model."
-      allowCustomValue
+      allowCustomValue={MODEL_ID_PATTERN.test(customId)}
+      onInputValueChange={setQuery}
       disabled={disabled}
       className={className}
       variant={variant}

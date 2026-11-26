@@ -75,7 +75,7 @@ export const knowledge = new Knowledge({
     name: 'tools',
     type: 'boolean | { read?: boolean | { maxTokens?: number }; write?: boolean }',
     description:
-      'Tools an attached agent gets. `true` gives all five: `knowledge_list`, `knowledge_search`, `knowledge_read`, `knowledge_page` and `knowledge_note`. `{ read: true }` gives the first three. `{ write: true }` gives the last two. `{ read: { maxTokens } }` turns on read and caps each `knowledge_read` body or `match` result, and each `knowledge_list` result, at `maxTokens`: 1,000 by default, at least 100. See [Read pages](/docs/knowledge/agents-and-tools#read-pages).',
+      'Tools an attached agent gets. `true` gives all six: `knowledge_list`, `knowledge_search`, `knowledge_read`, `knowledge_activity`, `knowledge_page` and `knowledge_note`. `{ read: true }` gives the first four. `{ write: true }` gives the last two. `{ read: { maxTokens } }` turns on read and caps each `knowledge_read` body or `match` result, each `knowledge_list` result, and each `knowledge_activity` result, at `maxTokens`: 1,000 by default, at least 100. See [Read pages](/docs/knowledge/agents-and-tools#read-pages).',
     isOptional: true,
     defaultValue: 'false',
   },
@@ -140,7 +140,7 @@ Returns the Knowledge tools for explicit wiring, such as an agent that isn't att
 
 ```typescript
 const tools = knowledge.createTools({ write: false })
-// knowledge_list, knowledge_search, knowledge_read
+// knowledge_list, knowledge_search, knowledge_read, knowledge_activity
 ```
 
 `principals` fixes the scope addresses every call acts as, for a host that runs the tools outside an agent run, such as an MCP server acting for an external agent. Each address must match a declared scope type, the store's declarations included. A call made with one that doesn't is refused. `createTools()` throws only for an empty list. The call's own run scopes are then ignored, and access follows the scope rules for these principals. Set them from the host's own authentication, never from the request. `author` is recorded on writes made through these tools.
@@ -157,13 +157,13 @@ const tools = knowledge.createTools({
 #### `getPinnedContext()`
 
 ```typescript oxfmt:false
-getPinnedContext(options: { principals: readonly string[] }): Promise<KnowledgePinnedEntry[]>
+getPinnedContext(options: { principals: readonly string[]; read?: boolean }): Promise<KnowledgePinnedEntry[]>
 ```
 
-Returns the pinned pages a caller holding `principals` receives, rendered as an agent run receives them: only pages it can read, within the instance's pin budget. Use it beside `createTools({ principals })` when a host serves Knowledge outside an agent run. Throws for an empty list or an undeclared principal.
+Returns the pinned pages a caller holding `principals` receives, rendered as an agent run receives them: only pages it can read, within the instance's pin budget. Use it beside `createTools({ principals })` when a host serves Knowledge outside an agent run, and pass the same `read` as that call (default: the instance's `tools.read`) so entries point at `knowledge_read` and `knowledge_list` only when the caller has them. Throws for an empty list or an undeclared principal.
 
 ```typescript
-const pins = await knowledge.getPinnedContext({ principals: ['agent:claude-code'] })
+const pins = await knowledge.getPinnedContext({ principals: ['agent:claude-code'], read: true })
 // [{ id, text, name, scope }]
 ```
 
@@ -297,10 +297,17 @@ Creates or updates the page at `path` (keys joined by `/`, such as `guides/insta
 #### `removePage()`
 
 ```typescript oxfmt:false
-removePage(input: { scope: string; path: string; author?: string }): Promise<KnowledgePage | null>
+removePage(input: {
+  scope: string
+  path: string
+  author?: string
+  expected?: { id: string; version: number }
+}): Promise<KnowledgePage | null>
 ```
 
 Removes the page at `path` and resolves to it, or to `null` when no page is there. Throws `"<scope>#<path>" has child pages; remove them first.` for a page with children, and `"<scope>#<path>" is declared in config; change the scope's pages to remove it.` for a template page. Throws without retrying when another write changed the page first.
+
+Pass `expected`, the page's `id` and `version` as you read it, to remove only that page. If the page at `path` is a different page or another version, or nothing is there, the call throws `KnowledgeConflictError` and removes nothing. The same applies when another write changes or removes the page during the call.
 
 #### `movePage()`
 
@@ -421,7 +428,7 @@ See [rename or retire a scope type](/reference/knowledge/scope-declarations#rena
 onChange(listener: (event: KnowledgeChangeEvent) => void): () => void
 ```
 
-Calls `listener` after each committed write made through this instance's store: tool writes, host writes through `getStorage()`, and new scopes. Returns a function that removes the listener. Use it to refresh a live UI. Writes made on a store obtained another way aren't seen.
+Calls `listener` after each committed write made through this instance's store: tool writes, host writes through `getStorage()`, importer runs, and new scopes. Writes in a transaction are reported once it commits, and not at all if it rolls back. Returns a function that removes the listener. Use it to refresh a live UI. Writes made on a store obtained another way aren't seen.
 
 Events carry IDs, not content or access, so anything that relays them to people must re-read each page under that person's read scope from `readScopeFor()`:
 

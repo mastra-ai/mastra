@@ -737,7 +737,33 @@ export type ToolExecuteContext<TContext, TRequestContext extends Record<string, 
   requestContext: RequestContext<TRequestContext>;
 };
 
-/** The `execute` callback signature used by `createTool` and `new Tool(...)`. */
+/**
+ * The `execute` callback of `createTool({ execute })` / `new Tool(...)`: called as
+ * `execute(inputData, context)`.
+ *
+ * - `inputData`: the tool input, already validated against `inputSchema` (the callback is not
+ *   called when validation fails; the caller gets a `ValidationError` instead). It is the
+ *   input object itself, not wrapped in `{ context }`.
+ * - `context`: runtime context — `requestContext` (always present), `mastra`, `abortSignal`,
+ *   `writer` (stream custom data), `workspace`, `observe`, and `agent` (`toolCallId`,
+ *   `threadId`, `resourceId`, `suspend`, `resumeData`) when an agent runs the tool, or
+ *   `workflow` when a workflow step does.
+ * - Return the tool output (validated against `outputSchema` when set).
+ *
+ * @example
+ * ```ts
+ * createTool({
+ *   id: 'get-weather',
+ *   description: 'Get the weather for a city',
+ *   inputSchema: z.object({ city: z.string() }),
+ *   execute: async ({ city }, { requestContext, abortSignal }) => {
+ *     return { city, temperature: 21 };
+ *   },
+ * });
+ * ```
+ *
+ * @see [createTool() reference](https://mastra.ai/reference/tools/create-tool)
+ */
 export type ToolExecuteFunction<
   TSchemaIn,
   TSchemaOut,

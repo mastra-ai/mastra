@@ -9,6 +9,7 @@ import {
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
   TABLE_KNOWLEDGE_PAGES_STATE,
 } from '@internal/core/knowledge-compat';
+import { coreFeatures } from '@mastra/core/features';
 import { KnowledgeSchemaResetRequiredError, KnowledgeStorage } from '@mastra/core/storage';
 import type { KnowledgePageStore } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
@@ -20,7 +21,14 @@ import type {
   SqliteTransaction as Transaction,
 } from '../../db/client';
 import { withClientWriteLock } from '../../db/write-lock';
-import { KNOWLEDGE_PAGE_DDL, KNOWLEDGE_PAGE_TABLES, LibSQLKnowledgePages, upgradeKnowledgePinKinds } from './pages';
+import { KNOWLEDGE_IMPORTER_DDL, LibSQLKnowledgeImporters } from './importers';
+import {
+  KNOWLEDGE_PAGE_DDL,
+  KNOWLEDGE_PAGE_TABLES,
+  LibSQLKnowledgePages,
+  upgradeKnowledgeActivityFeed,
+  upgradeKnowledgePinKinds,
+} from './pages';
 
 interface Executor {
   execute(statement: string | { sql: string; args?: InValue[] }): Promise<ResultSet>;
@@ -64,16 +72,40 @@ export function getLibSQLKnowledgeIsolationKey(
   return urlKey ? `libsql:${urlKey}` : (client ?? config.client ?? config);
 }
 
+/** Set on the config of a transaction view: the write transaction it runs on. */
+const IN_TRANSACTION = Symbol('knowledge transaction');
+const transactions = new WeakMap<KnowledgeStorage, Transaction>();
+
+/**
+ * The write transaction behind a {@link KnowledgeLibSQL} transaction view, for tables in this
+ * package that must commit with the page writes.
+ * @internal
+ */
+export function libsqlKnowledgeTransaction(view: KnowledgeStorage): Transaction {
+  const tx = transactions.get(view);
+  if (!tx) throw new Error('Not a KnowledgeLibSQL transaction view.');
+  return tx;
+}
+
 export class KnowledgeLibSQL extends KnowledgeStorage {
   readonly #client: Client;
   readonly #db: LibSQLDB;
   readonly #pages: LibSQLKnowledgePages;
+  readonly #inTransaction?: Transaction;
+  readonly #importers?: LibSQLKnowledgeImporters;
+  #savepoints = 0;
 
-  constructor(config: LibSQLDomainConfig) {
+  /** The importer tables' DDL, for provisioning them ahead of time when storage init is disabled. */
+  static getImportersExportDDL(): string[] {
+    return KNOWLEDGE_IMPORTER_DDL.map(statement => `${statement};`);
+  }
+
+  constructor(config: LibSQLDomainConfig & { [IN_TRANSACTION]?: Transaction }) {
     const client = resolveClient(config);
     const storageIsolationKey = config.storageIsolationKey ?? getLibSQLKnowledgeIsolationKey(config, client);
     super({ storageIsolationKey });
     this.#client = client;
+    this.#inTransaction = config[IN_TRANSACTION];
     this.#db = new LibSQLDB({
       client: this.#client,
       maxRetries: config.maxRetries,
@@ -81,9 +113,20 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       getLogger: () => this.logger,
     });
     this.#pages = new LibSQLKnowledgePages({
-      read: this.#client,
+      read: this.#inTransaction ?? this.#client,
       transaction: operation => this.#transaction(operation),
     });
+    if (coreFeatures.has('knowledge-importers')) {
+      this.#importers = new LibSQLKnowledgeImporters({
+        read: this.#inTransaction ?? this.#client,
+        transaction: operation => this.#transaction(operation),
+      });
+    }
+  }
+
+  /** Same database as the pages: on a transaction view, the view's write transaction. */
+  override get importers(): LibSQLKnowledgeImporters | undefined {
+    return this.#importers;
   }
 
   override getCapabilities() {
@@ -93,11 +136,25 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       supportsSchemaInspection: true,
       supportsExplicitReset: true,
       supportsPinKinds: true,
+      supportsTransactions: true,
+      supportsActivityDateRange: true,
+      supportsActivityAscending: true,
     } as const;
   }
 
   override async dangerouslyClearAll(): Promise<void> {
     await this.#pages.clearAll();
+  }
+
+  /**
+   * Run once after restoring an older copy of the database file, or after moving the app to a copy
+   * that was behind (the store can't detect that). Not needed when an embedded replica only lags its
+   * primary: it catches up on sync. Oldest-first positions held from
+   * before are then refused and readers restart from `since`, instead of skipping the events that
+   * reuse the numbers they passed.
+   */
+  rebaseActivityFeed(): Promise<void> {
+    return this.#pages.rebaseActivityFeed();
   }
 
   // Schema-4 page store: delegates to LibSQLKnowledgePages.
@@ -138,18 +195,24 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         sql: `INSERT OR IGNORE INTO "${TABLE_KNOWLEDGE_PAGES_STATE}" (id, schemaVersion) VALUES ('knowledge', ?)`,
         args: [KNOWLEDGE_PAGES_SCHEMA_VERSION],
       });
+      await upgradeKnowledgeActivityFeed(tx);
     });
   }
 
   override async dangerouslyReset(): Promise<void> {
     await withClientWriteLock(this.#client, async () => {
+      // Pages and importer rows go together, in one batch: no node map outlives its pages.
+      const importerStatements = this.#importers ? await LibSQLKnowledgeImporters.resetStatements(this.#client) : [];
       await this.#client.batch(
-        [...KNOWLEDGE_RESETTABLE_TABLE_NAMES, KNOWLEDGE_PAGE_TABLES.pinAudiences, KNOWLEDGE_PAGE_TABLES.links].map(
-          table => ({
-            sql: `DROP TABLE IF EXISTS "${table}"`,
-            args: [],
-          }),
-        ),
+        [
+          ...importerStatements.map(sql => ({ sql, args: [] })),
+          ...[...KNOWLEDGE_RESETTABLE_TABLE_NAMES, KNOWLEDGE_PAGE_TABLES.pinAudiences, KNOWLEDGE_PAGE_TABLES.links].map(
+            table => ({
+              sql: `DROP TABLE IF EXISTS "${table}"`,
+              args: [],
+            }),
+          ),
+        ],
         'write',
       );
     });
@@ -352,7 +415,34 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     return this.#pages.listPins(input);
   }
 
+  override transaction<T>(operation: (tx: KnowledgeStorage) => Promise<T>): Promise<T> {
+    if (this.#inTransaction) return this.#transaction(() => operation(this));
+    return this.#transaction(tx => {
+      const view = new KnowledgeLibSQL({
+        client: this.#client,
+        storageIsolationKey: this.getStorageIsolationKey(),
+        [IN_TRANSACTION]: tx,
+      });
+      transactions.set(view, tx);
+      return operation(view);
+    });
+  }
+
   async #transaction<T>(operation: (tx: Transaction) => Promise<T>): Promise<T> {
+    // In a transaction view, a savepoint: a failed store method undoes only its own writes.
+    const open = this.#inTransaction;
+    if (open) {
+      const name = `knowledge_sp_${++this.#savepoints}`;
+      await open.execute(`SAVEPOINT ${name}`);
+      try {
+        const result = await operation(open);
+        await open.execute(`RELEASE SAVEPOINT ${name}`);
+        return result;
+      } catch (error) {
+        await open.execute(`ROLLBACK TO SAVEPOINT ${name}`);
+        throw error;
+      }
+    }
     return this.#db.executeWriteOperationWithRetry(
       () =>
         withClientWriteLock(this.#client, async () => {

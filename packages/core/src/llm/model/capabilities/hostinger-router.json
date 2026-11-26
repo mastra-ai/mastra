@@ -30,11 +30,6 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "claude-sonnet-4.5": [
-      {
-        "type": "toggle"
-      }
-    ],
     "claude-haiku-4.5": [
       {
         "type": "toggle"
@@ -56,6 +51,11 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "claude-sonnet-4.5": [
+      {
+        "type": "toggle"
       }
     ]
   }

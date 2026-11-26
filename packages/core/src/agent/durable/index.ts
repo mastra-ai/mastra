@@ -77,12 +77,8 @@ export {
 } from './create-durable-agent';
 
 // DurableAgent class (base class for durable agents)
-export {
-  DurableAgent,
-  type DurableAgentConfig,
-  type DurableAgentStreamOptions,
-  type DurableAgentStreamResult,
-} from './durable-agent';
+export { DurableAgent } from './durable-agent';
+export type { DurableAgentConfig, DurableAgentStreamOptions, DurableAgentStreamResult } from './types';
 export { applyReservedMemoryContextKeys } from '../helpers';
 
 // EventedAgent class (extends DurableAgent with fire-and-forget execution)
@@ -124,6 +120,7 @@ export {
 export { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
 
 // Lets shared test suites simulate a process crash
+export { DURABLE_CONTEXT_SEGMENT_KEY } from './run-registry';
 export { __resetExecutionFencesForTests } from './execution-fence';
 
 // Shared thread-stream runtime, so durable-agent integrations outside core
@@ -149,8 +146,8 @@ export {
   emitErrorEvent,
   emitAbortEvent,
   emitSuspendedEvent,
-  type DurableAgentStreamOptions as StreamAdapterOptions,
-  type DurableAgentStreamResult as StreamAdapterResult,
+  type DurableStreamAdapterOptions as StreamAdapterOptions,
+  type DurableStreamAdapterResult as StreamAdapterResult,
 } from './stream-adapter';
 
 // Detach an observer's fullStream subscription when its consumer stops reading,
@@ -281,6 +278,13 @@ export { pruneAgentLoopSnapshot } from '../../loop/workflows/prune-snapshot';
 // Shared runtime outcome classification for external durable engines.
 export { endRunSpansWithError } from './run-registry';
 /** @internal The span pair a resumed or recovered execution reports under, shared with external durable engines. */
-export { carrySegmentSpans, liveSegmentSpan, segmentSpanData, type SegmentSpanData } from './segment-spans';
+export {
+  carrySegmentSpans,
+  endFailedSegmentSpans,
+  liveSegmentSpan,
+  segmentEndedBySuspension,
+  segmentSpanData,
+  type SegmentSpanData,
+} from './segment-spans';
 /** @internal Runtime instrumentation helpers. */
 export { agentLoopTermination, executionFailureTermination } from '../../loop/shared/execution-outcome';

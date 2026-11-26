@@ -13,6 +13,8 @@ Mastra uses pub/sub internally for workflow event processing, streaming, and cro
 
 For built-in implementations, see [`EventEmitterPubSub`](/reference/pubsub/event-emitter), [`UnixSocketPubSub`](/reference/pubsub/unix-socket-pubsub), [`CachingPubSub`](/reference/pubsub/caching-pubsub), [`RedisStreamsPubSub`](/reference/pubsub/redis-streams), and [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub).
 
+Mastra decides how to behave from an implementation's [properties](#properties), not from its class. Override the ones that describe your transport.
+
 ## Usage example
 
 Extend `PubSub` and implement the four abstract methods to add a custom backend.
@@ -186,13 +188,19 @@ await pubsub.subscribeFromOffset('my-topic', 42, event => {
     name: 'supportsOffsets',
     type: 'boolean',
     description:
-      'Whether `subscribeFromOffset()` honors numeric offsets. Defaults to `false`. A non-zero offset on an unsupported implementation falls back to replay subscription and emits a diagnostic warning when a logger is configured.',
+      'Whether `subscribeFromOffset()` honors numeric offsets. Defaults to `false`. A non-zero offset on an unsupported implementation falls back to replay subscription and logs a warning with `console.warn`. Implementations can override `onUnsupportedOffset()` to use their own logger.',
+  },
+  {
+    name: 'deliversAcrossProcesses',
+    type: 'boolean',
+    description:
+      'Whether a published event can reach a subscriber in another process. Defaults to `true`, so Mastra coordinates runs with other processes unless the implementation says otherwise. Return `false` only when every subscriber lives in the publishing process, as `EventEmitterPubSub` does.',
   },
   {
     name: 'redeliversUnacked',
     type: 'boolean',
     description:
-      "Whether an event delivered to a consumer that neither acks nor nacks it, for example because its process stopped, is delivered again to another consumer of the same group once the broker considers it abandoned. Defaults to `false`. Workflow recovery doesn't restart evented runs on a pubsub that returns `true`, so return `true` only when the broker does this, and only after 30 seconds or more.",
+      "Whether an event delivered to a consumer that neither acks nor nacks it, for example because its process stopped, is delivered again to another consumer of the same group once the broker considers it abandoned. Defaults to `false`. Workflow recovery doesn't restart evented runs on a pubsub that returns `true`, so return `true` only when the broker does this, and only after 30 seconds or more. Evented workflows and agents that run on several processes need `true`. See [evented workflows and agents](/docs/server/pubsub#evented-workflows-and-agents).",
   },
 ]}
 />
@@ -334,7 +342,7 @@ Per-subscription batching policy. The callback signature doesn't change. A batch
 
 ### `EventCallback`
 
-The callback signature for subscribers: `(event: Event, ack?: () => Promise<void>, nack?: () => Promise<void>) => void`.
+The callback signature for subscribers: `(event: Event, ack?: () => Promise<void>, nack?: () => Promise<void>, extend?: () => Promise<void>) => void | Promise<void>`.
 
 <PropertiesTable
   content={[
@@ -353,6 +361,13 @@ The callback signature for subscribers: `(event: Event, ack?: () => Promise<void
     name: 'nack',
     type: '() => Promise<void>',
     description: 'Negative acknowledge. The event is requeued for redelivery after a delay.',
+    isOptional: true,
+  },
+  {
+    name: 'extend',
+    type: '() => Promise<void>',
+    description:
+      "Renew the delivery's lease so the broker doesn't redeliver the event while the handler is still running. Omitted by backends that can't extend a delivery.",
     isOptional: true,
   },
 ]}

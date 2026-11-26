@@ -68,7 +68,7 @@ Extends `BaseExporterConfig`, which includes:
 ## `TracingStorageStrategy`
 
 ```typescript
-type TracingStorageStrategy = 'realtime' | 'batch-with-updates' | 'insert-only'
+type TracingStorageStrategy = 'realtime' | 'batch-with-updates' | 'insert-only' | 'event-sourced'
 ```
 
 ### Strategy behaviors
@@ -88,7 +88,7 @@ readonly name = 'mastra-default-observability-exporter';
 ### init
 
 ```typescript oxfmt:false
-init(options: InitExporterOptions): void
+init(options: InitExporterOptions): Promise<void>
 ```
 
 Initializes the exporter after dependencies are ready. Resolves tracing strategy based on storage capabilities.
@@ -174,7 +174,7 @@ The buffer flushes when any of these conditions are met:
 
 Failed flushes are retried with exponential backoff:
 
-- Retry delay: `retryDelayMs * 2^attempt`
+- Retry delay: `retryDelayMs * 2^(attempt - 1)`. The first retry waits `retryDelayMs`.
 - Maximum attempts: `maxRetries`
 - Batch is dropped after all retries fail
 

@@ -22,18 +22,36 @@ export function endRunSpansWithError(...args: Parameters<typeof coreDurable.endR
   if (coreFeatures.has('execution-outcomes')) coreDurable.endRunSpansWithError?.(...args);
 }
 
+/** End the spans a failed execution left open; an older core leaves them open. */
+export function endFailedSegmentSpans(...args: Parameters<typeof coreDurable.endFailedSegmentSpans>): void {
+  if (carriesSegmentSpans()) coreDurable.endFailedSegmentSpans?.(...args);
+}
+
+/** Whether a suspension beside the failed tool call already ended the spans of the segment. */
+export function segmentEndedBySuspension(...args: Parameters<typeof coreDurable.segmentEndedBySuspension>): boolean {
+  return carriesSegmentSpans() && !!coreDurable.segmentEndedBySuspension?.(...args);
+}
+
 export function executionFailureTermination(
   ...args: Parameters<typeof coreObservability.executionFailureTermination>
 ): SpanOutcomeFields {
   return coreFeatures.has('execution-outcomes') ? (coreObservability.executionFailureTermination?.(...args) ?? {}) : {};
 }
 
-/** Keep completed-request usage when a failed request makes the total incomplete. */
-export function generationUsage(usage: LanguageModelUsage, steps: Array<{ usage?: LanguageModelUsage }>) {
+/**
+ * Keep completed-request usage when a failed request makes the total incomplete, less what the
+ * MODEL_GENERATION spans of suspended segments already recorded; an older core recorded none.
+ */
+export function generationUsage(
+  usage: LanguageModelUsage,
+  steps: Array<{ usage?: LanguageModelUsage }>,
+  reported?: LanguageModelUsage,
+) {
   const usageIncomplete = coreFeatures.has('execution-outcomes') && coreObservability.isUsageIncomplete?.(usage);
+  const observed = usageIncomplete ? (coreObservability.calculateObservedUsage?.(steps) ?? usage) : usage;
   return {
     usageIncomplete,
-    usage: usageIncomplete ? (coreObservability.calculateObservedUsage?.(steps) ?? usage) : usage,
+    usage: coreObservability.subtractReportedUsage?.(observed, reported) ?? observed,
   };
 }
 

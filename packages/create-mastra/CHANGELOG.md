@@ -1,5 +1,23 @@
 # create-mastra
 
+## 1.40.3-alpha.2
+
+## 1.40.3-alpha.1
+
+## 1.40.3-alpha.0
+
+## 1.40.2
+
+### Patch Changes
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+## 1.40.2-alpha.9
+
+## 1.40.2-alpha.8
+
+## 1.40.2-alpha.7
+
 ## 1.40.2-alpha.6
 
 ### Patch Changes

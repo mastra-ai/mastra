@@ -136,10 +136,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           models: { activeModelPackId: null, modeDefaults: { build: `openai/${MODEL}`, plan: `openai/${MODEL}` } },
         }),
       );
-      const plansDir = path.join(directory, 'plans');
-      mkdirSync(plansDir, { recursive: true });
+      // Same shape the SDK actually uses: `plansDir` is workspace-relative, so
+      // it is read against the session's project path (`cwd` here).
+      const plansDir = 'plans';
+      mkdirSync(path.join(directory, plansDir), { recursive: true });
       const planPath = path.join(plansDir, 'fix.md');
-      writeFileSync(planPath, '# Fix\n\n1. Do it.\n');
+      writeFileSync(path.join(directory, planPath), '# Fix\n\n1. Do it.\n');
       const toolArguments = {
         plan: { path: planPath },
         release: { version: '1.2.0' },
@@ -279,8 +281,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         const workItemTools = createFactoryWorkItemTools(scope, {
           workItems: seeded.workItems,
           boards: createBoardRegistry(),
-          transitionService: {
-            transition: async request => ({
+          boardEngine: {
+            requestMove: async request => ({
               status: 'accepted',
               transitionId: randomUUID(),
               itemId: request.workItemId,
@@ -437,19 +439,23 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
     // Technical: the resumed run takes the request context the answer hands it. It must name
     // the phase session's owner, so the run keeps one identity from kickoff to finish and never
     // runs with no user ("the request has no authenticated user" on a Factory server).
-    it("carries on as the phase session's owner, and records who approved", async () => {
-      const { answer, errors, audit } = await parkedPhaseSession();
-      const requestsBefore = mock.getRequests().length;
-      resolved = [];
+    it.each(backend === 'postgres' ? ['configured engine', 'evented opt-in'] : ['configured engine'])(
+      "carries on as the phase session's owner, and records who approved (%s)",
+      async engine => {
+        if (engine === 'evented opt-in') vi.stubEnv('MASTRACODE_EXPERIMENTAL_AGENT', 'evented');
+        const { answer, errors, audit } = await parkedPhaseSession();
+        const requestsBefore = mock.getRequests().length;
+        resolved = [];
 
-      await answer('approve');
+        await answer('approve');
 
-      await vi.waitFor(() => expect(mock.getRequests().length).toBeGreaterThan(requestsBefore), { timeout: 30_000 });
-      expect(errors).toEqual([]);
-      expect(resolved.length).toBeGreaterThan(0);
-      expect([...new Set(resolved.map(tenant => tenant?.userId))]).toEqual([OWNER]);
-      expect(audit.map(event => event.actorId)).toEqual([REQUESTER]);
-    });
+        await vi.waitFor(() => expect(mock.getRequests().length).toBeGreaterThan(requestsBefore), { timeout: 30_000 });
+        expect(errors).toEqual([]);
+        expect(resolved.length).toBeGreaterThan(0);
+        expect([...new Set(resolved.map(tenant => tenant?.userId))]).toEqual([OWNER]);
+        expect(audit.map(event => event.actorId)).toEqual([REQUESTER]);
+      },
+    );
 
     it('lets the person who asked approve the plan on the web, and the run carries on as its owner', async () => {
       const { answerOnWeb, errors, audit } = await parkedPhaseSession();

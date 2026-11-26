@@ -69,18 +69,22 @@ async function findActiveSection(name: 'Codebase' | 'Work' | 'Accounts' | 'Model
   return within(screen.getByRole('region', { name }));
 }
 
-function registerSetup(failure?: 'connection' | 'intake' | 'model') {
+function registerSetup(failure?: 'connection' | 'intake' | 'personal-model') {
   const writes: { path: string; body: unknown }[] = [];
   let project: FactoryProjectPayload | undefined;
   let failed = false;
   server.use(
     // A connected personal lane starts on the caller's saved default model, when there is one.
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-      HttpResponse.json({ modelId: null, thinkingLevel: null }),
+      HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
     ),
     http.put(`${TEST_BASE_URL}/web/config/default-model`, async ({ request }) => {
       const body = await request.json();
       writes.push({ path: 'personal-model', body });
+      if (failure === 'personal-model' && !failed) {
+        failed = true;
+        return new HttpResponse(null, { status: 502 });
+      }
       return HttpResponse.json({ ok: true });
     }),
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -176,11 +180,7 @@ function registerSetup(failure?: 'connection' | 'intake' | 'model') {
       return HttpResponse.json({ bindings: [] });
     }),
     http.patch(`${TEST_BASE_URL}/web/factory/projects/fp-1`, async ({ request }) => {
-      writes.push({ path: 'model', body: await request.json() });
-      if (failure === 'model' && !failed) {
-        failed = true;
-        return HttpResponse.json({ error: 'unavailable' }, { status: 502 });
-      }
+      writes.push({ path: 'update', body: await request.json() });
       return HttpResponse.json({ project });
     }),
     http.post(`${TEST_BASE_URL}/web/config/om/provider-defaults`, async ({ request }) => {
@@ -289,7 +289,7 @@ describe('Draft Factory onboarding', () => {
     await user.click(screen.getByRole('button', { name: 'Create factory' }));
     expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
     expect(writes.filter(item => item.path === 'create')).toEqual([
-      { path: 'create', body: { name: 'backend', modelScope: 'factory' } },
+      { path: 'create', body: { name: 'backend', modelScope: 'factory', defaultModelId: 'anthropic/claude-fable-5' } },
     ]);
     expect(writes.find(item => item.path === 'registration')?.body).toEqual({ sourceId: 'gitlab-source' });
     expect(writes.find(item => item.path === 'connection')?.body).toEqual({
@@ -300,7 +300,6 @@ describe('Draft Factory onboarding', () => {
       repository: { externalId: '42', slug: 'team/backend' },
       branch: 'develop',
     });
-    expect(writes.find(item => item.path === 'model')?.body).toEqual({ defaultModelId: 'anthropic/claude-fable-5' });
     // A GitLab project only feeds the board once it is routed to the Factory it was picked for.
     expect(writes.find(item => item.path === 'routing')?.body).toEqual({
       integrationId: 'gitlab',
@@ -497,11 +496,11 @@ describe('Draft Factory onboarding', () => {
     expect(await screen.findByRole('heading', { name: 'Accounts', level: 2 })).toHaveFocus();
   });
 
-  it.each(['connection', 'model'] as const)(
+  it.each(['connection', 'personal-model'] as const)(
     'reuses the pending Factory after a failed final %s save and reload',
     async failure => {
       const writes = registerSetup(failure);
-      seedOnboarding('model', { modelScope: 'factory', repository: repo, workConfirmed: true, model });
+      seedOnboarding('model', { modelScope: 'user', repository: repo, workConfirmed: true, personal: model });
       const user = userEvent.setup();
       const view = renderOnboarding();
       await user.click(await enabledCreateButton());
@@ -518,11 +517,12 @@ describe('Draft Factory onboarding', () => {
   it.each(['factory', 'user', 'hybrid'] as const)(
     'recreates a pending Factory when a failed setup is retried in %s scope',
     async desiredScope => {
-      const writes = registerSetup('model');
+      const writes = registerSetup('personal-model');
+      const firstScope = desiredScope === 'user' ? 'hybrid' : 'user';
       seedOnboarding('model', {
         repository: repo,
         workConfirmed: true,
-        modelScope: desiredScope === 'factory' ? 'user' : 'factory',
+        modelScope: firstScope,
         model,
         personal: model,
       });
@@ -544,14 +544,9 @@ describe('Draft Factory onboarding', () => {
       expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
       expect(writes.filter(item => item.path === 'delete')).toEqual([{ path: 'delete', body: { id: 'fp-1' } }]);
       expect(writes.filter(item => item.path === 'create')).toEqual([
-        { path: 'create', body: { name: 'hello', modelScope: desiredScope === 'factory' ? 'user' : 'factory' } },
-        { path: 'create', body: { name: 'hello', modelScope: desiredScope } },
+        { path: 'create', body: { name: 'hello', modelScope: firstScope, defaultModelId: model.modelId } },
+        { path: 'create', body: { name: 'hello', modelScope: desiredScope, defaultModelId: model.modelId } },
       ]);
-      expect(
-        writes
-          .filter(item => item.path === 'model')
-          .every(item => !z.object({ modelScope: z.unknown().optional() }).parse(item.body).modelScope),
-      ).toBe(true);
     },
   );
 
@@ -571,63 +566,63 @@ describe('Draft Factory onboarding', () => {
     expect(writes.filter(item => item.path === 'create')).toHaveLength(1);
   });
 
-  it.each(['model'] as const)(
-    'replaces only its own repository link when the codebase changes after a failed %s save',
-    async failure => {
-      const writes = registerSetup(failure);
-      const links: { id: string; repository: { slug: string; externalId: string; defaultBranch: string } }[] = [];
-      server.use(
-        http.post(
-          `${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections/conn-1/repositories`,
-          async ({ request }) => {
-            const body = z
-              .object({ repository: z.object({ slug: z.string(), externalId: z.string() }) })
-              .parse(await request.json());
-            const link = {
-              id: `link-${body.repository.externalId}`,
-              repository: { ...body.repository, defaultBranch: 'main' },
-            };
-            if (!links.some(existing => existing.id === link.id)) links.push(link);
-            return HttpResponse.json({ projectRepository: { ...link, branch: 'main' } });
-          },
-        ),
-        http.delete(`${TEST_BASE_URL}/web/factory/projects/fp-1/repositories/:linkId`, ({ params }) => {
-          writes.push({ path: 'unlink', body: params.linkId });
-          links.splice(
-            links.findIndex(link => link.id === params.linkId),
-            1,
-          );
-          return HttpResponse.json({ ok: true });
-        }),
-      );
-      persistOnboardingDraft({ modelScope: 'factory', repository: repo, workConfirmed: true, model });
-      persistOnboardingStep('model');
-      const user = userEvent.setup();
-      renderOnboarding();
-      await user.click(await enabledCreateButton());
-      expect(await screen.findByRole('alert')).toBeInTheDocument();
+  it('replaces only its own repository link when the codebase changes after a failed personal model save', async () => {
+    const writes = registerSetup('personal-model');
+    const links: { id: string; repository: { slug: string; externalId: string; defaultBranch: string } }[] = [];
+    server.use(
+      http.post(
+        `${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections/conn-1/repositories`,
+        async ({ request }) => {
+          const body = z
+            .object({ repository: z.object({ slug: z.string(), externalId: z.string() }) })
+            .parse(await request.json());
+          const link = {
+            id: `link-${body.repository.externalId}`,
+            repository: { ...body.repository, defaultBranch: 'main' },
+          };
+          if (!links.some(existing => existing.id === link.id)) links.push(link);
+          return HttpResponse.json({ projectRepository: { ...link, branch: 'main' } });
+        },
+      ),
+      http.delete(`${TEST_BASE_URL}/web/factory/projects/fp-1/repositories/:linkId`, ({ params }) => {
+        writes.push({ path: 'unlink', body: params.linkId });
+        links.splice(
+          links.findIndex(link => link.id === params.linkId),
+          1,
+        );
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    persistOnboardingDraft({ modelScope: 'user', repository: repo, workConfirmed: true, personal: model });
+    persistOnboardingStep('model');
+    const user = userEvent.setup();
+    renderOnboarding();
+    await user.click(await enabledCreateButton());
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
 
-      links.push({
-        id: 'link-teammate',
-        repository: { slug: 'octo/teammate', externalId: '7', defaultBranch: 'main' },
-      });
-      await user.click(screen.getByRole('button', { name: 'Change codebase' }));
-      await user.click(await screen.findByRole('radio', { name: 'octo/other' }));
-      await user.click(screen.getByRole('button', { name: 'Continue' }));
-      await user.click(await enabledCreateButton());
+    links.push({
+      id: 'link-teammate',
+      repository: { slug: 'octo/teammate', externalId: '7', defaultBranch: 'main' },
+    });
+    await user.click(screen.getByRole('button', { name: 'Change codebase' }));
+    await user.click(await screen.findByRole('radio', { name: 'octo/other' }));
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.click(await enabledCreateButton());
 
-      expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
-      expect(writes.filter(item => item.path === 'create')).toHaveLength(1);
-      expect(writes.filter(item => item.path === 'unlink')).toEqual([{ path: 'unlink', body: 'link-99' }]);
-      expect(writes.filter(item => item.path === 'model').map(item => item.body)).toContainEqual({ name: 'other' });
-      expect(links.map(link => link.repository.slug)).toEqual(['octo/teammate', 'octo/other']);
-    },
-  );
+    expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
+    expect(writes.filter(item => item.path === 'create')).toHaveLength(1);
+    expect(writes.filter(item => item.path === 'unlink')).toEqual([{ path: 'unlink', body: 'link-99' }]);
+    expect(writes.filter(item => item.path === 'update').map(item => item.body)).toContainEqual({
+      name: 'other',
+      defaultModelId: model.modelId,
+    });
+    expect(links.map(link => link.repository.slug)).toEqual(['octo/teammate', 'octo/other']);
+  });
 
   it.each([thirdRepo, repo])(
     'removes superseded links after a failed cleanup, reload, and change to $fullName',
     async finalRepo => {
-      const writes = registerSetup('model');
+      const writes = registerSetup('personal-model');
       const repositories = [repo, otherRepo, thirdRepo];
       const teammateRepo: GithubRepo = { ...repo, id: 7, name: 'teammate', fullName: 'octo/teammate' };
       const links = new Map<string, GithubRepo>([['link-teammate', teammateRepo]]);
@@ -665,7 +660,7 @@ describe('Draft Factory onboarding', () => {
           return HttpResponse.json({ ok: true });
         }),
       );
-      persistOnboardingDraft({ modelScope: 'factory', repository: repo, workConfirmed: true, model });
+      persistOnboardingDraft({ modelScope: 'user', repository: repo, workConfirmed: true, personal: model });
       persistOnboardingStep('model');
       const user = userEvent.setup();
       const view = renderOnboarding();
@@ -716,8 +711,11 @@ describe('Personal Factory model', () => {
     expect(writes).toEqual([]);
     await user.click(await enabledCreateButton());
     await screen.findByRole('heading', { name: 'Factory ready' });
-    expect(writes.find(item => item.path === 'create')?.body).toEqual({ name: repo.name, modelScope: 'user' });
-    expect(writes.find(item => item.path === 'model')?.body).toEqual({ defaultModelId: 'anthropic/claude-fable-5' });
+    expect(writes.find(item => item.path === 'create')?.body).toEqual({
+      name: repo.name,
+      modelScope: 'user',
+      defaultModelId: 'anthropic/claude-fable-5',
+    });
     expect(writes.find(item => item.path === 'personal-model')?.body).toEqual({
       modelId: 'anthropic/claude-fable-5',
     });
@@ -806,8 +804,9 @@ describe('Account presets', () => {
       expect(writes).toEqual([]);
       await user.click(await enabledCreateButton());
       await screen.findByRole('heading', { name: 'Factory ready' });
-      expect(writes.find(item => item.path === 'create')?.body).toEqual({ name: repo.name, modelScope: scope });
-      expect(writes.find(item => item.path === 'model')?.body).toEqual({
+      expect(writes.find(item => item.path === 'create')?.body).toEqual({
+        name: repo.name,
+        modelScope: scope,
         defaultModelId: scope === 'user' ? personalModel.modelId : model.modelId,
       });
       expect(writes.filter(item => item.path === 'personal-model')).toEqual(
@@ -862,7 +861,11 @@ describe('Account presets', () => {
     expect(signInStarts).toEqual([{ mode: 'paste-code', scope: 'user' }]);
     await user.click(await enabledCreateButton());
     await screen.findByRole('heading', { name: 'Factory ready' });
-    expect(writes.find(item => item.path === 'create')?.body).toEqual({ name: repo.name, modelScope: 'hybrid' });
+    expect(writes.find(item => item.path === 'create')?.body).toEqual({
+      name: repo.name,
+      modelScope: 'hybrid',
+      defaultModelId: model.modelId,
+    });
     expect(writes.find(item => item.path === 'personal-model')?.body).toEqual({ modelId: personalModel.modelId });
   });
 
@@ -913,7 +916,14 @@ describe('Account presets', () => {
     const writes = registerSetup();
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: 'openai/gpt-6.1-sol', thinkingLevel: null }),
+        HttpResponse.json({
+          modelId: 'openai/gpt-6.1-sol',
+          thinkingLevel: null,
+          modelPacks: [
+            { id: 'personal', name: 'Personal', models: [{ modelId: 'openai/gpt-6.1-sol', thinkingLevel: 'medium' }] },
+          ],
+          defaultModelPackId: 'personal',
+        }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/models`, () =>
         HttpResponse.json({
@@ -944,7 +954,14 @@ describe('Account presets', () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/default-model`, async () => {
         await defaultAnswered;
-        return HttpResponse.json({ modelId: 'openai/gpt-6.1-sol', thinkingLevel: null });
+        return HttpResponse.json({
+          modelId: 'openai/gpt-6.1-sol',
+          thinkingLevel: null,
+          modelPacks: [
+            { id: 'personal', name: 'Personal', models: [{ modelId: 'openai/gpt-6.1-sol', thinkingLevel: 'medium' }] },
+          ],
+          defaultModelPackId: 'personal',
+        });
       }),
       http.get(`${TEST_BASE_URL}/web/config/models`, () =>
         HttpResponse.json({
@@ -1012,7 +1029,11 @@ describe('Account presets', () => {
     await user.click(await enabledCreateButton());
     await screen.findByRole('heading', { name: 'Factory ready' });
     expect(writes.filter(item => item.path === 'personal-model')).toEqual([]);
-    expect(writes.find(item => item.path === 'create')?.body).toEqual({ name: repo.name, modelScope: 'factory' });
+    expect(writes.find(item => item.path === 'create')?.body).toEqual({
+      name: repo.name,
+      modelScope: 'factory',
+      defaultModelId: model.modelId,
+    });
   });
 
   it('lets a local setup without an account switch the theme', async () => {
@@ -1058,7 +1079,7 @@ describe('Account presets', () => {
     renderOnboarding();
     await findActiveSection('Model');
     await user.click(await enabledCreateButton());
-    expect(await screen.findByRole('button', { name: 'Creating your factory…' })).toBeDisabled();
+    expect(await screen.findByRole('button', { name: 'Create factory', busy: true })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Change codebase' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Change work' })).toBeDisabled();
     const accounts = within(screen.getByRole('region', { name: 'Accounts' }));
@@ -1069,7 +1090,7 @@ describe('Account presets', () => {
     releaseCreate();
     expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
     expect(writes.filter(item => item.path === 'create')).toEqual([
-      { path: 'create', body: { name: repo.name, modelScope: 'factory' } },
+      { path: 'create', body: { name: repo.name, modelScope: 'factory', defaultModelId: model.modelId } },
     ]);
   });
 });

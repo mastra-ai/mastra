@@ -93,6 +93,14 @@ const sidebars = {
             icon: 'https://app.nango.dev/images/template-logos/outlook.svg',
           },
         },
+        {
+          type: 'doc',
+          id: 'email-calendar/sendgrid',
+          label: 'SendGrid',
+          customProps: {
+            icon: 'https://app.nango.dev/images/template-logos/sendgrid.svg',
+          },
+        },
       ],
     },
     {
@@ -378,6 +386,12 @@ const sidebars = {
             icon: 'https://cdn.simpleicons.org/vercel/black?viewbox=auto&size=28',
             iconDark: 'https://cdn.simpleicons.org/vercel/white?viewbox=auto&size=28',
           },
+        },
+        {
+          type: 'doc',
+          id: 'sandboxes/wbx',
+          label: 'WBX Sandbox',
+          customProps: { icon: '/img/integrations/wbx.svg', customCSS: 'dark:invert' },
         },
       ],
     },
@@ -740,15 +754,38 @@ const sidebars = {
       items: [
         {
           type: 'doc',
+          id: 'tools/anthropic',
+          label: 'Anthropic',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/anthropic/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/anthropic/white?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
           id: 'tools/brightdata',
           label: 'Bright Data',
           customProps: { icon: '/img/integrations/bright-data.svg' },
         },
         {
           type: 'doc',
+          id: 'tools/exa',
+          label: 'Exa',
+          customProps: { icon: 'https://app.nango.dev/images/template-logos/exa.svg' },
+        },
+        {
+          type: 'doc',
           id: 'tools/firecrawl',
           label: 'Firecrawl',
           customProps: { icon: '/img/integrations/firecrawl.svg' },
+        },
+        {
+          type: 'doc',
+          id: 'tools/gitlab',
+          label: 'GitLab',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/gitlab?viewbox=auto&size=28',
+          },
         },
         {
           type: 'doc',
@@ -1288,10 +1325,42 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'other/cloudflare-workers',
+          label: 'Cloudflare Workers',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/cloudflare?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'other/digits',
+          label: 'Digits',
+          customProps: {
+            icon: 'https://app.nango.dev/images/template-logos/digits.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'other/figma',
+          label: 'Figma',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/figma?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
           id: 'other/fireflies',
           label: 'Fireflies.ai',
           customProps: {
             icon: 'https://app.nango.dev/images/template-logos/fireflies.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'other/google-analytics',
+          label: 'Google Analytics',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/googleanalytics?viewbox=auto&size=28',
           },
         },
         {

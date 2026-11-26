@@ -80,7 +80,7 @@ export function SkillEditor({
                 </Txt>
               )}
               {revertable && (
-                <Button size="sm" variant="ghost" onClick={revert} disabled={pending}>
+                <Button size="sm" variant="ghost" onClick={revert} disabled={pending} loading={remove.isPending}>
                   Revert to original
                 </Button>
               )}
@@ -108,7 +108,13 @@ export function SkillEditor({
                 <Button size="sm" onClick={keep} disabled={pending} autoFocus>
                   Keep
                 </Button>
-                <Button size="sm" variant="destructive" onClick={deleteSkill} disabled={pending}>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={deleteSkill}
+                  disabled={pending}
+                  loading={remove.isPending}
+                >
                   Delete skill
                 </Button>
               </>
@@ -162,8 +168,8 @@ export function SkillEditor({
           <Button size="sm" variant="ghost" onClick={discard} disabled={pending}>
             Discard
           </Button>
-          <Button size="sm" variant="primary" onClick={submit} disabled={pending}>
-            {save.isPending ? 'Saving…' : 'Save'}
+          <Button size="sm" variant="primary" onClick={submit} disabled={pending} loading={save.isPending}>
+            Save
           </Button>
         </SaveBar>
       )}

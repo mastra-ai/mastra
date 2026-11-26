@@ -11,12 +11,7 @@ import { expect, it, vi } from 'vitest';
 import type { AgentExecutionOptions } from '../../../../agent/agent.types';
 import { createScorer } from '../../../../evals';
 import { EntityType } from '../../../../observability';
-import {
-  createSharedAgent,
-  describeForAllEngines,
-  isDurableEngineVariant,
-  useLoopScenarioAimock,
-} from '../aimock-scenario';
+import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
 import { captureOutcomeEvents } from '../outcome-test-utils';
 
 const REPLY = 'Scored reply.';
@@ -38,7 +33,7 @@ describeForAllEngines('AIMock loop scenario: call-time and defaultOptions scorer
 
   async function streamToEnd(agent: any, options?: AgentExecutionOptions) {
     const result = await agent.stream('Hello.', options);
-    const output = isDurableEngineVariant(engine) ? result.output : result;
+    const output = result.output ?? result;
     expect(await output.text).toBe(REPLY);
     result.cleanup?.();
     return result.runId as string;

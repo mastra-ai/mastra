@@ -20,7 +20,6 @@ import {
 import { useAgentControllerSettings } from '../../../../hooks/useAgentControllerSettings';
 import { useModelReasoningOptions } from '../../../../hooks/useAvailableModels';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useUpdateAgentControllerSettingsMutation } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { sessionDefaultsAnchor, settingsSectionPath } from '../../settings/settingsSections';
 import type { SlashCommand, SlashCommandOption } from '../services/commands';
 import { findCommand, isSlashCommand, parseSlashCommand } from '../services/commands';
@@ -49,7 +48,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const { sessionId, sessionEnabled, baseUrl, modelLockedReason } = useChatSessionContext();
   const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { usage, omPhase } = useChatRuntime();
-  const { activeModelId, setModel } = useChatModels();
+  const { activeModelId, select } = useChatModels();
   const { catalogTarget, modelScope } = useChatModelScope();
   const activeModelReasoningOptions = useModelReasoningOptions(activeModelId, catalogTarget);
   const availableThinkingLevels = getAvailableThinkingLevelsForModel(activeModelId ?? '', activeModelReasoningOptions);
@@ -67,9 +66,8 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
   const followUpMutation = useFollowUpAgentControllerMutation(hookArgs);
   const settingsQuery = useAgentControllerSettings(hookArgs);
-  const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
   const { permissions, permissionsLoading, setPermissionForCategory } = useChatPermissions();
-  const { thinkingDefault } = useChatThinking();
+  const { thinkingDefault, setLevel, resetLevel } = useChatThinking();
 
   const openSessionDefaults = () => {
     if (factoryId)
@@ -111,7 +109,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
       execute: async rawArguments => {
         if (!rawArguments) return;
         if (modelLockedReason) return pushNotice(modelLockedReason);
-        await setModel(rawArguments);
+        await select({ kind: 'model', modelId: rawArguments });
       },
     },
     {
@@ -207,13 +205,13 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
           if (modelLockedReason && changesThinkingLevel) return pushNotice(modelLockedReason);
           if (action.kind === 'set') {
             await ensureSettings();
-            await updateSettingsMutation.mutateAsync({ thinkingLevel: action.level });
+            await setLevel(action.level);
             pushNotice(`Thinking level set to ${action.level}.`);
             return;
           }
           if (action.kind === 'clear') {
             await ensureSettings();
-            await updateSettingsMutation.mutateAsync({ thinkingLevel: null });
+            await resetLevel();
             pushNotice(
               thinkingDefault
                 ? `Thinking level set to default: ${describeThinkingDefault(thinkingDefault)}.`

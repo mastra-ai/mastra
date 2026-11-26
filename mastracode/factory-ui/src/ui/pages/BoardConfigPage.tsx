@@ -13,6 +13,10 @@ import { useShownDraft } from '../domains/boardConfig/BoardDraftProvider';
 import { boardConfigPath } from '../domains/boardConfig/boardConfigPaths';
 import { BoardConfigEditor } from '../domains/boardConfig/components/BoardConfigEditor';
 import { BoardConfigHeader } from '../domains/boardConfig/components/BoardConfigHeader';
+import {
+  BoardConfigHeaderSkeleton,
+  BoardOverviewSkeleton,
+} from '../domains/boardConfig/components/BoardConfigSkeleton';
 import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
 import { OVERVIEW_SURFACE, SETTINGS_COLUMN } from '../domains/boardConfig/settingsColumn';
 import { boardPath } from '../domains/factory/boardCatalog';
@@ -61,21 +65,26 @@ export function BoardConfigPage() {
       ) : undefined,
   });
 
-  const configHeader =
-    query.isSuccess && (!phaseKey || shownPhase) ? (
-      <BoardConfigHeader
-        key={`${boardId}:${query.data.board.revision ?? 'code'}`}
-        factoryId={factory.id}
-        boardId={boardId}
-        phaseKey={phaseKey}
-        response={query.data}
-      />
-    ) : undefined;
+  const configHeader = query.isPending ? (
+    <BoardConfigHeaderSkeleton phase={phaseKey !== undefined} />
+  ) : query.isSuccess && (!phaseKey || shownPhase) ? (
+    <BoardConfigHeader
+      key={`${boardId}:${query.data.board.revision ?? 'code'}`}
+      factoryId={factory.id}
+      boardId={boardId}
+      phaseKey={phaseKey}
+      response={query.data}
+    />
+  ) : undefined;
 
   const body = query.isPending ? (
-    <SettingsContainer>
-      <SettingsSkeleton label="Loading board" rows={3} />
-    </SettingsContainer>
+    phaseKey ? (
+      <SettingsContainer>
+        <SettingsSkeleton label="Loading board" rows={3} />
+      </SettingsContainer>
+    ) : (
+      <BoardOverviewSkeleton />
+    )
   ) : query.isError && query.error instanceof BoardRequestError && query.error.code === 'board_not_found' ? (
     <EmptyState variant="fill" titleSlot={<span role="alert">Board unavailable: this board is not installed.</span>} />
   ) : query.isError ? (
@@ -111,10 +120,10 @@ export function BoardConfigPage() {
     <PageLayout
       variant="page"
       body="fixed"
-      header={configHeader && <div className={cn(SETTINGS_COLUMN, 'pb-3')}>{configHeader}</div>}
+      header={configHeader && <div className={SETTINGS_COLUMN}>{configHeader}</div>}
       {...slots}
     >
-      <div className={query.isSuccess ? OVERVIEW_SURFACE : cn(SETTINGS_COLUMN, 'px-4')}>{body}</div>
+      <div className={query.isError ? cn(SETTINGS_COLUMN, 'px-4') : OVERVIEW_SURFACE}>{body}</div>
     </PageLayout>
   );
 }

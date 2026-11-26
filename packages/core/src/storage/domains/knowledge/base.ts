@@ -1,5 +1,7 @@
 import type { KnowledgeScopeDeclarations } from '../../../knowledge/declarations';
 import { StorageDomain } from '../base';
+import type { KnowledgeImportersStorage } from './importers';
+import { KnowledgeMoveTooLargeError, MAX_KNOWLEDGE_MOVE_PAGES } from './pages';
 import type { KnowledgePageStore } from './pages';
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
@@ -18,6 +20,37 @@ export interface KnowledgeStorageCapabilities {
    * pin kinds don't report it, and core refuses listing pins on them rather than store a page pin.
    */
   supportsPinKinds?: boolean;
+  /** The adapter implements {@link KnowledgeStorage.transaction}. */
+  supportsTransactions?: boolean;
+  /**
+   * The adapter enforces {@link KnowledgeTransactionOptions.deadlineAt}. Without it, the option is
+   * ignored and nothing bounds how long a transaction runs.
+   */
+  enforcesTransactionDeadline?: boolean;
+  /**
+   * `listPageActivity` accepts `since`, `until` and `before` (dated mode). Adapters without it don't
+   * report it, and core refuses dated activity reads on them rather than return unbounded history.
+   */
+  supportsActivityDateRange?: boolean;
+  /**
+   * `listPageActivity` accepts `order: 'asc'` and `after` (oldest first). Adapters without it don't
+   * report it, and core refuses oldest-first activity reads on them.
+   */
+  supportsActivityAscending?: boolean;
+}
+
+/** @experimental */
+export interface KnowledgeTransactionOptions {
+  /**
+   * Absolute time (epoch ms) by which the transaction's work must be done, on adapters with
+   * `enforcesTransactionDeadline`: waiting for a connection, every statement and every lock wait
+   * share it, and no new work starts once it has passed. Past it the transaction rolls back and
+   * fails with {@link KnowledgeTransactionDeadlineError}. It bounds when work starts and how long
+   * statements run, not every round trip: BEGIN, ROLLBACK and a COMMIT already sent can overrun
+   * it, so leave a margin. Ignored by a view's nested `transaction`, which shares the outer
+   * deadline.
+   */
+  deadlineAt?: number;
 }
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
@@ -93,6 +126,15 @@ export class KnowledgeUnsupportedCapabilityError extends Error {
   constructor(capability: string) {
     super(`This Knowledge storage adapter does not expose ${capability}.`);
     this.name = 'KnowledgeUnsupportedCapabilityError';
+  }
+}
+
+/** A transaction ran past its `deadlineAt` and was rolled back; nothing in it was applied. Retrying is safe. */
+export class KnowledgeTransactionDeadlineError extends Error {
+  readonly retryable = true;
+  constructor(options?: { cause?: unknown }) {
+    super('The Knowledge transaction ran past its deadline and was rolled back.', options);
+    this.name = 'KnowledgeTransactionDeadlineError';
   }
 }
 
@@ -177,6 +219,73 @@ export abstract class KnowledgeStorage extends StorageDomain implements Knowledg
       supportsSchemaInspection: false,
       supportsExplicitReset: false,
     };
+  }
+
+  /**
+   * Runs `operation` against a view of this store whose reads and writes all belong to one
+   * transaction: it commits when `operation` resolves and rolls back when it throws, and no other
+   * connection sees its writes until it commits. A store method that fails inside the view undoes
+   * only its own writes, so the caller can catch it and go on. `transaction` on the view joins the
+   * same transaction the same way. Adapters in the same package can write their own tables through
+   * the view, so they commit with the page writes.
+   *
+   * Calls on this store (not the view) while `operation` runs are outside the transaction. Await
+   * calls on the view one at a time, as on a single connection.
+   *
+   * @experimental
+   */
+  transaction<T>(_operation: (tx: KnowledgeStorage) => Promise<T>, _options?: KnowledgeTransactionOptions): Promise<T> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('transactions'));
+  }
+
+  /**
+   * On a {@link transaction} view: locks the pages' rows against other writers until commit. A no-op
+   * on stores whose transactions already exclude every other writer (one write transaction at a
+   * time).
+   *
+   * @experimental
+   */
+  lockPages(_ids: string[]): Promise<void> {
+    return Promise.resolve();
+  }
+
+  /**
+   * On a {@link transaction} view: the ids of the live pages under `rootId` (not the root itself),
+   * locked so no page can be added under, moved out of or removed from that subtree until commit.
+   * A later {@link movePage} of `rootId` in the same transaction moves exactly these pages. Throws
+   * {@link KnowledgeMoveTooLargeError} past {@link MAX_KNOWLEDGE_MOVE_PAGES}. The default walks the
+   * children without locking, which holds on stores whose transactions exclude every other writer.
+   *
+   * @experimental
+   */
+  async lockSubtree(rootId: string): Promise<string[]> {
+    const ids: string[] = [];
+    const parents = [rootId];
+    while (parents.length) {
+      const parentId = parents.shift()!;
+      let cursor: string | undefined;
+      do {
+        const page = await this.listChildPages({ parentId, read: 'all', ...(cursor ? { cursor } : {}) });
+        for (const child of page.pages) {
+          ids.push(child.id);
+          parents.push(child.id);
+        }
+        // With the root, MAX_KNOWLEDGE_MOVE_PAGES descendants are already one page too many.
+        if (ids.length >= MAX_KNOWLEDGE_MOVE_PAGES) throw new KnowledgeMoveTooLargeError(rootId, ids.length + 1);
+        cursor = page.nextCursor ?? undefined;
+      } while (cursor);
+    }
+    return ids;
+  }
+
+  /**
+   * Importer bookkeeping on the same database and namespace as the pages, or undefined when the
+   * adapter has none. On a {@link transaction} view it belongs to that transaction.
+   *
+   * @experimental
+   */
+  get importers(): KnowledgeImportersStorage | undefined {
+    return undefined;
   }
 
   async inspectSchema(): Promise<KnowledgeSchemaInspection> {

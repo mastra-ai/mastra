@@ -1,5 +1,5 @@
+import type { FilterBarOption } from '@mastra/playground-ui/components/FilterBar';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
-import type { FilterBarField, FilterBarOperator, FilterBarOption } from '@mastra/playground-ui/components/FilterBar';
 import type { LucideIcon } from 'lucide-react';
 import { factoryParticipantId } from '@mastra/factory/work-items/card-people';
 import { PULL_REQUEST_SOURCE_FILTER } from '@mastra/factory/work-items/card-source-filters';
@@ -18,16 +18,24 @@ import { IconUserAdded } from '@mastra/playground-ui/icons/central/IconUserAdded
 import { IconUserDuo } from '@mastra/playground-ui/icons/central/IconUserDuo';
 import { IconUserEdit } from '@mastra/playground-ui/icons/central/IconUserEdit';
 import { IconPersona } from '@mastra/playground-ui/icons/central/IconPersona';
+import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
+import { IconShieldCheck } from '@mastra/playground-ui/icons/central/IconShieldCheck';
 
-export const BOARD_FILTER_OPERATORS: FilterBarOperator[] = [{ id: 'in', label: 'is any of', arity: 'many' }];
+import { BOARD_FILTER_OPERATORS, boardFilterOptions, boardFilterSummary } from '@mastra/playground-ui/domains/factory';
+import type {
+  BoardFilterField as SharedBoardFilterField,
+  BoardFilterOption,
+} from '@mastra/playground-ui/domains/factory';
 
-export type BoardFilterOption = FilterBarOption & { alsoMatches?: string };
-
-export type BoardFilterField = FilterBarField & { id: BoardFilterFieldId; suggestions: BoardFilterOption[] };
+export { BOARD_FILTER_OPERATORS, boardFilterOptions, boardFilterSummary };
+export type { BoardFilterOption };
+export type BoardFilterField = SharedBoardFilterField<BoardFilterFieldId>;
 
 const FIELD_PRESENTATION: Record<BoardFilterFieldId, { label: string; icon: LucideIcon }> = {
   source: { label: 'Intake source', icon: IconInboxEmpty },
   linearProject: { label: 'Linear project', icon: IconKanbanView },
+  pullRequest: { label: 'Pull request', icon: IconPullRequest },
+  trust: { label: 'Trust', icon: IconShieldCheck },
   teammate: { label: 'Involves', icon: IconUserDuo },
   author: { label: 'Author', icon: IconUserEdit },
   assignee: { label: 'Assignee', icon: IconUserAdded },
@@ -89,6 +97,14 @@ export function boardFilterFields({
       label: project.name,
       start: <IconKanbanView aria-hidden />,
     })),
+    pullRequest: [
+      { value: 'with', label: 'Has a pull request', start: <IconPullRequest aria-hidden /> },
+      { value: 'without', label: 'No pull request', start: <IconPullRequest aria-hidden /> },
+    ],
+    trust: [
+      { value: 'trusted', label: 'Trusted', start: <IconShieldCheck aria-hidden /> },
+      { value: 'untrusted', label: 'From outside', start: <IconShieldCheck aria-hidden /> },
+    ],
     teammate: people,
     author: people,
     assignee: people,
@@ -106,20 +122,4 @@ export function boardFilterFields({
     hidden: fieldId === 'linearProject' && !linearProjectOffered,
     suggestions: suggestions[fieldId],
   }));
-}
-
-/** The field's options, plus any picked value no longer offered (a disconnected source, a person off the board). */
-export function boardFilterOptions(field: BoardFilterField, selected: readonly string[]): BoardFilterOption[] {
-  const offered = new Set(field.suggestions.map(option => option.value));
-  const Icon = field.icon;
-  const orphaned = selected
-    .filter(value => !offered.has(value))
-    .map((value): BoardFilterOption => ({ value, start: Icon ? <Icon aria-hidden /> : undefined }));
-  return [...field.suggestions, ...orphaned];
-}
-
-export function boardFilterSummary(field: BoardFilterField, selected: readonly string[]): string {
-  if (selected.length > 1) return `${selected.length} selected`;
-  const only = boardFilterOptions(field, selected).find(option => option.value === selected[0]);
-  return only?.label ?? selected[0];
 }

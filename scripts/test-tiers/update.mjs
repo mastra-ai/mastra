@@ -424,8 +424,9 @@ export function runsToInspect(runs) {
  * on something that hasn't happened yet (a later green head, or a failed job reaching
  * `recheck_after`, when it is old enough to call) and `ready` says nothing could settle it now. So runs that stay unresolved are not fetched
  * again every day, and cannot use up the budget ahead of runs never looked at. A rerun keeps the
- * run id but bumps the attempt, so it is inspected again. A transient GitHub error that outlasts
- * the retries ends the day early the same way as the deadline.
+ * run id but bumps the attempt, so it is inspected again. A run whose transient GitHub error
+ * outlasts the retries is tried once more after the rest; one still failing then is left for the
+ * next day, like a run the deadline cut off, so no files move out.
  * Returns the failures, the runs that settled, the runs still waiting, and how many were left.
  */
 export function inspectRuns(tiers, runs, inspectRun, { deadline, now = Date.now, ready = () => true }) {
@@ -438,17 +439,30 @@ export function inspectRuns(tiers, runs, inspectRun, { deadline, now = Date.now,
   const failures = [];
   const settled = [];
   const waiting = [];
-  for (const [i, run] of pending.entries()) {
-    if (now() >= deadline) return { failures, settled, waiting, left: pending.length - i };
-    if (i % 50 === 0) console.error(`  run ${i + 1}/${pending.length}`);
+  const deferred = [];
+  const queue = pending.map(run => ({ run, retry: false }));
+  for (const [i, { run, retry }] of queue.entries()) {
+    if (now() >= deadline) return { failures, settled, waiting, left: queue.length - i + deferred.length };
+    if (i % 50 === 0 && !retry) console.error(`  run ${i + 1}/${pending.length}`);
     let found;
     try {
       found = inspectRun(run);
     } catch (error) {
       // Retries already ran out; keep what is settled rather than lose the whole day.
       if (!isTransientGhError(error)) throw error;
-      console.error(`GitHub kept failing (${String(error.stderr ?? error.message).trim()}); stopping early`);
-      return { failures, settled, waiting, left: pending.length - i };
+      const reason = String(error.stderr ?? error.message).trim();
+      if (now() >= deadline) {
+        console.error(`GitHub kept failing (${reason}) at the time limit; stopping early`);
+        return { failures, settled, waiting, left: queue.length - i + deferred.length };
+      }
+      if (retry) {
+        console.error(`GitHub kept failing on run ${run.id} again (${reason}); leaving it for the next run`);
+        deferred.push(run);
+      } else {
+        console.error(`GitHub kept failing on run ${run.id} (${reason}); trying it again after the rest`);
+        queue.push({ run, retry: true });
+      }
+      continue;
     }
     failures.push(...found);
     const open = found.filter(f => (f.verdict ?? classifyPrFailure(f)) === 'unresolved');
@@ -463,7 +477,7 @@ export function inspectRuns(tiers, runs, inspectRun, { deadline, now = Date.now,
           .at(-1),
       });
   }
-  return { failures, settled, waiting, left: 0 };
+  return { failures, settled, waiting, left: deferred.length };
 }
 
 /**
@@ -578,8 +592,9 @@ export function retryTransient(
 
 /**
  * One `gh api` call, retried on transient errors, that neither starts, waits nor runs past
- * `stopAt`: a call still running then is killed. Either way it throws a transient error, which
- * ends the day's inspection early with what was settled kept. A --paginate call is repeated
+ * `stopAt`: a call still running then is killed. Either way it throws a transient error. While
+ * runs are inspected, `inspectRuns` then retries that run after the rest, or ends the day early
+ * once its own deadline has passed; other callers fail. A --paginate call is repeated
  * whole, so a retry never mixes pages from two attempts.
  */
 export function boundedGh(args, { stopAt = Infinity, now = Date.now, exec = execFileSync, delays, sleep } = {}) {

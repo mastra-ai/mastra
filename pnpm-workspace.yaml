@@ -371,8 +371,8 @@ overrides:
   # the workspace build (see its vitest config).
   '@mastra/server>@mastra/mcp-apps-components': '-'
   # The Lance adapter supplies vectors; its optional embedding providers are unused here.
-  '@lancedb/lancedb@0.31.0>@huggingface/transformers': '-'
-  '@lancedb/lancedb@0.31.0>openai': '-'
+  '@lancedb/lancedb>@huggingface/transformers': '-'
+  '@lancedb/lancedb>openai': '-'
   # Share Wrangler's runtime with the Cloudflare storage test fixtures.
   'miniflare@4.20260730.0>workerd': 1.20261023.1
   # Temporarily pinning to 7.2.0; will unpin shortly.
@@ -469,7 +469,7 @@ overrides:
   '@modelcontextprotocol/sdk>@hono/node-server': 2.1.6
   '@modelcontextprotocol/node>@hono/node-server': 2.1.6
   '@ai-sdk/provider-utils@>=3.0.0 <3.0.46': 3.0.46
-  '@ai-sdk/provider-utils@>=4.0.0 <4.0.66': 4.0.66
+  '@ai-sdk/provider-utils@>=4.0.0 <4.0.66': 4.0.67
   # provider-utils 5.0.81 pins @ai-sdk/provider 4.0.38; keep ai v7/gateway on the
   # same provider so @internal/ai-v7's bundled types don't get `_2`-suffixed.
   '@ai-sdk/provider@>=4.0.0 <4.0.38': 4.0.38

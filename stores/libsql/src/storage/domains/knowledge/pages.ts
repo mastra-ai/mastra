@@ -3,6 +3,8 @@ import {
   knowledgePageKeyProblem,
   KNOWLEDGE_SEARCH_WEIGHTS,
   knowledgeSearchWords,
+  KnowledgeInvalidCursorError,
+  TABLE_KNOWLEDGE_PAGES_STATE,
 } from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
 import { createKnowledgeUlid, KnowledgeConflictError, KnowledgeNotFoundError } from '@mastra/core/storage';
@@ -13,6 +15,7 @@ import type {
   KnowledgeNoteListOutput,
   KnowledgePage,
   KnowledgePageActivityAction,
+  KnowledgePageActivityInput,
   KnowledgePageActivityEvent,
   KnowledgePageListOutput,
   KnowledgePageSearchHit,
@@ -89,6 +92,66 @@ export async function upgradeKnowledgePinKinds(tx: PageExecutor): Promise<void> 
   );
   await tx.execute(`DROP TABLE "${T.pins}"`);
   await tx.execute(`ALTER TABLE "${next}" RENAME TO "${T.pins}"`);
+}
+
+/**
+ * Activity tables from before feed positions have no `seq`. Adds it, numbers existing events in
+ * createdAt order, and indexes it. Also gives the feed its incarnation id. Run after
+ * {@link KNOWLEDGE_PAGE_DDL} and the state row's insert, in the same transaction; idempotent.
+ */
+export async function upgradeKnowledgeActivityFeed(tx: PageExecutor): Promise<void> {
+  const columns = await tx.execute(`SELECT name FROM pragma_table_info('${T.activity}')`);
+  if (!columns.rows.some(row => String(row.name) === 'seq')) {
+    await tx.execute(`ALTER TABLE "${T.activity}" ADD COLUMN seq INTEGER`);
+    await tx.execute(
+      `UPDATE "${T.activity}" SET seq = o.rank FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY createdAt, id) AS rank FROM "${T.activity}") AS o WHERE o.id = "${T.activity}".id`,
+    );
+  }
+  const state = await tx.execute(`SELECT name FROM pragma_table_info('${TABLE_KNOWLEDGE_PAGES_STATE}')`);
+  if (!state.rows.some(row => String(row.name) === 'activityIncarnation')) {
+    await tx.execute(`ALTER TABLE "${TABLE_KNOWLEDGE_PAGES_STATE}" ADD COLUMN activityIncarnation TEXT`);
+  }
+  await tx.execute(
+    `UPDATE "${TABLE_KNOWLEDGE_PAGES_STATE}" SET activityIncarnation = ${NEW_INCARNATION} WHERE id = 'knowledge' AND activityIncarnation IS NULL`,
+  );
+  await tx.execute(`CREATE UNIQUE INDEX IF NOT EXISTS idx_kactivity_seq ON "${T.activity}" (seq)`);
+  // A writer from before feed positions inserts without seq. Number its event in the same write
+  // transaction, so it still lands in commit order instead of staying invisible to oldest-first reads.
+  await tx.execute(
+    `CREATE TRIGGER IF NOT EXISTS trg_kactivity_seq AFTER INSERT ON "${T.activity}" WHEN NEW.seq IS NULL BEGIN UPDATE "${T.activity}" SET seq = (SELECT COALESCE(MAX(seq), 0) + 1 FROM "${T.activity}") WHERE rowid = NEW.rowid; END`,
+  );
+}
+
+/** SQL for a fresh feed incarnation id: 32 random hex digits. */
+const NEW_INCARNATION = 'lower(hex(randomblob(16)))';
+const FEED_INCARNATION = `(SELECT activityIncarnation FROM "${TABLE_KNOWLEDGE_PAGES_STATE}" WHERE id = 'knowledge')`;
+
+/** An oldest-first feed position: `<incarnation>:<seq>`. */
+function parseActivityPosition(position: string): { incarnation: string; seq: number } {
+  const match = /^([0-9a-f]{32}):(\d{1,16})$/.exec(position);
+  if (match) {
+    const seq = Number(match[2]);
+    if (Number.isSafeInteger(seq)) return { incarnation: match[1]!, seq };
+  }
+  throw new RangeError('Knowledge activity position is not one this store issued');
+}
+
+/**
+ * Explains an empty read after a position from the read's own row of feed state: refuses one from
+ * another incarnation of the feed (cleared or rebased since), or one past the highest `seq` (an
+ * older copy of the file restored).
+ */
+function checkActivityPosition(after: { incarnation: string; seq: number }, feed: Row | undefined): void {
+  if (feed?.feedIncarnation !== after.incarnation) {
+    throw new RangeError(
+      'Knowledge activity position is from before the feed was cleared or rebased (after a database restore); restart from since',
+    );
+  }
+  if (after.seq > Number(feed.maxSeq)) {
+    throw new RangeError(
+      'Knowledge activity position is ahead of this feed. On an embedded replica that is behind, retry after it syncs. If an older copy of the database was restored, or the app moved to a copy that was behind, run rebaseActivityFeed() once and restart from since',
+    );
+  }
 }
 
 /** DDL for the schema-4 page tables, in creation order. Every statement is idempotent. */
@@ -170,9 +233,11 @@ export const KNOWLEDGE_PAGE_DDL: string[] = [
     pageId TEXT NOT NULL,
     noteId TEXT,
     provenance TEXT NOT NULL,
-    createdAt TEXT NOT NULL
+    createdAt TEXT NOT NULL,
+    seq INTEGER
   )`,
   `CREATE INDEX IF NOT EXISTS idx_kactivity_page ON "${T.activity}" (pageId, id DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_kactivity_created ON "${T.activity}" (createdAt DESC, id DESC)`,
   // Outgoing body `[[links]]` per page; an unresolved link keeps its ref with a null target.
   `CREATE TABLE IF NOT EXISTS "${T.links}" (
     fromPageId TEXT NOT NULL,
@@ -276,7 +341,7 @@ function decodeCursor(cursor: string | undefined, length: number): string[] | un
   } catch {
     // fall through
   }
-  throw new Error('Invalid Knowledge cursor');
+  throw new KnowledgeInvalidCursorError(cursor);
 }
 
 function escapeLike(value: string): string {
@@ -390,6 +455,24 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
       for (const table of [T.links, T.activity, T.pinAudiences, T.pins, T.mentions, T.stamps, T.notes, T.pages]) {
         await tx.execute({ sql: `DELETE FROM ${table}`, args: [] });
       }
+      // seq starts again at 1, so positions held from before must be refused, not resumed.
+      await this.#newIncarnation(tx);
+    });
+  }
+
+  /**
+   * Run once after restoring an older copy of the database file. `seq` is in the file and goes back
+   * with it, so numbers a reader already passed get handed out again. This gives the feed a fresh
+   * incarnation id: positions from before are refused and readers restart from `since`.
+   */
+  async rebaseActivityFeed(): Promise<void> {
+    await this.#transaction(tx => this.#newIncarnation(tx));
+  }
+
+  async #newIncarnation(tx: PageExecutor): Promise<void> {
+    await tx.execute({
+      sql: `UPDATE "${TABLE_KNOWLEDGE_PAGES_STATE}" SET activityIncarnation = ${NEW_INCARNATION} WHERE id = 'knowledge'`,
+      args: [],
     });
   }
 
@@ -415,7 +498,9 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     now: string,
   ): Promise<void> {
     await tx.execute({
-      sql: `INSERT INTO "${T.activity}" (id, action, scopeId, pageId, noteId, provenance, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      // seq is numbered inside the write transaction. SQLite lets one writer at a time hold the
+      // database, across clients and processes, so seq follows commit order whatever each clock says.
+      sql: `INSERT INTO "${T.activity}" (id, action, scopeId, pageId, noteId, provenance, createdAt, seq) VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM "${T.activity}"))`,
       args: [
         createKnowledgeUlid(),
         action,
@@ -1473,16 +1558,30 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     return hits;
   }
 
-  async listPageActivity(input: {
-    read: KnowledgeReadScope;
-    scopeId?: string;
-    pageId?: string;
-    cursor?: string;
-    limit?: number;
-  }): Promise<{ events: KnowledgePageActivityEvent[]; nextCursor?: string }> {
+  async listPageActivity(
+    input: KnowledgePageActivityInput,
+  ): Promise<{ events: KnowledgePageActivityEvent[]; nextCursor?: string }> {
     const core = await loadPagesCore();
     const limit = limitOf(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
-    const cursor = decodeCursor(input.cursor, 1);
+    // Dated mode orders by (createdAt, id) and uses a two-part cursor; the undated id order and
+    // one-part cursor stay as they were.
+    const ascending = input.order === 'asc';
+    const dated = input.since !== undefined || input.until !== undefined || input.before !== undefined || ascending;
+    if (input.before !== undefined && input.cursor !== undefined) {
+      throw new RangeError('Knowledge activity takes either a cursor or a before position, not both');
+    }
+    if (input.after !== undefined && input.order !== 'asc') {
+      throw new RangeError('Knowledge activity takes an after position only with order asc');
+    }
+    if (input.after !== undefined && input.cursor !== undefined) {
+      throw new RangeError('Knowledge activity takes either a cursor or an after position, not both');
+    }
+    if (input.before !== undefined && input.order === 'asc') {
+      throw new RangeError('Knowledge activity takes a before position only newest first; use after with order asc');
+    }
+    const after = ascending ? (input.after ?? input.cursor) : undefined;
+    const seqAfter = after === undefined ? undefined : parseActivityPosition(after);
+    const cursor = ascending ? undefined : decodeCursor(input.cursor, dated ? 2 : 1);
     const readable = pageReadable('p', input.read);
     const noteVisible = noteReadable('n', input.read);
     const args: InValue[] = [...readable.args];
@@ -1495,17 +1594,47 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
       filters += ` AND e.pageId = ?`;
       args.push(input.pageId);
     }
-    if (cursor) {
+    if (input.since !== undefined) {
+      filters += ` AND e.createdAt >= ?`;
+      args.push(input.since.toISOString());
+    }
+    if (input.until !== undefined) {
+      filters += ` AND e.createdAt < ?`;
+      args.push(input.until.toISOString());
+    }
+    const position = input.before
+      ? [input.before.createdAt.toISOString(), input.before.id]
+      : dated
+        ? cursor
+        : undefined;
+    if (seqAfter !== undefined) {
+      // Checked in the same statement as the events. MAX(seq) only drops when the file goes back to
+      // an older copy; clearAll and rebaseActivityFeed change the incarnation.
+      filters += ` AND ${FEED_INCARNATION} = ? AND ? <= (SELECT COALESCE(MAX(seq), 0) FROM "${T.activity}") AND e.seq > ?`;
+      args.push(seqAfter.incarnation, seqAfter.seq, seqAfter.seq);
+    } else if (position) {
+      filters += ` AND (e.createdAt < ? OR (e.createdAt = ? AND e.id < ?))`;
+      args.push(position[0]!, position[0]!, position[1]!);
+    } else if (!dated && cursor) {
       filters += ` AND e.id < ?`;
       args.push(cursor[0]!);
     }
     args.push(...noteVisible.args, limit + 1);
-    const rows = await this.#query(
+    const events = `SELECT e.* FROM "${T.activity}" e JOIN "${T.pages}" p ON p.id = e.pageId WHERE ${readable.sql}${filters} AND (e.noteId IS NULL OR EXISTS (SELECT 1 FROM "${T.notes}" n WHERE n.id = e.noteId AND ${noteVisible.sql})) ORDER BY ${ascending ? 'e.seq ASC' : dated ? 'e.createdAt DESC, e.id DESC' : 'e.id DESC'} LIMIT ?`;
+    // Oldest first, the feed's incarnation and highest seq come back on the same statement as the
+    // events, so the same read snapshot, also when no event matches.
+    const all = await this.#query(
       this.#read,
-      `SELECT e.* FROM "${T.activity}" e JOIN "${T.pages}" p ON p.id = e.pageId WHERE ${readable.sql}${filters} AND (e.noteId IS NULL OR EXISTS (SELECT 1 FROM "${T.notes}" n WHERE n.id = e.noteId AND ${noteVisible.sql})) ORDER BY e.id DESC LIMIT ?`,
+      ascending
+        ? `SELECT f.feedIncarnation, f.maxSeq, e.* FROM (SELECT ${FEED_INCARNATION} AS feedIncarnation, (SELECT COALESCE(MAX(seq), 0) FROM "${T.activity}") AS maxSeq) f LEFT JOIN (${events}) e ON 1 ORDER BY e.seq ASC`
+        : events,
       args,
     );
+    const rows = ascending ? all.filter(row => row.id != null) : all;
+    if (seqAfter !== undefined && rows.length === 0) checkActivityPosition(seqAfter, all[0]);
+    const feedPosition = (row: Row) => `${String(row.feedIncarnation)}:${String(row.seq)}`;
     const page = rows.slice(0, limit);
+    const last = page[page.length - 1];
     return {
       events: page.map(row => ({
         id: String(row.id),
@@ -1515,8 +1644,15 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
         ...(row.noteId ? { noteId: String(row.noteId) } : {}),
         provenance: provenance(row.provenance),
         createdAt: new Date(String(row.createdAt)),
+        ...(ascending ? { position: feedPosition(row) } : {}),
       })),
-      ...(rows.length > limit ? { nextCursor: encodeCursor([String(page[page.length - 1]!.id)]) } : {}),
+      ...(rows.length > limit && last
+        ? {
+            nextCursor: ascending
+              ? feedPosition(last)
+              : encodeCursor(dated ? [String(last.createdAt), String(last.id)] : [String(last.id)]),
+          }
+        : {}),
     };
   }
 

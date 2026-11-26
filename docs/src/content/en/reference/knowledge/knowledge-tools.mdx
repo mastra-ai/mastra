@@ -1,17 +1,17 @@
 ---
 title: 'Reference: Knowledge tools | Knowledge'
-description: 'Arguments, operations, required roles and errors of the six Knowledge tools.'
+description: 'Arguments, operations, required roles and errors of the seven Knowledge tools.'
 packages:
   - '@mastra/core'
 ---
 
 # Knowledge tools
 
-Knowledge gives agents six tools. Which ones an agent gets depends on the Knowledge `tools` and `pinnedContext` options, or on the groups passed to [`createTools()`](/reference/knowledge/knowledge-class#createtools). See [Agents and tools](/docs/knowledge/agents-and-tools) for how agents use them.
+Knowledge gives agents seven tools. Which ones an agent gets depends on the Knowledge `tools` and `pinnedContext` options, or on the groups passed to [`createTools()`](/reference/knowledge/knowledge-class#createtools). See [Agents and tools](/docs/knowledge/agents-and-tools) for how agents use them.
 
 | Group | Tools | Enabled by |
 | - | - | - |
-| Read | `knowledge_list`, `knowledge_search`, `knowledge_read` | `tools: true` or `tools: { read: true }` |
+| Read | `knowledge_list`, `knowledge_search`, `knowledge_read`, `knowledge_activity` | `tools: true` or `tools: { read: true }` |
 | Write | `knowledge_page`, `knowledge_note` | `tools: true` or `tools: { write: true }` |
 | Pins | `knowledge_pin` | `pinnedContext` |
 
@@ -81,7 +81,9 @@ Access checks and `scope` filter results before ranking. `limit` applies after i
 ]}
 />
 
-Returns `{ results }`, each `{ type: 'page', page }` or `{ type: 'note', page, note }`. These searches also return `more`:
+Returns `{ results }`, each `{ type: 'page', page }` or `{ type: 'note', page, note }`. A page result's `page` can also include body matches: a `snippet` of about 60 tokens around the words that matched, not counting the `…` it puts where the body was cut; the `line` the snippet is centred on, numbered as `knowledge_read` numbers lines; and `matchingLines`, how many lines contain a matched word. Every line of the snippet carries its line number, as in `knowledge_read` (`9│Any reimbursement over $500 needs a manager.`), and a line cut at either end keeps its number and the `…`. When the nearest markdown heading above the snippet isn't in it, the snippet starts with that heading line and its number (`6│## Expenses`), then the excerpt. The matching is the search's own (quote marks removed, case-insensitive), so these fields are included only when the body contains at least one of the words, and left out when only the name or description matched. When any page result has them, `more` says how to read on from `line` with `knowledge_read` (`from`) or see every match (`match`). Snippets are built only for pages the run can read.
+
+These searches also return `more`:
 
 - A search that finds nothing suggests different key words or `knowledge_list`:
 
@@ -220,6 +222,56 @@ A `range` is `{ start: { line, col? }, end: { line, col? } }`. Lines start at 1.
 ```text
 knowledge_read: read notes or mentionedIn on their own, without outline, section, match or from.
 ```
+
+## `knowledge_activity`
+
+Lists what changed in Knowledge over a period, newest first by default, so an agent can answer questions like "what changed since Q3?". It covers page creates, edits, moves, merges and deletes, and notes added, restamped, removed or restored. It shows only changes to pages and notes the run can read now.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'since',
+    type: 'string',
+    description:
+      'Changes at or after this time: a date such as `2026-07-01` (UTC midnight), or a date-time with a zone such as `2026-07-01T09:30:00Z` or `2026-07-01T09:30:00+02:00`. A date-time without a zone, or a date that does not exist, is refused. Give `since`, `until` or both.',
+    isOptional: true,
+  },
+  { name: 'until', type: 'string', description: 'Changes before this time, in the same formats.', isOptional: true },
+  {
+    name: 'from',
+    type: 'string',
+    description: 'Only changes to this page, or to pages in this scope: a page reference.',
+    isOptional: true,
+  },
+  {
+    name: 'order',
+    type: "'newest' | 'oldest'",
+    description:
+      '`newest` lists the latest changes first. `oldest` lists them in feed order, where no change lands behind a cursor already held, for an agent that works through changes from where it last stopped.',
+    isOptional: true,
+    defaultValue: "'newest'",
+  },
+  { name: 'limit', type: 'number', description: 'Maximum changes, 1 to 100.', isOptional: true, defaultValue: '25' },
+  {
+    name: 'cursor',
+    type: 'string',
+    description:
+      "The previous result's `cursor`. Pass the same `since`, `until`, `from` and `order`; a cursor from other ones is refused.",
+    isOptional: true,
+  },
+]}
+/>
+
+Returns `{ from?, changes, more?, cursor? }`. Each change is `{ at, action, page, author, note? }`:
+
+- `page` is `{ ref, name }` with the page's current name, plus `deleted: true` when it has since been deleted.
+- `note`, on a note change, is `{ ref, text, current: true }` with the note's **current** text, not its text when the change happened. A note that has since been removed shows `{ ref, removed: true }` and no text.
+
+A change to a page or note the run can no longer read is left out. A result stops at `limit` changes, at the read cap, or after scanning eight batches, whichever comes first. The read cap never excludes the first readable change in those batches. When it stops early, `more` is `true` and `cursor` continues after the last change it consumed, including changes left out because they became unreadable. A result can contain no changes and still have `more: true` when it reaches the scan cap. Continue with its cursor to read the next changes: older ones, or newer ones with `order: 'oldest'`. A single note too large for the read cap comes back cut short with `truncated: true`.
+
+The tool needs a store that filters activity by date: the in-memory store, LibSQL and PostgreSQL. On other stores it refuses rather than return the whole history. `order: 'oldest'` needs the same stores.
+
+With `order: 'oldest'`, changes come in an order where none can land behind a cursor the agent already holds: a change that committed late, or came from a server whose clock is behind, still comes after it. That order isn't always the order changes happened in, and `since` and `until` still filter by the time a change was recorded. On PostgreSQL, changes come in transaction-id order (the order their transactions first wrote), and a change stays out of the results while a transaction that started before it remains open on the database server. The result always has a `cursor`, even once the agent has caught up or when nothing has changed yet: keep it, and continue with it later to get only the changes it hasn't listed. A page moved into a scope the run can read, or a note restamped or restored into view, brings its earlier changes with it. Those changes keep their place in the feed, so they can land behind a cursor already held and aren't returned when the agent continues with it. The move, restamp or restore itself comes through as a new change of the page it changed: in a read without `from`, or with `from` on that page or the scope it's in now, but not with `from` on another page. When the agent sees it, it can read that page's earlier changes newest first with `from`. For a moved folder, only the moved page gets that change, not the pages under it.
 
 ## `knowledge_page`
 
@@ -419,7 +471,7 @@ Pin audience "project:x" does not match a declared scope type.
 
 | Operation | Role | On |
 | - | - | - |
-| Search, read, list | `viewer` | The page's scope |
+| Search, read, list, activity | `viewer` | The page's scope (and, for a note change, the note's stamps) |
 | Create a page | `contributor` | `scope` |
 | Edit a page | `editor` | The page's scope |
 | Move within a scope | `editor` | The page's scope |

@@ -1,3 +1,5 @@
+import { Fragment } from 'react';
+import type { ReactNode } from 'react';
 import { SettingsItem } from './settings-list';
 import { SettingsRow } from './settings-row';
 import { Skeleton } from '@/ds/components/Skeleton/skeleton';
@@ -11,10 +13,15 @@ export type SettingsSkeletonProps = {
   label: string;
   /** Placeholder rows, matching how many the loaded list usually has. */
   rows?: number;
-  /** `row` stands in for `SettingsRow`s (label left, control right); `item` for `SettingsItem`s (icon, title, description). */
-  variant?: 'row' | 'item';
   className?: string;
-};
+} & (
+  | {
+      /** `row` stands in for `SettingsRow`s (label left, control right); `item` for `SettingsItem`s (icon, title, description). */
+      variant?: 'row' | 'item';
+      placeholder?: never;
+    }
+  | { variant?: never; placeholder: ReactNode }
+);
 
 /**
  * The loading state for anything inside a `SettingsContainer`. Placeholders are built from the real `SettingsRow` and
@@ -26,7 +33,7 @@ export type SettingsSkeletonProps = {
  * </SettingsContainer>
  * ```
  */
-export function SettingsSkeleton({ label, rows = 2, variant = 'row', className }: SettingsSkeletonProps) {
+export function SettingsSkeleton({ label, rows = 2, variant = 'row', placeholder, className }: SettingsSkeletonProps) {
   const Placeholder = variant === 'item' ? ItemPlaceholder : RowPlaceholder;
 
   return (
@@ -35,11 +42,11 @@ export function SettingsSkeleton({ label, rows = 2, variant = 'row', className }
       role="status"
       aria-label={label}
       data-slot="settings-skeleton"
-      className={cn('grid divide-y divide-border *:py-3.25 *:first:pt-0 *:last:pb-0', className)}
+      className={cn('grid divide-y divide-separator *:py-3.25 *:first:pt-0 *:last:pb-0', className)}
     >
-      {Array.from({ length: rows }, (_, index) => (
-        <Placeholder key={index} />
-      ))}
+      {Array.from({ length: rows }, (_, index) =>
+        placeholder === undefined ? <Placeholder key={index} /> : <Fragment key={index}>{placeholder}</Fragment>,
+      )}
     </div>
   );
 }

@@ -1,11 +1,11 @@
 ---
 name: factory-plan
-description: Produce a phased implementation plan for a Factory work item, submit it for approval, and move the card to its build phase once it is approved
+description: Produce a phased implementation plan for a Factory work item, submit it for approval, and end the phase once it is approved
 ---
 
 # Factory Plan
 
-Produce a phased, verifiable implementation plan for this Factory work item, then submit it with `submit_plan`. Once the plan is approved, you move the card on to the board's build phase (the `build` phase in the `factory-phase` signal's `Board phases by part:` line; Building on the default board); the approved plan is the builder's handoff.
+Produce a phased, verifiable implementation plan for this Factory work item, then submit it with `submit_plan`. Once the plan is approved, Factory moves the card on to the board's build phase (the `build` phase in the `factory-phase` signal's `Board phases by part:` line; Building on the default board) when your run ends; the approved plan is the builder's handoff. You never move the card yourself.
 
 You are working in a bound Factory session. The `factory-work-item` signal describes the card: its sources, labels, author and whether that author is trusted, the provider tool to fetch the issue with, and the card's Factory state. Complete the full planning pass in one run, then make `submit_plan` your terminal step. Never wait for or solicit human input mid-run; every design decision is yours to resolve.
 
@@ -53,13 +53,18 @@ Write the full plan into the conversation, structured as:
 - **Assumptions** — every recorded design decision and understanding correction from the run.
 - **Open questions** — only the decisions that genuinely need a human.
 
-The plan must be executable by someone with no access to this conversation beyond this message. Write it to `.artifacts/plans/issue-<number>.md` and include the same plan in the conversation.
+The plan must be executable by someone with no access to this conversation beyond this message. Write it to `.artifacts/plans/issue-<number>.md` relative to the **session workspace root** — the directory the workspace tools call the project root — and include the same plan in the conversation. `submit_plan` resolves the path you submit against that same workspace root and accepts only a `.md` file directly inside its `.artifacts/plans/`, so the two must agree:
+
+- **One repository in this sandbox** (the usual case): the workspace root _is_ that repository's checkout, so the file lands at `<checkout>/.artifacts/plans/issue-<number>.md`.
+- **Several repositories**: the workspace root holds one directory per repository, so the file lands at the root's `.artifacts/plans/issue-<number>.md`, _beside_ the checkouts and never inside one — `mastra/.artifacts/plans/issue-<number>.md` is rejected.
+
+Either way, submit the same relative path you wrote. If `submit_plan` rejects the path, it names the directory it accepts in the error; write the plan there rather than retrying the same path.
 
 ## Phase 4: Submit the Plan
 
-Submit the plan with a single `submit_plan` call carrying the plan file. Planning holds the card until `submit_plan` comes back with an approved plan: a person approves it unless the card's Planning phase auto-approves it, and while it waits the run is parked and the plan shows in Factory's attention list. Moving the card before then is refused.
+Submit the plan with a single `submit_plan` call carrying the plan file. Planning holds the card until `submit_plan` comes back with an approved plan: a person approves it unless the card's Planning phase auto-approves it, and while it waits the run is parked and the plan shows in Factory's attention list. No outcome moves the card before then.
 
-When `submit_plan` returns `Plan approved.`, move the card with `factory_transition_work_item` to the board's build phase (the `build` phase in the `factory-phase` signal's `Board phases by part:` line; Building, `execute`, on the default board), using the revision the `factory-phase` signal shows. Report the plan headline, then make that move: it ends your run. If the plan is rejected or comes back with feedback, address it and submit again; do not move the card.
+When `submit_plan` returns `Plan approved.`, the approval is the phase's outcome: the `factory-phase` signal says which outcome it reports. Report the plan headline and stop; Factory moves the card when your run ends. Only when the signal says the approval reports no outcome, report the one going to the board's build phase (the `build` phase in the `factory-phase` signal's `Board phases by part:` line) with `factory_report_outcome`, then stop. If the plan is rejected or comes back with feedback, address it and submit again; report no outcome.
 
 The builder implements the plan and pushes the branch, then opens the pull or merge request, or sends the branch to self-review first on a board that has a self-review phase and a project that turned it on; do not plan a PR-opening step.
 

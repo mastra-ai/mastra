@@ -1,40 +1,39 @@
-import { Button } from '@mastra/playground-ui/components/Button';
+import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Status } from '@mastra/playground-ui/components/StatusIndicators';
 import type { StatusPresentation } from '@mastra/playground-ui/components/StatusIndicators';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { IconBox } from '@mastra/playground-ui/icons/central/IconBox';
 import { IconServer } from '@mastra/playground-ui/icons/central/IconServer';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 
 import { ProviderBrandIcon } from '../../../../workspaces/components/ProviderBrandIcon';
-import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
+import { ListHeading } from '../ListHeading';
 
-export function ProviderRows({
-  children,
-  addDisabled,
-  onAdd,
-}: {
-  children: ReactNode;
-  addDisabled: boolean;
-  onAdd: () => void;
-}) {
-  return (
-    <ul className="divide-border divide-y">
-      {children}
-      <li>
-        <Button variant="ghost" size="sm" className="h-10 w-full justify-start" disabled={addDisabled} onClick={onAdd}>
-          <IconPlusMedium aria-hidden="true" />
-          Add provider
-        </Button>
-      </li>
-    </ul>
-  );
+const CONNECTED_ROW_CLASS = 'flex min-h-10 items-center gap-2.5 py-1.5 pr-1.5 pl-3';
+
+export function ProviderRows(props: Omit<ComponentProps<'ul'>, 'className'>) {
+  return <ul {...props} className="divide-border divide-y" />;
 }
 
-export function ProviderRowsSkeleton() {
-  return <SettingsSkeleton label="Loading providers" variant="item" />;
+export function ProviderRowsSkeleton({ description }: { description?: string }) {
+  return (
+    <div role="status" aria-label="Loading providers" className="flex flex-col gap-1">
+      <ListHeading label="Providers" description={description} />
+      <ProviderRows aria-hidden>
+        {[0, 1].map(index => (
+          <li key={index} className={CONNECTED_ROW_CLASS}>
+            <Skeleton className="size-icon-md shrink-0 rounded-sm motion-reduce:before:animate-none" />
+            <span className="flex min-w-0 flex-1">
+              <SkeletonText line="text-caption" className="w-32 motion-reduce:before:animate-none" />
+            </span>
+            <SkeletonText line="text-meta" className="w-16 motion-reduce:before:animate-none" />
+            <span className="size-control-sm shrink-0" />
+          </li>
+        ))}
+      </ProviderRows>
+    </div>
+  );
 }
 
 /** The row's name on one line, and a detail that wraps rather than hiding a URL or a balance. */
@@ -63,13 +62,13 @@ export function ConnectedRow({
 }: {
   icon: ReactNode;
   title: string;
-  detail?: string;
+  detail?: ReactNode;
   status: StatusPresentation;
   /** The row's actions. A row without any keeps the column so statuses line up. */
   children?: ReactNode;
 }) {
   return (
-    <li className="flex min-h-10 items-center gap-2.5 py-1.5 pr-1.5 pl-3">
+    <li className={CONNECTED_ROW_CLASS}>
       {icon}
       <RowTitle title={title} detail={detail} />
       <Txt as="span" variant="meta" tone="muted" className="shrink-0">

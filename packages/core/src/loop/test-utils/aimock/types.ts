@@ -3,7 +3,7 @@ import type { AgentConfig, ToolsInput } from '../../../agent';
 import type { MessageListInput } from '../../../agent/message-list';
 import type { MastraServerCache } from '../../../cache';
 import type { ServerConfig } from '../../../server/types';
-import type { ObservabilityEntrypoint, TracingOptions } from '../../../observability';
+import type { ObservabilityEntrypoint, TracingOptions, TracingPolicy } from '../../../observability';
 import type { PubSub } from '../../../events/pubsub';
 import type { MastraMemory } from '../../../memory';
 import type { MemoryConfigInternal } from '../../../memory/types';
@@ -93,7 +93,7 @@ export interface LoopScenarioResult {
  *   `setScenarioEngineHost`); the host then replaces the four in-repo variants.
  *   Skipping `'durable'` also skips `'inngest'`.
  */
-export type EngineVariant = 'normal' | 'durable' | 'evented' | 'fs' | 'inngest';
+export type EngineVariant = 'normal' | 'durable' | 'evented' | 'native-default' | 'native-evented' | 'fs' | 'inngest';
 
 /**
  * An engine provided from outside core (e.g. `@mastra/inngest`). When set, scenarios run only on
@@ -108,16 +108,28 @@ export interface ScenarioEngineHost {
 }
 
 /** All supported engine variants for parameterised test runs. */
-export const ALL_ENGINE_VARIANTS: readonly EngineVariant[] = ['normal', 'durable', 'evented', 'fs'] as const;
+export const ALL_ENGINE_VARIANTS: readonly EngineVariant[] = [
+  'normal',
+  'durable',
+  'evented',
+  'native-default',
+  'native-evented',
+  'fs',
+] as const;
 
-/**
- * `true` for variants that run through the durable execution path
- * (`createDurableAgent` / `createEventedAgent`). Use this instead of
- * `engine === 'durable'` in scenarios so durable-conditional behavior
- * automatically covers the evented variant too.
- */
+export function nativeExecutionEngine(engine: EngineVariant | undefined): 'default' | 'evented' | undefined {
+  return engine === 'native-default' ? 'default' : engine === 'native-evented' ? 'evented' : undefined;
+}
+
+/** Whether the variant runs through durable execution, with or without a wrapper. */
 export function isDurableEngineVariant(engine: EngineVariant | undefined): boolean {
-  return engine === 'durable' || engine === 'evented' || engine === 'inngest';
+  return (
+    engine === 'durable' ||
+    engine === 'evented' ||
+    engine === 'native-default' ||
+    engine === 'native-evented' ||
+    engine === 'inngest'
+  );
 }
 
 export interface RunLoopScenarioOptions {
@@ -442,6 +454,7 @@ export interface RunLoopScenarioOptions {
    * the same agent+storage must persist across calls.
    */
   sharedAgent?: { agent: any; mastra: any };
+  tracingPolicy?: TracingPolicy;
   /**
    * Build the agent via file-system routing (`assembleAgentFromFsEntry`) instead
    * of `new Agent(...)`, then register it through `Mastra.__registerFsAgents`.

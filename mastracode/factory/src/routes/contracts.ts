@@ -11,6 +11,8 @@ import {
   STATUS_EVENTS,
 } from '../boards/board-events.js';
 import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
+import { MODEL_PACK_MODELS_MAX, MODEL_PACK_NAME_MAX, MODEL_PACKS_MAX, modelIdSchema } from '../model-packs.js';
+import type { ModelPackSet } from '../model-packs.js';
 import { cardRuleGroupSchema, ruleGroupSchema } from '../rules/rule-group.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import {
@@ -583,6 +585,49 @@ const intakeTestResponseSchema = z.object({
 const workItemPathSchema = z.object({ id: uuidSchema });
 const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema });
 
+const MODEL_PACK_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+
+const modelPackSchema = z
+  .object({
+    id: z.string().regex(MODEL_PACK_ID_PATTERN, 'A pack ID is 1 to 64 letters, digits, "-" or "_"'),
+    name: z
+      .string()
+      .trim()
+      .min(1, 'A pack needs a name')
+      .max(MODEL_PACK_NAME_MAX, `A pack name is at most ${MODEL_PACK_NAME_MAX} characters`),
+    models: z
+      .array(z.object({ modelId: modelIdSchema, thinkingLevel: z.enum(THINKING_LEVELS) }))
+      .min(1, 'A pack needs at least one model')
+      .max(MODEL_PACK_MODELS_MAX, `A pack holds at most ${MODEL_PACK_MODELS_MAX} models`),
+  })
+  .refine(pack => new Set(pack.models.map(model => model.modelId)).size === pack.models.length, {
+    message: 'A pack cannot list the same model twice',
+    path: ['models'],
+  });
+
+const modelPacksSchema = z.array(modelPackSchema).max(MODEL_PACKS_MAX, `There can be at most ${MODEL_PACKS_MAX} packs`);
+const defaultModelPackIdSchema = z.string().nullable();
+
+function modelPackSetProblem({ modelPacks, defaultModelPackId }: ModelPackSet): string | undefined {
+  if (new Set(modelPacks.map(pack => pack.id)).size !== modelPacks.length) return 'Two packs cannot share an ID';
+  if (new Set(modelPacks.map(pack => pack.name.toLowerCase())).size !== modelPacks.length) {
+    return 'Two packs cannot share a name';
+  }
+  if (modelPacks.length === 0) {
+    return defaultModelPackId === null ? undefined : 'There is no default pack when there are no packs';
+  }
+  return modelPacks.some(pack => pack.id === defaultModelPackId)
+    ? undefined
+    : 'The default pack must be one of the packs';
+}
+
+export const modelPackSetSchema = z
+  .object({ modelPacks: modelPacksSchema, defaultModelPackId: defaultModelPackIdSchema })
+  .superRefine((set, ctx) => {
+    const problem = modelPackSetProblem(set);
+    if (problem) ctx.addIssue({ code: 'custom', message: problem });
+  });
+
 const projectSchema = entitySchema;
 const projectResponseSchema = z.object({ project: projectSchema });
 
@@ -681,6 +726,7 @@ export type RunQueueResponse = z.infer<typeof runQueueResponseSchema>;
 export const createProjectBodySchema = z.object({
   name: nonEmptyTrimmed(200),
   description: nullableTrimmed(2_000).optional().default(null),
+  defaultModelId: modelIdSchema.optional(),
   modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
 });
 
@@ -688,9 +734,10 @@ export const updateProjectBodySchema = z
   .object({
     name: nonEmptyTrimmed(200).optional(),
     description: nullableTrimmed(2_000).optional(),
-    defaultModelId: nullableTrimmed(200).optional(),
+    defaultModelId: modelIdSchema.optional(),
     modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
-    defaultThinkingLevel: z.enum(THINKING_LEVELS).optional(),
+    modelPacks: modelPacksSchema.optional(),
+    defaultModelPackId: defaultModelPackIdSchema.optional(),
     /** @deprecated Ignored. Each board phase starts its own runs with `autoStart` and `autoStartWhen`. */
     autoRunEnabled: z.boolean().optional(),
     /** @deprecated Ignored. Plans are approved per board with `exitTool.autoApprove`; Work's always wait for a person. */
@@ -700,7 +747,21 @@ export const updateProjectBodySchema = z
     /** @deprecated Ignored. A card is self-reviewed when its board has a self-review phase. */
     selfReviewEnabled: z.boolean().optional(),
   })
-  .refine(input => Object.keys(input).length > 0, { message: 'At least one project field is required' });
+  .refine(input => Object.keys(input).length > 0, { message: 'At least one project field is required' })
+  .transform(({ modelPacks, defaultModelPackId, ...fields }, ctx) => {
+    if (modelPacks === undefined && defaultModelPackId === undefined) return { ...fields, modelPackSet: undefined };
+    if (modelPacks === undefined || defaultModelPackId === undefined) {
+      ctx.addIssue({ code: 'custom', message: 'Send modelPacks and defaultModelPackId together' });
+      return z.NEVER;
+    }
+    const modelPackSet = { modelPacks, defaultModelPackId };
+    const problem = modelPackSetProblem(modelPackSet);
+    if (problem) {
+      ctx.addIssue({ code: 'custom', message: problem });
+      return z.NEVER;
+    }
+    return { ...fields, modelPackSet };
+  });
 
 const environmentBuildStatusSchema = z.enum(['pending', 'building', 'ready', 'failed', 'unknown']);
 
@@ -891,6 +952,17 @@ export const boardPhasesQuerySchema = z.object({
   linearProject: pickedValuesSchema,
   /** A card matches when it carries every one of them. */
   label: pickedValuesSchema,
+  /**
+   * `with` keeps cards that have a pull request: their own, one attached, or one held by another card
+   * that names this card's issue as resolved (`closesWorkItemIds`). `without` keeps the others.
+   */
+  pullRequest: pickedValuesSchema,
+  /**
+   * `untrusted` keeps GitHub and GitLab cards whose author lacks write access, including those with no
+   * trust stamp, as intake reads `item.trusted`. `trusted` keeps the rest: those authors, Factory, and
+   * cards from sources no outsider can file (Linear, manual and similar).
+   */
+  trust: pickedValuesSchema,
   /** Participant ids (`github:octocat`, `factory:<user id>`) related to the card in any way. */
   teammate: pickedValuesSchema,
   author: pickedValuesSchema,
@@ -1402,7 +1474,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
   projectCreate: {
     method: 'POST',
     path: '/web/factory/projects',
-    description: 'Create a Factory project',
+    description:
+      'Create a Factory project. Creating a second project in an organization is deprecated: each organization will have one Factory project.',
     bodySchema: createProjectBodySchema,
     responseSchema: projectResponseSchema,
   },
@@ -1488,13 +1561,6 @@ export const FACTORY_ROUTE_CONTRACTS = {
     description: 'Delete a sandbox environment variable of a Factory project',
     pathSchema: sandboxEnvPathSchema,
     responseSchema: z.null(),
-  },
-  projectApplyDefaultModel: {
-    method: 'POST',
-    path: '/web/factory/projects/:id/apply-default-model',
-    description: 'Start applying the Factory default model to running work and review threads in the background',
-    pathSchema: projectPathSchema,
-    responseSchema: z.object({ modelId: z.string(), status: z.literal('started') }),
   },
   projectDelete: {
     method: 'DELETE',
@@ -1583,6 +1649,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
                 .optional(),
               /** Factory tools the phase grants the session working the card there. */
               tools: z.array(z.string()).optional(),
+              /** The outcomes the phase's session may report; one per next phase when the board lists none. */
+              outcomes: z.array(z.object({ key: z.string(), label: z.string(), to: z.string() })).optional(),
               transitions: z.array(z.object({ outcome: z.string().nullable(), to: z.string() })),
             }),
           ),

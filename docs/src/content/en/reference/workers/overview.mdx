@@ -75,7 +75,7 @@ Processes workflow events from the PubSub `workflows` topic. Requires a pull-cap
 Polls storage for due cron schedules and publishes a `workflow.start` event to the `workflows` topic for each fire. The orchestration worker runs default-engine workflows in-process and evented workflows step by step.
 
 - **Name**: `scheduler`
-- **Single instance only**: Run exactly one instance to avoid duplicate fires
+- **Multiple instances**: Instances that share storage claim each fire atomically, so only one instance claims each fire. The scheduler makes up to three publish attempts per fire (two retries), so a retry after a lost broker response can publish the same fire again. A fire whose publish attempts all fail isn't replayed automatically.
 
 ### BackgroundTaskWorker
 
@@ -85,6 +85,8 @@ Executes background tool calls dispatched by agents.
 - **PubSub topic**: `background-tasks`
 - **Consumer group**: `background-task-workers`
 - **Supports multiple replicas**: Instances share the consumer group
+
+An agent's background tool call is bound to the run that made it, so only the process running that agent loop can execute it. A dedicated worker can't take it over. On a process that doesn't run this worker (`workers: false`, or `MASTRA_WORKERS` without `backgroundTasks`), a durable agent runs the tool inline and a regular agent returns a dispatch error as the tool result. To run background tools from a regular agent there, start the `backgroundTasks` worker on that process, or pass [`disableBackgroundTasks: true`](/reference/streaming/agents/stream) to `stream()` or `generate()` so the tools run inline.
 
 ## Supported storage backends
 
