@@ -1,9 +1,10 @@
 import { MastraClient } from '@mastra/client-js';
-import { PlatformSandbox } from '@mastra/platform-workspace';
-import type { PlatformSandboxOptions } from '@mastra/platform-workspace';
+import { ConnectClient } from '@mastra/connect';
+import type { MastraStorage } from '@mastra/core/storage';
+import { PlatformFilesystem, PlatformSandbox } from '@mastra/platform-workspace';
+import type { PlatformFilesystemOptions, PlatformSandboxOptions } from '@mastra/platform-workspace';
 import { PlatformAgent, toAgentBody } from './agents/platform-agent';
 import type { CreatePlatformAgentInput, PlatformAgentRecord } from './agents/platform-agent';
-import { PlatformConnect } from './connect/platform-connect';
 import { PlatformKnowledge } from './knowledge/index';
 import type { PlatformKnowledgeOptions } from './knowledge/index';
 import { PlatformMemory } from './memory/platform-memory';
@@ -20,6 +21,13 @@ import {
   waitUntilReady,
 } from './provisioning/index';
 import type { WaitOptions } from './provisioning/index';
+
+export interface PlatformStorageOptions {
+  /** The storage's id in Mastra. Defaults to the database id. */
+  id?: string;
+  /** Skip creating and migrating tables, for runtimes that run migrations separately. */
+  disableInit?: boolean;
+}
 
 type ProjectScoped<T> = Omit<T, 'accessToken' | 'projectId' | 'fetch'>;
 
@@ -68,7 +76,7 @@ function tokenProjectId(token: string): string | undefined {
 
 interface ProjectServices {
   client: MastraClient;
-  connect: PlatformConnect;
+  connect: ConnectClient;
   environments: PlatformEnvironments;
   memoryInstances: PlatformMemoryInstances;
   knowledgeInstances: PlatformKnowledgeInstances;
@@ -142,7 +150,12 @@ export class MastraPlatform {
         },
         fetch: this.#options.fetch,
       }),
-      connect: new PlatformConnect({ accessToken: this.#accessToken, projectId, fetch: this.#options.fetch }),
+      connect: new ConnectClient({
+        accessToken: this.#accessToken,
+        projectId,
+        orgId: organizationId,
+        fetch: this.#options.fetch,
+      }),
       environments: new PlatformEnvironments(this.#api, projectId),
       memoryInstances: new PlatformMemoryInstances(this.#api, projectId),
       knowledgeInstances: new PlatformKnowledgeInstances(this.#api, projectId),
@@ -153,8 +166,11 @@ export class MastraPlatform {
     return this.#project;
   }
 
-  /** Mastra Connect: the provider accounts the project's agents and tools act through. */
-  get connect(): PlatformConnect {
+  /**
+   * Mastra Connect for the project: the provider accounts its agents and tools act through. Use
+   * `connect.withResource(userId)` to connect, list, and remove an end user's own accounts.
+   */
+  get connect(): ConnectClient {
     return this.#services.connect;
   }
 
@@ -221,12 +237,26 @@ export class MastraPlatform {
       method: 'POST',
       body: toAgentBody(input),
     });
-    return new PlatformAgent(this.#services.client, created.id);
+    return new PlatformAgent(this.#services.client, {
+      id: created.id,
+      name: created.name ?? input.name,
+      description: input.description,
+      instructions: input.instructions,
+      model: input.model,
+    });
   }
 
-  /** A handle to an existing managed agent. Makes no request. */
-  getAgent(agentId: string): PlatformAgent {
-    return new PlatformAgent(this.#services.client, agentId);
+  /** An existing managed agent, with its name, description, and instructions read from the Platform. */
+  async getAgent(agentId: string): Promise<PlatformAgent> {
+    const client = this.#services.client;
+    const details = await client.getAgent(agentId).details();
+    return new PlatformAgent(client, {
+      id: agentId,
+      name: details.name,
+      description: details.description,
+      instructions: typeof details.instructions === 'string' ? details.instructions : undefined,
+      model: details.modelId,
+    });
   }
 
   /** The project's managed agents, keyed by agent ID. */
@@ -250,6 +280,62 @@ export class MastraPlatform {
   /** A Platform Knowledge instance. `instanceId` falls back to `MASTRA_KNOWLEDGE_INSTANCE_ID`. */
   getKnowledge(options: ProjectScoped<PlatformKnowledgeOptions> = {}): PlatformKnowledge {
     return new PlatformKnowledge({ ...options, accessToken: this.#accessToken, projectId: this.projectId });
+  }
+
+  /**
+   * A project file system, by the `id` it was provisioned with, ready to hand to a `Workspace`.
+   * Throws while the file system is still provisioning or if provisioning failed.
+   */
+  async getFilesystem(
+    filesystemId: string,
+    options: ProjectScoped<Omit<PlatformFilesystemOptions, 'bucketName'>> = {},
+  ): Promise<PlatformFilesystem> {
+    const record = await this.filesystems.get(filesystemId);
+    if (record.status !== 'ready' || !record.bucketName) {
+      throw new Error(`File system ${filesystemId} is ${record.status}${record.error ? `: ${record.error}` : ''}`);
+    }
+    return new PlatformFilesystem({
+      id: filesystemId,
+      ...options,
+      bucketName: record.bucketName,
+      accessToken: this.#accessToken,
+      projectId: this.projectId,
+      fetch: this.#options.fetch,
+    });
+  }
+
+  /**
+   * A project database as Mastra storage, for `new Mastra({ storage })`, `new Memory({ storage })`
+   * and anything else that takes one. Needs the store package for the database's kind installed:
+   * `@mastra/libsql` for Turso, `@mastra/pg` for Neon and Postgres, `@mastra/redis` for Redis.
+   */
+  async getStorage(databaseId: string, options: PlatformStorageOptions = {}): Promise<MastraStorage> {
+    const database = await this.databases.get(databaseId);
+    if (database.status !== 'ready') {
+      throw new Error(`Database ${databaseId} is ${database.status}${database.error ? `: ${database.error}` : ''}`);
+    }
+    const { envVars } = await this.databases.connection(databaseId);
+    const env = (name: string) => {
+      const value = envVars.find(v => v.name === name)?.value;
+      if (!value) throw new Error(`Database ${databaseId} has no ${name}`);
+      return value;
+    };
+    const config = { id: options.id ?? databaseId, disableInit: options.disableInit };
+    switch (database.kind) {
+      case 'turso': {
+        const { LibSQLStore } = await import('@mastra/libsql');
+        return new LibSQLStore({ ...config, url: env('TURSO_DATABASE_URL'), authToken: env('TURSO_AUTH_TOKEN') });
+      }
+      case 'neon':
+      case 'postgres': {
+        const { PostgresStore } = await import('@mastra/pg');
+        return new PostgresStore({ ...config, connectionString: env('DATABASE_URL') });
+      }
+      case 'redis': {
+        const { RedisStore } = await import('@mastra/redis');
+        return new RedisStore({ ...config, connectionString: env('REDIS_URL') });
+      }
+    }
   }
 
   /**

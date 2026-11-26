@@ -1,11 +1,20 @@
+import { mkdtempSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { LibSQLStore } from '@mastra/libsql';
+import { Memory } from '@mastra/memory';
+import { PostgresStore } from '@mastra/pg';
+import { RedisStore } from '@mastra/redis';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { MastraPlatform } from './mastra-platform';
 import { MastraPlatformError } from './provisioning/index';
 
 const ORG_ID = 'org_1';
+/** Where the stand-in's Turso databases live: real libSQL files, so a store built from one works. */
+const TURSO_DIR = mkdtempSync(join(tmpdir(), 'platform-turso-'));
 const SESSIONS: Record<string, 'admin' | 'member'> = { 'admin-session': 'admin', 'member-session': 'member' };
 
 type Row = { id: string; status: string; error: string | null; reads: number; [field: string]: unknown };
@@ -144,8 +153,18 @@ function platformControlPlane() {
         }
         if (m[2]) {
           if (row.status !== 'ready') return send(409, { error: 'Database is not ready' });
+          // The variables the Platform renders for each kind of database.
+          const envVars = {
+            turso: [
+              { name: 'TURSO_DATABASE_URL', value: `file:${join(TURSO_DIR, `${row.name}.db`)}`, secret: false },
+              { name: 'TURSO_AUTH_TOKEN', value: `token-${row.id}`, secret: true },
+            ],
+            neon: [{ name: 'DATABASE_URL', value: `postgresql://neon.example/${row.name}`, secret: true }],
+            postgres: [{ name: 'DATABASE_URL', value: `postgresql://railway.example/${row.name}`, secret: true }],
+            redis: [{ name: 'REDIS_URL', value: `redis://default:${row.id}@redis.example:6379`, secret: true }],
+          }[row.kind as string];
           return send(200, {
-            envVars: [{ name: 'DATABASE_URL', value: `libsql://${row.name}.example`, secret: true }],
+            envVars,
             snippets: [],
             docsUrl: 'https://mastra.ai/docs',
           });
@@ -240,8 +259,9 @@ describe('MastraPlatform project provisioning', () => {
 
     const database = await project.databases.create({ kind: 'turso', name: 'support-db' });
     await project.databases.waitUntilReady(database.id, wait);
-    expect((await project.databases.connection(database.id)).envVars).toEqual([
-      { name: 'DATABASE_URL', value: 'libsql://support-db.example', secret: true },
+    expect((await project.databases.connection(database.id)).envVars.map(v => v.name)).toEqual([
+      'TURSO_DATABASE_URL',
+      'TURSO_AUTH_TOKEN',
     ]);
 
     const filesystem = await project.filesystems.create({ environmentId: production!.id, name: 'uploads' });
@@ -251,6 +271,49 @@ describe('MastraPlatform project provisioning', () => {
       status: 'ready',
     });
     expect((await project.filesystems.list(production!.id)).map(fs => fs.id)).toEqual([filesystem.id]);
+  });
+
+  it('turns a provisioned database into Mastra storage that memory saves to', async () => {
+    const project = signedIn().project((await signedIn().projects.create({ name: 'Storage' })).id);
+    const database = await project.databases.create({ kind: 'turso', name: 'support-threads' });
+    await project.databases.waitUntilReady(database.id, wait);
+
+    const storage = await project.getStorage(database.id);
+    expect(storage).toBeInstanceOf(LibSQLStore);
+    expect(storage.id).toBe(database.id);
+
+    const memory = new Memory({ storage });
+    const thread = await memory.createThread({ resourceId: 'user-1', title: 'Refund' });
+    // A second store over the same database sees what the first one saved.
+    const second = await project.getStorage(database.id, { id: 'reopened' });
+    expect(second.id).toBe('reopened');
+    const reopened = new Memory({ storage: second });
+    expect(await reopened.getThreadById({ threadId: thread.id })).toMatchObject({ title: 'Refund' });
+  });
+
+  it('picks the store for each kind of database', async () => {
+    const project = signedIn().project((await signedIn().projects.create({ name: 'Stores' })).id);
+    const { environments } = project;
+    const [production] = await environments.list();
+    const stores = [];
+    for (const input of [
+      { kind: 'neon', name: 'neon-db' },
+      { kind: 'postgres', name: 'pg-db', environmentId: production!.id },
+      { kind: 'redis', name: 'cache', environmentId: production!.id },
+    ] as const) {
+      const database = await project.databases.create(input);
+      await project.databases.waitUntilReady(database.id, wait);
+      stores.push(await project.getStorage(database.id, { disableInit: true }));
+    }
+    expect(stores[0]).toBeInstanceOf(PostgresStore);
+    expect(stores[1]).toBeInstanceOf(PostgresStore);
+    expect(stores[2]).toBeInstanceOf(RedisStore);
+  });
+
+  it('refuses a database that is not ready yet', async () => {
+    const project = signedIn().project((await signedIn().projects.create({ name: 'Early' })).id);
+    const database = await project.databases.create({ kind: 'turso', name: 'too-soon' });
+    await expect(project.getStorage(database.id)).rejects.toThrow(`Database ${database.id} is provisioning`);
   });
 
   it('removes what it provisioned, and the project itself', async () => {

@@ -5820,6 +5820,9 @@ importers:
       '@mastra/client-js':
         specifier: workspace:*
         version: link:../../client-sdks/client-js
+      '@mastra/connect':
+        specifier: workspace:*
+        version: link:../connect
       '@mastra/platform-workspace':
         specifier: workspace:*
         version: link:../../workspaces/platform-workspace
@@ -5842,12 +5845,18 @@ importers:
       '@mastra/hono':
         specifier: workspace:*
         version: link:../../server-adapters/hono
+      '@mastra/libsql':
+        specifier: workspace:*
+        version: link:../../stores/libsql
       '@mastra/memory':
         specifier: workspace:*
         version: link:../memory
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../stores/pg
+      '@mastra/redis':
+        specifier: workspace:*
+        version: link:../../stores/redis
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15

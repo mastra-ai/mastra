@@ -1,9 +1,9 @@
 import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { MastraFilesystem, Workspace } from '@mastra/core/workspace';
 import type { PlatformSandboxOptions } from '@mastra/platform-workspace';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PlatformConnectError } from './connect/platform-connect';
-import { MastraPlatform } from './mastra-platform';
+import { MastraConnectError, MastraPlatform } from './index';
 
 const TOKEN = 'project-token';
 const PROJECT_ID = 'proj_1';
@@ -41,6 +41,12 @@ function platformServices() {
   const threads = new Map<string, { id: string; resourceId: string; title: string }>();
   const messages = new Map<string, unknown[]>();
   const sandboxes = new Map<string, { environmentId: string }>();
+  const filesystems = new Map([
+    ['fs_ready', { status: 'ready', bucketName: 'production-docs', error: null }],
+    ['fs_new', { status: 'provisioning', bucketName: null, error: null }],
+  ]);
+  /** Objects by `bucket/key`, the way the workspace proxy stores them. */
+  const objects = new Map<string, string>();
   let nextId = 1;
 
   async function handle(req: IncomingMessage, res: ServerResponse) {
@@ -48,7 +54,7 @@ function platformServices() {
     const method = req.method ?? 'GET';
     let raw = '';
     for await (const chunk of req) raw += chunk;
-    const body = raw ? JSON.parse(raw) : undefined;
+    const body = raw && req.headers['content-type']?.includes('json') ? JSON.parse(raw) : undefined;
     const send = (status: number, data?: unknown) => {
       res.writeHead(status, { 'content-type': 'application/json' });
       res.end(data === undefined ? undefined : JSON.stringify(data));
@@ -155,6 +161,49 @@ function platformServices() {
         provider: 'railway',
         status: 'ready',
       });
+    }
+
+    // —— Platform API: the record of a file system, which names its bucket ——
+    if ((m = path.match(/^\/v1\/server\/projects\/([^/]+)\/buckets\/([^/]+)$/)) && method === 'GET') {
+      const record = filesystems.get(m[2]!);
+      if (m[1] !== PROJECT_ID || !record) return send(404, { detail: 'File system not found' });
+      return send(200, { id: m[2], environmentId: 'env_prod', ...record });
+    }
+
+    // —— Workspace proxy: a bucket's objects, addressed by bucket name ——
+    if ((m = path.match(/^\/v1\/railway\/projects\/([^/]+)\/fs\/([^/]+)\/(.*)$/))) {
+      if (m[1] !== PROJECT_ID) return send(404, { error: 'project not found' });
+      const bucket = decodeURIComponent(m[2]!);
+      if (![...filesystems.values()].some(f => f.bucketName === bucket)) return send(404, { error: 'no bucket' });
+      const key = m[3]!.split('/').map(decodeURIComponent).join('/');
+      const id = `${bucket}/${key}`;
+      if (method === 'PUT') {
+        objects.set(id, raw);
+        return send(200, {});
+      }
+      if (method === 'GET' && key === '') {
+        const prefix = url.searchParams.get('prefix') ?? '';
+        const delimiter = url.searchParams.get('delimiter');
+        const keys = [...objects.keys()]
+          .filter(k => k.startsWith(`${bucket}/${prefix}`))
+          .map(k => k.slice(bucket.length + 1));
+        const rest = (k: string) => k.slice(prefix.length);
+        return send(200, {
+          contents: keys.filter(k => !delimiter || !rest(k).includes('/')).map(k => ({ key: k, size: 1 })),
+          commonPrefixes: delimiter
+            ? [...new Set(keys.filter(k => rest(k).includes('/')).map(k => `${prefix}${rest(k).split('/')[0]}/`))]
+            : [],
+        });
+      }
+      if (!objects.has(id)) return send(404, { error: 'NoSuchKey' });
+      if (method === 'HEAD') {
+        res.writeHead(200, { 'content-length': String(Buffer.byteLength(objects.get(id)!)) });
+        return res.end();
+      }
+      if (method === 'GET') {
+        res.writeHead(200);
+        return res.end(objects.get(id));
+      }
     }
 
     // —— Workspace proxy ——
@@ -274,38 +323,39 @@ describe('MastraPlatform services', () => {
   describe('connect', () => {
     it('connects an end user account that only that end user can see and remove', async () => {
       const { connect } = platform();
+      const user1 = connect.withResource('user-1');
+      const user2 = connect.withResource('user-2');
 
       expect((await connect.listIntegrations()).map(i => i.id)).toEqual(['github']);
 
-      const session = await connect.createConnectSession('github', { resourceId: 'user-1' });
-      expect(session).toMatchObject({
-        integrationId: 'github',
+      const session = await user1.createConnectSession('github');
+      // An end user's link is fetched separately, and only by that end user.
+      expect(session).toMatchObject({ integrationId: 'github', connectUrl: null });
+      expect(await user1.getConnectUrl(session.connectionId)).toMatchObject({
         connectUrl: `https://connect.example/${session.connectionId}`,
       });
+      await expect(user2.getConnectUrl(session.connectionId)).rejects.toMatchObject({ code: 'connection_not_found' });
 
       // Pending until the end user signs in at the link.
-      expect((await connect.listConnections({ resourceId: 'user-1' })).map(c => c.id)).toEqual(['conn_shared']);
+      expect((await user1.listConnections()).map(c => c.id)).toEqual(['conn_shared']);
       services.completeSignIn(session.connectionId);
 
-      expect((await connect.listConnections({ resourceId: 'user-1' })).map(c => c.id).sort()).toEqual([
-        session.connectionId,
-        'conn_shared',
-      ]);
-      expect((await connect.listConnections({ resourceId: 'user-2' })).map(c => c.id)).toEqual(['conn_shared']);
+      expect((await user1.listConnections()).map(c => c.id).sort()).toEqual([session.connectionId, 'conn_shared']);
+      expect((await user2.listConnections()).map(c => c.id)).toEqual(['conn_shared']);
       expect((await connect.listConnections()).map(c => c.id)).toEqual(['conn_shared']);
 
-      await expect(connect.disconnect(session.connectionId, { resourceId: 'user-2' })).rejects.toMatchObject({
-        name: 'PlatformConnectError',
+      await expect(user2.disconnect(session.connectionId)).rejects.toMatchObject({
+        name: 'MastraConnectError',
         status: 404,
       });
-      await connect.disconnect(session.connectionId, { resourceId: 'user-1' });
-      expect((await connect.listConnections({ resourceId: 'user-1' })).map(c => c.id)).toEqual(['conn_shared']);
+      await user1.disconnect(session.connectionId);
+      expect((await user1.listConnections()).map(c => c.id)).toEqual(['conn_shared']);
     });
 
     it('fails with the service status when the token is rejected', async () => {
       const { connect } = new MastraPlatform({ accessToken: 'wrong', projectId: PROJECT_ID });
       const error = await connect.listIntegrations().catch(e => e);
-      expect(error).toBeInstanceOf(PlatformConnectError);
+      expect(error).toBeInstanceOf(MastraConnectError);
       expect(error.status).toBe(401);
     });
   });
@@ -334,6 +384,27 @@ describe('MastraPlatform services', () => {
       const knowledge = platform().getKnowledge({ instanceId: 'kn_1', apiUrl: baseUrl });
       const store = await knowledge.getStorage();
       expect(await store!.listPages({ read: 'all' })).toEqual({ pages: [{ id: 'page_1', title: 'Refunds' }] });
+    });
+  });
+
+  describe('filesystems', () => {
+    it('reads and writes a provisioned file system through a Workspace', async () => {
+      const filesystem = await platform().getFilesystem('fs_ready');
+      expect(filesystem).toBeInstanceOf(MastraFilesystem);
+
+      await filesystem.writeFile('/docs/refunds.md', 'Refunds are issued to the original card within 5 days.');
+      await filesystem.writeFile('/docs/invoices.md', 'Invoices live under Billing > Invoices.');
+      expect(await filesystem.readFile('/docs/refunds.md', { encoding: 'utf-8' })).toContain('original card');
+
+      const workspace = new Workspace({ filesystem, bm25: true, autoIndexPaths: ['/docs'] });
+      await workspace.init();
+      const [top] = await workspace.search('where are my invoices');
+      expect(top?.id).toBe('/docs/invoices.md');
+    });
+
+    it('refuses a file system that is still provisioning', async () => {
+      await expect(platform().getFilesystem('fs_new')).rejects.toThrow('File system fs_new is provisioning');
+      await expect(platform().getFilesystem('fs_missing')).rejects.toMatchObject({ status: 404 });
     });
   });
 

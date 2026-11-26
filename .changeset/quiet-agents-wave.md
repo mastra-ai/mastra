@@ -22,17 +22,22 @@ const response = await agent.stream('Where is my invoice?', {
 const { messages } = await agent.listMessages('thread-1', { resourceId: 'user-1' });
 ```
 
-Agents can also be read, listed, updated, and deleted. Each run acts for an end user: pass `memory.resource` or `resourceId`.
+A managed agent is a Mastra `Agent`: register it in `new Mastra({ agents })`, give it to another agent as a sub-agent, or run it as a workflow step. Agents can also be read, listed, updated, and deleted. Each run acts for an end user: pass `memory.resource` or `resourceId`.
 
 ```ts
 const memory = platform.getMemory({ instanceId: 'mem_123' });
 const knowledge = platform.getKnowledge({ instanceId: 'kn_123' });
 
-const { connectUrl } = await platform.connect.createConnectSession('github', { resourceId: 'user-1' });
+const { connectionId } = await platform.connect.withResource('user-1').createConnectSession('github');
 
 const sandbox = await platform.createSandbox({ environmentId: 'env_123' });
 const { stdout } = await sandbox.executeCommand('ls', ['-la']);
+
+const filesystem = await platform.getFilesystem('bucket_123');
+const storage = await platform.getStorage('db_123');
 ```
+
+Each is the framework type it stands in for (`MastraMemory`, `Knowledge`, `MastraSandbox`, `MastraFilesystem`, `MastraStorage`), and `connect` is `@mastra/connect`'s `ConnectClient`. `getStorage` needs the store for the database's kind installed: `@mastra/libsql`, `@mastra/pg`, or `@mastra/redis`.
 
 The same client provisions projects for an organization member: create projects and environments, and Memory instances, Knowledge instances, databases, and file systems in them.
 

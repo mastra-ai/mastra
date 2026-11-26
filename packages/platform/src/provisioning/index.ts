@@ -335,7 +335,8 @@ export class PlatformDatabases {
   }
 }
 
-export interface PlatformFilesystem {
+/** A file system as the Platform records it. Read and write its files through `MastraPlatform.getFilesystem`. */
+export interface PlatformFilesystemRecord {
   id: string;
   environmentId: string;
   platformProjectId: string;
@@ -367,24 +368,24 @@ export class PlatformFilesystems {
     return `/v1/server/projects/${id(this.projectId)}/environments/${id(environmentId)}/buckets`;
   }
 
-  list(environmentId: string): Promise<PlatformFilesystem[]> {
+  list(environmentId: string): Promise<PlatformFilesystemRecord[]> {
     return this.api.request('GET', this.envPath(environmentId));
   }
 
   /** Starts provisioning a file system. Pass the result's `id` to `waitUntilReady` before using it. */
-  create({ environmentId, name }: CreatePlatformFilesystemInput): Promise<PlatformFilesystem> {
+  create({ environmentId, name }: CreatePlatformFilesystemInput): Promise<PlatformFilesystemRecord> {
     return this.api.request('POST', this.envPath(environmentId), { name });
   }
 
-  get(filesystemId: string): Promise<PlatformFilesystem> {
+  get(filesystemId: string): Promise<PlatformFilesystemRecord> {
     return this.api.request('GET', `/v1/server/projects/${id(this.projectId)}/buckets/${id(filesystemId)}`);
   }
 
-  async delete(filesystem: Pick<PlatformFilesystem, 'id' | 'environmentId'>): Promise<void> {
+  async delete(filesystem: Pick<PlatformFilesystemRecord, 'id' | 'environmentId'>): Promise<void> {
     await this.api.request('DELETE', `${this.envPath(filesystem.environmentId)}/${id(filesystem.id)}`);
   }
 
-  waitUntilReady(filesystemId: string, options?: WaitOptions): Promise<PlatformFilesystem> {
+  waitUntilReady(filesystemId: string, options?: WaitOptions): Promise<PlatformFilesystemRecord> {
     return waitUntilReady(() => this.get(filesystemId), `File system ${filesystemId}`, options);
   }
 }
