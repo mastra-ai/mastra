@@ -319,11 +319,13 @@ export class LibSQLDB {
       if (Object.keys(filteredRecord).length === 0) return;
       const knownColumns = await this.getTableColumns(args.tableName);
       const columns = knownColumns.size > 0 ? [...knownColumns] : Object.keys(filteredRecord);
+      // Names come from the table's catalog, which can hold columns a user added under any name, so
+      // they are quoted rather than validated.
       const updates = columns
         .filter(column => column !== 'id' && !args.preserve.includes(column))
         .map(column => {
-          const parsed = parseSqlIdentifier(column, 'column name');
-          return `"${parsed}" = excluded."${parsed}"`;
+          const quoted = `"${column.replaceAll('"', '""')}"`;
+          return `${quoted} = excluded.${quoted}`;
         });
       const statement = prepareStatement({ tableName: args.tableName, record: filteredRecord });
       if (!statement.sql.startsWith('INSERT OR REPLACE')) {
