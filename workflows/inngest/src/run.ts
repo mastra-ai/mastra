@@ -1,6 +1,6 @@
 import { ReadableStream } from 'node:stream/web';
 import type { ActorSignal } from '@mastra/core/auth/ee';
-import { getErrorFromUnknown } from '@mastra/core/error';
+import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '@mastra/core/error';
 import type { Mastra } from '@mastra/core/mastra';
 import type { TracingContext, TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -548,6 +548,19 @@ export class InngestRun<
     });
     if (!snapshot) {
       throw new NonRetriableError(`Cannot resume run ${this.runId}: snapshot not found`);
+    }
+
+    // Only suspended runs can be resumed. Resuming a run that is already finished (or still
+    // in flight) would overwrite its saved result/error and dispatch a duplicate resume event,
+    // so fail fast before mutating the snapshot. Mirrors core's WORKFLOW_RUN_NOT_SUSPENDED guard.
+    if (snapshot.status !== 'suspended') {
+      throw new MastraError({
+        id: 'WORKFLOW_RUN_NOT_SUSPENDED',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: 'This workflow run was not suspended',
+        details: { workflowId: this.workflowId, runId: this.runId, status: snapshot.status },
+      });
     }
 
     // Support label-based resume: look up step from resumeLabels
