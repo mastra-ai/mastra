@@ -4,7 +4,7 @@
 
 Added buttons to paused tools in Slack, Telegram and Teams threads. A tool that pauses with a `channelCard` in its suspend payload now shows that card in the thread, and a click on a `toolResumeButton()` resumes the tool with `{ action }`. The tool can pause again with a new card for multi-step flows, and the clicked card updates in place. A click takes the card's buttons off while the tool answers, and only buttons on the card currently shown are accepted, so a double click or a late click on an earlier step's button is ignored. Before, a paused tool left the thread stuck with nothing to click.
 
-`getChannelRun(requestContext)` tells a tool which thread it runs in, who clicked (or sent the message), and that user's resource ID (from `resolveResourceId`, or `<platform>:<userId>`), so the tool can compare it with the conversation's resource before acting for the clicker.
+`getChannelRun(requestContext)` tells a tool which thread it runs in, who clicked (or sent the message), and that user's resource ID (from `resolveResourceId`, or `<platform>:<userId>`), so the tool can compare it with the conversation's resource before acting for the clicker. That check means "same user" only when resource IDs are per user; a hook that maps a whole channel to one resource lets every member through.
 
 ```ts
 import { getChannelRun, toolResumeButton } from '@mastra/core/channels';

@@ -823,7 +823,8 @@ export class AgentChannels {
         return;
       }
       if (resumeError === 'in-progress') {
-        // The run may be resuming another of its paused calls, so this one still waits.
+        // The run may be resuming another of its paused calls (or this one, from
+        // elsewhere), so the card stays answerable until a click learns otherwise.
         await restoreCard?.().catch(restoreErr =>
           this.log('warn', 'Failed to restore the buttons of a tool card', {
             ...actionEventContext,

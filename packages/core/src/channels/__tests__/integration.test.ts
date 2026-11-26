@@ -953,22 +953,15 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s paused tool cards', 
       const second = await t.cardMessage('next', other);
       await t.click('next', first);
       await vi.waitFor(() => expect(t.seen).toHaveLength(3));
-      // Durable and evented resumes wait for the running one; plain ones are refused.
+      // The second resume waits for the running one on every engine. A refused
+      // resume is covered by the busy-resume test below.
       const raced = stopOther(second);
       await settle();
       t.releaseNext();
       await raced;
       await t.cardMessage('done');
       await settle();
-      // Engines differ on a resume while another is running: it either went
-      // through, or was refused and the card got its buttons back.
-      if (!t.seen.some(entry => entry.action === 'stop')) {
-        expect(t.versions(second).at(-1)).toEqual(['next', 'stop']);
-        await stopOther(second);
-      }
-      await vi.waitFor(() => expect(t.seen.filter(entry => entry.action === 'stop')).toHaveLength(1), {
-        timeout: 5000,
-      });
+      expect(t.seen.filter(entry => entry.action === 'stop')).toHaveLength(1);
     } finally {
       t.releaseNext();
       await t.cleanup();

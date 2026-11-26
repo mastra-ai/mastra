@@ -174,6 +174,8 @@ const callbackDataBytes = (id: string) => new TextEncoder().encode(`chat:${JSON.
  * @throws when `toolCallId` is empty, when `action` does not match
  * `/^[a-z][a-z0-9_-]{0,15}$/`, or when the button's id is too long for
  * Telegram, whose button data is limited to 64 bytes (about 50 for the id).
+ * The limit is checked on every platform, so a card works wherever it's shown.
+ * With 30-character tool call ids (Anthropic's), keep actions to 8 characters.
  */
 export function toolResumeButton({
   toolCallId,
