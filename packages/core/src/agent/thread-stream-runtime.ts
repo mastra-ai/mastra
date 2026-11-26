@@ -17,7 +17,6 @@ import {
   withoutLiveRequestKeys,
 } from '../request-context';
 import { getRequestContextInputSource } from '../request-context/input-source';
-import type { PendingSignalEnqueueResult } from '../storage/domains/memory/base';
 import type { MastraModelOutput } from '../stream/base/output';
 import { getChunkProducedAt } from '../stream/base/produced-at';
 import { isSignalChunkExcluded } from '../stream/signal-exclusions';
@@ -5055,20 +5054,18 @@ export class AgentThreadStreamRuntime {
     subscription.admittedSignalIds.add(data.signal.id);
     const signal = createSignal(data.signal);
     if (!data.stored) {
-      let written: Exclude<PendingSignalEnqueueResult, 'thread-not-found'>;
       try {
-        written = await this.#enqueueStoredSignal(state, key, store, signal, run);
+        if ((await this.#enqueueStoredSignal(state, key, store, signal, run)) === 'run-closed') {
+          await this.#storeLeftoverSignal(state, pubsub, key, run, signal, store);
+          return;
+        }
       } catch (error) {
-        // Not admitted, so a redelivery of the event may store it.
+        // No row was stored, so a redelivery of the event may store it.
         subscription.admittedSignalIds.delete(data.signal.id);
         run.agent
           .__getLogger?.()
           ?.warn?.('Could not store a signal forwarded to a running run', { runId, signalId: signal.id, error });
         throw error;
-      }
-      if (written === 'run-closed') {
-        await this.#storeLeftoverSignal(state, pubsub, key, run, signal, store);
-        return;
       }
     }
     if (this.#pendingUserMessageChunk(runId, signal, 'pending')) {
