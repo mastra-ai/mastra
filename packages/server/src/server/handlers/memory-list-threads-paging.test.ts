@@ -26,10 +26,12 @@ async function setup({
   withAgentMemory,
   branching = false,
   count = 5,
+  tied = false,
 }: {
   withAgentMemory: boolean;
   branching?: boolean;
   count?: number;
+  tied?: boolean;
 }) {
   const storage = new InMemoryStore();
   const memoryStore = (await storage.getStore('memory')) as MemoryStorage;
@@ -38,8 +40,8 @@ async function setup({
       thread: {
         id: `thread-${index}`,
         resourceId: 'resource',
-        createdAt: new Date(createdAt.getTime() + index * 10),
-        updatedAt: new Date(createdAt.getTime() + index * 10),
+        createdAt: new Date(createdAt.getTime() + (tied ? 0 : index * 10)),
+        updatedAt: new Date(createdAt.getTime() + (tied ? 0 : index * 10)),
         metadata: {},
       },
     });
@@ -246,5 +248,53 @@ describe.each([
     for (const [, threads] of filterAccessible.mock.calls) {
       expect(threads.length).toBeLessThanOrEqual(100);
     }
+  });
+});
+
+// Adapters such as MySQL order only by the sort field, so rows that tie on it can come back in a
+// different order for every OFFSET query. The mock gives each batch its own valid order of the tie.
+describe.each([
+  { name: 'agent memory', withAgentMemory: true, branching: false },
+  { name: 'branching agent memory', withAgentMemory: true, branching: true },
+  { name: 'storage fallback', withAgentMemory: false, branching: false },
+])('list threads paging with FGA and tied sort keys ($name)', ({ withAgentMemory, branching }) => {
+  it('returns every tied thread when a batch boundary falls inside the tie', async () => {
+    const { listThreads, originalListThreads, mastra } = await setup({
+      withAgentMemory,
+      branching,
+      count: 250,
+      tied: true,
+    });
+    listThreads.mockImplementation(async (args: any) => {
+      const all = await originalListThreads({ ...args, page: 0, perPage: false });
+      if (args.perPage === false) return all;
+      const rotation = (args.page * 41) % all.threads.length;
+      const reordered = [...all.threads.slice(rotation), ...all.threads.slice(0, rotation)];
+      const offset = args.page * args.perPage;
+      return {
+        ...all,
+        threads: reordered.slice(offset, offset + args.perPage),
+        page: args.page,
+        perPage: args.perPage,
+        hasMore: offset + args.perPage < all.total,
+      };
+    });
+    const filterAccessible = vi.fn(async (_user: unknown, threads: Array<{ id: string }>) => threads);
+    vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: { filterAccessible, require: vi.fn() } } as any);
+    const ctx = createTestServerContext({ mastra });
+    ctx.requestContext.set('user', { id: 'user-1' });
+
+    const result: any = await LIST_THREADS_ROUTE.handler({
+      ...ctx,
+      ...(withAgentMemory ? { agentId: 'test-agent' } : {}),
+      resourceId: 'resource',
+      page: 0,
+      perPage: false,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    } as any);
+
+    expect(result.total).toBe(250);
+    expect(new Set(result.threads.map((thread: { id: string }) => thread.id)).size).toBe(250);
+    expect(listThreads.mock.calls.some(([args]) => args?.perPage === false)).toBe(true);
   });
 });
