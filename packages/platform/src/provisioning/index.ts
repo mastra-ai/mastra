@@ -18,7 +18,10 @@ export interface PlatformApiOptions {
 }
 
 function errorMessage(body: unknown): string | undefined {
-  if (!body || typeof body !== 'object' || !('error' in body)) return undefined;
+  if (!body || typeof body !== 'object') return undefined;
+  // Problem details (RFC 9457), which the Platform API answers most errors with.
+  if ('detail' in body && typeof body.detail === 'string' && body.detail) return body.detail;
+  if (!('error' in body)) return undefined;
   const { error } = body;
   if (typeof error === 'string') return error;
   if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
@@ -62,7 +65,7 @@ export class PlatformApi {
 }
 
 export interface WaitOptions {
-  /** How long to wait before giving up. Defaults to 5 minutes. */
+  /** How long to wait before giving up. Defaults to 15 minutes (file systems can take over 5). */
   timeoutMs?: number;
   /** Time between status checks. Defaults to 2 seconds. */
   intervalMs?: number;
@@ -72,7 +75,7 @@ export interface WaitOptions {
 export async function waitUntilReady<T extends { status: string; error?: string | null }>(
   get: () => Promise<T>,
   label: string,
-  { timeoutMs = 5 * 60_000, intervalMs = 2_000 }: WaitOptions = {},
+  { timeoutMs = 15 * 60_000, intervalMs = 2_000 }: WaitOptions = {},
 ): Promise<T> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
