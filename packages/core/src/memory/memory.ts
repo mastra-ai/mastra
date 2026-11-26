@@ -870,7 +870,8 @@ https://mastra.ai/en/docs/memory/overview`,
       category: 'USER',
       text:
         `Observational memory is enabled, but the memory store ${storeName} does not support it. ` +
-        'Use a storage adapter that supports observational memory, or disable observationalMemory in your Memory options.',
+        'Use a storage adapter that supports observational memory, or set observationalMemory: false in your Memory options ' +
+        'and remove any observational-memory processor from the agent inputProcessors and outputProcessors.',
       details: { store: storeName },
     });
   }
