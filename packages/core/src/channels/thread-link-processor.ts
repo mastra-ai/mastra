@@ -69,7 +69,7 @@ export class ChannelThreadLinkProcessor implements Processor {
   async processOutputStream({ part, state, requestContext }: ProcessOutputStreamArgs): Promise<ChunkType> {
     if (state.linked || !linksThisRun(requestContext)) return part;
     if (part.type === 'text-delta') {
-      state.textStarted = true;
+      if (part.payload.text.trim()) state.textStarted = true;
       return part;
     }
     if ((part.type !== 'tool-call' && part.type !== 'step-finish') || !state.textStarted) return part;

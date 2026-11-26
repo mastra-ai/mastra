@@ -50,6 +50,12 @@ describe('ChannelThreadLinkProcessor', () => {
     expect(await feed(toolCall)).toBe(toolCall);
   });
 
+  it('does not count blank text as a reply', async () => {
+    const { feed } = run();
+    await feed({ ...text, payload: { id: 'b1', text: ' \n' } });
+    expect(await feed(stepFinish)).toBe(stepFinish);
+  });
+
   it('posts nothing on a reused thread, with hidden text, or without a URL', async () => {
     for (const options of [{ isNew: false }, { hidden: true }]) {
       const { feed } = run(options);

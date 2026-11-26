@@ -235,7 +235,7 @@ Set `replyMode: 'tool'` to have the agent post only through a `reply_in_thread` 
 
 - Reply text and tool calls stay out of the thread. `textDisplay` and `toolDisplay` default to `'hidden'`.
 - The typing status names the agent's current step, for example "is listing repo root", using each tool call's `description` argument.
-- `reply_in_thread` streams into the thread while the model writes it.
+- With `streaming: true` on the adapter, `reply_in_thread` streams into the thread while the model writes it. Without it, each reply posts once it's complete.
 - The agent's prompt tells it to post a one-line opener on long work, then the outcome, and to write for people rather than agents.
 - If the agent goes five minutes without posting, it's reminded to post a status.
 
@@ -254,6 +254,7 @@ export const yourAgent = new Agent({
     adapters: {
       slack: {
         adapter: createSlackAdapter(),
+        streaming: true,
         replyMode: {
           instructions: ['Link tickets as [ABC-123](<ticket url>).'],
           reminderAfterMs: 10 * 60_000,
@@ -265,7 +266,7 @@ export const yourAgent = new Agent({
 })
 ```
 
-`instructions` adds your own lines to the reply prompt. Pass a function, `({ canReply }) => string[]`, to vary them by whether the run can post. Settings you set on the adapter yourself, such as `toolDisplay`, win over the reply mode defaults.
+`instructions` adds your own lines to the reply prompt. Pass a function, `({ canReply }) => string[]`, to vary them by whether the run can post. If you set `textDisplay: 'show'`, the agent's text posts directly and gets the same prompt, but no `reply_in_thread` tool. Settings you set on the adapter yourself, such as `toolDisplay`, win over the reply mode defaults.
 
 Runs that didn't start from a message, such as a schedule or a web chat on a thread that started in a channel, find the thread from their memory thread and post there too.
 

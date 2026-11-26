@@ -121,9 +121,14 @@ export class ChannelReplyModeProcessor implements Processor {
     const { requestContext, state } = args;
     const render = await this.#deps.resolveRender(requestContext, state);
     const adapter = render && this.#deps.adapter(render.platform);
-    // With reply text shown, the reply stream already posts; the tool would double every message.
-    if (!requestContext || !render || !adapter?.replyMode || render.textDisplay !== 'hidden') return undefined;
+    if (!requestContext || !render || !adapter?.replyMode) return undefined;
     const config = adapter.replyMode === 'tool' ? {} : adapter.replyMode;
+    // With reply text shown the reply already posts, so the tool would double every message.
+    // The agent still gets the guidance on how to write for the thread.
+    if (render.textDisplay !== 'hidden') {
+      new ChannelReplyGuidanceProcessor({ instructions: config.instructions }).processInputStep(args);
+      return { messageList: args.messageList };
+    }
     const tools = {
       ...args.tools,
       ...createChannelReplyTool(requestContext, {
@@ -136,6 +141,11 @@ export class ChannelReplyModeProcessor implements Processor {
     await new ChannelReplyReminderProcessor({ afterMs: config.reminderAfterMs, now: this.#deps.now }).processInputStep(
       withTools,
     );
-    return { tools, messageList: args.messageList };
+    // A run that narrows its tools must still be able to post its reply.
+    const activeTools =
+      args.activeTools && !args.activeTools.includes(REPLY_TOOL_NAME)
+        ? [...args.activeTools, REPLY_TOOL_NAME]
+        : undefined;
+    return { tools, messageList: args.messageList, ...(activeTools ? { activeTools } : {}) };
   }
 }

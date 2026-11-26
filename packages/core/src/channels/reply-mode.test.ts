@@ -53,7 +53,7 @@ describe('channelReplyTypingStatus', () => {
 describe('ChannelReplyModeProcessor', () => {
   const render = { platform: 'slack', textDisplay: 'hidden', chatThread: {} } as never;
 
-  async function step(adapter: ChannelReplyModeAdapter | undefined, found: unknown = render) {
+  async function step(adapter: ChannelReplyModeAdapter | undefined, found: unknown = render, activeTools?: string[]) {
     const messageList = new MessageList({});
     const requestContext = new RequestContext();
     requestContext.set('channel', { platform: 'slack', isDM: false });
@@ -65,6 +65,7 @@ describe('ChannelReplyModeProcessor', () => {
       messageList,
       requestContext,
       tools: { other: {} },
+      activeTools,
       state: {},
     } as unknown as ProcessInputStepArgs);
     return { result, guidance: messageList.getSystemMessages('channel-reply-guidance') };
@@ -80,7 +81,18 @@ describe('ChannelReplyModeProcessor', () => {
   it('leaves runs alone when the adapter is not in reply mode or the run has no chat thread', async () => {
     expect((await step({})).result).toBeUndefined();
     expect((await step({ replyMode: 'tool' }, null)).result).toBeUndefined();
+  });
+
+  it('keeps the guidance but adds no reply tool when reply text is shown', async () => {
     const shown = { platform: 'slack', textDisplay: 'show', chatThread: {} };
-    expect((await step({ replyMode: 'tool' }, shown)).result).toBeUndefined();
+    const { result, guidance } = await step({ replyMode: { instructions: ['Link the PR.'] } }, shown);
+    expect(result).not.toHaveProperty('tools');
+    expect(String(guidance[0]!.content)).toContain('Link the PR.');
+  });
+
+  it('adds reply_in_thread to a run that narrows its active tools', async () => {
+    const { result } = await step({ replyMode: 'tool' }, render, ['other']);
+    expect(result!.activeTools).toEqual(['other', REPLY_TOOL_NAME]);
+    expect((await step({ replyMode: 'tool' })).result).not.toHaveProperty('activeTools');
   });
 });
