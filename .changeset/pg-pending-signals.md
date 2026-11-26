@@ -18,4 +18,4 @@ memory?.supportsPendingSignals; // true
 - lock the thread rows they touch for the whole transaction, so concurrent writes to one thread run one after another (`updateThreadResourceId` already did);
 - send one extra statement per call to take that lock (except `updateThreadResourceId`).
 
-This also fixes a deadlock between `updateThreadResourceId` and a `saveMessages` that re-saves a message of the same thread. Retention pruning takes no thread lock: it can still deadlock with the end of a run that holds signals on the rows it deletes, and Postgres then cancels one of the two.
+This also fixes a deadlock between `updateThreadResourceId` and a `saveMessages` that re-saves a message of the same thread or moves it to another thread. Retention pruning takes no thread lock: it can still deadlock with the end of a run that holds signals on the rows it deletes, and Postgres then cancels one of the two.

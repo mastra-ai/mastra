@@ -227,6 +227,45 @@ function raceTests(ctx: Ctx) {
   );
 
   it(
+    'settles a thread transfer racing a save that moves the thread messages to another thread without a deadlock',
+    async () => {
+      for (let iteration = 0; iteration < ITERATIONS; iteration++) {
+        const source = await newThread();
+        const target = await newThread(source.resourceId);
+        // Dated in id order and inserted in the reverse order. The thread's index returns the rows
+        // newest first and the heap in insertion order, so either scan meets them in the reverse
+        // of the lock order.
+        const prefix = `msg-${randomUUID()}`;
+        const base = Date.now() - 300_000;
+        const messages = Array.from({ length: 40 }, (_, index) => ({
+          ...createSampleMessageV2({
+            threadId: source.id,
+            resourceId: source.resourceId,
+            createdAt: new Date(base + index * 1000),
+          }),
+          id: `${prefix}-${String(index).padStart(2, '0')}`,
+        }));
+        for (const message of reversed(messages)) await ctx.memory.saveMessages({ messages: [message] });
+
+        const results = await startShifted<unknown>(
+          [
+            () => ctx.peer.saveMessages({ messages: messages.map(message => ({ ...message, threadId: target.id })) }),
+            () => ctx.memory.updateThreadResourceId({ threadId: source.id, resourceId: `resource-${randomUUID()}` }),
+          ],
+          iteration,
+        );
+
+        expect(results.filter(result => result.status === 'rejected').map(result => codesOf(result.reason))).toEqual(
+          [],
+        );
+        const moved = await ctx.memory.listMessages({ threadId: target.id, perPage: false });
+        expect(sorted(ids(moved.messages))).toEqual(sorted(ids(messages)));
+      }
+    },
+    RACE_TIMEOUT,
+  );
+
+  it(
     'settles a thread deletion racing claims, a close, a cancel, sends, saves, updates and deletes, leaving no row of the thread',
     async () => {
       for (let iteration = 0; iteration < ITERATIONS; iteration++) {
