@@ -231,21 +231,27 @@ describe('LibSQL pending signals', () => {
     it('runs init repeatedly and concurrently from two instances on an existing database', async () => {
       const url = tempDbUrl();
       const { thread, messageIds } = await createDatabaseWithoutSignalColumns(url);
-      const first = new MemoryLibSQL({ url });
-      const second = new MemoryLibSQL({ url });
+      const clients = [createClient({ url }), createClient({ url })];
+      try {
+        const [first, second] = clients.map(client => new MemoryLibSQL({ client }));
 
-      await Promise.all([first.init(), second.init()]);
-      await first.init();
-      await second.init();
+        await Promise.all([first!.init(), second!.init()]);
+        await first!.init();
+        await second!.init();
 
-      const columns = await columnsOf(url, 'mastra_messages');
-      expect(columns.filter(name => name === 'signalStatus' || name === 'signalClaimedBy')).toEqual([
-        'signalStatus',
-        'signalClaimedBy',
-      ]);
-      expect((await columnsOf(url, 'mastra_threads')).filter(name => name === 'signalRunId')).toEqual(['signalRunId']);
-      const listed = await second.listMessages({ threadId: thread.id, perPage: false });
-      expect(listed.messages.map(message => message.id)).toEqual(messageIds);
+        const columns = await columnsOf(url, 'mastra_messages');
+        expect(columns.filter(name => name === 'signalStatus' || name === 'signalClaimedBy')).toEqual([
+          'signalStatus',
+          'signalClaimedBy',
+        ]);
+        expect((await columnsOf(url, 'mastra_threads')).filter(name => name === 'signalRunId')).toEqual([
+          'signalRunId',
+        ]);
+        const listed = await second!.listMessages({ threadId: thread.id, perPage: false });
+        expect(listed.messages.map(message => message.id)).toEqual(messageIds);
+      } finally {
+        for (const client of clients) client.close();
+      }
     });
 
     it('creates a partial index on the thread and claim order', async () => {
