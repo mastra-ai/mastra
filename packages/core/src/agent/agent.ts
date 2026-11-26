@@ -15716,10 +15716,8 @@ export class Agent<
     }
     // A warm resume reuses the tools built for the first request, which close
     // over its request context, delegation hooks, and tool hooks (#25960). Rebuild them for
-    // this call and swap in only entries still holding a request-built tool, so
-    // tools a processor added or replaced are kept. Processor-added tools are
-    // rebuilt for this call's request context instead (#27544). Cold resumes already
-    // rebuilt everything in prepare() above.
+    // this call and keep only processor-added tools, rebuilt for this call's request context
+    // (#27544). Cold resumes already rebuilt everything in prepare() above.
     if (!coldSnapshot && (options?.requestContext || options?.delegation || options?.hooks || droppedStartingUser)) {
       try {
         const requestTools = await this.agentForExecution.getToolsForExecution({
@@ -15749,23 +15747,16 @@ export class Agent<
         for (const reg of new Set([entry, getRunRegistryEntry(runId, this.#mastra)])) {
           if (!reg) continue;
           const keep = new Set(options?.toolsets ? [] : (reg.callToolsetToolNames ?? []));
-          reg.tools = refreshStepToolsForCaller(
-            reg.tools ?? {},
-            reg.requestTools,
-            requestTools,
-            resumeRequestContext,
-            keep,
-          );
+          reg.tools = refreshStepToolsForCaller(reg.tools ?? {}, requestTools, resumeRequestContext, keep);
           // Later steps start from this caller's build, not the earlier caller's. Input processors run
           // again every step, so the tools they add or withhold need no carrying over.
           const keptToolsets = Object.fromEntries(
             [...keep].flatMap(name => {
-              const tool = reg.requestTools?.[name];
+              const tool = reg.baseTools?.[name];
               return tool && !(name in requestTools) ? [[name, tool] as const] : [];
             }),
           );
           reg.baseTools = { ...keptToolsets, ...requestTools };
-          reg.requestTools = reg.baseTools;
           if (options?.toolsets) reg.callToolsetToolNames = serializeToolsetToolNames(options.toolsets);
           if (options?.delegation) reg.delegation = resolvedOptions.delegation;
         }

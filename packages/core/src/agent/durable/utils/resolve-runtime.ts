@@ -154,15 +154,14 @@ export async function rebuildToolsForSegment(
   });
   const keep = new Set(entry.callToolsetToolNames ?? []);
   // The suspended step's tools, so an approved call runs with this segment's caller too.
-  entry.tools = refreshStepToolsForCaller(entry.tools ?? {}, entry.requestTools, requestTools, requestContext, keep);
+  entry.tools = refreshStepToolsForCaller(entry.tools ?? {}, requestTools, requestContext, keep);
   const keptToolsets = Object.fromEntries(
     [...keep].flatMap(name => {
-      const tool = entry.requestTools?.[name];
+      const tool = entry.baseTools?.[name];
       return tool && !(name in requestTools) ? [[name, tool] as const] : [];
     }),
   );
   entry.baseTools = { ...keptToolsets, ...requestTools };
-  entry.requestTools = entry.baseTools;
   return entry.baseTools;
 }
 
@@ -513,7 +512,6 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       isPlaceholder: false,
       tools,
       baseTools: tools,
-      requestTools: tools,
       toolsSegment,
       model,
       modelList,

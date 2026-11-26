@@ -497,29 +497,25 @@ export function rebindProcessorTools<T extends Record<string, unknown>>(tools: T
 }
 
 /**
- * Rebuilds a suspended step's tools for the caller resuming it. `previousRequestTools` are the
- * tools built for the earlier caller's request; a step tool still identical to one of them is
- * request-built. Request-built tools are replaced by `callerTools`, or dropped when the caller's
- * build lacks them (unless named in `keep`), so nothing built for the earlier caller runs for the
- * new one. Tools a processor added or swapped in are kept, processor-added ones rebuilt for
- * `requestContext` (#27544), and tools a processor withheld stay withheld.
+ * Rebuilds a suspended step's tools for the caller resuming it, so nothing built for an earlier
+ * caller runs for this one. Tools a processor added are rebuilt for `requestContext` (#27544).
+ * Every other tool is replaced by the caller's own, or dropped when the caller's build lacks it
+ * (unless named in `keep`). Tools the step did not offer stay out: the model already chose its call.
  */
 export function refreshStepToolsForCaller<T extends Record<string, unknown>>(
   stepTools: T,
-  previousRequestTools: Record<string, unknown> | undefined,
   callerTools: Record<string, unknown>,
   requestContext: RequestContext,
   keep?: ReadonlySet<string>,
 ): T {
-  const next: Record<string, unknown> = rebindProcessorTools({ ...stepTools }, requestContext);
+  const next: Record<string, unknown> = {};
   for (const [name, tool] of Object.entries(stepTools)) {
-    if (previousRequestTools?.[name] !== tool) continue;
-    if (name in callerTools) next[name] = callerTools[name];
-    else if (!keep?.has(name)) delete next[name];
-  }
-  for (const [name, tool] of Object.entries(callerTools)) {
-    // A name the earlier request configured but the step lacks was withheld by a processor.
-    if (!(name in stepTools) && !(previousRequestTools && name in previousRequestTools)) next[name] = tool;
+    const rebind = (tool as { [rebindToRequestContext]?: (rc: RequestContext) => unknown } | undefined)?.[
+      rebindToRequestContext
+    ];
+    if (rebind) next[name] = rebind(requestContext);
+    else if (name in callerTools) next[name] = callerTools[name];
+    else if (keep?.has(name)) next[name] = tool;
   }
   return next as T;
 }

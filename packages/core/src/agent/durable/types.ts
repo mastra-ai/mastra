@@ -821,13 +821,6 @@ export interface RunRegistryEntry {
    */
   baseTools?: Record<string, CoreTool>;
   /**
-   * The tools built for the request that started (or last resumed) the run.
-   * A warm resume rebuilds these with the resuming call's request context and
-   * swaps out only entries that still hold one of them, so processor-added or
-   * replaced tools are kept (#25960).
-   */
-  requestTools?: Record<string, CoreTool>;
-  /**
    * Names of the call-time `toolsets` tools passed by the call that started (or last resumed with
    * toolsets) the run, not the agent's default toolsets. A warm resume that passes no toolsets keeps
    * these tools for later steps, since a resume cannot repeat them over HTTP.
@@ -841,7 +834,7 @@ export interface RunRegistryEntry {
   toolsSegment?: string;
   /**
    * The method that started the run (`stream` or `generate`). A warm resume
-   * rebuilds `requestTools` for this method, so a streamed run's sub-agents keep
+   * rebuilds tools for this method, so a streamed run's sub-agents keep
    * streaming whatever the resume's `closeOnSuspend` is (#29436).
    */
   methodType?: AgentMethodType;

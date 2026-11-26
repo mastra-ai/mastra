@@ -20,14 +20,23 @@ const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
 type Log = { offered: string[][]; ran: string[] };
 
-function tool(id: string, log: Log, requireApproval = false) {
+/**
+ * Records `id:caller` when run. A tool built for one caller and run for another records
+ * `id:<caller> built for <builtFor>`, the way a real tool closes over its caller (an API client, a token).
+ */
+function ranAs(id: string, builtFor: string | undefined, context: any) {
+  const who = context?.requestContext?.get('who');
+  return builtFor === undefined || builtFor === who ? `${id}:${who}` : `${id}:${who} built for ${builtFor}`;
+}
+
+function tool(id: string, log: Log, requireApproval = false, builtFor?: string) {
   return createTool({
     id,
     description: id,
     inputSchema: z.object({}),
     requireApproval,
     execute: async (_input, context) => {
-      log.ran.push(`${id}:${context?.requestContext?.get('who')}`);
+      log.ran.push(ranAs(id, builtFor, context));
       return { ok: true };
     },
   });
@@ -58,8 +67,6 @@ function createModel(log: Log) {
 }
 
 function createRuntime(engine: 'default' | 'evented', storage: InMemoryStore, log: Log, recovery = false) {
-  const approve = tool('approve', log, true);
-  const secret = tool('secret', log);
   const agent = new Agent({
     id: 'matrix-agent',
     name: 'matrix-agent',
@@ -67,7 +74,11 @@ function createRuntime(engine: 'default' | 'evented', storage: InMemoryStore, lo
     model: createModel(log),
     tools: ({ requestContext }) => {
       const who = requestContext.get('who') as string;
-      return { approve, secret, [`${who}_agent`]: tool(`${who}_agent`, log) };
+      return {
+        approve: tool('approve', log, true, who),
+        secret: tool('secret', log, false, who),
+        [`${who}_agent`]: tool(`${who}_agent`, log),
+      };
     },
     defaultOptions: ({ requestContext }) => {
       const who = requestContext.get('who') as string;
@@ -175,17 +186,28 @@ describe.each(['default', 'evented'] as const)('resume by another caller (%s)', 
 });
 
 describe('crash recovery, then resume by another caller', () => {
-  it.each([true, false])('resume passes toolsets=%s', async resumeToolsets => {
+  it.each([
+    { crash: 'before the model step', resumeToolsets: true },
+    { crash: 'before the model step', resumeToolsets: false },
+    { crash: 'after the model step', resumeToolsets: false },
+  ])('crash $crash, resume passes toolsets=$resumeToolsets', async ({ crash, resumeToolsets }) => {
     globalRunRegistry.clear();
     const log: Log = { offered: [], ran: [] };
     const original = new InMemoryStore();
     const workflows = (await original.getStore('workflows'))!;
     const rows = new Map<string, any>();
     let crashRows: any[] | undefined;
+    let suspended = false;
     const persist = workflows.persistWorkflowSnapshot.bind(workflows);
     workflows.persistWorkflowSnapshot = async args => {
-      rows.set(`${args.workflowName}:${args.runId}`, structuredClone(args));
-      if (!crashRows && args.workflowName === DurableStepIds.AGENTIC_EXECUTION && args.snapshot.status === 'pending') {
+      if (args.snapshot.status === 'suspended') suspended = true;
+      if (!suspended) rows.set(`${args.workflowName}:${args.runId}`, structuredClone(args));
+      // Before the model step: the first checkpoint of the inner execution. After it: the last
+      // checkpoint before the run suspends, so recovery resumes at the tool call.
+      if (
+        (crash === 'after the model step' ? !suspended : !crashRows) &&
+        args.workflowName === DurableStepIds.AGENTIC_EXECUTION
+      ) {
         crashRows = [...rows.values()].map(row => structuredClone(row));
       }
       return persist(args);
@@ -216,19 +238,17 @@ describe('crash recovery, then resume by another caller', () => {
       import('../../../tools'),
       import('../../../request-context'),
     ]);
-    const freshTool = (id: string, requireApproval = false) =>
+    const freshTool = (id: string, requireApproval = false, builtFor?: string) =>
       makeTool({
         id,
         description: id,
         inputSchema: z.object({}),
         requireApproval,
         execute: async (_input: unknown, context: any) => {
-          log.ran.push(`${id}:${context?.requestContext?.get('who')}`);
+          log.ran.push(ranAs(id, builtFor, context));
           return { ok: true };
         },
       });
-    const approve = freshTool('approve', true);
-    const secret = freshTool('secret');
     const recoveringAgent = new A({
       id: 'matrix-agent',
       name: 'matrix-agent',
@@ -236,7 +256,11 @@ describe('crash recovery, then resume by another caller', () => {
       model: createModel(log),
       tools: ({ requestContext }: any) => {
         const who = requestContext.get('who') as string;
-        return { approve, secret, [`${who}_agent`]: freshTool(`${who}_agent`) };
+        return {
+          approve: freshTool('approve', true, who),
+          secret: freshTool('secret', false, who),
+          [`${who}_agent`]: freshTool(`${who}_agent`),
+        };
       },
       defaultOptions: ({ requestContext }: any) => {
         const who = requestContext.get('who') as string;
@@ -272,7 +296,7 @@ describe('crash recovery, then resume by another caller', () => {
       });
       expect((run?.snapshot as any)?.status).toBe('suspended');
     });
-    expect(log.offered[0]).toEqual(['alice_agent', 'alice_default', 'approve']);
+    if (crash === 'before the model step') expect(log.offered[0]).toEqual(['alice_agent', 'alice_default', 'approve']);
 
     const bob = new RC();
     bob.set('who', 'bob');
@@ -285,6 +309,9 @@ describe('crash recovery, then resume by another caller', () => {
       }),
     );
     expect(log.ran).toEqual(['approve:bob']);
+    // Recovered at the tool call, the next step rebuilds from the saved snapshot, whose ordinary
+    // values (like `who` here, unlike the signed-in user) are the starting caller's. Tracked on COR-1660.
+    if (crash === 'after the model step') return;
     expect(log.offered.at(-1)).toEqual([
       'approve',
       'bob_agent',
