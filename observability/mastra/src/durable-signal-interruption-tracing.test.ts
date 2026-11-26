@@ -175,4 +175,57 @@ describe.each(['durable', 'evented'] as const)('%s signal interruption tracing',
     expect(identity(answeredStep)).toEqual({ model: 'acme-large', provider: 'acme' });
     expect(exporter.getIncompleteSpans()).toEqual([]);
   }, 30_000);
+
+  it('keeps the provider response id on a model request cut off by a run abort', async () => {
+    const exporter = new TestExporter();
+    const agent = new Agent({
+      id: `abort-${variant}`,
+      name: 'Abort Agent',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        doStream: async ({ abortSignal }) => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'response-metadata', id: 'resp-aborted', modelId: 'mock-model-id' });
+              controller.enqueue({ type: 'reasoning-start', id: 'r' });
+              controller.enqueue({ type: 'reasoning-delta', id: 'r', delta: 'thinking' });
+              abortSignal?.addEventListener('abort', () => controller.error(abortSignal.reason), { once: true });
+            },
+          }),
+        }),
+      }),
+      memory: new MockMemory(),
+    });
+    const wrapped = variant === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent });
+    const mastra = new Mastra({
+      logger: false,
+      agents: { wrapped } as any,
+      storage: new InMemoryStore(),
+      observability: new Observability({
+        configs: { default: { serviceName: 'durable-signal-interruption', exporters: [exporter] } },
+      }),
+    });
+    const registered = mastra.getAgent('wrapped') as any;
+    const abort = new AbortController();
+
+    const res = await registered.stream('question', {
+      abortSignal: abort.signal,
+      memory: { thread: crypto.randomUUID(), resource: crypto.randomUUID() },
+    });
+    try {
+      for await (const chunk of res.fullStream) {
+        if (chunk.type === 'reasoning-delta') abort.abort();
+      }
+      await new Promise(resolve => setTimeout(resolve, 300));
+    } finally {
+      res.cleanup?.();
+    }
+
+    const inferences = exporter.getSpansByType(SpanType.MODEL_INFERENCE);
+    expect(inferences.map(span => span.attributes?.responseId)).toEqual(['resp-aborted']);
+    expect(exporter.getIncompleteSpans()).toEqual([]);
+  }, 30_000);
 });

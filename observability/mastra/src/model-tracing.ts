@@ -600,6 +600,10 @@ export class ModelSpanTracker {
         stopReasonContext: spanOptions.stopReasonContext,
       };
       this.#endChunkSpan();
+      this.#currentInferenceSpan?.end({
+        ...interruptedByRun(termination),
+        attributes: this.#inferenceStreamAttributes(),
+      });
       this.#currentStepSpan?.end({ ...interruptedByRun(termination), endTree: true });
       this.#currentStepSpan = undefined;
       this.#currentInferenceSpan = undefined;
@@ -829,7 +833,7 @@ export class ModelSpanTracker {
       this.#endStepSpan(payload, termination);
     } else {
       this.#endChunkSpan();
-      this.#currentInferenceSpan?.end(termination);
+      this.#currentInferenceSpan?.end({ ...termination, attributes: this.#inferenceStreamAttributes() });
       this.#currentStepSpan?.end(termination);
       this.#currentStepSpan = undefined;
       this.#currentInferenceSpan = undefined;
