@@ -1,6 +1,7 @@
 import { MastraA2AError } from '@mastra/core/a2a/client';
 import type {
   AgentCard,
+  CancelTaskResponse,
   DeleteTaskPushNotificationConfigParams,
   DeleteTaskPushNotificationConfigResponse,
   GetAuthenticatedExtendedCardResponse,
@@ -254,7 +255,7 @@ export class A2A extends BaseResource {
    * @returns Promise containing the task response
    */
   async cancelTask(params: TaskQueryParams): Promise<Task> {
-    return this.request(`/a2a/${this.agentId}`, {
+    const response = await this.request<CancelTaskResponse>(`/a2a/${this.agentId}`, {
       method: 'POST',
       body: {
         jsonrpc: '2.0',
@@ -263,6 +264,13 @@ export class A2A extends BaseResource {
         params,
       },
     });
+
+    if ('error' in response && response.error) {
+      throw createA2AJsonRpcError(response as JSONRPCErrorResponse);
+    }
+
+    // Legacy compatibility: preserve the successful JSON-RPC response envelope.
+    return response as unknown as Task;
   }
 
   /**

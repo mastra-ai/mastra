@@ -105,6 +105,11 @@ const files = new Map<string, StoryFile>([
 
 const UNREADABLE_FILE = 'missing.json';
 
+const LOG_COUNT = 5_000;
+for (let i = 0; i < LOG_COUNT; i++) {
+  files.set(`logs/run-${String(i).padStart(5, '0')}.json`, { content: `{"run":${i}}`, mimeType: 'application/json' });
+}
+
 function listDirectory(dir: string) {
   const prefix = dir === '.' ? '' : `${dir}/`;
   const entries = new Map<string, 'file' | 'directory'>();
@@ -144,6 +149,7 @@ function Explorer({ initialFile }: { initialFile?: string }) {
               onActiveFileChange={setActiveFilePath}
               searchFiles={false}
               searchSkills={false}
+              onCreateDirectory={() => {}}
             />
           </div>
         </TooltipProvider>
@@ -180,3 +186,5 @@ export const BinaryAudio: Story = { args: { initialFile: 'sfx/applause.wav' } };
 export const ReadError: Story = { args: { initialFile: 'missing.json' } };
 
 export const HostileStrings: Story = { args: { initialFile: 'edge/hostile-strings.json' } };
+
+export const LargeFolder: Story = { args: { initialFile: 'logs/run-04999.json' } };
