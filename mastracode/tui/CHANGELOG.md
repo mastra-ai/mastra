@@ -1,5 +1,34 @@
 # mastracode
 
+## 0.51.0-alpha.1
+
+### Minor Changes
+
+- Added a connection test, models from the endpoint, custom headers and an auth scheme choice to `/custom-providers`. Select a provider to find them: ([#31565](https://github.com/mastra-ai/mastra/pull/31565))
+
+  - **Add model** now offers the models the endpoint lists that are not added yet, one at a time or all at once, and still takes a typed ID. If the endpoint does not answer within a few seconds, it asks for the ID as before.
+  - **Test connection** calls the endpoint's model list and shows how many models it lists and how long it took. A failure shows the status, the URL called and the error text the endpoint returned.
+  - **Headers** adds or removes extra headers sent on every call. A secret value is masked while it is typed and shows as `••••`.
+  - **Auth scheme** sends the API key as `Authorization: Bearer <key>` or as `x-api-key: <key>`.
+
+  When an edit moves a provider's base URL to another origin, its secret headers are removed so their values are never sent to the new address. Add them again under **Headers**.
+
+  The choices are saved on the provider in `settings.json`:
+
+  ```json
+  {
+    "name": "Acme Gateway",
+    "authScheme": "x-api-key",
+    "headers": [{ "name": "X-Org-Id", "value": "org-123", "secret": false }]
+  }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`f19b0cf`](https://github.com/mastra-ai/mastra/commit/f19b0cf20c347921358943bb70c14051493088de), [`18439ea`](https://github.com/mastra-ai/mastra/commit/18439ea68fd5b009119e80af05cabc5ce5004c2b), [`21aee63`](https://github.com/mastra-ai/mastra/commit/21aee631dbb59e843b265706438865928185d500), [`6ae02c2`](https://github.com/mastra-ai/mastra/commit/6ae02c23a7aff35f229f46cc413c661309016e95)]:
+  - @mastra/core@1.87.0-alpha.1
+  - @mastra/code-sdk@1.22.0-alpha.1
+
 ## 0.50.4-alpha.0
 
 ### Patch Changes

@@ -1,5 +1,22 @@
 # @mastra/playground-ui
 
+## 72.0.0-alpha.1
+
+### Patch Changes
+
+- Fixed the multiple-select `Combobox` so `allowCustomValue` and `onInputValueChange` work as they do on the single select. Typed text is offered as an option and becomes a chip when picked. A selected value that `options` does not list now keeps its chip and stays in the value when another option is picked, with or without `allowCustomValue`. Such a value is also shown in the popup, where it can be unticked. With `allowCustomValue`, typing the exact value of an option whose label differs now offers that option, on single and multiple selects. ([#31555](https://github.com/mastra-ai/mastra/pull/31555))
+
+  ```tsx
+  const [selected, setSelected] = useState<string[]>([]);
+
+  <Combobox multiple allowCustomValue options={models} value={selected} onValueChange={setSelected} />;
+  ```
+
+- Updated dependencies [[`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`f19b0cf`](https://github.com/mastra-ai/mastra/commit/f19b0cf20c347921358943bb70c14051493088de), [`18439ea`](https://github.com/mastra-ai/mastra/commit/18439ea68fd5b009119e80af05cabc5ce5004c2b), [`21aee63`](https://github.com/mastra-ai/mastra/commit/21aee631dbb59e843b265706438865928185d500)]:
+  - @mastra/core@1.87.0-alpha.1
+  - @mastra/client-js@1.62.1-alpha.1
+  - @mastra/react@1.17.0-alpha.1
+
 ## 72.0.0-alpha.0
 
 ### Minor Changes
