@@ -595,6 +595,7 @@ export class AgentChannels {
     let inFlightKey: string | undefined;
     let cardKey: string | undefined;
     let restoreCard: (() => Promise<void>) | undefined;
+    let forgetCard: (() => void) | undefined;
     try {
       if (!parsed) {
         this.log('info', 'Malformed tool resume action', actionEventContext);
@@ -638,6 +639,11 @@ export class AgentChannels {
       // The card on screen decides which clicks count: an older card for this
       // call, an action the current step does not offer, or a card already
       // being answered (its buttons are stripped) is a late click.
+      if (stashed && !stashed.card) {
+        // An approval card's record: a resume id on it is forged.
+        this.log('info', 'Ignoring tool resume action on an approval card', actionEventContext);
+        return;
+      }
       if (stashed?.card) {
         if (
           (stashed.messageId && stashed.messageId !== messageId) ||
@@ -692,6 +698,15 @@ export class AgentChannels {
           expiresAt: Date.now() + APPROVAL_LOOKUP_TTL_MS,
         });
         if (stashed) this.pendingApprovalCards.delete(toolCallId);
+        if (stashed?.card) {
+          await this.adapters[platform]!.editMessage(chatThread.id, messageId, withoutButtons(stashed.card)).catch(
+            err =>
+              this.log('warn', 'Failed to take the buttons off a stale tool card', {
+                ...actionEventContext,
+                error: err,
+              }),
+          );
+        }
         this.log('info', 'Ignoring stale tool resume action (run waits on another tool call)', {
           ...actionEventContext,
           runId,
@@ -744,11 +759,23 @@ export class AgentChannels {
       // Take the buttons off while the tool answers, so the card can't be
       // clicked again until the tool shows its next step or finishes.
       if (stashed?.card) {
+        // The card changed or the call finished while this click was checked.
+        if (this.pendingApprovalCards.get(toolCallId) !== stashed) {
+          this.log('info', 'Ignoring tool resume action the card no longer offers', actionEventContext);
+          return;
+        }
         const answering = withoutButtons(stashed.card);
-        this.pendingApprovalCards.set(toolCallId, { ...stashed, card: answering });
+        const answeringRecord = { ...stashed, card: answering };
+        this.pendingApprovalCards.set(toolCallId, answeringRecord);
+        // Only undo this click's strip: the tool may have shown a newer card since.
+        const stillAnswering = () => this.pendingApprovalCards.get(toolCallId) === answeringRecord;
         restoreCard = async () => {
+          if (!stillAnswering()) return;
           this.pendingApprovalCards.set(toolCallId, stashed);
           await this.adapters[platform]!.editMessage(chatThread.id, messageId, stashed.card!);
+        };
+        forgetCard = () => {
+          if (stillAnswering()) this.pendingApprovalCards.delete(toolCallId);
         };
         try {
           await this.adapters[platform]!.editMessage(chatThread.id, messageId, answering);
@@ -791,10 +818,18 @@ export class AgentChannels {
             expiresAt: Date.now() + APPROVAL_LOOKUP_TTL_MS,
           });
         }
+        forgetCard?.();
         this.log('info', 'Ignoring stale tool resume action (run already answered)', actionEventContext);
         return;
       }
       if (resumeError === 'in-progress') {
+        // The run may be resuming another of its paused calls, so this one still waits.
+        await restoreCard?.().catch(restoreErr =>
+          this.log('warn', 'Failed to restore the buttons of a tool card', {
+            ...actionEventContext,
+            error: restoreErr,
+          }),
+        );
         this.log('info', 'Ignoring tool resume action: the run is already resuming', actionEventContext);
         return;
       }
@@ -1195,6 +1230,11 @@ export class AgentChannels {
               let toolArgs: Record<string, unknown> | undefined;
 
               const stashed = this.pendingApprovalCards.get(toolCallId);
+              if (stashed?.card) {
+                // A paused tool's card, not an approval: an approve/deny id on it is forged.
+                this.log('info', 'Ignoring tool approval action on a paused tool card', actionEventContext);
+                return;
+              }
               let requesterId = stashed?.requesterId;
               if (stashed?.runId) {
                 runId = stashed.runId;

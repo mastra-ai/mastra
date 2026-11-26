@@ -407,6 +407,9 @@ export function chunkToFallbackMessage(chunk: StreamChunk): string | null {
   return null;
 }
 
+/** Suspensions whose card was shown, so each is shown once however many streams carry it. */
+const shownSuspensions = new WeakSet<object>();
+
 /** The `channelCard` a paused tool put in its suspend payload, if it is a Chat SDK card. */
 export function channelCardOf(suspendPayload: unknown): CardElement | undefined {
   const card = (suspendPayload as ChannelSuspendPayload | undefined)?.channelCard;
@@ -440,6 +443,11 @@ export async function postSuspendedToolCard(args: {
     toolName: chunk.payload.toolName,
     args: chunk.payload.args,
   });
+  // Durable and evented runs hand one suspension to every open stream (the
+  // same payload object). Show it once, so a stream that lags behind can't
+  // put back a card whose buttons were already clicked.
+  if (shownSuspensions.has(chunk.payload)) return;
+  shownSuspensions.add(chunk.payload);
   const existing = getPendingApproval(enr.toolCallId);
   const messageId = await editOrPostMessage({
     adapter,

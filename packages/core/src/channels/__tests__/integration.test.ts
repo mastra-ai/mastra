@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { Agent } from '../../agent';
 import { createDurableAgent, createEventedAgent, EventedAgent } from '../../agent/durable';
 import { DurableStepIds } from '../../agent/durable/constants';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { ConsoleLogger } from '../../logger';
 import { useLoopScenarioAimock } from '../../loop/test-utils/aimock/aimock-scenario';
 import { Mastra } from '../../mastra';
@@ -688,6 +689,7 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s paused tool cards', 
     await mastra.startWorkers();
     await channels.initialize(mastra);
     const resumeStream = vi.spyOn(agent, 'resumeStream');
+    const approveToolCall = vi.spyOn(agent, 'approveToolCall');
 
     const inbound: Message = {
       id: 'inbound-1',
@@ -708,8 +710,8 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s paused tool cards', 
     const cards = () =>
       [...adapter.postMessage.mock.calls, ...adapter.editMessage.mock.calls].map(call => JSON.stringify(call));
     /** The message that shows the card with `action`'s button. */
-    const cardMessage = async (action: string) => {
-      const buttonId = `tool_resume:${toolCallId}:${action}`;
+    const cardMessage = async (action: string, id = toolCallId) => {
+      const buttonId = `tool_resume:${id}:${action}`;
       await vi.waitFor(() => expect(cards().join()).toContain(buttonId), { timeout: 5000 });
       const edit = adapter.editMessage.mock.calls.find((call: unknown[]) => JSON.stringify(call).includes(buttonId));
       if (edit) return edit[1] as string;
@@ -718,9 +720,9 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s paused tool cards', 
       );
       return `post-${postIndex + 1}`;
     };
-    const click = (action: string, messageId: string, user = alice) =>
+    const click = (action: string, messageId: string, user = alice, actionId = `tool_resume:${toolCallId}:${action}`) =>
       sdk().processAction({
-        actionId: `tool_resume:${toolCallId}:${action}`,
+        actionId,
         adapter,
         messageId,
         threadId: inbound.threadId,
@@ -747,6 +749,8 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s paused tool cards', 
         .map((call: unknown[]) => [...JSON.stringify(call[2]).matchAll(/tool_resume:[^"]*:([a-z]+)"/g)].map(m => m[1]));
     return {
       agent,
+      channels: () => channels,
+      approveToolCall,
       llm,
       adapter,
       seen,
@@ -934,9 +938,143 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s paused tool cards', 
         timeout: 5000,
       });
       // Clicked: no buttons; the next step: done/stop; clicked again: no buttons. Nothing reopens it.
-      // (Durable and evented runs show the next step through both open streams, so collapse repeats.)
-      const shown = t.versions(first).filter((v, i, all) => i === 0 || v.join() !== all[i - 1]!.join());
-      expect(shown).toEqual([[], ['done', 'stop'], []]);
+      expect(t.versions(first)).toEqual([[], ['done', 'stop'], []]);
+    } finally {
+      await t.cleanup();
+    }
+  }, 20_000);
+
+  it('never leaves a call stuck when its card is clicked while the run resumes its other call', async () => {
+    const t = await setup({ twin: true, holdNext: true, toolApprovers: 'anyone' });
+    const other = `${t.toolCallId}-b`;
+    const stopOther = (messageId: string) => t.click('stop', messageId, alice, `tool_resume:${other}:stop`);
+    try {
+      const first = await t.cardMessage('next');
+      const second = await t.cardMessage('next', other);
+      await t.click('next', first);
+      await vi.waitFor(() => expect(t.seen).toHaveLength(3));
+      // Durable and evented resumes wait for the running one; plain ones are refused.
+      const raced = stopOther(second);
+      await settle();
+      t.releaseNext();
+      await raced;
+      await t.cardMessage('done');
+      await settle();
+      // Engines differ on a resume while another is running: it either went
+      // through, or was refused and the card got its buttons back.
+      if (!t.seen.some(entry => entry.action === 'stop')) {
+        expect(t.versions(second).at(-1)).toEqual(['next', 'stop']);
+        await stopOther(second);
+      }
+      await vi.waitFor(() => expect(t.seen.filter(entry => entry.action === 'stop')).toHaveLength(1), {
+        timeout: 5000,
+      });
+    } finally {
+      t.releaseNext();
+      await t.cleanup();
+    }
+  }, 20_000);
+
+  it('ignores an approve click forged onto a paused tool card, and a resume click on an approval card', async () => {
+    const t = await setup();
+    try {
+      const first = await t.cardMessage('next');
+      await t.click('next', first, alice, `tool_approve:${t.toolCallId}`);
+      const records = (t.channels() as any).pendingApprovalCards as Map<string, { card?: unknown }>;
+      const { card: _card, ...approvalRecord } = records.get(t.toolCallId)!;
+      records.set(t.toolCallId, approvalRecord);
+      await t.click('next', first);
+      await settle();
+      expect(t.approveToolCall).not.toHaveBeenCalled();
+      expect(t.resumeStream).not.toHaveBeenCalled();
+    } finally {
+      await t.cleanup();
+    }
+  }, 20_000);
+
+  const resumeError = (id: string) =>
+    new MastraError({ id, domain: ErrorDomain.AGENT, category: ErrorCategory.USER, text: id });
+  /** Versions of the card message after the paused card replaced the running tool card. */
+  const afterShown = (t: { versions: (id: string) => string[][] }, messageId: string) => t.versions(messageId).slice(1);
+
+  it('gives the card its buttons back when the run is busy resuming another call', async () => {
+    const t = await setup();
+    try {
+      const first = await t.cardMessage('next');
+      t.resumeStream.mockRejectedValueOnce(resumeError('AGENT_RESUME_ALREADY_CLAIMED'));
+      await t.click('next', first);
+      expect(afterShown(t, first)).toEqual([[], ['next', 'stop']]);
+
+      await t.click('next', first);
+      await t.cardMessage('done');
+      expect(t.seen.map(entry => entry.action)).toEqual([undefined, 'next']);
+    } finally {
+      await t.cleanup();
+    }
+  }, 20_000);
+
+  it('leaves a newer card alone when the click it took fails', async () => {
+    const t = await setup();
+    try {
+      const first = await t.cardMessage('next');
+      const records = (t.channels() as any).pendingApprovalCards as Map<string, { card?: CardElement }>;
+      const newer = card(t.toolCallId, ['done', 'stop']);
+      t.resumeStream.mockImplementationOnce(async () => {
+        // The tool showed its next card before this resume reported being refused.
+        records.set(t.toolCallId, { ...records.get(t.toolCallId)!, card: newer });
+        throw resumeError('AGENT_RESUME_ALREADY_CLAIMED');
+      });
+      await t.click('next', first);
+      expect(records.get(t.toolCallId)?.card).toBe(newer);
+      expect(afterShown(t, first)).toEqual([[]]);
+    } finally {
+      await t.cleanup();
+    }
+  }, 20_000);
+
+  it('keeps a newer card when the click it took turns out to be stale', async () => {
+    const t = await setup();
+    try {
+      const first = await t.cardMessage('next');
+      const records = (t.channels() as any).pendingApprovalCards as Map<string, { card?: CardElement }>;
+      const newer = card(t.toolCallId, ['done', 'stop']);
+      t.resumeStream.mockImplementationOnce(async () => {
+        records.set(t.toolCallId, { ...records.get(t.toolCallId)!, card: newer });
+        throw resumeError('AGENT_RESUME_RUN_FINISHED');
+      });
+      await t.click('next', first);
+      expect(records.get(t.toolCallId)?.card).toBe(newer);
+    } finally {
+      await t.cleanup();
+    }
+  }, 20_000);
+
+  it('forgets a card whose call turns out to be answered', async () => {
+    const t = await setup();
+    try {
+      const first = await t.cardMessage('next');
+      t.resumeStream.mockRejectedValueOnce(resumeError('AGENT_RESUME_RUN_FINISHED'));
+      await t.click('next', first);
+      expect(((t.channels() as any).pendingApprovalCards as Map<string, unknown>).has(t.toolCallId)).toBe(false);
+      expect(afterShown(t, first)).toEqual([[]]);
+    } finally {
+      await t.cleanup();
+    }
+  }, 20_000);
+
+  it('ignores a click whose card changed while the click was being checked', async () => {
+    const t = await setup();
+    try {
+      const first = await t.cardMessage('next');
+      const records = (t.channels() as any).pendingApprovalCards as Map<string, { card?: CardElement }>;
+      const listSuspendedRuns = t.agent.listSuspendedRuns.bind(t.agent);
+      vi.spyOn(t.agent, 'listSuspendedRuns').mockImplementationOnce(async args => {
+        records.set(t.toolCallId, { ...records.get(t.toolCallId)!, card: card(t.toolCallId, ['next', 'stop']) });
+        return listSuspendedRuns(args);
+      });
+      await t.click('next', first);
+      await settle();
+      expect(t.resumeStream).not.toHaveBeenCalled();
     } finally {
       await t.cleanup();
     }

@@ -46,8 +46,9 @@ export type PostableMessage = string | CardElement | { markdown: string };
  * buttons on the card currently shown count. Suspending again with a new
  * `channelCard` replaces the card in place. In `'cards'` mode the tool's result
  * then replaces the card; in other modes the card stays, without buttons.
- * After a restart the click is matched against the paused call in history,
- * not the card, so a tool should still check the `action` it gets.
+ * After a restart, or on an instance that did not show the card, the click is
+ * matched against the paused call in history rather than the card, so a tool
+ * should still check the `action` it gets.
  *
  * @example
  * ```ts
