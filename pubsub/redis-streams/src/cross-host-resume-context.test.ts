@@ -117,11 +117,9 @@ describe('evented resume claimed by another host', () => {
 
       // The resumed segment acts as the resuming caller under the resume's own claim, never as the
       // caller who started the run.
-      // Whose context the approved tool's own execute uses is not settled yet (COR-1660), so it is
-      // excluded here.
-      const resumedSteps = resumed.filter(entry => entry.event !== 'tool-execute');
+      expect(resumed.some(entry => entry.event === 'tool-execute')).toBe(true);
       const initialExecutions = new Set(initial.flatMap(entry => entry.executionIds));
-      for (const entry of resumedSteps) {
+      for (const entry of resumed) {
         expect(entry.user, entry.event).toBe('bob');
         expect(
           entry.executionIds.some(id => initialExecutions.has(id)),
@@ -131,7 +129,7 @@ describe('evented resume claimed by another host', () => {
       // The LLM-step processors see the resume's own values. Finalization restores ordinary keys from the
       // run snapshot by design, so the output processor is only checked for identity above.
       expect(
-        resumedSteps
+        resumed
           .filter(entry => entry.event === 'input-step' || entry.event === 'llm-request')
           .map(({ event, marker }) => ({ event, marker })),
       ).toEqual([
@@ -237,6 +235,10 @@ describe('evented resume claimed by another host', () => {
       expect(toolResults.every(entry => entry.host === 'W')).toBe(true);
 
       for (const entry of toolResults) expect(entry.user).toBe('bob');
+      // The approved tool runs as the resuming caller too.
+      const executions = resumed.filter(entry => entry.event === 'tool-execute');
+      expect(executions.length).toBeGreaterThan(0);
+      for (const entry of executions) expect(entry.user).toBe('bob');
       // The model step after the approved tool is offered the resuming caller's tools only.
       expect(offeredTools(initial)).toEqual([['alice_only', 'approve']]);
       expect(offeredTools(resumed)).toEqual([['approve', 'bob_only']]);
