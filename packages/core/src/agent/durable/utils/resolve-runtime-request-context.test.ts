@@ -205,9 +205,11 @@ describe('rebuildRunToolsFromMastra request context', () => {
         [DURABLE_CONTEXT_SEGMENT_KEY, 'segment-2'],
         ['mastra__user', { id: 'bob' }],
       ]);
+    // One instance, so the sibling rebuild below is checked against the replaced entry's segment.
+    const mastra = makeMastra(agent);
     const rebuild = () =>
       rebuildRunToolsFromMastra({
-        mastra: makeMastra(agent),
+        mastra,
         runId,
         agentId: 'agent-1',
         state: {} as any,
