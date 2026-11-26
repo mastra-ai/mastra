@@ -1,3 +1,4 @@
+import { isRestoredWorkerControllerContext } from '../agent-controller/worker-run-binding';
 import {
   RequestContext,
   MASTRA_AUTH_TOKEN_KEY,
@@ -104,6 +105,10 @@ export function restoreRequestContext(
       ...Object.entries(withoutLiveRequestKeys(entries)),
       ...liveRequestEntries(runLevel),
     ]);
+    const controller = runLevel?.get('controller');
+    if (isRestoredWorkerControllerContext(controller)) {
+      restored.set('controller', controller);
+    }
     restoreRunAgentScopes(restored);
     return restored;
   }

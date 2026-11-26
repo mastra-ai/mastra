@@ -416,7 +416,7 @@ it.skipIf(!workerPrefix)(
 );
 
 it.skipIf(!postgresUrl || !redisUrl || !!workerPrefix).each([false, true])(
-  'persists a generated title for an evented Factory session over Redis Streams (split worker=%s)',
+  'persists a generated title for an evented Factory session over Redis Streams and completes the turn (split worker=%s)',
   async split => {
     const title = 'Repair the Login Flow';
     const model = new LLMock({ port: 0 });
@@ -432,7 +432,13 @@ it.skipIf(!postgresUrl || !redisUrl || !!workerPrefix).each([false, true])(
     vi.stubEnv('MASTRACODE_DISABLE_OBSERVATIONAL_MEMORY', '1');
     vi.stubEnv('MASTRACODE_DISABLE_TITLE_GENERATION', '0');
     model.on({ systemMessage: 'the title must be 3 to 5 words long' }, { content: title });
-    model.onMessage(/.*/, { content: 'The login flow is repaired.' });
+    model.on(
+      { predicate: request => JSON.stringify(request).includes('Tasks updated:') },
+      { content: 'The login flow is repaired.' },
+    );
+    model.onMessage(/Repair the broken login flow/, {
+      toolCalls: [{ id: approvalCallId, name: 'task_write', arguments: JSON.stringify({ tasks: [restartTask] }) }],
+    });
 
     try {
       await model.start();
@@ -463,21 +469,16 @@ it.skipIf(!postgresUrl || !redisUrl || !!workerPrefix).each([false, true])(
         requestContext.set('user', { workosId: 'phase-user', organizationId: ORG });
         const session = await controller?.getSession(sessionId, requestContext);
         expect(session).toBeDefined();
+        // Use the existing boolean approval mode so this test does not depend on a
+        // per-tool approval callback crossing the process boundary.
+        await session!.state.set({ yolo: true });
         await session!.sendMessage({ content: 'Repair the broken login flow.', requestContext });
         const memory = await runtime.storage.getMastraStorage().getStore('memory');
         expect(memory).toBeDefined();
-        if (worker) {
-          // COR-1521: the worker receives data for the controller, but not its methods.
-          await expect.poll(() => worker.output(), { timeout: 15_000 }).toContain('getState is not a function');
-          const { messages } = await memory!.listMessages({ threadId: sessionId, perPage: false });
-          expect(JSON.stringify(messages)).not.toContain('The login flow is repaired.');
-          expect(
-            model
-              .getRequests()
-              .filter(request => !JSON.stringify(request.body ?? {}).includes('the title must be 3 to 5 words long')),
-          ).toEqual([]);
-          return;
-        }
+        const tasks = await runtime.storage.getMastraStorage().getStore('threadState');
+        await expect
+          .poll(() => tasks!.getState({ threadId: sessionId, type: 'task' }), { timeout: 15_000 })
+          .toMatchObject([restartTask]);
         await expect
           .poll(async () => (await memory!.getThreadById({ threadId: sessionId }))?.title, { timeout: 15_000 })
           .toBe(title);
@@ -503,7 +504,7 @@ it.skipIf(!postgresUrl || !redisUrl || !!workerPrefix).each([false, true])(
       rmSync(appData, { recursive: true, force: true });
     }
   },
-  60_000,
+  120_000,
 );
 
 it.skipIf(!postgresUrl || !redisUrl || !!workerPrefix).each([false, true])(

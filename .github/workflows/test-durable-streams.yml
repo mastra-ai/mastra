@@ -112,8 +112,8 @@ jobs:
         run: pnpm exec vitest run src/agentic-loop-pubsub.test.ts src/cross-host-resume-context.test.ts -t 'retains live request context|uses resumed request context|resuming caller context' --reporter=verbose
         working-directory: pubsub/redis-streams
 
-      - name: Verify evented Factory title persistence
-        run: pnpm exec vitest run src/rules/board-phase-runtime.test.ts -t 'persists a generated title for an evented Factory session over Redis Streams' --reporter=verbose
+      - name: Verify evented Factory turn completion
+        run: pnpm exec vitest run src/rules/board-phase-runtime.test.ts -t 'persists a generated title for an evented Factory session over Redis Streams and completes the turn' --reporter=verbose
         working-directory: mastracode/factory
         env:
           FACTORY_TEST_POSTGRES_URL: ${{ env.POSTGRES_CONNECTION_STRING }}
