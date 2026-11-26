@@ -1,5 +1,27 @@
 # @mastra/platform
 
+## 0.3.0-alpha.1
+
+### Minor Changes
+
+- Added `PlatformKnowledge.handleImporterRun(request)`, which runs one of the app's importer classes when Mastra Platform asks for it. Mount it at `POST /_mastra/knowledge-importers/run`: ([#31527](https://github.com/mastra-ai/mastra/pull/31527))
+
+  ```ts
+  registerApiRoute('/_mastra/knowledge-importers/run', {
+    method: 'POST',
+    requiresAuth: false,
+    handler: c => knowledge.handleImporterRun(c.req.raw),
+  });
+  ```
+
+  The request's run token is its only input. The handler claims the run from the Knowledge API, reads each credential from the environment variable Platform names, and runs the import in the background with core's runner, writing pages through the run's session. It answers `202` once the run starts, `401` without a run token, and `404` for another instance's run. It never follows redirects, so the run token only goes to the configured Knowledge API. Needs a `@mastra/core` with the Knowledge importer runner; on an older core it answers `501`.
+
+  An importer never gets the app's own `MASTRA_KNOWLEDGE_ACCESS_TOKEN`, `MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_PLATFORM_SECRET_KEY`, even when Platform names one for a credential. List more names in the new `deniedCredentialEnv` option, e.g. `new PlatformKnowledge({ importers: [HelpSpotImporter], deniedCredentialEnv: ['DATABASE_URL'] })`. A run that asks for a denied variable fails with `credential_missing`, its value is never read, and the app logs a warning naming the variable.
+
+- Added an `importers` option to `PlatformKnowledge` that takes importer classes, e.g. `new PlatformKnowledge({ importers: [HelpSpotImporter] })`, and an `importerClasses` getter that returns them. This is how an app offers its importer classes to Mastra Platform, which can read each class's manifest. Listing the same class twice keeps one copy. If two different classes share an id, the first one is kept, and once the knowledge is registered with `Mastra` a warning goes to the app's logger. ([#31527](https://github.com/mastra-ai/mastra/pull/31527))
+
+  `importers` needs a `@mastra/core` with Knowledge importers; on an older core, passing it throws at startup, and apps that don't pass it are unaffected. The option is typed with `PlatformKnowledgeImporterClass`, the part of core's importer class that `PlatformKnowledge` uses, so this release still installs and typechecks with older cores. It will switch to core's own type in the next major release.
+
 ## 0.2.1-alpha.0
 
 ### Patch Changes
