@@ -28,10 +28,10 @@ afterAll(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-function tempDbUrl(): string {
+function tempDbUrl(fileName = 'mastra.db'): string {
   const dir = mkdtempSync(join(tmpdir(), 'libsql-pending-signals-'));
   dirs.push(dir);
-  return `file:${join(dir, 'mastra.db')}`;
+  return `file:${join(dir, fileName)}`;
 }
 
 // The memory suite on a file database, with the conformance races split over a second store on
@@ -603,16 +603,34 @@ describe('LibSQL pending signals', () => {
   });
 
   describe('pendingSignalsSharedAcrossProcesses', () => {
+    // The client opens an in-memory database when the decoded path of a `file:` url without an
+    // authority is exactly `:memory:`. Any other path is a file other processes can open.
+    const urls = () => [
+      { url: tempDbUrl(), shared: true },
+      { url: ':memory:', shared: false },
+      { url: 'file::memory:', shared: false },
+      { url: 'file::memory:?cache=shared', shared: false },
+      { url: 'file:%3Amemory%3A', shared: false },
+      { url: tempDbUrl('my%3Amemory%3A.db'), shared: true },
+      { url: tempDbUrl(':memory:backup.db'), shared: true },
+    ];
+
     it('is true for a file database and false for an in-memory one', async () => {
-      const file = new LibSQLStore({ id: 'shared-file', url: tempDbUrl() });
-      const memoryDb = new LibSQLStore({ id: 'shared-memory', url: ':memory:' });
-      const sharedCache = new LibSQLStore({ id: 'shared-cache', url: 'file::memory:?cache=shared' });
+      const stores = urls().map(({ url, shared }) => ({
+        url,
+        shared,
+        store: new LibSQLStore({ id: `shared-${randomUUID()}`, url }),
+      }));
       try {
-        expect((await file.getStore('memory'))!.pendingSignalsSharedAcrossProcesses).toBe(true);
-        expect((await memoryDb.getStore('memory'))!.pendingSignalsSharedAcrossProcesses).toBe(false);
-        expect((await sharedCache.getStore('memory'))!.pendingSignalsSharedAcrossProcesses).toBe(false);
+        const reported = await Promise.all(
+          stores.map(async ({ url, store }) => ({
+            url,
+            shared: (await store.getStore('memory'))!.pendingSignalsSharedAcrossProcesses,
+          })),
+        );
+        expect(reported).toEqual(stores.map(({ url, shared }) => ({ url, shared })));
       } finally {
-        await Promise.all([file.close(), memoryDb.close(), sharedCache.close()]);
+        await Promise.all(stores.map(({ store }) => store.close()));
       }
     });
 
@@ -630,18 +648,27 @@ describe('LibSQL pending signals', () => {
       }
     });
 
-    it('follows the url or client when the memory domain is built directly', () => {
-      expect(new MemoryLibSQL({ url: tempDbUrl() }).pendingSignalsSharedAcrossProcesses).toBe(true);
-      expect(new MemoryLibSQL({ url: ':memory:' }).pendingSignalsSharedAcrossProcesses).toBe(false);
-      expect(new MemoryLibSQL({ client: createClient({ url: tempDbUrl() }) }).pendingSignalsSharedAcrossProcesses).toBe(
-        false,
-      );
+    // The domain has no close, so the clients it opens from a url stay open until the process exits.
+    it('follows the url when the memory domain is built directly', () => {
+      const cases = urls();
       expect(
-        new MemoryLibSQL({ client: createClient({ url: 'http://127.0.0.1:1' }) }).pendingSignalsSharedAcrossProcesses,
-      ).toBe(true);
+        cases.map(({ url }) => ({ url, shared: new MemoryLibSQL({ url }).pendingSignalsSharedAcrossProcesses })),
+      ).toEqual(cases);
       expect(
         new MemoryLibSQL({ url: tempDbUrl(), sharedAcrossProcesses: false }).pendingSignalsSharedAcrossProcesses,
       ).toBe(false);
+    });
+
+    it('counts a client passed to the memory domain directly only when it is remote', () => {
+      const local = createClient({ url: tempDbUrl() });
+      const remote = createClient({ url: 'http://127.0.0.1:1' });
+      try {
+        expect(new MemoryLibSQL({ client: local }).pendingSignalsSharedAcrossProcesses).toBe(false);
+        expect(new MemoryLibSQL({ client: remote }).pendingSignalsSharedAcrossProcesses).toBe(true);
+      } finally {
+        local.close();
+        remote.close();
+      }
     });
   });
 

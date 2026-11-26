@@ -78,6 +78,7 @@ const OM_CAS_CONFLICT = Symbol('om-cas-conflict');
 /** A stored OM row plus a WHERE fragment matching exactly that row state. */
 type OMRow = { record: ObservationalMemoryRecord; guard: { sql: string; args: InValue[] } };
 import { parseSqlIdentifier } from '@mastra/core/utils';
+import { isInMemoryDatabaseUrl } from '../../../shared/single-connection-client';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import type {
@@ -202,7 +203,7 @@ export class MemoryLibSQL extends MemoryStorage {
     // `LibSQLStore` passes what it knows of the whole connection config. Built directly, a domain on a url
     // is shared unless the database lives in memory, and a client passed in only when it is remote.
     this.#sharedAcrossProcesses =
-      config.sharedAcrossProcesses ?? ('url' in config ? !config.url.includes(':memory:') : isRemoteClient(client));
+      config.sharedAcrossProcesses ?? ('url' in config ? !isInMemoryDatabaseUrl(config.url) : isRemoteClient(client));
     this.#db = new LibSQLDB({
       client,
       maxRetries: config.maxRetries,
