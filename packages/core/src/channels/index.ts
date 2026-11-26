@@ -1,5 +1,7 @@
 export { AgentChannels } from './agent-channels';
 export { AgentControllerChannels } from './agent-controller-channels';
+export { getChannelRun } from './channel-run';
+export type { ChannelRun } from './channel-run';
 export type {
   AgentControllerChannelsConfig,
   ChannelSessionResolve,

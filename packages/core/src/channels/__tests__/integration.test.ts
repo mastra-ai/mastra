@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import type { Message } from 'chat';
+import type { CardElement, Message } from 'chat';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -17,6 +17,8 @@ import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
 import { createTool } from '../../tools';
 import { AgentChannels } from '../agent-channels';
+import { getChannelRun } from '../channel-run';
+import { toolResumeButton } from '../formatting';
 import { ChatChannelGenerativeUIProcessor } from '../generative-ui';
 import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '../output-processor';
 import type { ChannelConfig } from '../types';
@@ -574,6 +576,300 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s inbound channel exec
     },
     20_000,
   );
+});
+
+describe.each(['plain', 'durable', 'evented'] as const)('%s paused tool cards', engine => {
+  const getLLM = useLoopScenarioAimock();
+
+  const alice = { userId: 'U1', userName: 'alice', fullName: 'Alice', isBot: false, isMe: false };
+  const bob = { userId: 'U2', userName: 'bob', fullName: 'Bob', isBot: false, isMe: false };
+
+  /** A card of buttons that resume `toolCallId` with each action. */
+  const card = (toolCallId: string, actions: string[]): CardElement => ({
+    type: 'card',
+    title: actions.join('/'),
+    children: [
+      {
+        type: 'actions',
+        children: actions.map(action => toolResumeButton({ toolCallId, action, label: action })),
+      },
+    ],
+  });
+
+  /**
+   * A channel agent whose `stepper` tool shows a next/stop card, then a done/stop
+   * card on `next`, and returns `'finished'` on `done` or `'stopped'` on `stop`.
+   */
+  async function setup(options: { toolApprovers?: 'anyone'; resolveResourceId?: boolean; twin?: boolean } = {}) {
+    // Durable run IDs bypass Mastra.generateId; see the inbound execution cases above.
+    const realCrypto = await vi.importActual<typeof import('node:crypto')>('node:crypto');
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockImplementation(realCrypto.randomUUID);
+    const toolCallId = `call-${randomUUID().slice(0, 8)}`;
+    const llm = getLLM();
+    const toolCalls = [{ id: toolCallId, name: 'stepper', arguments: {} }];
+    // A second paused call keeps the run waiting once the first is answered.
+    if (options.twin) toolCalls.push({ id: `${toolCallId}-b`, name: 'stepper', arguments: {} });
+    llm.on({ endpoint: 'chat', hasToolResult: false }, { toolCalls });
+    llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'All done' });
+
+    const storage = new InMemoryStore();
+    const adapter = createMockAdapter('slack');
+    adapter.userName = 'TestBot';
+    adapter.isDM = () => false;
+    adapter.fetchMessages = async () => ({ messages: [] });
+    let posted = 0;
+    adapter.postMessage = vi.fn(async () => ({ id: `post-${++posted}`, text: '' }));
+    adapter.editMessage = vi.fn(async () => {});
+    const threadId = `thread-${engine}-${randomUUID()}`;
+    const config = {
+      adapters: { slack: { adapter, streaming: false, toolApprovers: options.toolApprovers } },
+      resolveThreadId: () => threadId,
+      ...(options.resolveResourceId
+        ? { resolveResourceId: ({ message }: { message: Message }) => `team:${message.author.userId}` }
+        : {}),
+    };
+
+    const seen: Array<{ action?: string; actor?: string; actorResourceId?: string }> = [];
+    const stepper = createTool({
+      id: 'stepper',
+      description: 'Walk the user through two steps',
+      inputSchema: z.object({}),
+      resumeSchema: z.object({ action: z.string() }),
+      execute: async (_input, context) => {
+        const run = getChannelRun(context.requestContext);
+        const action = (context.agent?.resumeData as { action?: string } | undefined)?.action;
+        seen.push({ action, actor: run?.actor?.userId, actorResourceId: run?.actorResourceId });
+        const id = context.agent!.toolCallId;
+        if (action === 'done') return 'finished';
+        if (action === 'stop') return 'stopped';
+        await context.agent!.suspend({
+          channelCard: card(id, action === 'next' ? ['done', 'stop'] : ['next', 'stop']),
+        });
+      },
+    });
+    const inner = new Agent({
+      id: `cards-${randomUUID()}`,
+      name: 'TestBot',
+      instructions: 'Use the stepper.',
+      model: createOpenAI({ baseURL: `${llm.url}/v1`, apiKey: 'test' }).chat('gpt-4o'),
+      memory: new MockMemory({ storage }),
+      tools: { stepper },
+    });
+    const agent =
+      engine === 'plain'
+        ? inner
+        : engine === 'durable'
+          ? createDurableAgent({ agent: inner })
+          : createEventedAgent({ agent: inner });
+    let channels = new AgentChannels(config);
+    agent.setChannels(channels);
+    const mastra = new Mastra({ logger: false, storage, agents: { agent } });
+    await mastra.startWorkers();
+    await channels.initialize(mastra);
+    const resumeStream = vi.spyOn(agent, 'resumeStream');
+
+    const inbound: Message = {
+      id: 'inbound-1',
+      threadId: 'C1:thread',
+      text: '@TestBot walk me through it',
+      formatted: { type: 'root', children: [] },
+      raw: {},
+      attachments: [],
+      author: alice,
+      metadata: { dateSent: new Date(), edited: false },
+    };
+    const sdk = () =>
+      channels.sdk as unknown as {
+        processMessage(adapter: unknown, threadId: string, message: Message): Promise<void>;
+        processAction(event: unknown): Promise<void>;
+      };
+    const delivery = sdk().processMessage(adapter, inbound.threadId, inbound);
+    const cards = () =>
+      [...adapter.postMessage.mock.calls, ...adapter.editMessage.mock.calls].map(call => JSON.stringify(call));
+    /** The message that shows the card with `action`'s button. */
+    const cardMessage = async (action: string) => {
+      const buttonId = `tool_resume:${toolCallId}:${action}`;
+      await vi.waitFor(() => expect(cards().join()).toContain(buttonId), { timeout: 5000 });
+      const edit = adapter.editMessage.mock.calls.find((call: unknown[]) => JSON.stringify(call).includes(buttonId));
+      if (edit) return edit[1] as string;
+      const postIndex = adapter.postMessage.mock.calls.findIndex((call: unknown[]) =>
+        JSON.stringify(call).includes(buttonId),
+      );
+      return `post-${postIndex + 1}`;
+    };
+    const click = (action: string, messageId: string, user = alice) =>
+      sdk().processAction({
+        actionId: `tool_resume:${toolCallId}:${action}`,
+        adapter,
+        messageId,
+        threadId: inbound.threadId,
+        thread: { id: inbound.threadId, channelId: 'C1', isDM: false },
+        user,
+        raw: {},
+      });
+    const restart = async () => {
+      await channels.close();
+      channels = new AgentChannels(config);
+      agent.setChannels(channels);
+      await channels.initialize(mastra);
+    };
+    const cleanup = async () => {
+      // A durable or evented run still parked on its card keeps the inbound stream open.
+      await Promise.race([delivery.catch(() => {}), settle()]);
+      await channels.close();
+      await mastra.stopWorkers();
+    };
+    return { agent, llm, adapter, seen, resumeStream, cardMessage, click, restart, cleanup, toolCallId, threadId };
+  }
+
+  /** Lets an ignored click's resume, if one slipped through, reach the agent. */
+  const settle = () => new Promise(resolve => setTimeout(resolve, 100));
+
+  it('moves the card along on each click by the user who asked, then finishes with the tool result', async () => {
+    const t = await setup();
+    try {
+      const first = await t.cardMessage('next');
+      expect(t.seen).toEqual([{ action: undefined, actor: 'U1', actorResourceId: 'slack:U1' }]);
+
+      await t.click('next', first);
+      // The resumed call suspends again; its new card replaces the clicked one.
+      expect(await t.cardMessage('done')).toBe(first);
+      expect(t.seen[1]).toEqual({ action: 'next', actor: 'U1', actorResourceId: 'slack:U1' });
+
+      await t.click('done', first);
+      await vi.waitFor(() => expect(JSON.stringify(t.adapter.postMessage.mock.calls)).toContain('All done'), {
+        timeout: 5000,
+      });
+      expect(t.seen[2]).toMatchObject({ action: 'done', actor: 'U1' });
+      expect(JSON.stringify(t.llm.getRequests().at(-1)?.body)).toContain('finished');
+      expect(t.resumeStream).toHaveBeenCalledTimes(2);
+    } finally {
+      await t.cleanup();
+    }
+  }, 20_000);
+
+  it('ignores a click from another user', async () => {
+    const t = await setup();
+    try {
+      const first = await t.cardMessage('next');
+      await t.click('stop', first, bob);
+      await settle();
+      expect(t.resumeStream).not.toHaveBeenCalled();
+      expect(t.seen).toHaveLength(1);
+    } finally {
+      await t.cleanup();
+    }
+  }, 20_000);
+
+  it("takes another user's click when toolApprovers is 'anyone'", async () => {
+    const t = await setup({ toolApprovers: 'anyone' });
+    try {
+      const first = await t.cardMessage('next');
+      await t.click('stop', first, bob);
+      await vi.waitFor(() => expect(JSON.stringify(t.adapter.postMessage.mock.calls)).toContain('All done'), {
+        timeout: 5000,
+      });
+      expect(t.seen[1]).toEqual({ action: 'stop', actor: 'U2', actorResourceId: 'slack:U2' });
+      expect(JSON.stringify(t.llm.getRequests().at(-1)?.body)).toContain('stopped');
+    } finally {
+      await t.cleanup();
+    }
+  }, 20_000);
+
+  it('ignores a second click on the card while the first is being answered', async () => {
+    const t = await setup();
+    try {
+      const first = await t.cardMessage('next');
+      await Promise.all([t.click('next', first), t.click('stop', first)]);
+      await t.cardMessage('done');
+      await settle();
+      expect(t.resumeStream).toHaveBeenCalledTimes(1);
+      expect(t.seen.map(entry => entry.action)).toEqual([undefined, 'next']);
+    } finally {
+      await t.cleanup();
+    }
+  }, 20_000);
+
+  it('ignores a click on the card once the call finished', async () => {
+    const t = await setup();
+    try {
+      const first = await t.cardMessage('next');
+      await t.click('stop', first);
+      await vi.waitFor(() => expect(JSON.stringify(t.adapter.postMessage.mock.calls)).toContain('All done'), {
+        timeout: 5000,
+      });
+      await t.click('next', first);
+      await settle();
+      expect(t.resumeStream).toHaveBeenCalledTimes(1);
+      expect(t.seen.map(entry => entry.action)).toEqual([undefined, 'stop']);
+    } finally {
+      await t.cleanup();
+    }
+  }, 20_000);
+
+  it('ignores a click on a card whose call was answered elsewhere while the run waits on another', async () => {
+    const t = await setup({ twin: true });
+    try {
+      const first = await t.cardMessage('next');
+      await vi.waitFor(async () => {
+        const { runs } = await t.agent.listSuspendedRuns({ threadId: t.threadId });
+        expect(runs[0]?.toolCalls).toHaveLength(2);
+      });
+      // Answer the first call outside this channels instance, so its record of the card stays.
+      const { runs } = await t.agent.listSuspendedRuns({ threadId: t.threadId });
+      const memory = { thread: t.threadId, resource: 'slack:U1' };
+      const answered = await t.agent.resumeStream(
+        { action: 'stop' },
+        { runId: runs[0]!.runId, toolCallId: t.toolCallId, memory },
+      );
+      await answered.consumeStream();
+      t.resumeStream.mockClear();
+
+      await t.click('next', first);
+      await settle();
+      expect(t.resumeStream).not.toHaveBeenCalled();
+    } finally {
+      await t.cleanup();
+    }
+  }, 20_000);
+
+  it("applies resolveResourceId to the clicker's resource ID", async () => {
+    const t = await setup({ resolveResourceId: true, toolApprovers: 'anyone' });
+    try {
+      const first = await t.cardMessage('next');
+      // The inbound message created the thread, so the hook ran for its author.
+      expect(t.seen[0]).toMatchObject({ actor: 'U1', actorResourceId: 'team:U1' });
+      await t.click('next', first, bob);
+      await t.cardMessage('done');
+      expect(t.seen[1]).toEqual({ action: 'next', actor: 'U2', actorResourceId: 'team:U2' });
+    } finally {
+      await t.cleanup();
+    }
+  }, 20_000);
+
+  it('finds the paused call in history after a restart, and still checks who clicks', async () => {
+    const t = await setup();
+    try {
+      const first = await t.cardMessage('next');
+      await t.restart();
+      await t.click('next', first, bob);
+      await settle();
+      expect(t.resumeStream).not.toHaveBeenCalled();
+
+      await t.click('next', first);
+      expect(await t.cardMessage('done')).toBe(first);
+      expect(t.seen[1]).toEqual({ action: 'next', actor: 'U1', actorResourceId: 'slack:U1' });
+    } finally {
+      await t.cleanup();
+    }
+  }, 20_000);
+});
+
+describe('getChannelRun', () => {
+  it('is undefined off channels', () => {
+    expect(getChannelRun(undefined)).toBeUndefined();
+    expect(getChannelRun(new RequestContext())).toBeUndefined();
+  });
 });
 
 describe('reaction guidance reaches the model only with the reaction tool', () => {

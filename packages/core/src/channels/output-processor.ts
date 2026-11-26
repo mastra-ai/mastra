@@ -47,6 +47,10 @@ export interface ChatChannelRenderContext {
   /** Buffered-text behavior on abort. Absent means `'flush'` (driver-level default). */
   onAbort?: 'flush' | 'discard';
   approvalContext?: { toolCallId: string; messageId: string };
+  /** Who caused this run: the inbound message's author, or the clicker of a resume button. */
+  actor?: { userId: string; userName?: string; fullName?: string };
+  /** `actor`'s resource ID, when it could be resolved. */
+  actorResourceId?: string;
 }
 
 /** Chunks that carry reply text, kept out of the channel by `textDisplay: 'hidden'`. */

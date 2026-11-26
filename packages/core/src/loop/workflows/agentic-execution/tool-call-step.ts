@@ -797,8 +797,19 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           // to this chunk (abort, resume) must find the suspended invocation in memory
           // instead of racing the flush still in flight. If the flush failed, the
           // run still suspends but stays silent, so no consumer acts on a missing call.
+          // Like the approval chunk, publish through the output writer so output
+          // processors (e.g. channels rendering a paused tool's card) see it too.
           if (flushed) {
-            safeEnqueue(controller, suspensionChunk);
+            try {
+              if (outputWriter) {
+                await outputWriter(suspensionChunk);
+              } else {
+                safeEnqueue(controller, suspensionChunk);
+              }
+            } catch (error) {
+              logger?.error('Error publishing suspension chunk; delivering it directly instead:', error);
+              safeEnqueue(controller, suspensionChunk);
+            }
           }
 
           return await suspend(
