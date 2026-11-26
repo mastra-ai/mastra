@@ -313,24 +313,21 @@ describe('modelSupportsStructuredOutput', () => {
     _resetCapabilityCaches();
   });
 
-  it('returns true for a model with known native support', () => {
-    expect(modelSupportsStructuredOutput('openai/gpt-4o')).toBe(true);
-  });
-
-  it('returns false for a known unsupported route override', () => {
-    expect(modelSupportsStructuredOutput('deepseek/deepseek-v4-pro')).toBe(false);
-  });
-
-  it('returns false for an unlisted model from a provider with capability data', () => {
-    expect(modelSupportsStructuredOutput('openai/not-a-real-model')).toBe(false);
+  it.each([
+    ['returns true for a model with known native support', 'openai/gpt-4o', true],
+    ['returns false for a known unsupported route override', 'deepseek/deepseek-v4-pro', false],
+    ['returns false for an unlisted model from a provider with capability data', 'openai/not-a-real-model', false],
+    [
+      'uses underlying provider data for nested gateway routes without a route override',
+      'openrouter/openai/gpt-4o',
+      true,
+    ],
+  ] as const)('%s', (_title, input, expected) => {
+    expect(modelSupportsStructuredOutput(input)).toBe(expected);
   });
 
   it('returns undefined when the provider has no capability data', () => {
     expect(modelSupportsStructuredOutput('unknown-provider/some-model')).toBeUndefined();
-  });
-
-  it('uses underlying provider data for nested gateway routes without a route override', () => {
-    expect(modelSupportsStructuredOutput('openrouter/openai/gpt-4o')).toBe(true);
   });
 });
 
