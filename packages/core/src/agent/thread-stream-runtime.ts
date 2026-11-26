@@ -5457,7 +5457,7 @@ export class AgentThreadStreamRuntime {
     threadId: string,
     requestContext?: RequestContext,
   ) {
-    // Transient signals are delivery-only: never write them to storage, even when the
+    // Transient signals are delivery-only: never save them as messages, even when the
     // active-behavior asked to persist. Honored here (not just in the memory layer) so it holds
     // for any memory implementation, including ones without a signal-aware save filter.
     if (signal.transient) return;
@@ -9270,7 +9270,7 @@ export class AgentThreadStreamRuntime {
         if (!resourceId || !threadId) {
           throw new Error('resourceId and threadId are required to persist an active signal');
         }
-        // Transient signals are never written to storage, so a `persist` behavior has nothing
+        // Transient signals are never saved as messages, so a `persist` behavior has nothing
         // to do with them — report the drop honestly as `discard` instead of `persist`.
         if (signal.transient) {
           return {
@@ -9455,7 +9455,7 @@ export class AgentThreadStreamRuntime {
     runId = idleStart.runId;
     key ??= this.#threadKey(resourceId, threadId);
     if (idleBehavior === 'persist') {
-      // Transient signals are never written to storage, so an idle `persist` behavior drops
+      // Transient signals are never saved as messages, so an idle `persist` behavior drops
       // them entirely (no store, no broadcast) — report that as `discard`, not `persist`.
       if (signal.transient) {
         return {
