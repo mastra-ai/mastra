@@ -5,7 +5,11 @@ function plainJsonValue(value: unknown): unknown {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
   if (typeof value !== 'object') return typeof value === 'bigint' ? value : ABSENT;
-  if (value instanceof Number || value instanceof String || value instanceof Boolean) return value.valueOf();
+  if (value instanceof Number) {
+    const number = value.valueOf();
+    return Number.isFinite(number) ? number : null;
+  }
+  if (value instanceof String || value instanceof Boolean) return value.valueOf();
   return value;
 }
 

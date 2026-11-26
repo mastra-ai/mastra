@@ -2281,7 +2281,10 @@ export class ObservationalMemory {
       for (const part of (live.get(row.id)?.content.parts ?? []) as Part[]) {
         if (!part.providerMetadata?.mastra?.tokenEstimate) continue;
         const shape = shapeOf(part);
-        counted.set(shape, [...(counted.get(shape) ?? []), { part, taken: false }]);
+        const bucket = counted.get(shape);
+        const candidate = { part, taken: false };
+        if (bucket) bucket.push(candidate);
+        else counted.set(shape, [candidate]);
         countedParts++;
       }
       if (countedParts === 0) continue;

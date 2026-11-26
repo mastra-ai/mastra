@@ -65,6 +65,14 @@ describe('samePartContent', () => {
     ['null against undefined', { type: 'x', v: null }, { type: 'x', v: undefined }],
     ['undefined in an array is null', { type: 'x', v: [1, undefined] }, { type: 'x', v: [1, null] }],
     ['function field against a missing one', { type: 'x', f: () => 1 }, { type: 'x' }],
+    ...[Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 42].map(value => {
+      const part = { type: 'x', v: new Number(value) };
+      return [`boxed ${value} against its stored copy`, part, stored(part)] as [
+        string,
+        Record<string, unknown>,
+        Record<string, unknown>,
+      ];
+    }),
     ['NaN against null', { type: 'x', v: Number.NaN }, { type: 'x', v: null }],
     ['Infinity against null', { type: 'x', v: Number.POSITIVE_INFINITY }, { type: 'x', v: null }],
     ['number against numeric string', { type: 'x', v: 1 }, { type: 'x', v: '1' }],
