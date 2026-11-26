@@ -396,6 +396,93 @@ describe('FeedEventsProvider, on the board', () => {
     await waitForMutationsIdle(rendered.client);
   });
 
+  describe('a move the server takes on and answers later', () => {
+    const PAST_THE_WAIT_FOR_AN_ANSWER_MS = 151_000;
+
+    /** The server answers the move `202`; the card reads `review` once `board.stage` says so. */
+    async function submitMove(stream: FeedStream) {
+      server.use(stream.handler);
+      const { requests, board } = boardEndpoints();
+      server.use(
+        http.post(`${BOARD_URL}/item-1/transition`, () => HttpResponse.json({ inputId: 'input-1' }, { status: 202 })),
+      );
+      const rendered = await renderQuietBoard(stream);
+      const [item] = rendered.result.current.cards.data ?? [];
+      if (!item) throw new Error('the board never loaded its card');
+      act(() => rendered.result.current.move.mutate({ item, board: 'review', stage: 'review' }));
+      const shownStages = () => rendered.result.current.cards.data?.[0]?.stages;
+      await waitFor(() => expect(shownStages()).toEqual(['review']));
+      // The 202 is answered and frames keep coming: the move is still pending, the card where it was dragged.
+      stream.push();
+      await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
+      expect(rendered.result.current.move.isPending).toBe(true);
+      expect(shownStages()).toEqual(['review']);
+      return { rendered, requests, board, shownStages };
+    }
+
+    it('stays pending until the feed says it landed, then reads the card the server holds', async () => {
+      const stream = pushableFeedStream(PROJECT_ID);
+      const { rendered, requests, board, shownStages } = await submitMove(stream);
+      const moving = { ...requests };
+
+      board.stage = 'review';
+      stream.move({ inputId: 'input-1', status: 'accepted' });
+      await waitFor(() => expect(rendered.result.current.move.data).toEqual({ status: 'landed', inputId: 'input-1' }));
+      await waitForMutationsIdle(rendered.client);
+      expect(requests.cards).toBeGreaterThan(moving.cards);
+      expect(shownStages()).toEqual(['review']);
+    });
+
+    it('puts the card back when the feed says it was refused', async () => {
+      const stream = pushableFeedStream(PROJECT_ID);
+      const { rendered, shownStages } = await submitMove(stream);
+
+      stream.move({ inputId: 'input-1', status: 'rejected', code: 'card_busy', reason: 'The card is busy.' });
+      await waitFor(() => expect(rendered.result.current.move.data).toMatchObject({ status: 'rejected' }));
+      await waitForMutationsIdle(rendered.client);
+      expect(rendered.result.current.move.data).toEqual({
+        inputId: 'input-1',
+        status: 'rejected',
+        code: 'card_busy',
+        reason: 'The card is busy.',
+      });
+      expect(shownStages()).toEqual(['intake']);
+    });
+
+    it('stops waiting when no answer comes, and shows where the server holds the card', async () => {
+      const stream = pushableFeedStream(PROJECT_ID);
+      const { rendered, requests, shownStages } = await submitMove(stream);
+      const moving = { ...requests };
+
+      // Whoever took the move on never answers. The stream stays alive, as a live server keeps it.
+      for (let waited = 0; waited < PAST_THE_WAIT_FOR_AN_ANSWER_MS; waited += SERVER_PING_EVERY_MS) {
+        stream.ping();
+        await act(() => vi.advanceTimersByTimeAsync(SERVER_PING_EVERY_MS));
+      }
+      await waitFor(() =>
+        expect(rendered.result.current.move.data).toEqual({ status: 'unanswered', inputId: 'input-1' }),
+      );
+      await waitForMutationsIdle(rendered.client);
+      expect(requests.cards).toBeGreaterThan(moving.cards);
+      expect(shownStages()).toEqual(['intake']);
+    });
+
+    it('stops waiting when the stream dropped and came back, since the answer may have gone by', async () => {
+      const stream = pushableFeedStream(PROJECT_ID);
+      const { rendered, board, shownStages } = await submitMove(stream);
+
+      board.stage = 'review';
+      stream.close();
+      await act(() => vi.advanceTimersByTimeAsync(PAST_ONE_STREAM_RETRY_MS));
+      await waitFor(() => expect(stream.open).toBe(true));
+      await waitFor(() =>
+        expect(rendered.result.current.move.data).toEqual({ status: 'unanswered', inputId: 'input-1' }),
+      );
+      await waitForMutationsIdle(rendered.client);
+      expect(shownStages()).toEqual(['review']);
+    });
+  });
+
   it('keeps a card in the column it is moving to when a poll comes round before the move settles', async () => {
     server.use(http.get(FEED_URL, () => new HttpResponse(null, { status: 404 })));
     const { board } = boardEndpoints();
