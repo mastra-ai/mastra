@@ -2678,7 +2678,7 @@ export class MastraFactory {
         binding: runBinding,
         openRun: async () => {
           const threadId = session.thread.getId();
-          return threadId ? (await openRunsStorage.listByThread(threadId)).at(-1)?.kickoffId : undefined;
+          return threadId ? (await openRunsStorage.listRunning(threadId)).at(-1)?.kickoffId : undefined;
         },
       });
       // A run that waits for a person's yes or no leaves its card waiting on that answer.
@@ -2707,7 +2707,8 @@ export class MastraFactory {
         },
         {
           onApprovalRequested: async request => {
-            await runPaused();
+            // A call Factory answers itself waits on nobody.
+            if (!this.#dispatcher?.autoApproves(request.toolCallId)) await runPaused();
             await notifyApprovalRequested({
               sessionId: session.identity.getId(),
               threadId: session.thread.getId(),

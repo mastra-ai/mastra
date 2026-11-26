@@ -47,6 +47,8 @@ type PendingInput =
     }
   | {
       runPaused: FactoryRunEndedBinding;
+      /** The phase the card was in when the session stopped for its answer. */
+      phase: string;
       answer?: { paused: true } | { error: unknown };
     };
 
@@ -92,7 +94,7 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
         if ('runPaused' in pending) {
           if (pending.runPaused.workItemId !== workItemId) return undefined;
           try {
-            const next = await this.#stateAfterRunPause(pending.runPaused, state);
+            const next = await this.#stateAfterRunPause(pending.runPaused, pending.phase, state);
             pending.answer = { paused: true };
             return next;
           } catch (error) {
@@ -155,7 +157,15 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
    * approval until the next input says otherwise: the move an approval makes, or a run end.
    */
   async runPaused(binding: FactoryRunEndedBinding): Promise<void> {
-    const pending = { runPaused: binding } satisfies PendingInput as Extract<PendingInput, { runPaused: unknown }>;
+    // The phase the session waits in, read now: by the time the card's run hears of the wait, the
+    // card may have moved on to a phase the same role works.
+    const item = await this.#context.workItems.get({ orgId: binding.orgId, id: binding.workItemId });
+    const phase = item?.stages.length === 1 ? item.stages[0] : undefined;
+    if (!phase) return;
+    const pending = { runPaused: binding, phase } satisfies PendingInput as Extract<
+      PendingInput,
+      { runPaused: unknown }
+    >;
     await this.#ask(binding, pending);
     if (pending.answer && 'error' in pending.answer) throw pending.answer.error;
   }
@@ -196,8 +206,11 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
       ...(previous.countedRunEnd ? { countedRunEnd: previous.countedRunEnd } : {}),
     };
     if (kind !== 'working') return { state: kind, phase, probes: 0, ...kept };
+    // The dispatcher's own rule for a run that starts without a person: never on an outside
+    // author's pull request event, however the phase starts.
     const goAhead =
       run !== undefined &&
+      run.untrustedPullRequestEvent !== true &&
       (request.actor.type === 'human' ||
         request.actor.type === 'agent' ||
         item.autonomyArmedAt != null ||
@@ -227,9 +240,17 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     // that doesn't work this phase, say nothing about how the phase is going.
     if (binding.runEnd !== undefined && previous.countedRunEnd === binding.runEnd) return undefined;
     if (board.roleForPhase(phase) !== binding.role) return undefined;
+    const kept = previous.lastOutcome ? { lastOutcome: previous.lastOutcome } : {};
+    // The dispatcher runs a phase again only when the phase names how it ends (a goal or an exit
+    // tool). Any other phase's run just ended: nothing is probed, and its next run waits for a person.
+    const definition = board.phases[phase];
+    if (definition?.kind !== 'working' || !(definition.runner.goal || definition.exitTool)) {
+      return { state: 'awaiting_start', phase, probes, ...kept, ...counted };
+    }
     return {
       phase,
       probes: probes + 1,
+      ...kept,
       ...counted,
       ...(probes === 0
         ? { state: 'probing' as const }
@@ -243,11 +264,12 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
    */
   async #stateAfterRunPause(
     binding: FactoryRunEndedBinding,
+    pausedIn: string,
     previous: FactoryCardRunRecord,
   ): Promise<FactoryCardRunRecord | undefined> {
     const item = await this.#context.workItems.get({ orgId: binding.orgId, id: binding.workItemId });
     const phase = item?.stages.length === 1 ? item.stages[0] : undefined;
-    if (!item || !phase) return undefined;
+    if (!item || !phase || phase !== pausedIn) return undefined;
     const board = (await toBoardSource(this.#context.boards).load(binding)).get(boardForWorkItem(item));
     if (!board || board.phaseKind(phase) !== 'working' || board.roleForPhase(phase) !== binding.role) return undefined;
     return {

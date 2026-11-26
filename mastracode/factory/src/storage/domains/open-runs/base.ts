@@ -190,6 +190,21 @@ export class OpenRunsStorage extends FactoryStorageDomain {
     return rows.map(toRun);
   }
 
+  /** The runs of `threadId` no end is recorded for, oldest first, in one read. */
+  async listRunning(threadId: string): Promise<FactoryOpenRun[]> {
+    const rows = await this.#db.findMany<OpenRunDbRow>(
+      'factory_open_runs',
+      { thread_id: threadId, ended_at: null, closed_at: null },
+      {
+        orderBy: [
+          ['created_at', 'asc'],
+          ['kickoff_id', 'asc'],
+        ],
+      },
+    );
+    return rows.map(toRun);
+  }
+
   /** Opens `run`. Resolves `false` when its kickoff is already open, leaving that entry as it is. */
   async open(run: FactoryOpenRun): Promise<boolean> {
     try {

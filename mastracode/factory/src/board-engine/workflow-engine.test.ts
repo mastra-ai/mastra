@@ -158,6 +158,21 @@ describe('the workflow board engine', () => {
       probes: 0,
     });
 
+    // A move on an outside author's pull request event starts no run without a person, even from
+    // a mover whose moves otherwise are the go-ahead.
+    await engine.requestMove(await personMove(storage, item.id, 'intake', 'drag-2')());
+    await expect(
+      engine.requestMove({
+        ...(await into('planning', 'rule-2')),
+        actor: { type: 'agent', id: 'agent:binding' },
+        untrustedPullRequestEvent: true,
+      }),
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'planning' });
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({
+      state: 'awaiting_start',
+      phase: 'planning',
+    });
+
     // The card's own session ending the phase is the go-ahead for the next phase's run.
     await storage.update({
       orgId: ORG,
@@ -252,7 +267,7 @@ describe('the workflow board engine', () => {
             return answer;
           },
         }),
-        openRun: async () => (await openRuns.listByThread('thread-1')).at(-1)?.kickoffId,
+        openRun: async () => (await openRuns.listRunning('thread-1')).at(-1)?.kickoffId,
       });
       const end = () => listeners.forEach(listener => listener({ type: 'agent_end', reason: 'complete' }));
       return { end, told };
@@ -273,6 +288,106 @@ describe('the workflow board engine', () => {
       state: 'probing',
       phase: 'planning',
       probes: 1,
+    });
+  });
+
+  it("asks for no second run of a phase that doesn't name how it ends, since the dispatcher runs none", async () => {
+    const { storage, engine, item, binding } = await setup();
+    // The Work board's review phase runs a skill, with neither a goal nor an exit tool.
+    await storage.update({ orgId: ORG, id: item.id, userId: 'user-1', patch: { stages: ['pr-review'] } });
+    const review = { ...binding, role: 'review' };
+
+    for (const runEnd of ['run-1', 'run-2', 'run-3']) {
+      await expect(engine.runEnded({ ...review, runEnd }, engine)).resolves.toBe(false);
+      await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+        state: 'awaiting_start',
+        phase: 'pr-review',
+        probes: 0,
+      });
+    }
+  });
+
+  it('keeps the outcome that ended the last phase while it probes the next one', async () => {
+    const { storage, engine, item, binding } = await setup();
+    await storage.update({
+      orgId: ORG,
+      id: item.id,
+      userId: 'agent:binding',
+      patch: {
+        metadata: {
+          [PHASE_EXIT_METADATA_KEY]: { phase: 'planning', tool: 'submit_plan', at: new Date().toISOString() },
+        },
+      },
+    });
+    await expect(engine.runEnded({ ...binding, runEnd: 'run-1' }, engine)).resolves.toBe(true);
+
+    await expect(engine.runEnded({ ...binding, runEnd: 'run-2' }, engine)).resolves.toBe(false);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'probing',
+      phase: 'execute',
+      probes: 1,
+      lastOutcome: 'advance',
+    });
+    await expect(engine.runEnded({ ...binding, runEnd: 'run-3' }, engine)).resolves.toBe(false);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({
+      state: 'needs_attention',
+      probes: 2,
+      lastOutcome: 'advance',
+    });
+  });
+
+  it('records no approval wait on the next phase when the card moved on before its run heard of the wait', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const dir = mkdtempSync(join(tmpdir(), 'factory-board-runs-'));
+    onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
+    const held = Promise.withResolvers<void>();
+    const { engine } = replica(storage, `file:${join(dir, 'runs.db')}`, () => held.promise);
+    const { item, binding } = await storage.prepareRunStart({
+      orgId: ORG,
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Factory item',
+          stages: ['intake'],
+          sessions: {},
+          metadata: { authorTrusted: true },
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'session-1', branch: 'factory/item', threadId: 'thread-1' },
+      resourceId: 'resource-1',
+      kickoffKey: 'kickoff-1',
+      kickoffMessage: null,
+    });
+    await storage.update({ orgId: ORG, id: item.id, userId: 'user-1', patch: { stages: ['planning'] } });
+    await storage.update({
+      orgId: ORG,
+      id: item.id,
+      userId: 'agent:binding',
+      patch: {
+        metadata: {
+          [PHASE_EXIT_METADATA_KEY]: { phase: 'planning', tool: 'submit_plan', at: new Date().toISOString() },
+        },
+      },
+    });
+
+    // Planning's approved plan is moving the card to Building, which the same role works, when
+    // the wait Planning's session asked for reaches the card's run.
+    const moved = engine.runEnded({ ...binding, runEnd: 'run-1' }, engine);
+    await new Promise(resolve => setImmediate(resolve));
+    const paused = engine.runPaused(binding);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    held.resolve();
+    await expect(moved).resolves.toBe(true);
+    await paused;
+
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'running',
+      phase: 'execute',
+      probes: 0,
+      lastOutcome: 'advance',
     });
   });
 
