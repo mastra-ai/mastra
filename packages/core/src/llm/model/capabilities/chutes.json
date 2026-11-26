@@ -70,12 +70,7 @@
         "type": "toggle"
       }
     ],
-    "moonshotai/Kimi-K2.6-TEE": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "moonshotai/Kimi-K3-TEE": [
+    "Qwen/Qwen3.6-27B-TEE": [
       {
         "type": "toggle"
       }
@@ -85,12 +80,17 @@
         "type": "toggle"
       }
     ],
-    "Qwen/Qwen3.6-27B-TEE": [
+    "Qwen/Qwen3.5-27B-TEE": [
       {
         "type": "toggle"
       }
     ],
-    "Qwen/Qwen3.5-27B-TEE": [
+    "moonshotai/Kimi-K2.6-TEE": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "moonshotai/Kimi-K3-TEE": [
       {
         "type": "toggle"
       }
