@@ -29,7 +29,7 @@ describe('Observational memory on D1 (unsupported store)', () => {
     await mf.dispose();
   });
 
-  async function createMemory(prefix: string) {
+  async function createMemory(prefix: string, { observationalMemory = true } = {}) {
     const store = new D1Store({
       id: `d1-om-fallback-${prefix}`,
       binding: await mf.getD1Database('TEST_DB'),
@@ -37,7 +37,7 @@ describe('Observational memory on D1 (unsupported store)', () => {
     });
     const memory = new Memory({
       storage: store,
-      options: { observationalMemory: { model: 'openai/gpt-4o-mini' } },
+      options: { observationalMemory: observationalMemory ? { model: 'openai/gpt-4o-mini' } : false },
     });
     // ConsoleLogger.child() returns a new instance, so watch the class rather than one logger.
     const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
@@ -85,9 +85,9 @@ describe('Observational memory on D1 (unsupported store)', () => {
   });
 
   it('saves and recalls messages when an observational-memory processor is supplied explicitly', async () => {
-    const { memory, warn } = await createMemory('om_processor');
+    const { memory, warn } = await createMemory('om_processor', { observationalMemory: false });
     const prompts: unknown[] = [];
-    // A user-supplied processor registered under the observational-memory id. Memory decides
+    // Observational memory is off in config, so only this processor requests it. A user-supplied processor registered under the observational-memory id. Memory decides
     // whether to keep message history from that id and the store, not from the processor's internals.
     const omProcessor: Processor<'observational-memory'> = {
       id: 'observational-memory',
