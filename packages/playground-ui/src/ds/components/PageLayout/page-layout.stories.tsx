@@ -168,6 +168,37 @@ export const LongPage: Story = {
   },
 };
 
+export const PageWithFullHeightList: Story = {
+  args: {
+    children: (
+      <ul className="border-border1 h-full overflow-auto rounded-lg border">
+        {Array.from({ length: 40 }, (_, index) => (
+          <li key={index} className="border-border1 border-b px-3 py-2 last:border-b-0">
+            <Txt>Run {index + 1}</Txt>
+          </li>
+        ))}
+      </ul>
+    ),
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A last child that fills the page height and scrolls on its own, like a traces or logs table. It ends on the same gutter as its sides, without the end space a scrolling page gets.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const list = within(canvasElement).getByText('Run 1').closest('ul');
+    const body = list?.closest<HTMLElement>('[style*="overflow"]');
+    if (!list || !body) throw new Error('Missing the page parts');
+    const listBox = list.getBoundingClientRect();
+    const bodyBox = body.getBoundingClientRect();
+    await expect(bodyBox.bottom - listBox.bottom).toBeCloseTo(listBox.left - bodyBox.left, 0);
+    await expect(body.scrollHeight).toBeLessThanOrEqual(body.clientHeight);
+  },
+};
+
 export const PageWithActionRow: Story = {
   args: {
     actionRow: (
