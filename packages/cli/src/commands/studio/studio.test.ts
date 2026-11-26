@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -37,7 +37,7 @@ function createStudioFixture() {
   return dir;
 }
 
-function request(url: string): Promise<{ status: number; body: string }> {
+function request(url: string): Promise<{ status: number; body: string; headers: http.IncomingHttpHeaders }> {
   return new Promise((resolve, reject) => {
     http
       .get(url, response => {
@@ -48,6 +48,7 @@ function request(url: string): Promise<{ status: number; body: string }> {
           resolve({
             status: response.statusCode ?? 0,
             body: chunks.join(''),
+            headers: response.headers,
           });
         });
       })
@@ -288,6 +289,27 @@ describe('studio base path support', () => {
     }
   });
 
+  it('serves the favicon file instead of the SPA shell', async () => {
+    process.env.MASTRA_STUDIO_BASE_PATH = '/agents';
+    const studioDir = createStudioFixture();
+    writeFileSync(join(studioDir, 'mastra-dark-tile.svg'), '<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+    const server = createServer(studioDir, {}, '');
+
+    await new Promise<void>(resolve => server.listen(0, resolve));
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+
+    try {
+      const favicon = await request(`http://127.0.0.1:${port}/agents/mastra-dark-tile.svg`);
+
+      expect(favicon.status).toBe(200);
+      expect(favicon.body).toContain('<svg');
+      expect(favicon.body).not.toContain('<body>studio</body>');
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(err => (err ? reject(err) : resolve())));
+    }
+  });
+
   it('does not treat SPA routes with asset-like substrings as static assets', async () => {
     process.env.MASTRA_STUDIO_BASE_PATH = '/agents';
     const studioDir = createStudioFixture();
@@ -302,6 +324,30 @@ describe('studio base path support', () => {
 
       expect(spaLikeRoute.status).toBe(200);
       expect(spaLikeRoute.body).toContain('<body>studio</body>');
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(err => (err ? reject(err) : resolve())));
+    }
+  });
+
+  it('sends a content security policy that limits frames on the Studio document', async () => {
+    const studioDir = createStudioFixture();
+    const server = createServer(studioDir, {}, '');
+
+    await new Promise<void>(resolve => server.listen(0, resolve));
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+
+    try {
+      const htmlResponse = await request(`http://127.0.0.1:${port}/`);
+      const policy = htmlResponse.headers['content-security-policy'];
+
+      expect(htmlResponse.status).toBe(200);
+      expect(policy).toContain("frame-src 'self' blob: data: https:");
+      expect(policy).toContain("object-src 'none'");
+      expect(policy).toContain("frame-ancestors 'self'");
+      expect(readFileSync(new URL('../../../../playground/index.html', import.meta.url), 'utf8')).toContain(
+        "frame-src 'self' blob: data: https:",
+      );
     } finally {
       await new Promise<void>((resolve, reject) => server.close(err => (err ? reject(err) : resolve())));
     }

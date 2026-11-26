@@ -5,8 +5,12 @@ import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastr
 import {
   createStorageErrorId,
   ensureDate,
+  isRunFenceConflictError,
   MemoryStorage,
+  resolveRunFence,
+  RUN_FENCING_TABLE_SCHEMAS,
   serializeDate,
+  TABLE_MEMORY_RUN_FENCES,
   TABLE_MESSAGES,
   TABLE_THREADS,
   TABLE_RESOURCES,
@@ -14,8 +18,12 @@ import {
   normalizePerPage,
   calculatePagination,
   validateStorageMetadataFilter,
+  executeRetentionPrune,
+  resolveRetentionTargets,
+  retentionCutoffMs,
 } from '@mastra/core/storage';
 import type {
+  RunFence,
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
@@ -23,12 +31,19 @@ import type {
   StorageMetadataFilterValue,
   StorageListThreadsInput,
   StorageListThreadsOutput,
+  TABLE_NAMES,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 
 import { DODB } from '../../db';
 import type { DODomainConfig } from '../../db';
+import { DB_NOW_MS, executeFenced, runFenceGuard } from '../../db/run-fencing';
+import type { RunFenceCheck } from '../../db/run-fencing';
 import { createSqlBuilder } from '../../sql-builder';
-import { deserializeValue, isArrayOfRecords } from '../utils';
+import { deserializeValue, inJsonArray, isArrayOfRecords } from '../utils';
 
 function addSqliteMetadataFilter(
   conditions: string[],
@@ -80,6 +95,15 @@ function addSqliteMetadataValuePredicate(
 }
 
 export class MemoryStorageDO extends MemoryStorage {
+  /**
+   * Tables `prune()` can clean up. Run fences anchor on `retiredAt` (epoch ms), which stays unset until the
+   * execution holding the fence settles, so a running execution's fence is
+   * never pruned.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    runFences: { table: TABLE_MEMORY_RUN_FENCES, column: 'retiredAt', indexed: false, anchorType: 'epoch-ms' },
+  };
+
   override readonly supportsPartialThreadUpdate = true;
   #db: DODB;
 
@@ -98,12 +122,102 @@ export class MemoryStorageDO extends MemoryStorage {
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
+    await this.#db.createTable({
+      tableName: TABLE_MEMORY_RUN_FENCES as TABLE_NAMES,
+      schema: RUN_FENCING_TABLE_SCHEMAS[TABLE_MEMORY_RUN_FENCES],
+    });
+  }
+
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveRetentionTargets({
+      policies,
+      descriptor: MemoryStorageDO.retentionTables,
+      order: ['runFences'],
+    });
+    return executeRetentionPrune({
+      domain: 'memory',
+      targets,
+      options,
+      cutoffFor: (target, now) => retentionCutoffMs(target.policy, now),
+      deleteBatch: (_target, cutoff, limit) =>
+        this.#db.pruneRunRows({
+          tableName: TABLE_MEMORY_RUN_FENCES as TABLE_NAMES,
+          column: 'retiredAt',
+          cutoff: Number(cutoff),
+          limit,
+        }),
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.clearTable({ tableName: TABLE_MESSAGES });
     await this.#db.clearTable({ tableName: TABLE_THREADS });
     await this.#db.clearTable({ tableName: TABLE_RESOURCES });
+    await this.#db.clearTable({ tableName: TABLE_MEMORY_RUN_FENCES as TABLE_NAMES });
+  }
+
+  override supportsRunFencing(): boolean {
+    return true;
+  }
+
+  get #fencesTable(): string {
+    return this.#db.getTableName(TABLE_MEMORY_RUN_FENCES as TABLE_NAMES);
+  }
+
+  override async raiseRunFence(fence: RunFence): Promise<boolean> {
+    const table = this.#fencesTable;
+    try {
+      // One statement, so no other raise lands between judging the current fence and replacing it.
+      // Re-raising the current fence writes the same row back and still counts as raised.
+      // Every write un-retires the fence, so a reused run's fence isn't pruned mid-run.
+      const rows = (await this.#db.executeQuery({
+        sql: `INSERT INTO ${table} (runId, generation, ownerId) VALUES (?, ?, ?)
+          ON CONFLICT(runId) DO UPDATE SET generation = excluded.generation, ownerId = excluded.ownerId, retiredAt = NULL
+          WHERE excluded.generation > ${table}.generation
+            OR (excluded.generation = ${table}.generation AND excluded.ownerId = ${table}.ownerId)
+          RETURNING runId`,
+        params: [fence.runId, fence.generation, fence.ownerId],
+      })) as Record<string, unknown>[];
+      return rows.length > 0;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE_DO', 'RAISE_RUN_FENCE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId: fence.runId },
+        },
+        error,
+      );
+    }
+  }
+
+  override async retireRunFence(fence: RunFence): Promise<boolean> {
+    try {
+      const rows = (await this.#db.executeQuery({
+        sql: `UPDATE ${this.#fencesTable} SET retiredAt = ${DB_NOW_MS}
+          WHERE runId = ? AND generation = ? AND ownerId = ?
+          RETURNING runId`,
+        params: [fence.runId, fence.generation, fence.ownerId],
+      })) as Record<string, unknown>[];
+      return rows.length > 0;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE_DO', 'RETIRE_RUN_FENCE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId: fence.runId },
+        },
+        error,
+      );
+    }
+  }
+
+  /** The check a write must pass: its own fence, otherwise the one in scope. */
+  #runFenceCheck(fence: RunFence | undefined, operation: string): RunFenceCheck | undefined {
+    const resolved = resolveRunFence(this, fence);
+    return resolved && { claimsTable: this.#fencesTable, fence: resolved, operation };
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
@@ -142,6 +256,10 @@ export class MemoryStorageDO extends MemoryStorage {
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
+    return this.#insertResource(resource, undefined);
+  }
+
+  async #insertResource(resource: StorageResourceType, check: RunFenceCheck | undefined): Promise<StorageResourceType> {
     const fullTableName = this.#db.getTableName(TABLE_RESOURCES);
 
     // Prepare the record for SQL insertion
@@ -174,14 +292,14 @@ export class MemoryStorageDO extends MemoryStorage {
       values as (string | number | boolean | null | undefined)[],
       ['id'],
       updateMap,
+      runFenceGuard(check),
     );
 
-    const { sql, params } = query.build();
-
     try {
-      await this.#db.executeQuery({ sql, params });
+      await executeFenced(this.#db, check, query.build());
       return resource;
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('CLOUDFLARE_DO', 'SAVE_RESOURCE', 'FAILED'),
@@ -199,11 +317,14 @@ export class MemoryStorageDO extends MemoryStorage {
     resourceId,
     workingMemory,
     metadata,
+    fence,
   }: {
     resourceId: string;
     workingMemory?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageResourceType> {
+    const check = this.#runFenceCheck(fence, 'updateResource');
     const existingResource = await this.getResourceById({ resourceId });
 
     if (!existingResource) {
@@ -215,7 +336,7 @@ export class MemoryStorageDO extends MemoryStorage {
         createdAt: new Date(),
         updatedAt: new Date(),
       };
-      return this.saveResource({ resource: newResource });
+      return this.#insertResource(newResource, check);
     }
 
     const updatedAt = new Date();
@@ -235,13 +356,14 @@ export class MemoryStorageDO extends MemoryStorage {
     const values = [updatedResource.workingMemory, JSON.stringify(updatedResource.metadata), updatedAt.toISOString()];
 
     const query = createSqlBuilder().update(fullTableName, columns, values).where('id = ?', resourceId);
-
-    const { sql, params } = query.build();
+    const guard = runFenceGuard(check);
+    if (guard) query.andWhere(guard.sql, ...guard.params);
 
     try {
-      await this.#db.executeQuery({ sql, params });
+      await executeFenced(this.#db, check, query.build());
       return updatedResource;
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('CLOUDFLARE_DO', 'UPDATE_RESOURCE', 'FAILED'),
@@ -437,8 +559,9 @@ export class MemoryStorageDO extends MemoryStorage {
     }
   }
 
-  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
+  async saveThread({ thread, fence }: { thread: StorageThreadType; fence?: RunFence }): Promise<StorageThreadType> {
     const fullTableName = this.#db.getTableName(TABLE_THREADS);
+    const check = this.#runFenceCheck(fence, 'saveThread');
 
     // Prepare the record for SQL insertion
     const threadToSave = {
@@ -472,14 +595,14 @@ export class MemoryStorageDO extends MemoryStorage {
       values as (string | number | boolean | null | undefined)[],
       ['id'],
       updateMap,
+      runFenceGuard(check),
     );
 
-    const { sql, params } = query.build();
-
     try {
-      await this.#db.executeQuery({ sql, params });
+      await executeFenced(this.#db, check, query.build());
       return thread;
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('CLOUDFLARE_DO', 'SAVE_THREAD', 'FAILED'),
@@ -497,11 +620,14 @@ export class MemoryStorageDO extends MemoryStorage {
     id,
     title,
     metadata,
+    fence,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageThreadType> {
+    const check = this.#runFenceCheck(fence, 'updateThread');
     const thread = await this.getThreadById({ threadId: id });
     try {
       if (!thread) {
@@ -535,10 +661,10 @@ export class MemoryStorageDO extends MemoryStorage {
       values.push(updatedAt.toISOString());
 
       const query = createSqlBuilder().update(fullTableName, columns, values).where('id = ?', id);
+      const guard = runFenceGuard(check);
+      if (guard) query.andWhere(guard.sql, ...guard.params);
 
-      const { sql, params } = query.build();
-
-      await this.#db.executeQuery({ sql, params });
+      await executeFenced(this.#db, check, query.build());
 
       return {
         ...thread,
@@ -547,6 +673,7 @@ export class MemoryStorageDO extends MemoryStorage {
         updatedAt,
       };
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('CLOUDFLARE_DO', 'UPDATE_THREAD', 'FAILED'),
@@ -590,9 +717,13 @@ export class MemoryStorageDO extends MemoryStorage {
     }
   }
 
-  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
+  async saveMessages(args: {
+    messages: MastraDBMessage[];
+    fence?: RunFence;
+  }): Promise<{ messages: MastraDBMessage[] }> {
     const { messages } = args;
     if (messages.length === 0) return { messages: [] };
+    const check = this.#runFenceCheck(args.fence, 'saveMessages');
 
     try {
       const now = new Date();
@@ -636,25 +767,26 @@ export class MemoryStorageDO extends MemoryStorage {
         };
       });
 
-      // Insert messages and update all affected threads' updatedAt in parallel
-      await Promise.all([
-        this.#db.batchUpsert({
-          tableName: TABLE_MESSAGES,
-          records: messagesToInsert,
-        }),
-        // Update updatedAt timestamp for all affected threads
-        ...uniqueThreadIds.map(tid =>
-          this.#db.executeQuery({
-            sql: `UPDATE ${this.#db.getTableName(TABLE_THREADS)} SET updatedAt = ? WHERE id = ?`,
-            params: [now.toISOString(), tid],
-          }),
-        ),
-      ]);
+      // Insert messages, then update every affected thread's updatedAt. In order: a fenced save that
+      // lost its run must stop at its first refused statement, before anything after it lands.
+      await this.#db.batchUpsert({
+        tableName: TABLE_MESSAGES,
+        records: messagesToInsert,
+        check,
+      });
+      const guard = runFenceGuard(check);
+      for (const tid of uniqueThreadIds) {
+        await executeFenced(this.#db, check, {
+          sql: `UPDATE ${this.#db.getTableName(TABLE_THREADS)} SET updatedAt = ? WHERE id = ?${guard ? ` AND ${guard.sql}` : ''}`,
+          params: [now.toISOString(), tid, ...(guard?.params ?? [])],
+        });
+      }
 
       this.logger.debug(`Saved ${messages.length} messages`);
       const list = new MessageList().add(messages, 'memory');
       return { messages: list.get.all.db() };
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('CLOUDFLARE_DO', 'SAVE_MESSAGES', 'FAILED'),
@@ -677,15 +809,37 @@ export class MemoryStorageDO extends MemoryStorage {
   private async _getIncludedMessages(include: StorageListMessagesInput['include'], resourceId?: string) {
     if (!include || include.length === 0) return null;
 
-    const unionQueries: string[] = [];
-    const params: unknown[] = [];
-    let paramIdx = 1;
     const tableName = this.#db.getTableName(TABLE_MESSAGES);
     const resourceCondition = resourceId ? ` AND resourceId = ?` : '';
+
+    // Every include term binds a handful of parameters, so a statement pinning more than ~20
+    // messages runs out of bound parameters ("too many SQL variables"). Run the terms in small
+    // batches instead, the same way the D1 memory domain does, and merge the rows afterwards.
+    const MAX_UNION_TERMS = 5;
+    const unionQueries: string[] = [];
+    const unionParams: unknown[] = [];
+    const messages: Record<string, unknown>[] = [];
+    let paramIdx = 1;
+
+    const flushBatch = async () => {
+      if (unionQueries.length === 0) return;
+
+      const query = unionQueries.join(' UNION ALL ') + ' ORDER BY createdAt ASC';
+      const rows = await this.#db.executeQuery({
+        sql: query,
+        params: unionParams as (string | number | boolean | null | undefined)[],
+      });
+      if (Array.isArray(rows)) messages.push(...(rows as Record<string, unknown>[]));
+
+      unionQueries.length = 0;
+      unionParams.length = 0;
+    };
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
       // Query by message ID directly - get the threadId from the message itself via subquery
+
+      if (unionQueries.length >= MAX_UNION_TERMS) await flushBatch();
 
       unionQueries.push(`
                 SELECT * FROM (
@@ -721,21 +875,20 @@ export class MemoryStorageDO extends MemoryStorage {
                 ) AS query_${paramIdx}
             `);
 
-      params.push(id);
-      if (resourceId) params.push(resourceId, resourceId);
-      params.push(id, id, withNextMessages, withPreviousMessages);
+      unionParams.push(id);
+      if (resourceId) unionParams.push(resourceId, resourceId);
+      unionParams.push(id, id, withNextMessages, withPreviousMessages);
       paramIdx++;
     }
 
-    const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY createdAt ASC';
-    const messages = await this.#db.executeQuery({
-      sql: finalQuery,
-      params: params as (string | number | boolean | null | undefined)[],
-    });
+    await flushBatch();
 
-    if (!Array.isArray(messages)) {
+    if (messages.length === 0) {
       return [];
     }
+
+    // Each batch was ordered on its own, so restore the single-statement ordering.
+    messages.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
 
     // Parse message content
     const processedMessages = messages.map((message: Record<string, unknown>) => {
@@ -761,7 +914,7 @@ export class MemoryStorageDO extends MemoryStorage {
       const query = createSqlBuilder()
         .select(['id', 'content', 'role', 'type', 'createdAt', 'thread_id AS threadId', 'resourceId'])
         .from(fullTableName)
-        .where(`id in (${messageIds.map(() => '?').join(',')})`, ...messageIds);
+        .where(inJsonArray('id'), JSON.stringify(messageIds));
 
       query.orderBy('createdAt', 'DESC');
 
@@ -840,13 +993,12 @@ export class MemoryStorageDO extends MemoryStorage {
       const fullTableName = this.#db.getTableName(TABLE_MESSAGES);
 
       // Step 1: Get paginated messages from the thread(s) first (without excluding included ones)
-      const placeholders = threadIds.map(() => '?').join(', ');
       let query = `
         SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId
         FROM ${fullTableName}
-        WHERE thread_id IN (${placeholders})
+        WHERE ${inJsonArray('thread_id')}
       `;
-      const queryParams: unknown[] = [...threadIds];
+      const queryParams: unknown[] = [JSON.stringify(threadIds)];
 
       if (resourceId) {
         query += ` AND resourceId = ?`;
@@ -905,8 +1057,8 @@ export class MemoryStorageDO extends MemoryStorage {
       const paginatedCount = paginatedMessages.length;
 
       // Get total count
-      let countQuery = `SELECT count() as count FROM ${fullTableName} WHERE thread_id = ?`;
-      const countParams: unknown[] = [threadId];
+      let countQuery = `SELECT count() as count FROM ${fullTableName} WHERE ${inJsonArray('thread_id')}`;
+      const countParams: unknown[] = [JSON.stringify(threadIds)];
 
       if (resourceId) {
         countQuery += ` AND resourceId = ?`;
@@ -1005,10 +1157,16 @@ export class MemoryStorageDO extends MemoryStorage {
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
       // Otherwise, check if there are more pages in the pagination window
-      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+      const threadIdSet = new Set(threadIds);
+      const returnedThreadMessageIds = new Set(
+        finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
+      );
+      // Includes are fetched by id and ignore `filter.dateRange`, so a pinned message from outside
+      // the range must not count as coverage for messages the count query still reports as unread.
+      // A date range is therefore treated like a metadata filter: rely on the pagination window.
       const hasMore =
         perPageInput !== false &&
-        (metadataFilter || returnedThreadMessageIds.size < total) &&
+        (metadataFilter || dateRange?.start || dateRange?.end || returnedThreadMessageIds.size < total) &&
         offset + paginatedCount < total;
 
       return {
@@ -1054,6 +1212,7 @@ export class MemoryStorageDO extends MemoryStorage {
         content?: MastraMessageContentV2['content'];
       };
     })[];
+    fence?: RunFence;
   }): Promise<MastraDBMessage[]> {
     const { messages } = args;
     this.logger.debug('Updating messages', { count: messages.length });
@@ -1061,6 +1220,8 @@ export class MemoryStorageDO extends MemoryStorage {
     if (!messages.length) {
       return [];
     }
+    const check = this.#runFenceCheck(args.fence, 'updateMessages');
+    const guard = runFenceGuard(check);
 
     const messageIds = messages.map(m => m.id);
     const fullTableName = this.#db.getTableName(TABLE_MESSAGES);
@@ -1068,9 +1229,11 @@ export class MemoryStorageDO extends MemoryStorage {
 
     try {
       // Get existing messages
-      const placeholders = messageIds.map(() => '?').join(',');
-      const selectQuery = `SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId FROM ${fullTableName} WHERE id IN (${placeholders})`;
-      const existingMessages = (await this.#db.executeQuery({ sql: selectQuery, params: messageIds })) as any[];
+      const selectQuery = `SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId FROM ${fullTableName} WHERE ${inJsonArray('id')}`;
+      const existingMessages = (await this.#db.executeQuery({
+        sql: selectQuery,
+        params: [JSON.stringify(messageIds)],
+      })) as any[];
 
       if (existingMessages.length === 0) {
         return [];
@@ -1130,17 +1293,17 @@ export class MemoryStorageDO extends MemoryStorage {
         const updateQuery = createSqlBuilder()
           .update(fullTableName, ['content', 'role', 'type'], [contentStr, msg.role as string, msg.type as string])
           .where('id = ?', msg.id);
+        if (guard) updateQuery.andWhere(guard.sql, ...guard.params);
 
-        const { sql, params } = updateQuery.build();
-        await this.#db.executeQuery({ sql, params });
+        await executeFenced(this.#db, check, updateQuery.build());
       }
 
       // Update thread's updatedAt timestamp
       const threadIds = [...new Set(updatedMessages.map(m => m.threadId))];
       for (const tid of threadIds) {
-        await this.#db.executeQuery({
-          sql: `UPDATE ${threadsTableName} SET updatedAt = ? WHERE id = ?`,
-          params: [now, tid],
+        await executeFenced(this.#db, check, {
+          sql: `UPDATE ${threadsTableName} SET updatedAt = ? WHERE id = ?${guard ? ` AND ${guard.sql}` : ''}`,
+          params: [now, tid, ...(guard?.params ?? [])],
         });
       }
 
@@ -1148,6 +1311,7 @@ export class MemoryStorageDO extends MemoryStorage {
       const list = new MessageList().add(updatedMessages, 'memory');
       return list.get.all.db();
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('CLOUDFLARE_DO', 'UPDATE_MESSAGES', 'FAILED'),
@@ -1161,17 +1325,20 @@ export class MemoryStorageDO extends MemoryStorage {
     }
   }
 
-  async deleteMessages(messageIds: string[]): Promise<void> {
+  async deleteMessages(messageIds: string[], options?: { fence?: RunFence }): Promise<void> {
     if (messageIds.length === 0) return;
 
     const fullTableName = this.#db.getTableName(TABLE_MESSAGES);
+    const check = this.#runFenceCheck(options?.fence, 'deleteMessages');
 
     try {
-      const placeholders = messageIds.map(() => '?').join(',');
-      const sql = `DELETE FROM ${fullTableName} WHERE id IN (${placeholders})`;
-      await this.#db.executeQuery({ sql, params: messageIds });
+      const query = createSqlBuilder().delete(fullTableName).where(inJsonArray('id'), JSON.stringify(messageIds));
+      const guard = runFenceGuard(check);
+      if (guard) query.andWhere(guard.sql, ...guard.params);
+      await executeFenced(this.#db, check, query.build());
       this.logger.debug(`Deleted ${messageIds.length} messages`);
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('CLOUDFLARE_DO', 'DELETE_MESSAGES', 'FAILED'),

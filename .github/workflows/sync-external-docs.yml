@@ -1,0 +1,87 @@
+name: Sync External Docs
+
+# Pushes docs directories listed in .github/docs-sync.json to their external docs
+# repositories, so each site's repo holds (and deploys) exactly what is on main here.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/src/**'
+      - '.github/docs-sync.json'
+      - '.github/scripts/sync-docs.mjs'
+      - '.github/workflows/sync-external-docs.yml'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Target name from .github/docs-sync.json, or "all". A name syncs only that section; other sections of the same site are left as they are.'
+        required: false
+        default: 'all'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-external-docs
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync external docs repositories
+    # Only main may publish, including manual runs.
+    if: ${{ github.repository == 'mastra-ai/mastra' && github.ref == 'refs/heads/main' }}
+    runs-on: starsling-ubuntu-26.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          # Current main, not the run's GITHUB_SHA: re-running an older run must not publish stale docs.
+          ref: main
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+        with:
+          # The sync script only uses Node built-ins and git.
+          install-dependencies: 'false'
+
+      - name: List target repositories
+        id: repos
+        run: |
+          node -e "
+            const { targets } = require('./.github/docs-sync.json');
+            const names = [...new Set(targets.map(target => String(target.repo).split('/').pop()))];
+            console.log('names=' + names.join(','));
+          " >> "$GITHUB_OUTPUT"
+
+      - name: Dane App Auth
+        id: app-auth
+        uses: ./.github/actions/app-auth
+        with:
+          client-id: ${{ vars.DANE_CLIENT_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          owner: mastra-ai
+          # Scope the token to the manifest's repositories only.
+          repositories: ${{ steps.repos.outputs.names }}
+          permission-contents: write
+
+      - name: Sync docs
+        env:
+          # Push events have no inputs, so they sync every target.
+          TARGET: ${{ inputs.target || 'all' }}
+        run: node .github/scripts/sync-docs.mjs --push --target "$TARGET"
+
+      - name: Alert on failure
+        if: ${{ failure() }}
+        uses: ./.github/actions/slack-alert
+        with:
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          text: ':rotating_light: External docs sync failed for <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>. The external docs sites are out of date until it succeeds. <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View the run> and re-run it, or run the workflow manually.'

@@ -3,7 +3,7 @@
  */
 
 import type { SlashCommandMetadata } from '@mastra/code-sdk/utils/slash-command-loader';
-import { isSubconsciousEnabled } from '../utils/experimental-features.js';
+import { isKnowledgeEnabled } from '../utils/experimental-features.js';
 
 export interface HelpTextOptions {
   /** Number of available controller modes (mode commands shown when > 1) */
@@ -44,7 +44,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/permissions', description: 'Tool approval permissions' },
     { key: '/settings', description: 'Notifications, YOLO, thinking' },
     { key: '/memory', description: 'Configure Observational Memory (/om alias)' },
-    ...(isSubconsciousEnabled() ? [{ key: '/knowledge', description: 'Browse scoped Subconscious knowledge' }] : []),
+    ...(isKnowledgeEnabled() ? [{ key: '/knowledge', description: 'Browse scoped knowledge' }] : []),
     { key: '/review', description: 'Review a GitHub pull request' },
     { key: '/report-issue', description: 'Open or browse mastracode issues' },
     { key: '/cost', description: 'Token usage and costs' },
@@ -60,12 +60,14 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/mcp', description: 'Show/reload MCP connections' },
     { key: '/connect', description: 'Connect a provider account or API key' },
     { key: '/login', description: 'Sign in with a provider account' },
+    { key: '/factory', description: 'Switch to Factory mode (connects first if needed)' },
+    { key: '/local', description: 'Switch from Factory mode back to local mode' },
     { key: '/logout', description: 'Logout from OAuth provider' },
     { key: '/setup', description: 'Run the setup wizard' },
     { key: '/browser', description: 'Configure browser automation' },
     { key: '/api-keys', description: 'Manage provider API keys' },
     { key: '/plugins', description: 'Manage Mastra Code plugins' },
-    { key: '/theme', description: 'Switch color theme (auto/dark/light)' },
+    { key: '/theme', description: 'Switch color theme (picker, list, or name)' },
     { key: '/update', description: 'Check for and install updates' },
     { key: '/observability', description: 'Configure cloud observability' },
     { key: '/github', description: 'Subscribe in review/working mode or sync GitHub PR signals' },

@@ -5,6 +5,7 @@ import {
   createVoyageTextEmbedding,
   createVoyageTextEmbeddingV2,
 } from '../text-embedding';
+import { TEXT_MODEL_INFO } from '../types';
 
 // Mock functions
 const mockEmbed = vi.fn();
@@ -289,6 +290,30 @@ describe('Factory functions', () => {
 
     expect(model.specificationVersion).toBe('v3');
     expect(model.modelId).toBe('voyage-code-3');
+  });
+
+  it('accepts voyage-code-4 with its Voyage config and passes options to the SDK', async () => {
+    expect(TEXT_MODEL_INFO['voyage-code-4']).toEqual({
+      maxInputTokens: 32000,
+      defaultDimension: 1024,
+      supportedDimensions: [256, 512, 1024, 2048],
+      isMultimodal: false,
+      isContextualized: false,
+    });
+
+    mockEmbed.mockResolvedValue({ data: [{ embedding: [0.1], index: 0 }] });
+
+    const model = createVoyageTextEmbedding({
+      model: 'voyage-code-4',
+      inputType: 'document',
+      outputDimension: 2048,
+    });
+    await model.doEmbed({ values: ['function add(a, b) { return a + b; }'] });
+
+    expect(model.modelId).toBe('voyage-code-4');
+    expect(mockEmbed).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'voyage-code-4', inputType: 'document', outputDimension: 2048 }),
+    );
   });
 
   it('createVoyageTextEmbeddingV2 should create V2 model', () => {

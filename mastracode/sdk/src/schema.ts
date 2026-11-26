@@ -1,8 +1,15 @@
 import type { OMModel } from '@mastra/core/agent-controller';
 import { z } from 'zod';
 import { DEFAULT_CONFIG_DIR, MODEL_ROUTE_MAX_ENTRIES, MODEL_ROUTE_MAX_FIELD_LENGTH } from './constants.js';
+import { pendingModelFallbackSchema } from './model-fallback.js';
+import type { PendingModelFallback } from './model-fallback.js';
 import { THINKING_LEVEL_VALUES } from './thinking.js';
 import type { ThinkingLevelSetting } from './thinking.js';
+
+export type {
+  /** @deprecated Import from `@mastra/code-sdk/model-fallback`. */
+  PendingModelFallback,
+} from './model-fallback.js';
 
 export type PermissionPolicy = 'allow' | 'ask' | 'deny';
 
@@ -17,21 +24,13 @@ export interface ModelRouteEntry {
   id: string;
   label: string;
   modelId: string;
+  thinkingLevel?: ThinkingLevelSetting;
   accountId?: string;
   memoryModelId?: string;
 }
 
 export interface ModelRoute {
   entries: ModelRouteEntry[];
-}
-
-export interface PendingModelFallback {
-  fromEntryId: string;
-  toEntryId: string;
-  toModelId: string;
-  threadId?: string;
-  reason: 'pool-exhausted' | 'persistent-outage';
-  at: string;
 }
 
 export interface MastraCodeState {
@@ -42,6 +41,10 @@ export interface MastraCodeState {
   projectName?: string;
   /** Factory project that owns this session. */
   factoryProjectId?: string;
+  /** Whether this session uses organization or owner-scoped models and credentials. */
+  factoryModelScope?: 'factory' | 'user';
+  /** Stable user id of the Factory session owner. */
+  factoryOwnerUserId?: string;
   /** Authoritative organization id seeded by factory at session construction. */
   factoryOrgId?: string;
   /**
@@ -73,6 +76,13 @@ export interface MastraCodeState {
    * inherits the machine owner's personal configuration.
    */
   skipGlobalInstructions?: boolean;
+  /**
+   * Directories under the working directory whose project instruction files
+   * (AGENTS.md, CLAUDE.md) load, the session's own checkout first. Hosts that
+   * boot several checkouts under one working directory set it; unset, the
+   * working directory itself is the only root.
+   */
+  instructionRoots?: string[];
   configDir: string;
   homeDir?: string;
   gitBranch?: string;
@@ -175,6 +185,8 @@ export const stateSchema = z
     projectPath: z.string().optional(),
     projectName: z.string().optional(),
     factoryProjectId: z.string().optional(),
+    factoryModelScope: z.enum(['factory', 'user']).optional(),
+    factoryOwnerUserId: z.string().optional(),
     factoryOrgId: z.string().optional(),
     factoryOrgUnresolved: z.boolean().optional(),
     projectRepositoryId: z.string().optional(),
@@ -185,6 +197,8 @@ export const stateSchema = z
     baseRef: z.string().optional(),
     // Skip the operator machine's home-directory instruction files.
     skipGlobalInstructions: z.boolean().optional(),
+    // Checkouts whose instruction files load, the session's own first.
+    instructionRoots: z.array(z.string()).optional(),
     configDir: z.string().default(DEFAULT_CONFIG_DIR),
     homeDir: z.string().optional(),
     gitBranch: z.string().optional(),
@@ -241,18 +255,7 @@ export const stateSchema = z
       .default([]),
     // Sandbox allowed paths (per-thread, absolute paths allowed in addition to project root)
     sandboxAllowedPaths: z.array(z.string()).default([]),
-    // Pending route hop written by account rotation. The host consumes it on
-    // `state_changed` to apply thread stickiness, then clears it back to null.
-    mastracodePendingModelFallback: z
-      .object({
-        fromEntryId: z.string(),
-        toEntryId: z.string(),
-        toModelId: z.string(),
-        threadId: z.string().optional(),
-        reason: z.enum(['pool-exhausted', 'persistent-outage']),
-        at: z.string(),
-      })
-      .nullish(),
+    mastracodePendingModelFallback: pendingModelFallbackSchema.nullish(),
     // Asset directories contributed by active plugins.
     pluginSkillPaths: z.array(z.string()).default([]),
     pluginCommandPaths: z.array(z.string()).default([]),

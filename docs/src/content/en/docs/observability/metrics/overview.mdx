@@ -1,6 +1,6 @@
 ---
 title: "Metrics"
-description: "Collect automatic duration, token usage, and cost metrics from Mastra traces, store them in supported databases, and analyze them in Studio."
+description: "Collect automatic duration, token usage, and cost metrics from Mastra traces, emit custom metrics from tools and workflow steps, store them in supported databases, and analyze them in Studio."
 packages:
   - "@mastra/observability"
 ---
@@ -13,9 +13,9 @@ Mastra emits:
 
 - **Duration metrics** for agent runs, workflows, tools, model calls, and processors
 - **Token usage metrics** for model input and output, including detailed token categories when the provider reports them
-- **Cost estimates** calculated from token usage, provider, model, and model prices from [models.dev](https://models.dev)
+- **Cost estimates** calculated from token usage, provider, model, and model prices from [models.dev](https://models.dev) or from a [custom gateway](/models/gateways/custom-gateways#model-pricing)
 
-Metrics retain trace correlation context, so you can investigate a change in a chart by finding the related span. See the [Automatic metrics reference](/reference/observability/metrics/automatic-metrics) for metric names, labels, and cost fields.
+Metrics retain trace correlation context, so you can investigate a change in a chart by finding the related span. See the [Automatic metrics reference](/reference/observability/metrics/automatic-metrics) for metric names, labels, and cost fields. To record your own measurements, [emit custom metrics](#emit-custom-metrics).
 
 ## When to use metrics
 
@@ -23,6 +23,7 @@ Metrics retain trace correlation context, so you can investigate a change in a c
 - Track token consumption and estimated cost over time
 - Compare success and error rates across agents or tools
 - Measure the effect of prompt, model, or code changes
+- Count business events, such as orders processed or documents indexed
 
 ## Storage support
 
@@ -78,9 +79,63 @@ export const mastra = new Mastra({
 
 `MastraStorageExporter` persists metrics to the configured observability store and makes them available to Studio. Use `MastraPlatformExporter` instead, or alongside it, to send metrics to Mastra Platform.
 
+## Emit custom metrics
+
+Emit your own metrics from tools and workflow steps with `metrics.emit()`. Custom metrics go to the same exporters and storage as automatic metrics. They also carry the trace and span of the tool call or step that emitted them.
+
+In a tool, read `metrics` from the execution context:
+
+```ts title="src/mastra/tools/lookup-order.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const lookupOrder = createTool({
+  id: 'lookup-order',
+  description: 'Looks up an order by ID',
+  inputSchema: z.object({ orderId: z.string() }),
+  execute: async ({ orderId }, context) => {
+    const order = await db.orders.find(orderId)
+
+    context.metrics?.emit('orders_looked_up', 1, {
+      status: order ? 'found' : 'missing',
+    })
+
+    return { order }
+  },
+})
+```
+
+In a workflow step, read `metrics` from the `execute` parameters:
+
+```ts title="src/mastra/workflows/process-order.ts"
+import { createStep } from '@mastra/core/workflows'
+import { z } from 'zod'
+
+const chargeCard = createStep({
+  id: 'charge-card',
+  inputSchema: z.object({ amount: z.number(), currency: z.string() }),
+  outputSchema: z.object({ charged: z.boolean() }),
+  execute: async ({ inputData, metrics }) => {
+    metrics?.emit('payment_amount', inputData.amount, { currency: inputData.currency })
+
+    return { charged: true }
+  },
+})
+```
+
+Mastra drops negative, `NaN`, and infinite values. When observability isn't configured, `emit()` does nothing.
+
+### Keep labels low-cardinality
+
+Each distinct combination of labels becomes a separate series in the metrics store. Use labels for small, fixed sets of values, such as a status, region, or plan tier. Don't use IDs or free text as labels.
+
+Mastra removes labels that would create unbounded series. By default it drops `trace_id`, `span_id`, `run_id`, `request_id`, `user_id`, `resource_id`, `session_id`, and `thread_id`, and any label whose value is a UUID. Each metric still keeps its trace and span IDs, so you can go from a metric to the related trace without them. Change this behavior with the `cardinality` option in the [observability configuration](/reference/observability/tracing/configuration#observabilityinstanceconfig).
+
+See the [`MetricsContext` reference](/reference/observability/metrics/metrics-context) for every parameter.
+
 ## View and query metrics
 
-Use the [Studio observability dashboard](/docs/studio/observability) to inspect KPI cards, breakdowns, and time-series charts. For custom dashboards and analysis, use the observability store, `@mastra/client-js`, HTTP endpoints, or CLI described in the [Metric queries reference](/reference/observability/metrics/queries).
+Use the [Studio observability dashboard](/docs/studio/observability) to inspect KPI cards, breakdowns, and time-series charts. For custom dashboards and analysis, use the observability store, `@mastra/client-js`, HTTP endpoints, or CLI described in the [Metric queries reference](/reference/observability/metrics/queries). To query a custom metric, pass the name you gave to `emit()`.
 
 In production, always include a timestamp range in metric queries. Time bounds limit the data scanned and allow partitioned backends to skip unrelated partitions or chunks.
 

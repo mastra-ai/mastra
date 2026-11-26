@@ -1,15 +1,43 @@
-import { TABLE_WORKFLOW_SNAPSHOT, normalizePerPage, WorkflowsStorage } from '@mastra/core/storage';
+import {
+  TABLE_WORKFLOW_RUN_OWNERS,
+  TABLE_WORKFLOW_SNAPSHOT,
+  normalizePerPage,
+  resolveRunFence,
+  WorkflowsStorage,
+  executeRetentionPrune,
+  resolveRetentionTargets,
+  retentionCutoffMs,
+} from '@mastra/core/storage';
 import type {
+  ClaimRunOwnershipInput,
+  ClaimRunOwnershipResult,
+  RenewRunOwnershipInput,
+  RenewRunOwnershipResult,
+  RunFence,
+  RunOwnershipRecord,
   StorageListWorkflowRunsInput,
   StorageWorkflowRun,
   WorkflowRun,
   WorkflowRuns,
   UpdateWorkflowStateOptions,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
+import type { ConvexAdminClient } from '../../client';
 import { ConvexDB, resolveConvexConfig } from '../../db';
 import type { ConvexDomainConfig } from '../../db';
+import {
+  claimRunOwnership,
+  getRunOwnership,
+  releaseRunOwnership,
+  renewRunOwnership,
+  pruneRunClaims,
+} from '../../run-fencing';
+import type { RunFenceCheck } from '../../run-fencing';
 
 type RawWorkflowRun = Omit<StorageWorkflowRun, 'createdAt' | 'updatedAt' | 'snapshot'> & {
   createdAt: string;
@@ -17,15 +45,57 @@ type RawWorkflowRun = Omit<StorageWorkflowRun, 'createdAt' | 'updatedAt' | 'snap
   snapshot: WorkflowRunState | string;
 };
 
+/**
+ * A stored snapshot reduced to what `listWorkflowRuns({ summary: true })` returns: `status` and
+ * `timestamp` when set, and `parentWorkflow` only when both of its IDs are non-empty strings.
+ * A missing snapshot reduces to `{}`. Reads the stored value in place, without a full copy.
+ */
+function summarySnapshot(stored: WorkflowRunState | string | undefined): WorkflowRunState {
+  const parsed: unknown = typeof stored === 'string' ? JSON.parse(stored) : stored;
+  const source = (parsed !== null && typeof parsed === 'object' ? parsed : {}) as Partial<WorkflowRunState>;
+  const { status, timestamp, parentWorkflow } = source;
+  const summary: Record<string, unknown> = {};
+
+  if (status !== undefined && status !== null) {
+    summary.status = status;
+  }
+
+  if (timestamp !== undefined && timestamp !== null) {
+    summary.timestamp = timestamp;
+  }
+
+  const workflowId = parentWorkflow?.workflowId;
+  const runId = parentWorkflow?.runId;
+  if (typeof workflowId === 'string' && workflowId !== '' && typeof runId === 'string' && runId !== '') {
+    summary.parentWorkflow = { workflowId, runId };
+  }
+
+  return summary as unknown as WorkflowRunState;
+}
+
 export class WorkflowsConvex extends WorkflowsStorage {
+  /**
+   * Tables `prune()` can clean up. Run ownership records anchor on `updatedAt` (epoch ms), which every
+   * claim, renewal and release refreshes, so a live execution's record is never
+   * older than its renew interval.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    runOwnership: { table: TABLE_WORKFLOW_RUN_OWNERS, column: 'updatedAt', indexed: false, anchorType: 'epoch-ms' },
+  };
+
   #db: ConvexDB;
+  #client: ConvexAdminClient;
   constructor(config: ConvexDomainConfig) {
     super();
-    const client = resolveConvexConfig(config);
-    this.#db = new ConvexDB(client);
+    this.#client = resolveConvexConfig(config);
+    this.#db = new ConvexDB(this.#client);
   }
 
   supportsConcurrentUpdates(): boolean {
+    return true;
+  }
+
+  override supportsRunFencing(): boolean {
     return true;
   }
 
@@ -33,27 +103,81 @@ export class WorkflowsConvex extends WorkflowsStorage {
     // No-op for Convex; schema is managed server-side.
   }
 
-  async dangerouslyClearAll(): Promise<void> {
-    await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveRetentionTargets({
+      policies,
+      descriptor: WorkflowsConvex.retentionTables,
+      order: ['runOwnership'],
+    });
+    return executeRetentionPrune({
+      domain: 'workflows',
+      targets,
+      options,
+      cutoffFor: (target, now) => retentionCutoffMs(target.policy, now),
+      deleteBatch: (_target, cutoff, limit) =>
+        pruneRunClaims(this.#client, TABLE_WORKFLOW_RUN_OWNERS, 'updatedAt', Number(cutoff), limit),
+    });
   }
 
-  async updateWorkflowResults(args: {
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    await this.#db.clearTable({ tableName: TABLE_WORKFLOW_RUN_OWNERS });
+  }
+
+  /** The store to write a run through: fenced when the write carries or inherits a fence. */
+  #dbFor(fence: RunFence | undefined, runId: string, operation: string): ConvexDB {
+    const resolved = resolveRunFence(this, fence, runId);
+    const check: RunFenceCheck | undefined = resolved && {
+      claims: TABLE_WORKFLOW_RUN_OWNERS,
+      fence: resolved,
+      operation,
+    };
+    return this.#db.fenced(check);
+  }
+
+  // Each operation reads and writes the run's claim in one mutation, so
+  // Convex serializes racing claimers, renewals and fenced writes on the run.
+  override async claimRunOwnership(args: ClaimRunOwnershipInput): Promise<ClaimRunOwnershipResult> {
+    return claimRunOwnership(this.#client, args);
+  }
+
+  override async renewRunOwnership(args: RenewRunOwnershipInput): Promise<RenewRunOwnershipResult> {
+    return renewRunOwnership(this.#client, args);
+  }
+
+  override async releaseRunOwnership(fence: RunFence): Promise<boolean> {
+    return releaseRunOwnership(this.#client, fence);
+  }
+
+  override async getRunOwnership({ runId }: { runId: string }): Promise<RunOwnershipRecord | null> {
+    return getRunOwnership(this.#client, runId);
+  }
+
+  async updateWorkflowResults({
+    fence,
+    ...args
+  }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
     state?: Record<string, any>;
+    fence?: RunFence;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    return this.#db.mergeWorkflowStepResult(args);
+    return this.#dbFor(fence, args.runId, 'updateWorkflowResults').mergeWorkflowStepResult(args);
   }
 
-  async updateWorkflowState(args: {
+  async updateWorkflowState({
+    fence,
+    ...args
+  }: {
     workflowName: string;
     runId: string;
     opts: UpdateWorkflowStateOptions;
+    fence?: RunFence;
   }): Promise<WorkflowRunState | undefined> {
-    return this.#db.mergeWorkflowState(args);
+    return this.#dbFor(fence, args.runId, 'updateWorkflowState').mergeWorkflowState(args);
   }
 
   async persistWorkflowSnapshot({
@@ -63,6 +187,7 @@ export class WorkflowsConvex extends WorkflowsStorage {
     snapshot,
     createdAt,
     updatedAt,
+    fence,
   }: {
     workflowName: string;
     runId: string;
@@ -70,6 +195,7 @@ export class WorkflowsConvex extends WorkflowsStorage {
     snapshot: WorkflowRunState;
     createdAt?: Date;
     updatedAt?: Date;
+    fence?: RunFence;
   }): Promise<void> {
     const now = new Date();
     // Check if a record already exists to preserve createdAt
@@ -78,7 +204,7 @@ export class WorkflowsConvex extends WorkflowsStorage {
       keys: { workflow_name: workflowName, run_id: runId },
     });
 
-    await this.#db.insert({
+    await this.#dbFor(fence, runId, 'persistWorkflowSnapshot').insert({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       record: {
         workflow_name: workflowName,
@@ -111,8 +237,12 @@ export class WorkflowsConvex extends WorkflowsStorage {
     return typeof row.snapshot === 'string' ? JSON.parse(row.snapshot) : JSON.parse(JSON.stringify(row.snapshot));
   }
 
+  /**
+   * Lists runs newest first. With `summary`, each snapshot keeps only its status, timestamp and
+   * parent run; the full rows are still read from Convex.
+   */
   async listWorkflowRuns(args: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
-    const { workflowName, fromDate, toDate, perPage, page, resourceId, status } = args;
+    const { workflowName, fromDate, toDate, perPage, page, resourceId, status, summary } = args;
 
     // Pass known filters to queryTable for server-side filtering instead of fetching all rows
     const filters: Array<{ field: string; value: string }> = [];
@@ -145,10 +275,11 @@ export class WorkflowsConvex extends WorkflowsStorage {
       rows = rows.slice(offset, offset + normalized);
     }
 
+    // Reduced last, since the status filter above reads the full snapshot.
     const runs: WorkflowRun[] = rows.map(run => ({
       workflowName: run.workflow_name,
       runId: run.run_id,
-      snapshot: this.ensureSnapshot(run),
+      snapshot: summary ? summarySnapshot(run.snapshot) : this.ensureSnapshot(run),
       createdAt: new Date(run.createdAt),
       updatedAt: new Date(run.updatedAt),
       resourceId: run.resourceId,
@@ -190,8 +321,18 @@ export class WorkflowsConvex extends WorkflowsStorage {
     };
   }
 
-  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
-    await this.#db.deleteMany(TABLE_WORKFLOW_SNAPSHOT, [`${workflowName}-${runId}`]);
+  async deleteWorkflowRunById({
+    runId,
+    workflowName,
+    fence,
+  }: {
+    runId: string;
+    workflowName: string;
+    fence?: RunFence;
+  }): Promise<void> {
+    await this.#dbFor(fence, runId, 'deleteWorkflowRunById').deleteMany(TABLE_WORKFLOW_SNAPSHOT, [
+      `${workflowName}-${runId}`,
+    ]);
   }
 
   private async getRun(workflowName: string, runId: string): Promise<RawWorkflowRun | null> {

@@ -1,5 +1,6 @@
 import type { IntegrationConnection } from '../../capabilities/connection.js';
 import type {
+  CommitCheckStatus,
   PullRequest,
   PullRequestComment,
   RequestedReviewers,
@@ -16,6 +17,7 @@ import {
 } from './api.js';
 import type {
   GitLabApiClient,
+  GitLabCommitStatusState,
   GitLabDiscussionNote,
   GitLabDiscussionPosition,
   GitLabMember,
@@ -401,6 +403,29 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
     );
   };
 
+  const publishCommitCheck: NonNullable<VersionControl['publishCommitCheck']> = async input => {
+    const context = await deps.contextForConnection(input.connection);
+    const body = {
+      state: GITLAB_COMMIT_STATUS_STATE[input.status],
+      name: input.name,
+      ...(input.ref !== undefined ? { ref: input.ref } : {}),
+      // GitLab commit statuses carry a single short description, so the title is the only text published.
+      description: input.title.slice(0, GITLAB_COMMIT_STATUS_DESCRIPTION_LIMIT),
+    };
+    // GitLab answers 409 when two updates to the same status race; a short bounded retry settles it.
+    let status;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        status = await context.api.setCommitStatus(input.sourceId, input.headSha, body);
+        break;
+      } catch (error) {
+        if (attempt >= 3 || (error as { status?: number } | null)?.status !== 409) throw error;
+        await new Promise(resolve => setTimeout(resolve, 250 * attempt));
+      }
+    }
+    return { id: String(status.id), name: status.name, headSha: status.sha, status: input.status, url: status.target_url };
+  };
+
   const listRequestedReviewers: VersionControl['listRequestedReviewers'] = async input => {
     const context = await deps.contextForConnection(input.connection);
     const mergeRequest = await context.api.getMergeRequest(
@@ -446,6 +471,13 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
         throw new GitLabApiError('GitLab installation metadata must include a valid connection.', 400);
       }
       const context = await deps.contextForConnection(requestedConnection);
+      // Re-registering must not move repositories already linked on one
+      // instance over to another; the same-instance checks rely on this host.
+      const existing = await sourceControlStorage().installations.findByExternalId({
+        orgId,
+        externalId: installation.externalId,
+      });
+      assertSameInstance(existing?.providerMetadata.host, context.host);
       return sourceControlStorage().installations.upsert({
         orgId,
         connectedByUserId: userId,
@@ -493,6 +525,7 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
         connection,
         typeof installation.providerMetadata.host === 'string' ? installation.providerMetadata.host : undefined,
       );
+      assertSameInstance(installation.providerMetadata.host, context.host);
       // The API uses GitLab's immutable numeric project ID because Platform's
       // proxy normalizes encoded path slashes; retain the slug for browser URLs.
       return { connection: context.connection, sourceId: `${repository.externalId}:${repository.slug}` };
@@ -511,6 +544,7 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
         connection,
         typeof installation.providerMetadata.host === 'string' ? installation.providerMetadata.host : undefined,
       );
+      assertSameInstance(installation.providerMetadata.host, context.host);
       if (!context.repositoryAccessToken) {
         throw notSupported('This GitLab connection does not expose credentials for repository cloning.');
       }
@@ -547,8 +581,21 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
     listRequestedReviewers,
     requestReviewers,
     removeRequestedReviewers,
+    publishCommitCheck,
   };
 }
+
+const GITLAB_COMMIT_STATUS_DESCRIPTION_LIMIT = 255;
+
+// GitLab has no neutral state; an informational result is reported as skipped rather than as a pass.
+const GITLAB_COMMIT_STATUS_STATE: Record<CommitCheckStatus, GitLabCommitStatusState> = {
+  'in-progress': 'running',
+  success: 'success',
+  failure: 'failed',
+  neutral: 'skipped',
+  cancelled: 'canceled',
+  skipped: 'skipped',
+};
 
 async function submitReviewAction(
   deps: GitLabVersionControlDependencies,
@@ -874,6 +921,15 @@ function parseConnection(value: unknown): IntegrationConnection | null {
     return { type: 'app-installation', installationId: Number(connection.installationId) };
   }
   return null;
+}
+
+/** Repositories belong to the instance they were linked on; refuse to reach or re-register them through a connection that now points elsewhere. */
+function assertSameInstance(linkedHost: unknown, connectionHost: string): void {
+  if (typeof linkedHost !== 'string' || normalizeHost(linkedHost) === normalizeHost(connectionHost)) return;
+  throw new GitLabApiError(
+    `This repository was linked on ${normalizeHost(linkedHost)}, but its GitLab connection now points at ${normalizeHost(connectionHost)}. Link it again from the new instance.`,
+    409,
+  );
 }
 
 function normalizeHost(value: string): string {

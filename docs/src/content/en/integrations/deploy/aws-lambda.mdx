@@ -74,7 +74,7 @@ This Dockerfile uses npm. If you're using pnpm, yarn, or another package manager
 
 <Steps>
   <StepItem>
-    Set up environment variables for the deployment. Use the same region for all AWS services (ECR, Lambda) to avoid issues with resources not appearing across regions:
+    Set up environment variables for the deployment. Use the same region for all AWS services (ECR, Lambda) to avoid resources that exist in only one region:
 
     ```bash
     export PROJECT_NAME="your-mastra-app"
@@ -131,40 +131,40 @@ This Dockerfile uses npm. If you're using pnpm, yarn, or another package manager
 
 <Steps>
   <StepItem>
-    Navigate to the [AWS Lambda Console](https://console.aws.amazon.com/lambda/) and click **Create function**. Make sure you have the same region selected as where you created your ECR repository.
+    Navigate to the [AWS Lambda Console](https://console.aws.amazon.com/lambda/) and select **Create function**. Ensure you have the same region selected as where you created your ECR repository.
   </StepItem>
 
   <StepItem>
     Select **Container image** and configure the function:
 
     - **Function name**: Enter a name (e.g. `mastra-app`)
-    - **Container image URI**: Click **Browse images**, select your ECR repository, and choose the `latest` tag
+    - **Container image URI**: Select **Browse images**, pick your ECR repository, and choose the `latest` tag
     - **Architecture**: Select **arm64**
 
-    Click **Create function** to create the Lambda function.
+    Select **Create function** to create the Lambda function.
   </StepItem>
 
   <StepItem>
-    Configure memory and timeout. Go to **Configuration** > **General configuration** and click **Edit**:
+    Configure memory and timeout. Go to **Configuration** > **General configuration** and select **Edit**:
 
     - **Memory**: 512 MB (adjust based on your application needs)
     - **Timeout**: 1 minute or higher (the default 3 seconds is too low for most Mastra applications)
 
-    Click **Save**.
+    Select **Save**.
   </StepItem>
 
   <StepItem>
-    Add environment variables. Go to **Configuration** > **Environment variables** and click **Edit**. Add the variables your Mastra application needs:
+    Add environment variables. Go to **Configuration** > **Environment variables** and select **Edit**. Add the variables your Mastra application needs:
 
     - `OPENAI_API_KEY`: Your OpenAI API key (if using OpenAI)
     - `ANTHROPIC_API_KEY`: Your Anthropic API key (if using Anthropic)
     - Other provider-specific API keys as needed (e.g. `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` if using LibSQL with Turso)
 
-    Click **Save**.
+    Select **Save**.
   </StepItem>
 
   <StepItem>
-    Enable a Function URL for external access. Go to **Configuration** > **Function URL** and click **Create function URL**:
+    Enable a Function URL for external access. Go to **Configuration** > **Function URL** and select **Create function URL**:
 
     - **Auth type**: Select **NONE** for public access
     - Under **Additional settings**, check **Configure cross-origin resource sharing (CORS)**, then configure:
@@ -172,7 +172,7 @@ This Dockerfile uses npm. If you're using pnpm, yarn, or another package manager
       - **Allow headers**: `content-type` (`x-amzn-request-context` is also required when used with services like CloudFront/API Gateway)
       - **Allow methods**: `*`
 
-    Click **Save**.
+    Select **Save**.
   </StepItem>
 </Steps>
 
@@ -180,7 +180,7 @@ This Dockerfile uses npm. If you're using pnpm, yarn, or another package manager
 
 <Steps>
   <StepItem>
-    Copy the **Function URL** from the Lambda console and visit `<your-function-url>/api/agents` in your browser. You should see a JSON list of your agents.
+    Copy the **Function URL** from the Lambda console and visit `<your-function-url>/api/agents` in your browser. The response is a JSON list of your agents.
   </StepItem>
 
   <StepItem>
@@ -194,7 +194,7 @@ This Dockerfile uses npm. If you're using pnpm, yarn, or another package manager
 
 ## Next steps
 
-This guide provides a quickstart for deploying Mastra to AWS Lambda. For production workloads, consider enabling [CloudWatch monitoring](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-cloudwatchlogs.html) for your Lambda function, setting up [AWS X-Ray](https://docs.aws.amazon.com/lambda/latest/dg/services-xray.html) for distributed tracing, and configuring [provisioned concurrency](https://docs.aws.amazon.com/lambda/latest/dg/provisioned-concurrency.html) for consistent performance.
+The steps below deploy Mastra to AWS Lambda. For production workloads, consider enabling [CloudWatch monitoring](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-cloudwatchlogs.html) for your Lambda function, setting up [AWS X-Ray](https://docs.aws.amazon.com/lambda/latest/dg/services-xray.html) for distributed tracing, and configuring [provisioned concurrency](https://docs.aws.amazon.com/lambda/latest/dg/provisioned-concurrency.html) for consistent performance.
 
 ## Related
 

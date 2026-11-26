@@ -1,4 +1,3 @@
-import { MoreHorizontalIcon, Settings2Icon } from 'lucide-react';
 import { Fragment, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { SidebarNavLabel } from '../nav/sidebar-nav-label';
@@ -9,6 +8,8 @@ import { SidebarOptionalLink } from './sidebar-optional-link';
 import type { OptionalSidebarLink, SidebarLinkPlacement } from './sidebar-visibility';
 import { getDefaultPlacement, getSidebarLinkKey } from './sidebar-visibility';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { IconDotGrid1x3Horizontal } from '@/ds/icons/central/IconDotGrid1x3Horizontal';
+import { IconSettingsSliderHor } from '@/ds/icons/central/IconSettingsSliderHor';
 
 export type SidebarMoreLinksProps = {
   links: OptionalSidebarLink[];
@@ -74,10 +75,10 @@ export function SidebarMoreLinks({
       {hasMoreRow ? (
         <DropdownMenu modal={false}>
           <SidebarNavLink
-            link={{ name: 'More', url: '', icon: <MoreHorizontalIcon /> }}
+            link={{ name: 'More', url: '', icon: <IconDotGrid1x3Horizontal /> }}
             render={
               <DropdownMenu.Trigger ref={moreTriggerRef} render={<button type="button" />} aria-label="More">
-                <MoreHorizontalIcon aria-hidden="true" />
+                <IconDotGrid1x3Horizontal aria-hidden="true" />
                 <SidebarNavLabel>More</SidebarNavLabel>
               </DropdownMenu.Trigger>
             }
@@ -86,7 +87,7 @@ export function SidebarMoreLinks({
             {moreMenuLinks.map(link => renderMenuLink(link))}
             {moreMenuLinks.length > 0 && <DropdownMenu.Separator />}
             <DropdownMenu.Item onClick={() => onCustomize(moreTriggerRef.current, () => moreTriggerRef.current)}>
-              <Settings2Icon />
+              <IconSettingsSliderHor />
               Customize sidebar
             </DropdownMenu.Item>
           </DropdownMenu.Content>

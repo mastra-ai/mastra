@@ -7,13 +7,21 @@ const GITHUB_TOKEN_INJECTOR_RESOLVER_CONTEXT_KEY = 'factoryGithubTokenInjectorRe
 const GITHUB_PAT_KIND_CONTEXT_KEY = 'factoryGithubPatKind';
 const GITHUB_REFRESH_TARGET_CONTEXT_KEY = 'factoryGithubRefreshTarget';
 
-type GithubTokenInjector = (token: string) => void;
+/** `pat` marks an org PAT, which is never replaced for age. */
+type GithubTokenInjector = (token: string, pat?: boolean) => void;
 type GithubTokenInjectorResolver = () => GithubTokenInjector;
 
 /** The authorized GitHub repository behind the request's Factory session. */
 export interface GithubRefreshTarget {
   orgId: string;
   repositoryId: string;
+  /**
+   * Mints the token `GH_TOKEN` carries the same way the sandbox boot did (one
+   * credential for every environment repository when the provider can, else
+   * the session repository's, with the agent told through the environment
+   * signal). Absent for a single-repository session, which re-mints its own.
+   */
+  mint?: () => Promise<string>;
 }
 
 /** Recorded by the workspace resolver once it has authorized a GitHub-backed

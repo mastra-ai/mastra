@@ -1,6 +1,7 @@
 import type { AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4';
 import type { MastraDBMessage } from '../agent/message-list';
 import type { AgentSignalType } from '../agent/signals';
+import { agentThreadStreamTopic } from '../agent/thread-stream-topic';
 import { MastraBase } from '../base';
 import { ErrorDomain, MastraError } from '../error';
 import { ModelRouterEmbeddingModel } from '../llm/model';
@@ -8,6 +9,8 @@ import type { EmbeddingModelId, ModelRouterModelId } from '../llm/model';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
 import type {
+  ErrorProcessor,
+  ErrorProcessorOrWorkflow,
   InputProcessor,
   OutputProcessor,
   InputProcessorOrWorkflow,
@@ -15,6 +18,8 @@ import type {
 } from '../processors';
 import { isProcessorWorkflow, TokenLimiterProcessor } from '../processors';
 import { MemoryInputFilter, MessageHistory, WorkingMemory, SemanticRecall } from '../processors/memory';
+import type { WorkingMemoryInstructionArgs } from '../processors/memory';
+import { assertEmbeddingDimension } from '../processors/memory/embedding-dimension';
 import type { RequestContext } from '../request-context';
 import type {
   MastraCompositeStore,
@@ -50,6 +55,9 @@ import type {
   SerializedMemoryConfig,
   SerializedObservationalMemoryConfig,
   ObservationalMemoryOptions,
+  ObservationalMemorySettings,
+  GetObservationalMemoryRecordsInput,
+  ObservationalMemoryRecords,
 } from './types';
 import { isObservationalMemoryEnabled } from './types';
 
@@ -131,9 +139,17 @@ export abstract class MastraMemory extends MastraBase {
   vector?: MastraVector;
   embedder?: MastraEmbeddingModel<string>;
   embedderOptions?: MastraEmbeddingOptions;
+  /** Configured embedder output dimension; when set, the dimension probe is skipped. */
+  protected readonly embeddingDimension?: number;
   protected threadConfig: MemoryConfigInternal = { ...memoryDefaultOptions };
   private readonly hasExplicitLastMessages: boolean;
   #mastra?: Mastra;
+  #agentName?: string;
+  /**
+   * Set once more than one agent has resolved this memory. A shared memory has no
+   * single owner, so its missing-storage diagnostic omits the agent name.
+   */
+  #agentNameShared = false;
 
   constructor(config: { id?: string; name: string } & SharedMemoryConfig) {
     super({ component: 'MEMORY', name: config.name });
@@ -141,6 +157,19 @@ export abstract class MastraMemory extends MastraBase {
     this.hasExplicitLastMessages = config.options?.lastMessages !== undefined;
 
     if (config.options) this.threadConfig = this.getMergedThreadConfig(config.options);
+
+    if (
+      config.embeddingDimension !== undefined &&
+      !(Number.isInteger(config.embeddingDimension) && config.embeddingDimension > 0)
+    ) {
+      throw new MastraError({
+        id: 'MASTRA_MEMORY_INVALID_EMBEDDING_DIMENSION',
+        domain: ErrorDomain.MASTRA_MEMORY,
+        category: 'USER',
+        text: `embeddingDimension must be a positive integer, received ${String(config.embeddingDimension)}.`,
+      });
+    }
+    this.embeddingDimension = config.embeddingDimension;
 
     // DEPRECATION: Block old processors config
     if (config.processors) {
@@ -234,6 +263,36 @@ https://mastra.ai/en/docs/memory/semantic-recall`,
     this.#mastra = mastra;
   }
 
+  /**
+   * Internal method used by an Agent to record that it resolved this memory, so
+   * missing-storage diagnostics can name the agent when the memory has no
+   * attached Mastra instance. When several agents share one memory the name is
+   * left out, since the failing access cannot be attributed to a single agent.
+   * @internal
+   */
+  __registerAgent(agentName: string): void {
+    if (this.#agentName === undefined) {
+      this.#agentName = agentName;
+    } else if (this.#agentName !== agentName) {
+      this.#agentNameShared = true;
+    }
+  }
+
+  /**
+   * Delete a thread's live event stream from the registered Mastra pubsub.
+   * Call after the thread itself is deleted: nothing else ever clears an
+   * open-ended thread topic, so without this it lingers until the pubsub's
+   * idle TTL (or forever, if the pubsub has none). Best-effort; no-op when
+   * no Mastra instance is registered.
+   */
+  protected async clearThreadStream(threadId: string, resourceId?: string): Promise<void> {
+    try {
+      await this.#mastra?.pubsub?.clearTopic(agentThreadStreamTopic(resourceId, threadId));
+    } catch (error) {
+      this.logger.warn('Failed to clear thread event stream after deleting thread', { threadId, error });
+    }
+  }
+
   protected _hasOwnStorage = false;
   get hasOwnStorage() {
     return this._hasOwnStorage;
@@ -241,8 +300,14 @@ https://mastra.ai/en/docs/memory/semantic-recall`,
 
   get storage() {
     if (!this._storage) {
+      const agentLabel =
+        !this.#mastra && this.#agentName !== undefined && !this.#agentNameShared ? `[Agent:${this.#agentName}] ` : '';
       throw new Error(
-        `Memory requires a storage provider to function. Add a storage configuration to Memory or to your Mastra instance.
+        `${agentLabel}Memory requires a storage provider to function. Add a storage configuration to Memory or to your Mastra instance.${
+          this.#mastra
+            ? ''
+            : ' If this memory belongs to an agent that should inherit storage from Mastra, register the agent with that Mastra instance (for example, via mastra.addAgent(agent)). Standalone agents must configure storage directly on Memory.'
+        }
 
 https://mastra.ai/en/docs/memory/overview`,
       );
@@ -301,11 +366,12 @@ https://mastra.ai/en/docs/memory/overview`,
   private _embeddingDimensionPromise?: Promise<number | undefined>;
 
   /**
-   * Probe the embedder to determine its actual output dimension.
-   * The result is cached so subsequent calls are free.
+   * Determine the embedder's output dimension: the configured `embeddingDimension` when set,
+   * otherwise probe the embedder. The probe result is cached so subsequent calls are free.
    */
   protected async getEmbeddingDimension(): Promise<number | undefined> {
     if (!this.embedder) return undefined;
+    if (this.embeddingDimension !== undefined) return this.embeddingDimension;
     if (!this._embeddingDimensionPromise) {
       this._embeddingDimensionPromise = (async () => {
         try {
@@ -349,6 +415,17 @@ https://mastra.ai/en/docs/memory/overview`,
     return !this.embedder && this.vector?.isSelfEmbedding === true;
   }
 
+  /**
+   * `semanticRecall.maxChunkChars` from this instance's own options. Per-request memory options
+   * can't change it: they arrive from API callers, and a tiny value would cost one embedding and
+   * one vector row per character. Chunk boundaries also decide row ids, so they must stay fixed
+   * for an index.
+   */
+  protected get configuredMaxChunkChars(): number | undefined {
+    const semanticRecall = this.threadConfig.semanticRecall;
+    return typeof semanticRecall === 'object' ? semanticRecall.maxChunkChars : undefined;
+  }
+
   protected getEmbeddingIndexName(dimensions?: number): string {
     const separator = this.vector?.indexSeparator ?? '_';
     // A self-embedding store picks its own dimension, so this name is keyed on the mode.
@@ -356,6 +433,8 @@ https://mastra.ai/en/docs/memory/overview`,
     if (this.isSelfEmbedding) {
       return `memory${separator}messages${separator}selfembed`;
     }
+    assertEmbeddingDimension(this.embeddingDimension, dimensions);
+
     const defaultDimensions = 1536;
     const usedDimensions = dimensions ?? defaultDimensions;
     const isDefault = usedDimensions === defaultDimensions;
@@ -509,6 +588,15 @@ https://mastra.ai/en/docs/memory/overview`,
     messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
     observabilityContext?: Partial<ObservabilityContext>;
+    /**
+     * The run's record of messages already written to the semantic recall index, from
+     * `MessageList.getEmbeddedMessages()`. Messages recorded with the same text are not embedded
+     * again, and newly embedded ones are added. Agent runs pass it through the save queue;
+     * direct callers omit it.
+     *
+     * @internal
+     */
+    embeddedMessages?: Map<string, string>;
   }): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }>;
 
   /**
@@ -692,6 +780,14 @@ https://mastra.ai/en/docs/memory/overview`,
     memoryConfig?: MemoryConfigInternal;
   }): Promise<WorkingMemoryTemplate | null>;
 
+  /**
+   * Renders the working memory instruction that the `WorkingMemory` input processor adds to an agent's
+   * system prompt. Return `undefined` to use the processor's built-in instruction, or an empty string to add none.
+   */
+  getWorkingMemoryInstruction(_args: WorkingMemoryInstructionArgs): string | undefined {
+    return undefined;
+  }
+
   abstract updateWorkingMemory({
     threadId,
     resourceId,
@@ -838,10 +934,12 @@ https://mastra.ai/en/docs/memory/overview`,
               'version' in effectiveConfig.workingMemory &&
               effectiveConfig.workingMemory.version === 'vnext',
             templateProvider: this,
-            readOnly:
-              effectiveConfig.readOnly ||
-              (typeof effectiveConfig.workingMemory === 'object' &&
-                effectiveConfig.workingMemory.agentManaged === false),
+            instructionProvider: this,
+            readOnly: effectiveConfig.readOnly,
+            agentManaged:
+              typeof effectiveConfig.workingMemory === 'object'
+                ? effectiveConfig.workingMemory.agentManaged
+                : undefined,
           }),
         );
       }
@@ -924,8 +1022,10 @@ https://mastra.ai/en/docs/memory/overview`,
             vector: this.vector,
             embedder: this.embedder,
             embedderOptions: this.embedderOptions,
+            embeddingDimension: this.embeddingDimension,
             indexName,
             ...semanticConfig,
+            maxChunkChars: this.configuredMaxChunkChars,
           }),
         );
       }
@@ -979,6 +1079,21 @@ https://mastra.ai/en/docs/memory/overview`,
     // Return only the auto-generated processors (not the configured ones)
     // The agent will merge them with configuredProcessors
     return processors;
+  }
+
+  /**
+   * Get error processors for this memory instance.
+   * An agent appends these to its resolved `errorProcessors`, so memory can recover from failed
+   * model calls (for example, a request rejected for exceeding the context window) without the
+   * user registering a processor. They are kept when a call overrides `errorProcessors`.
+   * @param configuredProcessors - Error processors already resolved for the agent (for deduplication)
+   * @returns Error processors for this memory instance. The base implementation contributes none.
+   */
+  async getErrorProcessors(
+    _configuredProcessors: ErrorProcessorOrWorkflow[] = [],
+    _context?: RequestContext,
+  ): Promise<ErrorProcessor[]> {
+    return [];
   }
 
   /**
@@ -1051,8 +1166,10 @@ https://mastra.ai/en/docs/memory/overview`,
             vector: this.vector,
             embedder: this.embedder,
             embedderOptions: this.embedderOptions,
+            embeddingDimension: this.embeddingDimension,
             indexName,
             ...semanticRecallConfig,
+            maxChunkChars: this.configuredMaxChunkChars,
           }),
         );
       }
@@ -1110,6 +1227,36 @@ https://mastra.ai/en/docs/memory/overview`,
    * @returns Promise resolving to the cloned thread and copied messages
    */
   abstract cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput>;
+
+  /**
+   * Observational Memory settings for memory implementations that run Observational Memory
+   * themselves rather than through an `observational-memory` processor (for example a hosted
+   * backend). Returns `undefined` when this memory does not provide them.
+   */
+  async getObservationalMemoryConfig(_args: {
+    requestContext?: RequestContext;
+  }): Promise<ObservationalMemorySettings | undefined> {
+    return undefined;
+  }
+
+  /**
+   * Reads the current Observational Memory record and its history for memory implementations
+   * that report settings through `getObservationalMemoryConfig`. Callers must check thread
+   * access first. Returns `undefined` when this memory does not provide them.
+   */
+  async getObservationalMemoryRecords(
+    _args: GetObservationalMemoryRecordsInput,
+  ): Promise<ObservationalMemoryRecords | undefined> {
+    return undefined;
+  }
+
+  /** Waits for hosted buffering after thread access has been checked. Undefined means unsupported. */
+  async waitForObservationalMemoryBuffering(_args: {
+    threadId: string;
+    resourceId: string;
+  }): Promise<Pick<ObservationalMemoryRecords, 'record'> | undefined> {
+    return undefined;
+  }
 
   /**
    * Copies a thread and its messages to a new thread without returning the message

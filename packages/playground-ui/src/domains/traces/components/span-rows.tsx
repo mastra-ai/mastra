@@ -2,6 +2,7 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import { Fragment, useEffect } from 'react';
 import { getSpanDescendantIds } from '../hooks/get-all-span-ids';
 import type { UISpan, UISpanStyle } from '../types';
+import { getOverallLatency } from '../utils/span-timing';
 import { getSpanTypeUi } from './shared';
 
 export type SpanRowExpansion = {
@@ -16,6 +17,8 @@ export type SpanRowContext = {
   depth: number;
   isRootSpan: boolean;
   isLastChild: boolean;
+  /** One entry per ancestor level below the root: whether that ancestor still has siblings below, so its connector line keeps running through this row. */
+  guides: boolean[];
   isExpanded: boolean;
   isSelected: boolean;
   isFaded: boolean;
@@ -48,7 +51,7 @@ export type SpanRowsProps = SharedRowProps & {
  * only mounted while their parent is expanded.
  */
 export function SpanRows({ spans, ...rowProps }: SpanRowsProps) {
-  const overallLatency = spans[0]?.latency || 0;
+  const overallLatency = getOverallLatency(spans);
   const overallStartTime = spans[0]?.startTime || '';
 
   return (
@@ -59,6 +62,7 @@ export function SpanRows({ spans, ...rowProps }: SpanRowsProps) {
           span={span}
           depth={0}
           isLastChild={idx === spans.length - 1}
+          guides={[]}
           overallLatency={overallLatency}
           overallStartTime={overallStartTime}
           {...rowProps}
@@ -72,6 +76,7 @@ type SpanRowProps = SharedRowProps & {
   span: UISpan;
   depth: number;
   isLastChild: boolean;
+  guides: boolean[];
   overallLatency: number;
   overallStartTime: string;
 };
@@ -80,6 +85,7 @@ function SpanRow({
   span,
   depth,
   isLastChild,
+  guides,
   overallLatency,
   overallStartTime,
   renderRow,
@@ -111,6 +117,8 @@ function SpanRow({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [featuredSpanIds, allDescendantIds]);
 
+  const childGuides = isRootSpan ? [] : [...guides, !isLastChild];
+
   const toggleChildren = () => {
     if (!setExpandedSpanIds) return;
     setExpandedSpanIds(prev => {
@@ -125,6 +133,7 @@ function SpanRow({
     depth,
     isRootSpan,
     isLastChild,
+    guides,
     isExpanded,
     isSelected: selectedSpanId === span.id,
     isFaded,
@@ -150,6 +159,7 @@ function SpanRow({
             span={childSpan}
             depth={depth + 1}
             isLastChild={idx === array.length - 1}
+            guides={childGuides}
             overallLatency={overallLatency}
             overallStartTime={overallStartTime}
             renderRow={renderRow}

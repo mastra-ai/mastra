@@ -18,8 +18,8 @@ type CodeEditorProps = {
   onChange?: (value: string) => void;
 };
 
-// @mastra/playground-ui is a heavy presentational dependency (SideDialog,
-// CodeEditor, Select primitives) with its own dedicated tests; stub it as a
+// @mastra/playground-ui is a heavy presentational dependency (CodeEditor,
+// Select primitives) with its own dedicated tests; stub it as a
 // thin seam so this suite can focus on score-to-dataset payload preparation.
 // The dataset hooks are driven through the real @mastra/client-js + React
 // Query stack via MSW.
@@ -37,18 +37,6 @@ vi.mock('@/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
-vi.mock('@/ds/components/SideDialog', () => ({
-  SideDialog: Object.assign(
-    ({ isOpen, children }: PropsWithChildren<{ isOpen: boolean }>) => (isOpen ? <div>{children}</div> : null),
-    {
-      Top: ({ children }: PropsWithChildren) => <div>{children}</div>,
-      Content: ({ children }: PropsWithChildren) => <div>{children}</div>,
-      Header: ({ children }: PropsWithChildren) => <div>{children}</div>,
-      Heading: ({ children }: PropsWithChildren) => <h2>{children}</h2>,
-    },
-  ),
-}));
-
 vi.mock('@/ds/components/CodeEditor', () => ({
   CodeEditor: ({ value, onChange }: CodeEditorProps) => (
     <textarea
@@ -56,11 +44,6 @@ vi.mock('@/ds/components/CodeEditor', () => ({
       onChange={(event: ChangeEvent<HTMLTextAreaElement>) => onChange?.(event.target.value)}
     />
   ),
-}));
-
-vi.mock('@/ds/components/Text', () => ({
-  TextAndIcon: ({ children }: PropsWithChildren) => <span>{children}</span>,
-  getShortId: (id?: string) => id ?? '',
 }));
 
 beforeEach(() => {

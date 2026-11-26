@@ -1,13 +1,22 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
+  isRunFenceConflictError,
   normalizePerPage,
+  resolveRunFence,
+  TABLE_WORKFLOW_RUN_OWNERS,
   TABLE_WORKFLOW_SNAPSHOT,
   matchesExpectedWorkflowStatus,
   WorkflowsStorage,
   ensureDate,
 } from '@mastra/core/storage';
 import type {
+  ClaimRunOwnershipInput,
+  ClaimRunOwnershipResult,
+  RenewRunOwnershipInput,
+  RenewRunOwnershipResult,
+  RunFence,
+  RunOwnershipRecord,
   StorageListWorkflowRunsInput,
   WorkflowRun,
   WorkflowRuns,
@@ -18,7 +27,17 @@ import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { RedisDB } from '../../db';
 import type { RedisDomainConfig } from '../../db';
 import type { RedisClient } from '../../types';
-import { getKey } from '../utils';
+import {
+  claimRunOwnership,
+  getRunOwnership,
+  getRunOwnerships,
+  releaseRunOwnership,
+  renewRunOwnership,
+  runClaimKey,
+  writeBatch,
+} from '../run-fencing';
+import type { RunFenceCheck } from '../run-fencing';
+import { getKey, processRecord } from '../utils';
 
 function parseWorkflowRun(row: Record<string, unknown>): WorkflowRun {
   let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
@@ -38,6 +57,33 @@ function parseWorkflowRun(row: Record<string, unknown>): WorkflowRun {
     updatedAt: ensureDate(row.updatedAt as string | Date)!,
     resourceId: row.resourceId as string | undefined,
   };
+}
+
+/**
+ * A run with its snapshot reduced to what `listWorkflowRuns({ summary: true })` returns: `status`
+ * and `timestamp` when set, and `parentWorkflow` only when both of its IDs are non-empty strings.
+ * A missing snapshot, or one that failed to parse and stayed a string, reduces to `{}`.
+ */
+function summarizeWorkflowRun(run: WorkflowRun): WorkflowRun {
+  const source = run.snapshot !== null && typeof run.snapshot === 'object' ? run.snapshot : {};
+  const { status, timestamp, parentWorkflow } = source as Partial<WorkflowRunState>;
+  const snapshot: Record<string, unknown> = {};
+
+  if (status !== undefined && status !== null) {
+    snapshot.status = status;
+  }
+
+  if (timestamp !== undefined && timestamp !== null) {
+    snapshot.timestamp = timestamp;
+  }
+
+  const workflowId = parentWorkflow?.workflowId;
+  const runId = parentWorkflow?.runId;
+  if (typeof workflowId === 'string' && workflowId !== '' && typeof runId === 'string' && runId !== '') {
+    snapshot.parentWorkflow = { workflowId, runId };
+  }
+
+  return { ...run, snapshot: snapshot as unknown as WorkflowRunState };
 }
 
 type SnapshotRecord = {
@@ -101,8 +147,81 @@ export class WorkflowsRedis extends WorkflowsStorage {
     return false;
   }
 
+  public override supportsRunFencing(): boolean {
+    return true;
+  }
+
   public async dangerouslyClearAll(): Promise<void> {
     await this.db.deleteData({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    await this.db.scanAndDelete(`${escapeGlob(runClaimKey(TABLE_WORKFLOW_RUN_OWNERS, ''))}*`);
+  }
+
+  #runFenceCheck(fence: RunFence | undefined, runId: string, operation: string): RunFenceCheck | undefined {
+    const resolved = resolveRunFence(this, fence, runId);
+    return resolved && { claims: TABLE_WORKFLOW_RUN_OWNERS, fence: resolved, operation };
+  }
+
+  #ownershipError(operation: string, runId: string, error: unknown): MastraError {
+    return new MastraError(
+      {
+        id: createStorageErrorId('REDIS', operation, 'FAILED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details: { runId },
+      },
+      error,
+    );
+  }
+
+  // Each operation is one script over the run's ownership hash, so racing
+  // claimers and renewals serialize on Redis and resolve to a single winner.
+  public override async claimRunOwnership(args: ClaimRunOwnershipInput): Promise<ClaimRunOwnershipResult> {
+    try {
+      return await claimRunOwnership(this.client, args);
+    } catch (error) {
+      throw this.#ownershipError('CLAIM_RUN_OWNERSHIP', args.runId, error);
+    }
+  }
+
+  public override async renewRunOwnership(args: RenewRunOwnershipInput): Promise<RenewRunOwnershipResult> {
+    try {
+      return await renewRunOwnership(this.client, args);
+    } catch (error) {
+      throw this.#ownershipError('RENEW_RUN_OWNERSHIP', args.runId, error);
+    }
+  }
+
+  public override async releaseRunOwnership(fence: RunFence): Promise<boolean> {
+    try {
+      return await releaseRunOwnership(this.client, fence);
+    } catch (error) {
+      throw this.#ownershipError('RELEASE_RUN_OWNERSHIP', fence.runId, error);
+    }
+  }
+
+  public override async getRunOwnership({ runId }: { runId: string }): Promise<RunOwnershipRecord | null> {
+    try {
+      return await getRunOwnership(this.client, runId);
+    } catch (error) {
+      throw this.#ownershipError('GET_RUN_OWNERSHIP', runId, error);
+    }
+  }
+
+  /** Reads the records with single-key script calls the client pipelines, 500 at a time. */
+  public override async getRunOwnerships({ runIds }: { runIds: string[] }): Promise<Map<string, RunOwnershipRecord>> {
+    try {
+      return await getRunOwnerships(this.client, runIds);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('REDIS', 'GET_RUN_OWNERSHIPS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runCount: runIds.length },
+        },
+        error,
+      );
+    }
   }
 
   public async updateWorkflowResults({
@@ -112,6 +231,7 @@ export class WorkflowsRedis extends WorkflowsStorage {
     result,
     requestContext,
     state,
+    fence,
   }: {
     workflowName: string;
     runId: string;
@@ -119,7 +239,9 @@ export class WorkflowsRedis extends WorkflowsStorage {
     result: StepResult<unknown, unknown, unknown, unknown>;
     requestContext: Record<string, unknown>;
     state?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<Record<string, StepResult<unknown, unknown, unknown, unknown>>> {
+    const resolvedFence = resolveRunFence(this, fence, runId);
     try {
       const existingRecord = await this.getSnapshotRecord('workflows', workflowName, runId);
 
@@ -156,6 +278,7 @@ export class WorkflowsRedis extends WorkflowsStorage {
         resourceId: existingRecord?.resourceId,
         snapshot,
         createdAt: existingRecord?.createdAt ? ensureDate(existingRecord.createdAt) : undefined,
+        fence: resolvedFence,
       });
 
       return snapshot.context;
@@ -179,11 +302,14 @@ export class WorkflowsRedis extends WorkflowsStorage {
     workflowName,
     runId,
     opts,
+    fence,
   }: {
     workflowName: string;
     runId: string;
     opts: UpdateWorkflowStateOptions;
+    fence?: RunFence;
   }): Promise<WorkflowRunState | undefined> {
+    const resolvedFence = resolveRunFence(this, fence, runId);
     try {
       const existingRecord = await this.getSnapshotRecord('workflows', workflowName, runId);
 
@@ -209,6 +335,7 @@ export class WorkflowsRedis extends WorkflowsStorage {
         resourceId: existingRecord.resourceId,
         snapshot: updatedSnapshot,
         createdAt: existingRecord?.createdAt ? ensureDate(existingRecord.createdAt) : undefined,
+        fence: resolvedFence,
       });
 
       return updatedSnapshot;
@@ -236,8 +363,10 @@ export class WorkflowsRedis extends WorkflowsStorage {
     snapshot: WorkflowRunState;
     createdAt?: Date;
     updatedAt?: Date;
+    fence?: RunFence;
   }): Promise<void> {
     const { namespace = 'workflows', workflowName, runId, resourceId, snapshot, createdAt, updatedAt } = params;
+    const check = this.#runFenceCheck(params.fence, runId, 'persistWorkflowSnapshot');
     try {
       let finalCreatedAt = createdAt;
       let finalResourceId = resourceId;
@@ -252,19 +381,20 @@ export class WorkflowsRedis extends WorkflowsStorage {
         finalResourceId ??= existing?.resourceId;
       }
 
-      await this.db.insert({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        record: {
-          namespace,
-          workflow_name: workflowName,
-          run_id: runId,
-          resourceId: finalResourceId,
-          snapshot,
-          createdAt: finalCreatedAt,
-          updatedAt: updatedAt ?? new Date(),
-        },
+      const { key, processedRecord } = processRecord(TABLE_WORKFLOW_SNAPSHOT, {
+        namespace,
+        workflow_name: workflowName,
+        run_id: runId,
+        resourceId: finalResourceId,
+        snapshot,
+        createdAt: finalCreatedAt,
+        updatedAt: updatedAt ?? new Date(),
       });
+      const batch = writeBatch(this.client, check);
+      batch.set(key, JSON.stringify(processedRecord));
+      await batch.exec();
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('REDIS', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
@@ -377,11 +507,23 @@ export class WorkflowsRedis extends WorkflowsStorage {
     }
   }
 
-  public async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+  public async deleteWorkflowRunById({
+    runId,
+    workflowName,
+    fence,
+  }: {
+    runId: string;
+    workflowName: string;
+    fence?: RunFence;
+  }): Promise<void> {
+    const check = this.#runFenceCheck(fence, runId, 'deleteWorkflowRunById');
     try {
       const legacyKeys = await this.db.scanKeys(legacySnapshotKeyPattern('workflows', workflowName, runId));
-      await this.client.del([snapshotKey('workflows', workflowName, runId), ...legacyKeys]);
+      const batch = writeBatch(this.client, check);
+      for (const key of [snapshotKey('workflows', workflowName, runId), ...legacyKeys]) batch.del(key);
+      await batch.exec();
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('REDIS', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
@@ -398,6 +540,10 @@ export class WorkflowsRedis extends WorkflowsStorage {
     }
   }
 
+  /**
+   * Lists runs newest first. With `summary`, each snapshot keeps only its status, timestamp and
+   * parent run; the full snapshots are still read from Redis.
+   */
   public async listWorkflowRuns({
     workflowName,
     fromDate,
@@ -406,6 +552,7 @@ export class WorkflowsRedis extends WorkflowsStorage {
     page,
     resourceId,
     status,
+    summary,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       if (page !== undefined && page < 0) {
@@ -490,7 +637,8 @@ export class WorkflowsRedis extends WorkflowsStorage {
         runs = runs.slice(offset, offset + normalizedPerPage);
       }
 
-      return { runs, total };
+      // Every snapshot is fetched whole, so summary mode only trims the result, after the status filter.
+      return { runs: summary ? runs.map(summarizeWorkflowRun) : runs, total };
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;

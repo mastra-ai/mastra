@@ -3,20 +3,17 @@ import { ToolCallMono } from './tool-call-mono';
 export interface ToolCallOutputProps {
   text: string;
   error?: boolean;
-  maxLength?: number;
   'data-testid'?: string;
 }
 
-export function ToolCallOutput({ text, error, maxLength, 'data-testid': testId }: ToolCallOutputProps) {
-  const preview = maxLength !== undefined && text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
-
+export function ToolCallOutput({ text, error, 'data-testid': testId }: ToolCallOutputProps) {
   return (
     <ToolCallMono
       copyText={text}
       data-testid={testId}
       className={error ? 'text-destructive-foreground' : 'text-muted-foreground'}
     >
-      {preview}
+      {text}
     </ToolCallMono>
   );
 }

@@ -535,6 +535,37 @@ export function createDatasetsTests({
         expect(noMatch.datasets).toHaveLength(0);
       });
 
+      it('listDatasets filters by datasetIds and returns every match on one page', async () => {
+        const a = await datasetsStorage.createDataset({ name: 'ds-a' });
+        await datasetsStorage.createDataset({ name: 'ds-b' });
+        const c = await datasetsStorage.createDataset({ name: 'ds-c' });
+
+        const result = await datasetsStorage.listDatasets({
+          filters: { datasetIds: [a.id, c.id, 'missing-id'] },
+          pagination: { page: 0, perPage: false },
+        });
+        expect(result.datasets.map(d => d.name).sort()).toEqual(['ds-a', 'ds-c']);
+        expect(result.pagination).toMatchObject({ total: 2, perPage: false, hasMore: false });
+
+        const none = await datasetsStorage.listDatasets({
+          filters: { datasetIds: [] },
+          pagination: { page: 0, perPage: false },
+        });
+        expect(none.datasets).toHaveLength(0);
+        expect(none.pagination.total).toBe(0);
+      });
+
+      it('listDatasets keeps tenancy filters when datasetIds is set', async () => {
+        const mine = await datasetsStorage.createDataset({ name: 'mine', organizationId: 'org_a' });
+        const theirs = await datasetsStorage.createDataset({ name: 'theirs', organizationId: 'org_b' });
+
+        const result = await datasetsStorage.listDatasets({
+          filters: { organizationId: 'org_a', datasetIds: [mine.id, theirs.id] },
+          pagination: { page: 0, perPage: false },
+        });
+        expect(result.datasets.map(d => d.name)).toEqual(['mine']);
+      });
+
       it('listDatasets filters by name substring case-insensitively', async () => {
         await datasetsStorage.createDataset({ name: 'Production Tickets' });
         await datasetsStorage.createDataset({ name: 'production-logs' });
@@ -1559,6 +1590,21 @@ export function createDatasetsTests({
         });
         expect(page1.items).toHaveLength(1);
         expect(page1.pagination.hasMore).toBe(false);
+      });
+
+      it('listItems with perPage 0 returns only the total at a version', async () => {
+        await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'second' } });
+        await datasetsStorage.deleteItem({ id: item1.id, datasetId: ds.id });
+        // v1: item1, v2: item1 (updated), v3: item1 + second, v4: second
+
+        for (const [version, total] of [0, 1, 1, 2, 1].entries()) {
+          const result = await datasetsStorage.listItems({
+            datasetId: ds.id,
+            version,
+            pagination: { page: 0, perPage: 0 },
+          });
+          expect(result).toMatchObject({ items: [], pagination: { total, hasMore: total > 0 } });
+        }
       });
     });
 

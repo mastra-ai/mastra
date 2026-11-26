@@ -708,11 +708,11 @@ describe('runExperiment', () => {
           task,
           scorers: ['missing-run'],
         }),
-      ).rejects.toThrow('Scorer not found');
+      ).rejects.toMatchObject({ id: 'EXPERIMENT_SCORER_NOT_FOUND', message: expect.stringContaining('missing-run') });
       expect(task).not.toHaveBeenCalled();
     });
 
-    it('rejects experiment setup when a selected dataset scorer ID is missing', async () => {
+    it('fails the items that fall back to a missing dataset scorer, and keeps running the rest', async () => {
       const task = vi.fn().mockResolvedValue('output');
       const localMastra = {
         ...mastra,
@@ -725,9 +725,18 @@ describe('runExperiment', () => {
         scorerIds: ['missing-dataset'],
       });
       await datasetsStorage.addItem({ datasetId: dataset.id, input: { prompt: 'dataset' } });
+      await datasetsStorage.addItem({ datasetId: dataset.id, input: { prompt: 'unscored' }, scorerIds: [] });
 
-      await expect(runExperiment(localMastra, { datasetId: dataset.id, task })).rejects.toThrow('Scorer not found');
-      expect(task).not.toHaveBeenCalled();
+      const result = await runExperiment(localMastra, { datasetId: dataset.id, task });
+
+      expect(result.status).toBe('completed');
+      expect(result.succeededCount).toBe(1);
+      expect(result.failedCount).toBe(1);
+      expect(result.results.find(item => item.error)?.error).toEqual({
+        code: EXPERIMENT_ITEM_SCORER_NOT_FOUND,
+        message: 'Dataset scorer configuration references unregistered scorer IDs: missing-dataset',
+      });
+      expect(task).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -1038,6 +1047,16 @@ describe('runExperiment', () => {
       expect(workflowScorer.run).toHaveBeenCalledTimes(1);
       expect(stepScorer.run).toHaveBeenCalledTimes(1);
       expect(lowerScorer.run).not.toHaveBeenCalled();
+
+      // Regression for #29787: the step score must actually reach the scores store.
+      // The schema only accepts the 'STEP' entityType that runEvals uses; emitting
+      // 'WORKFLOW_STEP' failed validation and the score was silently dropped.
+      const { scores: persistedStepScores } = await scoresStorage.listScoresByScorerId({
+        scorerId: 'workflow-step',
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(persistedStepScores).toHaveLength(1);
+      expect(persistedStepScores[0]?.entityType).toBe('STEP');
     });
   });
 
@@ -1099,6 +1118,18 @@ describe('runExperiment', () => {
       // Meta-scorer should have been applied
       expect(runResult.results[0].scores).toHaveLength(1);
       expect(runResult.results[0].scores[0].scorerId).toBe('meta-scorer');
+
+      // Regression for #29787: the score must actually reach the scores store.
+      // Before the fix, `entityType: 'SCORER'` failed `saveScorePayloadSchema`
+      // validation, so the write was swallowed by a best-effort catch and the
+      // score was silently dropped.
+      const { scores: persistedScores } = await scoresStorage.listScoresByScorerId({
+        scorerId: 'meta-scorer',
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(persistedScores).toHaveLength(1);
+      expect(persistedScores[0]!.score).toBe(0.95);
+      expect(persistedScores[0]!.entityType).toBe('SCORER');
     });
   });
 

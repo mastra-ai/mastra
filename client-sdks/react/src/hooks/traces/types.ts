@@ -20,4 +20,6 @@ export const ROOT_ENTITY_TYPES = {
   WORKFLOW: 'workflow_run',
   SCORER: 'scorer',
   INGEST: 'rag_ingestion',
+  CLASSIFIER: 'classifier',
+  MCP_SERVER: 'mcp_server',
 } as const satisfies Record<string, `${EntityType}`>;

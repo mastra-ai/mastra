@@ -1,14 +1,13 @@
-import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check, ChevronsUpDown, Factory as FactoryIcon, Plus } from 'lucide-react';
-import { useLocation, useNavigate, useParams } from 'react-router';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Factory as FactoryIcon } from 'lucide-react';
+import { Link, useLocation, useParams } from 'react-router';
 import { useFactoriesQuery, useFactoryQuery } from '../../../../hooks/useFactories';
-import { createFactoryPath, factorySwitchPath } from '../services/factoryPaths';
+import { factorySwitchPath } from '../services/factoryPaths';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 
-/** Inline factory selection with a single Create Factory action. */
 export function FactorySwitcher() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const location = useLocation();
@@ -16,15 +15,6 @@ export function FactorySwitcher() {
   const activeFactoryQuery = useFactoryQuery(factoryId);
   const factories = factoriesQuery.data ?? [];
   const activeFactory = activeFactoryQuery.data;
-  const navigate = useNavigate();
-  const { setOpenMobile } = useSidebar();
-
-  const createFactoryFrom = factoryId ?? factories[0]?.id;
-  const openCreateFactory = () => {
-    if (!createFactoryFrom) return;
-    void navigate(createFactoryPath(createFactoryFrom));
-    setOpenMobile(false);
-  };
 
   return (
     <DropdownMenu>
@@ -32,38 +22,34 @@ export function FactorySwitcher() {
         id="factory-switcher-trigger"
         type="button"
         aria-label="Select factory"
-        className={cn(
-          buttonVariants({ variant: 'default' }),
-          'mt-1 w-full justify-start gap-2 px-2.5 text-left [&>svg]:mx-0',
-        )}
+        variant="ghost"
+        size="sm"
+        className="-ml-[calc(var(--control-px)-2px)] min-w-0 gap-1"
       >
-        <FactoryIcon size={16} className="text-muted-foreground shrink-0" />
-        <Txt tone="ink" as="span" variant="caption" className="min-w-0 flex-1 truncate">
-          {activeFactory?.name ?? 'Select a factory…'}
-        </Txt>
-        <ChevronsUpDown size={13} className="text-muted-foreground shrink-0" />
+        <FactoryIcon />
+        {factoryId && activeFactoryQuery.isPending ? (
+          <Skeleton
+            role="status"
+            aria-label="Loading factory"
+            className="h-3.5 w-24 motion-reduce:before:animate-none"
+          />
+        ) : (
+          <Txt tone="ink" as="span" variant="caption" className="min-w-0 truncate">
+            {activeFactory?.name ?? 'Select a factory…'}
+          </Txt>
+        )}
+        <IconChevronDownMedium className="text-muted-foreground size-icon-sm shrink-0" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="w-64">
         {factories.map(factory => (
-          <DropdownMenu.Item
-            key={factory.id}
-            onSelect={() => {
-              void navigate(factorySwitchPath(factory, location));
-            }}
-          >
+          <DropdownMenu.Item key={factory.id} render={<Link to={factorySwitchPath(factory, location)} />}>
             <FactoryIcon />
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate">{factory.name}</span>
             </span>
-            {factory.id === activeFactory?.id && <Check aria-label="Active factory" />}
+            {factory.id === activeFactory?.id && <IconCheckmark2Medium aria-label="Active factory" />}
           </DropdownMenu.Item>
         ))}
-
-        {factories.length > 0 && <DropdownMenu.Separator />}
-        <DropdownMenu.Item disabled={!createFactoryFrom} onSelect={openCreateFactory}>
-          <Plus />
-          <span>Create Factory</span>
-        </DropdownMenu.Item>
       </DropdownMenu.Content>
     </DropdownMenu>
   );

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { createSampleMessageV2, createSampleThread } from '@internal/storage-test-utils';
 import { SPAN_SCHEMA, TABLE_SPANS } from '@mastra/core/storage';
 import type { MemoryStorage, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
@@ -181,6 +182,40 @@ export function pgTests() {
         );
         expect(rows).toHaveLength(1);
         expect(rows[0]!.name).toBe('updated');
+      });
+    });
+
+    describe('Span outcome fields', () => {
+      it('returns how a span ended from every span read', async () => {
+        const observability = (await store.getStore('observability'))!;
+        const traceId = randomUUID().replaceAll('-', '');
+        const runId = randomUUID();
+        const ended = {
+          outcome: 'limit',
+          stopReason: 'timeout',
+          stopReasonContext: { limitMs: 3000 },
+          resumedFromSpanId: 'suspended-span',
+        };
+        await observability.createSpan({
+          span: {
+            traceId,
+            spanId: 'root',
+            parentSpanId: null,
+            runId,
+            name: 'agent run',
+            spanType: 'agent_run',
+            isEvent: false,
+            startedAt: new Date(),
+            endedAt: new Date(),
+            ...ended,
+          },
+        } as Parameters<typeof observability.createSpan>[0]);
+
+        expect((await observability.getSpan({ traceId, spanId: 'root' }))?.span).toMatchObject(ended);
+        expect((await observability.getRootSpan({ traceId }))?.span).toMatchObject(ended);
+        expect((await observability.getTrace({ traceId }))?.spans[0]).toMatchObject(ended);
+        const listed = await observability.listTraces({ filters: { runId }, pagination: { page: 0, perPage: 10 } });
+        expect(listed.spans).toMatchObject([{ traceId, ...ended }]);
       });
     });
 
@@ -508,9 +543,10 @@ export function pgTests() {
       });
 
       beforeEach(async () => {
-        testThreadId = `thread-${Date.now()}`;
-        testResourceId = `resource-${Date.now()}`;
-        testMessageId = `msg-${Date.now()}`;
+        // Date.now() alone collides when consecutive tests start in the same millisecond.
+        testThreadId = `thread-${randomUUID()}`;
+        testResourceId = `resource-${randomUUID()}`;
+        testMessageId = `msg-${randomUUID()}`;
       });
 
       it('should use createdAtZ over createdAt for messages when both exist', async () => {

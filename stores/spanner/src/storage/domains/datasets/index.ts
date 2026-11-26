@@ -492,6 +492,11 @@ export class DatasetsSpanner extends DatasetsStorage {
 
       const filterConditions: string[] = [];
       const filterParams: Record<string, any> = {};
+      if (args.filters?.datasetIds !== undefined) {
+        // IN UNNEST of an empty array is false, so [] matches no datasets.
+        filterConditions.push(`${quoteIdent('id', 'column name')} IN UNNEST(@datasetIds)`);
+        filterParams.datasetIds = args.filters.datasetIds;
+      }
       if (args.filters?.organizationId !== undefined) {
         filterConditions.push(`${quoteIdent('organizationId', 'column name')} = @organizationId`);
         filterParams.organizationId = args.filters.organizationId;
@@ -527,11 +532,14 @@ export class DatasetsSpanner extends DatasetsStorage {
       }
       const whereClause = filterConditions.length > 0 ? `WHERE ${filterConditions.join(' AND ')}` : '';
       // Spanner cannot infer the element type of empty arrays, so declare ARRAY<STRING>
-      // for `targetIds` whenever the filter is in play.
-      const filterTypes: Record<string, any> =
-        args.filters?.targetIds !== undefined && args.filters.targetIds.length > 0
-          ? { targetIds: { type: 'array', child: { type: 'string' } } }
-          : {};
+      // for `targetIds` and `datasetIds` whenever those filters are in play.
+      const filterTypes: Record<string, any> = {};
+      if (args.filters?.targetIds !== undefined && args.filters.targetIds.length > 0) {
+        filterTypes.targetIds = { type: 'array', child: { type: 'string' } };
+      }
+      if (args.filters?.datasetIds !== undefined) {
+        filterTypes.datasetIds = { type: 'array', child: { type: 'string' } };
+      }
 
       const [countRows] = await this.database.run({
         sql: `SELECT COUNT(*) AS count FROM ${tableName} ${whereClause}`,
@@ -1059,6 +1067,10 @@ export class DatasetsSpanner extends DatasetsStorage {
       const total = Number((countRows as Array<{ count: number | string }>)[0]?.count ?? 0);
       if (total === 0) {
         return { items: [], pagination: { total: 0, page, perPage: perPageForResponse, hasMore: false } };
+      }
+
+      if (perPage === 0) {
+        return { items: [], pagination: { total, page, perPage: perPageForResponse, hasMore: true } };
       }
 
       const limit = perPageInput === false ? total : perPage;

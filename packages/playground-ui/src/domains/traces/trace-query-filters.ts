@@ -1,5 +1,6 @@
 import type { QueryTracesInput } from '@mastra/client-js';
 import type { TraceQueryPredicate, TraceQueryScalarPredicate } from '@mastra/core/storage';
+import { tokenSearchPredicate } from '../observability/lib/token-search-predicate';
 import { isLegacyAnyValue } from './trace-filters';
 import type { buildTraceListFilters, TraceStatusFilter } from './trace-filters';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
@@ -27,6 +28,7 @@ export const TRACE_FILTER_OPERATOR_IDS = [
   'lte',
   'matches',
   'notMatches',
+  'hasAllTokens',
 ] as const;
 export type TraceFilterOperatorId = (typeof TRACE_FILTER_OPERATOR_IDS)[number];
 
@@ -61,12 +63,17 @@ const TRACE_FILTER_OPERATOR_TO_QUERY_OP = {
   lte: 'lte',
   matches: 'matches',
   notMatches: 'notMatches',
+  hasAllTokens: 'hasAllTokens',
 } as const satisfies Record<TraceFilterOperatorId, TraceQueryScalarPredicate['op']>;
 
 /** Fields whose values must be sent as numbers. Non-numeric input is dropped. */
 export const TRACE_QUERY_NUMERIC_FIELD_IDS = new Set([
   'durationMs',
+  'timeToFirstChunkMs',
+  'timeToFirstTokenMs',
   'spans.durationMs',
+  'spans.timeToFirstChunkMs',
+  'spans.timeToFirstTokenMs',
   'scores.score',
   'feedback.value',
 ]);
@@ -80,11 +87,24 @@ const TRACE_QUERY_TRACE_FIELD_IDS = new Set([
   'threadId',
   'resourceId',
   'durationMs',
+  'timeToFirstChunkMs',
+  'timeToFirstTokenMs',
+  'outcome',
+  'stopReason',
 ]);
 
 /** Trace-level fields that may be unset. "is not X" on these must also keep traces
  *  where the field is missing, so the predicate is `or[ne, notExists]`. */
-export const TRACE_QUERY_OPTIONAL_TRACE_FIELD_IDS = new Set(['threadId', 'resourceId', 'environment', 'durationMs']);
+export const TRACE_QUERY_OPTIONAL_TRACE_FIELD_IDS = new Set([
+  'threadId',
+  'resourceId',
+  'environment',
+  'durationMs',
+  'timeToFirstChunkMs',
+  'timeToFirstTokenMs',
+  'outcome',
+  'stopReason',
+]);
 
 /** Negative operators are expressed as `none(<positive>)` on related collections. */
 const NEGATIVE_TO_POSITIVE = {
@@ -112,13 +132,15 @@ function resolveTraceQueryPath(fieldId: string): { scope?: TraceQueryRelatedScop
   return { path: fieldId };
 }
 
-function scalarPredicate(
+export function scalarPredicate(
   op: TraceFilterOperatorId,
   path: string,
   values: (string | number)[],
 ): TraceQueryScalarPredicate | undefined {
   const queryOp = TRACE_FILTER_OPERATOR_TO_QUERY_OP[op];
   switch (queryOp) {
+    case 'hasAllTokens':
+      return tokenSearchPredicate(path, values[0]);
     case 'exists':
     case 'notExists':
       return { op: queryOp, path };
@@ -170,9 +192,16 @@ const TRACE_QUERY_PRESENCE_ONLY_FIELD_IDS = new Set<string>(['spans.error']);
 function tokenToTraceQueryPredicate(
   token: TraceFilterToken,
   excludedFieldIds: ReadonlySet<string>,
+  withTokenSearch: boolean,
 ): TokenPredicate | undefined {
   if (TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(token.fieldId) || excludedFieldIds.has(token.fieldId)) return undefined;
   const operatorId = token.operatorId ?? (token.fieldId === 'tags' ? 'in' : 'is');
+  if (operatorId === 'hasAllTokens') {
+    const { scope, path } = resolveTraceQueryPath(token.fieldId);
+    if (!withTokenSearch || scope !== 'spans') return undefined;
+    const predicate = tokenSearchPredicate(path, token.value);
+    return predicate ? { scope, predicate } : undefined;
+  }
   const isPresence = operatorId === 'exists' || operatorId === 'notExists';
   // Hand-edited URLs can pair these fields with value operators; drop them rather than fail the page.
   if (TRACE_QUERY_PRESENCE_ONLY_FIELD_IDS.has(token.fieldId) && !isPresence) return undefined;
@@ -236,13 +265,17 @@ function tokenToTraceQueryPredicate(
  *  merged into a single `some`. Inside an `or` group each token stands alone. */
 function predicatesForTokens(
   tokens: TraceFilterToken[],
-  { mergeRelated, excludedFieldIds }: { mergeRelated: boolean; excludedFieldIds: ReadonlySet<string> },
+  {
+    mergeRelated,
+    excludedFieldIds,
+    withTokenSearch,
+  }: { mergeRelated: boolean; excludedFieldIds: ReadonlySet<string>; withTokenSearch: boolean },
 ) {
   const args: TraceQueryPredicate[] = [];
   const related: Record<TraceQueryRelatedScope, TraceQueryScalarPredicate[]> = { spans: [], scores: [], feedback: [] };
 
   for (const token of tokens) {
-    const result = tokenToTraceQueryPredicate(token, excludedFieldIds);
+    const result = tokenToTraceQueryPredicate(token, excludedFieldIds, withTokenSearch);
     if (!result) continue;
     if (!('scope' in result)) {
       args.push(result.predicate);
@@ -266,12 +299,13 @@ function predicatesForTokens(
 function groupToTraceQueryPredicate(
   group: TraceFilterGroup,
   excludedFieldIds: ReadonlySet<string>,
+  withTokenSearch: boolean,
 ): TraceQueryPredicate | undefined {
   const tokens = group.nodes.filter((node): node is TraceFilterToken => !isTraceFilterGroup(node));
-  const args = predicatesForTokens(tokens, { mergeRelated: group.logic === 'and', excludedFieldIds });
+  const args = predicatesForTokens(tokens, { mergeRelated: group.logic === 'and', excludedFieldIds, withTokenSearch });
   for (const node of group.nodes) {
     if (!isTraceFilterGroup(node)) continue;
-    const predicate = groupToTraceQueryPredicate(node, excludedFieldIds);
+    const predicate = groupToTraceQueryPredicate(node, excludedFieldIds, withTokenSearch);
     if (predicate) args.push(predicate);
   }
   if (args.length === 0) return undefined;
@@ -286,6 +320,7 @@ export function buildTraceQueryRequest({
   tokens,
   groups = [],
   excludedFieldIds = new Set(),
+  withTokenSearch = false,
   now,
 }: Omit<Parameters<typeof buildTraceListFilters>[0], 'tokens' | 'status'> & {
   status?: TraceStatusFilter;
@@ -293,6 +328,7 @@ export function buildTraceQueryRequest({
   groups?: TraceFilterGroup[];
   /** Fields the server cannot query (e.g. `durationMs` without `traceQueryRootDuration`); dropped from tokens and groups. */
   excludedFieldIds?: ReadonlySet<string>;
+  withTokenSearch?: boolean;
   now: Date;
 }): Pick<QueryTracesInput, 'timeRange' | 'where'> {
   const args: TraceQueryPredicate[] = [];
@@ -300,31 +336,27 @@ export function buildTraceQueryRequest({
   if (rootEntityType) args.push({ op: 'eq', left: { path: 'entityType' }, right: { literal: rootEntityType } });
   if (status && status !== 'running') args.push({ op: 'eq', left: { path: 'status' }, right: { literal: status } });
 
-  args.push(...predicatesForTokens(tokens, { mergeRelated: true, excludedFieldIds }));
+  args.push(...predicatesForTokens(tokens, { mergeRelated: true, excludedFieldIds, withTokenSearch }));
 
   for (const group of groups) {
-    const predicate = groupToTraceQueryPredicate(group, excludedFieldIds);
+    const predicate = groupToTraceQueryPredicate(group, excludedFieldIds, withTokenSearch);
     if (predicate) args.push(predicate);
   }
 
   return {
-    timeRange: {
-      from: (dateFrom ?? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)).toISOString(),
-      to: (dateTo ?? now).toISOString(),
-    },
+    timeRange: resolveTraceQueryTimeRange(dateFrom, dateTo, now),
     ...(args.length ? { where: { op: 'and' as const, args } } : {}),
   };
 }
 
-export const TRACE_QUERY_DISCOVERY_MAX_RANGE_MS = 31 * 24 * 60 * 60 * 1000;
-
-/** Discovery endpoints reject ranges wider than 31 days (and `from >= to`); clamp
- *  the page's selected range so wide custom ranges still get field suggestions
- *  for the most recent window. */
-export function clampTraceDiscoveryTimeRange(timeRange: { from: string; to: string }): { from: string; to: string } {
-  const to = new Date(timeRange.to).getTime();
-  const from = new Date(timeRange.from).getTime();
-  const minFrom = to - TRACE_QUERY_DISCOVERY_MAX_RANGE_MS;
-  if (from >= minFrom && from < to) return timeRange;
-  return { from: new Date(minFrom).toISOString(), to: timeRange.to };
+/** The query window for a date range: open ends fall back to the last seven days up to `now`. */
+export function resolveTraceQueryTimeRange(
+  dateFrom: Date | undefined,
+  dateTo: Date | undefined,
+  now: Date,
+): QueryTracesInput['timeRange'] {
+  return {
+    from: (dateFrom ?? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)).toISOString(),
+    to: (dateTo ?? now).toISOString(),
+  };
 }

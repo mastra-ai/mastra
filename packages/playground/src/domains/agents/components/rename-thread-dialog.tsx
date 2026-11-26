@@ -61,7 +61,7 @@ export function RenameThreadDialog({ agentId, threadId, initialTitle, onOpenChan
               <Button type="button" onClick={() => onOpenChange(false)} disabled={isPending}>
                 Cancel
               </Button>
-              <Button type="submit" variant="primary" disabled={!canSave}>
+              <Button type="submit" variant="primary" disabled={!canSave} loading={isPending}>
                 Save
               </Button>
             </div>

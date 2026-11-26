@@ -31,6 +31,28 @@ export const MASTRA_RESOURCE_ID_KEY = 'mastra__resourceId';
 export const MASTRA_THREAD_ID_KEY = 'mastra__threadId';
 
 /**
+ * Reserved key for setting agent scopes from middleware.
+ *
+ * Holds a `string[]` of `<type>:<value>` addresses (for example `org:acme`,
+ * `resource:user-1`, `thread:t-9`). Scope types are arbitrary; `resource:` and
+ * `thread:` are the conventions Memory reads as the run's resource and thread.
+ * Middleware-set scopes are combined with the agent's `scopes` resolver and the
+ * per-call `scopes` option. Conflicting `resource:`/`thread:` values throw.
+ *
+ * During a run, the agent passes tools, processors and sub-agents a copy of the
+ * request context whose `mastra__scopes` holds only the non-identity scopes;
+ * the caller's own request context is never modified.
+ *
+ * @example
+ * ```typescript
+ * // In your auth middleware:
+ * const requestContext = c.get('requestContext');
+ * requestContext.set(MASTRA_SCOPES_KEY, [`org:${user.orgId}`, `resource:${user.id}`]);
+ * ```
+ */
+export const MASTRA_SCOPES_KEY = 'mastra__scopes';
+
+/**
  * Reserved key for storing version overrides on RequestContext.
  * When set, sub-agent delegation resolves versioned agents from these overrides.
  *
@@ -75,6 +97,63 @@ export const MASTRA_INHERITED_MEMORY_KEY = 'mastra__inheritedMemory';
  * ```
  */
 export const MASTRA_MESSAGE_AUTHOR_KEY = 'mastra__messageAuthor';
+
+/**
+ * Reserved key holding the authenticated end user, normalized to the
+ * `MastraUser` shape (`{ id, name?, email?, avatarUrl?, role? }`).
+ *
+ * Set by the server auth middleware after an auth provider authenticates the
+ * request (via `MastraAuthProvider.toMastraUser()`). Read at
+ * `DynamicArgument` resolution time so config callbacks receive an optional
+ * `user` argument. The raw provider-specific user object is stored separately
+ * under `mastra__user`.
+ */
+export const MASTRA_NORMALIZED_USER_KEY = 'mastra__normalizedUser';
+
+/**
+ * Keys that only describe the request that set them: the bearer token and the
+ * authenticated user with their roles, permissions and Knowledge principals.
+ * The user keys are set by the server auth middleware (`mastra__user`,
+ * `mastra__userRoles`, `mastra__userPermissions` and
+ * `mastra__knowledgePrincipals` are defined in `@mastra/server`) and are
+ * reserved, so clients cannot supply them.
+ */
+const LIVE_REQUEST_KEYS = [
+  MASTRA_AUTH_TOKEN_KEY,
+  MASTRA_NORMALIZED_USER_KEY,
+  'mastra__user',
+  'mastra__userPermissions',
+  'mastra__userRoles',
+  'mastra__knowledgePrincipals',
+];
+
+/**
+ * Unprefixed aliases the server auth middleware writes next to the namespaced
+ * keys for backward compatibility. They aren't reserved, and apps without the
+ * server may store their own values under them, so each alias is only dropped
+ * when its namespaced key shows the auth middleware wrote it.
+ */
+const LEGACY_USER_ALIASES: Record<string, string> = {
+  user: 'mastra__user',
+  userRoles: 'mastra__userRoles',
+  userPermissions: 'mastra__userPermissions',
+};
+
+/**
+ * Returns a copy of a persisted request context without the keys that belong to
+ * the request that wrote it (the bearer token and the authenticated user, roles
+ * and permissions). Workflow and durable-agent resume, restart and time travel
+ * use this so those values come from the request doing the resuming, and a
+ * resume without a signed-in user can't act as the user who started the run.
+ */
+export function withoutLiveRequestKeys(requestContext: Record<string, any> | undefined): Record<string, any> {
+  const rest = { ...requestContext };
+  for (const [alias, key] of Object.entries(LEGACY_USER_ALIASES)) {
+    if (key in rest) delete rest[alias];
+  }
+  for (const key of LIVE_REQUEST_KEYS) delete rest[key];
+  return rest;
+}
 
 /**
  * Whether a request-context key is reserved for Mastra itself.

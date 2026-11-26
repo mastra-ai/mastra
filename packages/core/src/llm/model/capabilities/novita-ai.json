@@ -2,6 +2,7 @@
   "attachment": [
     "deepseek/deepseek-ocr-2",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
     "google/gemma-3-12b-it",
     "google/gemma-3-27b-it",
     "google/gemma-4-26b-a4b-it",
@@ -10,13 +11,20 @@
     "meta-llama/llama-4-maverick-17b-128e-instruct-fp8",
     "meta-llama/llama-4-scout-17b-16e-instruct",
     "minimax/minimax-m3",
+    "minimax/minimax-m3.1-flash",
     "moonshotai/kimi-k2.5",
     "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k2.7-code",
     "moonshotai/kimi-k3",
+    "moonshotai/kimi-k3.1-pro",
+    "moonshotai/kimi-k3.1-pro-highspeed",
+    "openai/gpt-6.1-terra",
+    "openai/gpt-6.2-astra",
+    "openai/gpt-6.2-sol",
     "paddlepaddle/paddleocr-vl",
     "qwen/qwen3-omni-30b-a3b-thinking",
     "qwen/qwen3-vl-30b-a3b-instruct",
+    "qwen/qwen3-vl-plus",
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
     "qwen/qwen3.5-35b-a3b",
@@ -26,20 +34,26 @@
     "qwen/qwen3.8-27b",
     "qwen/qwen3.8-flash",
     "qwen/qwen3.8-max",
+    "qwen/qwen4-max",
     "stepfun/step-3.7-flash",
+    "stepfun/step-5-preview",
+    "tencent/hy4",
+    "tencent/hy4-flash",
     "xiaomimimo/mimo-v2.5",
     "xiaomimimo/mimo-v2.6-flash",
     "xiaomimimo/mimo-v2.6-pro",
     "zai-org/autoglm-phone-9b-multilingual",
     "zai-org/glm-4.5v",
     "zai-org/glm-4.6v",
-    "zai-org/glm-5.3-flash"
+    "zai-org/glm-5.3-flash",
+    "zai-org/glm-5.3-flashX"
   ],
   "temperature": [
     "apodex/apodex-1.1-mini",
     "baichuan/baichuan-m2-32b",
     "baidu/cobuddy",
     "baidu/ernie-4.5-21B-a3b",
+    "deepseek/deepseek-ocr-2",
     "deepseek/deepseek-r1-0528",
     "deepseek/deepseek-r1-0528-qwen3-8b",
     "deepseek/deepseek-r1-turbo",
@@ -47,6 +61,7 @@
     "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
     "deepseek/deepseek_v3",
     "google/gemma-3-12b-it",
     "google/gemma-3-27b-it",
@@ -54,8 +69,10 @@
     "google/gemma-4-31b-it",
     "gryphe/mythomax-l2-13b",
     "inclusionai/ling-3.0-flash",
+    "inclusionai/ling-3.0-flash-fin",
     "inclusionai/ling-3.0-flash-sante",
     "inclusionai/ling-3.0-flash-vl",
+    "inclusionai/ling-3.1-flash",
     "meta-llama/llama-3.1-8b-instruct",
     "meta-llama/llama-3.2-1b-instruct",
     "meta-llama/llama-3.3-70b-instruct",
@@ -68,6 +85,7 @@
     "minimax/minimax-m2.7",
     "minimax/minimax-m2.7-highspeed",
     "minimax/minimax-m3",
+    "minimax/minimax-m3.1-flash",
     "minimaxai/minimax-m1-80k",
     "moonshotai/kimi-k2-0905",
     "moonshotai/kimi-k2-instruct",
@@ -75,11 +93,13 @@
     "moonshotai/kimi-k2.6",
     "nousresearch/hermes-2-pro-llama-3-8b",
     "nvidia/nemotron-3-nano-30b-a3b",
+    "openai/gpt-6.1-terra",
     "openai/gpt-oss-120b",
     "paddlepaddle/paddleocr-vl",
     "qwen/qwen-mt-plus",
     "qwen/qwen3-omni-30b-a3b-thinking",
     "qwen/qwen3-vl-30b-a3b-instruct",
+    "qwen/qwen3-vl-plus",
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
     "qwen/qwen3.5-35b-a3b",
@@ -89,9 +109,14 @@
     "qwen/qwen3.7-max",
     "qwen/qwen3.8-2.4t-a95b",
     "qwen/qwen3.8-27b",
+    "qwen/qwen3.8-flash",
     "qwen/qwen3.8-max",
+    "qwen/qwen4-max",
     "stepfun/step-3.7-flash",
+    "stepfun/step-5-preview",
     "tencent/hy3",
+    "tencent/hy4",
+    "tencent/hy4-flash",
     "tencent/hy4-preview",
     "xiaomimimo/mimo-v2.5",
     "xiaomimimo/mimo-v2.5-pro",
@@ -108,7 +133,8 @@
     "zai-org/glm-5.1",
     "zai-org/glm-5.2",
     "zai-org/glm-5.3",
-    "zai-org/glm-5.3-flash"
+    "zai-org/glm-5.3-flash",
+    "zai-org/glm-5.3-flashX"
   ],
   "structuredOutput": [
     "apodex/apodex-1.1-mini",
@@ -118,6 +144,7 @@
     "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
     "google/gemma-4-26b-a4b-it",
     "google/gemma-4-31b-it",
     "meta-llama/llama-3.1-8b-instruct",
@@ -129,6 +156,7 @@
     "minimax/minimax-m2.7",
     "minimax/minimax-m2.7-highspeed",
     "minimax/minimax-m3",
+    "minimax/minimax-m3.1-flash",
     "minimaxai/minimax-m1-80k",
     "moonshotai/kimi-k2-0905",
     "moonshotai/kimi-k2-thinking",
@@ -136,11 +164,17 @@
     "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k2.7-code",
     "moonshotai/kimi-k3",
+    "moonshotai/kimi-k3.1-pro",
+    "moonshotai/kimi-k3.1-pro-highspeed",
     "nousresearch/hermes-2-pro-llama-3-8b",
     "nvidia/nemotron-3-nano-30b-a3b",
+    "openai/gpt-6.1-terra",
+    "openai/gpt-6.2-astra",
+    "openai/gpt-6.2-sol",
     "openai/gpt-oss-120b",
     "qwen/qwen3-omni-30b-a3b-thinking",
     "qwen/qwen3-vl-30b-a3b-instruct",
+    "qwen/qwen3-vl-plus",
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
     "qwen/qwen3.5-35b-a3b",
@@ -152,8 +186,12 @@
     "qwen/qwen3.8-27b",
     "qwen/qwen3.8-flash",
     "qwen/qwen3.8-max",
+    "qwen/qwen4-max",
     "stepfun/step-3.7-flash",
+    "stepfun/step-5-preview",
     "tencent/hy3",
+    "tencent/hy4",
+    "tencent/hy4-flash",
     "tencent/hy4-preview",
     "xiaomimimo/mimo-v2.5",
     "xiaomimimo/mimo-v2.5-pro",
@@ -168,9 +206,15 @@
     "zai-org/glm-5.1",
     "zai-org/glm-5.2",
     "zai-org/glm-5.3",
-    "zai-org/glm-5.3-flash"
+    "zai-org/glm-5.3-flash",
+    "zai-org/glm-5.3-flashX"
   ],
   "reasoning": {
+    "apodex/apodex-1.1-mini": [
+      {
+        "type": "toggle"
+      }
+    ],
     "deepseek/deepseek-v4-flash-0731": [
       {
         "type": "toggle"
@@ -180,7 +224,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek/deepseek-v4.1-flash": [
+    "deepseek/deepseek-v4.1-flash-1017": [
       {
         "type": "toggle"
       },
@@ -198,6 +242,15 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "deepseek/deepseek-v4.1-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "deepseek/deepseek-v4-pro": [
       {
         "type": "toggle"
@@ -207,39 +260,25 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "tencent/hy3": [
+    "stepfun/step-3.7-flash": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
-    "tencent/hy4-preview": [
+    "stepfun/step-5-preview": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
-    "xiaomimimo/mimo-v2.6-pro": [
+    "minimax/minimax-m3.1-flash": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "xiaomimimo/mimo-v2.5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "xiaomimimo/mimo-v2.5-pro": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "xiaomimimo/mimo-v2.6-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "baidu/cobuddy": [
+    "minimax/minimax-m3": [
       {
         "type": "toggle"
       }
@@ -254,48 +293,78 @@
         "type": "toggle"
       }
     ],
-    "inclusionai/ling-3.0-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "inclusionai/ling-3.1-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "inclusionai/ling-3.0-flash-sante": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "inclusionai/ling-3.0-flash-vl": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "inclusionai/ling-3.0-flash-fin": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "moonshotai/kimi-k3": [
+    "tencent/hy4-flash": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["none", "high"]
       }
     ],
-    "moonshotai/kimi-k2.6": [
+    "tencent/hy3": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "tencent/hy4": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "tencent/hy4-preview": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "xiaomimimo/mimo-v2.5-pro": [
       {
         "type": "toggle"
       }
     ],
-    "moonshotai/kimi-k2.5": [
+    "xiaomimimo/mimo-v2.6-flash": [
       {
         "type": "toggle"
       }
     ],
-    "zai-org/glm-4.6v": [
+    "xiaomimimo/mimo-v2.5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "xiaomimimo/mimo-v2.6-pro": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "mindai/macaron-v1-tall": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "mindai/macaron-v1-venti": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "nvidia/nemotron-3-nano-30b-a3b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "baidu/cobuddy": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai-org/glm-5.1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai-org/glm-4.5-air": [
       {
         "type": "toggle"
       }
@@ -304,21 +373,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/glm-4.6": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai-org/glm-5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai-org/glm-4.5v": [
-      {
-        "type": "toggle"
       }
     ],
     "zai-org/glm-4.7-flash": [
@@ -337,14 +391,25 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "zai-org/glm-5.1": [
+    "zai-org/glm-4.6": [
       {
         "type": "toggle"
       }
     ],
-    "zai-org/glm-4.5-air": [
+    "zai-org/glm-5": [
       {
         "type": "toggle"
+      }
+    ],
+    "zai-org/glm-4.5v": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai-org/glm-5.3-flashX": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "zai-org/glm-5.3": [
@@ -353,40 +418,46 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "apodex/apodex-1.1-mini": [
+    "zai-org/glm-4.6v": [
       {
         "type": "toggle"
       }
     ],
-    "nvidia/nemotron-3-nano-30b-a3b": [
+    "moonshotai/kimi-k3.1-pro-highspeed": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "moonshotai/kimi-k2.5": [
       {
         "type": "toggle"
       }
     ],
-    "minimax/minimax-m3": [
+    "moonshotai/kimi-k2.6": [
       {
         "type": "toggle"
       }
     ],
-    "stepfun/step-3.7-flash": [
+    "moonshotai/kimi-k3.1-pro": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
-    "mindai/macaron-v1-tall": [
+    "moonshotai/kimi-k3": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
-    "mindai/macaron-v1-venti": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "qwen/qwen3.7-max": [
+    "qwen/qwen3.5-397b-a17b": [
       {
         "type": "toggle"
       },
@@ -394,13 +465,17 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.8-27b": [
+    "qwen/qwen3.5-27b": [
       {
         "type": "toggle"
       },
       {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen3.7-max": [
+      {
+        "type": "toggle"
       },
       {
         "type": "budget_tokens"
@@ -415,7 +490,25 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.5-27b": [
+    "qwen/qwen4-max": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh"]
+      }
+    ],
+    "qwen/qwen3.8-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen3-vl-plus": [
       {
         "type": "toggle"
       },
@@ -432,23 +525,7 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "qwen/qwen3.5-122b-a10b": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen/qwen3.6-35b-a3b": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen/qwen3.8-flash": [
+    "qwen/qwen3.8-27b": [
       {
         "type": "toggle"
       },
@@ -468,14 +545,6 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.5-397b-a17b": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
     "qwen/qwen3.6-27b": [
       {
         "type": "toggle"
@@ -484,15 +553,74 @@
         "type": "budget_tokens"
       }
     ],
-    "baichuan/baichuan-m2-32b": [
+    "qwen/qwen3.6-35b-a3b": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen3.5-122b-a10b": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
       }
     ],
     "openai/gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-6.2-astra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "openai/gpt-6.2-sol": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "openai/gpt-6.1-terra": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "baichuan/baichuan-m2-32b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "inclusionai/ling-3.1-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "inclusionai/ling-3.0-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "inclusionai/ling-3.0-flash-sante": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "inclusionai/ling-3.0-flash-fin": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "inclusionai/ling-3.0-flash-vl": [
+      {
+        "type": "toggle"
       }
     ]
   }

@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "id": "it-helpdesk",
+  "version": "2026-11-23.1",
+  "pages": [
+    {
+      "key": "helpdesk-policy",
+      "path": "policies/helpdesk-safety",
+      "title": "IT helpdesk policy",
+      "file": "policy.md",
+      "scope": {
+        "kind": "tenant",
+        "profile": "helpdesk-office"
+      },
+      "kind": "policy",
+      "source": {
+        "kind": "original synthetic fixture",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "key": "network-guide",
+      "path": "guides/network-configuration",
+      "title": "Windows TCP/IP configuration",
+      "file": "network.md",
+      "scope": {
+        "kind": "docs",
+        "profile": "helpdesk-office"
+      },
+      "kind": "reference",
+      "source": {
+        "kind": "original summary of public Microsoft documentation",
+        "url": "https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/ipconfig",
+        "verifiedOn": "2026-11-23"
+      },
+      "links": ["helpdesk-policy"]
+    },
+    {
+      "key": "office-case",
+      "path": "cases/network-check",
+      "title": "Fictional office connectivity case",
+      "file": "office-case.md",
+      "scope": {
+        "kind": "customer",
+        "profile": "helpdesk-office"
+      },
+      "kind": "case",
+      "record": {
+        "topicTags": ["connectivity"],
+        "observedOn": "2026-11-15",
+        "state": "approved",
+        "summary": "In the fictional office case, the operator corrected the adapter selection with authorization and three local checks confirmed access.",
+        "applicability": "Applies only when the wrong adapter has been confirmed. A configuration check provides one observation in the investigation."
+      },
+      "source": {
+        "kind": "fictional service record",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "key": "branch-case",
+      "path": "cases/network-check",
+      "title": "Fictional branch connectivity case",
+      "file": "branch-case.md",
+      "scope": {
+        "kind": "customer",
+        "profile": "helpdesk-branch"
+      },
+      "kind": "case",
+      "record": {
+        "topicTags": ["connectivity"],
+        "observedOn": "2026-11-16",
+        "state": "approved",
+        "summary": "In the fictional branch case, the operator corrected the adapter selection with authorization and two local checks succeeded.",
+        "applicability": "Applies only when the wrong adapter has been confirmed. A configuration check provides one observation in the investigation."
+      },
+      "source": {
+        "kind": "fictional service record",
+        "license": "Apache-2.0"
+      }
+    }
+  ]
+}

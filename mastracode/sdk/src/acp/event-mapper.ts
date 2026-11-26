@@ -132,7 +132,8 @@ export function handleAgentControllerEvent(
       break;
 
     case 'error':
-      state.error = event.error;
+      // A retryable error is an attempt still in progress, not the cause of the turn ending.
+      if (event.retryable !== true) state.error = event.error;
       if (event.finishReason === 'length') state.stopReason = 'max_tokens';
       else if (event.finishReason === 'content-filter') state.stopReason = 'refusal';
       break;

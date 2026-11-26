@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 
+import { SearchEngine } from '../search';
 import type { SearchResult, IndexDocument } from '../search';
 import type { SkillSource, SkillSourceEntry, SkillSourceStat } from './skill-source';
 import { WorkspaceSkillsImpl } from './workspace-skills';
@@ -644,6 +645,15 @@ user-invocable: false
         'skills/skill-b/SKILL.md': VALID_SKILL_MD.replace('test-skill', 'skill-b'),
       });
 
+      // The default mock reports mtime = now, so a walk's stat count depends on
+      // whether a millisecond ticked since the last discovery (stale after 1 stat,
+      // full walk of 3 otherwise). A fixed past mtime makes every walk a full,
+      // non-stale one so both measurements below are comparable.
+      const statMock = filesystem.stat as ReturnType<typeof vi.fn>;
+      const currentStat = statMock.getMockImplementation()!;
+      const pastTime = new Date(Date.now() - 10_000);
+      statMock.mockImplementation(async (path: string) => ({ ...(await currentStat(path)), modifiedAt: pastTime }));
+
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
         skills: ['skills'],
@@ -651,17 +661,9 @@ user-invocable: false
 
       await skills.list();
 
-      const statMock = filesystem.stat as ReturnType<typeof vi.fn>;
       const originalCooldown = WorkspaceSkillsImpl.STALENESS_CHECK_COOLDOWN;
       try {
         (WorkspaceSkillsImpl as any).STALENESS_CHECK_COOLDOWN = 0;
-
-        // Settle any mtime/discovery-time tie left over from initial discovery:
-        // mock entries and #lastDiscoveryTime can land in the same millisecond,
-        // making the first walk short-circuit as stale (1 stat) while the next
-        // walk runs in full (3 stats). One refresh here guarantees both
-        // measurements below observe identical non-stale walks.
-        await skills.maybeRefresh();
 
         const before = statMock.mock.calls.length;
         await Promise.all([skills.maybeRefresh(), skills.maybeRefresh()]);
@@ -672,6 +674,7 @@ user-invocable: false
         const singleDelta = statMock.mock.calls.length - beforeSingle;
 
         // Two overlapping revalidations pay for exactly one walk
+        expect(singleDelta).toBeGreaterThan(0);
         expect(concurrentDelta).toBe(singleDelta);
       } finally {
         (WorkspaceSkillsImpl as any).STALENESS_CHECK_COOLDOWN = originalCooldown;
@@ -716,8 +719,8 @@ user-invocable: false
       expect(indexedPaths).not.toContain('skills/skill-b');
       // New skill is indexed
       expect(indexedPaths).toContain('skills/skill-c');
-      // Unchanged skill is neither duplicated nor dropped
-      expect(indexedPaths.filter(p => p === 'skills/skill-a')).toHaveLength(1);
+      // Unchanged skill is neither duplicated nor dropped (body + name/description docs)
+      expect(indexedPaths.filter(p => p === 'skills/skill-a')).toHaveLength(2);
     });
   });
 
@@ -737,6 +740,228 @@ user-invocable: false
       expect(results.length).toBeGreaterThan(0);
       expect(results[0]?.skillName).toBe('api-skill');
       expect(results[0]?.skillPath).toBe('skills/api-skill');
+    });
+
+    describe('name and description matching', () => {
+      const PR_REVIEW_SKILL_MD = `---
+name: pr-review
+description: Review pull requests for correctness and style
+---
+
+# Checklist
+
+Read the diff carefully.
+`;
+
+      function createSkills(searchEngine?: ReturnType<typeof createMockSearchEngine>) {
+        return new WorkspaceSkillsImpl({
+          source: createMockFilesystem({
+            'skills/pr-review/SKILL.md': PR_REVIEW_SKILL_MD,
+            'skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
+          }),
+          skills: ['skills'],
+          ...(searchEngine ? { searchEngine } : {}),
+        });
+      }
+
+      it('simple search matches a query found only in the skill name', async () => {
+        const results = await createSkills().search('pr-review');
+        expect(results.map(r => r.skillName)).toEqual(['pr-review']);
+      });
+
+      it('simple search matches a query found only in the description and previews the description', async () => {
+        const results = await createSkills().search('correctness');
+        expect(results).toHaveLength(1);
+        expect(results[0]).toMatchObject({
+          skillName: 'pr-review',
+          source: 'SKILL.md',
+          content: 'Review pull requests for correctness and style',
+        });
+      });
+
+      it('simple search matches multi-word queries whose words are split across name, description and body', async () => {
+        const results = await createSkills().search('Review DIFF pull');
+        expect(results.map(r => r.skillName)).toEqual(['pr-review']);
+      });
+
+      it('simple search returns nothing when no query word matches', async () => {
+        expect(await createSkills().search('kubernetes helm')).toEqual([]);
+      });
+
+      it('simple search ranks skills by how many query words match', async () => {
+        // Long keyword queries rarely match every word; the best partial match still wins
+        const results = await createSkills().search('review pull requests correctness kubernetes deploy');
+        expect(results[0]).toMatchObject({
+          skillName: 'pr-review',
+          content: 'Review pull requests for correctness and style',
+        });
+        expect(results[0]!.score).toBeCloseTo(4 / 6);
+      });
+
+      it('simple search ranks name and description matches above body-only matches', async () => {
+        const results = await new WorkspaceSkillsImpl({
+          source: createMockFilesystem({
+            'skills/pr-review/SKILL.md': PR_REVIEW_SKILL_MD,
+            'skills/diff-tool/SKILL.md': `---\nname: diff-tool\ndescription: Compares files\n---\n\nUse it to review changes.\n`,
+          }),
+          skills: ['skills'],
+        }).search('review');
+        expect(results.map(r => r.skillName)).toEqual(['pr-review', 'diff-tool']);
+      });
+
+      it('simple search ignores one- and two-letter words when the query has longer ones', async () => {
+        // "a", "do" and "it" appear in almost any text; they must not make every skill match
+        expect(await createSkills().search('do a kubernetes deploy on it')).toEqual([]);
+        // A query made only of short words still searches with them
+        expect((await createSkills().search('pr'))[0]?.skillName).toBe('pr-review');
+      });
+
+      it('simple search keeps short words that are part of a skill name', async () => {
+        const skills = new WorkspaceSkillsImpl({
+          source: createMockFilesystem({
+            'skills/ci-pipeline/SKILL.md': `---\nname: ci-pipeline\ndescription: Debugs failing continuous integration runs\n---\n\nRead the job log first.\n`,
+            'skills/pr-review/SKILL.md': PR_REVIEW_SKILL_MD,
+          }),
+          skills: ['skills'],
+        });
+        // "ci" is two letters but names a skill, so it must count as a query word
+        const results = await skills.search('fix ci pipeline');
+        expect(results.map(r => r.skillName)).toEqual(['ci-pipeline']);
+        // "ci" and "pipeline" match the name, "fix" matches nothing
+        expect(results[0]?.score).toBeCloseTo(2 / 3);
+        // "pr" names a skill, but "it" still does not
+        expect((await skills.search('review it with pr')).map(r => r.skillName)).toEqual(['pr-review']);
+      });
+
+      it('simple search ignores punctuation around query words', async () => {
+        const results = await createSkills().search('"correctness", (style).');
+        expect(results.map(r => r.skillName)).toEqual(['pr-review']);
+        expect(results[0]?.score).toBe(1);
+      });
+
+      it('simple search respects the skillNames filter when ranking', async () => {
+        const results = await createSkills().search('review api', { skillNames: ['api-skill'] });
+        expect(results.map(r => r.skillName)).toEqual(['api-skill']);
+      });
+
+      describe('reference files', () => {
+        const DIFF_TOOL_SKILL_MD = `---\nname: diff-tool\ndescription: Compares files\n---\n\nRun it on two files.\n`;
+
+        function createSkillsWithReferences() {
+          const filesystem = createMockFilesystem({
+            'skills/pr-review/SKILL.md': PR_REVIEW_SKILL_MD,
+            'skills/pr-review/references/style.md': 'Naming conventions for variables.',
+            'skills/diff-tool/SKILL.md': DIFF_TOOL_SKILL_MD,
+            'skills/diff-tool/references/flags.md': 'Flags for naming output files.',
+          });
+          const skills = new WorkspaceSkillsImpl({ source: filesystem, skills: ['skills'] });
+          const referenceReads = () =>
+            (filesystem.readFile as ReturnType<typeof vi.fn>).mock.calls.filter(([path]) =>
+              String(path).includes('/references/'),
+            ).length;
+          return { skills, referenceReads };
+        }
+
+        it('scores references at half weight and lists their file', async () => {
+          const { skills } = createSkillsWithReferences();
+          const results = await skills.search('naming conventions');
+          expect(results.map(r => [r.skillName, r.source, r.score])).toEqual([
+            ['pr-review', 'references/style.md', 0.5],
+            ['diff-tool', 'references/flags.md', 0.25],
+          ]);
+        });
+
+        it('ranks a reference match below a skill whose description matches the same words', async () => {
+          const { skills } = createSkillsWithReferences();
+          const results = await skills.search('compares naming');
+          // diff-tool's description has 1 of 2 words (0.5); each reference also has 1 of 2 (0.25).
+          // Equal scores keep read order, and the matching skill's references are read first.
+          expect(results.map(r => [r.skillName, r.source])).toEqual([
+            ['diff-tool', 'SKILL.md'],
+            ['diff-tool', 'references/flags.md'],
+            ['pr-review', 'references/style.md'],
+          ]);
+        });
+
+        it('skips reading references when enough skills already outscore any reference', async () => {
+          const { skills, referenceReads } = createSkillsWithReferences();
+          await skills.list();
+          const before = referenceReads();
+          const results = await skills.search('review correctness', { topK: 1 });
+          expect(results.map(r => r.skillName)).toEqual(['pr-review']);
+          expect(referenceReads()).toBe(before);
+        });
+
+        it('stops reading references after topK reference matches', async () => {
+          const { skills, referenceReads } = createSkillsWithReferences();
+          await skills.list();
+          const before = referenceReads();
+          const results = await skills.search('naming', { topK: 1 });
+          expect(results.map(r => r.source)).toEqual(['references/style.md']);
+          expect(referenceReads() - before).toBe(1);
+        });
+
+        it('returns skills and references in discovery order for an empty query', async () => {
+          const { skills } = createSkillsWithReferences();
+          const results = await skills.search('', { topK: 10 });
+          expect(results.map(r => r.source).sort()).toEqual([
+            'SKILL.md',
+            'SKILL.md',
+            'references/flags.md',
+            'references/style.md',
+          ]);
+        });
+      });
+
+      it('indexes name and description as a SKILL.md document', async () => {
+        const searchEngine = createMockSearchEngine();
+        const skills = createSkills(searchEngine);
+
+        const results = await skills.search('correctness');
+        expect(results).toHaveLength(1);
+        expect(results[0]).toMatchObject({ skillName: 'pr-review', source: 'SKILL.md' });
+        expect(results[0]?.content).toContain('Review pull requests for correctness');
+
+        const metadataDoc = searchEngine.indexedDocs.find(d => d.id === 'skill:skills/pr-review:SKILL.md#metadata');
+        expect(metadataDoc?.content).toBe('pr-review\nReview pull requests for correctness and style');
+        expect(metadataDoc?.metadata).toMatchObject({ skillPath: 'skills/pr-review', source: 'SKILL.md' });
+      });
+
+      it('returns one result per skill when both the body and metadata documents match', async () => {
+        const searchEngine = createMockSearchEngine();
+        const results = await createSkills(searchEngine).search('API');
+        expect(results.filter(r => r.skillName === 'api-skill')).toHaveLength(1);
+      });
+
+      it('keeps the metadata document when references are excluded', async () => {
+        const results = await createSkills(createMockSearchEngine()).search('correctness', {
+          includeReferences: false,
+        });
+        expect(results.map(r => r.skillName)).toEqual(['pr-review']);
+      });
+
+      it('with BM25, finds a skill by description without reporting SKILL.md line numbers', async () => {
+        const skills = new WorkspaceSkillsImpl({
+          source: createMockFilesystem({
+            'skills/pr-review/SKILL.md': PR_REVIEW_SKILL_MD,
+            'skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
+          }),
+          skills: ['skills'],
+          searchEngine: new SearchEngine({ bm25: {} }),
+        });
+
+        const [first] = await skills.search('correctness');
+        expect(first).toMatchObject({
+          skillName: 'pr-review',
+          source: 'SKILL.md',
+          // The preview is the description alone, not the indexed "name\ndescription" text
+          content: 'Review pull requests for correctness and style',
+        });
+        expect(first?.lineRange).toBeUndefined();
+
+        const [bodyHit] = await skills.search('diff carefully');
+        expect(bodyHit).toMatchObject({ skillName: 'pr-review', lineRange: { start: 3, end: 3 } });
+      });
     });
 
     it('should use search engine when configured', async () => {
@@ -1223,7 +1448,8 @@ This skill helps with endpoint design and API patterns.`;
 
       expect((await scopedA.search('Shared', { topK: 1 })).map(result => result.skillName)).toEqual(['alpha']);
       expect((await scopedB.search('Shared', { topK: 1 })).map(result => result.skillName)).toEqual(['beta']);
-      expect(new Set(indexedDocs.map(doc => doc.id)).size).toBe(2);
+      // One body + one name/description document per scoped skill
+      expect(new Set(indexedDocs.map(doc => doc.id)).size).toBe(4);
     });
   });
 
@@ -2094,7 +2320,10 @@ Instructions here.`;
       expect(result[0]?.name).toBe('test-skill');
     });
 
-    it('should discover skills with skills/** glob', async () => {
+    it.each([
+      ['should discover skills with skills/** glob', 'skills/**'],
+      ['should discover skills with trailing slash skills/', 'skills/'],
+    ] as const)('%s', async (_title, value) => {
       const filesystem = createMockFilesystem({
         'skills/test-skill/SKILL.md': VALID_SKILL_MD,
         'skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
@@ -2102,7 +2331,7 @@ Instructions here.`;
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skills: ['skills/**'],
+        skills: [value],
       });
 
       const result = await skills.list();
@@ -2172,22 +2401,6 @@ Instructions here.`;
       const result = await skills.list();
       expect(result).toHaveLength(1);
       expect(result[0]?.name).toBe('test-skill');
-    });
-
-    it('should discover skills with trailing slash skills/', async () => {
-      const filesystem = createMockFilesystem({
-        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
-        'skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
-      });
-
-      const skills = new WorkspaceSkillsImpl({
-        source: filesystem,
-        skills: ['skills/'],
-      });
-
-      const result = await skills.list();
-      expect(result).toHaveLength(2);
-      expect(result.map(s => s.name).sort()).toEqual(['api-skill', 'test-skill']);
     });
 
     it('should not produce duplicate skills when multiple patterns match the same skill', async () => {
@@ -2276,6 +2489,98 @@ Shadow instructions.`;
 
       const shadow = await skills.get('custom-skills/test-skill');
       expect(shadow?.instructions).toContain('Shadow instructions.');
+    });
+
+    it.each([
+      ['BM25', () => new SearchEngine({ bm25: {} })],
+      ['simple search', () => undefined],
+    ])('search() keeps working with two distinct local skills of the same name (%s)', async (_label, engine) => {
+      const copy = (description: string, body: string) =>
+        `---\nname: label-bugs\ndescription: ${description}\n---\n\n${body}`;
+      const searchEngine = engine();
+      const skills = new WorkspaceSkillsImpl({
+        source: createMockFilesystem({
+          'mastra/.claude/skills/label-bugs/SKILL.md': copy('Label core bugs', 'Apply the core label.'),
+          'mastra/.agents/skills/label-bugs/SKILL.md': copy('Label core bugs again', 'Apply the core label too.'),
+          'mastra/.claude/skills/label-bugs/references/triage.md': 'Triage label rules.',
+          'mastra/.agents/skills/label-bugs/references/triage.md': 'Triage label rules too.',
+          'node_modules/@company/skills/label-bugs/SKILL.md': copy('Vendored label skill', 'Zebra label.'),
+          'skills/pr-review/SKILL.md':
+            '---\nname: pr-review\ndescription: Review pull requests for correctness\n---\n\nRead the diff.',
+        }),
+        skills: ['mastra/.claude/skills', 'mastra/.agents/skills', 'skills', 'node_modules/@company/skills'],
+        ...(searchEngine ? { searchEngine } : {}),
+      });
+
+      const [review] = await skills.search('correctness');
+      expect(review?.skillName).toBe('pr-review');
+
+      const labelHits = await skills.search('label');
+      expect(new Set(labelHits.map(r => r.skillPath))).toEqual(
+        new Set(['mastra/.claude/skills/label-bugs', 'mastra/.agents/skills/label-bugs']),
+      );
+
+      // Reference reads must target each copy by path, not the ambiguous name.
+      const referenceHits = await skills.search('triage', { includeReferences: true });
+      expect(new Set(referenceHits.map(r => `${r.skillPath}/${r.source}`))).toEqual(
+        new Set([
+          'mastra/.claude/skills/label-bugs/references/triage.md',
+          'mastra/.agents/skills/label-bugs/references/triage.md',
+        ]),
+      );
+      if (!searchEngine) {
+        // Simple search lists every skill and reference for an empty query.
+        expect(await skills.search('', { includeReferences: true })).not.toHaveLength(0);
+      }
+
+      // The losing external copy is not attributed to either local copy.
+      const vendored = await skills.search('zebra');
+      expect(vendored.filter(r => r.content.includes('Zebra'))).toEqual([]);
+
+      await expect(skills.get('label-bugs')).rejects.toThrow('multiple local skills found');
+    });
+
+    it.each([
+      ['BM25', () => new SearchEngine({ bm25: {} })],
+      ['simple search', () => undefined],
+    ])('search() reads references when a skill path equals a duplicated name (%s)', async (_label, engine) => {
+      const copy = (body: string) => `---\nname: label-bugs\ndescription: Label bugs\n---\n\n${body}`;
+      const searchEngine = engine();
+      const skills = new WorkspaceSkillsImpl({
+        source: createMockFilesystem({
+          'label-bugs/SKILL.md': copy('Direct copy.'),
+          'label-bugs/references/triage.md': 'Triage rules, direct.',
+          'skills/label-bugs/SKILL.md': copy('Nested copy.'),
+          'skills/label-bugs/references/triage.md': 'Triage rules, nested.',
+        }),
+        skills: ['label-bugs', 'skills'],
+        ...(searchEngine ? { searchEngine } : {}),
+      });
+
+      const hits = await skills.search('triage', { includeReferences: true });
+      expect(new Set(hits.map(r => `${r.skillPath}/${r.source}`))).toEqual(
+        new Set(['label-bugs/references/triage.md', 'skills/label-bugs/references/triage.md']),
+      );
+    });
+
+    it.each([
+      ['BM25', () => new SearchEngine({ bm25: {} })],
+      ['simple search', () => undefined],
+    ])('search() does not credit a losing external copy to the local winner (%s)', async (_label, engine) => {
+      const searchEngine = engine();
+      const skills = new WorkspaceSkillsImpl({
+        source: createMockFilesystem({
+          'skills/label-bugs/SKILL.md': '---\nname: label-bugs\ndescription: Label bugs\n---\n\nApply labels.',
+          'node_modules/@company/skills/label-bugs/SKILL.md':
+            '---\nname: label-bugs\ndescription: Vendored label skill\n---\n\nZebra label.',
+        }),
+        skills: ['skills', 'node_modules/@company/skills'],
+        ...(searchEngine ? { searchEngine } : {}),
+      });
+
+      expect((await skills.search('zebra')).filter(r => r.content.includes('Zebra'))).toEqual([]);
+      const [local] = await skills.search('apply labels');
+      expect(local?.skillPath).toBe('skills/label-bugs');
     });
 
     it('should prefer local skills over external skills with same name', async () => {
@@ -2417,32 +2722,17 @@ Shadow instructions.`;
   });
 
   describe('direct skill path discovery', () => {
-    it('should discover a skill when path points to a directory containing SKILL.md', async () => {
+    it.each([
+      ['should discover a skill when path points to a directory containing SKILL.md', 'test-skill'],
+      ['should discover a skill when path points directly to SKILL.md', 'test-skill/SKILL.md'],
+    ] as const)('%s', async (_title, value) => {
       const filesystem = createMockFilesystem({
         'test-skill/SKILL.md': VALID_SKILL_MD,
       });
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skills: ['test-skill'],
-      });
-
-      const result = await skills.list();
-      expect(result).toHaveLength(1);
-      expect(result[0]?.name).toBe('test-skill');
-
-      const skill = await skills.get('test-skill');
-      expect(skill?.path).toBe('test-skill');
-    });
-
-    it('should discover a skill when path points directly to SKILL.md', async () => {
-      const filesystem = createMockFilesystem({
-        'test-skill/SKILL.md': VALID_SKILL_MD,
-      });
-
-      const skills = new WorkspaceSkillsImpl({
-        source: filesystem,
-        skills: ['test-skill/SKILL.md'],
+        skills: [value],
       });
 
       const result = await skills.list();
@@ -2469,24 +2759,15 @@ Shadow instructions.`;
       expect(result.map(s => s.name).sort()).toEqual(['api-skill', 'test-skill']);
     });
 
-    it('should gracefully handle non-existent direct skill path', async () => {
+    it.each([
+      ['should gracefully handle non-existent direct skill path', 'non-existent/SKILL.md'],
+      ['should gracefully handle non-existent direct directory path', 'non-existent-dir'],
+    ] as const)('%s', async (_title, value) => {
       const filesystem = createMockFilesystem({});
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skills: ['non-existent/SKILL.md'],
-      });
-
-      const result = await skills.list();
-      expect(result).toEqual([]);
-    });
-
-    it('should gracefully handle non-existent direct directory path', async () => {
-      const filesystem = createMockFilesystem({});
-
-      const skills = new WorkspaceSkillsImpl({
-        source: filesystem,
-        skills: ['non-existent-dir'],
+        skills: [value],
       });
 
       const result = await skills.list();
@@ -2819,9 +3100,28 @@ These are the updated instructions.
 
       await skills.removeSkill('skills/test-skill');
 
-      // Should have removed SKILL.md and reference entries
+      // Should have removed SKILL.md, name/description metadata, and reference entries
       expect(removedIds).toContain('skill:skills/test-skill:SKILL.md');
+      expect(removedIds).toContain('skill:skills/test-skill:SKILL.md#metadata');
       expect(removedIds).toContain('skill:skills/test-skill:doc.md');
+    });
+
+    it('reindexes a skill whose description changed even when its instructions did not', async () => {
+      const filesystem = createMockFilesystem({
+        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+      const searchEngine = { ...createMockSearchEngine(), remove: vi.fn(async () => {}) };
+      const skills = new WorkspaceSkillsImpl({ source: filesystem, skills: ['skills'], searchEngine });
+      await skills.list();
+
+      await filesystem.writeFile(
+        'skills/test-skill/SKILL.md',
+        VALID_SKILL_MD.replace('A test skill for unit testing', 'Generates release notes'),
+      );
+      await skills.refresh();
+
+      const metadataDocs = searchEngine.indexedDocs.filter(d => d.id === 'skill:skills/test-skill:SKILL.md#metadata');
+      expect(metadataDocs.at(-1)?.content).toBe('test-skill\nGenerates release notes');
     });
   });
 

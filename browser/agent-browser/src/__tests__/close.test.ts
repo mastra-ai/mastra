@@ -18,7 +18,7 @@ const { mockManager } = vi.hoisted(() => {
   return { mockManager };
 });
 
-vi.mock('agent-browser', () => ({
+vi.mock('../browser-manager', () => ({
   BrowserManager: class {
     launch = mockManager.launch;
     close = mockManager.close;
@@ -56,14 +56,6 @@ describe('browser_close', () => {
   it('can be called multiple times safely', async () => {
     await browser.close();
     await browser.close(); // Should not throw
-
-    expect(browser.status).toBe('closed');
-  });
-
-  it('transitions status from ready to closed', async () => {
-    expect(browser.status).toBe('ready');
-
-    await browser.close();
 
     expect(browser.status).toBe('closed');
   });

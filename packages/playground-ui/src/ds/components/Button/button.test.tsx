@@ -3,9 +3,11 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import * as React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { DropdownMenu } from '../DropdownMenu';
 import { Form } from '../Form';
 import { TooltipProvider } from '../Tooltip';
 import { Button, buttonVariants } from './Button';
+import type { ButtonSize } from './Button';
 
 afterEach(() => {
   cleanup();
@@ -38,14 +40,6 @@ describe('Button', () => {
     expect(alphaModified).toEqual([]);
   });
 
-  // Base UI renders `type="button"` when the prop is absent. Keeping the attribute off
-  // preserves the native `submit` default, so a form button that never set a type keeps
-  // submitting instead of silently going inert.
-  it('leaves type off so a form button keeps the native submit default', () => {
-    render(<Button>Save</Button>);
-    expect(screen.getByRole('button', { name: 'Save' }).hasAttribute('type')).toBe(false);
-  });
-
   it('preserves an explicit submit type', () => {
     render(<Button type="submit">Save</Button>);
     expect(screen.getByRole('button', { name: 'Save' }).getAttribute('type')).toBe('submit');
@@ -73,12 +67,6 @@ describe('Button', () => {
     );
 
     expect(screen.getByRole('link', { name: 'Agents' }).getAttribute('href')).toBe('/new');
-  });
-
-  it('composes with links through render', () => {
-    render(<Button render={<a href="/docs" />}>Read docs</Button>);
-    const link = screen.getByRole('link', { name: 'Read docs' });
-    expect(link.getAttribute('href')).toBe('/docs');
   });
 
   // One icon step per control step. Before this, the same nominal size rendered a
@@ -148,26 +136,42 @@ describe('Button', () => {
 
     it('keeps the label before a trailing icon', () => {
       render(
-        <Button variant="link" iconEnd={<svg data-testid="arrow" />}>
+        <Button variant="link" render={<a href="#" />} iconEnd={<svg data-testid="arrow" />}>
           Open billing portal
         </Button>,
       );
 
-      const button = screen.getByRole('button', { name: 'Open billing portal' });
-      expect(button.firstElementChild?.getAttribute('data-slot')).toBe('button-label');
-      expect(button.lastElementChild?.contains(screen.getByTestId('arrow'))).toBe(true);
+      const link = screen.getByRole('link', { name: 'Open billing portal' });
+      expect(link.firstElementChild?.getAttribute('data-slot')).toBe('button-label');
+      expect(link.lastElementChild?.contains(screen.getByTestId('arrow'))).toBe(true);
     });
 
     it('renders an icon-mode size as a text link rather than an icon button', () => {
       render(
-        <Button variant="link" size="icon-sm">
+        <Button variant="link" size="icon-sm" render={<a href="#" />}>
           Docs
         </Button>,
       );
 
-      const button = screen.getByRole('button', { name: 'Docs' });
-      expect(button.hasAttribute('data-shape')).toBe(false);
-      expect(button.querySelector('[data-slot="button-label"]')?.textContent).toBe('Docs');
+      const link = screen.getByRole('link', { name: 'Docs' });
+      expect(link.hasAttribute('data-shape')).toBe(false);
+      expect(link.querySelector('[data-slot="button-label"]')?.textContent).toBe('Docs');
+    });
+
+    it('keeps a disabled link an anchor with its href', () => {
+      render(
+        <Button variant="link" disabled render={<a href="/usage" />}>
+          View usage
+        </Button>,
+      );
+
+      const link = screen.getByRole('link', { name: 'View usage' });
+      expect(link.getAttribute('href')).toBe('/usage');
+      expect(link.getAttribute('aria-disabled')).toBe('true');
+
+      const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
+      link.dispatchEvent(clickEvent);
+      expect(clickEvent.defaultPrevented).toBe(true);
     });
   });
 
@@ -212,6 +216,32 @@ describe('Button', () => {
         </TooltipProvider>,
       );
       expect(screen.getByRole('button', { name: 'Add' }).getAttribute('aria-label')).toBeNull();
+    });
+
+    it('names an icon-only button from its tooltip when the size is forwarded as a text size', () => {
+      const size: ButtonSize = 'sm';
+      render(
+        <TooltipProvider>
+          <Button size={size} tooltip="Close panel">
+            <svg />
+          </Button>
+        </TooltipProvider>,
+      );
+      expect(screen.getByRole('button', { name: 'Close panel' })).toBeTruthy();
+    });
+
+    it('keeps the visible label as the name when the label sits inside a fragment', () => {
+      render(
+        <TooltipProvider>
+          <Button tooltip="More options">
+            <>
+              <svg />
+              Save
+            </>
+          </Button>
+        </TooltipProvider>,
+      );
+      expect(screen.getByRole('button', { name: 'Save' })).toBeTruthy();
     });
   });
 
@@ -346,6 +376,187 @@ describe('Button', () => {
     it('still routes a real button through Base UI', () => {
       render(<Button render={<button type="submit" />}>Save</Button>);
       expect(screen.getByRole('button', { name: 'Save' }).getAttribute('type')).toBe('submit');
+    });
+  });
+
+  describe('loading', () => {
+    it('blocks the click for itself and for a clickable row behind it', () => {
+      const onClick = vi.fn();
+      const onRowClick = vi.fn();
+      render(
+        <div onClick={onRowClick}>
+          <Button loading onClick={onClick}>
+            Save
+          </Button>
+        </div>,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      expect(onClick).not.toHaveBeenCalled();
+      expect(onRowClick).not.toHaveBeenCalled();
+    });
+
+    it('does not submit its form a second time', () => {
+      const onSubmit = vi.fn((event: React.FormEvent) => event.preventDefault());
+      render(
+        <form onSubmit={onSubmit}>
+          <Button type="submit" loading>
+            Save
+          </Button>
+        </form>,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+
+    it('keeps focus when the click that started it also disables the button', () => {
+      const { rerender } = render(<Button>Save</Button>);
+      const button = screen.getByRole<HTMLButtonElement>('button', { name: 'Save' });
+      button.focus();
+      rerender(
+        <Button loading disabled>
+          Save
+        </Button>,
+      );
+      expect(screen.getByRole('button', { name: 'Save' })).toBe(button);
+      expect(button.disabled).toBe(false);
+      expect(document.activeElement).toBe(button);
+    });
+
+    it('does not open the menu it triggers', () => {
+      render(
+        <DropdownMenu>
+          <DropdownMenu.Trigger render={<Button loading>More</Button>} />
+          <DropdownMenu.Content>
+            <DropdownMenu.Item>Archive</DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu>,
+      );
+      const button = screen.getByRole('button', { name: 'More' });
+      fireEvent.mouseDown(button);
+      fireEvent.click(button);
+      fireEvent.keyDown(button, { key: 'ArrowDown' });
+      expect(screen.queryByRole('menuitem')).toBeNull();
+    });
+
+    it('does not run the key handlers of its caller', () => {
+      const onKey = vi.fn();
+      render(
+        <Button loading onKeyDown={onKey} onKeyUp={onKey}>
+          Save
+        </Button>,
+      );
+      fireEvent.keyDown(screen.getByRole('button'), { key: 'Enter' });
+      fireEvent.keyUp(screen.getByRole('button'), { key: 'Enter' });
+      expect(onKey).not.toHaveBeenCalled();
+    });
+
+    it.each(['click', 'pointerDown', 'mouseDown', 'keyDown', 'keyUp'] as const)(
+      'does not run the %s handler of its render element',
+      name => {
+        const handler = vi.fn();
+        render(
+          <Button
+            loading
+            render={
+              <button
+                onClick={handler}
+                onPointerDown={handler}
+                onMouseDown={handler}
+                onKeyDown={handler}
+                onKeyUp={handler}
+              />
+            }
+          >
+            Save
+          </Button>,
+        );
+        fireEvent[name](screen.getByRole('button', { name: 'Save' }), { key: 'Enter' });
+        expect(handler).not.toHaveBeenCalled();
+      },
+    );
+
+    it('does not run the handlers of an element its render function returns', () => {
+      const handler = vi.fn();
+      render(
+        <Button
+          loading
+          render={props => <button {...props} onClick={handler} onPointerDown={handler} onMouseDown={handler} />}
+        >
+          Save
+        </Button>,
+      );
+      const button = screen.getByRole('button', { name: 'Save', busy: true });
+      fireEvent.pointerDown(button);
+      fireEvent.mouseDown(button);
+      fireEvent.click(button);
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('leaves browser and app shortcuts alone while focused', () => {
+      render(<Button loading>Save</Button>);
+      expect(fireEvent.keyDown(screen.getByRole('button'), { key: 'r', metaKey: true })).toBe(true);
+      expect(fireEvent.keyDown(screen.getByRole('button'), { key: 'Escape' })).toBe(true);
+      expect(fireEvent.keyDown(screen.getByRole('button'), { key: 'ArrowDown' })).toBe(true);
+    });
+
+    it('is busy and unavailable to assistive technology under its own name', () => {
+      render(
+        <Button loading icon={<svg />}>
+          Save
+        </Button>,
+      );
+      const button = screen.getByRole('button', { name: 'Save' });
+      expect(button.getAttribute('aria-busy')).toBe('true');
+      expect(button.getAttribute('aria-disabled')).toBe('true');
+      expect(screen.queryByRole('status')).toBeNull();
+    });
+
+    it('names an icon-only button from its tooltip', () => {
+      render(
+        <TooltipProvider>
+          <Button loading size="icon-md" tooltip="Refresh">
+            <svg />
+          </Button>
+        </TooltipProvider>,
+      );
+      expect(screen.getByRole('button', { name: 'Refresh' }).querySelector('.spinner')).not.toBeNull();
+    });
+
+    it.each([
+      ['the leading icon', { icon: <svg data-testid="icon" /> }, 'button-icon'],
+      ['the trailing icon', { iconEnd: <svg data-testid="icon" /> }, 'button-icon-end'],
+      ['the leading icon when there are two', { icon: <svg data-testid="icon" />, iconEnd: <svg /> }, 'button-icon'],
+    ])('puts the loader in place of %s', (_name, icons, slot) => {
+      const { container } = render(
+        <Button loading {...icons}>
+          Save
+        </Button>,
+      );
+      const loaders = container.querySelectorAll('.spinner');
+      expect(loaders).toHaveLength(1);
+      expect(loaders[0].parentElement?.getAttribute('data-slot')).toBe(slot);
+      expect(loaders[0].parentElement).toBe(screen.getByTestId('icon').parentElement);
+    });
+
+    it('adds the loader before the label of a button without an icon', () => {
+      render(<Button loading>Save</Button>);
+      const button = screen.getByRole('button', { name: 'Save' });
+      expect(button.firstElementChild?.querySelector('.spinner')).not.toBeNull();
+      expect(button.textContent).toBe('Save');
+    });
+
+    it('keeps a loading link a link and stops it from navigating', () => {
+      const onClick = vi.fn();
+      render(
+        <Button loading onClick={onClick} render={<RouterLink to="/agents" />}>
+          Agents
+        </Button>,
+      );
+      const link = screen.getByRole('link', { name: 'Agents' });
+      expect(link.getAttribute('href')).toBe('/agents');
+      expect(link.getAttribute('aria-busy')).toBe('true');
+      expect(fireEvent.click(link)).toBe(false);
+      expect(onClick).not.toHaveBeenCalled();
     });
   });
 

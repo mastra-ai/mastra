@@ -505,15 +505,7 @@ async function channelOutcome(
   steps.push(
     provider
       ? makeStep('present in resolved provider map', undefined, 'pass', `connection ${connection.id}`)
-      : makeStep(
-          'present in resolved provider map',
-          undefined,
-          'fail',
-          id === 'microsoft-teams' && !process.env.MASTRA_ENCRYPTION_KEY
-            ? 'active connection did not resolve — the Teams channel requires MASTRA_ENCRYPTION_KEY ' +
-                '(its install store persists per-agent bot secrets); without it channels() warn-and-skips the provider'
-            : 'active connection did not resolve',
-        ),
+      : makeStep('present in resolved provider map', undefined, 'fail', 'active connection did not resolve'),
   );
 
   if (provider) {
@@ -1074,8 +1066,9 @@ async function teamsProvisionFlow(
       return steps;
     }
     // Delegated connect() refuses to register a bot without a messaging
-    // endpoint; a local placeholder is fine because nothing ever calls it.
-    await provider.configure?.({ baseUrl: 'http://127.0.0.1:4111' });
+    // endpoint; a placeholder is fine because nothing ever calls it, but the
+    // Dev Portal rejects non-HTTPS endpoints so it must be an https URL.
+    await provider.configure?.({ baseUrl: 'https://smoke.invalid' });
 
     if (typeof provider.connect !== 'function' || typeof provider.disconnect !== 'function') {
       steps.push(

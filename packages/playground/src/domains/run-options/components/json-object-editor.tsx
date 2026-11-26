@@ -3,15 +3,17 @@ import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { RequestContextLabel } from '@mastra/playground-ui/domains/request-context/components/request-context-label';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconCodeBrackets } from '@mastra/playground-ui/icons/central/IconCodeBrackets';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconSquareBehindSquare1 } from '@mastra/playground-ui/icons/central/IconSquareBehindSquare1';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatJSON, isValidJson } from '@mastra/playground-ui/utils/formatting';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { Braces, CopyIcon, X, Check } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { z } from 'zod/v4';
@@ -144,7 +146,7 @@ export const JsonObjectEditor = ({
       <div>
         <Field>
           <div className="flex items-center justify-between">
-            <RequestContextLabel tooltip={labelTooltip}>{label} (JSON)</RequestContextLabel>
+            <FieldLabel info={labelTooltip}>{label} (JSON)</FieldLabel>
 
             <div className="flex items-center gap-2">
               {headerActions}
@@ -152,7 +154,7 @@ export const JsonObjectEditor = ({
                 <TooltipTrigger asChild>
                   <button type="button" onClick={handleFormat} className={buttonClass}>
                     <Icon>
-                      <Braces />
+                      <IconCodeBrackets />
                     </Icon>
                   </button>
                 </TooltipTrigger>
@@ -163,7 +165,7 @@ export const JsonObjectEditor = ({
                 <TooltipTrigger asChild>
                   <button type="button" onClick={handleCopy} className={buttonClass}>
                     <Icon>
-                      <CopyIcon />
+                      <IconSquareBehindSquare1 />
                     </Icon>
                   </button>
                 </TooltipTrigger>
@@ -177,7 +179,7 @@ export const JsonObjectEditor = ({
               <FieldLabel className="sr-only">{label} preset</FieldLabel>
               <Select value={selectedPreset} onValueChange={handlePresetChange}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a preset..." />
+                  <SelectValue placeholder="Select a preset" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__custom__">Custom</SelectItem>
@@ -203,10 +205,10 @@ export const JsonObjectEditor = ({
               tooltip={`Revert ${label} changes`}
               onClick={handleRevert}
             >
-              <X />
+              <IconCrossMedium />
             </Button>
           )}
-          <Button icon={<Check />} type="button" onClick={handleSave}>
+          <Button icon={<IconCheckmark2Medium />} type="button" onClick={handleSave}>
             Save
           </Button>
         </div>

@@ -11,6 +11,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 
 import { Agent } from '@mastra/core/agent';
+import type { Session } from '@mastra/core/agent-controller';
 import { Mastra } from '@mastra/core/mastra';
 import {
   defaultNotificationDeliveryDecision,
@@ -25,6 +26,7 @@ import { z } from 'zod';
 
 import { createResourceNotificationDispatcher, shouldHoldNotificationDelivery } from '../notification-dispatch.js';
 import { createSignalsPubSub, notificationDispatchLeaseKey } from '../signals-pubsub.js';
+import { FOREIGN_THREAD, findWakeSession, sessionLeaseScopes, threadScopeKey } from '../wake-session.js';
 
 const AGENT_ID = 'code-agent';
 const USAGE = { inputTokens: { total: 1 }, outputTokens: { total: 1 } };
@@ -73,6 +75,9 @@ function createProject(
     notifications,
     work,
     withDispatch = false,
+    projectPath,
+    threadProjects = {},
+    openThreadId = null,
   }: {
     rootDir: string;
     resourceId: string;
@@ -80,8 +85,30 @@ function createProject(
     work: WorkLog;
     /** Give this process Mastra Code's own dispatch: a dispatch timer for its resource and the hold policy. */
     withDispatch?: boolean;
+    /** The directory this process runs in: its session's thread scope. */
+    projectPath?: string;
+    /** The project each thread of the resource was created in (its `projectPath` tag), shared by every process. */
+    threadProjects?: Record<string, string>;
+    /** The thread this process's session has open, whatever project it was created in. */
+    openThreadId?: string | null;
   },
 ) {
+  // This process's one live session, as Mastra Code's delivery policy sees it.
+  let sessionLive = true;
+  const session = {
+    identity: { getResourceId: () => resourceId },
+    getThreadScope: () => (projectPath ? { projectPath } : {}),
+    thread: {
+      getId: () => openThreadId,
+      getById: async ({ threadId }: { threadId: string }) =>
+        threadProjects[threadId]
+          ? { id: threadId, resourceId, metadata: { projectPath: threadProjects[threadId] } }
+          : null,
+    },
+  } as unknown as Session<unknown>;
+  const sessions = {
+    getSession: async (id: string) => (sessionLive && id === resourceId ? session : undefined),
+  };
   let toolRunning = 0;
   let calls = 0;
   const model = new MockLanguageModelV3({
@@ -129,7 +156,8 @@ function createProject(
   const pubsub = createSignalsPubSub(resourceId, { rootDir });
   const dispatcher = createResourceNotificationDispatcher({
     getMastra: () => mastra,
-    getResourceIds: () => [resourceId],
+    getSessionScopes: async () =>
+      sessionLive ? (await sessionLeaseScopes(session)).map(scope => ({ resourceId, scope })) : [],
     leases: pubsub.getLeaseProvider(),
     owner: name,
     // Ticked by hand.
@@ -143,16 +171,26 @@ function createProject(
     tools: { slowTool },
     ...(withDispatch
       ? {
+          // Mastra Code's delivery policy (`notifications` in index.ts), without the stream options.
           notifications: {
             deliveryPolicy: {
-              decide: input =>
-                shouldHoldNotificationDelivery({
+              decide: async input => {
+                const decision = defaultNotificationDeliveryDecision(input);
+                const owner = await findWakeSession(
+                  sessions,
+                  [session],
+                  { resourceId: input.record.resourceId!, threadId: input.record.threadId },
+                  pubsub.getLeaseProvider(),
+                );
+                if (owner === FOREIGN_THREAD) return { ...decision, hold: true };
+                const hold = shouldHoldNotificationDelivery({
                   resourceId: input.record.resourceId!,
-                  ownedHere: input.record.resourceId === resourceId,
+                  scope: owner?.scope,
+                  ownedHere: owner !== undefined,
                   dispatcher,
-                })
-                  ? { ...defaultNotificationDeliveryDecision(input), hold: true }
-                  : undefined,
+                });
+                return hold ? { ...decision, hold: true } : undefined;
+              },
             },
           },
         }
@@ -178,6 +216,10 @@ function createProject(
     dispatchTick: () => dispatchDueNotifications({ mastra, storage: notifications }),
     /** This process's own dispatch of its resource. */
     dispatcher,
+    /** Close this process's session, as when the user quits it; the process keeps running. */
+    closeSession: () => {
+      sessionLive = false;
+    },
     get toolRunning() {
       return toolRunning;
     },
@@ -341,5 +383,208 @@ describe("each Mastra Code process delivers its own resources' notifications", (
     expect(await worktree.leases.getLeaseOwner(key)).toBeUndefined();
     await worktree.dispatcher.tick();
     expect(await worktree.leases.getLeaseOwner(key)).toBe('worktree');
+  }, 30_000);
+});
+
+describe('processes in different directories that share one resource', () => {
+  /** Two checkouts of one repository: one resource, two projects, two processes. */
+  async function setUpCheckouts({ mainOpenThreadId = null }: { mainOpenThreadId?: string | null } = {}) {
+    const { rootDir, notifications, work, ours } = await setUp();
+    const threadProjects = {
+      'main-thread': '/repo/main',
+      'feature-thread': '/repo/feature',
+      // A third checkout with no process running.
+      'closed-thread': '/repo/closed',
+      'feature-other': '/repo/feature',
+    };
+    const shared = { rootDir, resourceId: ours.resourceId, notifications, work, withDispatch: true, threadProjects };
+    const main = createProject('main', { ...shared, projectPath: '/repo/main', openThreadId: mainOpenThreadId });
+    const feature = createProject('feature', { ...shared, projectPath: '/repo/feature' });
+    // `main` starts first, so it is the one holding the resource's dispatch lease.
+    main.dispatcher.start();
+    await main.dispatcher.tick();
+    feature.dispatcher.start();
+    await feature.dispatcher.tick();
+    expect(await feature.leases.getLeaseOwner(notificationDispatchLeaseKey(ours.resourceId))).toBe('main');
+    /** Both processes' own dispatch timers, and each winning a fire of the shared schedule. */
+    const round = async () => {
+      await Promise.all([main.dispatcher.tick(), feature.dispatcher.tick()]);
+      await main.dispatchTick();
+      await feature.dispatchTick();
+    };
+    return { rootDir, notifications, work, main, feature, round };
+  }
+
+  it("delivers a thread in its own project's process while another project's process holds the resource", async () => {
+    const { notifications, work, main, feature, round } = await setUpCheckouts();
+    await notifications.createNotification(dueNotification(main.resourceId, 'feature-thread', { id: 'for-feature' }));
+
+    for (let index = 0; index < 3 && work.ran.length === 0; index++) await round();
+    // Steps leave the work log between a model call and its tool call, so wait for the run itself to end.
+    await waitFor(
+      () =>
+        work.inFlight === 0 &&
+        feature.agent.getActiveThreadRunId({ resourceId: main.resourceId, threadId: 'feature-thread' }) === undefined,
+      'the feature run to end',
+    );
+
+    const record = await notifications.getNotification({ threadId: 'feature-thread', id: 'for-feature' });
+    expect(record?.status, "the feature project's notification was never delivered").toBe('delivered');
+    expect(work.ran.length).toBeGreaterThan(0);
+    expect(work.ran.every(entry => entry.startsWith('feature:'))).toBe(true);
+
+    // The process holding the resource still delivers its own project's threads.
+    const before = work.ran.length;
+    await notifications.createNotification(dueNotification(main.resourceId, 'main-thread', { id: 'for-main' }));
+    await round();
+    await waitFor(() => work.ran.length > before && work.inFlight === 0, 'the main run');
+    expect((await notifications.getNotification({ threadId: 'main-thread', id: 'for-main' }))?.status).toBe(
+      'delivered',
+    );
+    expect(work.ran.slice(before).every(entry => entry.startsWith('main:'))).toBe(true);
+  }, 30_000);
+
+  it("delivers a thread once when one process has it open and its own project's process also runs", async () => {
+    // The user opened the feature checkout's thread from the main checkout's process (`/threads`).
+    const { notifications, work, main, round } = await setUpCheckouts({ mainOpenThreadId: 'feature-thread' });
+    for (let index = 0; index < 3; index++) {
+      await notifications.createNotification(
+        dueNotification(main.resourceId, 'feature-thread', { id: `for-feature-${index}` }),
+      );
+      await round();
+      await waitFor(() => work.inFlight === 0, 'runs to settle');
+    }
+    await round();
+    await waitFor(() => work.inFlight === 0, 'runs to settle');
+
+    for (let index = 0; index < 3; index++) {
+      const record = await notifications.getNotification({ threadId: 'feature-thread', id: `for-feature-${index}` });
+      expect(record?.status).toBe('delivered');
+    }
+    // Every run happened in one process: the two never both deliver the thread.
+    expect(new Set(work.ran.map(entry => entry.split(':')[0])).size).toBe(1);
+    expect(work.maxInFlight).toBe(1);
+  }, 30_000);
+
+  it("keeps delivering a project's other threads while another process has one of them open", async () => {
+    const { notifications, work, main, round } = await setUpCheckouts({ mainOpenThreadId: 'feature-thread' });
+    await notifications.createNotification(dueNotification(main.resourceId, 'feature-other', { id: 'other' }));
+    await notifications.createNotification(dueNotification(main.resourceId, 'feature-thread', { id: 'open' }));
+
+    for (let index = 0; index < 6; index++) {
+      await round();
+      await waitFor(() => work.inFlight === 0, 'runs to settle');
+    }
+
+    expect((await notifications.getNotification({ threadId: 'feature-other', id: 'other' }))?.status).toBe('delivered');
+    expect((await notifications.getNotification({ threadId: 'feature-thread', id: 'open' }))?.status).toBe('delivered');
+    // The open thread runs in the process that has it open; the project's other thread in its own project's process.
+    expect(work.ran.filter(entry => entry.startsWith('main:')).length).toBeGreaterThan(0);
+    expect(work.ran.filter(entry => entry.startsWith('feature:')).length).toBeGreaterThan(0);
+  }, 30_000);
+
+  it('delivers a thread with no project once, from the process holding the resource', async () => {
+    const { notifications, work, main, round } = await setUpCheckouts();
+    // A thread with no `projectPath` tag (created before scoping, say): every process's session claims it.
+    await notifications.createNotification(dueNotification(main.resourceId, 'unscoped-thread', { id: 'unscoped' }));
+
+    await round();
+    await waitFor(() => work.ran.length > 0 && work.inFlight === 0, 'the run');
+    await round();
+    await waitFor(() => work.inFlight === 0, 'runs to settle');
+
+    expect((await notifications.getNotification({ threadId: 'unscoped-thread', id: 'unscoped' }))?.status).toBe(
+      'delivered',
+    );
+    expect(work.ran.every(entry => entry.startsWith('main:'))).toBe(true);
+    expect(work.maxInFlight).toBe(1);
+  }, 30_000);
+
+  it("delivers a thread however many of a closed checkout's notifications are waiting ahead of it", async () => {
+    const { notifications, work, main, round } = await setUpCheckouts();
+    for (let index = 0; index < 120; index++) {
+      await notifications.createNotification(dueNotification(main.resourceId, 'closed-thread', { id: `old-${index}` }));
+    }
+    await sleep(5);
+    await notifications.createNotification(
+      dueNotification(main.resourceId, 'feature-thread', { id: 'for-feature', priority: 'urgent' }),
+    );
+
+    await round();
+    await waitFor(() => work.ran.length > 0 && work.inFlight === 0, 'the feature run');
+
+    expect((await notifications.getNotification({ threadId: 'feature-thread', id: 'for-feature' }))?.status).toBe(
+      'delivered',
+    );
+    expect(work.ran.every(entry => entry.startsWith('feature:'))).toBe(true);
+    // No process runs in the closed checkout, so its notifications wait for one, without counting attempts.
+    const closed = await notifications.listNotifications({ threadId: 'closed-thread' });
+    expect(closed).toHaveLength(120);
+    expect(closed.every(record => record.status === 'pending' && (record.deliveryAttempts ?? 0) === 0)).toBe(true);
+  }, 30_000);
+
+  it('lets one of two processes in the same project deliver its thread', async () => {
+    const { rootDir, notifications, work, main, feature, round } = await setUpCheckouts();
+    const featureAgain = createProject('feature-2', {
+      rootDir,
+      resourceId: main.resourceId,
+      notifications,
+      work,
+      withDispatch: true,
+      projectPath: '/repo/feature',
+      threadProjects: { 'feature-thread': '/repo/feature' },
+    });
+    featureAgain.dispatcher.start();
+    await notifications.createNotification(dueNotification(main.resourceId, 'feature-thread', { id: 'for-feature' }));
+
+    await Promise.all([round(), featureAgain.dispatcher.tick()]);
+    await waitFor(() => work.ran.length > 0 && work.inFlight === 0, 'the run');
+    await Promise.all([round(), featureAgain.dispatcher.tick()]);
+    await waitFor(() => work.inFlight === 0, 'runs to settle');
+
+    expect((await notifications.getNotification({ threadId: 'feature-thread', id: 'for-feature' }))?.status).toBe(
+      'delivered',
+    );
+    // One run (model, tool, model), in the process holding the project's dispatch lease.
+    expect(work.ran).toEqual(['feature:model', 'feature:tool', 'feature:model']);
+    expect(work.maxInFlight).toBe(1);
+    // `feature` holds the project's dispatch lease: it claimed it before `feature-2` started.
+    expect(
+      await feature.leases.getLeaseOwner(
+        notificationDispatchLeaseKey(main.resourceId, threadScopeKey({ projectPath: '/repo/feature' })),
+      ),
+    ).toBe('feature');
+  }, 30_000);
+
+  it('hands a dispatch lease to another process once no session here needs it', async () => {
+    const { rootDir, notifications, work, main, feature } = await setUpCheckouts();
+    const featureAgain = createProject('feature-2', {
+      rootDir,
+      resourceId: main.resourceId,
+      notifications,
+      work,
+      withDispatch: true,
+      projectPath: '/repo/feature',
+    });
+    featureAgain.dispatcher.start();
+    await featureAgain.dispatcher.tick();
+    const resourceKey = notificationDispatchLeaseKey(main.resourceId);
+    const featureKey = notificationDispatchLeaseKey(main.resourceId, threadScopeKey({ projectPath: '/repo/feature' }));
+    expect(await feature.leases.getLeaseOwner(featureKey)).toBe('feature');
+    expect(await feature.leases.getLeaseOwner(resourceKey)).toBe('main');
+
+    // The feature session closes; its process keeps running, and releases the project's lease on its next tick.
+    feature.closeSession();
+    await feature.dispatcher.tick();
+    expect(await feature.leases.getLeaseOwner(featureKey)).toBeUndefined();
+    await featureAgain.dispatcher.tick();
+    expect(await feature.leases.getLeaseOwner(featureKey)).toBe('feature-2');
+
+    // Likewise the resource's own lease, once the main session closes.
+    main.closeSession();
+    await main.dispatcher.tick();
+    expect(await main.leases.getLeaseOwner(resourceKey)).toBeUndefined();
+    await featureAgain.dispatcher.tick();
+    expect(await main.leases.getLeaseOwner(resourceKey)).toBe('feature-2');
   }, 30_000);
 });

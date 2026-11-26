@@ -1,9 +1,10 @@
-import { Monitor, Moon, Sun } from 'lucide-react';
-
 import { SegmentedControl, SegmentedControlItem } from '../SegmentedControl';
 import type { SegmentedControlProps } from '../SegmentedControl';
 import { useTheme } from '../ThemeProvider';
 import type { Theme } from '../ThemeProvider/theme-context';
+import { IconMoon } from '@/ds/icons/central/IconMoon';
+import { IconStudioDisplay } from '@/ds/icons/central/IconStudioDisplay';
+import { IconSun } from '@/ds/icons/central/IconSun';
 import type { ControlSize } from '@/ds/primitives/control-size';
 
 export interface ThemeToggleOption {
@@ -12,10 +13,10 @@ export interface ThemeToggleOption {
   icon: React.ReactNode;
 }
 
-const DEFAULT_OPTIONS: ReadonlyArray<ThemeToggleOption> = [
-  { value: 'system', label: 'System', icon: <Monitor /> },
-  { value: 'light', label: 'Light', icon: <Sun /> },
-  { value: 'dark', label: 'Dark', icon: <Moon /> },
+export const THEME_OPTIONS: ReadonlyArray<ThemeToggleOption> = [
+  { value: 'system', label: 'System', icon: <IconStudioDisplay /> },
+  { value: 'light', label: 'Light', icon: <IconSun /> },
+  { value: 'dark', label: 'Dark', icon: <IconMoon /> },
 ];
 
 type ControlledProps = { value: Theme; onChange: (next: Theme) => void };
@@ -48,7 +49,7 @@ function pickSelectedTheme(options: ReadonlyArray<ThemeToggleOption>, current: T
 export const ThemeToggle = ({
   value,
   onChange,
-  options = DEFAULT_OPTIONS,
+  options = THEME_OPTIONS,
   size = 'md',
   'aria-label': ariaLabel = 'Theme',
   ...groupProps

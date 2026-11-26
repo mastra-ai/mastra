@@ -25,35 +25,22 @@ describe('resolveSlackTopLevelThreadId', () => {
     expect(result).toBe('C123:');
   });
 
-  it('returns null when click was inside a real thread (threadTs !== messageId)', () => {
+  it.each([
+    [
+      'returns null when click was inside a real thread (threadTs !== messageId)',
+      'slack',
+      'C123:1700000000.000050',
+      '1700000000.000100',
+    ],
+    ['returns null for non-slack platforms', 'discord', 'C123:1700000000.000100', '1700000000.000100'],
+    ['returns null when messageId is missing', 'slack', 'C123:1700000000.000100', undefined],
+  ] as const)('%s', (_title, platform, chatThreadId, messageId) => {
     const adapter = makeSlackAdapter();
     const result = resolveSlackTopLevelThreadId({
-      platform: 'slack',
+      platform,
       adapter,
-      chatThreadId: 'C123:1700000000.000050',
-      messageId: '1700000000.000100',
-    });
-    expect(result).toBeNull();
-  });
-
-  it('returns null for non-slack platforms', () => {
-    const adapter = makeSlackAdapter();
-    const result = resolveSlackTopLevelThreadId({
-      platform: 'discord',
-      adapter,
-      chatThreadId: 'C123:1700000000.000100',
-      messageId: '1700000000.000100',
-    });
-    expect(result).toBeNull();
-  });
-
-  it('returns null when messageId is missing', () => {
-    const adapter = makeSlackAdapter();
-    const result = resolveSlackTopLevelThreadId({
-      platform: 'slack',
-      adapter,
-      chatThreadId: 'C123:1700000000.000100',
-      messageId: undefined,
+      chatThreadId,
+      messageId,
     });
     expect(result).toBeNull();
   });

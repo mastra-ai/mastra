@@ -36,6 +36,14 @@ interface SlackAdapterChannelConfigBase {
   textFormat?: ChannelAdapterConfig['textFormat'];
 
   /**
+   * Whether the agent's reply text is posted to Slack. See `ChannelAdapterConfig['textDisplay']`.
+   * `'hidden'` keeps it out of the thread, so the agent's own messages reach it only through tools you give it.
+   *
+   * @default 'show'
+   */
+  textDisplay?: ChannelAdapterConfig['textDisplay'];
+
+  /**
    * Control Slack typing indicators and Assistant-mode status text.
    *
    * - `true` — use built-in defaults: `"is typing…"` while generating text,
@@ -53,6 +61,30 @@ interface SlackAdapterChannelConfigBase {
    * @default true
    */
   typingStatus?: ChannelAdapterConfig['typingStatus'];
+
+  /** Who can approve or deny tool calls in a channel. Defaults to the requester; use `'anyone'` for shared channels. */
+  toolApprovers?: ChannelAdapterConfig['toolApprovers'];
+
+  /**
+   * **Experimental.** Give the agent a `render_card` tool that posts
+   * generative UI cards as native Block Kit. Needs `@json-render/chat`
+   * installed. See `ChannelAdapterConfig['generativeUI']`.
+   *
+   * @default false
+   */
+  generativeUI?: boolean;
+
+  /**
+   * Reply through a `reply_in_thread` tool instead of posting reply text and
+   * tool calls. See `ChannelAdapterConfig['replyMode']`.
+   */
+  replyMode?: ChannelAdapterConfig['replyMode'];
+
+  /**
+   * Link the first reply of a new thread to your web UI. See
+   * `ChannelAdapterConfig['threadLink']`.
+   */
+  threadLink?: ChannelAdapterConfig['threadLink'];
 }
 
 /**

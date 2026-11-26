@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import type { ModelPack } from '../../../model-packs.js';
 import { createFactoryStorageForTests } from '../../test-utils.js';
+import type { UpdateFactoryProjectInput } from './base.js';
 
 describe('FactoryProjectsStorage', () => {
   it('creates an org-owned project without any integration or repository', async () => {
@@ -17,11 +19,45 @@ describe('FactoryProjectsStorage', () => {
       createdBy: 'user-1',
       name: 'Platform',
       description: 'Internal platform work',
-      modelScope: 'factory',
-      slackWorkItemsEnabled: false,
+      modelScope: 'hybrid',
     });
     expect(await seed.projects.get({ orgId: 'org-1', id: project.id })).toEqual(project);
     expect(await seed.projects.get({ orgId: 'other-org', id: project.id })).toBeNull();
+  });
+
+  it('stores an explicit model scope at creation', async () => {
+    const seed = await createFactoryStorageForTests();
+    const factory = await seed.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Org', modelScope: 'factory' },
+    });
+    const user = await seed.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Mine', modelScope: 'user' },
+    });
+
+    expect((await seed.projects.get({ orgId: 'org-1', id: factory.id }))?.modelScope).toBe('factory');
+    expect((await seed.projects.get({ orgId: 'org-1', id: user.id }))?.modelScope).toBe('user');
+  });
+
+  it('round-trips the hybrid scope and reads unknown stored scopes as hybrid', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Split', modelScope: 'user' },
+    });
+
+    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { modelScope: 'hybrid' } });
+    expect((await seed.projects.get({ orgId: 'org-1', id: project.id }))?.modelScope).toBe('hybrid');
+    expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('hybrid');
+
+    // A value written by an older or newer build must not leak through as an unknown scope.
+    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { modelScope: 'factory' } });
+    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { modelScope: 'org' as never } });
+    expect((await seed.projects.get({ orgId: 'org-1', id: project.id }))?.modelScope).toBe('hybrid');
   });
 
   it('lists, updates, and deletes projects within their organization', async () => {
@@ -35,13 +71,9 @@ describe('FactoryProjectsStorage', () => {
     const updated = await seed.projects.update({
       orgId: 'org-1',
       id: first.id,
-      input: { name: 'Renamed', description: 'Now documented', slackWorkItemsEnabled: true },
+      input: { name: 'Renamed', description: 'Now documented' },
     });
-    expect(updated).toMatchObject({
-      name: 'Renamed',
-      description: 'Now documented',
-      slackWorkItemsEnabled: true,
-    });
+    expect(updated).toMatchObject({ name: 'Renamed', description: 'Now documented' });
     expect(await seed.projects.update({ orgId: 'org-2', id: first.id, input: { name: 'Nope' } })).toBeNull();
 
     const scoped = await seed.projects.update({
@@ -58,5 +90,184 @@ describe('FactoryProjectsStorage', () => {
     expect(await seed.projects.delete({ orgId: 'org-2', id: first.id })).toBeNull();
     expect(await seed.projects.delete({ orgId: 'org-1', id: first.id })).toMatchObject({ id: first.id });
     expect(await seed.projects.get({ orgId: 'org-1', id: first.id })).toBeNull();
+  });
+
+  it('round-trips every environment field and clears them with null', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Env' } });
+    expect(project).toMatchObject({
+      sandboxWorkingDirectory: null,
+      sandboxSettings: null,
+      workspaceSetupCommand: null,
+      activeTemplateId: null,
+      activeTemplateHeads: null,
+    });
+
+    const environment = {
+      sandboxWorkingDirectory: '/home/user/workspace',
+      sandboxSettings: { cpuCount: 8, memoryMb: 16384 },
+      workspaceSetupCommand: 'touch .ready',
+      activeTemplateId: 'tpl-1',
+      activeTemplateHeads: { 'mastra-ai/mastra': 'abc123' },
+    };
+    expect(await seed.projects.update({ orgId: 'org-1', id: project.id, input: environment })).toMatchObject(
+      environment,
+    );
+    expect(await seed.projects.get({ orgId: 'org-1', id: project.id })).toMatchObject(environment);
+
+    const cleared = {
+      sandboxWorkingDirectory: null,
+      sandboxSettings: null,
+      workspaceSetupCommand: null,
+      activeTemplateId: null,
+      activeTemplateHeads: null,
+    };
+    expect(await seed.projects.update({ orgId: 'org-1', id: project.id, input: cleared })).toMatchObject(cleared);
+  });
+
+  it('reads a project saved before packs as a single Default pack built from its default model', async () => {
+    const seed = await createFactoryStorageForTests();
+    const empty = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Empty' } });
+    expect(empty).toMatchObject({ defaultModelId: null, modelPacks: [], defaultModelPackId: null });
+
+    const legacy = await seed.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Legacy', defaultModelId: 'anthropic/claude-opus-5.5' },
+    });
+    expect(legacy).toMatchObject({
+      defaultModelId: 'anthropic/claude-opus-5.5',
+      defaultThinkingLevel: 'medium',
+      modelPacks: [
+        {
+          id: 'default',
+          name: 'Default',
+          models: [{ modelId: 'anthropic/claude-opus-5.5', thinkingLevel: 'medium' }],
+        },
+      ],
+      defaultModelPackId: 'default',
+    });
+  });
+
+  it('mirrors the default pack into the default model and edits the pack through the default model', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'P' } });
+    const build: ModelPack = {
+      id: 'build',
+      name: 'Build',
+      models: [
+        { modelId: 'anthropic/claude-opus-5.5', thinkingLevel: 'medium' },
+        { modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'high' },
+      ],
+    };
+    const cheap: ModelPack = {
+      id: 'cheap',
+      name: 'Cheap',
+      models: [{ modelId: 'deepseek/deepseek-flash', thinkingLevel: 'low' }],
+    };
+    const update = (input: UpdateFactoryProjectInput) =>
+      seed.projects.update({ orgId: 'org-1', id: project.id, input });
+
+    expect(await update({ modelPackSet: { modelPacks: [build, cheap], defaultModelPackId: 'cheap' } })).toMatchObject({
+      defaultModelId: 'deepseek/deepseek-flash',
+      defaultThinkingLevel: 'low',
+      modelPacks: [build, cheap],
+      defaultModelPackId: 'cheap',
+    });
+
+    await update({ modelPackSet: { modelPacks: [build, cheap], defaultModelPackId: 'build' } });
+    await update({ defaultModelId: 'moonshot/kimi-k3' });
+    expect(await seed.projects.getById({ id: project.id })).toMatchObject({
+      defaultModelId: 'moonshot/kimi-k3',
+      defaultThinkingLevel: 'medium',
+      modelPacks: [
+        { ...build, models: [{ modelId: 'moonshot/kimi-k3', thinkingLevel: 'medium' }, build.models[1]] },
+        cheap,
+      ],
+    });
+
+    await update({ name: 'Renamed' });
+    expect((await seed.projects.get({ orgId: 'org-1', id: project.id }))?.defaultModelPackId).toBe('build');
+
+    expect(await update({ modelPackSet: { modelPacks: [], defaultModelPackId: null } })).toMatchObject({
+      defaultModelId: null,
+      modelPacks: [],
+      defaultModelPackId: null,
+    });
+  });
+});
+
+describe('FactoryProjectsStorage builds', () => {
+  it('defaults the build columns and round-trips them', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'P' } });
+    expect(project).toMatchObject({
+      lastBuildId: null,
+      lastBuildAttemptedAt: null,
+      buildOnPushEnabled: false,
+      buildPushDebounceMinutes: 30,
+    });
+
+    const at = new Date('2026-10-08T10:00:00.000Z');
+    const updated = await seed.projects.update({
+      orgId: 'org-1',
+      id: project.id,
+      input: { lastBuildId: 'tpl_1', lastBuildAttemptedAt: at, buildOnPushEnabled: true, buildPushDebounceMinutes: 3 },
+    });
+    expect(updated).toMatchObject({
+      lastBuildId: 'tpl_1',
+      lastBuildAttemptedAt: at,
+      buildOnPushEnabled: true,
+      buildPushDebounceMinutes: 3,
+    });
+  });
+
+  it('claimBuildAttempt wins once per debounce window', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'P' } });
+    const t0 = new Date('2026-10-08T10:00:00.000Z');
+
+    expect(await seed.projects.claimBuildAttempt({ id: project.id, debounceMinutes: 10, now: t0 })).toBe(true);
+    const afterFirst = await seed.projects.getById({ id: project.id });
+    expect(afterFirst?.lastPushBuildAt).toEqual(t0);
+
+    const t1 = new Date(t0.getTime() + 9 * 60_000);
+    expect(await seed.projects.claimBuildAttempt({ id: project.id, debounceMinutes: 10, now: t1 })).toBe(false);
+    expect((await seed.projects.getById({ id: project.id }))?.lastPushBuildAt).toEqual(t0);
+
+    const t2 = new Date(t0.getTime() + 10 * 60_000);
+    expect(await seed.projects.claimBuildAttempt({ id: project.id, debounceMinutes: 10, now: t2 })).toBe(true);
+    expect((await seed.projects.getById({ id: project.id }))?.lastPushBuildAt).toEqual(t2);
+
+    // Two concurrent claims on a fresh window: exactly one wins.
+    const t3 = new Date(t2.getTime() + 60 * 60_000);
+    const results = await Promise.all([
+      seed.projects.claimBuildAttempt({ id: project.id, debounceMinutes: 10, now: t3 }),
+      seed.projects.claimBuildAttempt({ id: project.id, debounceMinutes: 10, now: t3 }),
+    ]);
+    expect(results.filter(Boolean)).toHaveLength(1);
+  });
+
+  it('pinActiveTemplate writes only while the build is still the last one', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'P' } });
+    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { lastBuildId: 'build-2' } });
+
+    expect(
+      await seed.projects.pinActiveTemplate({ id: project.id, buildId: 'build-1', templateId: 'tpl-1', heads: {} }),
+    ).toBe(false);
+    expect((await seed.projects.getById({ id: project.id }))?.activeTemplateId).toBeNull();
+
+    expect(
+      await seed.projects.pinActiveTemplate({
+        id: project.id,
+        buildId: 'build-2',
+        templateId: 'tpl-2',
+        heads: { 'acme/api': 'abc' },
+      }),
+    ).toBe(true);
+    const stored = await seed.projects.getById({ id: project.id });
+    expect(stored?.activeTemplateId).toBe('tpl-2');
+    expect(stored?.activeTemplateHeads).toEqual({ 'acme/api': 'abc' });
   });
 });

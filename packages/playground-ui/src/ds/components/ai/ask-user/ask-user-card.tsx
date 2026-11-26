@@ -7,7 +7,8 @@ import {
   AskUserSubmit,
   AskUserTextAnswer,
 } from './ask-user-controls';
-import { AskUserBody, AskUserContainer, AskUserOutput, AskUserPending, AskUserQuestion } from './ask-user-layout';
+import type { AskUserContainer } from './ask-user-layout';
+import { AskUserBody, AskUserOutput, AskUserPending, AskUserQuestion } from './ask-user-layout';
 import { AskUserRoot } from './ask-user-root';
 import type { AskUserAnswer, AskUserOption, AskUserPayload, AskUserResult } from './ask-user-types';
 import { Badge } from '@/ds/components/Badge';
@@ -45,7 +46,12 @@ function AskUserAnswerControls({ options }: { options: AskUserOption[] }) {
     <>
       <AskUserOptions>
         {options.map(option => (
-          <AskUserOptionItem key={option.label} value={option.label} description={option.description}>
+          <AskUserOptionItem
+            key={option.label}
+            value={option.label}
+            description={option.description}
+            recommended={option.recommended}
+          >
             {option.label}
           </AskUserOptionItem>
         ))}

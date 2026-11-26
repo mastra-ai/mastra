@@ -7,7 +7,7 @@ packages:
 
 # CachingPubSub
 
-`CachingPubSub` wraps any [`PubSub`](/reference/pubsub/base) implementation and adds event caching and replay. It records every published event per topic in a cache, so a subscriber that connects late or reconnects after a disconnect can replay the events it missed before continuing with live events.
+`CachingPubSub` wraps any [`PubSub`](/reference/pubsub/base) implementation and adds event caching and replay. It records published events per topic in a cache, so a subscriber that connects late or reconnects after a disconnect can replay the events it missed before continuing with live events.
 
 Use it to build resumable streams on top of a transport that doesn't keep history, such as [`EventEmitterPubSub`](/reference/pubsub/event-emitter). Transports that already persist events, such as [`RedisStreamsPubSub`](/reference/pubsub/redis-streams), don't need this wrapper.
 
@@ -75,6 +75,22 @@ const pubsub = withCaching(new EventEmitterPubSub(), new InMemoryServerCache())
         description: 'Logger for errors. Falls back to `console.error` when omitted.',
         isOptional: true,
       },
+      {
+        name: 'runLogTtlMs',
+        type: 'number',
+        description:
+          "Minimum retention requested for `agent.stream.*` run logs with every append. The default matches the run record's 24-hour lifetime: a run parked on a tool approval appends nothing while it waits, so its log must outlive every moment the record still authorizes observing it, or the approval request expires out of an authorized run. Storage holds the messages, and once a log expires there is nothing left to replay: `observe()` does not read messages from storage, so a reconnecting client fetches what it missed from storage itself. A cache whose own TTL is longer keeps that instead.",
+        isOptional: true,
+        defaultValue: '86400000 (24 hours)',
+      },
+      {
+        name: 'threadStreamLogTtlMs',
+        type: 'number',
+        description:
+          'Minimum retention requested for `agent.thread-stream.*` logs with every append. A cache whose own TTL is longer keeps that instead.',
+        isOptional: true,
+        defaultValue: '3600000 (1 hour)',
+      },
     ],
   },
 ]}
@@ -92,7 +108,8 @@ const pubsub = withCaching(new EventEmitterPubSub(), new InMemoryServerCache())
   {
     name: 'supportsOffsets',
     type: 'boolean',
-    description: 'Returns `true`. Cached events have sequential indexes that support numeric offset replay.',
+    description:
+      "Returns `true`. Cached events carry numeric indexes that support offset replay, strictly increasing within a log's lifetime. Indexes are opaque cursors, not positions: with the built-in Redis, Valkey and in-memory caches a fresh log starts at a clock-derived value, and Convex numbers densely, so pass an index read from an event (plus one), never a computed count. A recreated log normally continues above its predecessor, but that follows the cache's clock rather than a guarantee.",
   },
 ]}
 />
@@ -103,7 +120,9 @@ const pubsub = withCaching(new EventEmitterPubSub(), new InMemoryServerCache())
 
 ### `publish(topic, event)`
 
-Caches the event with a sequential index, then publishes it to the inner pub/sub.
+Caches the event with the topic's next index, then publishes it to the inner pub/sub. Consecutive publishes get consecutive indexes. A topic whose log expired or was cleared normally restarts above every index it issued before, so a reconnecting subscriber doesn't mistake new events for already-seen ones. That depends on the cache: `ConvexServerCache` numbers densely instead, and a clock-seeded cache can repeat an index when a log is recreated within the clock's resolution or after the clock moves backwards.
+
+A publish with `{ localOnly: true }` skips the cache and goes straight to the inner pub/sub, so live subscribers receive it but it can't be replayed.
 
 ```typescript
 await pubsub.publish('my-topic', {

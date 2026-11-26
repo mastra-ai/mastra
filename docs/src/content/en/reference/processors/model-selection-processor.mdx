@@ -29,7 +29,7 @@ export const agent = new Agent({
       model: typeSafeAi.decisionModel('__AI_SDK_TYPESAFE_DECISION_MODEL__'),
       choices: [
         {
-          model: '__GATEWAY_OPENAI_MODEL_MINI__',
+          model: '__GATEWAY_OPENAI_MODEL_LUNA__',
           criteria:
             'Answerable in one or two sentences from general knowledge, with no reasoning steps',
         },
@@ -162,7 +162,7 @@ const logger = new PinoLogger({ name: 'model-selection' })
 new ModelSelectionProcessor({
   model: typeSafeAi.decisionModel('__AI_SDK_TYPESAFE_DECISION_MODEL__'),
   choices: [
-    { model: '__GATEWAY_OPENAI_MODEL_MINI__', criteria: 'Simple lookups' },
+    { model: '__GATEWAY_OPENAI_MODEL_LUNA__', criteria: 'Simple lookups' },
     { model: '__GATEWAY_OPENAI_MODEL__', criteria: 'Multi-step reasoning' },
   ],
   onDecision: decision => {
@@ -196,7 +196,7 @@ The decision carries the model that was applied, the criterion that was chosen, 
   },
   {
     name: 'abstained',
-    type: "'below-threshold' | 'no-model-for-choice' | 'no-text' | 'error'",
+    type: "'below-threshold' | 'no-model-for-choice' | 'no-text' | 'error' | 'refused'",
     required: false,
     description: 'Why no model was applied. Absent on a successful routing decision and when select returns undefined.',
   },
@@ -228,7 +228,7 @@ const triage = new Classifier({
 new ModelSelectionProcessor({
   classifier: triage,
   select: ({ complexity }) =>
-    complexity.choice === 'trivial' ? '__GATEWAY_OPENAI_MODEL_MINI__' : undefined,
+    complexity.choice === 'trivial' ? '__GATEWAY_OPENAI_MODEL_LUNA__' : undefined,
 })
 ```
 
@@ -236,9 +236,9 @@ Returning `undefined` abstains, and the agent's configured model is used.
 
 ## Routing scope
 
-Each step in a run sends the conversation and every tool result so far to the model. That makes the opening call the cheapest one, not the most expensive, so routing only that call captures very little.
+Each step in a run sends the conversation and every tool result so far to the model. That makes the opening call the cheapest one, not the most expensive, so routing only that call captures little.
 
-On a four-step run the opening call holds roughly 14% of the input tokens, so routing it alone captures under a tenth of the available saving. That figure counts every input token at full price. With prompt caching, most of a later step's input is a discounted cache read, so routing later steps saves less than their token share suggests.
+On a four-step run the opening call holds about 14% of the input tokens, so routing it alone captures under a tenth of the available saving. That figure counts every input token at full price. With prompt caching, most of a later step's input is a discounted cache read, so routing later steps saves less than their token share suggests.
 
 `scope: 'run'` is the default for this reason. Use `scope: 'first-step'` when you would rather a long run drift back to the capable model than commit to one decision, and accept that on multi-step runs it saves close to nothing.
 
@@ -279,7 +279,7 @@ new ModelSelectionProcessor({
   select: ({ complexity, sensitive }) => {
     // Never downgrade a sensitive request, however simple it looks.
     if (sensitive.probability >= 0.3) return undefined
-    return complexity.choice === 'trivial' ? '__GATEWAY_OPENAI_MODEL_MINI__' : undefined
+    return complexity.choice === 'trivial' ? '__GATEWAY_OPENAI_MODEL_LUNA__' : undefined
   },
 })
 ```
@@ -297,7 +297,7 @@ If your decision model doesn't report choice distributions, the processor abstai
 
 ## Failure behavior
 
-Routing fails open. If the classifier errors or the classifier ID isn't registered, the processor logs a warning and the agent's configured model is used. If the request has no user text to classify, the processor abstains without logging and reports `abstained: 'no-text'` to `onDecision`. This is the safe direction for a cost optimization: the worst case is that you pay for the model you already configured.
+Routing fails open. If the classifier errors or the classifier ID isn't registered, the processor logs a warning and the agent's configured model is used. If the request has no user text to classify, the processor abstains without logging and reports `abstained: 'no-text'` to `onDecision`. With the `choices` form, if the decision model refuses the routing question, the processor abstains and reports `abstained: 'refused'`. With the `select` form, your callback receives the refusal answer and decides whether to return a model or `undefined`. This is the safe direction for a cost optimization: the worst case is that you pay for the model you already configured.
 
 This is the opposite of the fail-closed stance appropriate for [tool approval](/docs/agents/human-in-the-loop), where uncertainty should escalate rather than pass through.
 

@@ -1,5 +1,7 @@
+import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { FactorySessionOwner } from '../subscription-session.js';
 import type { GitLabSignalSubscriptionRow } from './subscriptions.js';
 import { classifyGitLabWebhook, dispatchGitLabWebhook } from './webhook-dispatch.js';
 import type { GitLabWebhookDispatchIntegration } from './webhook-dispatch.js';
@@ -40,7 +42,6 @@ const note = (attributes: Record<string, unknown> = {}) =>
 
 function subscription(
   id: string,
-  scope: string,
   threadId = `thread-${id}`,
   status: 'open' | 'closed' | 'merged' = 'open',
 ): GitLabSignalSubscriptionRow {
@@ -51,7 +52,6 @@ function subscription(
     sessionId: `session-${id}`,
     resourceId: 'resource-1',
     threadId,
-    sessionScope: scope,
     status,
     data: {
       host: 'gitlab.example.com',
@@ -84,7 +84,7 @@ function controllerStub(overrides: Record<string, unknown>, threads: Record<stri
 const getProjectMemberAccessLevel = vi.fn(async (): Promise<number | undefined> => 40);
 const resolveActiveConnectionForHost = vi.fn(async (connectionId: string) => connectionId);
 
-function gitlabStub(sessionRow: { userId: string; orgId: string } | null = null): GitLabWebhookDispatchIntegration {
+function gitlabStub(sessionRow: FactorySessionOwner | null = null): GitLabWebhookDispatchIntegration {
   return {
     integrationStorage: {} as never,
     sourceControlStorage: { sessions: { getBySessionId: async () => sessionRow } },
@@ -181,8 +181,8 @@ describe('dispatchGitLabWebhook', () => {
   it('runs the woken session as the subscribing user in the subscription organization', async () => {
     const owned = session('thread-a');
     const result = await dispatchGitLabWebhook(mergeRequest('reopen'), {
-      controller: controllerStub({ getSessionByResource: vi.fn(async () => owned.session), createSession: vi.fn() }),
-      listSubscriptions: async () => [subscription('a', '/worktrees/a', 'thread-a')],
+      controller: controllerStub({ getSession: vi.fn(async () => owned.session), createSession: vi.fn() }),
+      listSubscriptions: async () => [subscription('a', 'thread-a')],
       retireSubscription: vi.fn(async () => undefined),
     });
 
@@ -197,10 +197,10 @@ describe('dispatchGitLabWebhook', () => {
 
   it('falls back to the Factory session owner for a row that names no subscribing user', async () => {
     const owned = session('thread-a');
-    const row = subscription('a', '/worktrees/a', 'thread-a');
+    const row = subscription('a', 'thread-a');
     row.data = { ...row.data, subscribedByUserId: null };
     const result = await dispatchGitLabWebhook(mergeRequest('reopen'), {
-      controller: controllerStub({ getSessionByResource: vi.fn(async () => owned.session), createSession: vi.fn() }),
+      controller: controllerStub({ getSession: vi.fn(async () => owned.session), createSession: vi.fn() }),
       gitlab: gitlabStub({ userId: 'owner-9', orgId: 'org-9' }),
       listSubscriptions: async () => [row],
       retireSubscription: vi.fn(async () => undefined),
@@ -215,12 +215,12 @@ describe('dispatchGitLabWebhook', () => {
 
   it('fails the delivery, without retiring, when neither the row nor the session names a user', async () => {
     const owned = session('thread-a');
-    const row = subscription('a', '/worktrees/a', 'thread-a');
+    const row = subscription('a', 'thread-a');
     row.data = { ...row.data, subscribedByUserId: null };
     const retireSubscription = vi.fn(async () => undefined);
     const onTargetError = vi.fn();
     const result = await dispatchGitLabWebhook(mergeRequest('close'), {
-      controller: controllerStub({ getSessionByResource: vi.fn(async () => owned.session), createSession: vi.fn() }),
+      controller: controllerStub({ getSession: vi.fn(async () => owned.session), createSession: vi.fn() }),
       gitlab: gitlabStub(null),
       listSubscriptions: async () => [row],
       retireSubscription,
@@ -238,16 +238,16 @@ describe('dispatchGitLabWebhook', () => {
   it('delivers to every subscribed session, then retires terminal subscriptions', async () => {
     const a = session('thread-a');
     const b = session('thread-b');
-    const getSessionByResource = vi.fn(async (_resourceId: string, scope?: string) =>
-      scope === '/worktrees/a' ? a.session : b.session,
+    const getSession = vi.fn(async (sessionId: string) =>
+      sessionId === 'session-a' ? a.session : b.session,
     );
     const retireSubscription = vi.fn(async () => undefined);
 
     const result = await dispatchGitLabWebhook(mergeRequest('merge'), {
-      controller: controllerStub({ getSessionByResource, createSession: vi.fn() }),
+      controller: controllerStub({ getSession, createSession: vi.fn() }),
       listSubscriptions: async () => [
-        subscription('a', '/worktrees/a', 'thread-a'),
-        subscription('b', '/worktrees/b', 'thread-b'),
+        subscription('a', 'thread-a'),
+        subscription('b', 'thread-b'),
       ],
       retireSubscription,
     });
@@ -282,8 +282,8 @@ describe('dispatchGitLabWebhook', () => {
   it('reactivates retained subscriptions on reopen and points note deliveries at the note', async () => {
     const a = session('thread-a');
     const retireSubscription = vi.fn(async () => undefined);
-    const listSubscriptions = vi.fn(async () => [subscription('a', '/worktrees/a', 'thread-a', 'closed')]);
-    const controller = controllerStub({ getSessionByResource: async () => a.session, createSession: vi.fn() });
+    const listSubscriptions = vi.fn(async () => [subscription('a', 'thread-a', 'closed')]);
+    const controller = controllerStub({ getSession: async () => a.session, createSession: vi.fn() });
 
     await expect(
       dispatchGitLabWebhook(mergeRequest('reopen'), { controller, listSubscriptions, retireSubscription }),
@@ -309,8 +309,8 @@ describe('dispatchGitLabWebhook', () => {
   it('gates comments and approvals on trusted membership through the subscription connection', async () => {
     const a = session('thread-a');
     const onSenderRejected = vi.fn();
-    const controller = controllerStub({ getSessionByResource: async () => a.session, createSession: vi.fn() });
-    const listSubscriptions = async () => [subscription('a', '/worktrees/a', 'thread-a')];
+    const controller = controllerStub({ getSession: async () => a.session, createSession: vi.fn() });
+    const listSubscriptions = async () => [subscription('a', 'thread-a')];
     resolveActiveConnectionForHost.mockResolvedValue('direct-preferred');
 
     getProjectMemberAccessLevel.mockResolvedValueOnce(20);
@@ -351,9 +351,9 @@ describe('dispatchGitLabWebhook', () => {
     const a = session('thread-a');
     getProjectMemberAccessLevel.mockImplementationOnce(() => new Promise(() => {}));
     const pending = dispatchGitLabWebhook(mergeRequest('approved'), {
-      controller: controllerStub({ getSessionByResource: async () => a.session, createSession: vi.fn() }),
+      controller: controllerStub({ getSession: async () => a.session, createSession: vi.fn() }),
       gitlab: gitlabStub(),
-      listSubscriptions: async () => [subscription('a', '/worktrees/a', 'thread-a')],
+      listSubscriptions: async () => [subscription('a', 'thread-a')],
     });
     await vi.advanceTimersByTimeAsync(5_000);
     await expect(pending).resolves.toEqual({ delivered: 0, failed: 0, skipped: 0, ignored: false });
@@ -367,17 +367,17 @@ describe('dispatchGitLabWebhook', () => {
     const result = await dispatchGitLabWebhook(mergeRequest('close'), {
       controller: controllerStub(
         {
-          getSessionByResource: async (_resourceId: string, scope?: string) =>
-            scope === '/worktrees/a' ? a.session : undefined,
+          getSession: async (sessionId: string) =>
+            sessionId === 'session-a' ? a.session : undefined,
           createSession: vi.fn(),
         },
         { 'thread-a': 'resource-1', 'thread-b': 'resource-1' },
       ),
       gitlab: gitlabStub(null),
       listSubscriptions: async () => [
-        subscription('a', '/worktrees/a', 'thread-a'),
-        subscription('b', '/worktrees/b', 'thread-b'),
-        subscription('c', '/worktrees/c', 'thread-elsewhere'),
+        subscription('a', 'thread-a'),
+        subscription('b', 'thread-b'),
+        subscription('c', 'thread-elsewhere'),
       ],
       retireSubscription: async () => undefined,
       onTargetSkipped,
@@ -395,14 +395,14 @@ describe('dispatchGitLabWebhook', () => {
     resolveActiveConnectionForHost.mockImplementation(async (connectionId: string) => connectionId);
     const own = session('thread-own');
     const other = session('thread-other');
-    const ownRow = subscription('own', '/worktrees/own', 'thread-own');
-    const otherRow = subscription('other', '/worktrees/other', 'thread-other');
+    const ownRow = subscription('own', 'thread-own');
+    const otherRow = subscription('other', 'thread-other');
     otherRow.data.installationExternalId = 'conn-2';
     ownRow.data.installationExternalId = 'conn-1';
     const result = await dispatchGitLabWebhook(mergeRequest('approved'), {
       controller: controllerStub({
-        getSessionByResource: async (_resourceId: string, scope?: string) =>
-          scope === '/worktrees/own' ? own.session : other.session,
+        getSession: async (sessionId: string) =>
+          sessionId === 'session-own' ? own.session : other.session,
       }),
       gitlab: gitlabStub(null),
       listSubscriptions: async () => [ownRow, otherRow],
@@ -426,9 +426,9 @@ describe('dispatchGitLabWebhook', () => {
     const createSession = vi.fn(async () => a.session);
     await expect(
       dispatchGitLabWebhook(mergeRequest('close'), {
-        controller: controllerStub({ getSessionByResource: async () => undefined, createSession }),
-        gitlab: gitlabStub({ userId: 'owner-1', orgId: 'org-1' }),
-        listSubscriptions: async () => [subscription('a', '/worktrees/a', 'thread-a')],
+        controller: controllerStub({ getSession: async () => undefined, createSession }),
+        gitlab: gitlabStub({ userId: 'owner-1', orgId: 'org-1', projectRepositoryId: 'project-repository-1' }),
+        listSubscriptions: async () => [subscription('a', 'thread-a')],
         retireSubscription: async () => undefined,
       }),
     ).resolves.toMatchObject({ delivered: 1 });
@@ -437,10 +437,9 @@ describe('dispatchGitLabWebhook', () => {
         id: 'session-a',
         ownerId: 'owner-1',
         resourceId: 'resource-1',
-        scope: '/worktrees/a',
         tags: { factoryProjectId: 'resource-1', projectRepositoryId: 'project-repository-1' },
       }),
     );
-    expect(a.session.thread.switch).toHaveBeenCalledWith({ threadId: 'thread-a', emitEvent: false });
+    expect(a.session.thread.switch).toHaveBeenCalledWith({ threadId: 'thread-a', emitEvent: false, requestContext: expect.any(RequestContext) });
   });
 });

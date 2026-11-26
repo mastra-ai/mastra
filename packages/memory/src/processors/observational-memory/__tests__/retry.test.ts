@@ -1,13 +1,17 @@
+import { APICallError } from '@internal/ai-sdk-v5';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   assertCompleteModelResponse,
   computeDelay,
+  isExhaustedAccountError,
   isTransientLLMError,
   OmIncompleteResponseError,
+  OmModelCallTimeoutError,
   RETRY_CONFIG,
   withRetry,
 } from '../retry';
+import { openAiNoCredits, openAiRateLimit } from './provider-errors';
 
 describe('isTransientLLMError', () => {
   it('matches undici "terminated" error messages', () => {
@@ -111,6 +115,65 @@ describe('isTransientLLMError', () => {
   });
 });
 
+describe('isExhaustedAccountError', () => {
+  it('matches the error OpenAI sends for an account with no credits left', () => {
+    expect(isExhaustedAccountError(openAiNoCredits())).toBe(true);
+  });
+
+  it('matches the quota code in the response body under a generic message', () => {
+    const error = new APICallError({
+      message: 'Too Many Requests',
+      url: 'https://api.openai.com/v1/responses',
+      requestBodyValues: {},
+      statusCode: 429,
+      responseBody: '{"error":{"type":"insufficient_quota","code":"insufficient_quota"}}',
+    });
+    expect(isExhaustedAccountError(new Error('observer failed', { cause: { error } }))).toBe(true);
+  });
+
+  it('reads the quota code from the parsed body when the raw body is gone', () => {
+    const error = new APICallError({
+      message: 'Too Many Requests',
+      url: 'https://api.openai.com/v1/responses',
+      requestBodyValues: {},
+      statusCode: 429,
+      data: { error: { type: 'insufficient_quota', code: 'insufficient_quota' } },
+    });
+    expect(isExhaustedAccountError(error)).toBe(true);
+  });
+
+  it('finds the error beside an unrelated cause, and through a cyclic wrapper', () => {
+    const sibling = Object.assign(new Error('observer failed', { cause: new Error('stream closed') }), {
+      error: openAiNoCredits(),
+    });
+    expect(isExhaustedAccountError(sibling)).toBe(true);
+
+    const cyclic: Record<string, unknown> = { message: 'wrapper' };
+    cyclic.cause = cyclic;
+    cyclic.error = { cause: openAiNoCredits() };
+    expect(isExhaustedAccountError(cyclic)).toBe(true);
+
+    const rateLimit = Object.assign(new Error('observer failed', { cause: new Error('stream closed') }), {
+      error: openAiRateLimit(),
+    });
+    expect(isExhaustedAccountError(rateLimit)).toBe(false);
+  });
+
+  it('does not match an OpenAI rate limit', () => {
+    expect(isExhaustedAccountError(openAiRateLimit())).toBe(false);
+  });
+
+  it.each([
+    "This request would exceed your account's rate limit. Please try again later.",
+    'Upstream provider rate limit reached. Try again shortly. Manage gateway keys, credits and budgets: https://projects.mastra.ai/',
+    // Gemini's per-minute limit, which clears on its own.
+    'You exceeded your current quota, please check your plan and billing details.\nQuota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20\nPlease retry in 45.06s.',
+  ])('does not match the rate limit %s', message => {
+    const error = new APICallError({ message, url: 'https://example.com', requestBodyValues: {}, statusCode: 429 });
+    expect(isExhaustedAccountError(error)).toBe(false);
+  });
+});
+
 describe('default retry schedule', () => {
   // Tyler review (#16454): lock the schedule so the stated "few-minute" budget
   // doesn't silently regress.
@@ -202,6 +265,27 @@ describe('withRetry', () => {
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
+  it('rethrows an account with no credits left without retrying, though its status is 429', async () => {
+    const fn = vi.fn().mockRejectedValue(openAiNoCredits());
+
+    await expect(withRetry(fn, { label: 'test' })).rejects.toThrow('no credits remaining');
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { name: 'no credits beside an unrelated cause', error: openAiNoCredits, expectedCalls: 1 },
+    { name: 'a rate limit beside an unrelated cause', error: openAiRateLimit, expectedCalls: 4 },
+  ])('makes $expectedCalls call(s) for $name', async ({ error, expectedCalls }) => {
+    const wrapped = () =>
+      Object.assign(new Error('observer failed', { cause: new Error('stream closed') }), { error: error() });
+    const fn = vi.fn().mockImplementation(async () => {
+      throw wrapped();
+    });
+
+    await expect(withRetry(fn, { label: 'test' })).rejects.toThrow('observer failed');
+    expect(fn).toHaveBeenCalledTimes(expectedCalls);
+  });
+
   it('rethrows AbortError immediately without retrying', async () => {
     const abortErr = new Error('cancelled');
     (abortErr as any).name = 'AbortError';
@@ -254,5 +338,123 @@ describe('assertCompleteModelResponse', () => {
   it.each(['stop', 'length'])('returns the output for finishReason %s', finishReason => {
     const output = { finishReason, text: 'done' };
     expect(assertCompleteModelResponse(output, 'OM observer')).toBe(output);
+  });
+});
+
+describe('withRetry idleTimeoutMs', () => {
+  const original = { ...RETRY_CONFIG };
+  beforeEach(() => {
+    vi.useFakeTimers();
+    RETRY_CONFIG.initialDelayMs = 1;
+    RETRY_CONFIG.maxDelayMs = 1;
+    RETRY_CONFIG.jitter = 0;
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    Object.assign(RETRY_CONFIG, original);
+  });
+
+  const hang = (signal: AbortSignal) =>
+    new Promise<never>((_, reject) => signal.addEventListener('abort', () => reject(signal.reason)));
+
+  /** Settle-state probe that doesn't depend on the promise resolving. */
+  const track = <T>(promise: Promise<T>) => {
+    const state: { status: 'pending' | 'resolved' | 'rejected'; value?: T; error?: unknown } = { status: 'pending' };
+    promise.then(
+      value => Object.assign(state, { status: 'resolved', value }),
+      error => Object.assign(state, { status: 'rejected', error }),
+    );
+    return state;
+  };
+
+  it('aborts a hung attempt and retries it', async () => {
+    const signals: AbortSignal[] = [];
+    const fn = vi.fn(async (signal: AbortSignal) => {
+      signals.push(signal);
+      if (signals.length === 1) return hang(signal);
+      return 'ok';
+    });
+    const state = track(withRetry(fn, { label: 'observer', idleTimeoutMs: 1_000 }));
+    await vi.advanceTimersByTimeAsync(1_010);
+    expect(state).toEqual({ status: 'resolved', value: 'ok' });
+    expect(fn).toHaveBeenCalledTimes(2);
+    expect(signals[0]!.aborted).toBe(true);
+    expect(signals[0]!.reason).toBeInstanceOf(OmModelCallTimeoutError);
+  });
+
+  it('never aborts an attempt that keeps reporting activity, however long it runs', async () => {
+    const signals: AbortSignal[] = [];
+    const fn = vi.fn(async (signal: AbortSignal, onActivity: () => void) => {
+      signals.push(signal);
+      // 50 chunks, 400ms apart: 20s total against a 1s idle limit.
+      for (let chunk = 0; chunk < 50; chunk++) {
+        await new Promise(resolve => setTimeout(resolve, 400));
+        onActivity();
+      }
+      return 'long reply';
+    });
+    const state = track(withRetry(fn, { label: 'reflector', idleTimeoutMs: 1_000 }));
+    await vi.advanceTimersByTimeAsync(20_100);
+    expect(state).toEqual({ status: 'resolved', value: 'long reply' });
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(signals[0]!.aborted).toBe(false);
+  });
+
+  it('aborts an attempt that goes silent after streaming for a while', async () => {
+    const fn = vi.fn(async (signal: AbortSignal, onActivity: () => void) => {
+      for (let chunk = 0; chunk < 5; chunk++) {
+        await new Promise(resolve => setTimeout(resolve, 400));
+        onActivity();
+      }
+      return hang(signal);
+    });
+    const state = track(withRetry(fn, { label: 'reflector', idleTimeoutMs: 1_000, maxRetries: 0 }));
+    // 5 chunks over 2s, then silence: the idle limit fires 1s after the last chunk.
+    await vi.advanceTimersByTimeAsync(2_990);
+    expect(state.status).toBe('pending');
+    await vi.advanceTimersByTimeAsync(20);
+    expect(state.status).toBe('rejected');
+    expect(state.error).toBeInstanceOf(OmModelCallTimeoutError);
+    expect((state.error as Error).message).toBe('reflector call produced no output for 1000ms');
+  });
+
+  it('bounds a call that ignores its signal', async () => {
+    const fn = vi.fn(() => new Promise<never>(() => {}));
+    const state = track(withRetry(fn, { label: 'observer', idleTimeoutMs: 1_000, maxRetries: 1 }));
+    await vi.advanceTimersByTimeAsync(2_100);
+    expect(state.status).toBe('rejected');
+    expect(state.error).toBeInstanceOf(OmModelCallTimeoutError);
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry when the caller aborts', async () => {
+    const controller = new AbortController();
+    const fn = vi.fn((signal: AbortSignal) => hang(signal));
+    const promise = withRetry(fn, { label: 'observer', idleTimeoutMs: 1_000, abortSignal: controller.signal });
+    controller.abort(new Error('cancelled'));
+    await expect(promise).rejects.toThrow('cancelled');
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects with the caller abort right away when the call ignores its signal', async () => {
+    const controller = new AbortController();
+    const fn = vi.fn(() => new Promise<never>(() => {}));
+    const state = track(withRetry(fn, { label: 'observer', idleTimeoutMs: 60_000, abortSignal: controller.signal }));
+    controller.abort(new Error('cancelled'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(state.status).toBe('rejected');
+    expect((state.error as Error).message).toBe('cancelled');
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies no timeout unless asked', async () => {
+    const fn = vi.fn(async () => {
+      await new Promise(resolve => setTimeout(resolve, 30_000));
+      return 'slow';
+    });
+    RETRY_CONFIG.modelCallIdleTimeoutMs = 1;
+    const state = track(withRetry(fn, { label: 'append' }));
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(state).toEqual({ status: 'resolved', value: 'slow' });
   });
 });

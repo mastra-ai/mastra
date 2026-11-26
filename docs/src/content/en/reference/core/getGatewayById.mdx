@@ -49,11 +49,24 @@ console.log(gateway.name) // 'My Custom Gateway'
   content={[
   {
     name: 'gateway',
-    type: 'MastraModelGateway | undefined',
-    description: 'The gateway instance, or undefined if not found',
+    type: 'MastraModelGatewayInterface',
+    description: 'The gateway instance',
   },
 ]}
 />
+
+## Throws
+
+Throws a `MastraError` with ID `MASTRA_GET_GATEWAY_BY_ID_NOT_FOUND` if no registered gateway has the specified ID. Wrap the call in `try`/`catch` when the gateway might not be registered:
+
+```typescript
+let gateway
+try {
+  gateway = mastra.getGatewayById('my-custom-gateway')
+} catch {
+  // Gateway is not registered
+}
+```
 
 ## Related
 

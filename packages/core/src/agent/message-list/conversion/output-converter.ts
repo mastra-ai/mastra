@@ -14,6 +14,7 @@ import {
   pairOrphanedToolCalls,
   sanitizeOrphanedToolPairs,
 } from '../utils/provider-compat';
+import { hasReplayableReasoningMetadata } from '../utils/reasoning-metadata';
 import {
   getResponseProviderItemId,
   getResponseProviderItemKey,
@@ -493,6 +494,8 @@ export function aiV4UIMessagesToAIV4CoreMessages(messages: UIMessageV4[]): CoreM
 /**
  * Converts MCP-style tool results (`{ content: [...] }`) to model-native
  * multimodal tool result output without persisting a duplicate modelOutput copy.
+ * Media is emitted in the V2-authored `media` shape; the spec-boundary prompt
+ * converters translate it for V3/V4 models.
  */
 function convertMcpContentToolResultOutput(output: unknown): unknown {
   if (!output || typeof output !== 'object') return undefined;
@@ -516,11 +519,11 @@ function convertMcpContentToolResultOutput(output: unknown): unknown {
           return { type: 'text', text: String(typedPart.text ?? '') };
         case 'image':
           return typeof typedPart.data === 'string'
-            ? { type: 'image-data', data: typedPart.data, mediaType: String(typedPart.mimeType ?? 'image/png') }
+            ? { type: 'media', data: typedPart.data, mediaType: String(typedPart.mimeType ?? 'image/png') }
             : { type: 'text', text: JSON.stringify(typedPart) };
         case 'audio':
           return typeof typedPart.data === 'string'
-            ? { type: 'file-data', data: typedPart.data, mediaType: String(typedPart.mimeType ?? 'audio/wav') }
+            ? { type: 'media', data: typedPart.data, mediaType: String(typedPart.mimeType ?? 'audio/wav') }
             : { type: 'text', text: JSON.stringify(typedPart) };
         default:
           return { type: 'text', text: JSON.stringify(typedPart) };
@@ -692,26 +695,6 @@ function restoreAssistantFileProviderMetadata(
  * That requirement belongs to the provider protocol, not to the caller's preference.
  */
 export type ToolCallConversionMode = 'response' | 'prompt' | 'prompt-with-suspended';
-
-/**
- * A step that dies after the model starts thinking but before the reasoning
- * signature arrives leaves a step block holding only unsigned reasoning.
- * Providers that require signed thinking (Anthropic, Bedrock) drop such parts,
- * sending `content: []` and failing every later turn with a 400 (#24558).
- */
-const REPLAYABLE_REASONING_KEYS = [
-  'signature',
-  'redactedData',
-  'itemId',
-  'reasoningEncryptedContent',
-  'thoughtSignature',
-];
-
-function hasReplayableReasoningMetadata(providerOptions: AIV5Type.ProviderMetadata | undefined): boolean {
-  return Object.values(providerOptions ?? {}).some(
-    value => !!value && typeof value === 'object' && REPLAYABLE_REASONING_KEYS.some(key => key in value),
-  );
-}
 
 function isUnforwardableReasoningOnlyMessage(message: AIV5Type.ModelMessage): boolean {
   if (message.role !== 'assistant' || !Array.isArray(message.content) || message.content.length === 0) return false;

@@ -1,0 +1,82 @@
+/* Written per touchmove on the three layers only: non-inherited, so the page's subtree never restyles mid-drag. */
+@property --sidebar-reveal-drag {
+  syntax: '*';
+  inherits: false;
+}
+
+@property --sidebar-reveal-duration {
+  syntax: '*';
+  inherits: false;
+}
+
+@property --sidebar-reveal-progress {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --sidebar-reveal-motion {
+  syntax: '*';
+  inherits: false;
+}
+
+[data-sidebar-reveal] {
+  --sidebar-reveal-width: calc(100vw - 3.5rem);
+  --sidebar-reveal-radius: var(--studio-frame-radius, 1.5rem) 0 0 var(--studio-frame-radius, 1.5rem);
+  --sidebar-reveal-rest: 0;
+  --sidebar-reveal-settle: 320ms;
+}
+
+[data-sidebar-reveal][data-sidebar-mobile-open='true'] {
+  --sidebar-reveal-rest: 1;
+  --sidebar-reveal-settle: 400ms;
+}
+
+[data-sidebar-reveal] [data-sidebar-reveal-layer] {
+  --sidebar-reveal-progress: var(--sidebar-reveal-drag, var(--sidebar-reveal-rest));
+  --sidebar-reveal-motion: var(--sidebar-reveal-duration, var(--sidebar-reveal-settle)) var(--sidebar-reveal-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-sidebar-reveal] [data-sidebar-reveal-layer] {
+    --sidebar-reveal-motion: 0ms;
+  }
+}
+
+[data-sidebar-reveal-layer='panel'] {
+  scale: calc(0.95 + 0.05 * var(--sidebar-reveal-progress));
+  opacity: var(--sidebar-reveal-progress);
+  transition:
+    scale var(--sidebar-reveal-motion),
+    opacity var(--sidebar-reveal-motion);
+}
+
+[data-sidebar-reveal-layer='scrim'] {
+  translate: calc(var(--sidebar-reveal-progress) * var(--sidebar-reveal-width)) 0;
+  border-radius: var(--sidebar-reveal-radius);
+  opacity: var(--sidebar-reveal-progress);
+  transition:
+    translate var(--sidebar-reveal-motion),
+    opacity var(--sidebar-reveal-motion);
+}
+
+[data-sidebar-reveal][data-sidebar-mobile-present='true'] [data-sidebar-reveal-layer='panel'] {
+  will-change: scale, opacity;
+}
+
+[data-sidebar-reveal][data-sidebar-mobile-present='true'] [data-sidebar-reveal-layer='scrim'] {
+  will-change: translate, opacity;
+}
+
+[data-sidebar-reveal][data-sidebar-mobile-present='true'] [data-sidebar-reveal-layer='page'] {
+  position: relative;
+  z-index: 1;
+  overflow: clip;
+  border-radius: var(--sidebar-reveal-radius);
+  box-shadow:
+    0 0 0 1px var(--surface-rim),
+    var(--elevation-overlay);
+  translate: calc(var(--sidebar-reveal-progress) * var(--sidebar-reveal-width)) 0;
+  transition: translate var(--sidebar-reveal-motion);
+  will-change: translate;
+}

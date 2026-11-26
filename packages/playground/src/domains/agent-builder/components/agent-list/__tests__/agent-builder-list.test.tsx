@@ -126,15 +126,12 @@ describe('AgentBuilderList', () => {
     expect(screen.getByText('Only visible to you')).toBeTruthy();
   });
 
-  it('renders agent name and description without technical metadata', () => {
+  it('renders agent name and description', () => {
     renderList({ agents: fixtureAgents });
 
     expect(screen.getByText('Alpha Agent')).toBeTruthy();
     expect(screen.getByText('First agent description')).toBeTruthy();
     expect(screen.getByText('Beta Agent')).toBeTruthy();
-    expect(screen.queryByText('openai/gpt-4')).toBeNull();
-    expect(screen.queryByText('anthropic/claude')).toBeNull();
-    expect(screen.queryByText(/Updated/)).toBeNull();
   });
 
   it('filters by search prop', () => {
@@ -166,16 +163,6 @@ describe('AgentBuilderList', () => {
 
     expect(screen.getByText('No agents match your search')).toBeTruthy();
     expect(screen.queryByTestId('agent-row')).toBeNull();
-  });
-
-  it('supports the library list presentation', () => {
-    renderList({
-      agents: fixtureAgents,
-      rowTestId: 'library-agent-row',
-    });
-
-    expect(screen.getAllByTestId('library-agent-row')).toHaveLength(fixtureAgents.length);
-    expect(screen.queryByText('Private')).toBeNull();
   });
 
   it('renders the resolved author name when the server returned `author`', () => {

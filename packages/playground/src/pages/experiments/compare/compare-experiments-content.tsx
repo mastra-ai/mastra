@@ -7,7 +7,7 @@ import { useDatasetExperimentsQueries } from '@mastra/react/hooks/datasets';
 import { useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 import { ExperimentIdLink } from './experiment-id-link';
-import { ExperimentsComparison } from '@/domains/experiments/components/comparison/experiments-comparison';
+import { StudioExperimentsComparison } from '@/domains/experiments/components/comparison/studio-experiments-comparison';
 
 function ExperimentIdLinks({ experimentIds }: { experimentIds: string[] }) {
   return experimentIds.map((id, index) => (
@@ -103,13 +103,14 @@ export function CompareExperimentsContent({
     );
   }
 
+  // The single scroller of the comparison, on both axes, so the table's sticky titles pin to it.
   return (
-    <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
+    <div className="h-full overflow-auto">
       <div className="grid w-full content-start">
         <Txt as="h1" variant="heading" className="sr-only">
           Experiments comparison
         </Txt>
-        <ExperimentsComparison
+        <StudioExperimentsComparison
           datasetId={datasetId}
           baselineId={baselineId}
           contenderIds={contenderIds}

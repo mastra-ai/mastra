@@ -4,8 +4,8 @@
  * and other modules can operate on the state without coupling to the
  * MastraTUI class.
  */
-import { Container, TUI, ProcessTerminal } from '@earendil-works/pi-tui';
-import type { CombinedAutocompleteProvider, Component, Terminal, Text } from '@earendil-works/pi-tui';
+import { Container, ProcessTerminal } from '@earendil-works/pi-tui';
+import type { CombinedAutocompleteProvider, Component, Terminal, Text, TUI } from '@earendil-works/pi-tui';
 import type { KnowledgeInspector } from '@mastra/code-sdk';
 import type { BackgroundCompletionEvents } from '@mastra/code-sdk/agents/background-completion-events';
 import type { MastraCodeAnalytics } from '@mastra/code-sdk/analytics';
@@ -47,10 +47,13 @@ import { showError, showInfo } from './display.js';
 
 import type { FooterAnimationRenderer } from './footer-animation-renderer.js';
 import { GoalManager } from './goal-manager.js';
+import { MouseController } from './mouse/controller.js';
 import type { OnboardingInlineComponent } from './onboarding-inline.js';
+import { MastraTUI, PromptSlot } from './prompt-slot.js';
 import { pruneChatContainer } from './prune-chat.js';
 import { installRenderScheduler } from './render-scheduler.js';
 import type { RenderScheduler } from './render-scheduler.js';
+import type { FactoryRuntimeInfo, LocalRuntime, TuiController, TuiSession } from './runtime.js';
 import { getEditorTheme, getTermWidth, mastra } from './theme.js';
 import { VoiceController } from './voice/voice-controller.js';
 
@@ -104,13 +107,26 @@ export function getGithubPrSubscriptionsFromMetadata(
 // MastraTUIOptions
 // =============================================================================
 
-export interface MastraTUIOptions {
+/** In-process Mastra Code: agent, tools, and storage run in this process. */
+export interface LocalRuntimeOptions {
+  runtime?: 'local';
   /** The controller instance */
   controller: AgentController<any>;
-
   /** The session created from the controller that all work runs through */
   session: Session<any>;
+}
 
+/** Factory client: the agent runs in a Factory; the TUI only renders and forwards input. */
+export interface FactoryRuntimeOptions {
+  runtime: 'factory';
+  controller: TuiController;
+  session: TuiSession;
+  factory: FactoryRuntimeInfo;
+}
+
+export type MastraTUIOptions = MastraTUIBaseOptions & (LocalRuntimeOptions | FactoryRuntimeOptions);
+
+export interface MastraTUIBaseOptions {
   /** Hook manager for session lifecycle hooks */
   hookManager?: HookManager;
 
@@ -182,7 +198,7 @@ export interface MastraTUIOptions {
   /** Process-wide memory diagnostics handle for /profile. */
   processMemoryDiagnostics?: ProcessMemoryDiagnostics;
 
-  /** Session-scoped, read-only Subconscious knowledge inspection capability. */
+  /** Session-scoped, read-only knowledge inspection capability. */
   knowledgeInspector?: KnowledgeInspector;
   /** Why `knowledgeInspector` is absent, as reported by startup. */
   knowledgeInspectorUnavailableReason?: string;
@@ -195,6 +211,9 @@ export interface MastraTUIOptions {
 
   /** Process adapter exit hook. Defaults to process.exit. */
   exit?: (exitCode: number) => void;
+
+  /** Restart Mastra Code in place so a Factory/local mode switch takes effect. */
+  relaunch?: () => Promise<void>;
 }
 
 // =============================================================================
@@ -203,8 +222,12 @@ export interface MastraTUIOptions {
 
 export interface TUIState {
   // ── Core dependencies (set once) ──────────────────────────────────────
-  controller: AgentController<any>;
-  session: Session<any>;
+  controller: TuiController;
+  session: TuiSession;
+  /** The in-process runtime; undefined when connected to a Factory. */
+  local?: LocalRuntime;
+  /** Factory connection; set only when connected to a Factory. */
+  factory?: FactoryRuntimeInfo;
   options: MastraTUIOptions;
   hookManager?: HookManager;
   analytics?: MastraCodeAnalytics;
@@ -216,9 +239,12 @@ export interface TUIState {
   // ── TUI framework (set once) ──────────────────────────────────────────
   ui: TUI;
   renderScheduler?: RenderScheduler;
+  mouseController?: MouseController;
   footerAnimationRenderer?: FooterAnimationRenderer;
   chatContainer: Container;
   editorContainer: Container;
+  /** Menus open here, in place of the prompt. */
+  promptSlot: PromptSlot;
   idleCounter?: IdleCounterComponent;
   lastRenderedMessageAt?: number;
   editor: CustomEditor;
@@ -390,6 +416,17 @@ export interface TUIState {
   waitForAgentControllerEvents?: () => Promise<void>;
 }
 
+/**
+ * Forget the in-flight tool calls, stopping their live updates first: a
+ * running shell row keeps redrawing the whole TUI on a timer until stopped,
+ * even after it has left the chat.
+ */
+export function clearPendingTools(state: TUIState): void {
+  for (const tool of state.pendingTools.values()) tool.stopLiveUpdates?.();
+  state.pendingTools.clear();
+  state.pendingTaskToolIds?.clear();
+}
+
 // =============================================================================
 // Factory
 // =============================================================================
@@ -404,7 +441,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
   if (!options.terminal) {
     Object.defineProperty(terminal, 'columns', { get: getTermWidth });
   }
-  const ui = new TUI(terminal);
+  const ui = new MastraTUI(terminal);
   const assistantRenderRegistry = new AssistantRenderRegistry();
   let result: TUIState;
   const renderScheduler = installRenderScheduler(ui, () => {
@@ -422,10 +459,19 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
   globalBackgroundNoticeContainer.addChild(globalBackgroundNotice);
   const editor = new CustomEditor(ui, getEditorTheme());
   editor.requestRender = () => ui.requestRender();
+  const promptSlot = new PromptSlot(ui, editorContainer, editor);
+  ui.promptSlot = promptSlot;
+  const { mouseDialogs, mouseInput } = loadSettings().preferences;
+  const mouseController = new MouseController(ui, editor, {
+    dialogMouseEnabled: mouseDialogs,
+    inputMouseModeEnabled: mouseInput,
+  });
   result = {
     // Core dependencies
     controller: options.controller,
     session: options.session,
+    local: options.runtime === 'factory' ? undefined : { controller: options.controller, session: options.session },
+    factory: options.runtime === 'factory' ? options.factory : undefined,
     options,
     hookManager: options.hookManager,
     analytics: options.analytics,
@@ -437,8 +483,10 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // TUI framework
     ui,
     renderScheduler,
+    mouseController,
     chatContainer,
     editorContainer,
+    promptSlot,
     editor,
     footer,
     terminal,

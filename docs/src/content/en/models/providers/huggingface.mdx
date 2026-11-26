@@ -7,7 +7,7 @@ description: "Browse Hugging Face model IDs, capabilities, context windows, and 
 
 # <img src="https://models.dev/logos/huggingface.svg" alt="Hugging Face logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Hugging Face
 
-Access 81 Hugging Face models through Mastra's model router. Authentication is handled automatically using the `HF_TOKEN` environment variable.
+Access 120 Hugging Face models through Mastra's model router. Authentication is handled automatically using the `HF_TOKEN` environment variable.
 
 Learn more in the [Hugging Face documentation](https://huggingface.co).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "huggingface/MiniMaxAI/MiniMax-M1-80k"
+  model: "huggingface/CohereLabs/command-a-plus-05-2026-bf16"
 });
 
 // Generate a response
@@ -46,6 +46,54 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
+    "model": "huggingface/aisingapore/Gemma-SEA-LION-v4-27B-IT",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 128000,
+    "inputCost": 0.2,
+    "outputCost": 0.4
+  },
+  {
+    "model": "huggingface/alpindale/WizardLM-2-8x22B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 65535,
+    "maxOutput": 8000,
+    "inputCost": 0.62,
+    "outputCost": 0.62
+  },
+  {
+    "model": "huggingface/anthracite-org/magnum-v4-72b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 4096,
+    "inputCost": 2.5,
+    "outputCost": 5
+  },
+  {
+    "model": "huggingface/CohereLabs/command-a-plus-05-2026-bf16",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 192000,
+    "maxOutput": 64000,
+    "inputCost": 0.3,
+    "outputCost": 1.5
+  },
+  {
     "model": "huggingface/deepseek-ai/DeepSeek-R1",
     "imageInput": false,
     "audioInput": false,
@@ -65,9 +113,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 163840,
-    "maxOutput": 163840,
-    "inputCost": 3,
-    "outputCost": 5
+    "maxOutput": 32768,
+    "inputCost": 0.5,
+    "outputCost": 2.15
   },
   {
     "model": "huggingface/deepseek-ai/DeepSeek-V3",
@@ -76,10 +124,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 64000,
+    "contextWindow": 163840,
     "maxOutput": 8192,
-    "inputCost": 0.4,
-    "outputCost": 1.3
+    "inputCost": 0.32,
+    "outputCost": 0.89
   },
   {
     "model": "huggingface/deepseek-ai/DeepSeek-V3-0324",
@@ -88,10 +136,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 163840,
-    "maxOutput": 163840,
-    "inputCost": 0.27,
-    "outputCost": 1.12
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 1,
+    "outputCost": 2.625
   },
   {
     "model": "huggingface/deepseek-ai/DeepSeek-V3.1",
@@ -100,10 +148,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 131072,
+    "contextWindow": 163840,
     "maxOutput": 8192,
-    "inputCost": 0.27,
-    "outputCost": 1
+    "inputCost": 0.25,
+    "outputCost": 0.95
   },
   {
     "model": "huggingface/deepseek-ai/DeepSeek-V3.2",
@@ -114,8 +162,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 163840,
     "maxOutput": 65536,
-    "inputCost": 0.28,
-    "outputCost": 0.4
+    "inputCost": 0.26,
+    "outputCost": 0.38
   },
   {
     "model": "huggingface/deepseek-ai/DeepSeek-V4-Flash",
@@ -126,8 +174,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 384000,
-    "inputCost": 0.14,
-    "outputCost": 0.28
+    "inputCost": 0.07,
+    "outputCost": 0.14
   },
   {
     "model": "huggingface/deepseek-ai/DeepSeek-V4-Flash-0731",
@@ -138,8 +186,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 384000,
-    "inputCost": 0.14,
-    "outputCost": 0.28
+    "inputCost": 0.07,
+    "outputCost": 0.14
   },
   {
     "model": "huggingface/deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
@@ -150,8 +198,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 384000,
-    "inputCost": 0.44,
-    "outputCost": 1.32
+    "inputCost": 0.2156,
+    "outputCost": 0.6468
   },
   {
     "model": "huggingface/deepseek-ai/DeepSeek-V4-Pro",
@@ -162,8 +210,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 393216,
-    "inputCost": 0.435,
-    "outputCost": 0.87
+    "inputCost": 0.888188,
+    "outputCost": 1.5082
   },
   {
     "model": "huggingface/deepseek-ai/DeepSeek-V4-Pro-0813",
@@ -172,10 +220,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
+    "contextWindow": 1048576,
     "maxOutput": 384000,
-    "inputCost": 1.32,
-    "outputCost": 3.96
+    "inputCost": 1.3,
+    "outputCost": 2.6
   },
   {
     "model": "huggingface/deepseek-ai/DeepSeek-V4.1-Flash",
@@ -186,8 +234,44 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 384000,
-    "inputCost": 0.3,
-    "outputCost": 1.2
+    "inputCost": 0.14,
+    "outputCost": 0.42
+  },
+  {
+    "model": "huggingface/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 384000,
+    "inputCost": 0.05,
+    "outputCost": 0.3
+  },
+  {
+    "model": "huggingface/dphn/Dolphin-Mistral-24B-Venice-Edition",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.2,
+    "outputCost": 0.9
+  },
+  {
+    "model": "huggingface/google/gemma-2-27b-it",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 2048,
+    "inputCost": 0.65,
+    "outputCost": 0.65
   },
   {
     "model": "huggingface/google/gemma-3-12b-it",
@@ -222,8 +306,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 131072,
     "maxOutput": 131072,
-    "inputCost": 0.05,
-    "outputCost": 0.1
+    "inputCost": 0.04,
+    "outputCost": 0.05
   },
   {
     "model": "huggingface/google/gemma-4-26B-A4B-it",
@@ -234,8 +318,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 32768,
-    "inputCost": 0.13,
-    "outputCost": 0.4
+    "inputCost": 0.07,
+    "outputCost": 0.24
   },
   {
     "model": "huggingface/google/gemma-4-31B-it",
@@ -246,8 +330,92 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 32768,
-    "inputCost": 0.14,
-    "outputCost": 0.4
+    "inputCost": 0.34,
+    "outputCost": 0.1
+  },
+  {
+    "model": "huggingface/Gryphe/MythoMax-L2-13b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 3200,
+    "inputCost": 0.08,
+    "outputCost": 0.11
+  },
+  {
+    "model": "huggingface/ibm-granite/granite-4.2-8b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 117964,
+    "inputCost": 0.06,
+    "outputCost": 0.15
+  },
+  {
+    "model": "huggingface/inclusionAI/Ling-3.0-flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.06,
+    "outputCost": 0.18
+  },
+  {
+    "model": "huggingface/inclusionAI/Ling-3.0-flash-Fin",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 32768,
+    "inputCost": 0.075,
+    "outputCost": 0.22
+  },
+  {
+    "model": "huggingface/inclusionAI/Ling-3.0-flash-VL",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.06,
+    "outputCost": 0.18
+  },
+  {
+    "model": "huggingface/inclusionAI/Ling-3.1-flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 32768,
+    "inputCost": 0.3,
+    "outputCost": 0.9
+  },
+  {
+    "model": "huggingface/meta-llama/Llama-3.1-70B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 4096,
+    "inputCost": 0.72,
+    "outputCost": 0.72
   },
   {
     "model": "huggingface/meta-llama/Llama-3.1-8B-Instruct",
@@ -258,8 +426,32 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 131072,
     "maxOutput": 4096,
-    "inputCost": 0.06,
-    "outputCost": 0.06
+    "inputCost": 0.02,
+    "outputCost": 0.04
+  },
+  {
+    "model": "huggingface/meta-llama/Llama-3.2-1B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 60000,
+    "maxOutput": 32000,
+    "inputCost": 0.027,
+    "outputCost": 0.201
+  },
+  {
+    "model": "huggingface/meta-llama/Llama-3.2-3B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.05,
+    "outputCost": 0.33
   },
   {
     "model": "huggingface/meta-llama/Llama-3.3-70B-Instruct",
@@ -270,20 +462,68 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 131072,
     "maxOutput": 4096,
-    "inputCost": 0.59,
-    "outputCost": 0.79
+    "inputCost": 0.22,
+    "outputCost": 0.5
   },
   {
-    "model": "huggingface/MiniMaxAI/MiniMax-M1-80k",
-    "imageInput": false,
+    "model": "huggingface/meta-llama/Llama-4-Maverick-17B-128E-Instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 524288,
+    "maxOutput": 16384,
+    "inputCost": 0.35,
+    "outputCost": 1
+  },
+  {
+    "model": "huggingface/meta-llama/Llama-4-Scout-17B-16E-Instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 327680,
+    "maxOutput": 16384,
+    "inputCost": 0.1,
+    "outputCost": 0.3
+  },
+  {
+    "model": "huggingface/meta-llama/Llama-Guard-4-12B",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 163840,
+    "maxOutput": 163840,
+    "inputCost": 0.18,
+    "outputCost": 0.18
+  },
+  {
+    "model": "huggingface/meta-models/Muse-Glimmer-30B",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 80000,
-    "inputCost": 0.55,
-    "outputCost": 2.2
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "huggingface/meta-models/Muse-Spark-Open-816B-A42B",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 1.25,
+    "outputCost": 4.25
   },
   {
     "model": "huggingface/MiniMaxAI/MiniMax-M2",
@@ -316,8 +556,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131072,
+    "contextWindow": 65536,
+    "maxOutput": 65536,
     "inputCost": 0.3,
     "outputCost": 1.2
   },
@@ -328,10 +568,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 204800,
+    "contextWindow": 196608,
     "maxOutput": 131072,
-    "inputCost": 0.3,
-    "outputCost": 1.2
+    "inputCost": 0.6,
+    "outputCost": 1.8
   },
   {
     "model": "huggingface/MiniMaxAI/MiniMax-M3",
@@ -340,10 +580,34 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 524288,
+    "contextWindow": 1048576,
     "maxOutput": 512000,
-    "inputCost": 0.3,
-    "outputCost": 1.2
+    "inputCost": 0.23,
+    "outputCost": 0.96
+  },
+  {
+    "model": "huggingface/MiniMaxAI/MiniMax-M3.1-Flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 512000,
+    "inputCost": 0.075,
+    "outputCost": 0.3
+  },
+  {
+    "model": "huggingface/mistralai/Mistral-Large-4-1T-A52B",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 262144,
+    "inputCost": 0.7,
+    "outputCost": 2.1
   },
   {
     "model": "huggingface/moonshotai/Kimi-K2-Instruct",
@@ -354,8 +618,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 131072,
     "maxOutput": 16384,
-    "inputCost": 1,
-    "outputCost": 3
+    "inputCost": 0.57,
+    "outputCost": 2.3
   },
   {
     "model": "huggingface/moonshotai/Kimi-K2-Instruct-0905",
@@ -366,8 +630,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 16384,
-    "inputCost": 1,
-    "outputCost": 3
+    "inputCost": 0.6,
+    "outputCost": 2.5
   },
   {
     "model": "huggingface/moonshotai/Kimi-K2-Thinking",
@@ -397,13 +661,13 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "model": "huggingface/moonshotai/Kimi-K2.6",
     "imageInput": true,
     "audioInput": false,
-    "videoInput": true,
+    "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.95,
-    "outputCost": 4
+    "inputCost": 0.57,
+    "outputCost": 2.4
   },
   {
     "model": "huggingface/moonshotai/Kimi-K2.7-Code",
@@ -414,8 +678,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.95,
-    "outputCost": 4
+    "inputCost": 0.6,
+    "outputCost": 3
   },
   {
     "model": "huggingface/moonshotai/Kimi-K3",
@@ -424,10 +688,118 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 131072,
-    "inputCost": 3,
-    "outputCost": 15
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 0.276,
+    "outputCost": 9.6
+  },
+  {
+    "model": "huggingface/moonshotai/Kimi-K3.1-Pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 1.24,
+    "outputCost": 6.2
+  },
+  {
+    "model": "huggingface/NousResearch/Hermes-3-Llama-3.1-70B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 16384,
+    "inputCost": 0.7,
+    "outputCost": 0.7
+  },
+  {
+    "model": "huggingface/NousResearch/Hermes-4-405B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 117964,
+    "inputCost": 1,
+    "outputCost": 3
+  },
+  {
+    "model": "huggingface/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.06,
+    "outputCost": 0.24
+  },
+  {
+    "model": "huggingface/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.075,
+    "outputCost": 0.4
+  },
+  {
+    "model": "huggingface/nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 128000,
+    "inputCost": 0.5,
+    "outputCost": 2.15
+  },
+  {
+    "model": "huggingface/nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 262144,
+    "inputCost": 0.06,
+    "outputCost": 0.16
+  },
+  {
+    "model": "huggingface/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 8192,
+    "inputCost": 0.1,
+    "outputCost": 0.4
+  },
+  {
+    "model": "huggingface/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 8192,
+    "inputCost": 0.2,
+    "outputCost": 0.5
   },
   {
     "model": "huggingface/openai/gpt-oss-120b",
@@ -437,9 +809,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
-    "maxOutput": 32768,
-    "inputCost": 0.25,
-    "outputCost": 0.69
+    "maxOutput": 131072,
+    "inputCost": 0.03,
+    "outputCost": 0.15
   },
   {
     "model": "huggingface/openai/gpt-oss-20b",
@@ -449,9 +821,21 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
-    "maxOutput": 32768,
-    "inputCost": 0.1,
-    "outputCost": 0.5
+    "maxOutput": 131072,
+    "inputCost": 0.018,
+    "outputCost": 0.09
+  },
+  {
+    "model": "huggingface/openai/gpt-oss-safeguard-20b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.07,
+    "outputCost": 0.2
   },
   {
     "model": "huggingface/Qwen/Qwen2.5-Coder-32B-Instruct",
@@ -460,22 +844,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 131072,
+    "contextWindow": 32768,
     "maxOutput": 8192,
-    "inputCost": 0.06,
-    "outputCost": 0.2
-  },
-  {
-    "model": "huggingface/Qwen/Qwen3-235B-A22B",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 40960,
-    "maxOutput": 16384,
-    "inputCost": 0.2,
-    "outputCost": 0.8
+    "inputCost": 0.66,
+    "outputCost": 1
   },
   {
     "model": "huggingface/Qwen/Qwen3-235B-A22B-Instruct-2507",
@@ -486,8 +858,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 16384,
-    "inputCost": 0.855,
-    "outputCost": 2.565
+    "inputCost": 0.09,
+    "outputCost": 0.55
   },
   {
     "model": "huggingface/Qwen/Qwen3-235B-A22B-Thinking-2507",
@@ -496,10 +868,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 131072,
-    "inputCost": 0.3,
-    "outputCost": 3
+    "contextWindow": 128000,
+    "maxOutput": 81920,
+    "inputCost": 0.45,
+    "outputCost": 3.5
   },
   {
     "model": "huggingface/Qwen/Qwen3-30B-A3B",
@@ -514,16 +886,40 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.5
   },
   {
+    "model": "huggingface/Qwen/Qwen3-30B-A3B-Instruct-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 16384,
+    "inputCost": 0.1,
+    "outputCost": 0.3
+  },
+  {
     "model": "huggingface/Qwen/Qwen3-32B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 131072,
+    "contextWindow": 40960,
     "maxOutput": 16384,
-    "inputCost": 0.29,
-    "outputCost": 0.59
+    "inputCost": 0.08,
+    "outputCost": 0.28
+  },
+  {
+    "model": "huggingface/Qwen/Qwen3-8B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 40960,
+    "maxOutput": 32768,
+    "inputCost": 0.07,
+    "outputCost": 0.18
   },
   {
     "model": "huggingface/Qwen/Qwen3-Coder-30B-A3B-Instruct",
@@ -534,8 +930,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 65536,
-    "inputCost": 0.07,
-    "outputCost": 0.26
+    "inputCost": 0.15,
+    "outputCost": 0.6
   },
   {
     "model": "huggingface/Qwen/Qwen3-Coder-480B-A35B-Instruct",
@@ -545,9 +941,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 262144,
-    "maxOutput": 66536,
-    "inputCost": 2,
-    "outputCost": 2
+    "maxOutput": 65536,
+    "inputCost": 0.3,
+    "outputCost": 1
   },
   {
     "model": "huggingface/Qwen/Qwen3-Coder-Next",
@@ -558,8 +954,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 65536,
-    "inputCost": 0.2,
-    "outputCost": 1.5
+    "inputCost": 0.12,
+    "outputCost": 0.8
   },
   {
     "model": "huggingface/Qwen/Qwen3-Embedding-4B",
@@ -568,8 +964,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 32000,
-    "maxOutput": 2048,
+    "contextWindow": 32768,
+    "maxOutput": null,
     "inputCost": 0.01,
     "outputCost": null
   },
@@ -580,8 +976,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 32000,
-    "maxOutput": 4096,
+    "contextWindow": 32768,
+    "maxOutput": null,
     "inputCost": 0.01,
     "outputCost": null
   },
@@ -593,21 +989,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 262144,
-    "maxOutput": 66536,
-    "inputCost": 0.25,
-    "outputCost": 1
-  },
-  {
-    "model": "huggingface/Qwen/Qwen3-Next-80B-A3B-Thinking",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 131072,
-    "inputCost": 0.3,
-    "outputCost": 2
+    "maxOutput": 32768,
+    "inputCost": 0.09,
+    "outputCost": 1.1
   },
   {
     "model": "huggingface/Qwen/Qwen3-VL-235B-A22B-Instruct",
@@ -616,22 +1000,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 131072,
+    "contextWindow": 262144,
     "maxOutput": 32768,
-    "inputCost": 0.3,
-    "outputCost": 1.5
-  },
-  {
-    "model": "huggingface/Qwen/Qwen3-VL-235B-A22B-Thinking",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 32768,
-    "inputCost": 0.98,
-    "outputCost": 3.95
+    "inputCost": 0.2,
+    "outputCost": 0.88
   },
   {
     "model": "huggingface/Qwen/Qwen3-VL-30B-A3B-Instruct",
@@ -640,10 +1012,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 131072,
+    "contextWindow": 262144,
     "maxOutput": 32768,
-    "inputCost": 0.2,
-    "outputCost": 0.7
+    "inputCost": 0.15,
+    "outputCost": 0.6
   },
   {
     "model": "huggingface/Qwen/Qwen3.5-122B-A10B",
@@ -666,8 +1038,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 65536,
-    "inputCost": 0.3,
-    "outputCost": 2.4
+    "inputCost": 0.26,
+    "outputCost": 2.6
   },
   {
     "model": "huggingface/Qwen/Qwen3.5-35B-A3B",
@@ -678,8 +1050,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 65536,
-    "inputCost": 0.25,
-    "outputCost": 2
+    "inputCost": 0.14,
+    "outputCost": 1
   },
   {
     "model": "huggingface/Qwen/Qwen3.5-397B-A17B",
@@ -690,8 +1062,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 32768,
-    "inputCost": 0.6,
-    "outputCost": 3.6
+    "inputCost": 0.45,
+    "outputCost": 3
   },
   {
     "model": "huggingface/Qwen/Qwen3.5-9B",
@@ -702,8 +1074,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 65536,
-    "inputCost": 0.17,
-    "outputCost": 0.25
+    "inputCost": 0.1,
+    "outputCost": 0.15
   },
   {
     "model": "huggingface/Qwen/Qwen3.6-27B",
@@ -714,8 +1086,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 65536,
-    "inputCost": 0.47,
-    "outputCost": 3.19
+    "inputCost": 0.32,
+    "outputCost": 3.2
   },
   {
     "model": "huggingface/Qwen/Qwen3.6-35B-A3B",
@@ -726,8 +1098,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 65536,
-    "inputCost": 0.15,
-    "outputCost": 0.95
+    "inputCost": 0.1,
+    "outputCost": 0.89
   },
   {
     "model": "huggingface/Qwen/Qwen3.8-2.4T-A95B",
@@ -736,10 +1108,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262144,
+    "contextWindow": 1000000,
     "maxOutput": 131072,
-    "inputCost": 2.5,
-    "outputCost": 6.25
+    "inputCost": 2,
+    "outputCost": 6
   },
   {
     "model": "huggingface/Qwen/Qwen3.8-27B",
@@ -748,10 +1120,46 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262144,
+    "contextWindow": 1000000,
     "maxOutput": 32768,
-    "inputCost": 0.4,
-    "outputCost": 3
+    "inputCost": 0.04,
+    "outputCost": 1.35
+  },
+  {
+    "model": "huggingface/Qwen/Qwen3.8-Flash-Next",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 131072,
+    "inputCost": 0.15,
+    "outputCost": 0.5
+  },
+  {
+    "model": "huggingface/Qwen/Qwen3.8-Flash-Next-FP8",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.15,
+    "outputCost": 0.47
+  },
+  {
+    "model": "huggingface/reflection/Beam-1.0-501B-A23B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.25,
+    "outputCost": 1
   },
   {
     "model": "huggingface/stepfun-ai/Step-3.5-Flash",
@@ -790,14 +1198,38 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.58
   },
   {
+    "model": "huggingface/tencent/Hy4",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.7089,
+    "outputCost": 2.12585
+  },
+  {
+    "model": "huggingface/tencent/Hy4-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.07,
+    "outputCost": 0.281
+  },
+  {
     "model": "huggingface/tencent/Hy4-preview",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 64000,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
     "inputCost": 0.834,
     "outputCost": 2.501
   },
@@ -814,6 +1246,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 4.05
   },
   {
+    "model": "huggingface/thinkingmachines/Inkling-2-Mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.075,
+    "outputCost": 0.3
+  },
+  {
+    "model": "huggingface/thinkingmachines/Inkling-2-Small",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.15,
+    "outputCost": 0.5
+  },
+  {
     "model": "huggingface/thinkingmachines/Inkling-Small",
     "imageInput": true,
     "audioInput": false,
@@ -821,21 +1277,21 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 524288,
-    "maxOutput": 1048576,
-    "inputCost": 0.5,
+    "maxOutput": 524288,
+    "inputCost": 0.45,
     "outputCost": 1.2
   },
   {
-    "model": "huggingface/XiaomiMiMo/MiMo-V2-Flash",
+    "model": "huggingface/Undi95/ReMM-SLERP-L2-13B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 4096,
-    "inputCost": 0.1,
-    "outputCost": 0.3
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 6144,
+    "maxOutput": 5529,
+    "inputCost": 0.3,
+    "outputCost": 0.5
   },
   {
     "model": "huggingface/XiaomiMiMo/MiMo-V2.5",
@@ -846,8 +1302,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 131072,
-    "inputCost": 0.4,
-    "outputCost": 2
+    "inputCost": 0.14,
+    "outputCost": 0.28
   },
   {
     "model": "huggingface/XiaomiMiMo/MiMo-V2.5-Pro",
@@ -916,10 +1372,22 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 204800,
+    "contextWindow": 202752,
     "maxOutput": 131072,
-    "inputCost": 0.55,
-    "outputCost": 2.2
+    "inputCost": 0.43,
+    "outputCost": 1.75
+  },
+  {
+    "model": "huggingface/zai-org/GLM-4.6V",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.3,
+    "outputCost": 0.9
   },
   {
     "model": "huggingface/zai-org/GLM-4.6V-Flash",
@@ -940,10 +1408,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 204800,
+    "contextWindow": 202752,
     "maxOutput": 131072,
-    "inputCost": 0.6,
-    "outputCost": 2.2
+    "inputCost": 0.4,
+    "outputCost": 1.75
   },
   {
     "model": "huggingface/zai-org/GLM-4.7-Flash",
@@ -952,10 +1420,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 200000,
+    "contextWindow": 131072,
     "maxOutput": 128000,
-    "inputCost": null,
-    "outputCost": null
+    "inputCost": 0.0605,
+    "outputCost": 0.4
   },
   {
     "model": "huggingface/zai-org/GLM-5",
@@ -988,10 +1456,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262144,
+    "contextWindow": 1048576,
     "maxOutput": 131072,
-    "inputCost": 1.4,
-    "outputCost": 4.4
+    "inputCost": 0.5625,
+    "outputCost": 1.8
   },
   {
     "model": "huggingface/zai-org/GLM-5.3",
@@ -1002,8 +1470,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
-    "inputCost": 1.4,
-    "outputCost": 4.4
+    "inputCost": 0.0699,
+    "outputCost": 1.4
   },
   {
     "model": "huggingface/zai-org/GLM-5.3-Flash",
@@ -1014,8 +1482,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
-    "inputCost": 0.15,
-    "outputCost": 0.5
+    "inputCost": 0.0356,
+    "outputCost": 0.0815
   }
 ]}
 />
@@ -1027,12 +1495,14 @@ Model availability, capabilities, context windows, and pricing are sourced from 
 ### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://router.huggingface.co/v1",
-    id: "huggingface/MiniMaxAI/MiniMax-M1-80k",
+    id: "huggingface/CohereLabs/command-a-plus-05-2026-bf16",
     apiKey: process.env.HF_TOKEN,
     headers: {
       "X-Custom-Header": "value"
@@ -1044,6 +1514,8 @@ const agent = new Agent({
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",
@@ -1051,7 +1523,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "huggingface/zai-org/GLM-5.3-Flash"
-      : "huggingface/MiniMaxAI/MiniMax-M1-80k";
+      : "huggingface/CohereLabs/command-a-plus-05-2026-bf16";
   }
 });
 ```

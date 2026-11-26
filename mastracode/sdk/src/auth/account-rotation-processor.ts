@@ -19,11 +19,40 @@
  * `StreamErrorRetryProcessor`; `AccountStartNoticeProcessor` implements
  * `processInput` only and is registered in `inputProcessors`.
  */
-import { TripWire } from '@mastra/core/agent';
-import type { ProcessAPIErrorArgs, ProcessInputArgs, ProcessInputResult, Processor } from '@mastra/core/processors';
+import { classifyProviderError } from '@mastra/core/error';
+import type { ProviderFailureKind } from '@mastra/core/error';
+import type {
+  ProcessAPIErrorArgs,
+  ProcessAPIErrorResult,
+  ProcessInputArgs,
+  ProcessInputResult,
+  Processor,
+} from '@mastra/core/processors';
+import type { RequestContext } from '@mastra/core/request-context';
 
 import { resolveCredentialStore } from '../agents/credential-resolver.js';
-import { resolveModel, resolveRequestThinkingLevel } from '../agents/model.js';
+import {
+  advanceHostModelRoute,
+  requestModelRoute,
+  resolveModel,
+  resolveRequestThinkingLevel,
+} from '../agents/model.js';
+import {
+  MODEL_FALLBACK_PART_TYPE,
+  MODEL_FALLBACK_STATE_KEY,
+  modelFallbackNoticeText,
+  pendingModelFallbackSchema,
+} from '../model-fallback.js';
+import type {
+  ModelFallbackPartData,
+  ModelFallbackReason,
+  ModelRouteFailure,
+  PendingModelFallback,
+} from '../model-fallback.js';
+import { getCredentialProviderId, normalizeLegacyModelId } from '../providers/model-ids.js';
+import type { ModelRouteEntry } from '../schema.js';
+import { isThinkingLevelSetting } from '../thinking.js';
+import type { ThinkingLevelSetting } from '../thinking.js';
 import {
   getRequestAccountSelection,
   isRequestAccountRoutingExhausted,
@@ -34,6 +63,26 @@ import { ProviderAuthRequiredError, PROVIDER_AUTH_REQUIRED_ERROR } from './provi
 import { getOAuthProviders } from './storage.js';
 import type { CredentialStore, OAuthAccountRecord } from './types.js';
 
+export {
+  /** @deprecated Import from `@mastra/code-sdk/model-fallback`. */
+  MODEL_FALLBACK_PART_TYPE,
+  /** @deprecated Import from `@mastra/code-sdk/model-fallback`. */
+  MODEL_FALLBACK_STATE_KEY,
+  /** @deprecated Import from `@mastra/code-sdk/model-fallback`. */
+  modelFallbackNoticeText,
+} from '../model-fallback.js';
+export type {
+  /** @deprecated Import from `@mastra/code-sdk/model-fallback`. */
+  ModelFallbackPartData,
+  /** @deprecated Import from `@mastra/code-sdk/model-fallback`. */
+  PendingModelFallback,
+} from '../model-fallback.js';
+
+/** @deprecated Parse the whole part with `parseModelFallbackPart` from `@mastra/code-sdk/model-fallback`. */
+export function isModelFallbackReason(value: unknown): value is ModelFallbackReason {
+  return pendingModelFallbackSchema.shape.reason.safeParse(value).success;
+}
+
 export const ACCOUNT_SWITCH_PART_TYPE = 'data-mastracode-account-switch';
 
 /** Labels and instance ids only — never token material (do-not list). */
@@ -41,13 +90,7 @@ export interface AccountSwitchPartData {
   provider: string;
   from: { id: string; label: string } | null;
   to: { id: string; label: string } | null;
-  reason:
-    | 'rate-limit'
-    | 'quota-exhausted'
-    | 'auth-failed'
-    | 'pool-exhausted'
-    | 'persistent-outage'
-    | 'preferred-routing';
+  reason: 'rate-limit' | 'quota-exhausted' | 'auth-failed' | ModelFallbackReason | 'preferred-routing';
   at: string;
   /**
    * Set on a `to: null` part when a route pinned to a single account reported
@@ -63,9 +106,8 @@ export type RotationCredentialStore = CredentialStore & {
   /**
    * Force one refresh of the active account's tokens regardless of expiry
    * (401/403 path — a rejected-but-unexpired token usually means clock skew
-   * or a refresh race). `AuthStorage` provides it; deployed per-tenant stores
-   * don't, and the auth path degrades to plain rotation (which itself no-ops
-   * without registry methods).
+   * or a refresh race). `AuthStorage` provides it for its active account;
+   * deployed per-tenant stores provide it for their single credential.
    */
   forceRefreshActiveAccount?(providerId: string, accountInstanceId?: string): Promise<string | undefined>;
 };
@@ -84,16 +126,6 @@ const PROVIDER_HOST_PATTERNS: Array<[RegExp, string]> = [
   [/(^|\.)api\.github\.com$/i, 'github-copilot'],
 ];
 
-/**
- * Provider usage/quota-limit wording (locked Q7 bucket 1). Statuses 429/402
- * are matched before this; some providers deliver quota errors as plain 400s,
- * which only the message reveals. Deliberately restricted to unambiguous
- * quota phrases — a generic "exceeded your … limit" can appear on non-quota
- * client errors (request size, context length) that must never rotate.
- */
-const USAGE_LIMIT_MESSAGE_PATTERN =
-  /usage (?:limit|cap)|insufficient[_ ]quota|quota (?:exceeded|exhausted|reached)|exceeded (?:your )?current quota|insufficient (?:balance|credits?)|credits? exhausted|rate limit (?:exceeded|reached)|weekly limit|monthly limit/i;
-
 const NETWORK_ERROR_CODES = new Set([
   'ECONNRESET',
   'EPIPE',
@@ -110,34 +142,34 @@ const NETWORK_MESSAGE_PATTERN =
 
 const MAX_CAUSE_DEPTH = 4;
 
-/** Persisted data-part type for a model-route hop. */
-export const MODEL_FALLBACK_PART_TYPE = 'data-mastracode-model-fallback' as const;
-
-/** Non-secret transcript payload for a model-route hop. */
-export interface ModelFallbackPartData {
-  from: { entryId: string; label: string };
-  to: { entryId: string; label: string };
-  reason: 'pool-exhausted' | 'persistent-outage';
-  at: string;
-}
-
-/** Session-state key set when account rotation advances the model route. */
-export const MODEL_FALLBACK_STATE_KEY = 'mastracodePendingModelFallback' as const;
-
-/** Payload written to session state under MODEL_FALLBACK_STATE_KEY. */
-export interface PendingModelFallback {
-  fromEntryId: string;
-  toEntryId: string;
-  toModelId: string;
-  threadId?: string;
-  reason: 'pool-exhausted' | 'persistent-outage';
-  at: string;
-}
-
 export type RotationClassification =
   | { kind: 'rotate'; reason: 'rate-limit' | 'quota-exhausted' | 'auth-failed' }
   | { kind: 'hop' }
+  | { kind: 'stream-cut' }
   | { kind: 'never' };
+
+/**
+ * Same-account retries for a stream the provider cut after accepting the
+ * request. Each one can cost a full stream (900 s on the ChatGPT Codex route),
+ * so the budget is small. This is the whole budget: Mastra Code's
+ * `StreamErrorRetryProcessor` leaves these errors to this processor.
+ */
+export const MAX_STREAM_CUT_RETRIES = 2;
+
+const ROTATION_BY_PROVIDER_KIND: Partial<Record<ProviderFailureKind, RotationClassification>> = {
+  auth: { kind: 'rotate', reason: 'auth-failed' },
+  quota: { kind: 'rotate', reason: 'quota-exhausted' },
+  rate_limited: { kind: 'rotate', reason: 'rate-limit' },
+  unavailable: { kind: 'hop' },
+};
+
+function rotationFromStatus(status: number | undefined): RotationClassification | undefined {
+  if (status === 429) return { kind: 'rotate', reason: 'rate-limit' };
+  if (status === 402) return { kind: 'rotate', reason: 'quota-exhausted' };
+  if (status === 401 || status === 403) return { kind: 'rotate', reason: 'auth-failed' };
+  if (status !== undefined && status >= 500 && status < 600) return { kind: 'hop' };
+  return undefined;
+}
 
 function isErrorWithCode(error: unknown): error is { code?: unknown } {
   return typeof error === 'object' && error !== null && 'code' in error;
@@ -170,25 +202,6 @@ function isProviderAuthRequiredError(error: unknown): boolean {
   return false;
 }
 
-/** Concatenate the error's message with its cause chain (bounded). */
-function collectErrorText(error: unknown): string {
-  const parts: string[] = [];
-  let current: unknown = error;
-  for (let depth = 0; current && depth < MAX_CAUSE_DEPTH; depth++) {
-    if (current instanceof Error) {
-      parts.push(current.message);
-      current = current.cause;
-    } else if (typeof current === 'object' && 'message' in current) {
-      const message = (current as { message?: unknown }).message;
-      if (typeof message === 'string') parts.push(message);
-      current = (current as { cause?: unknown }).cause;
-    } else {
-      break;
-    }
-  }
-  return parts.join(' | ');
-}
-
 function isNetworkErrorLike(error: unknown): boolean {
   let current: unknown = error;
   for (let depth = 0; current && depth < MAX_CAUSE_DEPTH; depth++) {
@@ -211,46 +224,78 @@ function isNetworkErrorLike(error: unknown): boolean {
   return false;
 }
 
+/** The code the ChatGPT Codex backend puts on the error frame it sends when it ends a stream at 900 s. */
+const STREAM_DURATION_LIMIT_CODE = 'request_timeout';
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : undefined;
+}
+
+/** The `error.code` of a stream error frame: the raw frame, or the frame `@ai-sdk/openai` keeps as `data`. */
+function streamErrorFrameCode(value: Record<string, unknown>): unknown {
+  const data = asRecord(value.data);
+  const frame = value.type === 'error' ? value : data?.type === 'error' ? data : undefined;
+  return asRecord(frame?.error)?.code;
+}
+
 /**
- * The locked Q7 taxonomy. 429/402/usage-limit rotate immediately (429 is not
- * covered by any transient matcher, so it arrives here on first occurrence);
- * 401/403 and `ProviderAuthRequiredError` rotate after one forced refresh;
- * 5xx/network hop only when the transient retry budget is already spent (they
- * reach this processor because `StreamErrorRetryProcessor` declined); 400 and
- * everything unknown never touch the registry.
+ * Whether the provider accepted the request and then the response stream died:
+ * the AI SDK reports a body that fails after a 2xx response as
+ * "Failed to process successful response" with the 2xx status, and the ChatGPT
+ * Codex backend ends streams at 900 s, sometimes with a `request_timeout` error
+ * frame first. Either way the account and the provider answered, so this is
+ * not an outage, and another account would be cut the same way.
+ *
+ * `@ai-sdk/openai` raises that frame with `code: 'request_timeout'` and a
+ * derived `statusCode: 504`, so callers must check this before any 5xx rule.
+ * Mastra Code's transient retry matchers call it first so that account
+ * rotation is the only processor that retries these errors.
+ */
+export function isStreamCutAfterResponse(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; current && depth < MAX_CAUSE_DEPTH; depth++) {
+    const record = asRecord(current);
+    if (!record) break;
+    const { statusCode, status, code } = record;
+    const httpStatus = typeof statusCode === 'number' ? statusCode : status;
+    if (typeof httpStatus === 'number' && httpStatus >= 200 && httpStatus < 300) return true;
+    if (code === STREAM_DURATION_LIMIT_CODE || streamErrorFrameCode(record) === STREAM_DURATION_LIMIT_CODE) return true;
+    current = record.cause;
+  }
+  return false;
+}
+
+/**
+ * The locked Q7 taxonomy. Rate limits and exhausted quotas rotate immediately
+ * (429 is not covered by any transient matcher, so it arrives here on first
+ * occurrence); auth failures and `ProviderAuthRequiredError` rotate after one
+ * forced refresh; 5xx/network hop only when the transient retry budget is
+ * already spent (they reach this processor because `StreamErrorRetryProcessor`
+ * declined); everything else never touches the registry.
  */
 export function classifyRotationError(error: unknown): RotationClassification {
   if (isProviderAuthRequiredError(error)) {
     return { kind: 'rotate', reason: 'auth-failed' };
   }
-
+  // Before the status, wording and network checks: the duration-limit frame
+  // carries a derived 504, and a cut body's socket-error cause reads as
+  // network-like. Each of those would hop.
+  if (isStreamCutAfterResponse(error)) return { kind: 'stream-cut' };
   const status = readErrorStatus(error);
-
-  if (status === 429) return { kind: 'rotate', reason: 'rate-limit' };
-  if (status === 402) return { kind: 'rotate', reason: 'quota-exhausted' };
-  if (status === 401 || status === 403) return { kind: 'rotate', reason: 'auth-failed' };
-  if (status !== undefined && status >= 500 && status < 600) return { kind: 'hop' };
-
-  // Quota wording only rotates when it co-occurs with a statusless or 400
-  // error — the shapes providers actually use for message-only quota
-  // failures. Any other status keeps its own classification above (401/403
-  // auth, 5xx outage hop, 404/422 never), so limit-ish text riding a
-  // non-quota client error can no longer burn the whole pool.
-  if (status === undefined || status === 400) {
-    if (USAGE_LIMIT_MESSAGE_PATTERN.test(collectErrorText(error))) {
-      return { kind: 'rotate', reason: 'quota-exhausted' };
-    }
-  }
-  if (isNetworkErrorLike(error)) return { kind: 'hop' };
-
-  return { kind: 'never' };
+  const byStatus = rotationFromStatus(status);
+  if (byStatus) return byStatus;
+  // Wording only speaks for a statusless or 400 failure, where providers put quota and rate-limit text.
+  const byKind =
+    status === undefined || status === 400 ? ROTATION_BY_PROVIDER_KIND[classifyProviderError(error)] : undefined;
+  return byKind ?? (isNetworkErrorLike(error) ? { kind: 'hop' } : { kind: 'never' });
 }
 
 /** Provider id off a router model id: `mastracode/<provider>/<model>` or `<provider>/<model>`. */
 export function providerFromModelId(modelId: string): string | undefined {
-  const segments = modelId.replace(/^mastracode\//, '').split('/');
-  const providerId = segments[0];
-  if (providerId === 'openai') return 'openai-codex';
+  const segments = normalizeLegacyModelId(modelId)
+    .replace(/^mastracode\//, '')
+    .split('/');
+  const providerId = segments[0] ? getCredentialProviderId(segments[0]) : undefined;
   return providerId && KNOWN_PROVIDER_IDS.has(providerId) ? providerId : undefined;
 }
 
@@ -368,23 +413,6 @@ export function accountSwitchNoticeText(data: AccountSwitchPartData): string {
   return `Switched ${provider} account: ${from} → ${data.to.label} (${reason})`;
 }
 
-/** Transcript line for a model-route hop; shared by the live info event and the TUI's history render. */
-export function modelFallbackNoticeText(data: ModelFallbackPartData): string {
-  const reason = REASON_TEXT[data.reason] ?? data.reason;
-  return `Switched model route: ${data.from.label} → ${data.to.label} (${reason})`;
-}
-
-/**
- * Whether a persisted model-fallback reason is one this build understands.
- * `REASON_TEXT` also covers the account-switch reasons, so the notice text
- * alone would happily render a foreign value such as `rate-limit` as a
- * model-fallback reason; history parsed from another build's part must be
- * rejected instead.
- */
-export function isModelFallbackReason(value: unknown): value is ModelFallbackPartData['reason'] {
-  return value === 'pool-exhausted' || value === 'persistent-outage';
-}
-
 async function emitAccountSwitchPart(
   args: Pick<ProcessAPIErrorArgs, 'writer' | 'requestContext'> | Pick<ProcessInputArgs, 'writer' | 'requestContext'>,
   data: AccountSwitchPartData,
@@ -413,9 +441,8 @@ async function emitAccountSwitchPart(
 function providerFromSession(
   args: Pick<ProcessAPIErrorArgs, 'requestContext'> | Pick<ProcessInputArgs, 'requestContext'>,
 ): string | undefined {
-  const controller = args.requestContext?.get('controller') as { session?: { modelId?: unknown } } | undefined;
-  const modelId = controller?.session?.modelId;
-  return typeof modelId === 'string' ? providerFromModelId(modelId) : undefined;
+  const { modelId } = requestModelRoute(args.requestContext, getRoutingController(args));
+  return modelId ? providerFromModelId(modelId) : undefined;
 }
 
 /**
@@ -428,7 +455,7 @@ function providerFromSession(
  */
 /** Cached per-request model route cascade. */
 interface ModelRouteCascade {
-  entries: Array<{ id: string; label: string; modelId: string; accountId?: string }>;
+  entries: ModelRouteEntry[];
   position: number;
 }
 
@@ -475,28 +502,9 @@ function getRequestActiveAccount(
 
 function resolveAccountRoute(
   args: Pick<RoutingProcessorArgs, 'requestContext'>,
-  explicit?: { id: string; modelId: string; accountId?: string },
+  explicit?: ModelRouteEntry,
 ): AccountRoute | null {
-  const controller = getRoutingController(args);
-  const state = controller?.getState?.();
-  const pending = state?.mastracodePendingModelFallback as
-    | { toEntryId?: unknown; toModelId?: unknown; threadId?: unknown }
-    | null
-    | undefined;
-  const pendingMatchesThread =
-    pending &&
-    typeof pending.toEntryId === 'string' &&
-    typeof pending.toModelId === 'string' &&
-    (pending.threadId === undefined || pending.threadId === controller?.threadId);
-  const routeEntries = Array.isArray((state?.modelRoute as { entries?: unknown } | undefined)?.entries)
-    ? ((state?.modelRoute as { entries: Array<{ id?: unknown; modelId?: unknown; accountId?: unknown }> }).entries ??
-      [])
-    : [];
-  const entry = explicit
-    ? explicit
-    : pendingMatchesThread
-      ? routeEntries.find(candidate => candidate.id === pending.toEntryId && candidate.modelId === pending.toModelId)
-      : routeEntries.find(candidate => candidate.modelId === controller?.session?.modelId);
+  const entry = explicit ?? requestModelRoute(args.requestContext, getRoutingController(args)).entries[0];
   if (!entry || typeof entry.id !== 'string' || typeof entry.modelId !== 'string') return null;
   const providerId = providerFromModelId(entry.modelId);
   if (!providerId) return null;
@@ -587,35 +595,53 @@ export class AccountRotationProcessor implements Processor {
       credentialStore: RotationCredentialStore;
       maxProcessorRetries: number;
       settingsPath?: string;
+      /** The host has no modes, so per-mode thinking defaults never apply. */
+      modeless?: boolean;
+      /** Same host thinking default `getDynamicModel` uses, so a hop resolves at the same level. */
+      resolveDefaultThinkingLevel?: (ctx: {
+        requestContext: RequestContext;
+      }) => ThinkingLevelSetting | Promise<ThinkingLevelSetting>;
     },
   ) {}
 
-  async processAPIError(args: ProcessAPIErrorArgs): Promise<{ retry: boolean }> {
+  async processAPIError(args: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult> {
     const { error, state } = args;
 
-    // Core runs error processors even after the shared retry budget is spent
-    // and silently discards `retry: true` then (llm-execution-step.ts
-    // canRetryError) — rotating the cursor or emitting a switch part for a
-    // retry that will never run would lie to both auth.json and the
-    // transcript. With a fallback chain configured, a bare `retry: false`
-    // here would silently advance the route for an error we never classified, so the
-    // chain gate surfaces the error instead.
+    // Core drops `retry: true` once the shared retry budget is spent (llm-execution-step.ts canRetryError).
     if (args.retryCount >= this.options.maxProcessorRetries) {
-      await this.gateChainHop(args, error);
-      return { retry: false };
+      return this.hopToNextModel(args);
     }
 
     // Classify before attributing: an error from a provider outside the OAuth
     // registry (API-key/router providers are valid route entries) still hops on
     // rotate/hop classes — there is just no account cursor to advance.
     const classification = classifyRotationError(error);
-    // Q14: 400/unknown errors never rotate and never advance routes. With a chain
-    // active, core's fallback array would still advance on a bare
-    // `retry: false` (it advances on any thrown non-TripWire error), so the
-    // gate converts that into a surfaced error instead of a silent hop.
     if (classification.kind === 'never') {
-      await this.gateChainHop(args, error);
-      return { retry: false };
+      return this.hopToNextModel(args);
+    }
+
+    // A stream cut after the provider accepted the request (e.g. the ChatGPT
+    // Codex 900 s limit) says nothing about the account: retry it on the same
+    // account a few times, then move to the next model.
+    if (classification.kind === 'stream-cut') {
+      // The budget belongs to one model step: `state` lives for the whole request, and a
+      // step's retries keep its step number, while the next step starts with a fresh budget.
+      const budget = state.streamCutRetries as { step: number; count: number } | undefined;
+      const cuts = budget?.step === args.stepNumber ? budget.count : 0;
+      if (cuts >= MAX_STREAM_CUT_RETRIES) {
+        return this.hopToNextModel(args);
+      }
+      state.streamCutRetries = { step: args.stepNumber, count: cuts + 1 };
+      // The retry replays the request from scratch (Q10), as a rotation does.
+      args.rotateResponseMessageId?.();
+      const controller = args.requestContext?.get('controller') as
+        | { emitEvent?: (event: { type: 'info'; message: string }) => void }
+        | undefined;
+      controller?.emitEvent?.({
+        type: 'info',
+        message: `The provider ended the response stream early (it may have hit a stream duration limit). Retrying (${cuts + 1}/${MAX_STREAM_CUT_RETRIES}).`,
+      });
+      return { retry: true };
     }
 
     const cascade = await this.getModelRouteCascade(args);
@@ -648,8 +674,15 @@ export class AccountRotationProcessor implements Processor {
     // `ProviderAuthRequiredError` from an empty registry) a refresh can never
     // succeed, so skip it and fall through to the retry:false surface below,
     // which rethrows the original auth error instead of a generic pool
-    // exhaustion message.
-    if (classification.kind === 'rotate' && classification.reason === 'auth-failed' && active) {
+    // exhaustion message. Stores without an account registry (deployed
+    // per-tenant stores) hold one credential per provider, so they refresh
+    // that credential instead.
+    const hasAccountRegistry = typeof store.listAccounts === 'function';
+    if (
+      classification.kind === 'rotate' &&
+      classification.reason === 'auth-failed' &&
+      (active || !hasAccountRegistry)
+    ) {
       const forced = getForcedRefreshInstances(state);
       const refreshKey = `${providerId}:${active?.id ?? 'active'}`;
       if (!forced.has(refreshKey) && typeof store.forceRefreshActiveAccount === 'function') {
@@ -735,23 +768,8 @@ export class AccountRotationProcessor implements Processor {
     }
     const controller = getRoutingController(args);
     const state = controller?.getState?.();
-    const route = (
-      state?.modelRoute as
-        | { entries?: Array<{ id?: unknown; label?: unknown; modelId?: unknown; accountId?: unknown }> }
-        | undefined
-    )?.entries;
-    const pending = state?.mastracodePendingModelFallback as
-      | { toEntryId?: unknown; threadId?: unknown }
-      | null
-      | undefined;
-    const pendingMatchesThread =
-      pending &&
-      typeof pending.toEntryId === 'string' &&
-      (pending.threadId === undefined || pending.threadId === controller?.threadId);
-    const startIndex = pendingMatchesThread
-      ? route?.findIndex(entry => entry.id === pending.toEntryId)
-      : route?.findIndex(entry => entry.modelId === controller?.session?.modelId);
-    if (!route || startIndex === undefined || startIndex < 0 || route.length - startIndex < 2) {
+    const { entries: route } = requestModelRoute(args.requestContext, controller);
+    if (route.length < 2) {
       args.state.modelRouteCascade = null;
       return null;
     }
@@ -759,12 +777,17 @@ export class AccountRotationProcessor implements Processor {
     const thinkingLevel = resolveRequestThinkingLevel(
       {
         state: { thinkingLevel: state?.thinkingLevel },
-        session: { modeId: typeof controller?.session?.modeId === 'string' ? controller.session.modeId : 'build' },
+        ...(!this.options.modeless && {
+          session: { modeId: typeof controller?.session?.modeId === 'string' ? controller.session.modeId : 'build' },
+        }),
       },
       this.options.settingsPath,
+      args.requestContext && !isThinkingLevelSetting(state?.thinkingLevel)
+        ? await this.options.resolveDefaultThinkingLevel?.({ requestContext: args.requestContext })
+        : undefined,
     );
     const entries: ModelRouteCascade['entries'] = [];
-    for (const entry of route.slice(startIndex)) {
+    for (const entry of route) {
       if (
         typeof entry.id !== 'string' ||
         entry.id.length === 0 ||
@@ -800,29 +823,12 @@ export class AccountRotationProcessor implements Processor {
     return cascade;
   }
 
-  /**
-   * Q14 gate: 400/unknown/unattributable errors never advance routes. Core's
-   * fallback array advances on ANY thrown error except TripWire
-   * (llm-execution-step.ts), so when the session route has another entry and the
-   * current entry is non-last, a bare `retry: false` would silently hop on an
-   * error class the user excluded from hop triggers. TripWire is the only
-   * no-advance escape: the runner rethrows it and the fallback loop declines
-   * to advance. No chain (or already on the last entry) → return and let the
-   * plain `retry: false` surface the error exactly as before.
-   */
-  private async gateChainHop(args: ProcessAPIErrorArgs, error: unknown): Promise<void> {
-    const cascade = await this.getModelRouteCascade(args);
-    if (!cascade) return;
-    if (cascade.position >= cascade.entries.length - 1) return;
-    const reason = error instanceof Error ? error.message : String(error);
-    throw new TripWire(reason, {}, this.id);
+  private async hopToNextModel(args: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult> {
+    await this.emitModelFallbackPart(args, 'pool-exhausted');
+    return { retry: false };
   }
 
-  /** Announce and persist the next model-route hop before core advances. */
-  private async emitModelFallbackPart(
-    args: ProcessAPIErrorArgs,
-    reason: 'pool-exhausted' | 'persistent-outage',
-  ): Promise<void> {
+  private async emitModelFallbackPart(args: ProcessAPIErrorArgs, reason: ModelFallbackReason): Promise<void> {
     const cascade = await this.getModelRouteCascade(args);
     if (!cascade) return;
 
@@ -839,6 +845,9 @@ export class AccountRotationProcessor implements Processor {
         }
       | undefined;
     const at = new Date().toISOString();
+    const failure: ModelRouteFailure = {
+      kind: isProviderAuthRequiredError(args.error) ? 'auth' : classifyProviderError(args.error),
+    };
     const threadId = typeof controller?.threadId === 'string' ? controller.threadId : undefined;
     const pending = {
       fromEntryId: from.id,
@@ -848,28 +857,31 @@ export class AccountRotationProcessor implements Processor {
       reason,
       at,
     } satisfies PendingModelFallback;
-    await controller?.setThreadSetting?.({ key: MODEL_FALLBACK_STATE_KEY, value: pending });
+    const sticky = !requestModelRoute(args.requestContext, getRoutingController(args)).host;
+    if (sticky) await controller?.setThreadSetting?.({ key: MODEL_FALLBACK_STATE_KEY, value: pending });
     const data: ModelFallbackPartData = {
       from: { entryId: from.id, label: from.label },
       to: { entryId: to.id, label: to.label },
       reason,
       at,
+      failure,
     };
     try {
       await args.writer?.custom({ type: MODEL_FALLBACK_PART_TYPE, data });
     } catch (error) {
-      await controller?.setThreadSetting?.({ key: MODEL_FALLBACK_STATE_KEY, value: undefined });
+      if (sticky) await controller?.setThreadSetting?.({ key: MODEL_FALLBACK_STATE_KEY, value: undefined });
       throw error;
     }
-    await controller?.setState?.({ [MODEL_FALLBACK_STATE_KEY]: pending });
+    if (sticky) await controller?.setState?.({ [MODEL_FALLBACK_STATE_KEY]: pending });
     args.state.startNoticeEmitted = false;
     const targetRoute = resolveAccountRoute(args, to);
     if (targetRoute) {
       const store = resolveCredentialStore(args.requestContext) ?? this.options.credentialStore;
       await applyPreferredAccountRoute(args, store, targetRoute).catch(() => undefined);
     }
-    controller?.emitEvent?.({ type: 'info', message: modelFallbackNoticeText(data) });
+    if (sticky) controller?.emitEvent?.({ type: 'info', message: modelFallbackNoticeText(data) });
     cascade.position++;
+    if (!sticky && args.requestContext) advanceHostModelRoute(args.requestContext);
   }
 
   /**
@@ -882,7 +894,7 @@ export class AccountRotationProcessor implements Processor {
   private async declarePoolUnavailable(
     args: ProcessAPIErrorArgs,
     providerId: string,
-    reason: 'pool-exhausted' | 'persistent-outage',
+    reason: ModelFallbackReason,
     exclusive = false,
   ): Promise<{ retry: boolean }> {
     const store = resolveCredentialStore(args.requestContext) ?? this.options.credentialStore;

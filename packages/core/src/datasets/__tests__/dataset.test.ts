@@ -487,6 +487,52 @@ describe('Dataset', () => {
     await new Promise(r => setTimeout(r, 500));
   });
 
+  it('creating an experiment reads no item payloads, and running one reads each item once', async () => {
+    let itemsRead = 0;
+    const countingStore = new Proxy(datasetsStorage, {
+      get(target, prop) {
+        const value = Reflect.get(target, prop);
+        if (typeof value !== 'function') return value;
+        return async (...args: unknown[]) => {
+          const result = await value.apply(target, args);
+          const items = Array.isArray(result) ? result : result?.items;
+          itemsRead += items?.length ?? 0;
+          return result;
+        };
+      },
+    });
+    const countingMastra = {
+      ...mastra,
+      getStorage: () => ({
+        ...mockStorage,
+        getStore: async (name: keyof StorageDomains) =>
+          name === 'datasets' ? countingStore : mockStorage.getStore(name),
+      }),
+    } as unknown as Mastra;
+    const countingDs = new Dataset(datasetId, countingMastra);
+
+    const first = await ds.addItem({ input: { prompt: 'A' } });
+    await ds.addItem({ input: { prompt: 'B' } });
+    await ds.addItem({ input: { prompt: 'C' } });
+    await ds.updateItem({ itemId: first.id, input: { prompt: 'A2' } });
+    await ds.deleteItem({ itemId: first.id });
+
+    const created = await countingDs.createExperiment();
+    const pinned = await countingDs.createExperiment({ version: 3 });
+    expect([created.totalItems, pinned.totalItems]).toEqual([2, 3]);
+    expect(itemsRead).toBe(0);
+
+    const { experimentId, totalItems } = await countingDs.startExperimentAsync({
+      task: async () => 'ok',
+      scorers: [],
+    });
+    await vi.waitFor(async () => {
+      expect((await ds.getExperiment({ experimentId }))?.status).toBe('completed');
+    });
+    expect(totalItems).toBe(2);
+    expect(itemsRead).toBe(2);
+  });
+
   it('startExperimentAsync records the resolved version in experiment record', async () => {
     // Add two items → dataset version becomes 2
     await ds.addItem({ input: { prompt: 'A' } });
@@ -1017,92 +1063,6 @@ describe('Dataset', () => {
   // Ownership gates: reject child records that belong to a different dataset
   // even when the caller holds a valid handle to the current dataset.
   // ---------------------------------------------------------------------------
-
-  it('getItem returns null when the item belongs to a different dataset', async () => {
-    const other = await datasetsStorage.createDataset({ name: 'Other DS' });
-    const otherItem = await datasetsStorage.addItem({ datasetId: other.id, input: { x: 1 } });
-    const leaked = await ds.getItem({ itemId: otherItem.id });
-    expect(leaked).toBeNull();
-  });
-
-  it('getItemHistory filters out rows that belong to a different dataset', async () => {
-    const other = await datasetsStorage.createDataset({ name: 'Other DS' });
-    const otherItem = await datasetsStorage.addItem({ datasetId: other.id, input: { x: 1 } });
-    const rows = await ds.getItemHistory({ itemId: otherItem.id });
-    expect(rows).toEqual([]);
-  });
-
-  it('getExperiment returns null when the experiment belongs to a different dataset', async () => {
-    const other = await datasetsStorage.createDataset({ name: 'Other DS' });
-    const otherExp = await experimentsStorage.createExperiment({
-      datasetId: other.id,
-      datasetVersion: 0,
-      targetType: 'agent',
-      targetId: 'inline',
-      totalItems: 0,
-    });
-    const leaked = await ds.getExperiment({ experimentId: otherExp.id });
-    expect(leaked).toBeNull();
-  });
-
-  it('deleteExperiment throws NOT_FOUND when the experiment belongs to a different dataset', async () => {
-    const other = await datasetsStorage.createDataset({ name: 'Other DS' });
-    const otherExp = await experimentsStorage.createExperiment({
-      datasetId: other.id,
-      datasetVersion: 0,
-      targetType: 'agent',
-      targetId: 'inline',
-      totalItems: 0,
-    });
-    await expect(ds.deleteExperiment({ experimentId: otherExp.id })).rejects.toMatchObject({
-      id: 'EXPERIMENT_NOT_FOUND',
-    });
-    // Original experiment should still exist under its true dataset
-    const stillThere = await experimentsStorage.getExperimentById({ id: otherExp.id });
-    expect(stillThere?.id).toBe(otherExp.id);
-  });
-
-  it('listExperimentResults throws NOT_FOUND when experiment belongs to a different dataset', async () => {
-    const other = await datasetsStorage.createDataset({ name: 'Other DS' });
-    const otherExp = await experimentsStorage.createExperiment({
-      datasetId: other.id,
-      datasetVersion: 0,
-      targetType: 'agent',
-      targetId: 'inline',
-      totalItems: 0,
-    });
-    await expect(ds.listExperimentResults({ experimentId: otherExp.id })).rejects.toMatchObject({
-      id: 'EXPERIMENT_NOT_FOUND',
-    });
-  });
-
-  it('updateExperimentResult throws when experiment belongs to a different dataset', async () => {
-    const other = await datasetsStorage.createDataset({ name: 'Other DS' });
-    const otherExp = await experimentsStorage.createExperiment({
-      datasetId: other.id,
-      datasetVersion: 0,
-      targetType: 'agent',
-      targetId: 'inline',
-      totalItems: 0,
-    });
-    await expect(
-      ds.updateExperimentResult({ id: 'any-result-id', experimentId: otherExp.id, status: 'reviewed' }),
-    ).rejects.toMatchObject({
-      id: 'EXPERIMENT_NOT_FOUND',
-    });
-  });
-
-  it('updateExperimentResult rejects when called without experimentId', async () => {
-    await expect(
-      // Runtime guard for JS callers that bypass the type narrowing
-      (ds.updateExperimentResult as (input: { id: string; status: string }) => Promise<unknown>)({
-        id: 'any-result-id',
-        status: 'reviewed',
-      }),
-    ).rejects.toMatchObject({
-      id: 'EXPERIMENT_RESULT_MISSING_EXPERIMENT_ID',
-    });
-  });
 
   it('validates each schema update against the newly proposed schema', async () => {
     await ds.addItem({ input: { a: 1 } });

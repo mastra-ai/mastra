@@ -1,5 +1,6 @@
 import {
   parseTraceAggregateRequest,
+  planSpanAggregate,
   planTraceAggregate,
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
@@ -8,7 +9,7 @@ import type { TrustedTraceAggregatePlan } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { DbClient } from '../../../client';
-import { aggregateTraces, compilePostgresTraceAggregate } from './trace-aggregate';
+import { aggregateTraces, compilePostgresSpanAggregate, compilePostgresTraceAggregate } from './trace-aggregate';
 
 const TIME_RANGE = { from: '2026-01-01T00:00:00.000Z', to: '2026-01-02T00:00:00.000Z' };
 
@@ -58,7 +59,7 @@ describe('Postgres trace aggregate compiler', () => {
       compiled.text.indexOf('current_spans AS'),
     );
     const candidates = compiled.text.slice(compiled.text.indexOf('candidates AS'), compiled.text.indexOf('facts AS'));
-    expect(rootScope).toContain('r."entityName" IS NOT DISTINCT FROM $3');
+    expect(rootScope).toContain('r."entityName" IS NOT NULL AND r."entityName" = $3');
     expect(rootScope).not.toContain(`'error'`);
     expect(rootScope).not.toContain('metadataSearch');
     expect(candidates).not.toContain('r."entityName"');
@@ -138,7 +139,7 @@ describe('Postgres trace aggregate compiler', () => {
   it('fails closed on unmapped dimensions and measures', () => {
     const base = plan();
     expect(() => compilePostgresTraceAggregate('public', { ...base, dimensions: ['traceId' as never] })).toThrow(
-      'Unsupported trusted trace-aggregate field',
+      'Unsupported trusted aggregate field',
     );
     expect(() =>
       compilePostgresTraceAggregate('public', {
@@ -185,6 +186,30 @@ describe('Postgres trace aggregate compiler', () => {
     expect(compiled.values).toEqual(expect.arrayContaining(['org-a', 'res-1', 'mixed']));
     expect(compiled.text).toContain('(SUM("t0" + "t1"))::float8');
     expect(compiled.text).toContain('AS "costCoverage"');
+  });
+
+  it('groups the querySpans selection and joins usage per span', () => {
+    const compiled = compilePostgresSpanAggregate(
+      'custom',
+      planSpanAggregate(
+        {
+          timeRange: TIME_RANGE,
+          where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_generation' } },
+          groupBy: ['parentEntityName'],
+          measures: ['count', 'tokens.total.sum'],
+        },
+        { scope: { organizationId: 'org-a' } },
+      ),
+    );
+
+    expect(compiled.text).toContain('current_spans AS MATERIALIZED');
+    expect(compiled.text).toContain('FROM selected r');
+    expect(compiled.text).toContain('(r."parentEntityName")::text AS "d0"');
+    const usageRows = compiled.text.slice(compiled.text.indexOf('usage_rows AS'), compiled.text.indexOf('usage AS'));
+    expect(usageRows).toContain('(m."traceId", m."spanId") IN (SELECT "traceId", "spanId" FROM selected)');
+    expect(compiled.text).toContain('GROUP BY "traceId", "spanId"');
+    expect(compiled.text).toContain('LEFT JOIN usage u ON u."traceId" = r."traceId" AND u."spanId" = r."spanId"');
+    expect(compiled.values.slice(0, 4)).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'org-a', 'model_generation']);
   });
 });
 

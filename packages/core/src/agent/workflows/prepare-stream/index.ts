@@ -3,7 +3,8 @@ import type { ActorSignal, MastraFGAPermissionInput } from '../../../auth/ee';
 import type { BackgroundTaskManager } from '../../../background-tasks';
 import type { AgentBackgroundConfig } from '../../../background-tasks/types';
 import type { SystemMessage } from '../../../llm';
-import type { ToolCallConcurrency } from '../../../loop/types';
+import { hydrateSuspendedStreamState } from '../../../loop/suspended-stream-state';
+import type { AgentLoopResumeClaim, ToolCallConcurrency } from '../../../loop/types';
 import { createRunScope } from '../../../mastra/run-scope';
 import type { MastraMemory } from '../../../memory/memory';
 import { checkThreadFGA } from '../../../memory/thread-fga';
@@ -17,7 +18,8 @@ import { createWorkflow } from '../../../workflows/create';
 import type { Workspace } from '../../../workspace/workspace';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
-import type { CreatedAgentSignal } from '../../signals';
+import type { PendingSignalListener, CreatedAgentSignal } from '../../signals';
+import type { AgentStreamPublisher } from '../../streams/publisher';
 import type { AgentMethodType } from '../../types';
 import { createMapResultsStep } from './map-results-step';
 import { createPrepareMemoryStep } from './prepare-memory-step';
@@ -44,13 +46,16 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   requireToolApproval?: RequireToolApproval;
   toolCallConcurrency?: ToolCallConcurrency;
   eagerToolExecution?: boolean;
+  streamPublisher?: AgentStreamPublisher;
   resumeContext?: {
     resumeData: any;
     snapshot: any;
+    claim?: AgentLoopResumeClaim;
   };
   agentId: string;
   actor?: ActorSignal;
   agentVersionId?: string;
+  resolvedScopes?: string[];
   agentName?: string;
   toolCallId?: string;
   workspace?: Workspace;
@@ -64,7 +69,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
    */
   skipBgTaskWait?: boolean;
   drainPendingSignals?: (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
-  subscribePendingSignals?: (runId: string, listener: () => void) => () => void;
+  subscribePendingSignals?: (runId: string, listener: PendingSignalListener) => () => void;
 }
 
 export function createPrepareStreamWorkflow<OUTPUT = undefined>({
@@ -85,10 +90,12 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   requireToolApproval,
   toolCallConcurrency,
   eagerToolExecution,
+  streamPublisher,
   resumeContext,
   agentId,
   actor,
   agentVersionId,
+  resolvedScopes,
   agentName,
   toolCallId,
   workspace,
@@ -112,9 +119,11 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   // workflow registers. Prepare-stream and the agentic loop deliberately do
   // not share runtime state — each owns its own per-run scratch space.
   const runScope = createRunScope();
-  const memoryAuthorizationChecks = new Map<MastraFGAPermissionInput, Promise<void>>();
+  // Keyed by permission and thread: approval for one thread must not cover another.
+  const memoryAuthorizationChecks = new Map<string, Promise<void>>();
   const authorizeMemory = (permission: MastraFGAPermissionInput, threadId: string) => {
-    const existingCheck = memoryAuthorizationChecks.get(permission);
+    const key = JSON.stringify([permission, threadId]);
+    const existingCheck = memoryAuthorizationChecks.get(key);
     if (existingCheck) return existingCheck;
 
     const check = checkThreadFGA({
@@ -127,12 +136,23 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
       permission,
       actor,
     }).catch(error => {
-      memoryAuthorizationChecks.delete(permission);
+      memoryAuthorizationChecks.delete(key);
       throw error;
     });
-    memoryAuthorizationChecks.set(permission, check);
+    memoryAuthorizationChecks.set(key, check);
     return check;
   };
+
+  // Hydrated once: prepare-tools-step restores processor-loaded tools from the
+  // suspended transcript, and stream-step resumes the loop from it.
+  let resumeSnapshot: Promise<any> | undefined;
+  const getResumeSnapshot = resumeContext
+    ? () =>
+        (resumeSnapshot ??= hydrateSuspendedStreamState(resumeContext.snapshot, memory, {
+          logger: capabilities.logger,
+          runId,
+        }))
+    : undefined;
 
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -145,6 +165,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     methodType,
     memory,
     backgroundTaskEnabled: backgroundTaskManager?.config?.enabled,
+    getResumeSnapshot,
     runScope,
   });
 
@@ -172,9 +193,12 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     requireToolApproval,
     toolCallConcurrency,
     eagerToolExecution,
+    streamPublisher,
     resumeContext,
+    getResumeSnapshot,
     agentId,
     agentVersionId,
+    resolvedScopes,
     agentName,
     toolCallId,
     methodType,
@@ -205,6 +229,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     agentSpan,
     agentId,
     agentVersionId,
+    resolvedScopes,
     methodType,
     saveQueueManager,
     authorizeMemory,
@@ -224,6 +249,8 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
       // It must never write snapshot rows to the user's storage. Registering Mastra (done by
       // the agent) lets it read storage to suppress noise, while this keeps writes off.
       shouldPersistSnapshot: () => false,
+      // Never stored, so only the agent call that owns it can cancel it.
+      localCancellationOnly: true,
       validateInputs: false,
     },
   })

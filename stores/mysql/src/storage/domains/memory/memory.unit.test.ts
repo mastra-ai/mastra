@@ -1,4 +1,9 @@
-import { OBSERVATIONAL_MEMORY_TABLE_SCHEMA, TABLE_SCHEMAS } from '@mastra/core/storage';
+import {
+  OBSERVATIONAL_MEMORY_TABLE_SCHEMA,
+  RUN_FENCING_TABLE_SCHEMAS,
+  TABLE_MEMORY_RUN_FENCES,
+  TABLE_SCHEMAS,
+} from '@mastra/core/storage';
 import type { Pool } from 'mysql2/promise';
 import { describe, expect, it } from 'vitest';
 
@@ -19,6 +24,7 @@ function convergedCatalog({ withOmIndex }: { withOmIndex: boolean }) {
     mastra_messages: Object.keys(TABLE_SCHEMAS.mastra_messages ?? {}),
     mastra_resources: Object.keys(TABLE_SCHEMAS.mastra_resources ?? {}),
     [OM_TABLE]: Object.keys(omSchema),
+    [TABLE_MEMORY_RUN_FENCES]: Object.keys(RUN_FENCING_TABLE_SCHEMAS[TABLE_MEMORY_RUN_FENCES]),
   };
   return {
     tables: Object.keys(tables).map(t => ({ TABLE_NAME: t })),

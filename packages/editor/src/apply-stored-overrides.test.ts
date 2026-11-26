@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { z } from 'zod';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
@@ -55,6 +56,114 @@ describe('applyStoredOverrides', () => {
 
     const instructions = await result.getInstructions();
     expect(instructions).toBe('You are a stored-config agent with updated instructions.');
+  });
+
+  it('overrides a code model list when the editor owns the model', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor();
+    const codeAgent = new Agent({
+      id: 'my-agent',
+      name: 'Code Agent',
+      instructions: 'Code instructions',
+      model: [
+        { id: 'primary', model: 'openai/gpt-4o' },
+        { id: 'fallback', model: 'openai/gpt-4o-mini', maxRetries: 1 },
+      ],
+      editor: { model: true },
+    });
+    new Mastra({ storage, editor, agents: { 'my-agent': codeAgent } });
+
+    const agentsStore = await storage.getStore('agents');
+    await agentsStore?.create({
+      agent: {
+        id: 'my-agent',
+        name: 'Stored Agent',
+        instructions: 'Stored instructions',
+        model: { provider: 'openai', name: 'gpt-4o' },
+        modelList: [
+          { id: 'fallback', provider: 'openai', modelId: 'gpt-4.1', enabled: true, maxRetries: 4 },
+          { id: 'primary', provider: 'openai', modelId: 'gpt-4o', enabled: false, maxRetries: 0 },
+        ],
+      } as never,
+    });
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+
+    expect(await result.getModelList()).toMatchObject([
+      { id: 'fallback', model: { modelId: 'gpt-4.1' }, enabled: true, maxRetries: 4 },
+      { id: 'primary', model: { modelId: 'gpt-4o' }, enabled: false, maxRetries: 0 },
+    ]);
+  });
+
+  it('reconciles stale stored entries with newly added code models', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor();
+    const codeAgent = new Agent({
+      id: 'my-agent',
+      name: 'Code Agent',
+      instructions: 'Code instructions',
+      model: [
+        { id: 'primary', model: 'openai/gpt-4o' },
+        { id: 'new-fallback', model: 'openai/gpt-4.1' },
+      ],
+      editor: { model: true },
+    });
+    new Mastra({ storage, editor, agents: { 'my-agent': codeAgent } });
+
+    const agentsStore = await storage.getStore('agents');
+    await agentsStore?.create({
+      agent: {
+        id: 'my-agent',
+        name: 'Stored Agent',
+        instructions: 'Stored instructions',
+        model: { provider: 'openai', name: 'gpt-4o' },
+        modelList: [
+          { id: 'removed-fallback', provider: 'openai', modelId: 'gpt-4o-mini', enabled: true, maxRetries: 1 },
+          { id: 'primary', provider: 'openai', modelId: 'gpt-4o', enabled: false, maxRetries: 0 },
+        ],
+      } as never,
+    });
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+
+    expect(await result.getModelList()).toMatchObject([
+      { id: 'primary', enabled: false },
+      { id: 'new-fallback', model: { modelId: 'gpt-4.1' }, enabled: true },
+    ]);
+  });
+
+  it('preserves a configured code model instance when the stored selection is unchanged', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor();
+    const configuredModel = new MockLanguageModelV2({
+      provider: 'openai',
+      modelId: 'gpt-4o',
+    });
+    const codeAgent = new Agent({
+      id: 'my-agent',
+      name: 'Code Agent',
+      instructions: 'Code instructions',
+      model: [{ id: 'primary', model: configuredModel }],
+      editor: { model: true },
+    });
+    new Mastra({ storage, editor, agents: { 'my-agent': codeAgent } });
+
+    const agentsStore = await storage.getStore('agents');
+    await agentsStore?.create({
+      agent: {
+        id: 'my-agent',
+        name: 'Stored Agent',
+        instructions: 'Stored instructions',
+        model: { provider: 'openai', name: 'gpt-4o' },
+        modelList: [{ id: 'primary', provider: 'openai', modelId: 'gpt-4o', enabled: true, maxRetries: 0 }],
+      } as never,
+    });
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+    const modelList = await result.getModelList();
+
+    expect(modelList?.[0]?.model).toMatchObject({ provider: 'openai', modelId: 'gpt-4o' });
+    expect(modelList?.[0]?.model).not.toHaveProperty('gatewayId', 'models.dev');
   });
 
   it('does not override anything when code agent disables editor overrides', async () => {
@@ -564,5 +673,87 @@ describe('applyStoredOverrides', () => {
     const providerRequestContext = vi.mocked(stubProvider.resolveToolsVNext!).mock.calls[0]?.[0].requestContext;
     expect(providerRequestContext).toBe(requestContext);
     expect(providerRequestContext?.getRaw('nonSerializable')).toBe(requestContext.getRaw('nonSerializable'));
+  });
+});
+
+// Regression coverage for https://github.com/mastra-ai/mastra/issues/26274 —
+// file-based agents (`agents/<name>/`) register with `source: 'fs'`. They are
+// code-backed just like `source: 'code'` agents, so Studio saves must be stored
+// as overrides on top of the file definition instead of replacing it.
+describe('file-based agents (source: fs)', () => {
+  async function setupFsAgent() {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor();
+    const fsTool = createTool({
+      id: 'fs-tool',
+      description: 'Defined in the agent folder',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => ({ ok: true }),
+    });
+    const mastra = new Mastra({ storage, editor });
+    mastra.__registerFsAgents({
+      'fs-agent': new Agent({
+        id: 'fs-agent',
+        name: 'FS Agent',
+        instructions: 'You are a file-based agent.',
+        model: 'openai/gpt-4o-mini',
+        tools: { 'fs-tool': fsTool },
+      }),
+    });
+    const fsAgent = mastra.getAgentById('fs-agent');
+    return { storage, editor, mastra, fsAgent };
+  }
+
+  // The body Studio sends on the first save of a code-backed agent.
+  const studioSave = {
+    id: 'fs-agent',
+    name: 'FS Agent',
+    instructions: 'Studio draft instructions.',
+    model: { provider: 'openai', name: 'gpt-4o' },
+  };
+
+  it('keeps the file-based agent registered after the first save creates an override', async () => {
+    const { editor, mastra, fsAgent } = await setupFsAgent();
+    expect(fsAgent.source).toBe('fs');
+
+    const created = await editor.agent.create(studioSave);
+
+    expect(created).toBe(fsAgent);
+    expect(mastra.getAgentById('fs-agent')).toBe(fsAgent);
+    expect(mastra.getAgentById('fs-agent').source).toBe('fs');
+  });
+
+  it('layers saved drafts on top of the file definition instead of replacing it', async () => {
+    const { editor, fsAgent } = await setupFsAgent();
+    await editor.agent.create(studioSave);
+
+    const updated = await editor.agent.update({ id: 'fs-agent', instructions: 'Second Studio draft.' });
+
+    expect(await updated.getInstructions()).toBe('Second Studio draft.');
+    // Model and tools still come from the agent folder, not the stored snapshot.
+    expect(updated.model).toBe('openai/gpt-4o-mini');
+    expect(Object.keys(await updated.listTools())).toContain('fs-tool');
+    expect(updated.source).toBe('fs');
+
+    // The file-based singleton itself is never mutated by the override.
+    expect(await fsAgent.getInstructions()).toBe('You are a file-based agent.');
+  });
+
+  it('reloads the saved draft on top of the file definition after the cache is cleared', async () => {
+    const { editor, mastra, fsAgent } = await setupFsAgent();
+    await editor.agent.create(studioSave);
+    await editor.agent.update({ id: 'fs-agent', instructions: 'Unpublished draft.' });
+    editor.agent.clearCache('fs-agent');
+
+    // Studio reloads through the registry (`GET /agents/:id`), which layers the requested
+    // version onto the registered agent.
+    const registered = mastra.getAgentById('fs-agent');
+    expect(registered).toBe(fsAgent);
+
+    const draft = await editor.agent.applyStoredOverrides(registered, { status: 'draft' });
+    expect(await draft.getInstructions()).toBe('Unpublished draft.');
+    expect(draft.model).toBe('openai/gpt-4o-mini');
+    expect(Object.keys(await draft.listTools())).toContain('fs-tool');
   });
 });

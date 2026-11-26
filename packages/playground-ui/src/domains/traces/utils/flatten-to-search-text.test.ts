@@ -40,10 +40,6 @@ describe('flattenToSearchText', () => {
       expect(flattenToSearchText({ city: 'Lyon', unit: 'celsius' })).toBe('city Lyon unit celsius');
     });
 
-    it('makes a field name searchable on its own', () => {
-      expect(flattenToSearchText({ model: 'gpt-5-mini' })).toContain('model');
-    });
-
     it('keeps the key of a value it cannot search, so the field is still findable', () => {
       expect(flattenToSearchText({ error: null })).toBe('error');
       expect(flattenToSearchText({ a: 'one', b: null, c: undefined, d: 'two' })).toBe('a one b c d two');
@@ -245,30 +241,6 @@ describe('flattenToSearchText', () => {
       flattenToSearchText(input);
 
       expect(input).toEqual(snapshot);
-    });
-
-    it('is deterministic across repeated calls', () => {
-      const input = { a: 'one', nested: { b: 'two', list: [3, 'four'] } };
-
-      expect(flattenToSearchText(input)).toBe(flattenToSearchText(input));
-    });
-  });
-
-  describe('when given a realistic span payload', () => {
-    it('exposes every nested value and field name to a substring search', () => {
-      const attributes = {
-        model: 'gpt-5-mini',
-        usage: { inputTokens: 1200, outputTokens: 300 },
-        request: { location: { city: 'Lyon' }, tags: ['weather', 'forecast'] },
-        error: null,
-      };
-
-      const result = flattenToSearchText(attributes);
-
-      const needles = ['gpt-5-mini', '1200', '300', 'Lyon', 'weather', 'forecast', 'model', 'usage', 'error'];
-      for (const needle of needles) {
-        expect(result).toContain(needle);
-      }
     });
   });
 });

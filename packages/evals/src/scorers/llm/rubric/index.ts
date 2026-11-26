@@ -53,9 +53,10 @@ const analyzeOutputSchema = compileSchema(
  * with common list markers stripped from the front.
  */
 function parseRubricString(rubric: string): RubricCriterion[] {
+  // `\u2022` is the bullet `•`, escaped so published code stays Latin-1 (minifiers do not escape regex literals).
   return rubric
     .split('\n')
-    .map(line => line.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim())
+    .map(line => line.replace(/^\s*(?:[-*\u2022]|\d+[.)])\s*/, '').trim())
     .filter(line => line.length > 0)
     .map(description => ({ description, required: true }));
 }
@@ -152,7 +153,7 @@ function getTaskText(run: { input?: unknown }): string {
  * import { createRubricScorer } from '@mastra/evals/scorers/prebuilt';
  *
  * const rubricScorer = createRubricScorer({
- *   model: '__GATEWAY_OPENAI_MODEL_MINI__',
+ *   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
  *   criteria: [
  *     { description: 'The response includes an analysis section' },
  *     { description: 'The response includes concrete recommendations' },

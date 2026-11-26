@@ -15,10 +15,10 @@ vi.mock('@mastra/code-sdk/workflows/service', () => ({
 import { handleWorkflowsCommand } from '../workflows.js';
 
 function createCtx() {
+  const controller = { getMastra: vi.fn(() => undefined) };
   return {
-    controller: {
-      getMastra: vi.fn(() => undefined),
-    },
+    state: { local: { controller } },
+    controller,
     showError: vi.fn(),
     showInfo: vi.fn(),
   } as any;

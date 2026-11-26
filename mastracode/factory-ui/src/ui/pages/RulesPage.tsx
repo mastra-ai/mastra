@@ -1,4 +1,5 @@
-import { Badge, type BadgeVariant } from '@mastra/playground-ui/components/Badge';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
@@ -7,18 +8,8 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import {
-  Brain,
-  CircleCheck,
-  CircleDashed,
-  CirclePause,
-  CircleSlash,
-  CircleX,
-  ListFilter,
-  Repeat,
-  type LucideIcon,
-} from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router';
+import type { LucideIcon } from 'lucide-react';
+import { useSearchParams } from 'react-router';
 
 import { useFactoryDecisionAction, useFactoryDecisionHistory } from '../../hooks/useFactoryDecisions';
 import { relativeTime } from '../../lib/date/relativeTime';
@@ -27,36 +18,41 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
-import { supervisorAskPath } from '../domains/supervisor/services/supervisor';
 import { DayHeading, RailRow, RAIL_LIST, RAIL_MARK_TONE, RAIL_ROW_BODY } from '../domains/factory/components/Timeline';
 import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../domains/factory/services/decisions';
-import { SkeletonRows } from '../ui/SkeletonRows';
+import { RuleDecisionsSkeleton } from '../domains/factory/components/RuleDecisionsSkeleton';
+import { RULE_DECISION_GROUPS, ruleDecisionGroup } from '../domains/factory/ruleDecisionGroups';
+import type { RuleDecisionGroupKey } from '../domains/factory/ruleDecisionGroups';
+import { IconCircleBanSign } from '@mastra/playground-ui/icons/central/IconCircleBanSign';
+import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
+import { IconCircleDashed } from '@mastra/playground-ui/icons/central/IconCircleDashed';
+import { IconCircleX } from '@mastra/playground-ui/icons/central/IconCircleX';
+import { IconFilter2 } from '@mastra/playground-ui/icons/central/IconFilter2';
+import { IconArrowsRepeatRightLeft } from '@mastra/playground-ui/icons/central/IconArrowsRepeatRightLeft';
+import { IconPause } from '@mastra/playground-ui/icons/central/IconPause';
 
-const DECISION_GROUPS: ReadonlyArray<{
-  key: string;
-  label: string;
-  icon: LucideIcon;
-  statuses: FactoryDecisionStatus[] | undefined;
-}> = [
-  { key: 'all', label: 'All effects', icon: ListFilter, statuses: undefined },
-  { key: 'active', label: 'Active', icon: CircleDashed, statuses: ['pending', 'leased', 'retry'] },
-  { key: 'proposed', label: 'Awaiting approval', icon: CirclePause, statuses: ['proposed'] },
-  { key: 'failed', label: 'Failed', icon: CircleX, statuses: ['failed'] },
-  { key: 'succeeded', label: 'Succeeded', icon: CircleCheck, statuses: ['succeeded'] },
-];
+const GROUP_PRESENTATION: Record<RuleDecisionGroupKey, { label: string; icon: LucideIcon }> = {
+  all: { label: 'All effects', icon: IconFilter2 },
+  active: { label: 'Active', icon: IconCircleDashed },
+  proposed: { label: 'Awaiting approval', icon: IconPause },
+  failed: { label: 'Failed', icon: IconCircleX },
+  succeeded: { label: 'Succeeded', icon: IconCircleCheck },
+};
+
+const DECISION_GROUPS = RULE_DECISION_GROUPS.map(group => ({ ...group, ...GROUP_PRESENTATION[group.key] }));
 
 const STATUS_STYLE: Record<
   FactoryDecisionStatus,
   { icon: LucideIcon; tone: BadgeVariant; label: string; live?: true }
 > = {
-  pending: { icon: CircleDashed, tone: 'info', label: 'queued' },
-  proposed: { icon: CirclePause, tone: 'warning', label: 'awaiting approval' },
-  dismissed: { icon: CircleSlash, tone: 'neutral', label: 'dismissed' },
-  superseded: { icon: CircleSlash, tone: 'neutral', label: 'superseded' },
-  leased: { icon: CircleDashed, tone: 'cyan', label: 'running', live: true },
-  retry: { icon: CircleDashed, tone: 'orange', label: 'retrying', live: true },
-  succeeded: { icon: CircleCheck, tone: 'success', label: 'done' },
-  failed: { icon: CircleX, tone: 'destructive', label: 'failed' },
+  pending: { icon: IconCircleDashed, tone: 'info', label: 'queued' },
+  proposed: { icon: IconPause, tone: 'warning', label: 'awaiting approval' },
+  dismissed: { icon: IconCircleBanSign, tone: 'neutral', label: 'dismissed' },
+  superseded: { icon: IconCircleBanSign, tone: 'neutral', label: 'superseded' },
+  leased: { icon: IconCircleDashed, tone: 'cyan', label: 'running', live: true },
+  retry: { icon: IconCircleDashed, tone: 'orange', label: 'retrying', live: true },
+  succeeded: { icon: IconCircleCheck, tone: 'success', label: 'done' },
+  failed: { icon: IconCircleX, tone: 'destructive', label: 'failed' },
 };
 
 /** Rule decisions and their durable queued effects for the active Factory. */
@@ -64,8 +60,8 @@ export function RulesPage() {
   const factory = useActiveFactory();
   const slots = useSidebarHeaderSlots();
   return (
-    <PageLayout variant="fit" {...slots}>
-      <div className="flex min-h-0 flex-col p-4">
+    <PageLayout variant="page" {...slots}>
+      <div className="flex h-full min-h-0 flex-col">
         <RulesContent factoryProjectId={factory.id} />
       </div>
     </PageLayout>
@@ -74,10 +70,8 @@ export function RulesPage() {
 
 function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const requestedGroup = searchParams.get('group');
-  const decisionGroup = DECISION_GROUPS.find(entry => entry.key === requestedGroup)?.key ?? 'all';
+  const { key: decisionGroup, statuses: decisionStatuses } = ruleDecisionGroup(searchParams.get('group'));
   const decisionFilter = DECISION_GROUPS.find(entry => entry.key === decisionGroup);
-  const decisionStatuses = decisionFilter?.statuses;
   const decisionsQuery = useFactoryDecisionHistory(factoryProjectId, decisionGroup, decisionStatuses);
   const retryDecision = useFactoryDecisionAction(factoryProjectId, 'retry');
   const approveDecision = useFactoryDecisionAction(factoryProjectId, 'approve');
@@ -122,12 +116,12 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
             const Icon = entry.icon;
             return (
               <Button
+                icon={<Icon />}
                 key={entry.key}
                 variant={decisionGroup === entry.key ? 'primary' : 'default'}
                 aria-pressed={decisionGroup === entry.key}
                 onClick={() => setSearchParams(entry.key === 'all' ? {} : { group: entry.key }, { replace: true })}
               >
-                <Icon aria-hidden />
                 {entry.label}
               </Button>
             );
@@ -142,12 +136,12 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
       )}
 
       {decisionsQuery.isPending ? (
-        <SkeletonRows label="Loading rule decisions" rows={4} rowClassName="h-16 w-full" />
+        <RuleDecisionsSkeleton />
       ) : decisions.length === 0 ? (
         <EmptyState
           className="min-h-0 flex-1"
           as="h3"
-          iconSlot={<ListFilter aria-hidden />}
+          iconSlot={<IconFilter2 aria-hidden />}
           titleSlot={hasDecisionFilter ? 'No matching rule effects' : 'No rule effects yet'}
           descriptionSlot={
             hasDecisionFilter
@@ -178,7 +172,6 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
                         mark={<StatusIcon size={14} className={RAIL_MARK_TONE[tone]} aria-hidden />}
                       >
                         <DecisionRow
-                          factoryProjectId={factoryProjectId ?? ''}
                           decision={decision}
                           retrying={retryDecision.isPending && retryDecision.variables === decision.id}
                           approving={approveDecision.isPending && approveDecision.variables === decision.id}
@@ -197,6 +190,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
               hasNextPage={decisionsQuery.hasNextPage}
               isFetchingNextPage={decisionsQuery.isFetchingNextPage}
               onLoadMore={() => void decisionsQuery.fetchNextPage()}
+              loaded={decisions.length}
               label="Load more effects"
             />
           </div>
@@ -207,7 +201,6 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
 }
 
 function DecisionRow({
-  factoryProjectId,
   decision,
   retrying,
   approving,
@@ -216,7 +209,6 @@ function DecisionRow({
   onApprove,
   onDismiss,
 }: {
-  factoryProjectId: string;
   decision: FactoryDecisionSummary;
   retrying: boolean;
   approving: boolean;
@@ -225,7 +217,6 @@ function DecisionRow({
   onApprove: () => void;
   onDismiss: () => void;
 }) {
-  const navigate = useNavigate();
   const { tone, label, live } = STATUS_STYLE[decision.status];
   const progress = decision.completedAt
     ? `Completed ${relativeTime(decision.completedAt)}`
@@ -240,7 +231,13 @@ function DecisionRow({
         {label}
       </Badge>
       {decision.attempts > 1 ? (
-        <Badge size="xs" variant="neutral" emphasis="subtle" icon={<Repeat aria-hidden />} title="Attempts">
+        <Badge
+          size="xs"
+          variant="neutral"
+          emphasis="subtle"
+          icon={<IconArrowsRepeatRightLeft aria-hidden />}
+          title="Attempts"
+        >
           {decision.attempts}
         </Badge>
       ) : null}
@@ -250,36 +247,18 @@ function DecisionRow({
         </Txt>
       ) : null}
       <div className="ml-auto flex shrink-0 items-center gap-2 pl-2">
-        {decision.status === 'failed' ? (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            tooltip="Ask supervisor"
-            aria-label={`Ask supervisor about failed ${decision.type} decision`}
-            onClick={() =>
-              void navigate(
-                supervisorAskPath(
-                  factoryProjectId,
-                  `Explain why rule decision ${decision.id} failed and recommend the safest repair.`,
-                ),
-              )
-            }
-          >
-            <Brain aria-hidden />
-          </Button>
-        ) : null}
         {decision.status === 'proposed' ? (
           <>
-            <Button variant="ghost" size="sm" disabled={approving || dismissing} onClick={onDismiss}>
-              {dismissing ? 'Dismissing…' : 'Dismiss'}
+            <Button variant="ghost" size="sm" disabled={approving} onClick={onDismiss} loading={dismissing}>
+              Dismiss
             </Button>
-            <Button size="sm" disabled={approving || dismissing} onClick={onApprove}>
-              {approving ? 'Starting…' : 'Run'}
+            <Button size="sm" disabled={dismissing} onClick={onApprove} loading={approving}>
+              Run
             </Button>
           </>
         ) : decision.status === 'failed' && decision.canRetry ? (
-          <Button size="sm" disabled={retrying} onClick={onRetry}>
-            {retrying ? 'Retrying…' : 'Retry'}
+          <Button size="sm" onClick={onRetry} loading={retrying}>
+            Retry
           </Button>
         ) : null}
         <Txt

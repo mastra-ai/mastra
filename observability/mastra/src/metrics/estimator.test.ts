@@ -870,6 +870,7 @@ describe('estimateCosts', () => {
     ['global.anthropic.claude-sonnet-4-5-20250929-v1:0', 'amazon-bedrock/claude-sonnet-4-5', 0.003],
     ['jp.anthropic.claude-sonnet-4-5-20250929-v1:0', 'amazon-bedrock/claude-sonnet-4-5', 0.003],
     ['au.anthropic.claude-sonnet-4-5-20250929-v1:0', 'amazon-bedrock/claude-sonnet-4-5', 0.003],
+    ['in.anthropic.claude-sonnet-4-5-20250929-v1:0', 'amazon-bedrock/claude-sonnet-4-5', 0.003],
     ['us.amazon.nova-pro-v1:0', 'amazon-bedrock/amazon-nova-pro', 0.0008],
   ])('resolves Bedrock model id %s', (model, pricingId, estimatedCost) => {
     const costs = estimateCosts(

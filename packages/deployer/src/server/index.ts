@@ -81,13 +81,16 @@ const DEFAULT_CORS_EXPOSE_HEADERS = ['Content-Length', 'X-Requested-With'];
 
 function getCorsConfig(serverCors: CorsOptions | false | undefined, credentialsDefault: boolean) {
   const userCors = serverCors && typeof serverCors === 'object' ? serverCors : undefined;
-  const origin =
-    userCors && 'origin' in userCors && userCors.origin
-      ? userCors.origin
-      : credentialsDefault
-        ? (requestOrigin: string) => requestOrigin || undefined
-        : '*';
-  const credentials = userCors && 'credentials' in userCors ? userCors.credentials : credentialsDefault;
+  const hasExplicitOrigin = !!(userCors && 'origin' in userCors && userCors.origin);
+  const origin = hasExplicitOrigin
+    ? userCors!.origin
+    : credentialsDefault
+      ? (requestOrigin: string) => requestOrigin || undefined
+      : '*';
+  // Reflected origins never get credentials by default; that would let any site
+  // make cookie-authenticated requests. Set cors.origin to allow them.
+  const credentials =
+    userCors && 'credentials' in userCors ? userCors.credentials : credentialsDefault && hasExplicitOrigin;
 
   return {
     origin,
@@ -236,10 +239,19 @@ export async function createHonoServer(
   // to avoid "can't modify immutable headers" error on WebSocket upgrade
   // This is async because it dynamically imports @hono/node-ws to avoid
   // bundling ws into user code. Returns null if ws is not available.
+  //
+  // Only an explicitly configured origin is enforced on the WebSocket upgrade;
+  // `getCorsConfig` applies the same permissive default (reflect or `*`) below, so
+  // an install without an origin allowlist keeps working across origins.
+  const browserStreamOrigins =
+    server?.cors && typeof server.cors === 'object' && 'origin' in server.cors ? server.cors.origin : undefined;
+
   const browserStreamSetup =
     options.browserStream === false
       ? null
       : await setupBrowserStream(app, {
+          mastra,
+          allowedOrigins: browserStreamOrigins,
           getToolset: async (agentId: string) => {
             // Look up agent and return its browser if configured.
             // First try the runtime registry (code-defined + previously hydrated agents),
@@ -611,6 +623,13 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
   const studioProtocol = serverOptions?.studioProtocol ?? protocol;
   const studioPort = serverOptions?.studioPort ?? port;
 
+  // Start counting model tokens before the first request or recovered workflow run;
+  // usage is reported periodically and on shutdown (respects MASTRA_TELEMETRY_DISABLED).
+  // Older @mastra/core versions don't export it, hence the optional call.
+  await import('@mastra/core/telemetry')
+    .then(({ startModelUsageTelemetry }) => startModelUsageTelemetry?.(mastra))
+    .catch(() => {});
+
   const server = serve(
     {
       fetch: app.fetch,
@@ -677,10 +696,11 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
   // rolling deploys can let long-running agent turns finish.
   if (serverOptions?.handleShutdownSignals !== false) {
     // Core teardown gets the drain window (for in-flight evented workflow
-    // runs) plus a fixed 5s for the teardown itself: it must always run (e.g.
-    // DuckDB's file lock release), but a hanging shutdown can't be allowed to
-    // block process exit.
-    const CORE_SHUTDOWN_TIMEOUT_MS = 5000;
+    // runs) plus a fixed 6.5s for the teardown itself: up to 1.5s to hand back
+    // agent thread runs, then cleanup that must always run (e.g. DuckDB's file
+    // lock release), but a hanging shutdown can't be allowed to block process
+    // exit.
+    const CORE_SHUTDOWN_TIMEOUT_MS = 6500;
     const timedOut = Symbol('shutdown-timeout');
     const race = async (work: Promise<unknown>, ms: number): Promise<unknown> => {
       let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -693,12 +713,19 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
         clearTimeout(timeout);
       }
     };
-    let shuttingDown = false;
+    // On Ctrl-C the terminal signals every process in the group, so when a parent such as
+    // `mastra dev` or `mastra start` forwards the signal too, this process receives it twice
+    // within milliseconds. Only a signal after this window is a request to force-quit.
+    const DUPLICATE_SIGNAL_WINDOW_MS = 250;
+    let shutdownStartedAt: number | undefined;
     const shutdown = async (signal: NodeJS.Signals) => {
-      if (shuttingDown) {
-        return void process.exit(1);
+      if (shutdownStartedAt !== undefined) {
+        if (Date.now() - shutdownStartedAt >= DUPLICATE_SIGNAL_WINDOW_MS) {
+          process.exit(1);
+        }
+        return;
       }
-      shuttingDown = true;
+      shutdownStartedAt = Date.now();
       const logger = mastra.getLogger();
       logger.info('Shutting down Mastra server', { signal });
       try {
@@ -756,7 +783,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       }
       process.exit(0);
     };
-    // Keep both listeners active so any second shutdown signal can force an
+    // Keep both listeners active so a later second shutdown signal can force an
     // immediate exit, regardless of whether it matches the first signal.
     process.on('SIGINT', () => void shutdown('SIGINT'));
     process.on('SIGTERM', () => void shutdown('SIGTERM'));

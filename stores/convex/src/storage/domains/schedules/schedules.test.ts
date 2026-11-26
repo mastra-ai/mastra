@@ -67,6 +67,8 @@ describe('SchedulesConvex', () => {
         id: 'schedule-1',
         target: JSON.stringify(schedule.target),
         cron: schedule.cron,
+        run_at: null,
+        end_at: null,
         timezone: null,
         status: 'active',
         next_fire_at: 1_000,

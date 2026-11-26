@@ -138,10 +138,11 @@ export class SyncObservationStrategy extends ObservationStrategy {
       failures: result.extractionFailures,
       previousValues: this.priorExtractedValues,
       rawObservations: result.observations,
-      recentMessages: formatMessagesForObserver(this.opts.messages, {
-        maxPartLength: 500,
-        timeZone: this.opts.record.observedTimezone,
-      }),
+      recentMessages: () =>
+        formatMessagesForObserver(this.opts.messages, {
+          maxPartLength: 500,
+          timeZone: this.opts.record.observedTimezone,
+        }),
       threadId: this.opts.threadId,
       resourceId: this.opts.resourceId,
       mainAgent: this.opts.agent,
@@ -195,13 +196,14 @@ export class SyncObservationStrategy extends ObservationStrategy {
     const { threadId, messages } = this.opts;
 
     const lastObservedAt = this.getMaxMessageTimestamp(messages);
-    const messageRange = this.retrieval ? buildMessageRange(messages) : undefined;
+    // Build the group this cycle adds before merging it, so the commit carries exactly that group.
+    const newObservationGroup = this.createObservationGroup(output.observations, buildMessageRange(messages));
     const newObservations = await this.wrapObservations(
       output.observations,
       existingObservations,
       threadId,
       lastObservedAt,
-      messageRange,
+      newObservationGroup,
     );
     const observationTokens = this.tokenCounter.countObservations(newObservations);
     const cycleObservationTokens = this.tokenCounter.countObservations(output.observations);
@@ -216,6 +218,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
       cycleObservationTokens,
       observedMessageIds,
       lastObservedAt,
+      newObservationGroup,
       suggestedContinuation: output.suggestedContinuation,
       currentTask: output.currentTask,
       threadTitle: output.threadTitle,
@@ -254,6 +257,16 @@ export class SyncObservationStrategy extends ObservationStrategy {
       return { status: 'not-committed', reason: 'the observational memory head kept changing during the commit' };
     }
     processed = committed.processed;
+    // Index only the group this commit added, before anything below can fail the cycle. Earlier
+    // groups were indexed by the cycle that added them, and reflected groups are not observation
+    // output. A covered cycle added nothing.
+    if (!committed.alreadyCovered && processed.newObservationGroup) {
+      await this.indexNewObservationGroups(
+        [{ group: processed.newObservationGroup, threadId, observedAt: processed.lastObservedAt }],
+        resourceId,
+        committed.record.id,
+      );
+    }
 
     // A covered cycle wrote nothing; the instance that did commit owns the thread's title,
     // task, and cursor metadata, so this cycle's output must not overwrite them.
@@ -277,6 +290,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
         },
         lastObservedMessageCursor: getLastObservedMessageCursor(messages),
       });
+      this.opts.abortSignal?.throwIfAborted();
       await this.storage.patchThread({
         id: threadId,
         ...(shouldUpdateThreadTitle ? { title: newTitle } : {}),
@@ -293,16 +307,6 @@ export class SyncObservationStrategy extends ObservationStrategy {
           }),
         );
       }
-    }
-
-    if (!committed.alreadyCovered) {
-      await this.indexObservationGroups(
-        processed.observations,
-        threadId,
-        resourceId,
-        processed.lastObservedAt,
-        committed.record.id,
-      );
     }
 
     return { status: 'committed', processed, record: committed.record, alreadyCovered: committed.alreadyCovered };

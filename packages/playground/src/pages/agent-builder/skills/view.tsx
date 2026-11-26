@@ -1,10 +1,11 @@
+import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { useStoredSkills } from '@mastra/react/hooks/agents';
 import { useCurrentUser } from '@mastra/react/hooks/auth';
-import { ArrowLeftIcon, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router';
 import { CopySkillDialog } from '@/domains/agent-builder/components/skill-list/copy-skill-dialog';
@@ -37,11 +38,7 @@ export default function AgentBuilderSkillsView() {
   return <AgentBuilderSkillViewPage skill={storedSkill} />;
 }
 
-const AgentBuilderSkillViewSkeleton = () => (
-  <div className="flex h-screen w-screen items-center justify-center">
-    <Spinner />
-  </div>
-);
+const AgentBuilderSkillViewSkeleton = () => <BrandLoader fill />;
 
 interface PageProps {
   skill: NonNullable<ReturnType<typeof useStoredSkill>['data']>;
@@ -66,11 +63,10 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
           size="icon-sm"
           variant="ghost"
           onClick={() => navigate('/agent-builder/skills', { viewTransition: true })}
-          className="rounded-full"
           tooltip="Skills list"
           data-testid="skill-view-back-button"
         >
-          <ArrowLeftIcon />
+          <IconArrowLeft />
         </Button>
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <Txt as="p" variant="body" tone="ink" data-testid="skill-view-title" className="min-w-0 truncate">
@@ -86,7 +82,7 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
               size="md"
               onClick={() => setCopyOpen(true)}
               data-testid="skill-view-copy-button"
-              icon={<PlusIcon />}
+              icon={<IconPlusMedium />}
             >
               Copy to my skills
             </Button>

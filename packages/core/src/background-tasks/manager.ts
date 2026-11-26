@@ -5,13 +5,16 @@ import type {
   BackgroundTask,
   BackgroundTaskManagerConfig,
   BackgroundTaskStatus,
+  EnqueueOptions,
   EnqueueResult,
+  ResumeOptions,
   TaskContext,
   TaskFilter,
   TaskPayload,
   TaskListResult,
   ToolExecutor,
   BackgroundTaskEvent,
+  UpdateBackgroundTaskOptions,
 } from './types';
 import { BACKGROUND_TASK_WORKFLOW_ID } from './workflow-id';
 
@@ -20,8 +23,67 @@ const TOPIC_RESULT = 'background-tasks-result';
 const WORKER_GROUP = 'background-task-workers';
 const SHUTDOWN_GRACE_PERIOD_MS = 5_000;
 const SHUTDOWN_ABORT_MESSAGE = 'Background task manager is shutting down';
+const WORKER_TERMINATED_MESSAGE = 'Worker process terminated before task completed';
 const TASK_OWNERSHIP_LOST_MESSAGE = 'Background task execution ownership was taken over by another worker';
 
+function workflowRunError(result: { status: string; error?: unknown; tripwire?: { reason?: string } }): unknown {
+  if (result.error !== undefined) return result.error;
+  if (result.tripwire?.reason) return new Error(result.tripwire.reason);
+  return new Error(`Background task workflow run ended with status '${result.status}'`);
+}
+
+// Workflow results carry errors serialized to plain objects, not Error instances.
+function toTaskError(err: unknown): { message: string; stack?: string } {
+  if (err && typeof err === 'object' && typeof (err as { message?: unknown }).message === 'string') {
+    const { message, stack } = err as { message: string; stack?: unknown };
+    return typeof stack === 'string' ? { message, stack } : { message };
+  }
+  return { message: String(err) };
+}
+
+/** Pending rows each lapsed-pin sweep reads; later pages are read on later ticks. */
+const PIN_SWEEP_PAGE_SIZE = 100;
+// Bounds one running-row read even when `globalConcurrency` is unlimited.
+const RUNNING_SWEEP_MAX_PAGE_SIZE = 1_000;
+
+/** Test-only lower lease minimum; only ever lowers the default 3s. Read per manager, not at import. */
+function minLeaseOverride(): number | undefined {
+  const value = Number(process.env.MASTRA_BACKGROUND_TASKS_MIN_LEASE_MS);
+  return Number.isFinite(value) && value > 0 && value < 3_000 ? value : undefined;
+}
+
+/**
+ * Runs, persists, and recovers background tasks for one Mastra process.
+ *
+ * Several managers (processes or replicas) may share one storage backend.
+ * Execution is owned through a lease persisted on each task record:
+ *
+ * - Identity: each manager has a random `ownerId` (`workerId`), so a restarted
+ *   process is a new owner.
+ * - Acquisition: `handleDispatch` claims a task with a compare-and-set on the
+ *   observed status/owner/lease, writing `ownerId` and
+ *   `leaseExpiresAt = now + leaseDurationMs`. Losers of a race skip the task.
+ * - Renewal: the heartbeat renews owned leases every `leaseDurationMs / 3`,
+ *   fenced on `running` + this owner. Workflow terminal writes carry the same
+ *   fence, so a superseded owner cannot commit results.
+ * - Expiry and adoption: `recoverStaleTasks` only reclaims a `running` task
+ *   once its lease has expired (or was released on shutdown), fenced on the
+ *   owner/lease it read so one manager wins. It re-runs when the earliest live
+ *   lease lapses, and the periodic sweep in `#sweepLapsedPins` reclaims rows
+ *   whose owner died later. `restart()` is the one deliberate takeover of a
+ *   live lease.
+ * - Loss: a failed renewal aborts the local run's signal when another owner
+ *   holds the task or it was cancelled.
+ *
+ * Guarantee: at most one owner can commit a task's state at a time, except
+ * for the shutdown rollback of an interrupted resume in `handleResume`, which is
+ * conditional on status only. The tool
+ * itself may still run more than once (stalled owner past its lease, crash
+ * before the result is saved, explicit restart), so external side effects need
+ * idempotency. Assumes storage applies `updateTask` conditions atomically and
+ * that clock skew between managers is well below `leaseDurationMs`, since
+ * `leaseExpiresAt` is written by the owner's clock and read by others'.
+ */
 export class BackgroundTaskManager {
   private pubsub!: PubSub;
   private readonly workerId = globalThis.crypto.randomUUID();
@@ -64,6 +126,15 @@ export class BackgroundTaskManager {
   // recoverable once its owner stops renewing the lease.
   private localReservations = new Map<string, string>();
   private localPendingTaskIds = new Set<string>();
+  // Resumes requested with `onNoSlot: 'queue'` while no slot was free, keyed by
+  // task ID. The rows stay `suspended`; `drainPending()` publishes them first.
+  private localPendingResumes = new Map<string, { resumeData: unknown; suspendedAt: number | null }>();
+  // Portable resumes this process has published that no worker has picked up
+  // yet. The row stays `suspended` until `handleResume` runs, so storage-wide
+  // running counts miss them; `checkConcurrency()` adds them back so one free
+  // slot can't admit several queued resumes. Entries expire after a lease
+  // duration in case the event is lost.
+  private inFlightPortableResumes = new Map<string, { agentId: string; suspendedAt: number | null; until: number }>();
   private drainingPending = false;
 
   // Task IDs this manager currently holds an execution lease for. Populated on
@@ -71,7 +142,13 @@ export class BackgroundTaskManager {
   // lease at `leaseDurationMs / 3`. A worker that dies stops renewing, so its
   // leases expire and other workers may safely reclaim the tasks.
   private ownedLeases = new Set<string>();
+  // Pending task IDs enqueued with `pinToWorker`. Their rows carry this
+  // manager's owner ID and a lease, renewed by the same heartbeat, so other
+  // workers leave them alone until this manager claims them or dies.
+  private pinnedPendingLeases = new Set<string>();
   private heartbeatInterval?: ReturnType<typeof setInterval>;
+  // Shortest heartbeat / stale-recovery delay: 1s, unless a test lowered the lease minimum.
+  readonly #timingFloorMs: number;
 
   // Pending follow-up pass for stale-task recovery. A running task whose lease
   // is still valid is left alone by a recovery scan, so if its owner died just
@@ -79,6 +156,18 @@ export class BackgroundTaskManager {
   // process restart. This timer re-runs recovery once the earliest such lease
   // lapses, which lets a crashed owner's tasks settle without a restart.
   private staleRecoveryTimeout?: ReturnType<typeof setTimeout>;
+  // Periodic scan for `running` and `pinToWorker` rows whose owner stopped renewing; see `#sweepLapsedPins`.
+  private pinSweepInterval?: ReturnType<typeof setInterval>;
+  private sweepingPins = false;
+  // Page of pending rows the next pin sweep reads; see `#sweepLapsedPins`.
+  private pinSweepPage = 0;
+  // Page of running rows the next sweep reads; see `#sweepLapsedPins`.
+  private runningSweepPage = 0;
+
+  // Settlement chains of workflow runs started by this manager, plus the run
+  // deletes they spawn. Shutdown drains these so they finish while storage is
+  // still open — Mastra closes storage right after the manager stops.
+  #settlingRuns = new Set<Promise<unknown>>();
 
   // Pubsub callbacks (kept for unsubscribe)
   private workerCallback?: EventCallback;
@@ -112,10 +201,23 @@ export class BackgroundTaskManager {
     // The heartbeat renews at `leaseDurationMs / 3`, floored to 1s. A lease
     // shorter than 3s therefore expires before it can be renewed, so reject it
     // rather than silently letting every task's lease lapse mid-run.
-    if (!Number.isFinite(leaseDurationMs) || leaseDurationMs < 3_000) {
+    //
+    // Internal, for tests that prove lease expiry: MASTRA_BACKGROUND_TASKS_MIN_LEASE_MS
+    // lowers that 3s minimum, and the 1s timing floor scales down with it, so
+    // those tests wait milliseconds instead of seconds. Not a supported setting.
+    const minLeaseMs = minLeaseOverride() ?? 3_000;
+    this.#timingFloorMs = minLeaseMs / 3;
+    if (!Number.isFinite(leaseDurationMs) || leaseDurationMs < minLeaseMs) {
       throw new Error(
-        `BackgroundTaskManager leaseDurationMs must be a finite number of at least 3000ms (received: ${leaseDurationMs})`,
+        `BackgroundTaskManager leaseDurationMs must be a finite number of at least ${minLeaseMs}ms (received: ${leaseDurationMs})`,
       );
+    }
+    for (const [owner, limit] of Object.entries(config.perOwnerConcurrency ?? {})) {
+      if (!Number.isFinite(limit) || limit < 1) {
+        throw new Error(
+          `BackgroundTaskManager perOwnerConcurrency["${owner}"] must be a finite number of at least 1 (received: ${limit})`,
+        );
+      }
     }
     this.config = {
       ...config,
@@ -174,7 +276,20 @@ export class BackgroundTaskManager {
     this.resultCallback = async (event: Event, ack?: () => Promise<void>) => {
       if (event.type === 'task.completed' || event.type === 'task.failed') {
         try {
-          await this.handleResult(event);
+          // Tracked so shutdown waits for the result's hooks, including a
+          // failure it reported itself, before storage closes.
+          const handling = this.handleResult(event);
+          // Its errors still reach the pubsub through the await below.
+          this.#trackSettlingRun(handling.catch(() => {}));
+          await handling;
+        } finally {
+          await ack?.();
+        }
+        return;
+      }
+      if (event.type === 'task.cancelled') {
+        try {
+          await this.handleRemoteCancel(event.data.taskId);
         } finally {
           await ack?.();
         }
@@ -194,7 +309,11 @@ export class BackgroundTaskManager {
         if (event.type === 'task.dispatch' || event.type === 'task.restart') {
           handled = await this.handleDispatch(event);
         } else if (event.type === 'task.resume') {
-          handled = await this.handleResume(event);
+          // Tracked so shutdown waits for a resume caught mid-preparation to
+          // decline before storage closes.
+          const resuming = this.handleResume(event);
+          this.#trackSettlingRun(resuming);
+          handled = await resuming;
         } else if (event.type === 'task.cancel') {
           this.handleCancel(event);
         }
@@ -237,12 +356,6 @@ export class BackgroundTaskManager {
         ]);
         return;
       }
-
-      if (this.config.recoverStaleTasksOnStart) {
-        // Recover stale tasks from a previous process — only workers should
-        // attempt recovery since they own execution.
-        await this.recoverStaleTasks();
-      }
     }
 
     await this.pubsub.subscribe(TOPIC_RESULT, this.resultCallback);
@@ -259,12 +372,23 @@ export class BackgroundTaskManager {
       return;
     }
 
+    if (!isProducerOnly && this.config.recoverStaleTasksOnStart) {
+      // Recover stale tasks from a previous process — only workers should
+      // attempt recovery since they own execution. This runs after the result
+      // subscription so this process's own `onTaskFailed` and stream
+      // subscribers hear about the tasks recovery fails.
+      await this.recoverStaleTasks();
+      this.#startPinSweep();
+    }
+
     // Start periodic cleanup if configured
     const cleanupConfig = this.config.cleanup;
     if (cleanupConfig && !this.shuttingDown) {
       const intervalMs = cleanupConfig.cleanupIntervalMs ?? 60_000;
       this.cleanupInterval = setInterval(() => {
-        void this.cleanup();
+        void this.cleanup().catch(error => {
+          this.#mastra?.getLogger?.()?.warn('Background task cleanup failed:', error);
+        });
       }, intervalMs);
     }
 
@@ -343,10 +467,17 @@ export class BackgroundTaskManager {
    * Enqueue a task for background execution.
    * Prefer `createBackgroundTask()` which returns a self-contained handle.
    */
-  async enqueue(payload: TaskPayload, context?: TaskContext): Promise<EnqueueResult> {
+  async enqueue(payload: TaskPayload, context?: TaskContext, options?: EnqueueOptions): Promise<EnqueueResult> {
     if (this.shuttingDown) {
       throw new Error('BackgroundTaskManager is shutting down, cannot enqueue new tasks');
     }
+    const pinned = options?.pinToWorker === true;
+    if (pinned && !context) {
+      // A portable row pinned here would be skipped by every other worker on
+      // the shared dispatch topic while this process holds no closure for it.
+      throw new Error('pinToWorker requires a task context');
+    }
+    if (context) this.#assertCanRunLocalTasks('enqueue');
 
     // Mastra fires `init` as fire-and-forget. If a caller hits enqueue
     // before init completes, the dispatch publish fires before the worker
@@ -355,6 +486,7 @@ export class BackgroundTaskManager {
     // with id __background-task not found"). Await readiness up front.
     if (this.initPromise) await this.initPromise;
 
+    const createdAt = new Date();
     const task: BackgroundTask = {
       id: this.#mastra?.generateId() ?? globalThis.crypto.randomUUID(),
       status: 'pending',
@@ -368,7 +500,12 @@ export class BackgroundTaskManager {
       retryCount: 0,
       maxRetries: payload.maxRetries ?? this.config.defaultRetries?.maxRetries ?? 0,
       timeoutMs: payload.timeoutMs ?? this.config.defaultTimeoutMs,
-      createdAt: new Date(),
+      createdAt,
+      ...(payload.expiresAt ? { expiresAt: payload.expiresAt } : {}),
+      ...(payload.metadata ? { metadata: payload.metadata } : {}),
+      ...(pinned
+        ? { ownerId: this.workerId, leaseExpiresAt: new Date(createdAt.getTime() + this.config.leaseDurationMs) }
+        : {}),
     };
 
     // Register per-task context if provided
@@ -378,6 +515,7 @@ export class BackgroundTaskManager {
 
     const storage = await this.getStorage();
     await storage.createTask(task);
+    if (pinned) this.pinnedPendingLeases.add(task.id);
 
     const isProcessAffine = Boolean(context);
     const canRun = isProcessAffine ? this.reserveLocalSlot(task) : await this.checkConcurrency(task.agentId);
@@ -386,12 +524,14 @@ export class BackgroundTaskManager {
       try {
         await this.dispatch(task);
       } catch (error) {
+        this.pinnedPendingLeases.delete(task.id);
         const failed = await storage.updateTask(
           task.id,
           {
             status: 'failed',
             error: { message: error instanceof Error ? error.message : String(error) },
             completedAt: new Date(),
+            ...(pinned ? { ownerId: undefined, leaseExpiresAt: undefined } : {}),
           },
           { expectedStatus: 'pending' },
         );
@@ -408,11 +548,13 @@ export class BackgroundTaskManager {
     // Backpressure
     switch (this.config.backpressure) {
       case 'reject':
+        this.pinnedPendingLeases.delete(task.id);
         this.deregisterTaskContext(task.id);
         await storage.deleteTask(task.id);
         throw new Error(`Concurrency limit reached, cannot enqueue task for tool "${task.toolName}"`);
 
       case 'fallback-sync':
+        this.pinnedPendingLeases.delete(task.id);
         this.deregisterTaskContext(task.id);
         await storage.deleteTask(task.id);
         return { task, fallbackToSync: true };
@@ -461,6 +603,8 @@ export class BackgroundTaskManager {
         continue;
       }
       this.ownedLeases.delete(taskId);
+      this.pinnedPendingLeases.delete(taskId);
+      this.localPendingResumes.delete(taskId);
 
       if (previousStatus === 'pending') {
         this.localPendingTaskIds.delete(taskId);
@@ -477,17 +621,7 @@ export class BackgroundTaskManager {
       }
 
       if (previousStatus === 'running' || previousStatus === 'suspended') {
-        // Cancel the workflow run so workflow storage reflects the
-        // cancellation and any stored suspended snapshot is cleaned up.
-        if (this.#mastra) {
-          try {
-            const workflow = this.#mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID);
-            const wrapper = await workflow.createRun({ runId: taskId });
-            await wrapper.cancel();
-          } catch (err) {
-            this.#mastra?.getLogger?.()?.warn(`background-task workflow cancel failed for ${taskId}:`, err as any);
-          }
-        }
+        await this.#cancelWorkflowRun(taskId);
       }
 
       const cancelledTask = await storage.getTask(taskId);
@@ -500,6 +634,9 @@ export class BackgroundTaskManager {
             ?.getLogger?.()
             ?.warn(`background-task cancellation callback failed for ${taskId}:`, error as any);
         }
+        // Cancelling answers nothing, but the open request on the tool call
+        // must go so a client doesn't offer to answer a dead task.
+        if (previousStatus === 'suspended') await this.runLocalExecutionHook(cancelledTask);
       }
       this.deregisterTaskContext(taskId);
 
@@ -525,7 +662,7 @@ export class BackgroundTaskManager {
    * `resumeData` is forwarded to the tool's `execute` options on the
    * resumed run.
    */
-  async resume(taskId: string, resumeData?: unknown): Promise<BackgroundTask> {
+  async resume(taskId: string, resumeData?: unknown, options?: ResumeOptions): Promise<BackgroundTask> {
     if (this.shuttingDown) {
       throw new Error('BackgroundTaskManager is shutting down, cannot resume tasks');
     }
@@ -543,17 +680,41 @@ export class BackgroundTaskManager {
     if (task.status !== 'suspended') {
       throw new Error(`Cannot resume task in status '${task.status}' (expected 'suspended')`);
     }
+    if (options?.suspendedAt !== undefined && new Date(options.suspendedAt).getTime() !== suspensionToken(task)) {
+      throw new Error(`Cannot resume task "${taskId}": its suspension has changed since it was read`);
+    }
 
     const isProcessAffine = this.taskContexts.has(taskId);
+    if (isProcessAffine) this.#assertCanRunLocalTasks('resume');
     const canRun = isProcessAffine ? this.reserveLocalSlot(task) : await this.checkConcurrency(task.agentId);
     if (!canRun) {
-      // Resume sits outside the queue/fallback-sync paths — there's no
-      // synchronous caller to fall back to, and silently leaving the task
+      if (options?.onNoSlot === 'queue') {
+        // The row stays `suspended` until a slot frees and `drainPending()`
+        // publishes the resume. Only this process holds the queued resume, so
+        // if it exits first the task is still a resumable suspended row.
+        // The suspension token ties the queued data to this suspension: if the
+        // task is resumed elsewhere and suspends again, the entry is dropped.
+        this.localPendingResumes.set(taskId, { resumeData, suspendedAt: suspensionToken(task) });
+        return task;
+      }
+      // By default resume sits outside the queue/fallback-sync paths — there's
+      // no synchronous caller to fall back to, and silently leaving the task
       // suspended hides the failure from the caller. Throw and let the
       // caller retry once a slot frees.
       throw new Error(`Concurrency limit reached, cannot resume task "${taskId}" — retry once a slot is available`);
     }
 
+    this.localPendingResumes.delete(taskId);
+    await this.#publishResume(task, resumeData, isProcessAffine);
+    return task;
+  }
+
+  async #publishResume(task: BackgroundTask, resumeData: unknown, isProcessAffine: boolean): Promise<void> {
+    const taskId = task.id;
+    if (this.shuttingDown) {
+      if (isProcessAffine) this.releaseLocalSlot(taskId);
+      throw new Error('BackgroundTaskManager is shutting down, cannot resume tasks');
+    }
     // Resume publishes directly (not via dispatch()), so it needs its own
     // lazy worker start for the library-mode process-restart case.
     await this.#ensureExecutionWorkersStarted();
@@ -564,15 +725,20 @@ export class BackgroundTaskManager {
     try {
       await this.pubsub.publish(dispatchTopic, {
         type: 'task.resume',
-        data: { taskId, resumeData },
+        data: { taskId, resumeData, suspendedAt: suspensionToken(task) },
         runId: taskId,
       });
     } catch (error) {
       if (isProcessAffine) this.releaseLocalSlot(taskId);
       throw error;
     }
-
-    return task;
+    if (!isProcessAffine) {
+      this.inFlightPortableResumes.set(taskId, {
+        agentId: task.agentId,
+        suspendedAt: suspensionToken(task),
+        until: Date.now() + this.config.leaseDurationMs,
+      });
+    }
   }
 
   /**
@@ -580,6 +746,11 @@ export class BackgroundTaskManager {
    * re-registered via `registerTaskContext(taskId, ...)` because the original
    * registration is gone (e.g. process restart) — the manager doesn't
    * rehydrate executor closures from storage.
+   *
+   * Restarting a `running` task is an explicit takeover: the claim is fenced on
+   * status only, so it succeeds even while another manager holds a live lease.
+   * The previous owner's next renewal fails and aborts its run, but that run
+   * may overlap this one until then.
    */
   async restart(taskId: string, context?: TaskContext): Promise<BackgroundTask> {
     if (this.shuttingDown) {
@@ -600,6 +771,7 @@ export class BackgroundTaskManager {
       throw new Error(`Cannot restart task in status '${task.status}' (expected 'pending' or 'running')`);
     }
     const isRestart = task.status === 'running';
+    if (context || this.taskContexts.has(taskId)) this.#assertCanRunLocalTasks('restart');
 
     if (context) {
       this.registerTaskContext(task.id, context);
@@ -644,14 +816,41 @@ export class BackgroundTaskManager {
     const now = Date.now();
 
     const storage = await this.getStorage();
+    if (!storage.supportsTaskExpiry) {
+      // Adapters written before `expiresAt` existed ignore `hasExpiresAt` and
+      // treat an unknown `dateFilterBy` as `createdAt`, so the expiry pass
+      // would delete every finished row. Keep the global TTLs only.
+      await storage.deleteTasks({
+        status: ['completed'],
+        toDate: new Date(now - completedTtlMs),
+        dateFilterBy: 'completedAt',
+      });
+      await storage.deleteTasks({
+        status: ['failed', 'cancelled', 'timed_out'],
+        toDate: new Date(now - failedTtlMs),
+        dateFilterBy: 'completedAt',
+      });
+      return;
+    }
+    // Rows with their own `expiresAt` are retained until that deadline instead
+    // of the global TTLs. Only terminal rows are deleted, so a live row is never
+    // removed from under its lease owner.
+    await storage.deleteTasks({
+      status: ['completed', 'failed', 'cancelled', 'timed_out'],
+      toDate: new Date(now),
+      dateFilterBy: 'expiresAt',
+    });
+
     await storage.deleteTasks({
       status: ['completed'],
+      hasExpiresAt: false,
       toDate: new Date(now - completedTtlMs),
       dateFilterBy: 'completedAt',
     });
 
     await storage.deleteTasks({
       status: ['failed', 'cancelled', 'timed_out'],
+      hasExpiresAt: false,
       toDate: new Date(now - failedTtlMs),
       dateFilterBy: 'completedAt',
     });
@@ -748,6 +947,10 @@ export class BackgroundTaskManager {
    * - `task.resumed` (status: 'running') — suspended task resumed
    *
    * The stream stays open until the caller's AbortSignal fires (client disconnect).
+   *
+   * Events are scoped to a resource: when `resourceId` is omitted, only tasks without a
+   * `resourceId` are delivered. Pass `allResources: true` to receive events for every
+   * resource (privileged consumers only — payloads include task args and results).
    */
   stream(options?: {
     agentId?: string;
@@ -757,10 +960,24 @@ export class BackgroundTaskManager {
     taskId?: string;
     abortSignal?: AbortSignal;
     includeExisting?: boolean;
+    allResources?: boolean;
   }): ReadableStream<Record<string, unknown>> {
     const manager = this;
     const pubsub = this.pubsub;
-    const { agentId, runId, threadId, resourceId, abortSignal, taskId, includeExisting = true } = options ?? {};
+    const {
+      agentId,
+      runId,
+      threadId,
+      resourceId,
+      abortSignal,
+      taskId,
+      includeExisting = true,
+      allResources = false,
+    } = options ?? {};
+    const matchesResource = (taskResourceId: string | null | undefined) => {
+      if (resourceId !== undefined) return taskResourceId === resourceId;
+      return allResources || taskResourceId == null;
+    };
 
     const EVENT_STATUS_MAP: Record<string, BackgroundTaskStatus> = {
       'task.running': 'running',
@@ -793,7 +1010,7 @@ export class BackgroundTaskManager {
           if (agentId && data.agentId !== agentId) return;
           if (runId && data.runId !== runId) return;
           if (threadId && data.threadId !== threadId) return;
-          if (resourceId && data.resourceId !== resourceId) return;
+          if (!matchesResource(data.resourceId)) return;
           if (taskId && data.taskId !== taskId) return;
 
           const payload: Record<string, unknown> = {
@@ -866,7 +1083,7 @@ export class BackgroundTaskManager {
           const storage = await manager.getStorage();
           if (taskId) {
             const task = await storage.getTask(taskId);
-            if (task && task.status === 'running') {
+            if (task && task.status === 'running' && matchesResource(task.resourceId)) {
               controller.enqueue({
                 type: 'background-task-running',
                 payload: {
@@ -891,6 +1108,7 @@ export class BackgroundTaskManager {
 
             for (const task of existing) {
               if (abortSignal?.aborted) break;
+              if (!matchesResource(task.resourceId)) continue;
               try {
                 controller.enqueue({
                   type: 'background-task-running',
@@ -953,6 +1171,9 @@ export class BackgroundTaskManager {
     // Retryable running tasks intentionally remain `running` in storage so
     // the next process can recover them through recoverStaleTasks(). Tasks
     // without retries retain the existing terminal cancellation behavior.
+    // Snapshot the held leases now: waiting for runs to settle below removes
+    // them from `ownedLeases`, but their leases still need handing back.
+    const leasesToRelease = new Set(this.ownedLeases);
     const activeTaskIds = [...this.activeAbortControllers.keys()];
     this.#abortActiveControllers();
     const cancellationResults = await this.#waitForShutdownStep(
@@ -966,6 +1187,18 @@ export class BackgroundTaskManager {
           ?.warn(`Failed to cancel background task ${activeTaskIds[index]} during shutdown:`, result.reason as any);
       }
     });
+
+    // Aborted runs settle asynchronously and then delete their workflow run.
+    // Let them finish while storage is still open — Mastra closes it as soon
+    // as this returns. Re-snapshot because a settling run adds its delete.
+    const awaitedRuns = new Set<Promise<unknown>>();
+    for (;;) {
+      const pending = [...this.#settlingRuns].filter(run => !awaitedRuns.has(run));
+      if (pending.length === 0) break;
+      pending.forEach(run => awaitedRuns.add(run));
+      const settled = await this.#waitForShutdownStep('background task run settlement', Promise.allSettled(pending));
+      if (!settled) break;
+    }
 
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
@@ -1001,6 +1234,8 @@ export class BackgroundTaskManager {
     this.taskContexts.clear();
     this.localReservations.clear();
     this.localPendingTaskIds.clear();
+    this.localPendingResumes.clear();
+    this.inFlightPortableResumes.clear();
     this.staticExecutors.clear();
 
     // Stop renewing leases and hand back the ones still held so another worker
@@ -1014,9 +1249,14 @@ export class BackgroundTaskManager {
       clearTimeout(this.staleRecoveryTimeout);
       this.staleRecoveryTimeout = undefined;
     }
-    if (this.ownedLeases.size > 0) {
-      const ownedTaskIds = [...this.ownedLeases];
-      this.ownedLeases.clear();
+    if (this.pinSweepInterval) {
+      clearInterval(this.pinSweepInterval);
+      this.pinSweepInterval = undefined;
+    }
+    for (const taskId of this.ownedLeases) leasesToRelease.add(taskId);
+    this.ownedLeases.clear();
+    if (leasesToRelease.size > 0) {
+      const ownedTaskIds = [...leasesToRelease];
       try {
         const storage = await this.getStorage();
         // Fenced on `ownerId` so a task already reclaimed or finished elsewhere
@@ -1038,6 +1278,30 @@ export class BackgroundTaskManager {
         // Storage unavailable — leases expire on their own.
       }
     }
+    if (this.pinnedPendingLeases.size > 0) {
+      const pinnedTaskIds = [...this.pinnedPendingLeases];
+      this.pinnedPendingLeases.clear();
+      try {
+        const storage = await this.getStorage();
+        // Expire the lease but keep the owner: the work this pin stood for is
+        // abandoned, so peers recover the row now as a lost attempt (consuming a
+        // retry or failing) rather than as fresh, never-run work.
+        await this.#waitForShutdownStep(
+          'background task pinned lease release',
+          Promise.allSettled(
+            pinnedTaskIds.map(taskId =>
+              storage.updateTask(
+                taskId,
+                { leaseExpiresAt: new Date() },
+                { expectedStatus: 'pending', expectedOwnerId: this.workerId },
+              ),
+            ),
+          ),
+        );
+      } catch {
+        // Storage unavailable — leases expire on their own.
+      }
+    }
     if (this.initPromise) {
       await this.#waitForShutdownStep('background task pubsub flush', this.pubsub.flush());
     }
@@ -1046,8 +1310,34 @@ export class BackgroundTaskManager {
   async #cancelTaskForShutdown(taskId: string): Promise<void> {
     const storage = await this.getStorage();
     const task = await storage.getTask(taskId);
-    if (task?.status === 'running' && task.maxRetries > 0) return;
-    await this.cancel(taskId);
+    if (task?.status !== 'running') {
+      await this.cancel(taskId);
+      return;
+    }
+    // A task with retries is handed back for the next process to resume.
+    if (task.maxRetries > 0) return;
+    // Without retries the task can't run again. Shutdown didn't cancel it, so
+    // it ends the way a crash ends it rather than looking like a user cancel.
+    const fence = { expectedStatus: 'running' as const, expectedOwnerId: this.workerId };
+    if (await this.#failTerminated(storage, taskId, fence, { runLocalHooks: true })) {
+      this.ownedLeases.delete(taskId);
+      await this.#cancelWorkflowRun(taskId);
+    }
+  }
+
+  /**
+   * Cancels a task's background-task workflow run, so workflow storage
+   * reflects the task's end and any stored suspended snapshot is cleaned up.
+   */
+  async #cancelWorkflowRun(taskId: string): Promise<void> {
+    if (!this.#mastra) return;
+    try {
+      const workflow = this.#mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID);
+      const wrapper = await workflow.createRun({ runId: taskId });
+      await wrapper.cancel();
+    } catch (err) {
+      this.#mastra?.getLogger?.()?.warn(`background-task workflow cancel failed for ${taskId}:`, err as any);
+    }
   }
 
   #abortActiveControllers(): void {
@@ -1118,6 +1408,23 @@ export class BackgroundTaskManager {
   }
 
   // --- Internal ---
+
+  /**
+   * A task with a registered context runs from this process's closures, so it
+   * is published to this process's own dispatch topic. A producer-mode manager
+   * never consumes that topic, and no other process can run those closures, so
+   * the task would sit unclaimed (#31089). Refuse before anything is persisted
+   * or published; agent runs then execute the tool without a background task.
+   */
+  #assertCanRunLocalTasks(action: 'enqueue' | 'restart' | 'resume'): void {
+    if (this.config.mode !== 'producer') return;
+    throw new Error(
+      `Cannot ${action} a background task with an in-process executor: this process doesn't run background tasks ` +
+        `(workers are disabled or MASTRA_WORKERS excludes backgroundTasks), and other processes can't run its executor. ` +
+        `Run the backgroundTasks worker on this process, or pass \`disableBackgroundTasks: true\` to agent runs here so their tools run inline. ` +
+        `Tasks enqueued directly can omit the task context to let a dedicated worker run the tool by name.`,
+    );
+  }
 
   /**
    * Lazily start Mastra's execution workers before publishing. In "library
@@ -1207,12 +1514,23 @@ export class BackgroundTaskManager {
       return task.ownerId === this.workerId;
     }
 
+    if (task.status === 'pending' && task.ownerId && task.ownerId !== this.workerId) {
+      // Pinned to another worker (`pinToWorker`), which holds the work for it.
+      // Claiming it here would run the task twice. If that worker dies, stale
+      // recovery accounts for the lost attempt and re-dispatches the row.
+      return true;
+    }
+    // A row pinned to this worker is claimed fenced on the owner alone: the
+    // heartbeat may renew its lease between the read above and this write.
+    const pinnedHere = task.status === 'pending' && task.ownerId === this.workerId;
+
     // A broker redelivery only counts against the retry budget when a previous
     // delivery actually started execution (the task was marked `running`, e.g.
     // the worker crashed mid-run). A dispatch declined cleanly during shutdown
     // leaves the task `pending`, so the worker that picks up the redelivery
     // still gets the full retry budget.
-    const retryCount = task.status === 'running' ? deliveryAttempt - 1 : task.retryCount;
+    // Never lower the stored count: crash recovery may already have spent retries this message's delivery count doesn't know about.
+    const retryCount = task.status === 'running' ? Math.max(task.retryCount, deliveryAttempt - 1) : task.retryCount;
     // Claim execution ownership with an expiring lease. The compare-and-set on
     // the previously observed owner/lease fences concurrent dispatchers: when
     // two workers race for the same pending task, only the first claim wins and
@@ -1231,13 +1549,16 @@ export class BackgroundTaskManager {
       },
       isRestart
         ? { expectedStatus: task.status }
-        : {
-            expectedStatus: task.status,
-            expectedOwnerId: task.ownerId ?? null,
-            expectedLeaseExpiresAt: task.leaseExpiresAt ?? null,
-          },
+        : pinnedHere
+          ? { expectedStatus: 'pending', expectedOwnerId: this.workerId }
+          : {
+              expectedStatus: task.status,
+              expectedOwnerId: task.ownerId ?? null,
+              expectedLeaseExpiresAt: task.leaseExpiresAt ?? null,
+            },
     );
     if (!started) return true;
+    this.pinnedPendingLeases.delete(taskId);
     this.ownedLeases.add(taskId);
     if (this.shuttingDown) return false;
 
@@ -1281,24 +1602,28 @@ export class BackgroundTaskManager {
       const run = await workflow.createRun({ runId: taskId });
       if (this.shuttingDown) return false;
       const runPromise = shouldRestart ? run.restart() : run.start({ inputData: { taskId } });
-      void runPromise
-        .then(result => {
-          if (result.status !== 'suspended') {
-            void workflow.deleteWorkflowRunById(taskId);
-          }
-        })
-        .catch(err => {
-          this.#mastra
-            ?.getLogger?.()
-            ?.error(`background-task workflow ${shouldRestart ? 'restart' : 'start'} failed for ${taskId}:`, err);
-        })
-        .finally(() => {
-          // The run has settled (suspended or terminal), so this worker no
-          // longer owns the lease: stop renewing it.
-          this.ownedLeases.delete(taskId);
-          this.releaseLocalSlot(taskId);
-          void this.drainPending();
-        });
+      const action = shouldRestart ? 'restart' : 'start';
+      this.#trackSettlingRun(
+        runPromise
+          .then(
+            result => {
+              if (result.status !== 'suspended') {
+                this.#deleteSettledRun(workflow, taskId);
+              }
+              if (result.status !== 'success' && result.status !== 'suspended') {
+                return this.failUnsettledTask(taskId, action, workflowRunError(result));
+              }
+            },
+            err => this.failUnsettledTask(taskId, action, err),
+          )
+          .finally(() => {
+            // The run has settled (suspended or terminal), so this worker no
+            // longer owns the lease: stop renewing it.
+            this.ownedLeases.delete(taskId);
+            this.releaseLocalSlot(taskId);
+            void this.drainPending();
+          }),
+      );
     } catch (error) {
       this.releaseLocalSlot(taskId);
       this.ownedLeases.delete(taskId);
@@ -1332,15 +1657,19 @@ export class BackgroundTaskManager {
   private async handleResume(event: Event): Promise<boolean> {
     if (this.shuttingDown) return false;
     const { taskId, resumeData } = event.data;
+    // The suspension this event answers. Absent on events published by an
+    // older version, which fall back to the status-only check.
+    const answers: number | null | undefined = event.data.suspendedAt;
+    this.inFlightPortableResumes.delete(taskId);
 
     const storage = await this.getStorage();
     if (this.shuttingDown) return false;
     const task = await storage.getTask(taskId);
     if (this.shuttingDown) return false;
-    if (!task || task.status !== 'suspended') {
-      // Either gone or already resumed/cancelled by another worker. Drop the
-      // event silently — the worker group ensures exactly-once delivery, but
-      // the task may have moved on between publish and pickup.
+    if (!task || task.status !== 'suspended' || (answers !== undefined && suspensionToken(task) !== answers)) {
+      // Either gone, already resumed/cancelled by another worker, or resumed
+      // and suspended again — this event's data answers an earlier
+      // suspension. Drop it.
       this.releaseLocalSlot(taskId);
       void this.drainPending();
       return true;
@@ -1356,17 +1685,22 @@ export class BackgroundTaskManager {
         ownerId: this.workerId,
         leaseExpiresAt: new Date(Date.now() + this.config.leaseDurationMs),
       },
-      { expectedStatus: 'suspended' },
+      { expectedStatus: 'suspended', expectedSuspendedAt: task.suspendedAt ?? null },
     );
     if (!resumed) {
       this.releaseLocalSlot(taskId);
       void this.drainPending();
       return true;
     }
+    // This suspension is answered; a resume queued here for it is now stale.
+    this.localPendingResumes.delete(taskId);
     this.ownedLeases.add(taskId);
     const resumedTask = await storage.getTask(taskId);
     if (resumedTask) {
       await this.publishLifecycleEvent('task.resumed', resumedTask);
+      // The suspension is answered: let the caller drop its open request from
+      // the tool call before the run can suspend again.
+      await this.runLocalExecutionHook(resumedTask);
     }
 
     if (!this.#mastra) {
@@ -1378,24 +1712,113 @@ export class BackgroundTaskManager {
     // `createRun({ runId })` reattaches to the existing snapshot when given a
     // stable runId — we don't want a fresh run.
     const run = await workflow.createRun({ runId: taskId });
-    void run
-      .resume({ resumeData })
-      .then(result => {
-        if (result.status !== 'suspended') {
-          void workflow.deleteWorkflowRunById(taskId);
-        }
-      })
-      .catch(err => {
-        this.#mastra?.getLogger?.()?.error(`background-task workflow resume failed for ${taskId}:`, err);
-      })
-      .finally(() => {
-        // The resumed run has settled (suspended or terminal): stop renewing
-        // the lease this worker held for it.
-        this.ownedLeases.delete(taskId);
-        this.releaseLocalSlot(taskId);
-        void this.drainPending();
-      });
+    if (this.shuttingDown) {
+      // Starting the run now would outlive shutdown and leave the task
+      // `running`, where recovery restarts it from scratch. Put it back to
+      // `suspended` and leave the event unacked so the resume can be retried.
+      this.ownedLeases.delete(taskId);
+      this.releaseLocalSlot(taskId);
+      await storage
+        .updateTask(
+          taskId,
+          {
+            status: 'suspended',
+            startedAt: task.startedAt,
+            suspendPayload: task.suspendPayload,
+            suspendedAt: task.suspendedAt,
+            ownerId: undefined,
+            leaseExpiresAt: undefined,
+          },
+          { expectedStatus: 'running' },
+        )
+        .catch(error => {
+          this.#mastra
+            ?.getLogger?.()
+            ?.warn(`Failed to restore suspended background task ${taskId} during shutdown:`, error);
+        });
+      return false;
+    }
+    this.#trackSettlingRun(
+      run
+        .resume({ resumeData })
+        .then(
+          result => {
+            if (result.status !== 'suspended') {
+              this.#deleteSettledRun(workflow, taskId);
+            }
+            if (result.status !== 'success' && result.status !== 'suspended') {
+              return this.failUnsettledTask(taskId, 'resume', workflowRunError(result));
+            }
+          },
+          err => this.failUnsettledTask(taskId, 'resume', err),
+        )
+        .finally(() => {
+          // The resumed run has settled (suspended or terminal): stop renewing
+          // the lease this worker held for it.
+          this.ownedLeases.delete(taskId);
+          this.releaseLocalSlot(taskId);
+          void this.drainPending();
+        }),
+    );
     return true;
+  }
+
+  /** Track a run settlement (or its follow-up delete) so shutdown can drain it before storage closes. */
+  #trackSettlingRun(promise: Promise<unknown>): void {
+    const tracked = promise.finally(() => this.#settlingRuns.delete(tracked));
+    this.#settlingRuns.add(tracked);
+    void tracked.catch(error => {
+      this.#mastra?.getLogger?.()?.error('Background task workflow run settlement failed:', error);
+    });
+  }
+
+  #deleteSettledRun(workflow: { deleteWorkflowRunById(runId: string): Promise<void> }, taskId: string): void {
+    this.#trackSettlingRun(
+      workflow.deleteWorkflowRunById(taskId).catch(error => {
+        this.#mastra?.getLogger?.()?.warn(`Failed to delete workflow run for background task ${taskId}:`, error);
+      }),
+    );
+  }
+
+  /**
+   * Settles a task whose background-task workflow run ended in a non-success,
+   * non-suspended state (or rejected). On the ordinary failure path
+   * classify-outcome has already moved the task to `failed`, so the CAS below
+   * is a no-op. It only takes effect when a step threw before persisting a
+   * terminal status (e.g. the `completed` write failed), which would otherwise
+   * leave the task `running` forever.
+   */
+  private async failUnsettledTask(taskId: string, action: 'start' | 'restart' | 'resume', err: unknown) {
+    const errorInfo = toTaskError(err);
+    try {
+      const storage = await this.getStorage();
+      const marked = await storage.updateTask(
+        taskId,
+        {
+          status: 'failed',
+          error: errorInfo,
+          completedAt: new Date(),
+          ownerId: undefined,
+          leaseExpiresAt: undefined,
+        },
+        { expectedStatus: 'running', expectedOwnerId: this.workerId },
+      );
+      if (!marked) return;
+      this.#mastra?.getLogger?.()?.error(`background-task workflow ${action} failed for ${taskId}:`, err);
+      const failedTask = await storage.getTask(taskId);
+      if (failedTask?.status === 'failed') {
+        await this.runLocalCompletionHooks(failedTask, 'failed', { error: failedTask.error ?? errorInfo });
+        await this.publishLifecycleEvent('task.failed', failedTask);
+      }
+    } catch (settleError) {
+      this.#mastra
+        ?.getLogger?.()
+        ?.error(`background-task workflow ${action} failed for ${taskId} and the task could not be marked failed:`, {
+          error: err,
+          settleError,
+        });
+      this.deregisterTaskContext(taskId);
+    }
   }
 
   /**
@@ -1492,16 +1915,20 @@ export class BackgroundTaskManager {
         // handleResult so they fire once per subscribing process.
         await ctx.onFailed?.(task);
       }
+    } catch (hookError) {
+      // Callers publish the terminal lifecycle event right after this; a
+      // throwing per-task hook must not suppress it.
+      this.#mastra?.getLogger?.()?.warn(`background-task ${status} hooks threw for ${task.id}:`, hookError);
     } finally {
       this.deregisterTaskContext(task.id);
     }
   }
 
   /**
-   * Per-task suspend hooks. Fires `ctx.onResult({ status: 'suspended', ... })`
-   * so the message list / memory pick up the suspension as the tool's
-   * current invocation state. Does NOT deregister the task context — resume
-   * needs the executor closure intact.
+   * Per-task suspend hooks. Fires `ctx.onExecution({ suspendedAt, suspendPayload, ... })`
+   * so the message list / memory record the open suspension on the tool
+   * call. Does NOT deregister the task context — resume needs the executor
+   * closure intact.
    *
    * @internal — called by the workflow-engine step bodies in workflow.ts
    */
@@ -1518,6 +1945,7 @@ export class BackgroundTaskManager {
       resourceId: task.resourceId,
       startedAt: task.startedAt!,
       suspendedAt: task.suspendedAt,
+      suspendPayload: task.suspendPayload,
     });
   }
 
@@ -1540,6 +1968,19 @@ export class BackgroundTaskManager {
     } catch {
       //fail silently
     }
+  }
+
+  /**
+   * Another process cancelled a task this one dispatched. Run its execution
+   * hook, so the dispatcher drops an open request it recorded for the task,
+   * and release the task's context. A cancel made here has already done both.
+   */
+  private async handleRemoteCancel(taskId: string): Promise<void> {
+    if (!this.taskContexts.has(taskId)) return;
+    const task = await (await this.getStorage()).getTask(taskId);
+    if (task?.status !== 'cancelled') return;
+    await this.runLocalExecutionHook(task);
+    this.deregisterTaskContext(taskId);
   }
 
   private async handleResult(event: Event): Promise<void> {
@@ -1697,7 +2138,7 @@ export class BackgroundTaskManager {
    * reclaimed by another owner, so it is dropped from the tracking set.
    */
   async #renewOwnedLeases(): Promise<void> {
-    if (this.ownedLeases.size === 0) return;
+    if (this.ownedLeases.size === 0 && this.pinnedPendingLeases.size === 0) return;
     let storage;
     try {
       storage = await this.getStorage();
@@ -1722,20 +2163,45 @@ export class BackgroundTaskManager {
         // Transient storage error — keep the lease tracked and retry next tick.
       }
     }
+    for (const taskId of [...this.pinnedPendingLeases]) {
+      try {
+        // A failed renewal means the row was claimed, cancelled, or recovered
+        // by another worker after this lease lapsed — stop tracking it.
+        const renewed = await storage.updateTask(
+          taskId,
+          { leaseExpiresAt: new Date(Date.now() + this.config.leaseDurationMs) },
+          { expectedStatus: 'pending', expectedOwnerId: this.workerId },
+        );
+        if (!renewed) this.pinnedPendingLeases.delete(taskId);
+      } catch {
+        // Transient storage error — retry next tick.
+      }
+    }
   }
 
   /**
    * Called when a lease renewal loses its compare-and-set. Renewal normally
-   * fails because the task left `running` (it completed, failed, suspended or
-   * was cancelled), which needs no action. When the task is *still running under
-   * a different owner*, another worker has taken it over, so the local run is
-   * aborted to stop a superseded executor from doing further work. Its fenced
-   * terminal writes would be rejected anyway; aborting just stops the wasted run.
+   * fails because the task left `running` (it completed, failed or suspended),
+   * which needs no action. Two cases still have a local executor to stop:
+   * - The task was *cancelled*, possibly by another process whose `task.cancel`
+   *   event never reached this one. The local run is aborted the same way a
+   *   local `cancel()` aborts it, so it settles as cancelled.
+   * - The task is *still running under a different owner*: another worker has
+   *   taken it over. Its fenced terminal writes would be rejected anyway;
+   *   aborting just stops the wasted run.
    */
   async #abortSupersededRun(taskId: string): Promise<void> {
     try {
       const storage = await this.getStorage();
       const current = await storage.getTask(taskId);
+      if (current?.status === 'cancelled') {
+        const controller = this.activeAbortControllers.get(taskId);
+        if (!controller) return;
+        controller.abort(new Error('Task cancelled'));
+        this.activeAbortControllers.delete(taskId);
+        this.deregisterTaskContext(taskId);
+        return;
+      }
       if (current?.status !== 'running') return;
       if (current.ownerId === this.workerId || !current.ownerId) return;
       const controller = this.activeAbortControllers.get(taskId);
@@ -1748,9 +2214,12 @@ export class BackgroundTaskManager {
 
   #startLeaseHeartbeat(): void {
     if (this.heartbeatInterval) return;
-    const intervalMs = Math.max(1_000, Math.floor(this.config.leaseDurationMs / 3));
+    const intervalMs = Math.max(this.#timingFloorMs, Math.floor(this.config.leaseDurationMs / 3));
     this.heartbeatInterval = setInterval(() => {
       void this.#renewOwnedLeases();
+      // Storage-wide admission can be freed by another process, which never
+      // triggers a local drain. Retry queued resumes on each tick.
+      if (this.localPendingResumes.size > 0) void this.drainPending();
     }, intervalMs);
     // Never keep the process alive just to renew leases.
     this.heartbeatInterval.unref?.();
@@ -1764,10 +2233,15 @@ export class BackgroundTaskManager {
     for (const agentId of this.localReservations.values()) {
       if (agentId === task.agentId) agentRunning++;
     }
-    if (agentRunning >= this.config.perAgentConcurrency) return false;
+    if (agentRunning >= this.#ownerLimit(task.agentId)) return false;
 
     this.localReservations.set(task.id, task.agentId);
     return true;
+  }
+
+  #ownerLimit(agentId: string): number {
+    const overrides = this.config.perOwnerConcurrency;
+    return overrides && Object.hasOwn(overrides, agentId) ? overrides[agentId]! : this.config.perAgentConcurrency;
   }
 
   private releaseLocalSlot(taskId: string): void {
@@ -1776,17 +2250,40 @@ export class BackgroundTaskManager {
 
   private async checkConcurrency(agentId: string): Promise<boolean> {
     const storage = await this.getStorage();
-    const globalRunning = await storage.getRunningCount();
+    // Another worker may already have handled a resume this manager published.
+    await this.#pruneInFlightResumes();
+    let inFlightForAgent = 0;
+    for (const entry of this.inFlightPortableResumes.values()) {
+      if (entry.agentId === agentId) inFlightForAgent++;
+    }
+    const globalRunning = (await storage.getRunningCount()) + this.inFlightPortableResumes.size;
     if (globalRunning >= this.config.globalConcurrency) {
       return false;
     }
 
-    const agentRunning = await storage.getRunningCountByAgent(agentId);
-    if (agentRunning >= this.config.perAgentConcurrency) {
+    const agentRunning = (await storage.getRunningCountByAgent(agentId)) + inFlightForAgent;
+    if (agentRunning >= this.#ownerLimit(agentId)) {
       return false;
     }
 
     return true;
+  }
+
+  async #pruneInFlightResumes(): Promise<void> {
+    if (this.inFlightPortableResumes.size === 0) return;
+    const storage = await this.getStorage();
+    const now = Date.now();
+    for (const [taskId, entry] of [...this.inFlightPortableResumes]) {
+      if (entry.until <= now) {
+        this.inFlightPortableResumes.delete(taskId);
+        continue;
+      }
+      // Once the row leaves this suspension, storage counts it (or it is done).
+      const task = await storage.getTask(taskId);
+      if (!task || task.status !== 'suspended' || suspensionToken(task) !== entry.suspendedAt) {
+        this.inFlightPortableResumes.delete(taskId);
+      }
+    }
   }
 
   private async drainPending(): Promise<void> {
@@ -1795,6 +2292,31 @@ export class BackgroundTaskManager {
 
     try {
       const storage = await this.getStorage();
+      // Queued resumes go first: they continue work that already started.
+      for (const [taskId, entry] of [...this.localPendingResumes]) {
+        const task = await storage.getTask(taskId);
+        // Drop the entry if the task left the suspension it was queued for —
+        // including being resumed elsewhere and suspending again.
+        if (!task || task.status !== 'suspended' || suspensionToken(task) !== entry.suspendedAt) {
+          this.localPendingResumes.delete(taskId);
+          continue;
+        }
+
+        const isProcessAffine = this.taskContexts.has(taskId);
+        const canRun = isProcessAffine ? this.reserveLocalSlot(task) : await this.checkConcurrency(task.agentId);
+        if (!canRun) continue;
+        if (this.shuttingDown) return;
+
+        this.localPendingResumes.delete(taskId);
+        try {
+          await this.#publishResume(task, entry.resumeData, isProcessAffine);
+        } catch (error) {
+          this.localPendingResumes.set(taskId, entry);
+          this.#mastra?.getLogger?.()?.warn(`background-task resume failed while draining ${taskId}:`, error as any);
+          return;
+        }
+      }
+
       for (const taskId of [...this.localPendingTaskIds]) {
         const task = await storage.getTask(taskId);
         if (!task || task.status !== 'pending') {
@@ -1839,47 +2361,13 @@ export class BackgroundTaskManager {
       const { tasks: staleTasks } = await storage.listTasks({ status: 'running' });
       let nextSweepAt: number | undefined;
       for (const task of staleTasks) {
-        // A still-valid lease proves the owner is alive — do not reclaim it.
-        // This is what stops a second worker from taking over a task another
-        // process is actively running.
-        if (task.ownerId && task.leaseExpiresAt && task.leaseExpiresAt.getTime() > now) {
-          const leaseExpiry = task.leaseExpiresAt.getTime();
+        if (isLiveRunning(task, now)) {
+          const leaseExpiry = task.leaseExpiresAt!.getTime();
           nextSweepAt = nextSweepAt === undefined ? leaseExpiry : Math.min(nextSweepAt, leaseExpiry);
           continue;
         }
-
-        // Fence the reclaim on the owner/lease we observed. If another worker
-        // reclaimed this task between the list and now, the compare-and-set
-        // fails and we leave it to them instead of clobbering their run.
-        const fence = {
-          expectedStatus: 'running' as const,
-          expectedOwnerId: task.ownerId ?? null,
-          expectedLeaseExpiresAt: task.leaseExpiresAt ?? null,
-        };
-        if (task.maxRetries > 0) {
-          await storage.updateTask(
-            task.id,
-            {
-              status: 'pending',
-              startedAt: undefined,
-              ownerId: undefined,
-              leaseExpiresAt: undefined,
-            },
-            fence,
-          );
-        } else {
-          await storage.updateTask(
-            task.id,
-            {
-              status: 'failed',
-              error: { message: 'Worker process terminated before task completed' },
-              completedAt: new Date(),
-              ownerId: undefined,
-              leaseExpiresAt: undefined,
-            },
-            fence,
-          );
-        }
+        // Re-pended rows are dispatched by the pending pass below.
+        await this.#reclaimLapsedRunning(storage, task);
       }
 
       const { tasks: pendingTasks } = await storage.listTasks({
@@ -1888,6 +2376,14 @@ export class BackgroundTaskManager {
         orderDirection: 'asc',
       });
       for (const task of pendingTasks) {
+        if (task.ownerId) {
+          const leaseExpiry = task.leaseExpiresAt?.getTime();
+          if (leaseExpiry !== undefined && leaseExpiry > now) {
+            nextSweepAt = nextSweepAt === undefined ? leaseExpiry : Math.min(nextSweepAt, leaseExpiry);
+          }
+          if (await this.#recoverLapsedPinWhenFree(storage, task, now)) await this.#dispatchRecoveredPin(task);
+          continue;
+        }
         if (await this.checkConcurrency(task.agentId)) {
           await this.dispatch(task);
         }
@@ -1900,6 +2396,227 @@ export class BackgroundTaskManager {
         logger.error('Failed to recover stale background tasks', error);
       }
     }
+  }
+
+  /**
+   * Reclaims a `running` row whose lease lapsed: re-pends it, or fails it once
+   * it is out of retries. Returns `true` when the row was re-pended and should
+   * be dispatched; `false` when it was failed or another worker got to it first.
+   */
+  async #reclaimLapsedRunning(
+    storage: Awaited<ReturnType<BackgroundTaskManager['getStorage']>>,
+    task: BackgroundTask,
+  ): Promise<boolean> {
+    // Fence the reclaim on the owner/lease we observed. If another worker
+    // reclaimed this task between the list and now, the compare-and-set
+    // fails and we leave it to them instead of clobbering their run.
+    const fence = {
+      expectedStatus: 'running' as const,
+      expectedOwnerId: task.ownerId ?? null,
+      expectedLeaseExpiresAt: task.leaseExpiresAt ?? null,
+    };
+    // A lease that lapsed with its owner still set means the worker died
+    // mid-run, possibly because of this task, so re-pending it spends a
+    // retry like a lapsed pin in `#recoverLapsedPin`; otherwise a task that
+    // kills its worker is re-run by every process that starts. A graceful
+    // shutdown clears the owner to hand the task back, and that costs
+    // nothing.
+    const handedBack = !task.ownerId && task.maxRetries > 0;
+    if (handedBack || task.retryCount < task.maxRetries) {
+      const requeued = await storage.updateTask(
+        task.id,
+        {
+          status: 'pending',
+          retryCount: handedBack ? task.retryCount : task.retryCount + 1,
+          startedAt: undefined,
+          ownerId: undefined,
+          leaseExpiresAt: undefined,
+        },
+        fence,
+      );
+      return Boolean(requeued);
+    }
+    await this.#failTerminated(storage, task.id, fence);
+    return false;
+  }
+
+  /**
+   * Fails a task whose worker is gone and reports it with `task.failed`, so
+   * `onTaskFailed` and stream subscribers hear about it like any other failure.
+   * Only the caller whose fenced write lands publishes, so peers racing on the
+   * same row stay quiet. A failed publish is logged, not thrown, so a sweep
+   * still reaches the rows after this one. Returns whether the write landed.
+   * Pass `runLocalHooks` when this process may still hold the task's per-task
+   * hooks, so they run, isolated, before the event, as for any other failure.
+   */
+  async #failTerminated(
+    storage: Awaited<ReturnType<BackgroundTaskManager['getStorage']>>,
+    taskId: string,
+    fence: UpdateBackgroundTaskOptions,
+    { runLocalHooks = false }: { runLocalHooks?: boolean } = {},
+  ): Promise<boolean> {
+    const failed = await storage.updateTask(
+      taskId,
+      {
+        status: 'failed',
+        error: { message: WORKER_TERMINATED_MESSAGE },
+        completedAt: new Date(),
+        ownerId: undefined,
+        leaseExpiresAt: undefined,
+      },
+      fence,
+    );
+    if (!failed) return false;
+    try {
+      const failedTask = await storage.getTask(taskId);
+      if (failedTask?.status === 'failed') {
+        if (runLocalHooks) await this.runLocalCompletionHooks(failedTask, 'failed', { error: failedTask.error });
+        await this.publishLifecycleEvent('task.failed', failedTask);
+      }
+    } catch (error) {
+      this.#mastra?.getLogger?.()?.warn(`Failed to report background task ${taskId} as failed:`, error as any);
+    }
+    return true;
+  }
+
+  /**
+   * Accounts for a `pinToWorker` row whose owner stopped renewing its lease.
+   * A pin means work for the row was in flight on its owner, so a lapsed pin
+   * is a lost attempt, handled like a `running` row whose lease lapsed: it
+   * consumes a retry and is unpinned, or it fails. Returns `true` when the row
+   * was unpinned and should be dispatched; `false` when the lease is still
+   * live, the row was failed, or another worker got to it first.
+   */
+  async #recoverLapsedPin(
+    storage: Awaited<ReturnType<BackgroundTaskManager['getStorage']>>,
+    task: BackgroundTask,
+    now: number,
+  ): Promise<boolean> {
+    if (task.leaseExpiresAt && task.leaseExpiresAt.getTime() > now) return false;
+    const fence = {
+      expectedStatus: 'pending' as const,
+      expectedOwnerId: task.ownerId ?? null,
+      expectedLeaseExpiresAt: task.leaseExpiresAt ?? null,
+    };
+    const retry = task.retryCount < task.maxRetries;
+    const recovered = retry
+      ? await storage.updateTask(
+          task.id,
+          { retryCount: task.retryCount + 1, ownerId: undefined, leaseExpiresAt: undefined },
+          fence,
+        )
+      : await this.#failTerminated(storage, task.id, fence);
+    if (recovered) {
+      // The lapse only proves the owner stopped renewing. Its adopted work may
+      // still be running, which is why pinned work must be idempotent.
+      this.#mastra
+        ?.getLogger()
+        ?.warn(
+          `Background task ${task.id} lost its pin: worker ${task.ownerId} stopped renewing its lease. ${
+            retry ? 'Retrying it on another worker.' : 'Marking it failed.'
+          }`,
+        );
+    }
+    return retry && recovered;
+  }
+
+  /**
+   * {@link #recoverLapsedPin}, but a row that would be retried is only unpinned
+   * while a slot is free: an unpinned pending row is no longer seen by the pin
+   * sweep, so unpinning it without dispatching would spend the retry and leave
+   * it waiting for a restart. Without a slot the pin stays lapsed and a later
+   * sweep tries again. A row out of retries is failed either way.
+   */
+  async #recoverLapsedPinWhenFree(
+    storage: Awaited<ReturnType<BackgroundTaskManager['getStorage']>>,
+    task: BackgroundTask,
+    now: number,
+  ): Promise<boolean> {
+    const lapsed = !task.leaseExpiresAt || task.leaseExpiresAt.getTime() <= now;
+    if (lapsed && task.retryCount < task.maxRetries && !(await this.checkConcurrency(task.agentId))) return false;
+    return this.#recoverLapsedPin(storage, task, now);
+  }
+
+  /**
+   * Dispatches a row just unpinned by {@link #recoverLapsedPin}. The row is now
+   * unowned, so the pin sweep no longer sees it: if publishing fails, queue it
+   * locally so `drainPending()` (also run by every pin sweep) retries it.
+   */
+  async #dispatchRecoveredPin(task: BackgroundTask): Promise<void> {
+    try {
+      await this.dispatch(task);
+    } catch (error) {
+      this.localPendingTaskIds.add(task.id);
+      this.#mastra
+        ?.getLogger?.()
+        ?.warn(`background-task dispatch failed after recovering pin ${task.id}:`, error as any);
+    }
+  }
+
+  /**
+   * Periodically recovers `running` rows and `pinToWorker` rows whose owner
+   * stopped renewing its lease. The startup scan only sees rows that existed
+   * when this worker started, so without this a task whose worker died later
+   * would wait for a restart. Unpinned pending rows are left alone: they are
+   * dispatched by their own worker and by startup recovery, as before.
+   */
+  async #sweepLapsedPins(): Promise<void> {
+    if (this.shuttingDown || this.sweepingPins) return;
+    this.sweepingPins = true;
+    try {
+      const storage = await this.getStorage();
+      const now = Date.now();
+      // One page per tick. `globalConcurrency` caps how many tasks run at once, so a
+      // page that large normally holds every running row and a lapsed one is found
+      // on the next tick; rows past it (peers with a higher limit) wait for later pages.
+      const runningPageSize = Math.min(
+        Math.max(PIN_SWEEP_PAGE_SIZE, this.config.globalConcurrency),
+        RUNNING_SWEEP_MAX_PAGE_SIZE,
+      );
+      const { tasks: running, total: runningTotal } = await storage.listTasks({
+        status: 'running',
+        orderBy: 'createdAt',
+        orderDirection: 'asc',
+        page: this.runningSweepPage,
+        perPage: runningPageSize,
+      });
+      // Move on only when rows exist past this page, so a full last page doesn't make the next tick read nothing.
+      this.runningSweepPage =
+        (this.runningSweepPage + 1) * runningPageSize < runningTotal ? this.runningSweepPage + 1 : 0;
+      for (const task of running) {
+        if (this.shuttingDown) return;
+        if (isLiveRunning(task, now)) continue;
+        // Queue it rather than dispatching now: the dead row counted against
+        // concurrency until it was re-pended, and the drain re-checks the limit.
+        if (await this.#reclaimLapsedRunning(storage, task)) this.localPendingTaskIds.add(task.id);
+      }
+      // Dispatches reclaimed rows, and recovered pins whose dispatch failed on an earlier tick.
+      if (this.localPendingTaskIds.size > 0) await this.drainPending();
+      // One page per tick, so a long queue doesn't make every worker read every pending row each lease.
+      const { tasks } = await storage.listTasks({
+        status: 'pending',
+        orderBy: 'createdAt',
+        orderDirection: 'asc',
+        page: this.pinSweepPage,
+        perPage: PIN_SWEEP_PAGE_SIZE,
+      });
+      this.pinSweepPage = tasks.length < PIN_SWEEP_PAGE_SIZE ? 0 : this.pinSweepPage + 1;
+      for (const task of tasks) {
+        if (!task.ownerId || this.shuttingDown) continue;
+        if (await this.#recoverLapsedPinWhenFree(storage, task, now)) await this.#dispatchRecoveredPin(task);
+      }
+    } catch (error) {
+      this.#mastra?.getLogger()?.error('Failed to recover lapsed pinned background tasks', error);
+    } finally {
+      this.sweepingPins = false;
+    }
+  }
+
+  #startPinSweep(): void {
+    if (this.shuttingDown || this.pinSweepInterval) return;
+    this.pinSweepInterval = setInterval(() => void this.#sweepLapsedPins(), this.config.leaseDurationMs);
+    // Never keep the process alive just to sweep for lapsed pins.
+    this.pinSweepInterval.unref?.();
   }
 
   /**
@@ -1916,9 +2633,10 @@ export class BackgroundTaskManager {
 
     // Wait just past the lease expiry (clocks drift between workers), but bound
     // the delay so a stray far-future lease cannot park recovery indefinitely.
+    const floor = this.#timingFloorMs;
     const delay = Math.min(
-      Math.max(nextSweepAt - Date.now() + 1_000, 1_000),
-      Math.max(this.config.leaseDurationMs, 1_000),
+      Math.max(nextSweepAt - Date.now() + floor, floor),
+      Math.max(this.config.leaseDurationMs, floor),
     );
     this.staleRecoveryTimeout = setTimeout(() => {
       this.staleRecoveryTimeout = undefined;
@@ -1927,4 +2645,16 @@ export class BackgroundTaskManager {
     // Never keep the process alive just to sweep for stale tasks.
     this.staleRecoveryTimeout.unref?.();
   }
+}
+
+/**
+ * A still-valid lease proves a `running` row's owner is alive. This is what
+ * stops a second worker from taking over a task another process is running.
+ */
+function isLiveRunning(task: BackgroundTask, now: number): boolean {
+  return Boolean(task.ownerId && task.leaseExpiresAt && task.leaseExpiresAt.getTime() > now);
+}
+
+function suspensionToken(task: BackgroundTask): number | null {
+  return task.suspendedAt?.getTime() ?? null;
 }

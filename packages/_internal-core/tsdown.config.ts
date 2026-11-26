@@ -12,6 +12,8 @@ export default defineConfig({
     'src/durable/index.ts',
     'src/knowledge-compat/index.ts',
     'src/memory/index.ts',
+    'src/frontmatter/index.ts',
+    'src/fs-routing/index.ts',
   ],
   format: ['esm', 'cjs'],
   fixedExtension: false,

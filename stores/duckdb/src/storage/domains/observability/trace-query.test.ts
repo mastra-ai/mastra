@@ -8,9 +8,8 @@ import {
   planTraceQuery,
   planTraceQueryObservedFields,
   planTraceQueryValues,
-  TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
-import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
+import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan, TraceQueryResourceLimitError } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { DuckDBConnection } from '../../db/index';
@@ -46,6 +45,27 @@ describe('DuckDB advanced trace query', () => {
     );
     expect(compiled.values).toContain(5000);
   });
+
+  it.each(['timeToFirstChunkMs', 'timeToFirstTokenMs'] as const)(
+    'compiles %s predicates against the stored root and span columns',
+    field => {
+      const compiled = compileDuckDBTraceQuery(
+        plan({
+          where: {
+            op: 'and',
+            args: [
+              { op: 'gt', left: { path: field }, right: { literal: 500 } },
+              { spans: { some: { op: 'notExists', path: field } } },
+            ],
+          },
+        }),
+      );
+
+      expect(compiled.sql).toContain(`r.${field} IS NOT NULL AND r.${field} > ?`);
+      expect(compiled.sql).toContain(`(s.${field} IS NULL)`);
+      expect(compiled.values).toContain(500);
+    },
+  );
 
   it('normalizes discovery resource exhaustion without exposing driver details', async () => {
     const query = vi.fn().mockRejectedValue(new Error('Out of Memory Error: failed to allocate secret query'));
@@ -104,7 +124,7 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
   });
 
-  it('projects canonical span values with guarded JSON strings and typed timestamps', () => {
+  it('projects canonical span values from columns or guarded JSON strings with typed timestamps', () => {
     const compiled = compileDuckDBTraceQuery(
       plan({
         where: {
@@ -130,9 +150,12 @@ describe('DuckDB advanced trace query', () => {
     );
 
     expect(compiled.sql.match(/FROM current_spans s/g)).toHaveLength(1);
+    // Model and provider read the column, falling back to string attributes for older spans.
     expect(compiled.sql).toContain(`json_type(attributes, '$.model') = 'VARCHAR'`);
-    expect(compiled.sql).toContain(`json_extract_string(attributes, '$.model')`);
     expect(compiled.sql).toContain(`json_type(attributes, '$.provider') = 'VARCHAR'`);
+    expect(compiled.sql).toMatch(/COALESCE\(\s*model,/);
+    expect(compiled.sql).toContain('s.model IS NOT DISTINCT FROM ?');
+    expect(compiled.sql).toContain('s.provider IS NOT DISTINCT FROM ?');
     expect(compiled.sql).toContain(`date_diff('millisecond', startedAt, endedAt) AS durationMs`);
     expect(compiled.sql).toContain('s.startedAt IS NOT NULL AND s.startedAt >= CAST(? AS TIMESTAMP)');
     expect(compiled.sql).toContain('s.durationMs IS NOT NULL AND s.durationMs > ?');
@@ -376,7 +399,7 @@ describe('DuckDB advanced trace query', () => {
 
     expect(compiled.sql).toContain('endedAt < CAST(? AS TIMESTAMP)');
     expect(compiled.sql).toContain('traceId > ?');
-    expect(compiled.sql).toContain('ORDER BY endedAt DESC, traceId ASC');
+    expect(compiled.sql).toContain('ORDER BY endedAt DESC NULLS LAST, traceId ASC');
     expect(compiled.values.at(-1)).toBe(3);
   });
 
@@ -398,7 +421,7 @@ describe('DuckDB advanced trace query', () => {
     );
 
     expect(compiled.sql).toContain('page_rows AS');
-    expect(compiled.sql).toContain('ORDER BY endedAt ASC, traceId ASC');
+    expect(compiled.sql).toContain('ORDER BY endedAt ASC NULLS LAST, traceId ASC');
     expect(compiled.sql).toContain('LIMIT ? OFFSET ?');
     expect(compiled.sql).toContain('SELECT COUNT(*) AS total\n    FROM candidates');
     expect(compiled.sql).toContain('LEFT JOIN page_rows ON TRUE');
@@ -560,14 +583,19 @@ describe('DuckDB advanced trace query', () => {
       page: { next: expect.any(String) },
     });
     if (!('traces' in response)) throw new Error('Expected trace results');
-    expect(Object.keys(response.traces[0]!)).toHaveLength(16);
+    expect(Object.keys(response.traces[0]!)).toHaveLength(23);
     expect(response.traces[0]).toMatchObject({
       name: 'Agent run',
+      outcome: null,
+      stopReason: null,
+      stopReasonContext: null,
       entityId: 'agent-1',
       parentSpanId: null,
       createdAt: '2026-01-01T12:00:00.000Z',
       metadata: { customer: { id: 'customer-1' }, count: 2 },
       inputPreview: 'Help with my order',
+      outputPreview: 'Sure, which order?',
+      errorPreview: null,
     });
     expect(response.traces[0]).not.toHaveProperty('input');
   });
@@ -577,7 +605,7 @@ describe('DuckDB advanced trace query', () => {
       ...traceRow('trace-a', '2026-01-01T12:00:00.000Z'),
       entityId: null,
       metadata: null,
-      input: null,
+      inputPreview: '',
     };
     const query = vi.fn().mockResolvedValue([row]);
     const response = await queryTraces({ query } as unknown as DuckDBConnection, plan());
@@ -588,12 +616,18 @@ describe('DuckDB advanced trace query', () => {
       parentSpanId: null,
       metadata: null,
       inputPreview: null,
+      timeToFirstChunkMs: null,
+      timeToFirstTokenMs: null,
     });
     expect(response.page.next).toBeNull();
   });
 
   it('returns exact list-compatible pagination metadata from one statement', async () => {
-    const query = vi.fn().mockResolvedValue([{ ...traceRow('trace-c', '2026-01-01T10:00:00.000Z'), total: 3n }]);
+    const query = vi
+      .fn()
+      .mockResolvedValue([
+        { ...traceRow('trace-c', '2026-01-01T10:00:00.000Z'), timeToFirstChunkMs: 0, timeToFirstTokenMs: 0, total: 3n },
+      ]);
     const response = await queryTraces(
       { query } as unknown as DuckDBConnection,
       plan({ pagination: { page: 1, perPage: 2 } }),
@@ -601,7 +635,7 @@ describe('DuckDB advanced trace query', () => {
 
     expect(query).toHaveBeenCalledTimes(1);
     expect(response).toMatchObject({
-      traces: [{ traceId: 'trace-c' }],
+      traces: [{ traceId: 'trace-c', timeToFirstChunkMs: 0, timeToFirstTokenMs: 0 }],
       pagination: { total: 3, page: 1, perPage: 2, hasMore: false },
     });
     expect(response).not.toHaveProperty('page');
@@ -648,7 +682,9 @@ function traceRow(traceId: string, startedAt: string) {
     entityId: 'agent-1',
     parentSpanId: null,
     metadata: JSON.stringify({ customer: { id: 'customer-1' }, count: 2 }),
-    input: JSON.stringify({ messages: [{ role: 'user', content: 'Help with my order' }] }),
+    inputPreview: 'Help with my order',
+    outputPreview: 'Sure, which order?',
+    errorPreview: '',
     threadId: null,
     resourceId: null,
     startedAt: new Date(startedAt),

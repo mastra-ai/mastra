@@ -9,6 +9,18 @@ export type SpanTimingLayout = {
   widthPercent: number;
 };
 
+/** Length of a track spanning every top-level span, from the first span start to the latest span end. */
+export function getOverallLatency(spans: Pick<UISpan, 'startTime' | 'latency'>[]): number {
+  const [firstSpan] = spans;
+  if (!firstSpan) return 0;
+
+  const overallStart = new Date(firstSpan.startTime).getTime();
+  return spans.reduce(
+    (latest, span) => Math.max(latest, new Date(span.startTime).getTime() + span.latency - overallStart),
+    0,
+  );
+}
+
 /** Positions a span on a track spanning the whole trace (`overallLatency` ms from `overallStartTime`). */
 export function getSpanTimingLayout(
   span: UISpan,

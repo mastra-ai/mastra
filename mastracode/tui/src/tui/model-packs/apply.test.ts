@@ -1,4 +1,4 @@
-import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
+import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/model-fallback';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -68,7 +68,7 @@ function makeContext(modelId = 'provider/old') {
   const stateSet = vi.fn(async (nextState: Record<string, unknown>) => {
     sessionState = { ...sessionState, ...nextState };
   });
-  return {
+  const result = {
     ctx: {
       state: {
         controller: {
@@ -97,6 +97,9 @@ function makeContext(modelId = 'provider/old') {
     modelSwitch,
     modeSwitch,
   };
+  const { state } = result.ctx;
+  state.local = { controller: state.controller, session: state.session };
+  return result;
 }
 
 describe('model pack application', () => {

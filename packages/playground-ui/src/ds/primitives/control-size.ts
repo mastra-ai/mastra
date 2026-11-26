@@ -42,15 +42,29 @@ export const controlSizeClasses: Record<ControlSize, string> = {
   lg: 'h-control-lg text-label',
 };
 
+// Inner spacing per rung, as custom properties so every pill-shaped control reads the same two
+// numbers: `--control-px`, the inset from a pill's end to its label (a glyph side takes 2px less,
+// since a glyph draws inside its box), and `--control-gap`, between an icon and its label. Button,
+// a FilterBar chip and an InputGroup set them from here; nothing restates the values.
+export const controlSpacing: Record<ControlSize, string> = {
+  sm: '[--control-px:.9em] [--control-gap:0.3125rem]',
+  md: '[--control-px:.9em] [--control-gap:0.375rem]',
+  lg: '[--control-px:1em] [--control-gap:0.375rem]',
+};
+
 export type ControlTriggerVisualVariant = 'default' | 'ghost';
 
 // Open ("popup-open") state per variant. `default` washes through `--surface-tint`, the
 // layer its raised material expresses every other state in: its fill is a pinned card
 // colour, and swapping that would drop the control out of the material it shares with a
 // field. `ghost` has no material to wash, so it takes a fill rung.
+// `aria-expanded=false` is a closed trigger whose tooltip is open: Base UI sets `data-popup-open`
+// for that too. `:where` keeps the weight of the plain attribute, so a press still wins.
 export const controlTriggerOpenState: Record<ControlTriggerVisualVariant, string> = {
-  default: 'data-[popup-open]:[--surface-tint:var(--fill)] data-[popup-open]:text-foreground',
-  ghost: 'data-[popup-open]:bg-fill-subtle data-[popup-open]:text-foreground',
+  default:
+    '[&[data-popup-open]:where(:not([aria-expanded=false]))]:[--surface-tint:var(--field-open)] [&[data-popup-open]:where(:not([aria-expanded=false]))]:text-foreground',
+  ghost:
+    '[&[data-popup-open]:where(:not([aria-expanded=false]))]:bg-fill-subtle [&[data-popup-open]:where(:not([aria-expanded=false]))]:text-foreground',
 };
 
 // Open-state classes for a trigger rendered with any Button variant; only the

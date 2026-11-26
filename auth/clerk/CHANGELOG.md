@@ -1,5 +1,115 @@
 # @mastra/auth-clerk
 
+## 1.4.1
+
+### Patch Changes
+
+- Fixed Clerk Studio sign-in for OAuth applications that require PKCE, while preserving stateless and concurrent login support. ([#24328](https://github.com/mastra-ai/mastra/pull/24328))
+
+- Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package. ([#31176](https://github.com/mastra-ai/mastra/pull/31176))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+- Updated dependencies [[`16c6902`](https://github.com/mastra-ai/mastra/commit/16c6902f8b971c4950fea55e13a8038022bde8bb), [`e3ed577`](https://github.com/mastra-ai/mastra/commit/e3ed57715f9668d9da55e7636ebefa10b141ebc4)]:
+  - @mastra/auth@1.2.1
+
+## 1.4.1-alpha.1
+
+### Patch Changes
+
+- Fixed Clerk Studio sign-in for OAuth applications that require PKCE, while preserving stateless and concurrent login support. ([#24328](https://github.com/mastra-ai/mastra/pull/24328))
+
+## 1.4.1-alpha.0
+
+### Patch Changes
+
+- Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package. ([#31176](https://github.com/mastra-ai/mastra/pull/31176))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+- Updated dependencies [[`16c6902`](https://github.com/mastra-ai/mastra/commit/16c6902f8b971c4950fea55e13a8038022bde8bb), [`e3ed577`](https://github.com/mastra-ai/mastra/commit/e3ed57715f9668d9da55e7636ebefa10b141ebc4)]:
+  - @mastra/auth@1.2.1-alpha.0
+
+## 1.4.0
+
+### Minor Changes
+
+- The built-in MCP server now advertises your identity provider as the authorization server to MCP clients, so they can discover where to sign in. ([#29930](https://github.com/mastra-ai/mastra/pull/29930))
+
+### Patch Changes
+
+- The authenticated user now has `id` set to the token's `sub` claim when the token has no `id` claim. A token that already has an `id` claim keeps it. Standard OIDC access tokens identify the user only with `sub`, so before this change Mastra treated these users as having no id. ([#29930](https://github.com/mastra-ai/mastra/pull/29930))
+
+  This fixes RBAC: every protected route answered `403 Missing required permission` because the user's roles were never loaded.
+
+  It also changes which records these users see on existing HTTP routes, unless you set `mapUserToResourceId`:
+
+  - **Stored agents, skills, workspaces, and other owned records.** Lists were unfiltered before, so every user saw every record. Now each user sees their own records plus public ones, and another user's private records are no longer listed (users with an admin permission such as `agents:admin` keep the full list). Records these users create are owned by them and private by default. Records created before the upgrade have no owner and stay visible to everyone.
+  - **Tool-provider connections.** Per-author connections were stored under the shared `default` owner. They are now stored under the user's `sub`. Connections created before the upgrade stay under `default`, so users have to reconnect them. Shared connections are unaffected. To keep using the old connections instead, set `mapUserToResourceId: () => 'default'` on the auth provider. That puts every user back in one shared `default` resource, so it also shares memory and owned records between them; use it only if that matches how the app worked before.
+  - **Observability.** Feedback submitted by these users is recorded with their `sub` as the user id.
+
+- Updated dependencies [[`2770567`](https://github.com/mastra-ai/mastra/commit/27705673f2d33b5094a25cfb538d87d81ad9f2c8), [`2770567`](https://github.com/mastra-ai/mastra/commit/27705673f2d33b5094a25cfb538d87d81ad9f2c8), [`c0d3bfd`](https://github.com/mastra-ai/mastra/commit/c0d3bfdc43d5c9ded75b7373e0ac943c567e2781)]:
+  - @mastra/auth@1.2.0
+
+## 1.4.0-alpha.0
+
+### Minor Changes
+
+- The built-in MCP server now advertises your identity provider as the authorization server to MCP clients, so they can discover where to sign in. ([#29930](https://github.com/mastra-ai/mastra/pull/29930))
+
+### Patch Changes
+
+- The authenticated user now has `id` set to the token's `sub` claim when the token has no `id` claim. A token that already has an `id` claim keeps it. Standard OIDC access tokens identify the user only with `sub`, so before this change Mastra treated these users as having no id. ([#29930](https://github.com/mastra-ai/mastra/pull/29930))
+
+  This fixes RBAC: every protected route answered `403 Missing required permission` because the user's roles were never loaded.
+
+  It also changes which records these users see on existing HTTP routes, unless you set `mapUserToResourceId`:
+
+  - **Stored agents, skills, workspaces, and other owned records.** Lists were unfiltered before, so every user saw every record. Now each user sees their own records plus public ones, and another user's private records are no longer listed (users with an admin permission such as `agents:admin` keep the full list). Records these users create are owned by them and private by default. Records created before the upgrade have no owner and stay visible to everyone.
+  - **Tool-provider connections.** Per-author connections were stored under the shared `default` owner. They are now stored under the user's `sub`. Connections created before the upgrade stay under `default`, so users have to reconnect them. Shared connections are unaffected. To keep using the old connections instead, set `mapUserToResourceId: () => 'default'` on the auth provider. That puts every user back in one shared `default` resource, so it also shares memory and owned records between them; use it only if that matches how the app worked before.
+  - **Observability.** Feedback submitted by these users is recorded with their `sub` as the user id.
+
+- Updated dependencies [[`2770567`](https://github.com/mastra-ai/mastra/commit/27705673f2d33b5094a25cfb538d87d81ad9f2c8), [`2770567`](https://github.com/mastra-ai/mastra/commit/27705673f2d33b5094a25cfb538d87d81ad9f2c8), [`c0d3bfd`](https://github.com/mastra-ai/mastra/commit/c0d3bfdc43d5c9ded75b7373e0ac943c567e2781)]:
+  - @mastra/auth@1.2.0-alpha.0
+
+## 1.3.2
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@clerk/backend@^3.26.2` ↗︎](https://www.npmjs.com/package/@clerk/backend/v/3.26.2) (from `^3.17.2`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+- Updated dependencies [[`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed)]:
+  - @mastra/auth@1.1.5
+
+## 1.3.2-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@clerk/backend@^3.26.2` ↗︎](https://www.npmjs.com/package/@clerk/backend/v/3.26.2) (from `^3.17.2`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+- Updated dependencies [[`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed)]:
+  - @mastra/auth@1.1.5-alpha.0
+
+## 1.3.1
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+- Updated dependencies [[`fae54c5`](https://github.com/mastra-ai/mastra/commit/fae54c57917cd1f527937ca42b5ab7dfe1d55a2a)]:
+  - @mastra/auth@1.1.4
+
+## 1.3.1-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+- Updated dependencies [[`fae54c5`](https://github.com/mastra-ai/mastra/commit/fae54c57917cd1f527937ca42b5ab7dfe1d55a2a)]:
+  - @mastra/auth@1.1.4-alpha.0
+
 ## 1.3.0
 
 ### Minor Changes

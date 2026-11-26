@@ -39,10 +39,6 @@ export interface AuditActorProfileInput {
 
 export const ACTOR_PROFILE_METADATA_KEY = '__actorProfile';
 
-export function auditAgentName(modeId: string): string {
-  return `${modeId} agent`;
-}
-
 export function auditActorProfile(
   user: { name?: string; email?: string; avatarUrl?: string } | undefined,
 ): AuditActorProfileInput | undefined {
@@ -111,12 +107,17 @@ export interface ListAuditEventsInput {
   actorId?: string;
   /** Opaque cursor from a previous page (`nextCursor`). */
   before?: string;
+  /**
+   * Page oldest-first, strictly after this cursor: `nextCursor` of a previous
+   * `after` page, or `encodeAuditCursor` of a row. Can't be combined with `before`.
+   */
+  after?: string;
   limit?: number;
 }
 
 export interface AuditEventPage {
   events: AuditEventRow[];
-  /** Pass back as `before` to fetch the next (older) page; absent at the end. */
+  /** Pass back as `before` (or `after`, when paging forward) to fetch the next page; absent at the end. */
   nextCursor?: string;
 }
 
@@ -156,6 +157,23 @@ export function decodeAuditCursor(cursor: string): { occurredAt: Date; id: strin
   const id = cursor.slice(sep + 1);
   if (Number.isNaN(occurredAt.getTime()) || !id) return undefined;
   return { occurredAt, id };
+}
+
+/** An `after` cursor at an instant: paging from it skips every row recorded at or before then. */
+export function auditCursorAt(instant: Date): string {
+  return `${instant.toISOString()}_ffffffff-ffff-ffff-ffff-ffffffffffff`;
+}
+
+const AUDIT_EVENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * Decode an `after` cursor, or `undefined` when it can't be paged from. Its id
+ * must be a UUID like every audit row id: Postgres rejects any other id in the
+ * keyset comparison.
+ */
+export function decodeAuditAfterCursor(cursor: string): { occurredAt: Date; id: string } | undefined {
+  const decoded = decodeAuditCursor(cursor);
+  return decoded && AUDIT_EVENT_ID.test(decoded.id) ? decoded : undefined;
 }
 
 export const AUDIT_EVENTS_SCHEMA: CollectionSchema = {
@@ -278,8 +296,9 @@ export class AuditStorage extends FactoryStorageDomain {
     return toRow(inserted);
   }
 
-  /** List an org's audit events newest-first with keyset pagination. */
+  /** List an org's audit events newest-first (or oldest-first with `after`) with keyset pagination. */
   async list(input: ListAuditEventsInput): Promise<AuditEventPage> {
+    if (input.before && input.after) throw new Error('Audit list takes `before` or `after`, not both');
     const limit = clampAuditLimit(input.limit);
 
     const where: CollectionWhere = { org_id: input.orgId };
@@ -287,12 +306,21 @@ export class AuditStorage extends FactoryStorageDomain {
     if (input.actions && input.actions.length > 0) where.action = { in: input.actions };
     if (input.actorId) where.actor_id = input.actorId;
 
-    const cursor = input.before ? decodeAuditCursor(input.before) : undefined;
+    const forward = input.after !== undefined;
+    const cursor =
+      input.after !== undefined
+        ? decodeAuditAfterCursor(input.after)
+        : input.before
+          ? decodeAuditCursor(input.before)
+          : undefined;
+    // Paging forward from an unreadable cursor would replay the whole trail.
+    if (forward && !cursor) throw new Error(`Invalid audit cursor '${input.after}'`);
+    const direction = forward ? 'asc' : 'desc';
 
     const rows = await this.#db.findMany<AuditEventDbRow>('audit_events', where, {
       orderBy: [
-        ['occurred_at', 'desc'],
-        ['id', 'desc'],
+        ['occurred_at', direction],
+        ['id', direction],
       ],
       limit: limit + 1,
       ...(cursor ? { cursor: { values: [cursor.occurredAt, cursor.id] } } : {}),

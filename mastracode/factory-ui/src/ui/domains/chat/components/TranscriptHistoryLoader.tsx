@@ -1,14 +1,8 @@
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { TranscriptHistoryLoader as SharedTranscriptHistoryLoader } from '@mastra/playground-ui/domains/chat/transcript';
 
 import { useChatTranscript } from '../context/useChatTranscript';
 
 export function TranscriptHistoryLoader() {
   const { loadMore } = useChatTranscript();
-  if (!loadMore.isLoading) return null;
-
-  return (
-    <div className="flex w-full justify-center py-2">
-      <Spinner size="sm" className="text-muted-foreground" aria-label="Loading older messages" />
-    </div>
-  );
+  return <SharedTranscriptHistoryLoader loading={loadMore.isLoading} />;
 }

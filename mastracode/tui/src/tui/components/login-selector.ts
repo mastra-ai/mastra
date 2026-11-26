@@ -2,9 +2,11 @@
  * OAuth provider selector component for /login and /logout commands
  */
 
-import { Box, Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
+import { Container, getKeybindings, Text } from '@earendil-works/pi-tui';
 import type { OAuthProviderInterface } from '@mastra/code-sdk/auth/types';
 import { theme } from '../theme.js';
+import type { MenuChrome } from './menu-chrome.js';
+import { MenuList } from './menu-list.js';
 
 /**
  * Interface for auth provider that the selector needs.
@@ -17,110 +19,48 @@ export interface AuthProviderSource {
   countAccounts?(providerId: string): number;
 }
 
-export class LoginSelectorComponent extends Box {
-  private listContainer: Container;
-  private allProviders: { id: string; name: string }[] = [];
-  private selectedIndex: number = 0;
-  private mode: 'login' | 'logout';
-  private authSource: AuthProviderSource;
-  private onSelectCallback: (providerId: string) => void;
-  private onCancelCallback: () => void;
+export class LoginSelectorComponent extends Container implements MenuChrome {
+  private readonly list?: MenuList;
 
   constructor(
-    mode: 'login' | 'logout',
-    authSource: AuthProviderSource,
+    private readonly mode: 'login' | 'logout',
+    private readonly authSource: AuthProviderSource,
     onSelect: (providerId: string) => void,
-    onCancel: () => void,
+    private readonly onCancel: () => void,
   ) {
-    // Box with padding and background
-    super(2, 1, text => theme.bg('overlayBg', text));
+    super();
 
-    this.mode = mode;
-    this.authSource = authSource;
-    this.onSelectCallback = onSelect;
-    this.onCancelCallback = onCancel;
-
-    // Load all OAuth providers
-    this.loadProviders();
-
-    // Add title
-    const title = mode === 'login' ? 'Select provider to login:' : 'Select provider to logout:';
-    this.addChild(new Text(theme.fg('text', title)));
-    this.addChild(new Spacer(1));
-
-    // Create list container
-    this.listContainer = new Container();
-    this.addChild(this.listContainer);
-
-    this.addChild(new Spacer(1));
-    this.addChild(new Text(theme.fg('muted', 'Press Enter to select, Escape to cancel')));
-
-    // Initial render
-    this.updateList();
-  }
-
-  private loadProviders(): void {
-    this.allProviders = this.authSource.getOAuthProviders().map(p => ({ id: p.id, name: p.name }));
-  }
-
-  private updateList(): void {
-    this.listContainer.clear();
-
-    for (let i = 0; i < this.allProviders.length; i++) {
-      const provider = this.allProviders[i];
-      if (!provider) continue;
-
-      const isSelected = i === this.selectedIndex;
-
-      // Check if user has stored OAuth credentials for this provider.
-      const isLoggedIn = this.authSource.isLoggedIn(provider.id);
-      const accountCount = this.authSource.countAccounts?.(provider.id) ?? 0;
-      const accountSuffix =
-        accountCount > 0 ? theme.fg('muted', ` (${accountCount} account${accountCount === 1 ? '' : 's'})`) : '';
-      const statusIndicator =
-        (isLoggedIn ? theme.fg('success', ' ✓ stored') : theme.fg('muted', ' • unconfigured')) + accountSuffix;
-
-      let line = '';
-      if (isSelected) {
-        line = theme.fg('accent', '→ ' + provider.name) + statusIndicator;
-      } else {
-        line = '  ' + provider.name + statusIndicator;
-      }
-
-      this.listContainer.addChild(new Text(line));
-    }
-
-    // Show "no providers" if empty
-    if (this.allProviders.length === 0) {
+    const providers = authSource.getOAuthProviders();
+    if (providers.length === 0) {
       const message =
-        this.mode === 'login' ? 'No OAuth providers available' : 'No OAuth providers logged in. Use /connect first.';
-      this.listContainer.addChild(new Text(theme.fg('muted', message)));
+        mode === 'login' ? 'No OAuth providers available' : 'No OAuth providers logged in. Use /connect first.';
+      this.addChild(new Text(theme.fg('muted', message), 2, 0));
+      return;
     }
+
+    this.list = new MenuList(
+      providers.map(provider => ({ value: provider.id, label: provider.name, description: this.status(provider.id) })),
+      12,
+    );
+    this.list.onSelect = item => onSelect(item.value);
+    this.list.onCancel = onCancel;
+    this.addChild(this.list);
+  }
+
+  menuTitle(): string {
+    return this.mode === 'login' ? 'Select provider to login' : 'Select provider to logout';
+  }
+
+  /** "✓ stored (2 accounts)" when the provider has stored credentials, else "unconfigured". */
+  private status(providerId: string): string {
+    if (!this.authSource.isLoggedIn(providerId)) return theme.fg('muted', 'unconfigured');
+    const count = this.authSource.countAccounts?.(providerId) ?? 0;
+    const accounts = count > 0 ? theme.fg('muted', ` (${count} account${count === 1 ? '' : 's'})`) : '';
+    return theme.fg('success', '✓ stored') + accounts;
   }
 
   handleInput(keyData: string): void {
-    const kb = getKeybindings();
-
-    // Up arrow
-    if (kb.matches(keyData, 'tui.select.up')) {
-      this.selectedIndex = Math.max(0, this.selectedIndex - 1);
-      this.updateList();
-    }
-    // Down arrow
-    else if (kb.matches(keyData, 'tui.select.down')) {
-      this.selectedIndex = Math.min(this.allProviders.length - 1, this.selectedIndex + 1);
-      this.updateList();
-    }
-    // Enter
-    else if (kb.matches(keyData, 'tui.select.confirm')) {
-      const selectedProvider = this.allProviders[this.selectedIndex];
-      if (selectedProvider) {
-        this.onSelectCallback(selectedProvider.id);
-      }
-    }
-    // Escape or Ctrl+C
-    else if (kb.matches(keyData, 'tui.select.cancel')) {
-      this.onCancelCallback();
-    }
+    if (this.list) this.list.handleInput(keyData);
+    else if (getKeybindings().matches(keyData, 'tui.select.cancel')) this.onCancel();
   }
 }

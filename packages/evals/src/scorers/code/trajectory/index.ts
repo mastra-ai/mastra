@@ -11,6 +11,7 @@ import {
   checkTrajectoryEfficiency,
   checkTrajectoryBlacklist,
   analyzeToolFailures,
+  toToolLevelSteps,
 } from '../../utils';
 import type {
   TrajectoryComparisonResult,
@@ -129,7 +130,7 @@ export function createTrajectoryAccuracyScorerCode(options: TrajectoryAccuracySc
           actualTrajectory,
           expectedTrajectory: undefined,
           comparison: undefined,
-          actualStepNames: actualTrajectory.steps.map((s: TrajectoryStep) => s.name),
+          actualStepNames: toToolLevelSteps(actualTrajectory.steps).map((s: TrajectoryStep) => s.name),
           expectedStepNames: [],
           error: 'No expected trajectory provided (pass via options or dataset item expectedTrajectory)',
         };
@@ -153,7 +154,7 @@ export function createTrajectoryAccuracyScorerCode(options: TrajectoryAccuracySc
         actualTrajectory,
         expectedTrajectory: { steps: resolvedExpectedSteps },
         comparison,
-        actualStepNames: actualTrajectory.steps.map((s: TrajectoryStep) => s.name),
+        actualStepNames: toToolLevelSteps(actualTrajectory.steps).map((s: TrajectoryStep) => s.name),
         expectedStepNames: resolvedExpectedSteps.map((s: ExpectedStep) => s.name),
       };
     })
@@ -203,20 +204,32 @@ function evaluateNestedExpectations(
   weights: Required<TrajectoryScoreWeights> = { accuracy: 0.4, efficiency: 0.3, toolFailures: 0.2, blacklist: 0.1 },
 ): NestedEvaluationResult[] {
   const results: NestedEvaluationResult[] = [];
-  const matchedIndices = new Set<number>();
+  const matchedSteps = new Set<TrajectoryStep>();
+  // Search the tool-level view so steps nested under model_generation in trace-derived
+  // trajectories are found, unless the expectation targets a container step itself.
+  const toolLevelSteps = toToolLevelSteps(actualSteps);
+  // Same rule as compareTrajectories: an untyped expectation naming a container step matches it raw.
+  const containerNames = new Set(
+    actualSteps.filter(s => s.stepType === 'model_generation' || s.stepType === 'processor_run').map(s => s.name),
+  );
 
   for (const expectedStep of expectedSteps) {
     if (!expectedStep.children) continue;
 
+    const candidates =
+      expectedStep.stepType === 'model_generation' ||
+      expectedStep.stepType === 'processor_run' ||
+      (!expectedStep.stepType && containerNames.has(expectedStep.name))
+        ? actualSteps
+        : toolLevelSteps;
     // Find the first unmatched actual step that satisfies name/type
-    const matchIndex = actualSteps.findIndex(
-      (s, i) =>
-        !matchedIndices.has(i) &&
+    const actualStep = candidates.find(
+      s =>
+        !matchedSteps.has(s) &&
         s.name === expectedStep.name &&
         (!expectedStep.stepType || s.stepType === expectedStep.stepType),
     );
-    const actualStep = matchIndex >= 0 ? actualSteps[matchIndex] : undefined;
-    if (matchIndex >= 0) matchedIndices.add(matchIndex);
+    if (actualStep) matchedSteps.add(actualStep);
 
     if (!actualStep) {
       // A missing parent cannot satisfy a nested expectation.

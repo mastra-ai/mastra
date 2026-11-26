@@ -184,11 +184,14 @@ export async function getDynamicWorkspace({
   mastra,
   skillExtension,
   backgroundToolsEnabled = false,
+  plansDir,
 }: {
   requestContext: RequestContext;
   mastra?: Mastra;
   skillExtension?: WorkspaceSkillExtension;
   backgroundToolsEnabled?: boolean;
+  /** Host-configured plans directory the plan-mode write guard allows. */
+  plansDir?: string;
 }) {
   const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = ctx?.getState();
@@ -215,12 +218,15 @@ export async function getDynamicWorkspace({
   // All modes share the same workspace tool configuration.  Per-mode tool
   // visibility is enforced at LLM-call time via `availableTools` /
   // `activeTools` on the AgentController, not by mutating workspace capabilities.
-  const workspaceTools = createMastraCodeWorkspaceTools(backgroundToolsEnabled);
+  const workspaceTools = createMastraCodeWorkspaceTools(backgroundToolsEnabled, plansDir);
 
-  // Reuse existing workspace if already registered (preserves ProcessManager state)
+  // Reuse existing workspace if already registered (preserves ProcessManager state).
+  // `optional` skips the error log on a miss; older cores ignore it and throw instead.
   let existing: Workspace<LocalFilesystem, LocalSandbox> | undefined;
   try {
-    existing = mastra?.getWorkspaceById(workspaceId) as Workspace<LocalFilesystem, LocalSandbox>;
+    existing = mastra?.getWorkspaceById(workspaceId, { optional: true }) as
+      | Workspace<LocalFilesystem, LocalSandbox>
+      | undefined;
   } catch {
     // Not registered yet
   }
@@ -255,6 +261,7 @@ export async function getDynamicWorkspace({
     name: 'Mastra Code Workspace',
     filesystem,
     sandbox: new LocalSandbox({
+      timeout: 30_000,
       workingDirectory: projectPath,
       env: buildSandboxEnv(),
     }),

@@ -20,14 +20,14 @@ const ProviderRequestCountsSchema = z.object({
 
 const ProviderMessageBatchSchema = z.object({
   id: z.string(),
-  archived_at: z.string().optional(),
-  cancel_initiated_at: z.string().optional(),
+  archived_at: z.string().nullish(),
+  cancel_initiated_at: z.string().nullish(),
   created_at: z.string(),
-  ended_at: z.string().optional(),
+  ended_at: z.string().nullish(),
   expires_at: z.string(),
   processing_status: z.enum(['in_progress', 'canceling', 'ended']).or(z.string()),
   request_counts: ProviderRequestCountsSchema,
-  results_url: z.string().optional(),
+  results_url: z.string().nullish(),
   type: z.literal('message_batch'),
 });
 
@@ -76,14 +76,14 @@ export function cancelMessageBatchTool(proxy: PlatformProxy) {
 
       return {
         id: batch.id,
-        ...(batch.archived_at !== undefined && { archived_at: batch.archived_at }),
-        ...(batch.cancel_initiated_at !== undefined && { cancel_initiated_at: batch.cancel_initiated_at }),
+        ...(batch.archived_at != null && { archived_at: batch.archived_at }),
+        ...(batch.cancel_initiated_at != null && { cancel_initiated_at: batch.cancel_initiated_at }),
         created_at: batch.created_at,
-        ...(batch.ended_at !== undefined && { ended_at: batch.ended_at }),
+        ...(batch.ended_at != null && { ended_at: batch.ended_at }),
         expires_at: batch.expires_at,
         processing_status: batch.processing_status,
         request_counts: batch.request_counts,
-        ...(batch.results_url !== undefined && { results_url: batch.results_url }),
+        ...(batch.results_url != null && { results_url: batch.results_url }),
         type: batch.type,
       };
     },

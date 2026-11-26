@@ -6,6 +6,7 @@ import {
   resolveDefaultThinkingLevel,
   runThinkingLevel,
   supportsMaxReasoningEffort,
+  THINKING_LEVEL_VALUES,
 } from './thinking.js';
 
 const effort = (...values: string[]) => [{ type: 'effort' as const, values }];
@@ -92,17 +93,33 @@ describe('thinking model capabilities', () => {
     ],
     ['Claude without extended thinking offers only off', 'anthropic/claude-3-5-haiku-20241022', undefined, ['off']],
     ['Gemini without a thinking config offers only off', 'google/gemini-2.0-flash', undefined, ['off']],
+    ['providers whose request cannot carry the level offer only off', 'zai/glm-5', effort('low', 'high'), ['off']],
+    ['GitHub Copilot offers only off without catalog data', 'github-copilot/claude-opus-4.7', undefined, ['off']],
+    ['Kimi for Coding offers only off without catalog data', 'kimi-for-coding/kimi-k2.6', undefined, ['off']],
+    ['models missing from the catalog keep every level', 'my-local/local-model', undefined, THINKING_LEVEL_VALUES],
     [
-      'other providers offer the efforts the model publishes',
-      'xai/grok-3-mini',
-      effort('low', 'high'),
-      ['off', 'low', 'high'],
+      'xAI offers only the efforts its package accepts',
+      'xai/grok-4.6',
+      effort('low', 'medium', 'high', 'xhigh', 'max'),
+      ['off', 'low', 'medium', 'high', 'xhigh'],
+    ],
+    [
+      'Alibaba offers its thinking switch, not efforts its request cannot send',
+      'alibaba/qwen-plus',
+      [{ type: 'toggle' }, ...effort('low', 'high')],
+      ['off', 'high'],
+    ],
+    [
+      'a model whose thinking controls the request cannot send offers only off',
+      'mistral/magistral-x',
+      [{ type: 'toggle' }, ...effort('low')],
+      ['off'],
     ],
     ['OpenAI models listed without reasoning controls offer only off', 'openai/gpt-4o', [], ['off']],
     ['other providers listed without reasoning controls offer only off', 'xai/grok-4.20-0309-reasoning', [], ['off']],
     [
       'models that only toggle thinking offer off and one on level',
-      'zai/glm-4.6',
+      'togetherai/Qwen/Qwen3.5-9B',
       [{ type: 'toggle' }],
       ['off', 'high'],
     ],

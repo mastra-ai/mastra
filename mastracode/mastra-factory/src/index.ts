@@ -8,6 +8,7 @@ import { PosthogAnalytics, setAnalytics } from 'mastra/dist/analytics/index.js';
 
 import { create } from './create.js';
 import { redactError } from './utils/redact.js';
+import { versionTagForAnalytics } from './utils/versions.js';
 
 const pkg = JSON.parse(
   readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf8'),
@@ -21,36 +22,45 @@ const analytics = new PosthogAnalytics({
 setAnalytics(analytics);
 
 const program = new Command();
-const DEFAULT_TEMPLATE_REPO = 'https://github.com/mastra-ai/softwarefactory-template';
 
 type CreateArgs = {
-  template: string;
+  template?: string;
   platform?: boolean;
   org?: string;
   region?: string;
+  tag?: string;
 };
 
 program
   .name('create-factory')
   .description('Create a new Mastra Factory project')
   .argument('[project-name]', 'Directory name of the project')
-  .option('--template <template-name>', 'Create a project from a template (public GitHub URL)', DEFAULT_TEMPLATE_REPO)
-  .option('--no-platform', 'Skip Mastra platform sign-in, project, and Neon provisioning')
+  .option(
+    '--template <template-name>',
+    'Create a project from a template (public GitHub URL). Defaults to the platform template, or the self-hosted template with --no-platform',
+  )
+  .option('--no-platform', 'Skip Mastra platform provisioning and scaffold the self-hosted template')
   .option('--org <org>', 'Mastra organization id or name — skips the interactive org picker')
-  .option('--region <region>', 'Platform project region (eu or us); prompts when omitted')
+  .option('--region <region>', 'Platform project region (eu or us); defaults to us')
+  .option(
+    '--tag <dist-tag>',
+    'Pin the Mastra packages to the versions published under this npm dist-tag (e.g. latest, alpha)',
+  )
   .version(pkg.version, '-v, --version')
   .action(async (projectNameArg: string | undefined, args: CreateArgs) => {
     const region = args.region ? String(args.region) : undefined;
     const validRegion = region === 'eu' || region === 'us' ? region : undefined;
-    const customTemplate = args.template === DEFAULT_TEMPLATE_REPO ? undefined : args.template;
+    const versionTag = args.tag?.trim() || undefined;
+    const analyticsVersionTag = versionTagForAnalytics(versionTag);
     // Values that must never reach analytics if a failure message echoes them.
     // (redactError also covers derived variants, e.g. degit's prefix-stripped repo.)
     const sensitiveValues = [
-      customTemplate,
+      args.template,
       args.org ? String(args.org) : undefined,
       // Valid regions are already reported in args; only an invalid (arbitrary)
       // value is sensitive.
       validRegion ? undefined : region,
+      analyticsVersionTag === 'custom' ? versionTag : undefined,
       projectNameArg,
     ];
 
@@ -61,10 +71,11 @@ program
         args: {
           // Only report whether the default template was used — a custom
           // template URL could identify a private repo, so never send it.
-          default_template: args.template === DEFAULT_TEMPLATE_REPO,
+          default_template: args.template === undefined,
           no_platform: args.platform === false,
           has_org: Boolean(args.org),
           region: validRegion ?? (region ? 'invalid' : undefined),
+          version_tag: analyticsVersionTag,
         },
         execution: async () => {
           try {
@@ -75,6 +86,7 @@ program
               noPlatform: args.platform === false,
               org: args.org ? String(args.org) : undefined,
               region,
+              versionTag,
               analytics,
             });
           } catch (err) {

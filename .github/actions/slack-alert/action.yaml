@@ -1,0 +1,54 @@
+name: 'Slack alert'
+description: 'Post a message to the maintainers Slack channel. Warns instead of failing the job unless strict is set.'
+inputs:
+  token:
+    description: 'Slack bot token (SLACK_BOT_TOKEN)'
+    required: true
+  text:
+    description: 'Message text, in Slack mrkdwn'
+    required: true
+  channel:
+    # #eng-maintainer-alerts; the bot must be a member of this channel.
+    description: 'Slack channel ID'
+    required: false
+    default: 'C0CD83YFFNF'
+  strict:
+    description: "'true' fails the step when the message is not delivered, for callers that must retry later"
+    required: false
+    default: 'false'
+runs:
+  using: 'composite'
+  steps:
+    - name: Post to Slack
+      shell: bash
+      env:
+        SLACK_BOT_TOKEN: ${{ inputs.token }}
+        SLACK_CHANNEL: ${{ inputs.channel }}
+        TEXT: ${{ inputs.text }}
+        STRICT: ${{ inputs.strict }}
+      run: |
+        # Warns by default; with strict, an undelivered message fails the step.
+        undelivered() {
+          if [ "$STRICT" = "true" ]; then
+            echo "::error::$1"
+            exit 1
+          fi
+          echo "::warning::$1"
+          exit 0
+        }
+
+        if [ -z "$SLACK_BOT_TOKEN" ]; then
+          undelivered "SLACK_BOT_TOKEN is not set; skipping Slack alert."
+        fi
+
+        if ! response=$(jq -n --arg channel "$SLACK_CHANNEL" --arg text "$TEXT" '{channel: $channel, text: $text, unfurl_links: false}' \
+          | curl -sS -X POST https://slack.com/api/chat.postMessage \
+              -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+              -H 'Content-Type: application/json; charset=utf-8' \
+              --data @-); then
+          undelivered "Could not reach Slack; skipping alert."
+        fi
+
+        if [ "$(echo "$response" | jq -r .ok)" != "true" ]; then
+          undelivered "Slack alert failed: $(echo "$response" | jq -r .error)"
+        fi

@@ -7,8 +7,10 @@
  * it: Set as active / Re-authenticate… / Remove… / Back.
  */
 
-import { Box, Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
 import { theme } from '../theme.js';
+import type { MenuChrome } from './menu-chrome.js';
+import { MenuList } from './menu-list.js';
 
 export interface ManagedAccount {
   id: string;
@@ -26,8 +28,8 @@ export interface LoginAccountManagerCallbacks {
 
 type ManagerMode = 'menu' | 'account' | 'confirm-remove';
 
-export class LoginAccountManagerComponent extends Box {
-  private listContainer: Container;
+export class LoginAccountManagerComponent extends Container implements MenuChrome {
+  private list!: MenuList;
   private mode: ManagerMode = 'menu';
   private accounts: ManagedAccount[];
   private selectedIndex = 0;
@@ -37,20 +39,11 @@ export class LoginAccountManagerComponent extends Box {
   private readonly providerName: string;
 
   constructor(providerName: string, accounts: ManagedAccount[], callbacks: LoginAccountManagerCallbacks) {
-    super(2, 1, text => theme.bg('overlayBg', text));
+    super();
 
     this.providerName = providerName;
     this.accounts = accounts;
     this.callbacks = callbacks;
-
-    this.addChild(new Text(theme.fg('warning', `${providerName} accounts`)));
-    this.addChild(new Spacer(1));
-
-    this.listContainer = new Container();
-    this.addChild(this.listContainer);
-
-    this.addChild(new Spacer(1));
-    this.addChild(new Text(theme.fg('muted', 'Press Enter to select, Escape to cancel')));
 
     this.updateList();
   }
@@ -66,7 +59,7 @@ export class LoginAccountManagerComponent extends Box {
     this.updateList();
   }
 
-  private rows(): { label: string; action: () => void }[] {
+  private rows(): { label: string; description?: string; action: () => void }[] {
     if (this.mode === 'account') {
       const account = this.selectedAccount;
       if (!account) {
@@ -102,7 +95,8 @@ export class LoginAccountManagerComponent extends Box {
     }
     return [
       ...this.accounts.map(account => ({
-        label: `${account.label}${account.active ? theme.fg('success', ' ✓ active') : ''}`,
+        label: account.label,
+        description: account.active ? theme.fg('success', '✓ active') : undefined,
         action: () => {
           this.selectedAccount = account;
           this.mode = 'account';
@@ -122,51 +116,35 @@ export class LoginAccountManagerComponent extends Box {
     this.updateList();
   }
 
+  /** "Anthropic accounts", or "Anthropic accounts › work" while an account's actions are open. */
+  menuTitle(): string {
+    const open = this.mode !== 'menu' && this.selectedAccount ? ` › ${this.selectedAccount.label}` : '';
+    return `${this.providerName} accounts${open}`;
+  }
+
   private updateList(): void {
-    this.listContainer.clear();
-
-    if (this.mode === 'account' && this.selectedAccount) {
-      this.listContainer.addChild(new Text(theme.fg('text', `${this.selectedAccount.label}:`)));
-      this.listContainer.addChild(new Spacer(1));
-    }
-
+    this.clear();
     const rows = this.rows();
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      if (!row) continue;
-      const isSelected = i === this.selectedIndex;
-      const isActionRow = this.mode === 'account' || (this.mode === 'menu' && i >= this.accounts.length);
-      const text = isSelected
-        ? theme.fg('accent', `→ ${row.label}`)
-        : isActionRow
-          ? theme.fg('text', `  ${row.label}`)
-          : `  ${row.label}`;
-      this.listContainer.addChild(new Text(text));
-    }
-
+    this.list = new MenuList(
+      rows.map((row, index) => ({ value: String(index), label: row.label, description: row.description })),
+      12,
+    );
+    this.list.setSelectedIndex(this.selectedIndex);
+    this.list.onSelectionChange = item => {
+      this.selectedIndex = Number(item.value);
+    };
+    this.list.onSelect = item => rows[Number(item.value)]?.action();
+    this.list.onCancel = () => {
+      if (this.mode === 'account' || this.mode === 'confirm-remove') this.backToMenu();
+      else this.callbacks.onBack();
+    };
+    this.addChild(this.list);
     if (this.accounts.length === 0) {
-      this.listContainer.addChild(new Text(theme.fg('muted', 'No accounts registered.')));
+      this.addChild(new Text(theme.fg('muted', 'No accounts registered.'), 2, 0));
     }
   }
 
   handleInput(keyData: string): void {
-    const kb = getKeybindings();
-    const rows = this.rows();
-
-    if (kb.matches(keyData, 'tui.select.up')) {
-      this.selectedIndex = Math.max(0, this.selectedIndex - 1);
-      this.updateList();
-    } else if (kb.matches(keyData, 'tui.select.down')) {
-      this.selectedIndex = Math.min(rows.length - 1, this.selectedIndex + 1);
-      this.updateList();
-    } else if (kb.matches(keyData, 'tui.select.confirm')) {
-      rows[this.selectedIndex]?.action();
-    } else if (kb.matches(keyData, 'tui.select.cancel')) {
-      if (this.mode === 'account' || this.mode === 'confirm-remove') {
-        this.backToMenu();
-      } else {
-        this.callbacks.onBack();
-      }
-    }
+    this.list.handleInput(keyData);
   }
 }

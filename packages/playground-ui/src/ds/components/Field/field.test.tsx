@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { Checkbox } from '../Checkbox';
@@ -11,6 +12,7 @@ import { RadioGroup, RadioGroupItem } from '../RadioGroup';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
 import { Switch } from '../Switch';
 import { Textarea } from '../Textarea';
+import { TooltipProvider } from '../Tooltip';
 import {
   Field,
   FieldContent,
@@ -373,5 +375,81 @@ describe.each([
     expect(screen.getByRole(role, { name: 'Factory for Releases' })).toBeTruthy();
     expect(screen.queryByRole(role, { name: 'Releases' })).toBeNull();
     expect(screen.getByRole(role, { name: 'Reviews' })).toBeTruthy();
+  });
+});
+
+describe('FieldLabel with info', () => {
+  const renderWithInfo = (label: ReactNode = 'Display name') =>
+    render(
+      <TooltipProvider delay={0}>
+        <Field>
+          <FieldLabel info="Shown to people who pick this agent.">{label}</FieldLabel>
+          <Input />
+        </Field>
+      </TooltipProvider>,
+    );
+
+  it('keeps the label naming the control and names the icon after the label', () => {
+    renderWithInfo();
+
+    expect(screen.getByRole('textbox', { name: 'Display name' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'About Display name' })).toBeTruthy();
+  });
+
+  it('names the icon from a label built from several strings', () => {
+    const name = 'Request Context';
+    render(
+      <Field>
+        <FieldLabel info="The values every run gets.">{name} (JSON)</FieldLabel>
+        <Input />
+      </Field>,
+    );
+
+    expect(screen.getByRole('button', { name: 'About Request Context (JSON)' })).toBeTruthy();
+  });
+
+  it('describes the icon with the info for screen readers while the tooltip is closed', () => {
+    renderWithInfo();
+
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'About Display name', description: 'Shown to people who pick this agent.' }),
+    ).toBeTruthy();
+  });
+
+  it('names the icon from the rendered label when the label holds elements', () => {
+    renderWithInfo(<span>Display name</span>);
+
+    expect(screen.getByRole('button', { name: 'About Display name' })).toBeTruthy();
+  });
+
+  it('opens the tooltip on hover', async () => {
+    renderWithInfo();
+
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'About Display name' }));
+    fireEvent.mouseMove(screen.getByRole('button', { name: 'About Display name' }));
+
+    expect(await screen.findByRole('tooltip', { name: 'Shown to people who pick this agent.' })).toBeTruthy();
+  });
+
+  it('is reached with Tab and opens the tooltip on keyboard focus', async () => {
+    const user = userEvent.setup();
+    renderWithInfo();
+
+    await user.tab();
+
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'About Display name' }));
+    expect(await screen.findByRole('tooltip', { name: 'Shown to people who pick this agent.' })).toBeTruthy();
+  });
+
+  it('focuses the icon, not the control, when the icon is clicked', async () => {
+    const user = userEvent.setup();
+    renderWithInfo();
+    const icon = screen.getByRole('button', { name: 'About Display name' });
+
+    await user.click(icon);
+
+    expect(document.activeElement).toBe(icon);
+    expect(document.activeElement).not.toBe(screen.getByRole('textbox', { name: 'Display name' }));
   });
 });

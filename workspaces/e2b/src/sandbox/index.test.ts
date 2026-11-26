@@ -86,6 +86,7 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandH
     commands: {
       run: createDefaultRunMock(),
       list: vi.fn().mockResolvedValue([]),
+      kill: vi.fn().mockResolvedValue(true),
       sendStdin: vi.fn().mockResolvedValue(undefined),
     },
     files: {
@@ -171,6 +172,7 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandH
       return Promise.resolve(result);
     });
     mockSandbox.commands.list.mockResolvedValue([]);
+    mockSandbox.commands.kill.mockResolvedValue(true);
     mockSandbox.commands.sendStdin.mockResolvedValue(undefined);
     mockSandbox.files.write.mockResolvedValue(undefined);
     mockSandbox.files.read.mockResolvedValue('');
@@ -1360,6 +1362,23 @@ describe('E2BSandbox', () => {
       expect(mockSandbox.commands.sendStdin).not.toHaveBeenCalled();
     });
 
+    it('lists an exited process until its output has been read', async () => {
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+      mockSandbox.commands.list.mockResolvedValue([{ pid: 1, cmd: 'node', args: ['server.js'] }]);
+
+      const handle = await sandbox.processes.spawn('echo done');
+      await handle.wait();
+
+      expect(await sandbox.processes.list()).toEqual([
+        { pid: '1', command: 'node server.js', running: true },
+        { pid: handle.pid, command: 'echo done', running: false, exitCode: 0 },
+      ]);
+
+      await sandbox.processes.get(handle.pid);
+      expect(await sandbox.processes.list()).toEqual([{ pid: '1', command: 'node server.js', running: true }]);
+    });
+
     it('defaults cwd to the configured workingDirectory', async () => {
       const sandbox = new E2BSandbox({ workingDirectory: '/srv/app' });
       await sandbox._start();
@@ -1394,6 +1413,39 @@ describe('E2BSandbox', () => {
       const [, runOpts] = mockSandbox.commands.run.mock.calls.at(-1)!;
       expect(runOpts.cwd).toBeUndefined();
       expect(sandbox.workingDirectory).toBeUndefined();
+    });
+
+    it('runs commands as the configured user', async () => {
+      const sandbox = new E2BSandbox({ user: 'agent' });
+      await sandbox._start();
+
+      await sandbox.executeCommand('pwd');
+      expect(mockSandbox.commands.run.mock.calls.at(-1)![1]).toMatchObject({ user: 'agent' });
+
+      // Background processes run as the same user, and so does the kill script
+      // that takes their tree down (another user could not signal them).
+      const handle = await sandbox.processes.spawn('node server.js');
+      expect(mockSandbox.commands.run.mock.calls.at(-1)![1]).toMatchObject({ user: 'agent' });
+
+      // Record the call count first: re-reading the last call would find the
+      // spawn above even if kill issued no cleanup command at all.
+      const beforeKill = mockSandbox.commands.run.mock.calls.length;
+      await handle.kill();
+
+      const killCalls = mockSandbox.commands.run.mock.calls.slice(beforeKill);
+      expect(killCalls).toHaveLength(1);
+      expect(killCalls[0]![0]).toContain('pgrep -P');
+      expect(killCalls[0]![1]).toMatchObject({ user: 'agent' });
+    });
+
+    it('leaves the user unset so the template default applies', async () => {
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      await sandbox.executeCommand('pwd');
+
+      const [, runOpts] = mockSandbox.commands.run.mock.calls.at(-1)!;
+      expect(runOpts).not.toHaveProperty('user');
     });
   });
 });
@@ -1815,6 +1867,69 @@ describe('E2BSandbox Mount Configuration', () => {
       ),
     ).toBe(false);
   });
+
+  it('S3 mount uses explicit owner uid/gid and skips the id probe', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-owner',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
+        owner: { uid: 2001, gid: 2002 },
+      }),
+    } as any;
+
+    await sandbox.mount(mockFilesystem, '/data/s3-owner');
+
+    const calls = mockSandbox.commands.run.mock.calls;
+    const s3fsMountCall = calls.find(
+      (call: any[]) => call[0].includes('s3fs') && call[0].includes('/data/s3-owner') && !call[0].includes('which'),
+    );
+
+    expect(s3fsMountCall).toBeDefined();
+    expect(s3fsMountCall?.[0]).toContain('uid=2001');
+    expect(s3fsMountCall?.[0]).toContain('gid=2002');
+    // The default user's uid/gid probe is skipped when an owner is configured
+    expect(calls.some((call: any[]) => call[0] === 'id -u && id -g')).toBe(false);
+  });
+
+  it('S3 mount probes the default user uid/gid when no owner is set', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-probe',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
+      }),
+    } as any;
+
+    await sandbox.mount(mockFilesystem, '/data/s3-probe');
+
+    const calls = mockSandbox.commands.run.mock.calls;
+    const s3fsMountCall = calls.find(
+      (call: any[]) => call[0].includes('s3fs') && call[0].includes('/data/s3-probe') && !call[0].includes('which'),
+    );
+
+    expect(calls.some((call: any[]) => call[0] === 'id -u && id -g')).toBe(true);
+    expect(s3fsMountCall?.[0]).toContain('uid=1000');
+    expect(s3fsMountCall?.[0]).toContain('gid=1000');
+  });
 });
 
 /**
@@ -2153,6 +2268,65 @@ describe('E2BSandbox GCS Mount Configuration', () => {
     if (gcsfuseCall) {
       expect(gcsfuseCall[0]).toContain('--anonymous-access');
     }
+  });
+
+  it('GCS mount uses explicit owner uid/gid and skips the id probe', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-gcs-owner',
+      name: 'GCSFilesystem',
+      provider: 'gcs',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 'gcs',
+        bucket: 'test-bucket',
+        serviceAccountKey: JSON.stringify({ type: 'service_account', project_id: 'test' }),
+        owner: { uid: 3001, gid: 3002 },
+      }),
+    } as any;
+
+    await sandbox.mount(mockFilesystem, '/data/gcs-owner');
+
+    const calls = mockSandbox.commands.run.mock.calls;
+    const gcsfuseCall = calls.find(
+      (call: any[]) => call[0].includes('gcsfuse') && call[0].includes('/data/gcs-owner') && !call[0].includes('which'),
+    );
+
+    expect(gcsfuseCall).toBeDefined();
+    expect(gcsfuseCall?.[0]).toContain('--uid=3001');
+    expect(gcsfuseCall?.[0]).toContain('--gid=3002');
+    // The default user's uid/gid probe is skipped when an owner is configured
+    expect(calls.some((call: any[]) => call[0] === 'id -u && id -g')).toBe(false);
+  });
+
+  it('GCS mount probes the default user uid/gid when no owner is set', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-gcs-probe',
+      name: 'GCSFilesystem',
+      provider: 'gcs',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 'gcs',
+        bucket: 'test-bucket',
+        serviceAccountKey: JSON.stringify({ type: 'service_account', project_id: 'test' }),
+      }),
+    } as any;
+
+    await sandbox.mount(mockFilesystem, '/data/gcs-probe');
+
+    const calls = mockSandbox.commands.run.mock.calls;
+    const gcsfuseCall = calls.find(
+      (call: any[]) => call[0].includes('gcsfuse') && call[0].includes('/data/gcs-probe') && !call[0].includes('which'),
+    );
+
+    expect(calls.some((call: any[]) => call[0] === 'id -u && id -g')).toBe(true);
+    expect(gcsfuseCall?.[0]).toContain('--uid=1000');
+    expect(gcsfuseCall?.[0]).toContain('--gid=1000');
   });
 });
 

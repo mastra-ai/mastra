@@ -344,12 +344,19 @@ export function toMemoryModelId(modelId: string): string {
   return modelId.startsWith(CUSTOM_PROVIDER_PREFIX) ? modelId.slice(CUSTOM_PROVIDER_PREFIX.length) : modelId;
 }
 
-/** Preview the concrete model Memory's `'auto'` resolves to for a main-session model ID. */
-export function resolveAutoOMModelId(currentModelId?: string): string {
-  if (!currentModelId)
-    return resolveAutoModelId(undefined, { autoModels: MASTRACODE_AUTO_OM_MODELS }) ?? DEFAULT_OM_MODEL_ID;
+/**
+ * Preview the concrete model Memory's `'auto'` resolves to for a main-session model ID.
+ * Pass `canUseProvider` when credentials are not the server's environment (Factory), so
+ * the preview matches what runs pick.
+ */
+export function resolveAutoOMModelId(
+  currentModelId?: string,
+  canUseProvider?: (providerId: string) => boolean,
+): string {
+  const options = { autoModels: MASTRACODE_AUTO_OM_MODELS, canUseProvider };
+  if (!currentModelId) return resolveAutoModelId(undefined, options) ?? DEFAULT_OM_MODEL_ID;
   const memoryModelId = toMemoryModelId(currentModelId);
-  const picked = resolveAutoModelId(memoryModelId, { autoModels: MASTRACODE_AUTO_OM_MODELS });
+  const picked = resolveAutoModelId(memoryModelId, options);
   return !picked || picked === memoryModelId ? currentModelId : picked;
 }
 

@@ -165,7 +165,7 @@ describe('paste-code flow (anthropic)', () => {
     await post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
 
     expect(await seed.credentials.listCredentials('org1', 'user-b')).toEqual([]);
-    expect(await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic')).toBeUndefined();
+    expect(await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic', 'user')).toBeUndefined();
   });
 
   it('deletes the session after completion (replay returns 404)', async () => {
@@ -412,8 +412,8 @@ describe('org-scoped sign-in', () => {
       type: 'oauth',
       access: 'a-1',
     });
-    // Visible to other org members through resolution.
-    expect(await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic')).toBeDefined();
+    // Visible to other org members through factory-scoped resolution.
+    expect(await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic', 'org')).toBeDefined();
   });
 
   it('device-code poll stores an org-scoped credential when started with scope org', async () => {
