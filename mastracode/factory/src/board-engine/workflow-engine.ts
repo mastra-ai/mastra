@@ -137,7 +137,11 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     return { [FACTORY_BOARD_WORKFLOW_ID]: this.workflow };
   }
 
-  async requestMove(asked: FactoryTransitionRequest): Promise<FactoryTransitionResult> {
+  async requestMove({
+    interruptedRun: _claimed,
+    ...asked
+  }: FactoryTransitionRequest): Promise<FactoryTransitionResult> {
+    // Only a run this engine stopped itself lets a person's move past the busy card.
     const request = (await this.#interrupts(asked)) ? { ...asked, interruptedRun: true as const } : asked;
     const pending = { request } satisfies PendingInput as Extract<PendingInput, { request: unknown }>;
     await this.#ask(request, pending);

@@ -458,6 +458,12 @@ const doing = await boardEngine.describe?.({ workItemId });
 
 An engine that keeps such a record may implement two optional members: `describe(card)`, and `runPaused(binding, 'approval')`, which Factory calls when a session's run stops for a person's answer. The default engine implements neither.
 
+On a workflow board, a person's move wins over a run. When someone drags a card whose phase's run is going into another phase that runs work, the engine stops the card's runs the way Stop does, waits up to two minutes for them to end, and then commits the move. A run that hasn't ended by then is given up on and its record closed. Moves the board would refuse anyway, moves to a resting or terminal phase, and moves to another board stop nothing. The default engine still refuses such a move with `card_busy`.
+
+Deleting a card ends its run. Factory tells the engine through the optional `cardDeleted(card)`; the workflow engine answers the inputs asked before the delete, then deletes the card's `factory-board` run.
+
+A custom engine reaches the card's runs through `context.runs` (`inFlight`, `stop`, `abandon`), which Factory fills in.
+
 A custom engine that runs on workflows of its own lists them under `workflows`, and `MastraFactory` registers them the same way.
 
 ### Board tool-result rules
