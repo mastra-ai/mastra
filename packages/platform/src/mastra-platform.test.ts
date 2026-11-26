@@ -102,7 +102,7 @@ async function startPlatform() {
   });
   // A project access token carries no user, so a run must name the end user it acts for.
   app.post(`${prefix}/agents/:agentId/:run{stream|generate}`, async (c, next) => {
-    const body = await c.req.raw.clone().json();
+    const body = (await c.req.raw.clone().json()) as Record<string, unknown>;
     runs.push(body);
     if (typeof body.resourceId !== 'string') return c.json({ error: 'resourceId is required' }, 400);
     return next();
