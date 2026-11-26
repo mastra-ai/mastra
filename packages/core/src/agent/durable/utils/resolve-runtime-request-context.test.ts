@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ProcessorState } from '../../../processors/runner';
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../../../request-context';
 import { DurableExecutionFenceError, EXECUTION_SUPERSEDED_ERROR_ID } from '../execution-fence';
-import { DURABLE_CONTEXT_SEGMENT_KEY, globalRunRegistry } from '../run-registry';
+import { DURABLE_CONTEXT_SEGMENT_KEY, globalRunRegistry, refreshRunRequestTools } from '../run-registry';
 import { rebuildRunToolsFromMastra } from './resolve-runtime';
 
 /**
@@ -256,6 +256,22 @@ describe('rebuildRunToolsFromMastra request context', () => {
     } finally {
       globalRunRegistry.delete(runId);
     }
+  });
+
+  it('keeps a withheld tool withheld when one resume omits it and a later resume returns it', () => {
+    const approve = { id: 'approve', built: 'alice' } as any;
+    const secret = { id: 'secret', built: 'alice' } as any;
+    // A processor withheld `secret` from the tools the model is offered.
+    const entry = { tools: { approve }, requestTools: { approve, secret } } as any;
+
+    refreshRunRequestTools(entry, { approve: { id: 'approve', built: 'bob' } as any }, new RequestContext());
+    refreshRunRequestTools(
+      entry,
+      { approve: { id: 'approve', built: 'carol' } as any, secret: { id: 'secret', built: 'carol' } as any },
+      new RequestContext(),
+    );
+
+    expect(entry.tools).toEqual({ approve: { id: 'approve', built: 'carol' } });
   });
 
   it("drops request-built tools the resuming caller's build omits, keeping processor replacements", async () => {

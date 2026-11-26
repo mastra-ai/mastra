@@ -135,7 +135,8 @@ export function getEntrySegment(entry: RunRegistryEntry | undefined, runId: stri
  * Swap in `requestTools`, rebuilt for a new caller, wherever the entry still holds a tool built for
  * an earlier request, drop request-built tools the new build omits, and rebind processor-added tools
  * to `requestContext`. Tools a processor added, replaced or withheld are kept as the processor left
- * them (#25960, #27544).
+ * them (#25960, #27544). A withheld tool the new build omits stays recorded, so a later build that
+ * returns it again still finds it withheld.
  */
 export function refreshRunRequestTools(
   entry: RunRegistryEntry,
@@ -155,10 +156,17 @@ export function refreshRunRequestTools(
     }
     return next;
   };
+  // Withheld tools the new build omits stay in the baseline; otherwise a later build that returns
+  // them again would no longer see them as withheld and add them back.
+  const withheld = Object.fromEntries(
+    Object.entries(entry.requestTools ?? {}).filter(
+      ([name]) => !(name in requestTools) && !(name in (entry.tools ?? {})),
+    ),
+  );
   entry.tools = rebindProcessorTools(refresh(entry.tools ?? {}, entry.requestTools), requestContext);
   if (entry.baseTools)
     entry.baseTools = rebindProcessorTools(refresh(entry.baseTools, entry.requestTools), requestContext);
-  entry.requestTools = requestTools;
+  entry.requestTools = { ...withheld, ...requestTools };
 }
 
 /**
