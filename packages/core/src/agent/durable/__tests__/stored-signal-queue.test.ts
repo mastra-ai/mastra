@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Memory } from '../../../../../memory/src';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
-import type { Event } from '../../../events/types';
+import type { Event, EventCallback, SubscribeOptions } from '../../../events/types';
 import { Mastra } from '../../../mastra';
 import type { MastraMemory } from '../../../memory/memory';
 import { MockMemory } from '../../../memory/mock';
@@ -24,6 +24,7 @@ import { createTool } from '../../../tools';
 import { warnUnsharedAgentSignals } from '../../../workflows/evented/setup-warning';
 import { Agent } from '../../agent';
 import { createSignal } from '../../signals';
+import { agentThreadStreamTopic } from '../../thread-stream-topic';
 import { createEventedAgent } from '../create-evented-agent';
 import { globalRunRegistry } from '../run-registry';
 import { closeStoredSignalRun, storedSignalDrain } from '../stored-signal-drain';
@@ -49,7 +50,7 @@ type SignalsCall =
 class ObservedMemory extends InMemoryMemory {
   readonly calls: SignalsCall[] = [];
   /** Runs before each insert reaches the store. */
-  beforeEnqueue?: (message: MastraDBMessage) => Promise<void>;
+  beforeEnqueue?: (message: MastraDBMessage, toRunId?: string) => Promise<void>;
   /** The next insert fails before writing. */
   failNextEnqueue = false;
   /** Runs before each claim reaches the store. */
@@ -67,7 +68,7 @@ class ObservedMemory extends InMemoryMemory {
     message: MastraDBMessage;
     toRunId?: string;
   }): Promise<PendingSignalEnqueueResult> {
-    await this.beforeEnqueue?.(args.message);
+    await this.beforeEnqueue?.(args.message, args.toRunId);
     if (this.failNextEnqueue) {
       this.failNextEnqueue = false;
       throw new Error('memory storage unavailable');
@@ -132,6 +133,29 @@ class BrokerLikePubSub extends EventEmitterPubSub {
   }
   override get redeliversUnacked(): boolean {
     return true;
+  }
+}
+
+/** A broker-like pubsub that reports each delivery its subscriber failed, which a broker delivers again. */
+class UnackedReportingPubSub extends BrokerLikePubSub {
+  onUnacked?: (event: Event) => void;
+  readonly #wrapped = new Map<EventCallback, EventCallback>();
+
+  override async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
+    let wrapped = this.#wrapped.get(cb);
+    if (!wrapped) {
+      wrapped = (event, ack, nack) => {
+        const result = cb(event, ack, nack);
+        void Promise.resolve(result).catch(() => this.onUnacked?.(event));
+        return result;
+      };
+      this.#wrapped.set(cb, wrapped);
+    }
+    return super.subscribe(topic, wrapped, options);
+  }
+
+  override async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
+    return super.unsubscribe(topic, this.#wrapped.get(cb) ?? cb);
   }
 }
 
@@ -560,6 +584,52 @@ describe('signals of a running evented agent kept in memory storage', () => {
     const followUps = prompts.slice(2).filter(prompt => !textOf(prompt).includes(BARRIER));
     expect(followUps).toHaveLength(1);
     expect(occurrences(followUps[0], 'AFTER_CLOSE_SEND')).toBe(1);
+    expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
+  });
+
+  it('stores a forwarded signal for the next turn on redelivery when its first store for the thread failed', async () => {
+    const memoryStore = new ObservedMemory();
+    const pubsub = new UnackedReportingPubSub();
+    const { scope, prompts, toolGate, start, afterFollowUps } = setup({ memoryStore, pubsub });
+    const { stream, done } = await start();
+    // The executing process closed the run before the forwarded signal was stored, as finalize does before FINISH.
+    await memoryStore.closeSignalRun({ threadId: scope.threadId, runId: stream.runId, consumedIds: [] });
+    const signal = createSignal({ type: 'user', contents: 'FORWARDED_AFTER_CLOSE' });
+    // The first insert for the thread, the one after the run answered closed, fails.
+    memoryStore.beforeEnqueue = async (message, toRunId) => {
+      if (message.id !== signal.id || toRunId) return;
+      memoryStore.beforeEnqueue = undefined;
+      throw new Error('memory storage unavailable');
+    };
+    // A replica that does not hold the run forwards the signal without storing it. The broker delivers the event
+    // again once its first delivery failed.
+    const event = {
+      type: 'signal-enqueued',
+      runId: stream.runId,
+      data: {
+        type: 'signal-enqueued',
+        runId: stream.runId,
+        signal: JSON.parse(JSON.stringify(signal)),
+        sourceId: 'another-replica',
+      },
+    };
+    const topic = agentThreadStreamTopic(scope.resourceId, scope.threadId);
+    const unacked = gate();
+    pubsub.onUnacked = failed => {
+      if (failed.data?.signal?.id === signal.id) unacked.release();
+    };
+    await pubsub.publish(topic, event);
+    await unacked.promise;
+    await pubsub.publish(topic, event);
+    const followUpsDone = afterFollowUps();
+    toolGate.release();
+    await done;
+    await followUpsDone;
+
+    expect(textOf(prompts[1])).not.toContain('FORWARDED_AFTER_CLOSE');
+    const followUps = prompts.slice(2).filter(prompt => !textOf(prompt).includes(BARRIER));
+    expect(followUps).toHaveLength(1);
+    expect(occurrences(followUps[0], 'FORWARDED_AFTER_CLOSE')).toBe(1);
     expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
   });
 
