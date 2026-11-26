@@ -71,9 +71,7 @@ describe('buildFilterQuery primitive shorthand delegates to $eq', () => {
   it('keeps $ne: null as present and non-null', () => {
     const { sql, values } = buildFilterQuery({ price: { $ne: null } });
 
-    expect(sql).toBe(
-      `WHERE (json_type(metadata, '$.price') IS NOT NULL AND json_type(metadata, '$.price') != 'null')`,
-    );
+    expect(sql).toBe(`WHERE (json_type(metadata, '$.price') IS NOT NULL AND json_type(metadata, '$.price') != 'null')`);
     expect(values).toEqual([]);
   });
 });

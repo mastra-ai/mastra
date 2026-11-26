@@ -622,12 +622,7 @@ describe('LibSQLVector JSON filter type safety', () => {
   describe('numeric ranges', () => {
     it('keeps range operators scoped to numeric values', async () => {
       await expect(queryIds({ n: { $gt: 2 } })).resolves.toEqual(['false-str', 'one-int', 'zero-int']);
-      await expect(queryIds({ n: { $gte: 2 } })).resolves.toEqual([
-        'false-str',
-        'one-int',
-        'true-bool',
-        'zero-int',
-      ]);
+      await expect(queryIds({ n: { $gte: 2 } })).resolves.toEqual(['false-str', 'one-int', 'true-bool', 'zero-int']);
       await expect(queryIds({ n: { $lt: 3 } })).resolves.toEqual(['false-bool', 'true-bool']);
       await expect(queryIds({ n: { $lte: 3 } })).resolves.toEqual(['false-bool', 'true-bool', 'zero-int']);
       // Numeric-string operands are still coerced against numeric columns.
