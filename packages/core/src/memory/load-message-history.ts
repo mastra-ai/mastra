@@ -85,7 +85,7 @@ async function partitionMessages(
   limits: HistoryLimits,
   tokenCounter?: TokenCounter,
   initialTokens = 0,
-): Promise<LoadMessageHistoryResult & { overflowReason?: 'messages' | 'tokens' }> {
+): Promise<LoadMessageHistoryResult & { overflowReason?: 'messages' | 'tokens'; loadedTokens: number }> {
   const maxTokens = limits.maxTokens === undefined ? undefined : limits.maxTokens - (limits.atMaxRemoveTokens ?? 0);
   if (maxTokens !== undefined && !tokenCounter) {
     throw new Error('A token counter is required to load token-limited message history');
@@ -93,6 +93,7 @@ async function partitionMessages(
 
   let messageCount = 0;
   let tokenCount = initialTokens;
+  let loadedTokens = initialTokens;
   let reachedLimit = false;
   let overflowReason: 'messages' | 'tokens' | undefined;
   const retainedIds = new Set<string>();
@@ -102,6 +103,7 @@ async function partitionMessages(
     if (tokenCounter) {
       for (const message of group) groupTokens += await tokenCounter.countMessage(message);
     }
+    loadedTokens += groupTokens;
     const exceedsMessageLimit = limits.maxMessages !== undefined && messageCount + group.length > limits.maxMessages;
     const exceedsTokenLimit = maxTokens !== undefined && tokenCount + groupTokens > maxTokens;
 
@@ -118,7 +120,7 @@ async function partitionMessages(
 
   const messages = messagesDescending.filter(message => retainedIds.has(message.id)).reverse();
   const overflow = messagesDescending.filter(message => !retainedIds.has(message.id)).reverse();
-  return { messages, overflow, overflowReason };
+  return { messages, overflow, overflowReason, loadedTokens };
 }
 
 function laterDate(left: Date | undefined, right: Date | undefined): Date | undefined {
@@ -196,23 +198,32 @@ export async function loadMessageHistory(args: LoadMessageHistoryArgs): Promise<
 
     const oldestPageMessage = result.messages.at(-1);
     const oldestTimestamp = oldestPageMessage?.createdAt.getTime();
+    // Overflow is returned so the token limiter can trim it and record a boundary, which it only does
+    // above maxTokens. Stopping at the trim target would leave the history start sliding every run.
     const crossedCutoff =
-      cutoffTimestamp !== undefined && oldestTimestamp !== undefined && oldestTimestamp < cutoffTimestamp;
+      cutoffTimestamp !== undefined &&
+      oldestTimestamp !== undefined &&
+      oldestTimestamp < cutoffTimestamp &&
+      (!args.includeOverflow ||
+        partitioned.overflowReason !== 'tokens' ||
+        partitioned.loadedTokens > (args.maxTokens ?? 0));
     const reachedBoundary =
       args.boundary !== undefined &&
       oldestTimestamp !== undefined &&
       oldestTimestamp < new Date(args.boundary.createdAt).getTime();
 
     if (!result.hasMore || crossedCutoff || reachedBoundary || result.messages.length === 0) {
-      return args.includeOverflow && partitioned.overflowReason === 'tokens'
-        ? partitioned
-        : { messages: partitioned.messages, overflow: [] };
+      return {
+        messages: partitioned.messages,
+        overflow: args.includeOverflow && partitioned.overflowReason === 'tokens' ? partitioned.overflow : [],
+      };
     }
 
     if (oldestTimestamp === undefined) {
-      return args.includeOverflow && partitioned.overflowReason === 'tokens'
-        ? partitioned
-        : { messages: partitioned.messages, overflow: [] };
+      return {
+        messages: partitioned.messages,
+        overflow: args.includeOverflow && partitioned.overflowReason === 'tokens' ? partitioned.overflow : [],
+      };
     }
 
     if (end?.getTime() === oldestTimestamp && added === 0) {
