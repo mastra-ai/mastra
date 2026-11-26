@@ -125,7 +125,11 @@ export class BaseResource {
           return response as unknown as T;
         }
 
-        const data = await response.json();
+        const responseText = await response.text();
+        if (responseText.length === 0) {
+          return undefined as T;
+        }
+        const data = JSON.parse(responseText);
         return data as T;
       } catch (error) {
         lastError = error as Error;
