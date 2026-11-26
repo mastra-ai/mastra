@@ -437,6 +437,27 @@ const factory = new MastraFactory({
 
 A card's run takes its card from its run id, and a resume carries only an input id. The move itself and its answer stay in the process that asked for it, so the run stores nothing but its id, and a run started or resumed through Mastra's workflow API, which the engine didn't ask for, moves nothing. The process that asks for a move applies it, so this engine runs workflows on the default engine only. A move must not wait on another move of the same card, since that card's inputs are applied one at a time.
 
+The card's run also records what the card is doing, and `describe` reads it back:
+
+```typescript
+const doing = await boardEngine.describe?.({ workItemId });
+// { state: 'probing', phase: 'execute', probes: 1, lastOutcome: 'advance' }
+```
+
+| State               | The card                                                                           |
+| ------------------- | ---------------------------------------------------------------------------------- |
+| `resting`           | Sits in a resting phase until someone moves it.                                    |
+| `awaiting_start`    | Sits in a working phase whose run waits for a person to start it.                  |
+| `running`           | Has its phase's run queued or going.                                               |
+| `probing`           | Had a run end without an outcome; the phase runs once more.                        |
+| `awaiting_approval` | Has a session waiting on a person's answer: a submitted plan, or a held tool call. |
+| `needs_attention`   | Had two runs end without an outcome. `reason` says so, and a person takes it on.   |
+| `terminal`          | Sits in a terminal phase.                                                          |
+
+`phase` is the phase the state was recorded in, `probes` counts the runs that ended there without an outcome, and `lastOutcome` is the last outcome a run ended a phase with. The record holds nothing else: no actor, organization or card content. `describe` answers nothing for a card no input was asked of yet. A run end told more than once counts once, and the count starts over when the card changes phase. A person starting a waiting run isn't an input yet, so the card says `awaiting_start` until that run pauses or ends.
+
+An engine that keeps such a record may implement two optional members: `describe(card)`, and `runPaused(binding, 'approval')`, which Factory calls when a session's run stops for a person's answer. The default engine implements neither.
+
 A custom engine that runs on workflows of its own lists them under `workflows`, and `MastraFactory` registers them the same way.
 
 ### Board tool-result rules
