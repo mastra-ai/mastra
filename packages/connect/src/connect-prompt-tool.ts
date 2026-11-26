@@ -216,8 +216,34 @@ export function buildConnectPromptTool({
           message: `${name} could not be connected: ${error}`,
           error,
         });
-        if (!requested) return failed('It is no longer available to connect.');
         const previous = agent?.suspendPayload as ChannelConnectPromptPayload | undefined;
+        const toolCallId = agent!.toolCallId;
+        const pause = async (next: Omit<ChannelConnectPromptPayload, keyof ConnectPromptPayload>) => {
+          await agent!.suspend({ ...payload, ...next } satisfies ChannelConnectPromptPayload);
+          return payload;
+        };
+        const run = getChannelRun(context?.requestContext);
+        const refuse = async () => {
+          if (!run?.actor) return;
+          await run.thread.postEphemeral(run.actor.userId, NOT_OWNER_NOTICE, { fallbackToDM: false }).catch(() => null);
+        };
+
+        // This toolset reads the platform for its own resource only. Resolved
+        // for someone other than the conversation's owner (a per-request scope
+        // that follows the clicker), it can't tell how the owner's sign-in is
+        // going, so only Cancel may end the call.
+        const owner = agent?.resourceId ?? resourceId;
+        if (resourceId !== owner) {
+          if (resumed.action === 'cancel') return failed(CONNECT_CANCELLED_ERROR);
+          await refuse();
+          return pause({
+            connectionId: previous?.connectionId,
+            expiresAt: previous?.expiresAt,
+            channelCard: previous?.channelCard ?? connectPromptCard(toolCallId, name),
+          });
+        }
+
+        if (!requested) return failed('It is no longer available to connect.');
         if (payload.providers[0]?.connected) {
           const settled = connections.find(
             connection =>
@@ -228,11 +254,6 @@ export function buildConnectPromptTool({
         }
         if (resumed.action === 'cancel') return failed(CONNECT_CANCELLED_ERROR);
 
-        const toolCallId = agent!.toolCallId;
-        const pause = async (next: Omit<ChannelConnectPromptPayload, keyof ConnectPromptPayload>) => {
-          await agent!.suspend({ ...payload, ...next } satisfies ChannelConnectPromptPayload);
-          return payload;
-        };
         const waiting = (
           text: string,
           signIn: Pick<ChannelConnectPromptPayload, 'connectionId' | 'expiresAt'> | undefined,
@@ -255,17 +276,9 @@ export function buildConnectPromptTool({
         }
 
         // Connect: only the person the conversation belongs to may start a
-        // sign-in, since the account they connect serves this resource. The
-        // toolset's scope must be the conversation's too: one resolved per
-        // request from the channel's actor would otherwise follow the clicker.
-        const run = getChannelRun(context?.requestContext);
-        const owner = agent?.resourceId ?? resourceId;
-        if (!run?.actor || resourceId !== owner || run.actorResourceId !== owner) {
-          if (run?.actor) {
-            await run.thread
-              .postEphemeral(run.actor.userId, NOT_OWNER_NOTICE, { fallbackToDM: false })
-              .catch(() => null);
-          }
+        // sign-in, since the account they connect serves this resource.
+        if (!run?.actor || run.actorResourceId !== owner) {
+          await refuse();
           return pause({ channelCard: connectPromptCard(toolCallId, name) });
         }
         // Only a sign-in the user got a link for decides what I've connected
@@ -277,8 +290,13 @@ export function buildConnectPromptTool({
           if (await sendPrivately(run, name, link)) {
             signIn = { connectionId: session.connectionId, expiresAt: link.expiresAt };
           }
-        } catch {
+        } catch (error) {
           // The platform couldn't start a sign-in here; the app still can.
+          // Its errors carry the status and reason, never the link.
+          context?.mastra?.getLogger?.()?.warn('request_connection could not start a sign-in', {
+            provider: requested.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
         return waiting(
           signIn

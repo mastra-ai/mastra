@@ -199,6 +199,8 @@ async function setup(
     sessionsFail?: boolean;
     /** Who may click; defaults to anyone so the connect tool's own ownership check is under test. */
     toolApprovers?: 'anyone' | 'requester';
+    /** Who starts the thread. */
+    author?: typeof alice;
   } = {},
 ) {
   const platform = fakePlatform({ expiresAt: options.expiresAt, sessionsFail: options.sessionsFail });
@@ -275,7 +277,7 @@ async function setup(
     formatted: { type: 'root', children: [] },
     raw: {},
     attachments: [],
-    author: alice,
+    author: options.author ?? alice,
     metadata: { dateSent: new Date(), edited: false },
   });
   await vi.waitFor(() => expect(shownActions()).toEqual(['connect', 'cancel']), { timeout: 5000 });
@@ -357,6 +359,9 @@ describe('request_connection in a channel thread', () => {
     await t.click('connect', bob);
 
     expect(t.platform.sessionsCreated()).toBe(0);
+    expect(t.recorded.filter(entry => entry.kind === 'ephemeral')).toEqual([
+      expect.objectContaining({ userId: bob.userId, body: expect.stringContaining('Only the person') }),
+    ]);
     expect(t.shownActions()).toEqual(['connect', 'cancel']);
 
     await t.click('connect');
@@ -438,6 +443,49 @@ describe('request_connection in a channel thread', () => {
 
     expect(t.platform.sessionsCreated()).toBe(1);
     expect(t.shownActions()).toEqual(['check', 'cancel']);
+  });
+
+  it("doesn't let another member's own connection finish the owner's call", async () => {
+    const t = await setup({ scopeToActor: true });
+    await t.click('connect');
+    t.platform.rows.push({
+      id: 'c_bob',
+      integrationId: 'linear',
+      status: 'active',
+      resourceId: 'slack:U-BOB',
+      connectedByUserId: null,
+      connectedAt: null,
+      createdAt: '2026-11-26T00:00:00Z',
+      accountLabel: null,
+    });
+    await t.click('check', bob);
+
+    expect(t.replies()).toEqual([]);
+    expect(t.shownActions()).toEqual(['check', 'cancel']);
+    expect(t.cards().at(-1)!.body).toContain('I sent you a private link to connect Linear.');
+
+    // Alice's sign-in is still the one I've connected looks at.
+    t.platform.settle('failed');
+    await t.click('check');
+    await vi.waitFor(() => expect(t.replies()).toHaveLength(1));
+    expect(t.replies()[0]).toContain('The sign-in did not finish.');
+  });
+
+  it('still lets a member who may answer the card cancel it when the toolset follows them', async () => {
+    const t = await setup({ scopeToActor: true });
+    await t.click('cancel', bob);
+
+    await vi.waitFor(() => expect(t.replies()).toHaveLength(1));
+    expect(t.replies()[0]).toContain('The user cancelled connecting.');
+  });
+
+  it("starts no sign-in in someone else's thread with a toolset scoped to another user", async () => {
+    // The toolset serves slack:U-ALICE, but Bob started this conversation.
+    const t = await setup({ author: bob, toolApprovers: 'requester' });
+    await t.click('connect', bob);
+
+    expect(t.platform.sessionsCreated()).toBe(0);
+    expect(t.shownActions()).toEqual(['connect', 'cancel']);
   });
 
   it("keeps waiting when I've connected is pressed before the sign-in finished", async () => {
