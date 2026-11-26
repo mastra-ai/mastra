@@ -35,7 +35,14 @@ import type { InngestEngineType } from './types';
 // Statuses a cancel can still apply to. A finished run keeps its final status
 // (success, failed, canceled, tripwire, bailed), but cancel must still cover a
 // live run that is starting or blocked waiting for a resume.
-const CANCELABLE_RUN_STATUSES: WorkflowRunStatus[] = ['running', 'pending', 'waiting', 'suspended', 'paused', 'skipped'];
+const CANCELABLE_RUN_STATUSES: WorkflowRunStatus[] = [
+  'running',
+  'pending',
+  'waiting',
+  'suspended',
+  'paused',
+  'skipped',
+];
 
 export class InngestRun<
   TEngineType = InngestEngineType,
