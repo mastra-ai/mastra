@@ -12,7 +12,7 @@ Observability alerts and platform alerts both send to the same destinations, but
 | Kind | Watches | Opens when |
 | - | - | - |
 | Observability alert | Traces, spans, scores, and custom metrics that your application sends to [Mastra Platform Observability](/docs/mastra-platform/observability/overview) | A measured value, such as an error rate or a day's cost, crosses a threshold you set |
-| Platform alert | Deploys, services, and usage of projects that run on Mastra platform | An event happens, such as a failed production deploy |
+| Platform alert | Deploys, services, and usage of projects that run on Mastra platform | An event happens, such as a failed production deploy or when your server returns 4xx or 5xx status codes |
 
 To be told about both an agent's error rate and a failed deploy, create one alert of each kind and point both at the same destination.
 
@@ -21,7 +21,7 @@ This page explains the settings that decide whether an alert is useful or noisy,
 ## Before you begin
 
 - Use an organization admin account. Members and viewers can see alerts and destinations, but only admins can create, change, close, or delete them.
-- Use a Starter plan or higher. On the Free plan, creating an alert prompts you to upgrade. Your plan caps how many observability alerts can be enabled at once. Platform alerts have no cap. See [pricing](https://mastra.ai/pricing).
+- Use a Starter plan or higher. On the Free plan, creating an alert prompts you to upgrade. See [pricing](https://mastra.ai/pricing).
 - For observability alerts, send traces to [Mastra Platform Observability](/docs/mastra-platform/observability/overview). The backtest needs a day or two of data to show whether a threshold is useful.
 
 ## How alerts run
@@ -38,14 +38,14 @@ An alert belongs to the organization or to one project. Create it on the organiz
 
 ## Choose what to watch
 
-The **"Watch"** field decides what each check counts. Picking the right one matters more than any other setting.
+Inside an Observability alert, the **"Watch"** field decides what each check counts. Picking the right one matters more than any other setting.
 
 | Watch | Counts | Use it for |
 | - | - | - |
 | Traces | One item per request, described by its root span, usually the agent or workflow run that handled the request | Whether requests complete, and what each request costs in time, tokens, and money |
 | Spans | Every step inside a request: agent runs, model calls, tool calls, processors, workflow steps. Filter by span type to pick one kind. | Whether one part of your system, such as a tool or a model, is slow or failing |
 | Scores | Results from your scorers | Quality regressions, such as an eval score dropping |
-| Custom metrics | Metrics that your application records | Anything else you measure yourself |
+| [Custom metrics](/docs/observability/metrics/overview#emit-custom-metrics) | Metrics that your application records | Anything else you measure yourself |
 
 The difference between traces and spans matters most for errors. A failed tool call is a failed span, but the agent can often recover: it retries, uses another tool, or answers without it. A failed trace means the request itself didn't complete. Alert on traces, or on spans of type `agent_run`, when users are affected. Alert on spans of type `tool_call` to find a tool that breaks, even when agents work around it.
 
@@ -85,9 +85,18 @@ For example, an alert opens when the error rate is above 5%. With a recovery lev
 
 ### Wait for late data
 
-Under **"Advanced"**, **"Wait for late data"** makes each check skip the newest data. Some exporters send spans in batches. A check that runs before a batch arrives sees too little data: an error rate can look too high, or a count too low.
+Spans can reach Mastra several seconds after they happen. Mastra saves incoming spans in batches, and most exporters, including Mastra's own, also send them in batches. How late spans arrive depends on your exporter and its settings. A check that runs before they arrive counts too few spans, and totals such as runs, tokens, or cost look lower than they are.
 
-Keep it at "None" unless the alert opens and closes again within a few minutes without a real cause. Then choose the shortest delay that covers how late your spans arrive, such as 1m or 2m. With 2m and a 15-minute window, the 10:15 check reads 09:58 to 10:13. Checks still run every five minutes. A longer delay gives data more time to arrive, but delays every alert by the same amount.
+You can recognize this when an alert opens and then closes again at the next check, although nothing changed. The first check counted the latest minutes before all their spans had arrived. By the next check, five minutes later, they had arrived and the value was back to normal.
+
+**"Wait for late data"**, under **"Advanced"**, ends each check's window a little earlier. The check then counts only spans that had time to arrive. Checks still run every five minutes, and the window keeps its length:
+
+| "Wait for late data" | The 10:15 check of a 15-minute window reads |
+| - | - |
+| None | 10:00 to 10:15 |
+| 2m | 09:58 to 10:13 |
+
+In exchange, the alert also notices a rising error rate or cost later by the same amount. Keep "None" unless an alert opens and closes by itself like this. Then choose the shortest delay that stops it, starting with 1m.
 
 ## Related
 
