@@ -104,7 +104,12 @@ async function main() {
   const observations = new Map<string, { detach: () => void }>();
 
   async function stream(cmd: any) {
-    const run = await durable.stream(cmd.prompt, { maxSteps: 5, requireToolApproval: !!cmd.requireToolApproval });
+    const memory = cmd.threadId ? { thread: cmd.threadId, resource: 'queue-restart-test' } : undefined;
+    const run = await durable.stream(cmd.prompt, {
+      maxSteps: 5,
+      requireToolApproval: !!cmd.requireToolApproval,
+      memory,
+    });
     emit({ type: 'run', runId: run.runId });
     let finishReason: string | undefined;
     for await (const chunk of run.fullStream) {
@@ -171,6 +176,22 @@ async function main() {
     stream,
     approve,
     observe,
+    async queue(cmd) {
+      const resourceId = 'queue-restart-test';
+      const queued = base.queueMessage(cmd.prompt, {
+        threadId: cmd.threadId,
+        resourceId,
+        ifIdle: {
+          streamOptions: {
+            runId: cmd.runId,
+            memory: { thread: cmd.threadId, resource: resourceId },
+            onFinish: () => emit({ type: 'queued-finished', runId: cmd.runId }),
+          },
+        },
+      });
+      const receipt = await queued.accepted;
+      emit({ type: 'queue-receipt', action: receipt.action, runId: 'runId' in receipt ? receipt.runId : undefined });
+    },
     async followUpAtFinish(cmd) {
       const releaseLease = redisPubsub.releaseLease.bind(redisPubsub);
       const acquireLease = redisPubsub.acquireLease.bind(redisPubsub);
@@ -268,6 +289,15 @@ async function main() {
         await new Promise(resolve => setTimeout(resolve, 50));
       }
       throw new Error(`No suspended checkpoint for ${cmd.runId}`);
+    },
+    async waitForThreadLeaseExpiry(cmd) {
+      const key = `queue-restart-test\u0000${cmd.threadId}`;
+      const deadline = Date.now() + 20_000;
+      while (await redisPubsub.getLeaseOwner(key)) {
+        if (Date.now() >= deadline) throw new Error(`Thread lease did not expire for ${cmd.threadId}`);
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      emit({ type: 'thread-lease-expired' });
     },
     release: () => releaseGate(),
     detach: cmd => observations.get(cmd.id)?.detach(),
