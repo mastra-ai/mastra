@@ -6765,58 +6765,7 @@ export class AgentThreadStreamRuntime {
             // This follow-up never started, so a later check may start one with the same input.
             state.storedFollowUpInputs.get(key)?.delete(signal.id);
             if (!winnerRunId) return;
-            // A winner that reads this store claims the rows itself. One whose store can't be compared here leaves
-            // them pending too: it is the signal run of its own store, normally this one. A winner known not to read
-            // this store gets them through its holder, each row deleted only once its forward was published.
-            const reads = await this.#winnerReadsStore(state, previousRun.agent, winnerRunId, key, store);
-            if (reads === 'unknown') {
-              previousRun.agent
-                .__getLogger?.()
-                ?.debug?.(
-                  "Left the signals an ended run left pending: the run holding the thread may read another store, and this process can't tell",
-                  { runId: previousRun.runId, winnerRunId },
-                );
-            }
-            if (reads !== 'other') return;
-            await this.#writeStoredSignals(state, key, async () => {
-              const pending = new Set(
-                (await store.store.listPendingSignals({ threadId: store.threadId })).map(row => row.id),
-              );
-              const ids = state.locallyQueuedSignalIdsByThread.get(key);
-              for (const leftover of leftovers.filter(({ id }) => pending.has(id))) {
-                // Echoes of the original send stay suppressed, but this forward must be taken if this runtime later
-                // holds that run.
-                if (ids?.has(leftover.id)) ids.set(leftover.id, winnerRunId);
-                try {
-                  await this.#publishAndWait(pubsub, key, {
-                    type: 'signal-enqueued',
-                    runId: winnerRunId,
-                    signal: this.#serializeSignal(leftover),
-                    sourceId: this.#getSourceId(),
-                  });
-                } catch (error) {
-                  previousRun.agent
-                    .__getLogger?.()
-                    ?.warn?.(
-                      'Could not hand the signals an ended run left to the run holding the thread; they stay pending',
-                      { runId: previousRun.runId, winnerRunId, signalId: leftover.id, error },
-                    );
-                  return;
-                }
-                try {
-                  await store.store.cancelPendingSignals({ threadId: store.threadId, ids: [leftover.id] });
-                } catch (error) {
-                  previousRun.agent
-                    .__getLogger?.()
-                    ?.warn?.('Could not delete a signal handed to the run holding the thread; it stays pending', {
-                      runId: previousRun.runId,
-                      winnerRunId,
-                      signalId: leftover.id,
-                      error,
-                    });
-                }
-              }
-            });
+            await this.#handLeftoversToWinner(state, pubsub, key, previousRun, store, leftovers, winnerRunId);
             return;
           }
           return this.#drainStoredLeftovers(
@@ -6883,6 +6832,98 @@ export class AgentThreadStreamRuntime {
     if (await this.#drainPendingIdleSignals(state, pubsub, key, leaseRunId)) return;
     if (leaseRunId === previousRun.runId) this.#releaseEndedStoredRun(state, pubsub, key, previousRun);
     else this.#releaseThreadLease(pubsub, key, leaseRunId);
+  }
+
+  /**
+   * The rows an ended run left, once `winnerRunId` won the thread's lease
+   * over this check's follow-up. A winner that reads this store claims them
+   * itself. One whose store can't be compared here leaves them pending too:
+   * it is the signal run of its own store, normally this one. A winner known
+   * not to read this store gets them through its holder, one row at a time,
+   * in order, until one can't be handed over. Never rejects: whatever fails
+   * leaves the rows pending.
+   */
+  async #handLeftoversToWinner(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    previousRun: EndedThreadRun,
+    store: ThreadSignalsStore,
+    leftovers: CreatedAgentSignal[],
+    winnerRunId: string,
+  ): Promise<void> {
+    const logger = previousRun.agent.__getLogger?.();
+    const context = { runId: previousRun.runId, winnerRunId };
+    try {
+      const reads = await this.#winnerReadsStore(state, previousRun.agent, winnerRunId, key, store);
+      if (reads === 'unknown') {
+        logger?.debug?.(
+          "Left the signals an ended run left pending: the run holding the thread may read another store, and this process can't tell",
+          context,
+        );
+      }
+      if (reads !== 'other') return;
+      await this.#writeStoredSignals(state, key, async () => {
+        const rows = new Map(
+          (await store.store.listPendingSignals({ threadId: store.threadId })).map(row => [row.id, row]),
+        );
+        const ids = state.locallyQueuedSignalIdsByThread.get(key);
+        for (const leftover of leftovers) {
+          const row = rows.get(leftover.id);
+          if (!row) continue;
+          // Put back as it was, with its id and `createdAt`, directly: this write already holds the chain. Writes
+          // nothing when the row is still there.
+          const keepPending = async (error: unknown) => {
+            try {
+              await store.store.enqueuePendingSignal({ message: row });
+            } catch (restoreError) {
+              logger?.error?.(
+                'Could not hand a signal an ended run left to the run holding the thread, nor keep it pending; it is lost',
+                { ...context, signalId: leftover.id, error, restoreError },
+              );
+              return;
+            }
+            logger?.warn?.(
+              'Could not hand the signals an ended run left to the run holding the thread; they stay pending',
+              { ...context, signalId: leftover.id, error },
+            );
+          };
+          // Deleted before the forward is published: when the winner's holder stores the forward in this store,
+          // a row still there makes its insert write nothing, and a delete after it would remove the signal.
+          let deleted: string[];
+          try {
+            deleted = await store.store.cancelPendingSignals({ threadId: store.threadId, ids: [leftover.id] });
+          } catch (error) {
+            // A delete whose write landed and whose answer was lost left no row.
+            await keepPending(error);
+            return;
+          }
+          // A run claimed it, or it was cancelled, since the list.
+          if (!deleted.includes(leftover.id)) continue;
+          // Echoes of the original send stay suppressed, but this forward must be taken if this runtime later
+          // holds that run.
+          if (ids?.has(leftover.id)) ids.set(leftover.id, winnerRunId);
+          try {
+            await this.#publishAndWait(pubsub, key, {
+              type: 'signal-enqueued',
+              runId: winnerRunId,
+              signal: this.#serializeSignal(leftover),
+              sourceId: this.#getSourceId(),
+            });
+          } catch (error) {
+            await keepPending(error);
+            return;
+          }
+        }
+      });
+    } catch (error) {
+      // The follow-up never started and the winner holds the thread: this is the end of the losing path, not a
+      // failed start.
+      logger?.warn?.('Could not hand the signals an ended run left to the run holding the thread; they stay pending', {
+        ...context,
+        error,
+      });
+    }
   }
 
   async #drainPendingContinuations(
