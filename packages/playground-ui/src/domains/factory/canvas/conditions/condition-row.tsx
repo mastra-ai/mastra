@@ -104,7 +104,7 @@ export function ConditionRowEditor({
   onOr,
 }: ConditionRowEditorProps) {
   return (
-    <div className="flex min-w-0 flex-col gap-2">
+    <div className="flex min-w-0 flex-col gap-2 transition-opacity duration-fast ease-out-custom starting:opacity-0">
       <div className="flex min-w-0 items-center gap-1">
         <Select
           value={row.field || null}

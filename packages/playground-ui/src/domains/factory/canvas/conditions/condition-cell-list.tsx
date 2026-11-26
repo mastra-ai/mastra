@@ -3,6 +3,7 @@ import type { KeyboardEvent, ReactNode } from 'react';
 
 import { GrowIn } from '../canvas-frame';
 import { AddConditionButton, FLOW_CELL, FLOW_CELL_SELECTED, ValueChip, Wire } from '../flow-parts';
+import { pinParentHeight } from '../pin-parent-height';
 import { ConditionLogic } from './condition-logic';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/utils/cn';
@@ -118,9 +119,14 @@ export function ConditionCellList({
             <div
               data-editing={holds(node, selected) || undefined}
               onKeyDown={holds(node, selected) ? onKeyDown : undefined}
-              className={cn(FLOW_CELL, 'gap-1', holds(node, selected) && FLOW_CELL_SELECTED)}
+              className={cn(FLOW_CELL, holds(node, selected) && FLOW_CELL_SELECTED)}
             >
-              <ConditionCellItem node={node} entering={entering} />
+              {/* Eases to the cell's new height as a condition opens for editing or closes, instead of jumping. */}
+              <div className="-m-1 overflow-hidden transition-[height] duration-normal ease-out-custom motion-reduce:h-auto!">
+                <div ref={pinParentHeight} className="flex flex-col gap-1 p-1">
+                  <ConditionCellItem node={node} entering={entering} />
+                </div>
+              </div>
             </div>
           </div>
         </GrowIn>

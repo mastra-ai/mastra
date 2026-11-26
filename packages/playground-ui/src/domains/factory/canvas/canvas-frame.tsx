@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { PanelSheet } from './panel-sheet';
 import { useInSheet } from './panel-sheet-context';
+import { pinParentHeight } from './pin-parent-height';
+import { useLaneGlide } from './use-lane-glide';
 import { usePhoneLayout } from './use-phone-layout';
 import { DrawerTitle } from '@/ds/components/Drawer';
 import { Txt } from '@/ds/components/Txt';
@@ -18,9 +20,6 @@ const ZOOM_STEPS = [0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5];
 /** A floating bar's arrival, such as "Unsaved changes": it fades and rises into place over the toolbar. */
 export const FLOAT_IN =
   'duration-normal ease-out-custom transition-[opacity,translate] starting:opacity-0 motion-safe:starting:translate-y-2';
-
-/** How the flow and the toolbar make room for the side panel as it opens and closes. */
-const SLIDE = 'duration-normal ease-out-custom motion-reduce:transition-none';
 
 /**
  * A block that grows in from nothing as it mounts, so what sits under it slides down instead of jumping; with
@@ -134,8 +133,8 @@ function PeriodLabel() {
 }
 
 /**
- * The side panel's frame: a phase, a rule or a test sits in it, top right over the canvas, or in a bottom sheet on a
- * phone. It eases in whenever it opens or swaps for another, from the side it docks to.
+ * One side panel: a phase, a rule or a test. On a desktop it fills the dock's card, scrolling once it's taller than
+ * the canvas, and fades in whenever it opens or takes another's place; on a phone it fills the bottom sheet.
  */
 export function SidePanel({ label, children }: { label: string; children: ReactNode }) {
   const sheet = useInSheet();
@@ -151,9 +150,8 @@ export function SidePanel({ label, children }: { label: string; children: ReactN
     <aside
       aria-label={label}
       className={cn(
-        overlaySurfaceStyle,
-        'flex max-h-full w-90 flex-col gap-4 overflow-y-auto rounded-card px-3.5 pt-3.5 pb-4',
-        'transition-[opacity,translate] duration-normal ease-out-custom starting:opacity-0 motion-safe:starting:translate-x-2',
+        'flex max-h-[100cqh] flex-col gap-4 overflow-y-auto px-3.5 pt-3.5 pb-4',
+        'transition-opacity duration-fast ease-out-custom starting:opacity-0',
       )}
     >
       {children}
@@ -163,6 +161,57 @@ export function SidePanel({ label, children }: { label: string; children: ReactN
 
 /** An open side panel, and how to close it when a phone's sheet is swiped away. */
 type PanelSlot = { content: ReactNode; onClose: () => void };
+
+/**
+ * The desktop side panel's card, docked top right over the canvas. It slides in as a panel opens and stays while one
+ * panel takes another's place, easing to the new one's height; on closing it holds the last panel to slide out with.
+ */
+function PanelDock({ panel }: { panel: PanelSlot | undefined }) {
+  const surface = useRef<HTMLDivElement>(null);
+  const [held, setHeld] = useState(panel);
+  if (panel && panel !== held) setHeld(panel);
+  const shown = panel ?? held;
+  const leaving = !panel && held !== undefined;
+
+  // Lets go of the closed panel once its card has slid out, or at once where nothing animates. A panel opening
+  // mid-way cancels the slide, and with it the release.
+  useEffect(() => {
+    const card = surface.current;
+    if (!leaving || !card) return;
+    let stale = false;
+    const sliding = typeof card.getAnimations === 'function' ? card.getAnimations() : [];
+    Promise.all(sliding.map(animation => animation.finished)).then(
+      () => {
+        if (!stale) setHeld(undefined);
+      },
+      () => undefined,
+    );
+    return () => {
+      stale = true;
+    };
+  }, [leaving]);
+
+  if (!shown) return null;
+
+  return (
+    // A size container, so the panel inside can cap its height at the dock's while the card eases its own.
+    <div className="[container-type:size] pointer-events-none absolute top-15.5 right-4 bottom-18 w-100">
+      <div
+        ref={surface}
+        inert={leaving}
+        className={cn(
+          overlaySurfaceStyle,
+          'pointer-events-auto overflow-hidden rounded-card',
+          'transition-[opacity,translate,height] duration-normal ease-out-custom motion-reduce:h-auto! motion-reduce:transition-opacity',
+          'starting:opacity-0 motion-safe:starting:translate-x-3',
+          leaving && 'pointer-events-none opacity-0 duration-fast motion-safe:translate-x-3',
+        )}
+      >
+        <div ref={pinParentHeight}>{shown.content}</div>
+      </div>
+    </div>
+  );
+}
 
 /**
  * The canvas page: the page's header and the flow scroll underneath, only the flow zooms, the view tabs float top left,
@@ -192,6 +241,7 @@ export function CanvasFrame({
   const step = ZOOM_STEPS.indexOf(zoom);
   const phone = usePhoneLayout();
   const tabsInFlow = phone && !status;
+  const { flow, lane } = useLaneGlide(panel !== undefined);
 
   return (
     <div className="relative size-full min-h-0 overflow-hidden">
@@ -202,13 +252,13 @@ export function CanvasFrame({
         ) : (
           <div className="flex w-max min-w-full items-start px-6 pt-21 pb-40 max-sm:w-full max-sm:px-4 max-sm:pt-5.5">
             <span aria-hidden className="flex-1" />
-            <div className="shrink-0 max-sm:w-full">
+            <div ref={flow} className="shrink-0 max-sm:w-full">
               {tabsInFlow && <div className="mb-8">{tabs}</div>}
               {header}
               <div style={{ zoom }}>{children}</div>
             </div>
             {/* The lane the panel takes: it only pushes the flow over once the space beside the flow is narrower. */}
-            <span aria-hidden className={cn(SLIDE, 'flex-1 transition-[min-width]', panel && 'sm:min-w-92')} />
+            <span ref={lane} aria-hidden className="flex-1 sm:data-open:min-w-102" />
           </div>
         )}
       </section>
@@ -218,22 +268,15 @@ export function CanvasFrame({
         <PeriodLabel />
       </div>
 
-      {panel &&
-        (phone ? (
-          <PanelSheet onClose={panel.onClose}>{panel.content}</PanelSheet>
-        ) : (
-          <div className="pointer-events-none absolute top-15.5 right-4 bottom-18 flex flex-col *:pointer-events-auto">
-            {panel.content}
-          </div>
-        ))}
+      {phone ? panel && <PanelSheet onClose={panel.onClose}>{panel.content}</PanelSheet> : <PanelDock panel={panel} />}
 
       {/* Without a panel, it centers on the canvas, clear of the zoom control on either side. */}
       {bar && (
         <div
           className={cn(
-            SLIDE,
-            'pointer-events-none absolute inset-x-0 bottom-6 flex flex-col items-center gap-3 px-4 transition-[right,padding] *:pointer-events-auto',
-            panel ? 'sm:right-94' : 'md:px-32',
+            'pointer-events-none absolute inset-x-0 bottom-6 flex flex-col items-center gap-3 px-4 *:pointer-events-auto',
+            'transition-[right,padding] duration-normal ease-out-custom motion-reduce:transition-none',
+            panel ? 'sm:right-104' : 'md:px-32',
           )}
         >
           {bar}

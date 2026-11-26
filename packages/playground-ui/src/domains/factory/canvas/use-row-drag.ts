@@ -1,6 +1,8 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent, PointerEvent } from 'react';
 
+import { glideTiming } from './glide-timing';
+
 export type RowDrag = { from: number; to: number; offset: number };
 
 /** A drag with the rows' places on screen as it started, and the canvas zoom they were measured under. */
@@ -28,21 +30,10 @@ function shiftOf({ from, to, rows }: Drag, index: number) {
   return 0;
 }
 
-function cssTimeInMs(value: string) {
-  const time = value.trim();
-  return Number.parseFloat(time) * (time.endsWith('ms') ? 1 : 1000);
-}
-
 /** Eases every row from where it stood as the drag ended into where it stands now, so a drop or Escape never snaps. */
 function glide({ rows, dragged, zoom }: Settle): Animation[] {
-  // Without Web Animations, as in jsdom, or with reduced motion, the rows just stand in their places.
-  if (typeof Element.prototype.animate !== 'function') return [];
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return [];
-  const style = getComputedStyle(document.documentElement);
-  const timing: KeyframeAnimationOptions = {
-    duration: cssTimeInMs(style.getPropertyValue('--duration-normal')),
-    easing: style.getPropertyValue('--ease-out-custom').trim() || 'ease-out',
-  };
+  const timing = glideTiming();
+  if (!timing) return [];
   return rows.flatMap(({ row, top }) => {
     // Screen pixels, under the canvas zoom; a transform inside the zoom is scaled by it.
     const delta = (top - row.getBoundingClientRect().top) / zoom;

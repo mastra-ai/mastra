@@ -241,8 +241,9 @@ export function RuleEditorView<Event extends string>({
 
       {canEdit &&
         dirty && (
-          // Pulled up by the panel's gap and padded back, so the gap grows in with the bar instead of jumping open.
-          <GrowIn className="-mt-4">
+          // Pulled up by the panel's gap and padded back, so the gap grows in with the bar instead of jumping open. A
+          // new rule has it from the start, so it opens with the panel instead of growing in after.
+          <GrowIn enter={rule !== undefined} className="-mt-4">
             <div className="flex flex-col gap-2 pt-4">
               {preview?.changed !== undefined && (
                 <Txt as="p" variant="caption" tone="muted" role="status">
