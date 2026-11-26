@@ -1076,6 +1076,14 @@ describe('customProviders parsing/persistence', () => {
   it('creates custom provider ids without custom- prefix', () => {
     expect(getCustomProviderId('Acme Provider')).toBe('acme-provider');
     expect(getCustomProviderId('  !!!  ')).toBe('provider');
+    expect(getCustomProviderId('--Café--Provider--')).toBe('caf-provider');
+    expect(getCustomProviderId('A--B')).toBe('a-b');
+  });
+
+  it('slugifies a very long provider name without stalling', () => {
+    const started = Date.now();
+    expect(getCustomProviderId(`-${'a-'.repeat(50_000)}`)).toBe(`a${'-a'.repeat(49_999)}`);
+    expect(Date.now() - started).toBeLessThan(500);
   });
 
   describe('stripMastraCodeCustomProviderPrefix', () => {

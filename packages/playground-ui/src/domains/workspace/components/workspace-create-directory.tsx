@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { parentOf, ROOT_PATH } from '../path';
+import { parentOf, ROOT_PATH, trimDotSlashPath } from '../path';
 import { useWorkspaceContext } from './use-workspace-context';
 import { Button } from '@/ds/components/Button';
 import {
@@ -25,7 +25,7 @@ export function WorkspaceCreateDirectory({ labeled = false }: { labeled?: boolea
 
   if (!onCreateDirectory || isReadOnly(ROOT_PATH)) return null;
 
-  const trimmed = path.trim().replace(/^\.?\/+|\/+$/g, '');
+  const trimmed = trimDotSlashPath(path.trim());
 
   const submit = async () => {
     if (!trimmed) return;

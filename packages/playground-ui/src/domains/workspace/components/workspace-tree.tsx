@@ -3,7 +3,7 @@ import { useWorkspaceDirectory } from '@mastra/react/hooks/workspace';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ROOT_PATH, joinPath, parentOf } from '../path';
+import { ROOT_PATH, joinPath, parentOf, trimEdgeSlashes } from '../path';
 import { MountIcon } from './mount-icon';
 import type { WorkspaceMount } from './mount-icon';
 import { useWorkspaceContext } from './use-workspace-context';
@@ -213,7 +213,7 @@ function FolderChildren({
 
   const create = async (name: string) => {
     try {
-      await onCreateDirectory?.(joinPath(path, name.replace(/^\/+|\/+$/g, '')));
+      await onCreateDirectory?.(joinPath(path, trimEdgeSlashes(name)));
     } catch {
       // The caller reports the failure; keep the input open so the user can retry or cancel.
       return;

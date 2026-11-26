@@ -1,4 +1,5 @@
 import type { IntegrationStorageHandle, IntegrationSubscription } from '../../storage/domains/integrations/base.js';
+import { trimEdgeSlashes } from './path-slashes.js';
 
 export type GitLabSignalSubscriptionSource = 'auto-create-change-request' | 'explicit-tool';
 export type GitLabSignalSubscriptionStatus = 'open' | 'closed' | 'merged';
@@ -66,7 +67,7 @@ export function mergeRequestTargetKey(input: GitLabWebhookMergeRequestTarget): s
 }
 
 export function mergeRequestUrl(host: string, projectPath: string, changeRequestId: string | number): string {
-  return `https://${normalizeSubscriptionHost(host)}/${projectPath.replace(/^\/+|\/+$/g, '')}/-/merge_requests/${changeRequestId}`;
+  return `https://${normalizeSubscriptionHost(host)}/${trimEdgeSlashes(projectPath)}/-/merge_requests/${changeRequestId}`;
 }
 
 function sameSession(row: GitLabSignalSubscriptionRow, input: SubscribeToMergeRequestInput): boolean {

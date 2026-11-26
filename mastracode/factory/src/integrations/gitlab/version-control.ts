@@ -25,6 +25,7 @@ import type {
   GitLabNote,
   GitLabUser,
 } from './api.js';
+import { trimEdgeSlashes } from './path-slashes.js';
 
 export interface GitLabVersionControlContext {
   api: GitLabApiClient;
@@ -946,7 +947,7 @@ function normalizeHost(value: string): string {
 }
 
 function normalizeSlug(value: string): string {
-  const slug = value.replace(/^\/+|\/+$/g, '');
+  const slug = trimEdgeSlashes(value);
   const segments = slug.split('/');
   if (!slug || segments.some(segment => !/^[A-Za-z0-9_.-]+$/.test(segment) || segment === '.' || segment === '..')) {
     throw new GitLabApiError('GitLab repository slug is invalid.', 400);

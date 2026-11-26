@@ -5,6 +5,7 @@ import { KnowledgePageLink } from '../../knowledge/knowledge-links';
 import { isRecord } from '../../messages/signal-data';
 import type { BodyExtent } from './knowledge-body-range';
 import { readExtent, writeExtent } from './knowledge-body-range';
+import { findKnowledgeMentions } from './knowledge-mentions';
 import type { MessageMetadata } from '@/domains/chat';
 import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
 import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
@@ -164,14 +165,12 @@ function Body({ markdown, refIds = new Map() }: { markdown: string; refIds?: Ref
   );
 }
 
-const MENTION = /\[\[([^\]]+)\]\]/g;
-
 /** A note's text with each resolved `[[Page Name]]` linking to its page; unresolved names stay plain. */
 function NoteText({ note }: { note: NoteSummary }) {
   const parts: ReactNode[] = [];
   let last = 0;
-  for (const match of note.text.matchAll(MENTION)) {
-    const ref = (match[1] ?? '').trim();
+  for (const match of findKnowledgeMentions(note.text)) {
+    const ref = match.ref.trim();
     // Own string values only: `[[constructor]]` must not read Object.prototype.
     const mentioned = note.mentions && Object.hasOwn(note.mentions, ref) ? note.mentions[ref] : undefined;
     const pageId = typeof mentioned === 'string' ? mentioned : undefined;
@@ -187,7 +186,7 @@ function NoteText({ note }: { note: NoteSummary }) {
         </span>
       ),
     );
-    last = match.index + match[0].length;
+    last = match.index + match.length;
   }
   parts.push(note.text.slice(last));
   return <>{parts}</>;
@@ -282,6 +281,7 @@ const FAILED_TITLES: Record<string, string> = {
  * What each Knowledge tool's settled result says, or null when the shape isn't one we know.
  * A failed call (`errorText` set) gets a card naming what it tried and the error it got.
  */
+// eslint-disable-next-line react-refresh/only-export-components -- card builder shared with the badge components
 export function knowledgeCard(
   toolName: string,
   input: unknown,
