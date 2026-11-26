@@ -229,8 +229,8 @@ describe('process collector', () => {
     const heap = records.find(r => r.name === 'mastra_factory_process_heap_utilization')?.value;
     expect(heap).toBeGreaterThan(0);
     expect(heap).toBeLessThan(1);
-    // Every space seen is a known label (or `other`); every tick emits exactly one record per
-    // known label, so the number of distinct `space` values equals the per-tick space count.
+    // Every space seen is a known label (or `other`); the collector emits one record for each
+    // space the runtime reports, plus the always-present `other` bucket.
     const spaces = records.filter(r => r.name === 'mastra_factory_process_heap_space_bytes');
     const knownSpaces = new Set([
       'old',

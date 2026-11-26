@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Added an admin-gated `GET /web/admin/heap-snapshot` endpoint that streams a live `v8.getHeapSnapshot()` back to the caller. Off by default: requires `FACTORY_HEAP_SNAPSHOT=1` AND organization-administrator access in tenant mode (404/403 otherwise). Single-flight — concurrent requests return 409. Lets a maintainer pull a `.heapsnapshot` from a saturated production process without shell access.
+Added an on-demand heap snapshot download at `GET /web/admin/heap-snapshot`, so you can find what a Factory process is holding in memory without shell access. It is off by default: set `FACTORY_HEAP_SNAPSHOT=1` (or `true`), and in tenant mode the caller must be an organization administrator. The snapshot contains every secret in the process, including other users' credentials, so only enable it on a single-tenant deployment you operate. One snapshot runs at a time; a second concurrent request returns 409.

@@ -5,12 +5,21 @@
  * as the response body so a maintainer can pull a `.heapsnapshot` from a live
  * Factory process without shell access (Railway deployments have no exec).
  *
- * This is a diagnostic tool, not a steady-state endpoint: see the WARNINGS in
- * the handler. It is off by default and gated twice —
+ * Trust boundary: the response is the whole process heap. It carries every
+ * in-process secret — user-scoped model credentials the credential model
+ * otherwise withholds from organization admins, integration tokens, and the
+ * data of every other organization the process serves. Enabling the flag is
+ * only safe on a single-tenant deployment the operator controls.
  *
- *   1. the `FACTORY_HEAP_SNAPSHOT` env flag must be `1`/`true` (case-insensitive);
- *      with the flag absent or anything else the route 404s so it is
- *      indistinguishable from a route that does not exist;
+ * Cost: snapshotting blocks the event loop for the whole serialization (tens
+ * of seconds on a multi-GB heap) and needs roughly heap-size extra memory, so
+ * near the heap limit it can OOM the process.
+ *
+ * It is off by default and gated twice:
+ *
+ *   1. the `FACTORY_HEAP_SNAPSHOT` env flag must be `1` or `true`
+ *      (case-insensitive); otherwise the route answers with the app's normal
+ *      not-found response;
  *   2. tenant-mode callers must administer the organization, following the
  *      same `isOrganizationAdmin` check used by {@link AutomationRunRoutes}
  *      in `./automation-runs.ts`. Local (no-auth) deployments only require
@@ -33,42 +42,37 @@ import { loose, Route } from './route.js';
 import type { RouteDependencies } from './route.js';
 
 export interface HeapSnapshotRoutesDeps extends RouteDependencies {
-  /** Whether the endpoint is enabled; defaults to reading `FACTORY_HEAP_SNAPSHOT`. */
-  isEnabled?: () => boolean;
   /** Clock seam for the filename timestamp; defaults to `Date.now()`. */
   now?: () => Date;
   /** Snapshot producer seam; defaults to `v8.getHeapSnapshot()`. */
   getHeapSnapshot?: () => NodeJS.ReadableStream;
   /** Logger seam; defaults to `console`. */
-  logger?: { info: (msg: string, meta?: Record<string, unknown>) => void };
+  logger?: {
+    info: (msg: string, meta?: Record<string, unknown>) => void;
+    error: (msg: string, meta?: Record<string, unknown>) => void;
+  };
 }
 
-/** Parse a boolean-ish env var the same way the rest of Factory does. */
-function envEnabled(): boolean {
-  const raw = process.env.FACTORY_HEAP_SNAPSHOT;
-  if (!raw) return false;
-  const normalized = raw.trim().toLowerCase();
-  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+function heapSnapshotEnabled(): boolean {
+  const raw = process.env.FACTORY_HEAP_SNAPSHOT?.trim().toLowerCase();
+  return raw === '1' || raw === 'true';
 }
 
-/** Filename-safe ISO timestamp: `2026-11-18T15-30-00-000Z`. */
+/** Filename-safe ISO timestamp: `2026-11-18T15-30-00.000Z`. */
 function filenameTimestamp(date: Date): string {
   return date.toISOString().replace(/:/g, '-');
 }
 
 export class HeapSnapshotRoutes extends Route<HeapSnapshotRoutesDeps> {
   /**
-   * Single-flight guard. Snapshotting a multi-GB heap can take tens of
-   * seconds and roughly doubles RSS momentarily; running two at once is a
-   * fast way to OOM a saturated process.
+   * Single-flight guard. Running two snapshots at once is a fast way to OOM a
+   * saturated process.
    */
   #inFlight = false;
 
   /**
    * Fail-closed scope check, mirroring {@link AutomationRunRoutes.#resolveScope}.
-   *
-   * Returns `null` when the caller is allowed through, or a `Response` with
-   * the appropriate status when not.
+   * Returns `null` when the caller is allowed through, otherwise the error response.
    */
   async #checkAccess(c: Context): Promise<Response | null> {
     const { auth } = this.deps;
@@ -93,7 +97,6 @@ export class HeapSnapshotRoutes extends Route<HeapSnapshotRoutesDeps> {
   }
 
   routes(): ApiRoute[] {
-    const isEnabled = this.deps.isEnabled ?? envEnabled;
     const now = this.deps.now ?? (() => new Date());
     const getHeapSnapshot = this.deps.getHeapSnapshot ?? (() => v8.getHeapSnapshot());
     const logger = this.deps.logger ?? console;
@@ -103,7 +106,7 @@ export class HeapSnapshotRoutes extends Route<HeapSnapshotRoutesDeps> {
         method: 'GET',
         handler: async c => {
           const context = loose(c);
-          if (!isEnabled()) return context.json({ error: 'not_found' }, 404);
+          if (!heapSnapshotEnabled()) return context.notFound();
 
           const denied = await this.#checkAccess(context);
           if (denied) return denied;
@@ -121,30 +124,41 @@ export class HeapSnapshotRoutes extends Route<HeapSnapshotRoutesDeps> {
           const filename = `factory-${filenameTimestamp(now())}.heapsnapshot`;
           logger.info('heap snapshot starting', { filename, heapUsedBytes: heapUsedBefore });
 
-          // Content-Type application/octet-stream — the file is JSON, but the
-          // browser must save-as, not render. The filename steers Chrome
-          // DevTools "Load profile" straight to the right memory tool.
+          // The file is JSON, but the browser must save it rather than render
+          // it, and nothing between here and the caller may keep a copy.
           context.header('Content-Type', 'application/octet-stream');
           context.header('Content-Disposition', `attachment; filename="${filename}"`);
+          context.header('Cache-Control', 'no-store');
 
-          return stream(context, async honoStream => {
-            try {
-              const snapshot = getHeapSnapshot();
-              const nodeReadable = snapshot instanceof Readable ? snapshot : Readable.from(snapshot);
-              for await (const chunk of nodeReadable) {
-                await honoStream.write(chunk as Uint8Array);
+          let failed = false;
+          return stream(
+            context,
+            async honoStream => {
+              try {
+                const snapshot = getHeapSnapshot();
+                const readable = snapshot instanceof Readable ? snapshot : Readable.from(snapshot);
+                for await (const chunk of readable) {
+                  await honoStream.write(chunk as Uint8Array);
+                }
+              } catch (error) {
+                failed = true;
+                throw error;
+              } finally {
+                this.#inFlight = false;
+                logger.info('heap snapshot finished', {
+                  filename,
+                  outcome: failed ? 'error' : 'ok',
+                  durationMs: Date.now() - startedAt,
+                  heapUsedBytes: heapUsedBefore,
+                  heapUsedBytesAfter: process.memoryUsage().heapUsed,
+                });
               }
-            } finally {
-              this.#inFlight = false;
-              const heapUsedAfter = process.memoryUsage().heapUsed;
-              logger.info('heap snapshot finished', {
-                filename,
-                durationMs: Date.now() - startedAt,
-                heapUsedBytes: heapUsedBefore,
-                heapUsedBytesAfter: heapUsedAfter,
-              });
-            }
-          });
+            },
+            async (error, honoStream) => {
+              logger.error('heap snapshot failed', { filename, error: String(error) });
+              await honoStream.close();
+            },
+          );
         },
       }),
     ];

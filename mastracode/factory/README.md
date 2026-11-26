@@ -128,16 +128,16 @@ Every record has a `service` label read from `MASTRA_WORKERS`: `api` when it's `
 
 ### Admin heap snapshot
 
-Factory exposes an on-demand heap-snapshot download at `GET /web/admin/heap-snapshot`. It is off by default and gated twice so the surface is inert without an explicit opt-in:
+Factory exposes an on-demand heap-snapshot download at `GET /web/admin/heap-snapshot`. It is off by default and gated twice:
 
-1. `FACTORY_HEAP_SNAPSHOT=1` must be set on the process. With the variable absent or any other value the route 404s so it is indistinguishable from a route that does not exist.
-2. In tenant mode the caller must be an organization administrator, following the same `isOrganizationAdmin` check as the automation-runs ingress. Non-admins get 403, anonymous callers 401. Local (no-auth) deployments require only the env flag.
+1. `FACTORY_HEAP_SNAPSHOT` must be `1` or `true` (case-insensitive). With the variable absent or any other value the route answers with the same 404 as a path that does not exist.
+2. In tenant mode the caller must be an organization administrator, following the same `isOrganizationAdmin` check as the automation-runs ingress. Anonymous callers get 401, callers without an organization or without admin access get 403. Local (no-auth) deployments require only the env flag.
 
-When enabled, the endpoint streams `v8.getHeapSnapshot()` as `application/octet-stream` with `Content-Disposition: attachment; filename="factory-<iso>.heapsnapshot"`. Load the downloaded file into Chrome DevTools → Memory → Load profile to walk retainers.
+**Trust boundary.** The response is the whole process heap, so it carries every in-process secret: user-scoped model credentials the credential model otherwise keeps from organization administrators, integration tokens, and the data of every other organization the process serves. Only set the flag on a single-tenant deployment you operate, and turn it off again once you have the snapshot.
 
-Only one snapshot is allowed at a time per process: a second concurrent request returns 409.
+When enabled, the endpoint streams `v8.getHeapSnapshot()` as `application/octet-stream` with `Content-Disposition: attachment; filename="factory-<iso>.heapsnapshot"` and `Cache-Control: no-store`. Load the downloaded file into Chrome DevTools → Memory → Load profile to walk retainers. Only one snapshot runs at a time per process: a second concurrent request returns 409.
 
-**Cost.** Snapshotting a multi-GB heap blocks the event loop for tens of seconds and needs roughly heap-size extra memory while the snapshot is serialized — close to the heap limit it can OOM the process. Use it to investigate the health metrics in the previous section (specifically the `process_memory_bytes{kind=heap_used}` signal); do not leave it enabled on healthy traffic.
+**Cost.** Snapshotting a multi-GB heap blocks the event loop for tens of seconds and needs roughly heap-size extra memory while the snapshot is serialized — close to the heap limit it can OOM the process. Use it to investigate what holds `process_memory_bytes{kind=heap_used}` from the previous section.
 
 ### Product telemetry
 
