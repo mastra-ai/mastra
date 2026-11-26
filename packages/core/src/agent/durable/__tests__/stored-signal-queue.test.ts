@@ -159,16 +159,24 @@ class BrokerLikePubSub extends EventEmitterPubSub {
   }
 }
 
-/** A broker-like pubsub that reports each delivery its subscriber failed, which a broker delivers again. */
+/**
+ * A broker-like pubsub that records each delivery its subscriber acknowledged and reports each delivery its subscriber
+ * failed, which a broker delivers again unless it was acknowledged.
+ */
 class UnackedReportingPubSub extends BrokerLikePubSub {
   onUnacked?: (event: Event) => void;
+  readonly acked: Event[] = [];
   readonly #wrapped = new Map<EventCallback, EventCallback>();
 
   override async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
     let wrapped = this.#wrapped.get(cb);
     if (!wrapped) {
       wrapped = (event, ack, nack) => {
-        const result = cb(event, ack, nack);
+        const recordAck = async () => {
+          this.acked.push(event);
+          await ack?.();
+        };
+        const result = cb(event, recordAck, nack);
         void Promise.resolve(result).catch(() => this.onUnacked?.(event));
         return result;
       };
@@ -701,8 +709,11 @@ describe('signals of a running evented agent kept in memory storage', () => {
     pubsub.onUnacked = failed => {
       if (failed.data?.signal?.id === signal.id) unacked.release();
     };
+    const ackedForSignal = () => pubsub.acked.filter(acked => acked.data?.signal?.id === signal.id);
     await pubsub.publish(topic, event);
     await unacked.promise;
+    // A broker delivers again only a delivery that was not acknowledged.
+    expect(ackedForSignal()).toEqual([]);
     await pubsub.publish(topic, event);
     const followUpsDone = afterFollowUps();
     toolGate.release();
@@ -713,6 +724,7 @@ describe('signals of a running evented agent kept in memory storage', () => {
     const followUps = prompts.slice(2).filter(prompt => !textOf(prompt).includes(BARRIER));
     expect(followUps).toHaveLength(1);
     expect(occurrences(followUps[0], 'FORWARDED_AFTER_CLOSE')).toBe(1);
+    expect(ackedForSignal()).toHaveLength(1);
     expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
   });
 
