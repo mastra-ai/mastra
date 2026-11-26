@@ -725,9 +725,9 @@ export function createDurableToolCallStep() {
         ? createObservabilityContext({ currentSpan: processorAgentSpan })
         : undefined;
 
-      // Tools, memory and workspace cached for an earlier segment were built with that caller's request
-      // context, e.g. when the run parked here and another host claimed the resume. Rebuild them for
-      // this segment before resolving the tool.
+      // Tools cached for an earlier segment were built with that caller's request context, e.g. when
+      // the run parked here and another host claimed the resume. Rebuild them for this segment before
+      // resolving the tool.
       let staleRebuildContext: RequestContext | undefined;
       if (mastra && isStaleRunRegistryEntry(registryEntry, runId, requestContext)) {
         const rebuilt = await rebuildRunToolsFromMastra({

@@ -108,9 +108,9 @@ export function getStepSegment(runId: string | undefined, stepContext: RequestCo
 }
 
 /**
- * Whether the entry's request-scoped state (tools, memory, workspace and context) was built for an
- * earlier segment than the one running this step, for example when the run parked here and another
- * host claimed the resume. An entry that records no segment is not treated as stale.
+ * Whether the entry's request-scoped tools and context were built for an earlier segment than the one
+ * running this step, for example when the run parked here and another host claimed the resume. An
+ * entry that records no segment is not treated as stale.
  */
 export function isStaleRunRegistryEntry(
   entry: RunRegistryEntry | undefined,

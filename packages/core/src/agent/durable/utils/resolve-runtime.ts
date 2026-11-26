@@ -550,9 +550,9 @@ export async function rebuildRunToolsFromMastra(options: {
   /** Restore processors for tool execution, not persistence-only rebuilds. */
   rehydrateProcessors?: boolean;
   /**
-   * Rebuild the entry's request-built tools, memory, workspace and context when they were built for
-   * an earlier segment (see `isStaleRunRegistryEntry`). Save queue and processor state carry across
-   * segments.
+   * Rebuild the entry's request-built tools and context when they were built for an earlier segment
+   * (see `isStaleRunRegistryEntry`). Memory, workspace, save queue and processor state carry across
+   * segments, as on a warm resume.
    */
   replaceStale?: boolean;
   logger?: { debug?: (...args: any[]) => void; error?: (...args: any[]) => void };
@@ -651,9 +651,9 @@ export async function rebuildRunToolsFromMastra(options: {
         (existing.baseTools !== undefined || existing.tools !== undefined);
       // Re-checked here: a sibling step of the same segment may already have replaced the entry.
       if (options.replaceStale && isStaleRunRegistryEntry(existing, runId, requestContext)) {
+        // Memory and workspace stay: the save queue is bound to the entry's memory, and a warm resume
+        // keeps them too. Which thread and resource they touch comes from the run.
         refreshRunRequestTools(existing, tools, resolveRequestContext);
-        existing.workspace = workspace;
-        existing.memory = memory;
         existing.requestContext = resolveRequestContext;
         existing.requestContextRebuilt = true;
         existing.requestContextSegment = getStepSegment(runId, requestContext);

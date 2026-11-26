@@ -174,7 +174,7 @@ describe('rebuildRunToolsFromMastra request context', () => {
     },
   );
 
-  it('replaces tools, memory and workspace built for an earlier segment, keeping run state', async () => {
+  it('rebuilds tools built for an earlier segment, keeping memory, workspace and run state', async () => {
     const runId = 'stale-segment-replace';
     const saveQueueManager = {};
     const processorStates = new Map();
@@ -235,8 +235,8 @@ describe('rebuildRunToolsFromMastra request context', () => {
         omitted: { id: 'omitted', built: 'bob' },
         processorTool,
       });
-      expect(replaced.memory).toEqual({ built: 'bob' });
-      expect(replaced.workspace).toEqual({ built: 'bob' });
+      expect(replaced.memory).toEqual({ built: 'alice' });
+      expect(replaced.workspace).toEqual({ built: 'alice' });
       expect(replaced.requestContext?.get('mastra__user')).toEqual({ id: 'bob' });
       expect(replaced.requestContext?.get('marker')).toBe('A');
       expect(replaced.requestContextRebuilt).toBe(true);
