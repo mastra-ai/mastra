@@ -1328,8 +1328,8 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
                   if (modelSpan?.isInternal) modelSpan.parent ??= agentSpan;
                   // Surface every tool call made during the run so exporters (e.g. PostHog)
                   // see the same { toolCallId, toolName, args } shape as the in-process loop.
-                  const toolCalls = steps.flatMap(step =>
-                    ((step.toolCalls ?? []) as DurableToolCallInput[]).map(tc => ({
+                  const toolCalls = steps.flatMap((step: { toolCalls?: DurableToolCallInput[] }) =>
+                    (step.toolCalls ?? []).map(tc => ({
                       toolCallId: tc.toolCallId,
                       toolName: tc.toolName,
                       args: tc.args,

@@ -14620,6 +14620,34 @@ export class Agent<
     }
   }
 
+  #durableRunMemoryInfo(workflowInput: DurableAgenticWorkflowInput) {
+    const memoryInfo = (
+      workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
+    )?.memoryInfo;
+    return {
+      threadId: workflowInput.state?.threadId ?? memoryInfo?.threadId,
+      resourceId: workflowInput.state?.resourceId ?? memoryInfo?.resourceId,
+    };
+  }
+
+  #createDurableWorkflowRun(
+    workflow: ReturnType<DefaultAgentExecutionEngine['getWorkflow']>,
+    runId: string,
+    workflowInput: DurableAgenticWorkflowInput,
+    entry: RunRegistryEntry | undefined,
+    usesRunPubSub: boolean,
+  ) {
+    return this.executionEngine.createRun(
+      workflow,
+      {
+        runId,
+        resourceId: this.#durableRunMemoryInfo(workflowInput).resourceId,
+        ...(usesRunPubSub ? { pubsub: this.fenceRunPubSub(entry?.executionFence, entry?.abortController) } : {}),
+      },
+      workflowInput.options.retainOutcome,
+    );
+  }
+
   /**
    * Execute the durable workflow.
    *
@@ -14646,20 +14674,7 @@ export class Agent<
     // Populate the run row's resourceId column so storage-level resource
     // filters (listSuspendedRuns / listActiveRuns) can narrow the query,
     // mirroring the non-durable agentic loop (loop/workflows/stream.ts).
-    const memoryInfo = (
-      workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
-    )?.memoryInfo;
-    const resourceId = workflowInput.state?.resourceId ?? memoryInfo?.resourceId;
-
-    const run = await this.executionEngine.createRun(workflow, {
-      runId,
-      resourceId,
-      pubsub: this.fenceRunPubSub(executionFence, entry?.abortController),
-      ...(workflowInput.options.retainOutcome && {
-        shouldPersistSnapshot: ({ workflowStatus }) =>
-          ['pending', 'running', 'paused', 'suspended'].includes(workflowStatus),
-      }),
-    });
+    const run = await this.#createDurableWorkflowRun(workflow, runId, workflowInput, entry, true);
     // Parent the workflow run under the AGENT_RUN span so the trace exports under it.
     let result;
     try {
@@ -14696,11 +14711,7 @@ export class Agent<
     try {
       const workflow = this.getWorkflow();
       await this.executionEngine.ensureEngineWorkersStarted(this.workflowEngine, this.logger);
-      const memoryInfo = (
-        workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
-      )?.memoryInfo;
-      const threadId = workflowInput.state?.threadId ?? memoryInfo?.threadId;
-      const resourceId = workflowInput.state?.resourceId ?? memoryInfo?.resourceId;
+      const { threadId, resourceId } = this.#durableRunMemoryInfo(workflowInput);
       if (sharedExecution && pubsub && entry?.requestContext && executionFence && threadId) {
         await agentThreadStreamRuntime.claimDurableThreadLease(
           pubsub,
@@ -14740,15 +14751,7 @@ export class Agent<
       }
       // Evented workers publish on the host bus. A default-engine fallback must
       // instead publish on this run's transport or the caller's stream hangs.
-      const run = await this.executionEngine.createRun(workflow, {
-        runId,
-        resourceId,
-        ...(usesRunPubSub ? { pubsub: this.fenceRunPubSub(executionFence, entry?.abortController) } : {}),
-        ...(workflowInput.options.retainOutcome && {
-          shouldPersistSnapshot: ({ workflowStatus }) =>
-            ['pending', 'running', 'paused', 'suspended'].includes(workflowStatus),
-        }),
-      });
+      const run = await this.#createDurableWorkflowRun(workflow, runId, workflowInput, entry, usesRunPubSub);
       // Track completion so an immediate resume waits for suspension persistence.
       await this.executionEngine
         .startRun(
