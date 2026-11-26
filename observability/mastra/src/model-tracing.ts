@@ -1310,10 +1310,11 @@ export class ModelSpanTracker {
               if (chunk.type === 'response-metadata' && typeof chunk.payload?.modelId === 'string') {
                 servedModelId = chunk.payload.modelId;
               }
+              if (MODEL_RESPONSE_CHUNK_TYPES.has(chunk.type)) this.#captureCompletionStartTime();
+              // After the clock: the first provider chunk may open the inference, which resets the id.
               if (chunk.type === 'response-metadata' && typeof chunk.payload?.id === 'string') {
                 this.#inferenceResponseId = chunk.payload.id;
               }
-              if (MODEL_RESPONSE_CHUNK_TYPES.has(chunk.type)) this.#captureCompletionStartTime();
               if (chunk.type === 'finish') {
                 const payload =
                   servedModelId && !chunk.payload?.metadata?.modelId
