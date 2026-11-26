@@ -1765,25 +1765,33 @@ The declaration is read on every request. Clients on the 2026-07-28 protocol sen
 
 The `skills` option serves [Agent Skills](https://agentskills.io) over the [MCP Skills extension](https://modelcontextprotocol.io/extensions/skills/overview) (`io.modelcontextprotocol/skills`). Clients that support it, such as VS Code and ChatGPT, list your skills, show their descriptions to the model, and load a skill's files when the task needs them.
 
-Each folder holding a `SKILL.md` is one skill, named after the folder. Its files are served as `skill://` resources:
+Each folder holding a `SKILL.md` is one skill, named after the folder. Its files are served as `skill://` resources. Point `files` at a [workspace filesystem](/docs/sandbox/filesystem), such as a `LocalFilesystem`:
 
 ```typescript
-import { MCPServer, readSkillFiles } from '@mastra/mcp'
+import { MCPServer } from '@mastra/mcp'
+import { LocalFilesystem } from '@mastra/core/workspace'
 
 const server = new MCPServer({
   id: 'docs-server',
   name: 'Docs Server',
   version: '1.0.0',
   tools: {},
-  skills: { files: await readSkillFiles('./skills') },
+  skills: { files: new LocalFilesystem({ basePath: './skills' }) },
 })
 ```
 
 With a `./skills/git-workflow/SKILL.md` and a `./skills/git-workflow/references/REFERENCE.md`, the server serves `skill://git-workflow/SKILL.md` and `skill://git-workflow/references/REFERENCE.md`.
 
-`readSkillFiles()` reads a folder on disk and skips symbolic links. It needs Node.js. On runtimes without a filesystem, such as Cloudflare Workers, pass the files as an object: `{ 'git-workflow/SKILL.md': '---\nname: git-workflow\n...' }`. A value can be a string or a `Uint8Array`.
+To serve the skills in an agent's workspace, pass its filesystem and the folder that holds them: `{ files: workspace.filesystem, root: 'skills' }`. Set `root` to the skills folder rather than the workspace root, because the server walks every folder under `root` to find skills.
 
-The server answers `skills/list`, `skills/get`, and `resources/directory/read`, and lists each skill's `SKILL.md` in `resources/list`. Each listed skill carries the size and SHA-256 digest of every file, so clients can check what they read. Clients without the extension can still read the files with `resources/read`.
+The server reads each file once to list it with its size and SHA-256 digest, then reads it again when a client asks for it. It keeps only that metadata in memory, not the file contents. If a file changed since it was listed, reading it fails, and the next request lists the skills afresh. Symbolic links are skipped.
+
+`files` also takes:
+
+- An object of contents, keyed by `/`-separated path: `{ 'git-workflow/SKILL.md': '---\nname: git-workflow\n...' }`. A value can be a string or a `Uint8Array`. Use this on runtimes without a filesystem, such as Cloudflare Workers.
+- An MCP SDK `SkillFiles` adapter, an object with `list(dir)` and `read(path)`, for other storage.
+
+The server answers `skills/list`, `skills/get`, and `resources/directory/read`, and lists each skill's `SKILL.md` in `resources/list`. Clients without the extension can still read the files with `resources/read`.
 
 A `SKILL.md` must start with frontmatter that has a `name` matching its folder and a `description`. A skill that fails these checks is skipped, with a warning in the server log.
 
@@ -1791,10 +1799,16 @@ A `SKILL.md` must start with frontmatter that has a `name` matching its folder a
   content={[
   {
     name: 'files',
-    type: 'Record<string, string | Uint8Array>',
+    type: 'Record<string, string | Uint8Array> | SkillFilesystem | SkillFiles',
     isOptional: false,
     description:
-      "Skill files keyed by `/`-separated path relative to the skills root. Files outside a skill folder aren't served.",
+      "Where the skill files are: an object of contents, a filesystem with `readdir` and `readFile`, or an MCP SDK `SkillFiles` adapter. Files outside a skill folder aren't served. Pass `source` instead to serve your own `SkillSource`.",
+  },
+  {
+    name: 'root',
+    type: 'string',
+    isOptional: true,
+    description: 'Folder within `files` that holds the skills. Defaults to its root.',
   },
   {
     name: 'prefix',
@@ -1818,6 +1832,38 @@ A `SKILL.md` must start with frontmatter that has a `name` matching its folder a
   },
 ]}
 />
+
+### Custom skill sources
+
+To decide yourself what each caller gets, pass a `SkillSource` from the MCP SDK as `source` instead of `files`. Use it for skills that differ per user, are generated on request, or live in a remote registry. The server calls the source on every request and adds the `cacheHint`:
+
+```typescript
+import { MCPServer } from '@mastra/mcp'
+import type { SkillSource } from '@mastra/mcp'
+
+const source: SkillSource = {
+  async list() {
+    return { skills: await registry.listSkills() }
+  },
+  async get(uri) {
+    return registry.getSkill(uri)
+  },
+  async read(uri) {
+    const text = await registry.readFile(uri)
+    return text === undefined ? undefined : { text }
+  },
+}
+
+const server = new MCPServer({
+  id: 'registry-server',
+  name: 'Registry Server',
+  version: '1.0.0',
+  tools: {},
+  skills: { source },
+})
+```
+
+Each skill lists its files with their digests, or `resources: 'dynamic'` when its files change too often to hash. `read` returns `{ text }` or `{ bytes }`, with an optional `mimeType`, or `undefined` for a file it doesn't serve. A source can also implement `readDirectory` to answer `resources/directory/read`, and `listResources` to add entries to `resources/list`. Without `readDirectory`, the server declares no directory reads.
 
 To read skills from a server, use the [`MCPClient` `skills` property](/reference/tools/mcp-client#skills-property).
 

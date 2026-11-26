@@ -1,14 +1,15 @@
 import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { SKILLS_EXTENSION_ID, SkillsClient, SkillVerificationError } from '@modelcontextprotocol/client/ext/skills';
+import { memorySkillFiles, skillEntry } from '@modelcontextprotocol/server/ext/skills';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { connectClient, rawRequest, serveHTTP } from './__tests__/harness.mock';
 import type { ServedHTTP } from './__tests__/harness.mock';
 import { MCPServer } from './server';
-import { readSkillFiles } from './skills';
-import type { MCPServerSkills } from './skills';
+import type { MCPServerSkills, SkillSource } from './skills';
 
 vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
 
@@ -282,36 +283,156 @@ describe('MCPServer skills options', () => {
   });
 });
 
-describe('readSkillFiles', () => {
-  let root: string;
+describe('MCPServer skills from a Mastra filesystem', () => {
+  let base: string;
 
   beforeAll(async () => {
-    root = await mkdtemp(join(tmpdir(), 'mcp-skills-'));
-    await mkdir(join(root, 'demo', 'references'), { recursive: true });
-    await writeFile(join(root, 'demo', 'SKILL.md'), skillMd('demo', 'Demo skill'));
-    await writeFile(join(root, 'demo', 'references', 'NOTES.md'), 'notes');
-    await writeFile(join(root, 'outside.txt'), 'secret');
-    await symlink(join(root, 'outside.txt'), join(root, 'demo', 'link.txt'));
+    base = await mkdtemp(join(tmpdir(), 'mcp-skills-'));
+    await mkdir(join(base, 'skills', 'demo', 'references'), { recursive: true });
+    await writeFile(join(base, 'skills', 'demo', 'SKILL.md'), skillMd('demo', 'Demo skill'));
+    await writeFile(join(base, 'skills', 'demo', 'references', 'NOTES.md'), 'notes');
+    await writeFile(join(base, 'skills', 'demo', 'secret.txt'), 'secret');
+    await symlink(join(base, 'skills', 'demo', 'secret.txt'), join(base, 'skills', 'demo', 'link.txt'));
+    await writeFile(join(base, 'README.md'), 'outside the skills folder');
   });
 
   afterAll(async () => {
-    await rm(root, { recursive: true, force: true });
+    await rm(base, { recursive: true, force: true });
   });
 
-  it('reads a folder of skills, skipping symbolic links, and serves it', async () => {
-    const files = await readSkillFiles(root);
-    expect(Object.keys(files).sort()).toEqual(['demo/SKILL.md', 'demo/references/NOTES.md', 'outside.txt']);
-
-    const served = await serveHTTP(createServer({ files }));
+  it("serves a workspace's skills folder, reading files when clients ask for them", async () => {
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: base }) });
+    const filesystem = workspace.filesystem!;
+    const readFile = vi.spyOn(filesystem, 'readFile');
+    const served = await serveHTTP(createServer({ files: filesystem, root: 'skills' }));
     try {
       const client = await connectClient(served.url);
       try {
         const skillsClient = new SkillsClient(client);
         const [demo] = (await skillsClient.list()).skills;
         expect(demo?.uri).toBe('skill://demo/SKILL.md');
-        expect((await skillsClient.read(demo!, 'references/NOTES.md')).text).toBe('notes');
-        // Files outside any skill folder are not served.
-        await expect(client.readResource({ uri: 'skill://outside.txt' })).rejects.toThrow();
+        // The symbolic link is left out; everything else under the skill is listed.
+        expect(Array.isArray(demo!.resources) && demo!.resources.map(r => r.uri).sort()).toEqual([
+          'skill://demo/SKILL.md',
+          'skill://demo/references/NOTES.md',
+          'skill://demo/secret.txt',
+        ]);
+        // Listing hashed each file once; nothing is read again until a client asks.
+        expect(readFile).toHaveBeenCalledTimes(3);
+        await skillsClient.list();
+        expect(readFile).toHaveBeenCalledTimes(3);
+
+        const notes = await skillsClient.read(demo!, 'references/NOTES.md');
+        expect(notes).toMatchObject({ verified: true, text: 'notes' });
+        expect(readFile).toHaveBeenCalledTimes(4);
+        expect(readFile).toHaveBeenLastCalledWith('skills/demo/references/NOTES.md');
+
+        await expect(client.readResource({ uri: 'skill://README.md' })).rejects.toThrow();
+        await expect(client.readResource({ uri: 'skill://demo/link.txt' })).rejects.toThrow();
+      } finally {
+        await client.close();
+      }
+    } finally {
+      await served.close();
+    }
+  });
+
+  it('fails a read of a file that changed since it was listed, then lists it afresh', async () => {
+    const served = await serveHTTP(createServer({ files: new LocalFilesystem({ basePath: join(base, 'skills') }) }));
+    try {
+      const client = await connectClient(served.url);
+      try {
+        const skillsClient = new SkillsClient(client);
+        const [before] = (await skillsClient.list()).skills;
+        await writeFile(join(base, 'skills', 'demo', 'references', 'NOTES.md'), 'new notes');
+        await expect(client.readResource({ uri: 'skill://demo/references/NOTES.md' })).rejects.toThrow(
+          /changed since it was listed/,
+        );
+        const [after] = (await skillsClient.list()).skills;
+        expect(after).not.toEqual(before);
+        expect(await skillsClient.read(after!, 'references/NOTES.md')).toMatchObject({
+          verified: true,
+          text: 'new notes',
+        });
+      } finally {
+        await client.close();
+      }
+    } finally {
+      await served.close();
+    }
+  });
+});
+
+describe('MCPServer skills from other sources', () => {
+  it('reads through an MCP SDK SkillFiles adapter', async () => {
+    const files = memorySkillFiles({ 'catalog/a/SKILL.md': skillMd('a', 'A'), 'catalog/a/notes.md': 'n' });
+    const served = await serveHTTP(createServer({ files, root: 'catalog' }));
+    try {
+      const client = await connectClient(served.url);
+      try {
+        const skillsClient = new SkillsClient(client);
+        const [a] = (await skillsClient.list()).skills;
+        expect(a?.uri).toBe('skill://a/SKILL.md');
+        expect(await skillsClient.read(a!, 'notes.md')).toMatchObject({ verified: true, text: 'n' });
+      } finally {
+        await client.close();
+      }
+    } finally {
+      await served.close();
+    }
+  });
+
+  it('serves a custom SkillSource, without directory reads when it has none', async () => {
+    const report = skillMd('report', 'Weekly report for the caller');
+    const reads: string[] = [];
+    const source: SkillSource = {
+      async list() {
+        return {
+          skills: [
+            await skillEntry('report', { 'SKILL.md': report }),
+            {
+              uri: 'skill://live/SKILL.md',
+              frontmatter: { name: 'live', description: 'Generated' },
+              resources: 'dynamic',
+            },
+          ],
+        };
+      },
+      async get(uri) {
+        return (await this.list({}, undefined as never)).skills.find(skill => skill.uri === uri);
+      },
+      async read(uri) {
+        reads.push(uri);
+        if (uri === 'skill://report/SKILL.md') return { text: report, mimeType: 'text/markdown' };
+        if (uri === 'skill://live/SKILL.md') return { text: skillMd('live', 'Generated', `at ${reads.length}`) };
+        if (uri === 'skill://live/data.bin') return { bytes: PNG, mimeType: 'image/png' };
+        return undefined;
+      },
+      async listResources() {
+        return [{ uri: 'skill://report/SKILL.md', name: 'report', mimeType: 'text/markdown' }];
+      },
+    };
+    const served = await serveHTTP(createServer({ source, cacheHint: { ttlMs: 1000, cacheScope: 'private' } }));
+    try {
+      const client = await connectClient(served.url);
+      try {
+        expect(client.getServerCapabilities()?.extensions).toEqual({ [SKILLS_EXTENSION_ID]: { directoryRead: false } });
+        const skillsClient = new SkillsClient(client);
+        const listing = await skillsClient.list();
+        expect(listing).toMatchObject({ ttlMs: 1000, cacheScope: 'private' });
+        const [reportSkill, live] = listing.skills;
+        expect(await skillsClient.read(reportSkill!)).toMatchObject({ verified: true, mimeType: 'text/markdown' });
+        expect((await skillsClient.read(live!)).body).toContain('at 2');
+        const blob = await client.readResource({ uri: 'skill://live/data.bin' });
+        expect(blob.contents[0]).toMatchObject({ mimeType: 'image/png', blob: btoa(String.fromCharCode(...PNG)) });
+        expect((await client.listResources()).resources.map(r => r.uri)).toEqual(['skill://report/SKILL.md']);
+        await expect(skillsClient.get('skill://nope/SKILL.md')).rejects.toMatchObject({ code: -32602 });
+        await expect(client.readResource({ uri: 'skill://nope/SKILL.md' })).rejects.toThrow();
+        const directory = await rawRequest(served.url, {
+          method: 'resources/directory/read',
+          params: { uri: 'skill://report' },
+        });
+        expect(directory.json().error).toMatchObject({ code: -32601 });
       } finally {
         await client.close();
       }

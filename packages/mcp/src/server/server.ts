@@ -69,7 +69,7 @@ import type {
   Tool as MCPTool,
   jsonSchemaValidator,
 } from '@modelcontextprotocol/server';
-import { RESOURCES_DIRECTORY_READ_METHOD, SKILLS_EXTENSION_ID } from '@modelcontextprotocol/server/ext/skills';
+import { SKILLS_EXTENSION_ID } from '@modelcontextprotocol/server/ext/skills';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 
 import type { StdioServerHandle } from '@modelcontextprotocol/server/stdio';
@@ -99,8 +99,8 @@ import {
   toToolExecutionContext,
 } from './request';
 import type { ContinuationEnvelope } from './request';
-import { buildSkillCatalog, registerSkillHandlers, skillFileContents } from './skills';
-import type { MCPServerSkills, SkillCatalog } from './skills';
+import { registerSkillHandlers, servesDirectories, skillFileContents, skillSourceFor } from './skills';
+import type { MCPServerSkills, SkillSource } from './skills';
 import { BackgroundTaskMCPTaskStore } from './tasks/background-store';
 import { resolveTasksConfig, SelectingMCPTaskStore } from './tasks/config';
 import type { MCPServerTasksOptions, ResolvedTasksConfig, ResolvedToolTaskMode } from './tasks/config';
@@ -282,8 +282,8 @@ export interface MCPServerConfig extends CoreMCPServerConfig {
   skills?: MCPServerSkills;
 }
 
-/** Catalogs by `skills` config, so servers built per request from one config hash its files once. */
-const skillCatalogs = new WeakMap<MCPServerSkills, Promise<SkillCatalog>>();
+/** Skill sources by `skills` config, so servers built per request from one config hash its files once. */
+const skillSources = new WeakMap<MCPServerSkills, SkillSource>();
 
 export interface MCPServerHTTPOptions {
   url: URL;
@@ -777,7 +777,10 @@ export class MCPServer extends MCPServerBase {
       capabilities.resources = { subscribe: true, listChanged: true };
     }
     if (this.skillsConfig) {
-      capabilities.extensions = { ...capabilities.extensions, [SKILLS_EXTENSION_ID]: { directoryRead: true } };
+      capabilities.extensions = {
+        ...capabilities.extensions,
+        [SKILLS_EXTENSION_ID]: { directoryRead: servesDirectories(this.skillsConfig) },
+      };
     }
     if (this.promptOptions) capabilities.prompts = { listChanged: true };
     if (this.appResourceList.length > 0 || this.hasUiMetadata()) {
@@ -850,7 +853,7 @@ export class MCPServer extends MCPServerBase {
     if (this.skillsConfig) {
       registerSkillHandlers(server, {
         config: this.skillsConfig,
-        catalog: () => this.skillCatalog(),
+        source: this.skillSource(),
         trace: (instance, method, params, ctx, fn) =>
           this.traceCustomRequest(instance, method, params, ctx, () => fn()),
       });
@@ -2124,17 +2127,15 @@ export class MCPServer extends MCPServerBase {
     };
   }
 
-  /** The `skills` catalog, built on first use and shared by every server built from the same config. */
-  private skillCatalog(): Promise<SkillCatalog> {
+  /** The `skills` source, shared by every server built from the same config. */
+  private skillSource(): SkillSource {
     const config = this.skillsConfig!;
-    let catalog = skillCatalogs.get(config);
-    if (!catalog) {
-      catalog = buildSkillCatalog(config, message => this.logger.warn(message));
-      skillCatalogs.set(config, catalog);
-      // A failed build is retried on the next request.
-      catalog.catch(() => skillCatalogs.delete(config));
+    let source = skillSources.get(config);
+    if (!source) {
+      source = skillSourceFor(config, message => this.logger.warn(message));
+      skillSources.set(config, source);
     }
-    return catalog;
+    return source;
   }
 
   private registerResourceHandlers(server: Server): void {
@@ -2152,7 +2153,7 @@ export class MCPServer extends MCPServerBase {
 
     const listResources = async (ctx: ServerContext, requestContext: RequestContext): Promise<Resource[]> => [
       ...appResourcesFor(ctx),
-      ...(hasSkills ? (await this.skillCatalog()).listed : []),
+      ...(hasSkills ? ((await this.skillSource().listResources?.(ctx)) ?? []) : []),
       ...((await options?.listResources({
         extra: toToolExecutionContext(ctx, this.name).extra,
         requestContext,
@@ -2185,15 +2186,8 @@ export class MCPServer extends MCPServerBase {
     this.setTracedHandler(server, 'resources/read', async (request, ctx, trace) => {
       const uri = request.params.uri;
       if (hasSkills && uri.startsWith('skill://')) {
-        const catalog = await this.skillCatalog();
-        const file = catalog.files.get(uri);
+        const file = await this.skillSource().read(uri, ctx);
         if (file) return { contents: [skillFileContents(uri, file)] };
-        if (catalog.dirs.has(uri)) {
-          throw new ProtocolError(
-            ProtocolErrorCode.InvalidParams,
-            `${uri} is a directory; use ${RESOURCES_DIRECTORY_READ_METHOD}`,
-          );
-        }
       }
       const resource = await findResource(uri, ctx, trace.requestContext);
       if (!resource) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Resource not found: ${uri}`);
