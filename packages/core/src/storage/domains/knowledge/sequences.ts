@@ -356,6 +356,7 @@ function isJsonValue(value: unknown, ancestors: Set<object> = new Set()): boolea
   const proto = Object.getPrototypeOf(value);
   if (array ? proto !== Array.prototype : proto !== Object.prototype && proto !== null) return false;
   const keys = Reflect.ownKeys(value).filter(key => !(array && key === 'length'));
+  if (array && !keys.every((key, index) => key === String(index))) return false;
   if (array && keys.length !== (value as unknown[]).length) return false;
   const children: unknown[] = [];
   for (const key of keys) {

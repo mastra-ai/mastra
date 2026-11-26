@@ -471,6 +471,7 @@ export function createKnowledgeSequenceTests(createStore: () => Promise<Knowledg
         { list: [1, , 2] },
         cyclic,
         hooked,
+        { list: Object.assign(new Array(1), { extra: 'not an array element' }) },
         { nested: hookedList },
         getter,
         symbolKey,
