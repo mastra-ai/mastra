@@ -5027,8 +5027,7 @@ export class AgentThreadStreamRuntime {
       return;
     }
     this.#publishPendingUserMessage(pubsub, key, record.runId, signal, 'pending');
-    this.#notifyPendingSignals(state, key, signal);
-    this.#publishSignalAvailable(record.agent, record.runId, signal.id);
+    this.#notifyPendingSignals(state, key, signal, record.runId);
     this.#publish(pubsub, key, {
       type: 'signal-enqueued',
       runId: record.runId,
@@ -5076,10 +5075,7 @@ export class AgentThreadStreamRuntime {
       this.#publish(pubsub, key, { type: 'user-message-admitted', signalId: signal.id, admittedRunId: runId });
     }
     this.#publishPendingUserMessage(pubsub, key, runId, signal, 'pending');
-    this.#notifyPendingSignals(state, key, signal);
-    // A sender that stored the row announced it itself.
-    const announcer = record?.agent ?? state.storedReservations.get(runId)?.agent;
-    if (!data.stored && announcer) this.#publishSignalAvailable(announcer, runId, signal.id);
+    this.#notifyPendingSignals(state, key, signal, runId);
   }
 
   /**
@@ -7222,10 +7218,20 @@ export class AgentThreadStreamRuntime {
     };
   }
 
-  #notifyPendingSignals(state: AgentThreadRuntimeState, key: string, signal: CreatedAgentSignal): void {
+  /**
+   * `forRunId` is the run a stored signal was inserted for: an insert answers after its wait on the store, by when
+   * the thread may hold another run, which must not hear of it.
+   */
+  #notifyPendingSignals(
+    state: AgentThreadRuntimeState,
+    key: string,
+    signal: CreatedAgentSignal,
+    forRunId?: string,
+  ): void {
     const runId = state.activeThreadRunIds.get(key);
     if (
       !runId ||
+      (forRunId !== undefined && runId !== forRunId) ||
       state.threadKeysByRunId.get(runId) !== key ||
       state.abortedRunIds.has(runId) ||
       state.preparedRunsById.get(runId)?.abortController.signal.aborted
