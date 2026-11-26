@@ -356,7 +356,9 @@ In an agent's [channel](/docs/channels) thread, the paused call shows a card wit
 1. **I've connected** checks the platform. When the connection is active, the call finishes and the agent continues. Otherwise the card keeps waiting, or the call finishes as failed when the sign-in didn't finish or its link expired.
 1. **Cancel** finishes the call as failed with "The user cancelled connecting."
 
-Each button checks the platform first. When the provider is already connected, for example from your app, the call finishes as connected, even after **Cancel**. The card needs an adapter that shows buttons and a `toolDisplay` mode other than `'text'`. In `'text'` mode no card is posted and the run stays paused.
+Each button on the current card checks the platform first. When the provider is already connected, for example from your app, the call finishes as connected, even after **Cancel**. Buttons that serve a different resource are the exception, as described below.
+
+The card needs an adapter that shows buttons and a `toolDisplay` mode other than `'text'`. In `'text'` mode no card is posted. The user's next message resumes the call through [automatic tool resumption](/docs/agents/human-in-the-loop#automatic-tool-resumption), and the model writes the resume data, for example `{ action: 'connect' }` when the user asks to connect. The same ownership rule applies, with the message's author in place of the user who selected a button.
 
 The sign-in link is never in the thread, in the card, in the tool's result, or in logs. When Mastra can't deliver it privately, or the platform can't start a sign-in, the card asks the user to connect the provider from your app instead, and still offers **I've connected** and **Cancel**.
 
