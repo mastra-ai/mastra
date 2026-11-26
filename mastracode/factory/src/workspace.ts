@@ -60,6 +60,7 @@ import {
   evictSessionSandbox,
   getSessionSandbox,
   hasFailedSetupCommand,
+  readEnvironmentRepositoryCommits,
   recordFailedSetupCommand,
   resolveSessionWorkdir,
 } from './sandbox/session-sandbox.js';
@@ -1831,6 +1832,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           }
         }
       } finally {
+        await Promise.all(
+          states.map(async state => {
+            if (state.setupStatus === 'skipped') return;
+            Object.assign(state, await readEnvironmentRepositoryCommits(target, gate.root, state.dir));
+          }),
+        );
         record();
         await recordSetupResults(repos, states, failures, inFlight, repeated);
       }

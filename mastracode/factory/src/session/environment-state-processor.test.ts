@@ -102,6 +102,30 @@ describe('FactoryEnvironmentStateProcessor', () => {
     );
   });
 
+  it('names the commit a repository with a setup command was built at, and warns when the checkout moved past it', async () => {
+    const built = 'a'.repeat(40);
+    const newer = 'b'.repeat(40);
+    const [docs, mastra] = environment.repositories;
+    recordSessionEnvironment('sess-1', {
+      workingDirectory: '/home/user',
+      repositories: [
+        { ...docs!, builtAt: built, checkoutAt: built },
+        { ...docs!, slug: 'acme/api', dir: '/home/user/api', builtAt: built, checkoutAt: newer },
+        { ...mastra!, builtAt: built, checkoutAt: newer },
+      ],
+    });
+
+    const signal = await new FactoryEnvironmentStateProcessor().computeStateSignal(stateArgs(requestContext()));
+
+    const contents = (signal as { contents: string }).contents;
+    expect(contents).toContain('(default main, setup ok, built at aaaaaaa)\n');
+    expect(contents).toContain(
+      '(default main, setup ok, built at aaaaaaa; the checkout is at bbbbbbb, so build output and installed dependencies may be out of date)',
+    );
+    // A repository with no setup command has no build output to describe.
+    expect(contents).toContain('acme/mastra at /home/user/mastra on (detached) (default main, setup skipped)');
+  });
+
   it('names a one-repository environment by its checkout as the working directory, with no multi-repository advice', async () => {
     recordSessionEnvironment('sess-1', {
       workingDirectory: '/home/user',

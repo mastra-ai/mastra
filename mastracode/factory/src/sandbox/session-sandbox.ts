@@ -15,6 +15,7 @@ import type {
   WorkspaceSandbox,
 } from '@mastra/core/workspace';
 import { timedPhase } from '../timing.js';
+import type { ExecutableSandbox } from './materialization.js';
 import { deriveLocalWorkdir, deriveRemoteRepoDir, repoDirUnder, repositoryDirectoryName } from './workdir.js';
 
 /**
@@ -437,6 +438,47 @@ async function writeRepoMarker(
   await sandbox.executeCommand!(
     `mkdir -p "$(dirname "${marker}")" && printf '%s' ${shellQuote(content)} > "${marker}" && { test -f "${failed}" && { grep -vxF -- ${shellQuote(repoDir)} "${failed}" > "${failed}.tmp" || true; } && mv "${failed}.tmp" "${failed}" || true; }`,
   ).catch(() => {});
+  await writeBuiltAt(sandbox, root, repoDir);
+}
+
+/**
+ * Where the boot keeps the commit a repository's setup output was produced
+ * at: the checkout's commit when the environment build or the session ran
+ * the setup command. The checkout moves on (the boot syncs it, the agent
+ * pulls), so this is the only record of what `dist` and the installed
+ * dependencies were built from.
+ */
+const BUILT_AT_DIR = '.mastra-sandbox/built-at';
+
+/** Record the checkout's current commit as the one its setup output was built at. Best-effort. */
+async function writeBuiltAt(sandbox: WorkspaceSandbox, root: string, repoDir: string): Promise<void> {
+  const file = `${root}/${BUILT_AT_DIR}/${repoDir}`;
+  await sandbox.executeCommand!(
+    `head=$(git -C "${root}/${repoDir}" rev-parse HEAD) && mkdir -p "$(dirname "${file}")" && printf '%s' "$head" > "${file}"`,
+  ).catch(() => {});
+}
+
+const COMMIT = /^[0-9a-f]{40}$/;
+
+/**
+ * The commit a repository's setup output was built at, and the commit its
+ * checkout is at now. Either is undefined when unknown (a sandbox created
+ * before this was recorded, or a checkout git cannot read). Never throws.
+ */
+export async function readEnvironmentRepositoryCommits(
+  sandbox: Pick<ExecutableSandbox, 'executeCommand'>,
+  root: string,
+  dir: string,
+): Promise<{ builtAt?: string; checkoutAt?: string }> {
+  const file = `${root}/${BUILT_AT_DIR}/${path.posix.basename(dir)}`;
+  const result = await sandbox
+    .executeCommand?.(`cat "${file}" 2>/dev/null; echo; git -C "${dir}" rev-parse HEAD 2>/dev/null; true`)
+    .catch(() => undefined);
+  const [builtAt, checkoutAt] = (result?.stdout ?? '').split('\n').map(line => line.trim());
+  return {
+    ...(builtAt && COMMIT.test(builtAt) ? { builtAt } : {}),
+    ...(checkoutAt && COMMIT.test(checkoutAt) ? { checkoutAt } : {}),
+  };
 }
 
 async function workspaceMarkerMatches(sandbox: WorkspaceSandbox, root: string, content: string): Promise<boolean> {
@@ -475,7 +517,7 @@ export function createEnvironmentSetupHook(
 ): SandboxStartHook {
   const workspaceCommand = environment.workspaceSetupCommand?.trim() ? environment.workspaceSetupCommand : undefined;
   const workspaceMarker = workspaceCommand ? setupMarkerContent(workspaceCommand) : undefined;
-  return async ({ sandbox }) => {
+  return async ({ sandbox, outcome }) => {
     if (!sandbox.executeCommand) {
       throw new Error(`Sandbox '${sandbox.id}' cannot run the session setup: no executeCommand implementation`);
     }
@@ -491,12 +533,16 @@ export function createEnvironmentSetupHook(
       const setupDone = setup === 'done';
       const failedInBuild = setup === 'failed-in-build';
       if (marker) {
-        const outcome = setupDone
+        const message = setupDone
           ? 'marker matches, skipping setup command'
           : failedInBuild
             ? 'setup command failed in the environment build, not running it again'
             : 'no matching marker, setup command will run';
-        process.stderr.write(`[factory:setup] ${repo.slug}: ${outcome} (${root}/${repoSetupMarkerPath(repoDir)})\n`);
+        process.stderr.write(`[factory:setup] ${repo.slug}: ${message} (${root}/${repoSetupMarkerPath(repoDir)})\n`);
+        // A new sandbox's checkout is still where the environment build left
+        // it: the boot has not synced it yet, so its commit is the one the
+        // build ran the setup command at.
+        if (outcome === 'created' && (setupDone || failedInBuild)) await writeBuiltAt(sandbox, root, repoDir);
       }
       repos.push({
         ...repo,

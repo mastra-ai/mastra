@@ -4499,7 +4499,12 @@ describe('factory environment sandbox context', () => {
      */
     async function boot(
       resolver: (args: any) => Promise<any>,
-      markers: { repos?: Record<string, boolean | 'failed-in-build'>; workspace?: boolean } = {},
+      markers: {
+        repos?: Record<string, boolean | 'failed-in-build'>;
+        workspace?: boolean;
+        /** Per repository directory: the built-at commit and the checkout commit the boot reads. */
+        commits?: Record<string, [builtAt: string, checkoutAt: string]>;
+      } = {},
     ) {
       const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
       const sandbox = mocks.createSandbox.mock.results[0]!.value as { exec: ReturnType<typeof vi.fn> };
@@ -4513,6 +4518,11 @@ describe('factory environment sandbox context', () => {
         }
         if (text.includes('workspace-setup"') && text.startsWith('test -f')) {
           return { exitCode: markers.workspace ? 0 : 1, stdout: '', stderr: '' };
+        }
+        const commitRead = /^cat "[^"]*\/\.mastra-sandbox\/built-at\/([^"]+)"/.exec(text);
+        if (commitRead) {
+          const commits = markers.commits?.[commitRead[1]!];
+          return { exitCode: 0, stdout: commits ? `${commits[0]}\n${commits[1]}\n` : '\n', stderr: '' };
         }
         return original(command, ...rest);
       });
@@ -4654,6 +4664,28 @@ describe('factory environment sandbox context', () => {
           },
         ],
       });
+    });
+
+    it('records the commit each repository with a setup command was built at, beside its checkout commit', async () => {
+      const { resolver } = environmentFixture({ links: twoLinks });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1', branch: 'factory/issue-7' });
+      const built = 'a'.repeat(40);
+      const checkout = 'b'.repeat(40);
+
+      const { exec } = await boot(resolver, {
+        repos: { hello: true },
+        workspace: true,
+        commits: { hello: [built, checkout], docs: [built, checkout] },
+      });
+
+      expect(peekSessionEnvironment('session-a')?.repositories).toEqual([
+        expect.objectContaining({ slug: 'octocat/hello', setupStatus: 'ok', builtAt: built, checkoutAt: checkout }),
+        // No setup command, so no build output to describe and nothing read.
+        expect.not.objectContaining({ builtAt: expect.anything() }),
+      ]);
+      const reads = exec.mock.calls.map(([command]) => String(command)).filter(c => c.includes('built-at/'));
+      expect(reads.filter(c => c.startsWith('cat ')).map(c => /built-at\/([^"]+)/.exec(c)![1])).toEqual(['hello']);
     });
 
     it('numbers the environment signal from 1 even when stored link positions have gaps', async () => {

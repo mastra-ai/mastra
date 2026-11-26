@@ -18,6 +18,10 @@ export interface SessionEnvironmentRepositoryState {
   setupStatus: EnvironmentRepositorySetupStatus;
   /** The change request this session opened in the repository, once it has. */
   changeRequestUrl?: string;
+  /** The commit the setup output (build output, installed dependencies) was produced at, when known. */
+  builtAt?: string;
+  /** The commit the checkout was at when the boot finished, when known. */
+  checkoutAt?: string;
 }
 
 export interface SessionEnvironmentState {
@@ -121,6 +125,14 @@ function isUntrustedCheckout(requestContext: RequestContext | undefined): boolea
   return controller?.getState?.().untrustedCheckout === true;
 }
 
+// Only a repository with a setup command has build output to describe.
+function builtAtText(repo: SessionEnvironmentRepositoryState): string {
+  if (repo.setupStatus === 'skipped' || !repo.builtAt) return '';
+  const built = `, built at ${repo.builtAt.slice(0, 7)}`;
+  if (!repo.checkoutAt || repo.checkoutAt === repo.builtAt) return built;
+  return `${built}; the checkout is at ${repo.checkoutAt.slice(0, 7)}, so build output and installed dependencies may be out of date`;
+}
+
 function environmentCacheKey(state: SessionEnvironmentState): string {
   return `environment:${createHash('sha256').update(JSON.stringify(state)).digest('hex').slice(0, 16)}`;
 }
@@ -147,7 +159,7 @@ export class FactoryEnvironmentStateProcessor implements Processor<'factory-envi
       return;
     const lines = state.repositories.map(
       (repo, index) =>
-        `${index + 1}. ${escapeText(repo.slug)} at ${escapeText(repo.dir)} on ${escapeText(repo.branch ?? '(detached)')} (default ${escapeText(repo.defaultBranch)}, setup ${repo.setupStatus})` +
+        `${index + 1}. ${escapeText(repo.slug)} at ${escapeText(repo.dir)} on ${escapeText(repo.branch ?? '(detached)')} (default ${escapeText(repo.defaultBranch)}, setup ${repo.setupStatus}${builtAtText(repo)})` +
         (repo.changeRequestUrl ? `, change request ${escapeText(repo.changeRequestUrl)}` : ''),
     );
     const only = state.repositories.length === 1 ? state.repositories[0] : undefined;

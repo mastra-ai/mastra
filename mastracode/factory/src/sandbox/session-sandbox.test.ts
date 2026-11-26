@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -12,6 +13,7 @@ import {
   evictSessionSandbox,
   getSessionSandbox,
   peekSessionSandbox,
+  readEnvironmentRepositoryCommits,
   resolveSessionWorkdir,
   sessionLayout,
 } from './session-sandbox.js';
@@ -509,6 +511,89 @@ describe('environment setup hook', () => {
     await new LocalSandbox({ workingDirectory: boot, onStart: hook(log) })._start();
     expect(log).toEqual(['acme/docs']);
     await expect(fs.readFile(path.join(boot, '.mastra-sandbox/setup-failed'), 'utf8')).resolves.toBe('');
+  });
+
+  /** A real one-commit git checkout at `dir`; returns its commit. */
+  const gitCommit = (dir: string, message: string): string => {
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { encoding: 'utf8' });
+    git('commit', '--allow-empty', '-q', '-m', message);
+    return git('rev-parse', 'HEAD').trim();
+  };
+
+  const gitInit = async (dir: string): Promise<void> => {
+    await fs.rm(path.join(dir, '.git'), { recursive: true, force: true });
+    execFileSync('git', ['init', '-q', dir]);
+  };
+
+  it('records the commit a new sandbox was built at before the boot moves the checkout, and keeps it on a reattach', async () => {
+    const boot = path.join(dir, 'built');
+    await plantRepo(boot, 'api', API);
+    await plantRepo(boot, 'docs', DOCS);
+    await fs.writeFile(path.join(boot, '.mastra-sandbox/workspace-setup'), setupMarkerContent(WORKSPACE));
+    await fs.writeFile(path.join(boot, '.mastra-sandbox/setup-failed'), 'docs\n');
+    await gitInit(path.join(boot, 'api'));
+    await gitInit(path.join(boot, 'docs'));
+    const builtApi = gitCommit(path.join(boot, 'api'), 'built');
+    const builtDocs = gitCommit(path.join(boot, 'docs'), 'built');
+    let pulled = '';
+    // The boot syncs each checkout to a newer commit, as the real one does.
+    const run = async () => {
+      pulled = gitCommit(path.join(boot, 'api'), 'pulled');
+    };
+    // `outcome` is what a provider reports for a sandbox booted from its template.
+    const onStart = createEnvironmentSetupHook(run, 'sess-env', 'acme/api', {
+      repos,
+      workspaceSetupCommand: WORKSPACE,
+    });
+    const sandbox = new LocalSandbox({ workingDirectory: boot });
+    await onStart({ sandbox, outcome: 'created' });
+
+    await expect(readEnvironmentRepositoryCommits(sandbox, boot, path.join(boot, 'api'))).resolves.toEqual({
+      builtAt: builtApi,
+      checkoutAt: pulled,
+    });
+    // Setup failed in the build, but its output still came from that commit.
+    await expect(readEnvironmentRepositoryCommits(sandbox, boot, path.join(boot, 'docs'))).resolves.toEqual({
+      builtAt: builtDocs,
+      checkoutAt: builtDocs,
+    });
+
+    await onStart({ sandbox, outcome: 'connected' });
+    await expect(readEnvironmentRepositoryCommits(sandbox, boot, path.join(boot, 'api'))).resolves.toMatchObject({
+      builtAt: builtApi,
+    });
+  });
+
+  it('records the commit a session ran a setup command at itself', async () => {
+    const boot = path.join(dir, 'session-setup');
+    await plantRepo(boot, 'api', 'an older api command');
+    await gitInit(path.join(boot, 'api'));
+    gitCommit(path.join(boot, 'api'), 'built with the old command');
+    let synced = '';
+    const onStart = createEnvironmentSetupHook(
+      async (_sb, env) => {
+        synced = gitCommit(path.join(boot, 'api'), 'synced');
+        await env.repos[0]!.gate.markSetupDone();
+      },
+      'sess-env',
+      'acme/api',
+      { repos: [{ slug: 'acme/api', setupCommand: API }] },
+    );
+    const sandbox = new LocalSandbox({ workingDirectory: boot });
+    await onStart({ sandbox, outcome: 'created' });
+
+    await expect(readEnvironmentRepositoryCommits(sandbox, boot, path.join(boot, 'api'))).resolves.toEqual({
+      builtAt: synced,
+      checkoutAt: synced,
+    });
+  });
+
+  it('reads no commits it cannot know', async () => {
+    const boot = path.join(dir, 'unknown');
+    await fs.mkdir(path.join(boot, 'api'), { recursive: true });
+    const sandbox = new LocalSandbox({ workingDirectory: boot });
+    await expect(readEnvironmentRepositoryCommits(sandbox, boot, path.join(boot, 'api'))).resolves.toEqual({});
   });
 
   it('a missing checkout reads as not done even when the marker matches', async () => {
