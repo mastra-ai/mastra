@@ -8,7 +8,17 @@ import type { IssueReconciler } from '../../issue-reconciler.js';
 import type { PlatformConnectProviderRegistration, PlatformConnectProviderSource } from '../connect/routes.js';
 import type { PlatformConnectOption } from '../platform-connect.js';
 import { PlatformConnectBinding } from './connect-binding.js';
-import type { LinkOrgConnectionsResult, NeedsLinkingEntry, PlatformConnection } from './connect-binding.js';
+import type {
+  LinkOrgConnectionsOptions,
+  LinkOrgConnectionsResult,
+  NeedsLinkingEntry,
+  PlatformConnection,
+} from './connect-binding.js';
+import type {
+  PlatformConnectEventDelivery,
+  PlatformConnectEventRoute,
+  PlatformConnectEventSource,
+} from './connect-events.js';
 
 /** Reconciles run hourly unless an integration says otherwise. */
 export const DEFAULT_PLATFORM_RECONCILE_INTERVAL_MS = 60 * 60_000;
@@ -51,11 +61,14 @@ export interface PlatformConnectIntegrationOptions {
  * Factory project, the provider's connect routes and the reconcile worker.
  * Capabilities (`intake`, `versionControl`) are composed in by subclasses.
  */
-export abstract class PlatformConnectIntegration implements FactoryIntegration, PlatformConnectProviderSource {
+export abstract class PlatformConnectIntegration
+  implements FactoryIntegration, PlatformConnectProviderSource, PlatformConnectEventSource
+{
   readonly id: string;
   readonly binding: PlatformConnectBinding;
   readonly #connectProviders: readonly PlatformConnectProvider[];
   readonly #reconcileIntervalMs: number;
+  #reconcileWorker: IssueReconcileWorker | undefined;
 
   constructor(options: PlatformConnectIntegrationOptions) {
     this.id = options.id;
@@ -109,8 +122,8 @@ export abstract class PlatformConnectIntegration implements FactoryIntegration, 
     return this.binding.proxy(connectionId, request);
   }
 
-  linkOrgConnections(): Promise<LinkOrgConnectionsResult> {
-    return this.binding.linkOrgConnections();
+  linkOrgConnections(options?: LinkOrgConnectionsOptions): Promise<LinkOrgConnectionsResult> {
+    return this.binding.linkOrgConnections(options);
   }
 
   get needsLinking(): NeedsLinkingEntry[] {
@@ -138,10 +151,10 @@ export abstract class PlatformConnectIntegration implements FactoryIntegration, 
   /**
    * Starts boot linking (non-blocking) and returns the reconcile worker, when
    * the integration reconciles. Linking that adds a connection triggers one
-   * extra reconcile.
+   * extra reconcile. The integration's storage remembers what was linked.
    */
   workers(ctx: IntegrationContext): MastraWorker[] {
-    void this.binding.ensureBootLinked();
+    void this.binding.ensureBootLinked(ctx.storage.generic);
     const reconcile = this.reconcile(ctx);
     if (!reconcile) return [];
     const worker = new IssueReconcileWorker({
@@ -149,18 +162,42 @@ export abstract class PlatformConnectIntegration implements FactoryIntegration, 
       reconcile,
       intervalMs: this.#reconcileIntervalMs,
     });
+    this.#reconcileWorker = worker;
     this.binding.onConnectionsLinked(() => worker.requestRun());
     return [worker];
+  }
+
+  /** Runs the reconcile now, if the integration has one running. */
+  requestReconcile(): void {
+    this.#reconcileWorker?.requestRun();
+  }
+
+  /**
+   * Handles one event from a connection's platform event log. Integrations
+   * without provider events leave it undefined and get no route.
+   */
+  protected handleConnectEvent?(event: PlatformConnectEventDelivery, ctx: IntegrationContext): Promise<void>;
+
+  connectEventRoute(ctx: IntegrationContext): PlatformConnectEventRoute | null {
+    const handle = this.handleConnectEvent;
+    if (!handle) return null;
+    return {
+      binding: this.binding,
+      handle: event => handle.call(this, event, ctx),
+      reconcile: () => this.requestReconcile(),
+    };
   }
 
   abstract routes(ctx: IntegrationContext): ApiRoute[];
 
   diagnostics(): Record<string, unknown> {
     const needsLinking = this.needsLinking;
+    const detached = this.binding.detached;
     return {
       configured: true,
       mode: 'platform',
       ...(needsLinking.length > 0 ? { needsLinking } : {}),
+      ...(detached.length > 0 ? { detached } : {}),
     };
   }
 }

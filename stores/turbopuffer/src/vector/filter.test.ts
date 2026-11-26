@@ -263,4 +263,141 @@ describe('TurbopufferFilterTranslator', () => {
       expect(() => translate(filter)).toThrow('$all operator requires a non-empty array');
     });
   });
+
+  // Mixed logical and field operators at the same level
+  describe('mixed logical and field operators', () => {
+    it('ANDs a leading $or with a sibling field', () => {
+      const filter = {
+        $or: [{ status: 'active' }, { featured: true }],
+        tenantId: 'tenant-a',
+      } as TurbopufferVectorFilter;
+
+      expect(translate(filter)).toEqual([
+        'And',
+        [
+          [
+            'Or',
+            [
+              ['status', 'Eq', 'active'],
+              ['featured', 'Eq', true],
+            ],
+          ],
+          ['tenantId', 'Eq', 'tenant-a'],
+        ],
+      ]);
+    });
+
+    it('ANDs a trailing $or with a leading sibling field', () => {
+      const filter = {
+        tenantId: 'tenant-a',
+        $or: [{ status: 'active' }, { featured: true }],
+      } as TurbopufferVectorFilter;
+
+      expect(translate(filter)).toEqual([
+        'And',
+        [
+          ['tenantId', 'Eq', 'tenant-a'],
+          [
+            'Or',
+            [
+              ['status', 'Eq', 'active'],
+              ['featured', 'Eq', true],
+            ],
+          ],
+        ],
+      ]);
+    });
+
+    it('ANDs $and with sibling fields', () => {
+      const filter = {
+        $and: [{ price: { $gte: 10 } }, { price: { $lte: 100 } }],
+        category: 'books',
+      } as TurbopufferVectorFilter;
+
+      expect(translate(filter)).toEqual([
+        'And',
+        [
+          [
+            'And',
+            [
+              ['price', 'Gte', 10],
+              ['price', 'Lte', 100],
+            ],
+          ],
+          ['category', 'Eq', 'books'],
+        ],
+      ]);
+    });
+
+    it('ANDs several logical operators with several sibling fields', () => {
+      const filter = {
+        $or: [{ status: 'active' }, { featured: true }],
+        $and: [{ price: { $gt: 0 } }],
+        tenantId: 'tenant-a',
+        category: 'books',
+      } as TurbopufferVectorFilter;
+
+      expect(translate(filter)).toEqual([
+        'And',
+        [
+          [
+            'Or',
+            [
+              ['status', 'Eq', 'active'],
+              ['featured', 'Eq', true],
+            ],
+          ],
+          ['And', [['price', 'Gt', 0]]],
+          ['tenantId', 'Eq', 'tenant-a'],
+          ['category', 'Eq', 'books'],
+        ],
+      ]);
+    });
+
+    it('ANDs a mixed object nested inside $and operands', () => {
+      const filter = {
+        $and: [{ $or: [{ status: 'active' }, { featured: true }], tenantId: 'tenant-a' }, { category: 'books' }],
+      } as TurbopufferVectorFilter;
+
+      expect(translate(filter)).toEqual([
+        'And',
+        [
+          [
+            'And',
+            [
+              [
+                'Or',
+                [
+                  ['status', 'Eq', 'active'],
+                  ['featured', 'Eq', true],
+                ],
+              ],
+              ['tenantId', 'Eq', 'tenant-a'],
+            ],
+          ],
+          ['category', 'Eq', 'books'],
+        ],
+      ]);
+    });
+
+    it('ANDs a mixed object nested inside $or operands', () => {
+      const filter = {
+        $or: [{ tenantId: 'tenant-a', $and: [{ price: { $gt: 0 } }] }, { category: 'books' }],
+      } as TurbopufferVectorFilter;
+
+      expect(translate(filter)).toEqual([
+        'Or',
+        [
+          [
+            'And',
+            [
+              ['tenantId', 'Eq', 'tenant-a'],
+              ['And', [['price', 'Gt', 0]]],
+            ],
+          ],
+          ['category', 'Eq', 'books'],
+        ],
+      ]);
+    });
+  });
 });

@@ -223,12 +223,12 @@ const agentScorer = createScorer({
 })
   .preprocess(({ run }) => {
     // run.input is automatically typed as ScorerRunInputForAgent
-    const userMessage = run.inputData.inputMessages[0]?.content
+    const userMessage = run.input.inputMessages[0]?.content.content
     return { userMessage }
   })
   .generateScore(({ run, results }) => {
     // run.output is automatically typed as ScorerRunOutputForAgent
-    const response = run.output[0]?.content
+    const response = run.output[0]?.content.content ?? ''
     return response.length > 10 ? 1.0 : 0.5
   })
 ```
@@ -271,11 +271,11 @@ const agentTraceScorer = createScorer({
   type: 'agent',
 }).generateScore(({ run }) => {
   // Trace data is automatically transformed to agent format
-  const userMessages = run.inputData.inputMessages
-  const agentResponse = run.output[0]?.content
+  const userMessages = run.input.inputMessages
+  const agentResponse = run.output[0]?.content.content ?? ''
 
   // Score based on response length
-  return agentResponse?.length > 50 ? 0 : 1
+  return agentResponse.length > 50 ? 0 : 1
 })
 
 // Register with Mastra for trace scoring

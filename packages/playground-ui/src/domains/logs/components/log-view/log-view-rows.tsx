@@ -66,7 +66,7 @@ export function LogViewRows<T extends LogViewLine>({
   const olderEdge = hasNextPage && <OlderLogsEdge isFetching={isFetchingNextPage} onVisible={loadOlder} />;
 
   return (
-    <LogStream scrollRef={scrollRef} wrap={wrap} className="flex-1">
+    <LogStream scrollRef={scrollRef} wrap={wrap} fractionDigits={timeFractionDigits} className="flex-1">
       <LogStream.Header>
         <LogStream.HeaderCell>Time</LogStream.HeaderCell>
         <LogStream.HeaderCell>Level</LogStream.HeaderCell>

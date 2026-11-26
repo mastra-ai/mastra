@@ -7,7 +7,7 @@ description: "Browse Hugging Face model IDs, capabilities, context windows, and 
 
 # <img src="https://models.dev/logos/huggingface.svg" alt="Hugging Face logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Hugging Face
 
-Access 120 Hugging Face models through Mastra's model router. Authentication is handled automatically using the `HF_TOKEN` environment variable.
+Access 125 Hugging Face models through Mastra's model router. Authentication is handled automatically using the `HF_TOKEN` environment variable.
 
 Learn more in the [Hugging Face documentation](https://huggingface.co).
 
@@ -210,8 +210,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 393216,
-    "inputCost": 0.745334,
-    "outputCost": 1.5016
+    "inputCost": 0.888188,
+    "outputCost": 1.5082
   },
   {
     "model": "huggingface/deepseek-ai/DeepSeek-V4-Pro-0813",
@@ -580,7 +580,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1048576,
+    "contextWindow": 524288,
     "maxOutput": 512000,
     "inputCost": 0.23,
     "outputCost": 0.96
@@ -850,16 +850,28 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1
   },
   {
+    "model": "huggingface/Qwen/Qwen2.5-VL-72B-Instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.8,
+    "outputCost": 1
+  },
+  {
     "model": "huggingface/Qwen/Qwen3-235B-A22B-Instruct-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 131072,
+    "contextWindow": 262144,
     "maxOutput": 16384,
-    "inputCost": 0.15,
-    "outputCost": 0.75
+    "inputCost": 0.09,
+    "outputCost": 0.55
   },
   {
     "model": "huggingface/Qwen/Qwen3-235B-A22B-Thinking-2507",
@@ -1162,6 +1174,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1
   },
   {
+    "model": "huggingface/RekaAI/reka-edge-2603",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 16384,
+    "maxOutput": 14745,
+    "inputCost": 0.1,
+    "outputCost": 0.1
+  },
+  {
+    "model": "huggingface/Sao10K/L3-8B-Lunaris-v1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 7372,
+    "inputCost": 0.04,
+    "outputCost": 0.05
+  },
+  {
     "model": "huggingface/stepfun-ai/Step-3.5-Flash",
     "imageInput": false,
     "audioInput": false,
@@ -1318,6 +1354,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3
   },
   {
+    "model": "huggingface/XiaomiMiMo/MiMo-V2.6-Flash-RL",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.14,
+    "outputCost": 0.28
+  },
+  {
+    "model": "huggingface/XiaomiMiMo/MiMo-V2.6-Pro-RL",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.387,
+    "outputCost": 0.783
+  },
+  {
     "model": "huggingface/zai-org/AutoGLM-Phone-9B-Multilingual",
     "imageInput": true,
     "audioInput": false,
@@ -1458,8 +1518,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
-    "inputCost": 0.5625,
-    "outputCost": 1.8
+    "inputCost": 0.643,
+    "outputCost": 1.978
   },
   {
     "model": "huggingface/zai-org/GLM-5.3",
@@ -1482,8 +1542,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
-    "inputCost": 0.042,
-    "outputCost": 0.184
+    "inputCost": 0.0356,
+    "outputCost": 0.0815
   }
 ]}
 />

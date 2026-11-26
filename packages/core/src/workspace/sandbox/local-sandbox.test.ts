@@ -453,20 +453,15 @@ describe('LocalSandbox', () => {
       expect(instructions).toContain(tempDir);
     });
 
-    it('should return custom instructions when override is provided', () => {
+    it.each([
+      ['should return custom instructions when override is provided', 'Custom sandbox instructions.'],
+      ['should return empty string when override is empty string', ''],
+    ] as const)('%s', (_title, instructions) => {
       const sb = new LocalSandbox({
         workingDirectory: tempDir,
-        instructions: 'Custom sandbox instructions.',
+        instructions,
       });
-      expect(sb.getInstructions()).toBe('Custom sandbox instructions.');
-    });
-
-    it('should return empty string when override is empty string', () => {
-      const sb = new LocalSandbox({
-        workingDirectory: tempDir,
-        instructions: '',
-      });
-      expect(sb.getInstructions()).toBe('');
+      expect(sb.getInstructions()).toBe(instructions);
     });
 
     it('should return auto-generated instructions when no override', () => {

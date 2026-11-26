@@ -1,6 +1,7 @@
 import { createAnthropic } from '@ai-sdk/anthropic-v6';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider-v6';
 import { MastraError } from '../../../error/index.js';
+import { prepareToolsForMastraGateway } from '../mastra-gateway-provider-tools.js';
 import { PROVIDER_REGISTRY } from '../provider-registry.js';
 import { MastraModelGateway } from './base.js';
 import type { ProviderConfig, GatewayLanguageModel } from './base.js';
@@ -43,6 +44,21 @@ export function gatewayServesObservationalMemory(apiKey: string | undefined): bo
   if (typeof apiKey !== 'string' || apiKey.length === 0) return false;
   if (apiKey.startsWith('msk-gateway-') || apiKey.startsWith('mskv2_')) return false;
   return apiKey.startsWith('msk_');
+}
+
+/**
+ * Every request to the gateway's chat endpoint goes through a model built here, whichever gateway
+ * or caller asked for it, so this is where its provider tools are made runnable.
+ */
+function withGatewayProviderTools(
+  model: ReturnType<ReturnType<typeof createOpenRouter>['chat']>,
+  routerId: string,
+): GatewayLanguageModel {
+  const doGenerate = model.doGenerate.bind(model);
+  const doStream = model.doStream.bind(model);
+  model.doGenerate = async options => doGenerate(prepareToolsForMastraGateway(options, routerId));
+  model.doStream = async options => doStream(prepareToolsForMastraGateway(options, routerId));
+  return model as unknown as GatewayLanguageModel;
 }
 
 export class MastraGateway extends MastraModelGateway {
@@ -167,22 +183,28 @@ export class MastraGateway extends MastraModelGateway {
 
     if (this.config?.customFetch) {
       // Non-Anthropic OAuth path: gateway key in GATEWAY_AUTH_HEADER, customFetch owns Authorization
-      return createOpenRouter({
-        apiKey: 'oauth-gateway-placeholder',
-        baseURL,
-        headers: withGatewayAuthHeader(apiKey, headers),
-        fetch: this.config.customFetch,
-      }).chat(fullModelId) as unknown as GatewayLanguageModel;
+      return withGatewayProviderTools(
+        createOpenRouter({
+          apiKey: 'oauth-gateway-placeholder',
+          baseURL,
+          headers: withGatewayAuthHeader(apiKey, headers),
+          fetch: this.config.customFetch,
+        }).chat(fullModelId),
+        `mastra/${fullModelId}`,
+      );
     }
 
     // API key path: gateway key goes via Authorization (standard flow)
-    return createOpenRouter({
-      apiKey,
-      baseURL,
-      headers: {
-        'User-Agent': MASTRA_USER_AGENT,
-        ...headers,
-      },
-    }).chat(fullModelId) as unknown as GatewayLanguageModel;
+    return withGatewayProviderTools(
+      createOpenRouter({
+        apiKey,
+        baseURL,
+        headers: {
+          'User-Agent': MASTRA_USER_AGENT,
+          ...headers,
+        },
+      }).chat(fullModelId),
+      `mastra/${fullModelId}`,
+    );
   }
 }

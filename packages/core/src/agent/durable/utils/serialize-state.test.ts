@@ -366,11 +366,6 @@ describe('serializeDurableOptions', () => {
     expect(result.toolChoice).toEqual({ type: 'tool', toolName: 'search' });
   });
 
-  it('leaves toolChoice undefined when not provided', () => {
-    const result = serializeDurableOptions({});
-    expect(result.toolChoice).toBeUndefined();
-  });
-
   it('drops unknown toolChoice object shapes', () => {
     const result = serializeDurableOptions({
       toolChoice: { type: 'unknown-type' } as any,

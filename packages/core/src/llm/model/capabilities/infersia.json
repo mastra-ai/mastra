@@ -31,12 +31,6 @@
         "type": "toggle"
       }
     ],
-    "deepseek/deepseek-v4.1-flash-1017": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
     "minimax/minimax-m3.1-flash": [
       {
         "type": "effort",
@@ -53,6 +47,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "high"]
+      }
+    ],
+    "deepseek/deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ]
   }

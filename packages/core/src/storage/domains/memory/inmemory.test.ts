@@ -61,14 +61,17 @@ describe('InMemoryMemory listMessages include resource scope', () => {
     expect(result.messages.map(message => message.id)).toEqual(['b1']);
   });
 
-  it('still returns a cross-thread include from the same resource', async () => {
+  it.each([
+    ['still returns a cross-thread include from the same resource', 'thread-a2', 'resource-a', 'a4'],
+    ['keeps an empty resourceId in listMessages unscoped, like its main query', 'thread-b1', '', 'b1'],
+  ] as const)('%s', async (_title, threadId, resourceId, value) => {
     const result = await store.listMessages({
-      threadId: 'thread-a2',
-      resourceId: 'resource-a',
+      threadId,
+      resourceId,
       include: [{ id: 'a2', withPreviousMessages: 1, withNextMessages: 1 }],
     });
 
-    expect(result.messages.map(message => message.id)).toEqual(['a1', 'a2', 'a3', 'a4']);
+    expect(result.messages.map(message => message.id)).toEqual(['a1', 'a2', 'a3', value]);
   });
 
   it('does not return another resource on the semantic recall fast path', async () => {
@@ -141,16 +144,6 @@ describe('InMemoryMemory listMessages include resource scope', () => {
     });
 
     expect(result.messages).toEqual([]);
-  });
-
-  it('keeps an empty resourceId in listMessages unscoped, like its main query', async () => {
-    const result = await store.listMessages({
-      threadId: 'thread-b1',
-      resourceId: '',
-      include: [{ id: 'a2', withPreviousMessages: 1, withNextMessages: 1 }],
-    });
-
-    expect(result.messages.map(message => message.id)).toEqual(['a1', 'a2', 'a3', 'b1']);
   });
 });
 

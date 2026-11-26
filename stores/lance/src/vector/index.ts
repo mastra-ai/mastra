@@ -482,12 +482,22 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           const flattenedMetadata = this.flattenObject(metadataItem, 'metadata');
           // Add all flattened metadata properties to the row data object
           Object.entries(flattenedMetadata).forEach(([key, value]) => {
-            rowData[key] = value;
+            // Skip null values. A column that is null in every row of the batch cannot be
+            // type-inferred by Arrow/Lance, which fails the whole upsert. The null is still
+            // preserved losslessly in _metadata_json below.
+            if (value === null) {
+              return;
+            }
+            // Lance rejects '.' in top-level field names, so replace dots with underscores.
+            // This matches filterTranslator, which does the same when building metadata filters.
+            rowData[key.replace(/\./g, '_')] = value;
           });
           // Store lossless JSON representation for round-trip fidelity
           rowData['_metadata_json'] = JSON.stringify(metadataItem);
         } else {
-          rowData['_metadata_json'] = '';
+          // Store '{}' (not '') so empty metadata round-trips as {} instead of falling back to
+          // flat extraction, which would surface phantom null columns from sibling rows.
+          rowData['_metadata_json'] = '{}';
         }
 
         return rowData;
@@ -504,7 +514,10 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         // Check for schema mismatches:
         // - extraColumns: columns in data not in schema (will be dropped)
         // - missingSchemaColumns: columns in schema not in data (will be set to null)
-        const dataColumns = new Set(Object.keys(data[0] || {}));
+        // Union over every row, not just the first: metadata columns are skipped for
+        // null values, so a column can appear only in a later row of the batch. Reading
+        // only data[0] would miss it and let mergeInsert fail with "field not in schema".
+        const dataColumns = new Set(data.flatMap(row => Object.keys(row)));
         const extraColumns = [...dataColumns].filter(col => !existingColumns.has(col));
         const missingSchemaColumns = [...existingColumns].filter(col => !dataColumns.has(col));
         const hasSchemaMismatch = extraColumns.length > 0 || missingSchemaColumns.length > 0;

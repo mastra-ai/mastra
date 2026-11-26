@@ -3,10 +3,13 @@
  * Uses pi-tui overlay pattern with search and navigation.
  */
 
-import { Box, fuzzyFilter, getKeybindings, Input, matchesKey, Spacer, Text } from '@earendil-works/pi-tui';
+import { Container, fuzzyFilter, getKeybindings, matchesKey } from '@earendil-works/pi-tui';
 import type { Focusable, TUI } from '@earendil-works/pi-tui';
 import type { AgentControllerThread } from '@mastra/core/agent-controller';
 import { theme } from '../theme.js';
+import { ListWindow } from './list-window.js';
+import type { Filterable, MenuChrome, MenuHint } from './menu-chrome.js';
+import { labelColumnWidth, menuRow } from './menu-list.js';
 import { PickerList } from './picker-list.js';
 
 // =============================================================================
@@ -43,9 +46,11 @@ const FOLLOW_UP_PREVIEW_LOAD_DELAY_MS = 50;
 // ThreadSelectorComponent
 // =============================================================================
 
-export class ThreadSelectorComponent extends Box implements Focusable {
-  private searchInput!: Input;
+export class ThreadSelectorComponent extends Container implements Focusable, Filterable, MenuChrome {
+  focused = false;
   private list!: PickerList<AgentControllerThread>;
+  private labelColumn = 0;
+  private readonly window = new ListWindow();
   private allThreads: AgentControllerThread[];
   private filteredThreads: AgentControllerThread[];
   private selectedIndex = 0;
@@ -66,18 +71,8 @@ export class ThreadSelectorComponent extends Box implements Focusable {
   private previewLoadVersion = 0;
   private previewLoadTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  // Focusable implementation
-  private _focused = false;
-  get focused(): boolean {
-    return this._focused;
-  }
-  set focused(value: boolean) {
-    this._focused = value;
-    this.searchInput.focused = value;
-  }
-
   constructor(options: ThreadSelectorOptions) {
-    super(2, 1, text => theme.bg('overlayBg', text));
+    super();
 
     this.tui = options.tui;
     this.currentResourceId = options.currentResourceId;
@@ -98,15 +93,7 @@ export class ThreadSelectorComponent extends Box implements Focusable {
   }
 
   private getVisibleRange(): { startIndex: number; endIndex: number } {
-    const startIndex = Math.max(
-      0,
-      Math.min(
-        this.selectedIndex - Math.floor(MAX_VISIBLE_THREADS / 2),
-        this.filteredThreads.length - MAX_VISIBLE_THREADS,
-      ),
-    );
-    const endIndex = Math.min(startIndex + MAX_VISIBLE_THREADS, this.filteredThreads.length);
-    return { startIndex, endIndex };
+    return this.window.range(this.selectedIndex, this.filteredThreads.length, MAX_VISIBLE_THREADS);
   }
 
   private getVisibleThreads(): AgentControllerThread[] {
@@ -193,33 +180,31 @@ export class ThreadSelectorComponent extends Box implements Focusable {
     }
   }
 
+  menuFilterTarget(): Filterable {
+    return this;
+  }
+
+  menuHints(): readonly MenuHint[] {
+    return this.onCloneCallback ? [{ key: 'tab', label: 'clone active thread' }] : [];
+  }
+
+  setFilter(query: string): void {
+    this.filterThreads(query);
+    this.tui.requestRender();
+    this.scheduleMessagePreviewLoad({ delayMs: INTERACTION_PREVIEW_LOAD_DELAY_MS });
+  }
+
   private buildUI(): void {
-    this.addChild(new Text(theme.bold(theme.fg('accent', 'Select Thread')), 0, 0));
-    this.addChild(new Spacer(1));
-    const cloneHint = this.onCloneCallback ? ' • Tab clone active thread' : '';
-    this.addChild(
-      new Text(theme.fg('muted', `Type to search • ↑↓ navigate • Enter select${cloneHint} • Esc cancel`), 0, 0),
-    );
-    this.addChild(new Spacer(1));
-
-    this.searchInput = new Input();
-    this.searchInput.onSubmit = () => {
-      const selected = this.filteredThreads[this.selectedIndex];
-      if (selected) {
-        this.onSelectCallback(selected);
-      }
-    };
-    this.addChild(this.searchInput);
-    this.addChild(new Spacer(1));
-
+    this.labelColumn = labelColumnWidth(this.allThreads.map(thread => this.displayId(thread)));
     this.list = new PickerList({
       maxVisible: MAX_VISIBLE_THREADS,
+      window: this.window,
       renderItem: (thread, selected) => this.renderThread(thread, selected),
       onActivate: index => {
         this.selectedIndex = index;
         this.handleInput('\r');
       },
-      emptyText: () => 'No matching threads',
+      emptyText: () => '  no matching threads',
     });
     this.addChild(this.list);
 
@@ -264,7 +249,7 @@ export class ThreadSelectorComponent extends Box implements Focusable {
         )
       : this.allThreads;
 
-    this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.filteredThreads.length - 1));
+    this.selectedIndex = 0;
     this.updateList();
     this.scheduleMessagePreviewLoad({ initialLoad: true });
   }
@@ -284,28 +269,26 @@ export class ThreadSelectorComponent extends Box implements Focusable {
     this.list.setItems(this.filteredThreads, this.selectedIndex);
   }
 
+  private displayId(thread: AgentControllerThread): string {
+    return `${thread.resourceId}/${thread.id.slice(-6)}`;
+  }
+
   private renderThread(thread: AgentControllerThread, isSelected: boolean): string[] {
     const isCurrent = thread.id === this.currentThreadId;
     const checkmark = isCurrent ? theme.fg('success', ' ✓') : '';
-    const shortId = thread.id.slice(-6);
     const threadPath = thread.metadata?.projectPath as string | undefined;
-    const pathTag = threadPath ? theme.fg('dim', ` [${threadPath.split('/').pop()}]`) : '';
-    const displayId = `${thread.resourceId}/${shortId}`;
-    const timeAgo = theme.fg('muted', ` (${this.formatTimeAgo(thread.updatedAt)})`);
+    const pathTag = threadPath ? theme.fg('dim', `[${threadPath.split('/').pop()}] `) : '';
+    const timeAgo = theme.fg('muted', `(${this.formatTimeAgo(thread.updatedAt)})`);
 
     // Show thread title when available, except the default placeholder title.
     const displayTitle = thread.title && thread.title !== 'New Thread' ? thread.title : null;
 
-    const lines = [
-      isSelected
-        ? theme.fg('accent', `→ ${displayId}`) + pathTag + timeAgo + checkmark
-        : `  ${displayId}` + pathTag + timeAgo + checkmark,
-    ];
+    const lines = [menuRow(isSelected, this.displayId(thread), pathTag + timeAgo + checkmark, this.labelColumn)];
     if (displayTitle) {
-      lines.push(`     ${theme.fg('muted', displayTitle)}`);
+      lines.push(`    ${theme.fg('muted', displayTitle)}`);
     } else {
       const preview = this.messagePreviews.get(thread.id);
-      if (preview) lines.push(`     ${theme.fg('dim', `"${preview}"`)}`);
+      if (preview) lines.push(`    ${theme.fg('dim', `"${preview}"`)}`);
     }
     return lines;
   }
@@ -337,11 +320,6 @@ export class ThreadSelectorComponent extends Box implements Focusable {
       if (selected) {
         this.onCloneCallback(selected);
       }
-    } else {
-      this.searchInput.handleInput(keyData);
-      this.filterThreads(this.searchInput.getValue());
-      this.tui.requestRender();
-      this.scheduleMessagePreviewLoad({ delayMs: INTERACTION_PREVIEW_LOAD_DELAY_MS });
     }
   }
 }

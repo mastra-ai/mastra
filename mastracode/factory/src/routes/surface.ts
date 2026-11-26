@@ -895,7 +895,12 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       }))
     : undefined;
   const boardEngine = transitionService
-    ? (deps.factoryBoardEngine ?? createDispatcherBoardEngine({ transitionService }))
+    ? (deps.factoryBoardEngine ??
+      createDispatcherBoardEngine({
+        transitionService,
+        workItems: deps.domains.workItems,
+        boards: deps.boardRegistry,
+      }))
     : undefined;
   const startCoordinator = boardEngine
     ? new FactoryStartCoordinator(

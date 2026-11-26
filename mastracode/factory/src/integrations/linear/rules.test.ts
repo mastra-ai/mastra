@@ -218,6 +218,38 @@ describe('LinearRules', () => {
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
 
+  it("never evaluates an issue against another issue's card that shares its identifier", async () => {
+    const { project, service, workItems } = await setup();
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'linear',
+          type: 'issue',
+          externalId: `linear:${issue.identifier}`,
+          url: issue.url,
+        },
+        title: `${issue.identifier}: Another workspace's issue`,
+        stages: ['intake'],
+        sessions: {},
+        metadata: { linearIssueId: 'issue-in-another-workspace' },
+      },
+    });
+    const evaluate = vi.spyOn(workItems, 'commitRuleEvaluation');
+
+    await service.ingest({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      issues: [{ ...issue, stateType: 'completed' }],
+    });
+
+    // Closed with no card of its own: nothing is evaluated, least of all the other issue's card.
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+
   // A card finished while claims were enforced, the issue moved teams and reopened, and a second
   // live card was filed under the new identifier with the same stable issue id.
   it.each([

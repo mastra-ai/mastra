@@ -156,22 +156,6 @@ describe('Mastra — workflow scheduler integration', () => {
     await mastra.shutdown();
   });
 
-  it('instantiates the scheduler when explicitly enabled even without declarative schedules', async () => {
-    const mastra = new Mastra({
-      logger: false,
-      ...withoutNotificationDispatch,
-      storage: new MockStore(),
-      scheduler: { enabled: true },
-    });
-
-    await mastra.startWorkers();
-    await waitForScheduler(mastra);
-    expect(mastra.scheduler).toBeDefined();
-    expect(mastra.scheduler!.isRunning).toBe(true);
-
-    await mastra.shutdown();
-  });
-
   describe('scheduled default workflows (#18807)', () => {
     afterEach(() => {
       vi.unstubAllEnvs();

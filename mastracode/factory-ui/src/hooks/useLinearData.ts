@@ -16,8 +16,16 @@ import { DETAIL_STALE_MS } from './useFactoryData';
  * service degrades to a disabled status instead of throwing, so consumers read
  * `data`, never `error`. Pass `enabled: false` to gate the request.
  */
+/** How often Linear's status refreshes while workspaces are moving to Mastra Connect. */
+export const LINEAR_MIGRATION_POLL_MS = 10_000;
+
 export function linearStatusQueryOptions(baseUrl: string) {
-  return queryOptions({ queryKey: queryKeys.linearStatus(), queryFn: () => fetchLinearStatus(baseUrl) });
+  return queryOptions({
+    queryKey: queryKeys.linearStatus(),
+    queryFn: () => fetchLinearStatus(baseUrl),
+    // The server moves workspaces on its own; refresh until it's done so the notice clears.
+    refetchInterval: query => (query.state.data?.migration?.required ? LINEAR_MIGRATION_POLL_MS : false),
+  });
 }
 
 export function useLinearStatusQuery(enabled: boolean = true) {

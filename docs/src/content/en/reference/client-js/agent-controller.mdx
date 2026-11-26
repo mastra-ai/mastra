@@ -311,10 +311,10 @@ Returns: `Promise<SendNotificationResult>`
 
 | Group | Events |
 | - | - |
-| Run | `agent_start`, `agent_end`, `usage_update`, `goal_evaluation`, `follow_up_queued` |
+| Run | `agent_start`, `agent_end`, `usage_update`, `goal_evaluation`, `task_complete_evaluation`, `follow_up_queued` |
 | Messages | `message_start`, `message_update`, `message_end` |
 | Tools | `tool_input_start`, `tool_input_delta`, `tool_input_end`, `tool_start`, `tool_update`, `tool_end`, `shell_output`, `command_exit`, `tool_approval_required`, `tool_suspended`, `tool_suspension_cancelled`, `task_updated` |
-| Session | `state_changed`, `display_state_changed`, `mode_changed`, `model_changed`, `thread_changed`, `thread_created`, `thread_deleted`, `thread_title_updated` |
+| Session | `state_changed`, `display_state_changed`, `mode_changed`, `model_changed`, `thread_changed`, `thread_created`, `thread_deleted`, `thread_title_updated`, `thread_owner_changed` |
 | Subagents | `subagent_start`, `subagent_text_delta`, `subagent_tool_start`, `subagent_tool_end`, `subagent_end`, `subagent_model_changed` |
 | Memory | `om_observation_start`, `om_observation_end`, `om_observation_failed`, `om_reflection_start`, `om_reflection_end`, `om_reflection_failed`, `om_buffering_start`, `om_buffering_end`, `om_buffering_failed`, `om_model_changed`, `om_activation`, `om_status`, `om_thread_title_updated` |
 | Workspace | `workspace_ready`, `workspace_error`, `workspace_status_changed` |
