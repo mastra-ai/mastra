@@ -12,7 +12,7 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createBoardRegistry } from '../boards/index.js';
 import { ProjectBoardCache } from '../boards/project-boards.js';
 import { workSeedWithSelfReview } from '../boards/work-migrations.js';
-import { createFactoryTransitionTools } from '../rules/tools.js';
+import { createFactoryOutcomeTools } from '../rules/tools.js';
 import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../storage/test-utils.js';
 import { FactoryWorkItemStateProcessor } from './work-item-state-processor.js';
@@ -461,10 +461,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
       const card = await githubCard({ pullRequestHeadSha: NEW });
       expect(card.contents).toContain(`This review pass covers head \`${NEW}\`. Record your verdict for that head.`);
 
-      const tools = await createFactoryTransitionTools({
+      const tools = await createFactoryOutcomeTools({
         requestContext: card.context,
         storage: card.workItems,
-        transitionService: { transition: async () => ({ status: 'rejected' }) } as never,
         boards: createBoardRegistry(),
       });
       const verdictTool = tools.factory_record_review_verdict as unknown as {

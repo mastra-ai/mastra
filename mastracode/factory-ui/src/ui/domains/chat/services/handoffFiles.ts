@@ -1,7 +1,7 @@
-import { isThinkingLevelSetting } from '@mastra/code-sdk/thinking';
-import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import type { ModelSelectionRequest } from '@mastra/factory/model-packs';
 
 import type { PendingImage } from '../context/ComposerImagesContext';
+import { DEFAULT_MODEL_SELECTION, readModelSelection } from './modelSelection';
 
 // Attachments for a session's first prompt cross the draft -> thread navigation
 // in memory rather than in history state: base64 images can exceed browsers'
@@ -26,8 +26,7 @@ export function takeHandoffFiles(resourceId: string): PendingImage[] {
 
 export interface FailedDraft {
   prompt: string;
-  modelId?: string;
-  thinkingLevel?: ThinkingLevelSetting;
+  modelSelection: ModelSelectionRequest;
 }
 
 /**
@@ -48,8 +47,10 @@ export function readFailedDraft(
   if (typeof draft !== 'object' || draft === null || !('prompt' in draft) || typeof draft.prompt !== 'string') {
     return undefined;
   }
-  const modelId = 'modelId' in draft && typeof draft.modelId === 'string' ? draft.modelId : undefined;
-  const thinkingLevel =
-    'thinkingLevel' in draft && isThinkingLevelSetting(draft.thinkingLevel) ? draft.thinkingLevel : undefined;
-  return { prompt: draft.prompt, modelId, thinkingLevel, files: peekHandoffFiles(draftSessionId) };
+  const modelSelection = 'modelSelection' in draft ? readModelSelection(draft.modelSelection) : undefined;
+  return {
+    prompt: draft.prompt,
+    modelSelection: modelSelection ?? DEFAULT_MODEL_SELECTION,
+    files: peekHandoffFiles(draftSessionId),
+  };
 }

@@ -210,8 +210,21 @@ describe('slackRunErrorCard', () => {
     const card = rendered(slackRunErrorCard(new Error('Request timed out.'), slackRun()));
 
     expect(card).toContain('Request timed out');
+    expect(card).toContain('"id":"run_continue"');
+    expect(card).toContain('Click Continue or send a message to try again.');
     expect(card).toContain('Open session');
     expect(card).toContain(SLACK_SESSION_URL);
+  });
+
+  it('offers Continue only for a failure continuing the run can fix', () => {
+    const timeout = rendered(
+      slackRunErrorCard(new Error('Request timed out.'), { requestContext: new RequestContext() }),
+    );
+    const refused = rendered(slackRunErrorCard(codexPlanRefusal(), slackRun()));
+
+    expect(timeout).toContain('run_continue');
+    expect(refused).not.toContain('run_continue');
+    expect(refused).not.toContain('Continue');
   });
 
   it('still explains the failure when the run has no session or no public URL', () => {

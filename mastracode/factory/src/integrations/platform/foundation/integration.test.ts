@@ -36,7 +36,7 @@ const SUMMARY: IssueReconcileSummary = {
   failed: 0,
   errors: [],
 };
-const CTX = {} as IntegrationContext;
+const CTX = { storage: {} } as IntegrationContext;
 const OFFLINE = { baseUrl: 'http://127.0.0.1:9', accessToken: 'platform-secret', projectId: 'proj_factory' };
 
 class TestIntegration extends PlatformConnectIntegration {

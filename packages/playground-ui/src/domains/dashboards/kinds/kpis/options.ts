@@ -1,6 +1,6 @@
 import type { DashboardQuery } from '@mastra/client-js';
 import { z } from 'zod/v4';
-import { measureOf, rowsOf, valueOf } from '../../lib/answers';
+import { emptyMeasure, measureOf, rowsOf, valueOf } from '../../lib/answers';
 import type { DashboardAnswer } from '../../lib/requests';
 import { evaluate, exprRefs, formatSchema, unknownQueryIssues, valueExprSchema } from '../../lib/values';
 import type { ValueExpr, ValueRef } from '../../lib/values';
@@ -40,13 +40,6 @@ const changeOf = (value: number | undefined, previous: number | undefined) =>
     ? ((value - previous) / Math.abs(previous)) * 100
     : undefined;
 
-const countsOrSums = (measure: string) =>
-  measure === 'count' ||
-  measure === 'errorCount' ||
-  measure.endsWith('.sum') ||
-  measure.endsWith('.count') ||
-  measure.startsWith('countDistinct.');
-
 /**
  * An ungrouped trace or span aggregate's one row, read at `ref`'s measure. A window with nothing in it
  * answers no rows at all, which is 0 for a count or sum, and no figure for an average, rate or percentile.
@@ -55,7 +48,7 @@ const rowMeasure = (answer: DashboardAnswer | undefined, ref: ValueRef) => {
   const rows = rowsOf(answer)?.rows;
   if (!rows || !ref.measure) return undefined;
   const row = rows[0];
-  if (!row) return countsOrSums(ref.measure) ? 0 : undefined;
+  if (!row) return emptyMeasure(ref.measure);
   return measureOf(row.measures, ref.measure);
 };
 

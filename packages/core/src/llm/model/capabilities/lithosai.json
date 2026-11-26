@@ -21,13 +21,13 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4.1-Flash-ultra": [
+    "deepseek-ai/DeepSeek-V4.1-Flash-fast": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4.1-Flash-fast": [
+    "deepseek-ai/DeepSeek-V4.1-Flash-ultra": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]

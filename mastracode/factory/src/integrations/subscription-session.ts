@@ -121,7 +121,12 @@ export async function createSessionAsRowOwner(
 export async function resolveSubscriptionSession(
   controller: MountedMastraCode['controller'],
   subscription: SubscriptionSessionRow,
-  options: { label: string; sourceControl?: SubscriptionSessionLookup },
+  options: {
+    label: string;
+    sourceControl?: SubscriptionSessionLookup;
+    /** The delivery's run context ({@link subscriptionRunContext}), read only when the session must switch threads. */
+    runContext: () => Promise<RequestContext | undefined>;
+  },
 ) {
   const { label } = options;
   const { sessionId, resourceId, threadId } = subscription;
@@ -191,7 +196,13 @@ export async function resolveSubscriptionSession(
     await seedSessionOrg(session, session.state.get()?.factoryOrgId);
   }
   if (session.thread.getId() !== threadId) {
-    await session.thread.switch({ threadId, emitEvent: false });
+    // Switching loads the thread's memory, which resolves credentials for the
+    // caller; a webhook has no signed-in user, so switch as the run's tenant.
+    const requestContext = await options.runContext();
+    if (!requestContext) {
+      throw new Error(`${label} subscription ${subscription.id} has no resolvable tenant identity; not delivered.`);
+    }
+    await session.thread.switch({ threadId, emitEvent: false, requestContext });
   }
   if (session.thread.getId() !== threadId) {
     throw new Error(`Session ${sessionId} did not bind thread ${threadId}.`);

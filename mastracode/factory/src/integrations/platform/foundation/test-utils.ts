@@ -13,12 +13,14 @@ export interface FakeConnection {
   status: string;
   accountLabel?: string | null;
   resourceId?: string | null;
+  connectedAt?: string | null;
 }
 
 export interface FakeReply {
   status: number;
   body?: unknown;
   contentType?: string;
+  headers?: Record<string, string>;
 }
 
 /** A row of a connection's platform event log, as `GET /v2/connections/:id/events` returns it. */
@@ -37,6 +39,8 @@ export interface FakePlatformRequest {
   method: string;
   path: string;
   query: URLSearchParams;
+  /** The JSON request body, when there was one. */
+  body?: unknown;
 }
 
 /** A platform problem response (`application/problem+json`), as the platform itself answers. */
@@ -64,7 +68,12 @@ export class FakePlatform {
   readonly connectionEvents = new Map<string, FakeConnectionEvent[]>();
   /** Replies for the next event log reads of a connection, in place of the log. */
   readonly nextEventReplies = new Map<string, FakeReply[]>();
-  proxy: (connectionId: string, path: string, query: URLSearchParams) => FakeReply = () => ({ status: 200, body: {} });
+  proxy: (connectionId: string, path: string, query: URLSearchParams, body: unknown) => FakeReply = () => ({
+    status: 200,
+    body: {},
+  });
+  /** Routes a test adds, tried before the built-in ones; `undefined` falls through. A promise holds the request until it settles. */
+  route: (method: string, path: string, body: unknown) => FakeReply | Promise<FakeReply> | undefined = () => undefined;
 
   #url = '';
 
@@ -93,15 +102,17 @@ export class FakePlatform {
   }
 
   async #handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    for await (const _chunk of req) {
-      // Drain the body; the fake answers from its state alone.
-    }
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(chunk as Buffer);
+    const text = Buffer.concat(chunks).toString('utf8');
+    const body: unknown = text ? parseBody(text) : undefined;
     const method = req.method ?? 'GET';
     const url = new URL(req.url ?? '/', 'http://platform');
     const path = url.pathname;
-    this.requests.push({ method, path, query: url.searchParams });
-    const reply = this.#route(method, path, url.searchParams);
+    this.requests.push({ method, path, query: url.searchParams, ...(body === undefined ? {} : { body }) });
+    const reply = await (this.route(method, path, body) ?? this.#route(method, path, url.searchParams, body));
     res.statusCode = reply.status;
+    for (const [name, value] of Object.entries(reply.headers ?? {})) res.setHeader(name, value);
     if (reply.body === undefined) {
       res.end();
       return;
@@ -110,7 +121,7 @@ export class FakePlatform {
     res.end(JSON.stringify(reply.body));
   }
 
-  #route(method: string, path: string, query: URLSearchParams): FakeReply {
+  #route(method: string, path: string, query: URLSearchParams, body: unknown): FakeReply {
     const project = `/v2/projects/${this.projectId}`;
     if (method === 'GET' && path === '/v2/connections') {
       return { status: 200, body: { connections: this.orgConnections } };
@@ -142,6 +153,22 @@ export class FakePlatform {
         },
       };
     }
+    const reconnect = /^\/v2\/connections\/([^/]+)\/reconnect-session$/.exec(path);
+    if (method === 'POST' && reconnect) {
+      const id = decodeURIComponent(reconnect[1]!);
+      const connection = this.orgConnections.find(c => c.id === id);
+      if (!connection) return problem(404, 'not_found');
+      return {
+        status: 201,
+        body: {
+          connectionId: id,
+          integrationId: connection.integrationId,
+          connectUrl: 'https://connect.example/reconnect',
+          sessionToken: 'reconnect-token',
+          expiresAt: '2026-11-13T13:00:00.000Z',
+        },
+      };
+    }
     const events = /^\/v2\/connections\/([^/]+)\/events$/.exec(path);
     if (method === 'GET' && events) {
       const id = decodeURIComponent(events[1]!);
@@ -153,8 +180,16 @@ export class FakePlatform {
       return { status: 200, body: { events: page, nextCursor: page.at(-1)?.id ?? null } };
     }
     const proxy = /^\/v2\/connections\/([^/]+)\/proxy(\/.*)?$/.exec(path);
-    if (proxy) return this.proxy(decodeURIComponent(proxy[1]!), proxy[2] ?? '/', query);
+    if (proxy) return this.proxy(decodeURIComponent(proxy[1]!), proxy[2] ?? '/', query, body);
     return problem(404, 'not_found', `${method} ${path}`);
+  }
+}
+
+function parseBody(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
   }
 }
 

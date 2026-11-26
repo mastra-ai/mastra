@@ -1,4 +1,5 @@
 import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
+import type { ModelSelectionRequest } from '@mastra/factory/model-packs';
 import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import type { QueryClient } from '@tanstack/react-query';
 import { screen, waitFor } from '@testing-library/react';
@@ -10,6 +11,7 @@ import { expect } from 'vitest';
 import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import type { SessionModelTarget } from '../../../../../hooks/useSessionModel';
 import { OverlaysProvider } from '../../../../lib/overlays';
 import { ChatSessionRouteProvider } from '../../Chat';
 import { ChatSessionBoundary } from '../../context/ChatSessionProvider';
@@ -126,6 +128,10 @@ export function stubPreparingSession({
           name: 'Preparing',
           defaultModelId: 'openai/gpt-4o-mini',
           defaultThinkingLevel: 'medium',
+          modelPacks: [
+            { id: 'factory', name: 'Factory', models: [{ modelId: 'openai/gpt-4o-mini', thinkingLevel: 'medium' }] },
+          ],
+          defaultModelPackId: 'factory',
         },
       }),
     ),
@@ -146,7 +152,14 @@ export function stubPreparingSession({
       } catch {
         return HttpResponse.json({ message: 'Model settings unavailable' }, { status: 500 });
       }
-      return HttpResponse.json({ modelId: 'openai/gpt-4o-mini', thinkingLevel: null });
+      return HttpResponse.json({
+        modelId: 'openai/gpt-4o-mini',
+        thinkingLevel: null,
+        modelPacks: [
+          { id: 'personal', name: 'Personal', models: [{ modelId: 'openai/gpt-4o-mini', thinkingLevel: 'medium' }] },
+        ],
+        defaultModelPackId: 'personal',
+      });
     }),
     http.get(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, () => {
       result.sessionLookups += 1;
@@ -221,11 +234,22 @@ export function stubPreparingSession({
       result.operations.push(`mode:${body.modeId}`);
       return HttpResponse.json({ ok: true });
     }),
-    http.post(`${API}/sessions/:resourceId/model`, async ({ request }) => {
-      const body = (await request.json()) as { modelId?: string };
-      result.operations.push(`model:${body.modelId}`);
-      return HttpResponse.json({ ok: true });
-    }),
+    http.put<never, SessionModelTarget & { selection: ModelSelectionRequest }>(
+      `${TEST_BASE_URL}/web/config/session-model`,
+      async ({ request }) => {
+        const { selection } = await request.json();
+        result.operations.push(
+          selection.kind === 'model'
+            ? `model:${selection.modelId}`
+            : selection.kind === 'pack'
+              ? `pack:${selection.packId}`
+              : 'default',
+        );
+        return HttpResponse.json({
+          modelSelection: selection.kind === 'pack' ? { kind: 'pack', packId: selection.packId } : { kind: 'model' },
+        });
+      },
+    ),
     http.post(`${API}/sessions/:resourceId/messages`, async ({ request }) => {
       const body = await request.json();
       result.operations.push('message');

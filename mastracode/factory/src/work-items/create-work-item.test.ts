@@ -4,6 +4,7 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { DispatcherBoardEngine } from '../board-engine/engine.js';
 import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/index.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import { StoredBoardsStorage } from '../storage/domains/boards/base.js';
@@ -38,7 +39,7 @@ async function setup(routes: StoredIntakeRouteInput[] = []) {
     createFactoryWorkItem({
       workItems: seed.workItems,
       boards,
-      transitionService,
+      boardEngine: new DispatcherBoardEngine({ transitionService, workItems: seed.workItems, boards }),
       audit: async () => {},
       orgId: 'org-1',
       userId: 'user-1',
@@ -182,7 +183,7 @@ describe('createFactoryWorkItem under the intake order evaluator', () => {
       createFactoryWorkItem({
         workItems: seed.workItems,
         boards,
-        transitionService,
+        boardEngine: new DispatcherBoardEngine({ transitionService, workItems: seed.workItems, boards }),
         audit: async () => {},
         orgId: 'org-1',
         userId: 'user-1',
@@ -350,12 +351,16 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       const create = (
         input: CreateWorkItemInput,
         // `null` files with Factory transitions unavailable.
-        transitionService: CreateFactoryWorkItemArgs['transitionService'] | null = service,
+        boardEngine: CreateFactoryWorkItemArgs['boardEngine'] | null = new DispatcherBoardEngine({
+          transitionService: service,
+          workItems,
+          boards,
+        }),
       ): Promise<CreateFactoryWorkItemResult> =>
         createFactoryWorkItem({
           workItems,
           boards,
-          transitionService: transitionService ?? undefined,
+          boardEngine: boardEngine ?? undefined,
           audit: async () => {},
           intakeRoutes,
           ...scope,
@@ -400,8 +405,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           if (step === 'rollback') await interleave();
           return remove(args);
         };
-        const transitionService: CreateFactoryWorkItemArgs['transitionService'] = {
-          transition: async request => {
+        const boardEngine: CreateFactoryWorkItemArgs['boardEngine'] = {
+          requestMove: async request => {
             const at = request.ingress.identity.endsWith(':intake-route') ? 'route-move' : 'initial-entry';
             if (at === step) await interleave();
             const transitioned = await service.transition(request);
@@ -409,7 +414,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             return transitioned;
           },
         };
-        const result = await create(first, transitions ? transitionService : null).finally(() => {
+        const result = await create(first, transitions ? boardEngine : null).finally(() => {
           workItems.update = update;
           workItems.delete = remove;
         });

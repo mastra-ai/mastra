@@ -664,45 +664,95 @@ describe('LSPManager', () => {
     });
   });
 
+  describe('prepareQuery file content', () => {
+    it('opens the file with provided content without reading', async () => {
+      const readFile = vi.fn();
+      const fsManager = new LSPManager(mockProcessManager, '/fallback', {}, { exists: vi.fn(), readFile });
+
+      const query = await fsManager.prepareQuery('/project/src/app.ts', 'const provided = 1');
+      query?.release();
+
+      expect(readFile).not.toHaveBeenCalled();
+      expect(mockNotifyOpen).toHaveBeenCalledWith('/project/src/app.ts', 'const provided = 1', 'typescript');
+      await fsManager.shutdownAll();
+    });
+
+    it('reads file content through the workspace filesystem', async () => {
+      const readFile = vi.fn().mockResolvedValue('const remote = 1');
+      const fsManager = new LSPManager(mockProcessManager, '/fallback', {}, { exists: vi.fn(), readFile });
+
+      const query = await fsManager.prepareQuery('/s3/src/app.ts');
+      query?.release();
+
+      expect(readFile).toHaveBeenCalledWith('/s3/src/app.ts', { encoding: 'utf-8' });
+      expect(mockNotifyOpen).toHaveBeenCalledWith('/s3/src/app.ts', 'const remote = 1', 'typescript');
+      await fsManager.shutdownAll();
+    });
+
+    it('decodes Buffer content from the workspace filesystem', async () => {
+      const readFile = vi.fn().mockResolvedValue(Buffer.from('const buffered = 1'));
+      const fsManager = new LSPManager(mockProcessManager, '/fallback', {}, { exists: vi.fn(), readFile });
+
+      const query = await fsManager.prepareQuery('/s3/src/app.ts');
+      query?.release();
+
+      expect(mockNotifyOpen).toHaveBeenCalledWith('/s3/src/app.ts', 'const buffered = 1', 'typescript');
+      await fsManager.shutdownAll();
+    });
+
+    async function withHostFile(run: (filePath: string) => Promise<void>) {
+      const os = await import('node:os');
+      const nodePath = await import('node:path');
+      const nodeFs = await import('node:fs/promises');
+      const tempDir = await nodeFs.mkdtemp(nodePath.join(os.tmpdir(), 'lsp-manager-test-'));
+      const filePath = nodePath.join(tempDir, 'app.ts');
+      await nodeFs.writeFile(filePath, 'const host = 1');
+      try {
+        await run(filePath);
+      } finally {
+        await nodeFs.rm(tempDir, { recursive: true, force: true });
+      }
+    }
+
+    it('does not read the host file when the workspace filesystem cannot read the path', async () => {
+      await withHostFile(async filePath => {
+        const readFile = vi.fn().mockRejectedValue(new Error('not found'));
+        const fsManager = new LSPManager(mockProcessManager, '/fallback', {}, { exists: vi.fn(), readFile });
+
+        const query = await fsManager.prepareQuery(filePath);
+        query?.release();
+        await fsManager.shutdownAll();
+
+        expect(mockNotifyOpen).toHaveBeenCalledWith(filePath, '', 'typescript');
+      });
+    });
+
+    it('reads the host file when there is no workspace filesystem', async () => {
+      await withHostFile(async filePath => {
+        const hostManager = new LSPManager(mockProcessManager, '/fallback');
+
+        const query = await hostManager.prepareQuery(filePath);
+        query?.release();
+        await hostManager.shutdownAll();
+
+        expect(mockNotifyOpen).toHaveBeenCalledWith(filePath, 'const host = 1', 'typescript');
+      });
+    });
+  });
+
   describe('severity mapping', () => {
-    it('maps severity 1 to error', async () => {
+    it.each([
+      ['maps severity 1 to error', 1, 'err', 'error'],
+      ['maps severity 2 to warning', 2, 'warn', 'warning'],
+      ['maps severity 3 to info', 3, 'info', 'info'],
+      ['maps severity 4 to hint', 4, 'hint', 'hint'],
+      ['maps unknown severity to warning', 99, 'unknown', 'warning'],
+    ] as const)('%s', async (_title, severity, message, expected) => {
       mockWaitForDiagnostics.mockResolvedValueOnce([
-        { severity: 1, message: 'err', range: { start: { line: 0, character: 0 } } },
+        { severity, message, range: { start: { line: 0, character: 0 } } },
       ]);
       const diagnostics = await manager.getDiagnostics('/project/src/app.ts', 'code');
-      expect(diagnostics[0]!.severity).toBe('error');
-    });
-
-    it('maps severity 2 to warning', async () => {
-      mockWaitForDiagnostics.mockResolvedValueOnce([
-        { severity: 2, message: 'warn', range: { start: { line: 0, character: 0 } } },
-      ]);
-      const diagnostics = await manager.getDiagnostics('/project/src/app.ts', 'code');
-      expect(diagnostics[0]!.severity).toBe('warning');
-    });
-
-    it('maps severity 3 to info', async () => {
-      mockWaitForDiagnostics.mockResolvedValueOnce([
-        { severity: 3, message: 'info', range: { start: { line: 0, character: 0 } } },
-      ]);
-      const diagnostics = await manager.getDiagnostics('/project/src/app.ts', 'code');
-      expect(diagnostics[0]!.severity).toBe('info');
-    });
-
-    it('maps severity 4 to hint', async () => {
-      mockWaitForDiagnostics.mockResolvedValueOnce([
-        { severity: 4, message: 'hint', range: { start: { line: 0, character: 0 } } },
-      ]);
-      const diagnostics = await manager.getDiagnostics('/project/src/app.ts', 'code');
-      expect(diagnostics[0]!.severity).toBe('hint');
-    });
-
-    it('maps unknown severity to warning', async () => {
-      mockWaitForDiagnostics.mockResolvedValueOnce([
-        { severity: 99, message: 'unknown', range: { start: { line: 0, character: 0 } } },
-      ]);
-      const diagnostics = await manager.getDiagnostics('/project/src/app.ts', 'code');
-      expect(diagnostics[0]!.severity).toBe('warning');
+      expect(diagnostics[0]!.severity).toBe(expected);
     });
 
     it('maps undefined severity to warning', async () => {

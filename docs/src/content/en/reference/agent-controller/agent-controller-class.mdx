@@ -284,6 +284,30 @@ A message lifecycle starts with the initial message in `message_start`. Compact 
     isOptional: true,
   },
   {
+    name: 'includeDefaultGateways',
+    type: 'boolean',
+    description:
+      'Whether the model catalog and auth checks also use the built-in gateways, which read provider credentials from the process environment. Set to `false` to use only `gateways`.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'modelFallbacks',
+    type: 'boolean',
+    description:
+      "Whether runs add provider-side fallback models for the selected model. For example, a blocked `claude-fable-5` turn is retried on `claude-opus-4-8`. Set to `false` so only the agent's own model runs.",
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'registerAgents',
+    type: 'boolean',
+    description:
+      "Whether backing agents are registered on the Mastra instance, where `listAgents()` and the standard `/agents` server routes can reach them. Set to `false` so the agents only run through this controller. Unregistered agents don't take the Mastra instance's `durable` defaults, and deferred notification delivery can't resolve them.",
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
     name: 'omConfig',
     type: 'AgentControllerOMConfig',
     description: 'Default observational memory model selections, automatic model resolver, and thresholds.',

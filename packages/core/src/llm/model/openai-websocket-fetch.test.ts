@@ -295,7 +295,10 @@ describe('createOpenAIWebSocketFetch', () => {
     expect(sockets[0].readyState).toBe(3);
   });
 
-  it('does not silently fall back to HTTP for overlapping non-persisted continuations', async () => {
+  it.each([
+    ['does not silently fall back to HTTP for overlapping non-persisted continuations', false],
+    ['does not silently fall back to HTTP for any overlapping continuation', true],
+  ] as const)('%s', async (_title, store) => {
     const websocketFetch = createOpenAIWebSocketFetch();
     nextServerEvents.push({ type: 'response.output_text.delta', delta: 'still running' });
 
@@ -311,34 +314,7 @@ describe('createOpenAIWebSocketFetch', () => {
         headers: { Authorization: 'Bearer openai-key' },
         body: JSON.stringify({
           stream: true,
-          store: false,
-          previous_response_id: 'resp_previous',
-          model: 'gpt-5.5',
-          input: 'continue',
-        }),
-      }),
-    ).rejects.toThrow('Cannot start an overlapping WebSocket Responses continuation');
-
-    websocketFetch.close();
-  });
-
-  it('does not silently fall back to HTTP for any overlapping continuation', async () => {
-    const websocketFetch = createOpenAIWebSocketFetch();
-    nextServerEvents.push({ type: 'response.output_text.delta', delta: 'still running' });
-
-    await websocketFetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer openai-key' },
-      body: JSON.stringify({ stream: true, model: 'gpt-5.5', input: 'hello' }),
-    });
-
-    await expect(
-      websocketFetch('https://api.openai.com/v1/responses', {
-        method: 'POST',
-        headers: { Authorization: 'Bearer openai-key' },
-        body: JSON.stringify({
-          stream: true,
-          store: true,
+          store,
           previous_response_id: 'resp_previous',
           model: 'gpt-5.5',
           input: 'continue',

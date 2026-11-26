@@ -1,4 +1,5 @@
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
+import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -11,6 +12,8 @@ const EMPTY_REPOSITORIES = {
   github: 'No repositories are shared with the Mastra GitHub App yet. Use Manage access to add some.',
   gitlab: 'No GitLab projects found.',
 } as const;
+
+const REPOSITORY_ROW = 'flex items-center gap-3 rounded-lg px-3 py-2.5';
 
 /** GitHub searches on the server; GitLab lists every project, so its search filters here. */
 function visibleRepositories(repositories: SourceControlRepository[], host: SourceControlHost, search: string) {
@@ -37,7 +40,18 @@ export function OnboardingRepositoryRows({
   onSelectRepository: (repository: SourceControlRepository) => void;
   onPreviewRepository?: (repository: SourceControlRepository | undefined) => void;
 }) {
-  if (pending) return <SkeletonRows label={`Loading ${host} repositories`} rows={3} rowClassName="h-12 w-full" />;
+  if (pending)
+    return (
+      <SkeletonRows label={`Loading ${host} repositories`} rows={3} className="gap-0.5">
+        <div aria-hidden className={REPOSITORY_ROW}>
+          <Skeleton className="size-4 shrink-0 rounded-full motion-reduce:before:animate-none" />
+          <span className="min-w-0 flex-1">
+            <SkeletonText line="text-caption" className="w-40 motion-reduce:before:animate-none" />
+            <SkeletonText line="text-meta" className="mt-0.5 w-20 motion-reduce:before:animate-none" />
+          </span>
+        </div>
+      </SkeletonRows>
+    );
   const visible = visibleRepositories(repositories, host, search);
   if (visible.length === 0) {
     return (
@@ -60,7 +74,8 @@ export function OnboardingRepositoryRows({
         <label
           key={repo.id}
           className={cn(
-            'group/onboarding-repo flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5',
+            'group/onboarding-repo cursor-pointer',
+            REPOSITORY_ROW,
             selectedRepositoryId === repo.id ? 'bg-fill' : 'hover:bg-fill-subtle focus-within:bg-fill-subtle',
           )}
           onMouseEnter={() => onPreviewRepository?.(repo)}

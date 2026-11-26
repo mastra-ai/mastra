@@ -1,5 +1,5 @@
+import type { EnvironmentBuild } from '@mastra/playground-ui/components/EnvironmentBuild';
 import type {
-  FactoryEnvironmentBuild,
   FactoryEnvironmentBuildTriggers,
   FactoryEnvironmentPayload,
   FactoryEnvironmentRepository,
@@ -95,7 +95,7 @@ export function e2bEnvironment(overrides: Partial<FactoryEnvironmentPayload> = {
   });
 }
 
-export function buildHistory(): FactoryEnvironmentBuild[] {
+export function buildHistory(): EnvironmentBuild[] {
   return [
     {
       buildId: 'tpl-1:bld-2',

@@ -222,7 +222,7 @@ describe('durable agent trace correlation (#19891)', () => {
     });
 
     // Poll until the durable flush lands — a fixed sleep is timing-dependent
-    // under CI load (same shape as durable-agent-suspend-metadata.test.ts).
+    // under CI load.
     const store = await storage.getStore('memory');
     let assistant: any;
     for (let i = 0; i < 100 && !assistant; i++) {

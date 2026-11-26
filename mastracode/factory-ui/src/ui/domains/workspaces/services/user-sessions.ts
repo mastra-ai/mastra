@@ -35,10 +35,18 @@ export interface FactoryUserSession {
   createdAt: string;
   updatedAt: string;
   /** What the viewer may do with this session, computed by the server. */
-  capabilities?: { recreateSandbox: boolean; takeOwnership: boolean; switchModel?: boolean };
+  capabilities?: {
+    recreateSandbox: boolean;
+    takeOwnership: boolean;
+    switchModel?: boolean;
+    ownershipLock?: SessionOwnershipLock;
+  };
   /** The cards this session follows: the ones it asked for or subscribed to. Only the list read reports it. */
   followedWorkItemIds?: readonly string[];
 }
+
+/** Why a session the viewer doesn't own keeps its owner. */
+export type SessionOwnershipLock = 'card' | 'slack-thread' | 'side-session';
 
 type FactoryUserSessionPayload = Omit<FactoryUserSession, 'title'> & { title?: string | null };
 

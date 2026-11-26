@@ -3,6 +3,7 @@ import { setRunAgentScopes } from '../../agent/scopes';
 import { ConsoleLogger } from '../../logger';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
+import { unwrapKnowledgeStorage } from '../changes';
 import type { KnowledgeChangeEvent } from '../changes';
 import { knowledgeMemoryScopes } from '../declarations';
 import { Knowledge } from '../index';
@@ -83,6 +84,119 @@ describe('Knowledge change events', () => {
     const scope = (await store.getScopesByAddress(['org:acme']))[0]!;
     await store.createPage({ scopeId: scope.id, parentId: scope.id, name: 'Host page', createdBy: 'host' } as never);
     expect(summary()).toEqual(['page:create']);
+  });
+
+  it('reports writes in a getStorage() transaction once it commits, and none it rolled back', async () => {
+    const { knowledge, call, events, summary } = setup();
+    await call('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Billing' });
+    events.length = 0;
+    const store = await knowledge.getStorage();
+    const scope = (await store.getScopesByAddress(['org:acme']))[0]!;
+    const create = (tx: typeof store, name: string) =>
+      tx.createPage({ parentId: scope.id, name, provenance: { author: 'host' } });
+
+    let seenInside: string[] = ['not run'];
+    const committed = await store.transaction(async tx => {
+      const page = await create(tx, 'Committed');
+      seenInside = summary();
+      return page;
+    });
+    expect(seenInside).toEqual([]);
+    expect(events).toMatchObject([{ kind: 'page', op: 'create', pageId: committed.id, scopeId: scope.id }]);
+
+    events.length = 0;
+    await expect(
+      store.transaction(async tx => {
+        await create(tx, 'Rolled back');
+        throw new Error('undo');
+      }),
+    ).rejects.toThrow('undo');
+    expect(events).toEqual([]);
+
+    let innerId = '';
+    const outer = await store.transaction(async tx => {
+      const page = await create(tx, 'Outer');
+      await tx
+        .transaction(async inner => {
+          innerId = (await create(inner, 'Inner')).id;
+          throw new Error('undo inner');
+        })
+        .catch(() => {});
+      return page;
+    });
+    expect(events).toMatchObject([{ kind: 'page', op: 'create', pageId: outer.id }]);
+    expect(events).toHaveLength(1);
+    expect(innerId).not.toBe('');
+    expect(await store.getPage({ id: innerId, read: 'all' })).toBeNull();
+
+    // The importer sink opens savepoints but keeps writing through the outer view.
+    events.length = 0;
+    let undoneId = '';
+    let keptId = '';
+    const outerAgain = await store.transaction(async tx => {
+      await tx
+        .transaction(async () => {
+          undoneId = (await create(tx, 'Undone through outer')).id;
+          throw new Error('undo savepoint');
+        })
+        .catch(() => {});
+      await tx.transaction(async () => {
+        keptId = (await create(tx, 'Kept through outer')).id;
+      });
+      return create(tx, 'Outer again');
+    });
+    expect(await store.getPage({ id: undoneId, read: 'all' })).toBeNull();
+    expect(events.map(event => event.kind === 'page' && event.pageId)).toEqual([keptId, outerAgain.id]);
+
+    // A write through an outer view belongs to the innermost transaction open anywhere in the chain,
+    // including one opened from a nested view.
+    events.length = 0;
+    let deepUndoneId = '';
+    const outerDeep = await store.transaction(async tx => {
+      await tx.transaction(async middle => {
+        await middle
+          .transaction(async () => {
+            deepUndoneId = (await create(tx, 'Undone in the innermost')).id;
+            throw new Error('undo innermost');
+          })
+          .catch(() => {});
+      });
+      return create(tx, 'Outer deep');
+    });
+    expect(deepUndoneId).not.toBe('');
+    expect(await store.getPage({ id: deepUndoneId, read: 'all' })).toBeNull();
+    expect(events.map(event => event.kind === 'page' && event.pageId)).toEqual([outerDeep.id]);
+  });
+
+  it('reports only the attempt that committed when the store retries a transaction', async () => {
+    const { knowledge, call, events } = setup();
+    await call('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Billing' });
+    events.length = 0;
+    const store = await knowledge.getStorage();
+    const scope = (await store.getScopesByAddress(['org:acme']))[0]!;
+    // Like LibSQL on a lock error: run the operation once in a transaction that rolls back, then again.
+    const raw = unwrapKnowledgeStorage(store);
+    const transaction = raw.transaction.bind(raw);
+    vi.spyOn(raw, 'transaction').mockImplementation(async (operation, ...rest) => {
+      await transaction(
+        async tx => {
+          await operation(tx);
+          throw new Error('database is locked');
+        },
+        ...rest,
+      ).catch(() => {});
+      return transaction(operation, ...rest);
+    });
+
+    const ids: string[] = [];
+    await store.transaction(async tx => {
+      ids.push((await tx.createPage({ parentId: scope.id, name: 'Retried', provenance: { author: 'host' } })).id);
+    });
+
+    expect(ids).toHaveLength(2);
+    expect(await store.getPage({ id: ids[0]!, read: 'all' })).toBeNull();
+    expect(events).toMatchObject([{ kind: 'page', op: 'create', pageId: ids[1] }]);
+    expect(events).toHaveLength(1);
   });
 
   it('says where a moved or merged-away page was before', async () => {

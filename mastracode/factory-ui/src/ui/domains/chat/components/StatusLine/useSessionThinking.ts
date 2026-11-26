@@ -5,6 +5,7 @@ import type { ThinkingLevelOption } from '@mastra/playground-ui/components/Think
 import { useAvailableModelsQuery, useModelReasoningOptions } from '../../../../../hooks/useAvailableModels';
 import { useChatModelScope } from '../../context/useChatModelScope';
 import type { ChatThinkingApi } from '../../context/ChatThinkingContext';
+import { useChatModels } from '../../context/useChatModels';
 import { useChatThinking } from '../../context/useChatThinking';
 import {
   ALL_THINKING_LEVEL_OPTIONS,
@@ -15,13 +16,14 @@ import type { EffectiveThinkingLevel } from '../../services/thinkingLevels';
 
 type SessionThinkingState =
   | { unavailableReason: string; loading: boolean }
-  | { effective: EffectiveThinkingLevel; source: string };
+  | { effective: EffectiveThinkingLevel; source: string; resettable: boolean };
 
 function sessionThinkingState(
   modelId: string | undefined,
   catalogPending: boolean,
   thinking: ChatThinkingApi,
   switchingModel: boolean,
+  packName: string | undefined,
 ): SessionThinkingState {
   if (catalogPending) return { unavailableReason: "This model's thinking levels aren't loaded yet.", loading: true };
   if (thinking.loadError) return { unavailableReason: "The thinking level couldn't be loaded.", loading: false };
@@ -29,9 +31,11 @@ function sessionThinkingState(
   if (switchingModel) return { unavailableReason: 'Switching model…', loading: true };
   if (!modelId) return { unavailableReason: 'Pick a model first.', loading: false };
   const { origin } = thinking.level;
+  if (packName) return { effective: thinking.level, source: `${packName} pack`, resettable: false };
   return {
     effective: thinking.level,
     source: origin === 'session' ? 'this session' : DEFAULT_SOURCE_LABELS[origin],
+    resettable: origin === 'session',
   };
 }
 
@@ -47,12 +51,13 @@ function levelSummary(options: ThinkingLevelOption<ThinkingLevelSetting>[], stat
 /** The session's thinking level for `modelId`, shared by the controls on and inside the model picker. */
 export function useSessionThinking(modelId: string | undefined, switchingModel: boolean) {
   const thinking = useChatThinking();
+  const { selectedPack } = useChatModels();
   const { catalogTarget } = useChatModelScope();
   const catalog = useAvailableModelsQuery(catalogTarget);
   const reasoningOptions = useModelReasoningOptions(modelId, catalogTarget);
   const options = modelId ? thinkingLevelOptionsForModel(modelId, reasoningOptions) : ALL_THINKING_LEVEL_OPTIONS;
 
-  const state = sessionThinkingState(modelId, catalog.isPending, thinking, switchingModel);
+  const state = sessionThinkingState(modelId, catalog.isPending, thinking, switchingModel, selectedPack?.name);
 
   return {
     options,

@@ -364,6 +364,85 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
     }, 20_000);
   });
 
+  describe('per-topic idle retention', () => {
+    const ONE_HOUR = 60 * 60 * 1000;
+    const ONE_DAY = 24 * 60 * 60 * 1000;
+    const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+
+    it('bounds a run’s topics by the run-log retention, not the idle backstop', async () => {
+      // A finished run whose process died before its delayed clearTopic used
+      // to sit in Redis for the full backstop. Its topics are fan-out and
+      // their replay history is bounded in the server cache, so they take the
+      // retention their cached log does: a day for run topics, matching the
+      // lifetime of the record that authorizes reading them (a run parked on
+      // a tool approval appends nothing, so this must cover the record's full
+      // window), and an hour for thread streams.
+      const ps = createPubSub();
+      const runId = randomUUID();
+      const runTopics = [`agent.stream.${runId}`, `agent.control.${runId}`, `agent.control.${runId}.ack`];
+      const threadStream = `agent.thread-stream.${randomUUID()}`;
+      const workQueue = `work-queue-${randomUUID()}`;
+      for (const topic of [...runTopics, threadStream, workQueue]) await ps.publish(topic, makeEvent());
+
+      const inspector = await createInspector();
+      for (const topic of runTopics) {
+        const pttl = await inspector.pTTL(`mastra:topic:${topic}`);
+        expect(pttl).toBeGreaterThan(ONE_HOUR);
+        expect(pttl).toBeLessThanOrEqual(ONE_DAY);
+      }
+      const threadPttl = await inspector.pTTL(`mastra:topic:${threadStream}`);
+      expect(threadPttl).toBeGreaterThan(0);
+      expect(threadPttl).toBeLessThanOrEqual(ONE_HOUR);
+      // A work queue keeps the backstop: its grouped consumers must still find
+      // their backlog after an outage.
+      expect(await inspector.pTTL(`mastra:topic:${workQueue}`)).toBeGreaterThan(ONE_DAY);
+    }, 15_000);
+
+    it('keeps a finished run’s topic bounded when a reader resubscribes to catch the tail', async () => {
+      // Subscription setup stamps the TTL because MKSTREAM may have just
+      // created the key. It must not promote a run topic to the backstop.
+      const ps = createPubSub();
+      const topic = `agent.stream.${randomUUID()}`;
+      await ps.publish(topic, makeEvent());
+      await ps.subscribe(topic, (_event, ack) => void ack?.());
+
+      const inspector = await createInspector();
+      const pttl = await inspector.pTTL(`mastra:topic:${topic}`);
+      expect(pttl).toBeGreaterThan(0);
+      expect(pttl).toBeLessThanOrEqual(ONE_DAY);
+    }, 15_000);
+
+    it('lets a shorter configured backstop cap run topics too', async () => {
+      const ps = createPubSub({ streamIdleTtlMs: 60_000 });
+      const topic = `agent.stream.${randomUUID()}`;
+      await ps.publish(topic, makeEvent());
+
+      const inspector = await createInspector();
+      const pttl = await inspector.pTTL(`mastra:topic:${topic}`);
+      expect(pttl).toBeGreaterThan(0);
+      expect(pttl).toBeLessThanOrEqual(60_000);
+    }, 15_000);
+
+    it('leaves run topics unexpiring when expiry is disabled', async () => {
+      const ps = createPubSub({ streamIdleTtlMs: 0 });
+      const topic = `agent.stream.${randomUUID()}`;
+      await ps.publish(topic, makeEvent());
+
+      const inspector = await createInspector();
+      // -1: the key exists with no TTL, as documented for streamIdleTtlMs: 0.
+      expect(await inspector.pTTL(`mastra:topic:${topic}`)).toBe(-1);
+    }, 15_000);
+
+    it('still gives non-run topics the seven-day default', async () => {
+      const ps = createPubSub();
+      const topic = `plain-${randomUUID()}`;
+      await ps.publish(topic, makeEvent());
+
+      const inspector = await createInspector();
+      expect(await inspector.pTTL(`mastra:topic:${topic}`)).toBeGreaterThan(SEVEN_DAYS - 60_000);
+    }, 15_000);
+  });
+
   describe('streamIdleTtlMs', () => {
     it('stamps a rolling TTL on the stream key when configured (atomically with the write)', async () => {
       const ps = createPubSub({ streamIdleTtlMs: 60_000 });

@@ -30,6 +30,29 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
+    "hy4": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "gemma4": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 0,
+        "max": 32768
+      }
+    ],
+    "qwen3.8-max": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
     "qwen3.8-flash": [
       {
         "type": "effort",
@@ -41,13 +64,19 @@
         "max": 32768
       }
     ],
-    "hy4": [
+    "glm5.3-flash": [
       {
         "type": "effort",
-        "values": ["none", "low", "high"]
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gemma4": [
+    "glm5.3": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "qwen3.6": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -68,35 +97,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "qwen3.8-max": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "qwen3.6": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 0,
-        "max": 32768
-      }
-    ],
-    "glm5.3": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "glm5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "mimo-v2.6-flash": [

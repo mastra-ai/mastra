@@ -35,6 +35,7 @@ const platformIcons = {
   jira: 'jira',
   'incident-io': 'incidentio',
   vanta: 'vanta',
+  linear: 'linear',
 } as const satisfies Record<PlatformConnectProviderId, string>;
 
 export function connectionName(connection: PlatformProviderConnection): string {

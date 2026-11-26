@@ -79,6 +79,7 @@ describe('resolveSubscriptionSession', () => {
     const session = await resolveSubscriptionSession(controller, row(), {
       label: 'Test',
       sourceControl: { sessions: { getBySessionId } },
+      runContext: () => subscriptionRunContext(row(), undefined),
     });
     expect(queryThread).toHaveBeenCalledWith({ threadId: 'thread-1' });
     expect(getBySessionId).toHaveBeenCalledWith('session-1');
@@ -128,6 +129,7 @@ describe('resolveSubscriptionSession', () => {
     const session = await resolveSubscriptionSession(controller, row({ projectRepositoryId: 'repo-pr' }), {
       label: 'Test',
       sourceControl: { sessions: { getBySessionId: async () => ({ userId: 'user-1', orgId: 'org-1', ...filed }) } },
+      runContext: () => subscriptionRunContext(row(), undefined),
     });
 
     expect(session?.state.get().projectRepositoryId).toBe(expected);

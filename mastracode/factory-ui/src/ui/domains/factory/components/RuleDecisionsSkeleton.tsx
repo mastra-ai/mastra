@@ -19,8 +19,10 @@ export function RuleDecisionsSkeleton() {
             >
               <div className={cn('flex min-h-7 min-w-0 items-center gap-2 py-0.5', RAIL_ROW_BODY)}>
                 <SkeletonText line="text-column" className="w-32 motion-reduce:before:animate-none" />
-                <Skeleton className="h-5 w-16 rounded-full motion-reduce:before:animate-none" />
-                <SkeletonText line="text-meta" className="ml-auto w-12 motion-reduce:before:animate-none" />
+                <Skeleton className="h-4.5 w-16 motion-reduce:before:animate-none" />
+                <div className="ml-auto shrink-0 pl-2">
+                  <SkeletonText line="text-meta" className="w-12 motion-reduce:before:animate-none" />
+                </div>
               </div>
             </RailRow>
           ))}

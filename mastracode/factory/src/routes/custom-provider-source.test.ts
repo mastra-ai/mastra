@@ -23,14 +23,19 @@ const ORG = 'org1';
 const USER = 'user-a';
 const OTHER_USER = 'user-b';
 
-const ACME = {
-  providerId: 'acme',
-  name: 'Acme',
+const ACME_CONNECTION = {
   url: 'https://llm.acme.dev/v1',
   apiKey: 'sk-acme',
-  models: ['fast-1'],
+  authScheme: 'x-api-key' as const,
+  headers: [
+    { name: 'X-Team', value: 'team-secret', secret: true },
+    { name: 'X-Region', value: 'eu', secret: false },
+  ],
 };
-const ACME_PROVIDER = { name: 'Acme', url: 'https://llm.acme.dev/v1', apiKey: 'sk-acme', models: ['fast-1'] };
+const ACME = { providerId: 'acme', name: 'Acme', ...ACME_CONNECTION, models: ['fast-1'] };
+// What model resolution receives: the stored row with its auth scheme and
+// headers, so a session calls the endpoint the way its checks did.
+const ACME_PROVIDER = { name: 'Acme', ...ACME_CONNECTION, models: ['fast-1'] };
 
 type WebUser = { workosId: string; organizationId?: string };
 

@@ -23,33 +23,24 @@ import {
 // ---------------------------------------------------------------------------
 
 describe('stripAnsi', () => {
-  it('returns plain text unchanged', () => {
-    expect(stripAnsi('hello world')).toBe('hello world');
-  });
-
-  it('strips basic color codes', () => {
-    expect(stripAnsi('\u001b[31mred text\u001b[0m')).toBe('red text');
-  });
-
-  it('strips bold escape', () => {
-    expect(stripAnsi('\u001b[1mbold\u001b[0m')).toBe('bold');
+  it.each([
+    ['returns plain text unchanged', 'hello world', 'hello world'],
+    ['strips basic color codes', '\u001b[31mred text\u001b[0m', 'red text'],
+    ['strips bold escape', '\u001b[1mbold\u001b[0m', 'bold'],
+    ['strips cursor movement codes', '\u001b[2J\u001b[H', ''],
+    [
+      'handles multiple escape sequences in one string',
+      '\u001b[32mgreen\u001b[0m and \u001b[34mblue\u001b[0m',
+      'green and blue',
+    ],
+    ['returns empty string for empty input', '', ''],
+  ] as const)('%s', (_title, input, expected) => {
+    expect(stripAnsi(input)).toBe(expected);
   });
 
   it('strips OSC hyperlink sequences', () => {
     const hyperlink = '\u001b]8;;https://example.com\u0007click\u001b]8;;\u0007';
     expect(stripAnsi(hyperlink)).toBe('click');
-  });
-
-  it('strips cursor movement codes', () => {
-    expect(stripAnsi('\u001b[2J\u001b[H')).toBe('');
-  });
-
-  it('handles multiple escape sequences in one string', () => {
-    expect(stripAnsi('\u001b[32mgreen\u001b[0m and \u001b[34mblue\u001b[0m')).toBe('green and blue');
-  });
-
-  it('returns empty string for empty input', () => {
-    expect(stripAnsi('')).toBe('');
   });
 
   it('handles string with no escape sequences', () => {

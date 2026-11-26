@@ -17,15 +17,14 @@ import { SCENARIO_MODEL_ID } from '../types';
  * continuation request carried a `role: "tool"` message with null content —
  * rejected by providers (e.g. Anthropic) with a 500.
  *
- * The background manager runs in `mode: 'producer'` so the dispatched task
- * stays pending and the supervisor's continuation turn deterministically
- * carries the placeholder (the previously-buggy path). `startWorkers: false`
- * alone is not enough: dispatch lazily auto-starts execution workers
- * (#19339), and on durable/evented the continuation crosses pubsub hops, so
- * the fast-completing task would win the race and the real sub-agent output
- * would replace the placeholder before the second LLM call. Producer mode
- * never registers a local worker, matching the source test's
- * "workers intentionally NOT started" condition on every engine.
+ * The background manager has no concurrency slots (`globalConcurrency: 0`,
+ * default `'queue'` backpressure), so the dispatched task is queued and stays
+ * pending, and the supervisor's continuation turn deterministically carries
+ * the placeholder (the previously-buggy path). `startWorkers: false` alone is
+ * not enough: dispatch lazily auto-starts execution workers (#19339), and on
+ * durable/evented the continuation crosses pubsub hops, so the
+ * fast-completing task would win the race and the real sub-agent output would
+ * replace the placeholder before the second LLM call.
  *
  * Ported from packages/core/src/agent/__tests__/subagent-background-tool-content.test.ts
  * to the cross-engine scenario matrix.
@@ -92,11 +91,11 @@ describeForAllEngines(
         // Opt the delegation into background dispatch — this is what produces
         // the placeholder result.
         agentBackgroundTasks: { tools: { helper: { enabled: true } } },
-        // Producer mode: the task is persisted and the placeholder returned, but
-        // no local worker ever executes it — keeps the dispatched task pending so
-        // the continuation deterministically carries the placeholder (see
-        // docblock; startWorkers: false alone loses the race on durable/evented).
-        backgroundTasks: { enabled: true, mode: 'producer' },
+        // No slots: the task is persisted and queued and the placeholder
+        // returned, but it never runs — keeps the dispatched task pending so the
+        // continuation deterministically carries the placeholder (see docblock;
+        // startWorkers: false alone loses the race on durable/evented).
+        backgroundTasks: { enabled: true, globalConcurrency: 0 },
         startWorkers: false,
         stopWhen: stepCountIs(3),
         fixtures: scenarioFixtures,
