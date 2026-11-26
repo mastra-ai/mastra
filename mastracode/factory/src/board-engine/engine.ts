@@ -82,6 +82,8 @@ export interface FactoryBoardEngine {
    * for a card it has no record of.
    */
   describe?(card: Pick<FactoryTransitionRequest, 'workItemId'>): Promise<FactoryCardRunState | undefined>;
+  /** Tells the engine a card was deleted, for an engine that keeps something per card to let go of. */
+  cardDeleted?(card: Pick<FactoryTransitionRequest, 'workItemId'>): Promise<void>;
   /** Workflows the engine runs cards on; `MastraFactory` registers them with the host's Mastra. */
   readonly workflows?: Readonly<Record<string, AnyWorkflow>>;
 }

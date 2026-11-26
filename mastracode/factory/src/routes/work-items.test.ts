@@ -28,6 +28,7 @@ let acceptedHook: Array<{ workItemId: string }> = [];
 let committedHook: Array<{ workItemId: string; fromStage?: string; toStage: string }> = [];
 /** Every input the routes hand the board engine, in order. */
 let engineInputs: FactoryTransitionRequest[] = [];
+const deletedCards: string[] = [];
 
 const auditRecorder: AuditRecorder = {
   async record(input) {
@@ -106,6 +107,7 @@ function buildApp(
       intakeEvaluator: 'route-list',
       queueHealth: seed.queueHealth,
       boardEngine: {
+        cardDeleted: async card => void deletedCards.push(card.workItemId),
         requestMove: input => {
           engineInputs.push(input);
           return new DispatcherBoardEngine({
@@ -1513,13 +1515,18 @@ describe('DELETE /web/factory/work-items/:id', () => {
   it('removes the item for the org', async () => {
     const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
     const { workItem } = await created.json();
+    deletedCards.length = 0;
     const res = await json('DELETE', `/web/factory/work-items/${workItem.id}`);
     expect((await res.json()).ok).toBe(true);
     expect(await listItems()).toHaveLength(0);
+    // The board engine hears of the delete, to let go of what it kept for the card.
+    expect(deletedCards).toEqual([workItem.id]);
   });
 
   it('404s for unknown or cross-org items', async () => {
+    deletedCards.length = 0;
     expect((await json('DELETE', `/web/factory/work-items/00000000-0000-4000-8000-000000000099`)).status).toBe(404);
+    expect(deletedCards).toEqual([]);
   });
 });
 

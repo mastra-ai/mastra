@@ -366,23 +366,31 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     };
   }
 
+  /**
+   * Ends the run of a card that was deleted. Inputs asked before the delete are answered first
+   * (the card is gone, so they move nothing); an input asked after it would start a run that finds
+   * no card.
+   */
+  async cardDeleted(card: CardRef): Promise<void> {
+    if (!this.workflow.mastra) return;
+    await this.#queued(card, () => this.workflow.deleteWorkflowRunById(boardRunId(card.workItemId)));
+  }
+
   async #ask(card: CardRef, pending: PendingInput): Promise<void> {
     const inputId = crypto.randomUUID();
     this.#pending.set(inputId, pending);
     try {
-      await this.#queued(card, inputId, pending);
+      await this.#queued(card, () => this.#resume(card, inputId, pending));
     } finally {
       this.#pending.delete(inputId);
     }
   }
 
-  #queued(card: CardRef, inputId: string, pending: PendingInput): Promise<void> {
+  #queued(card: CardRef, work: () => Promise<void>): Promise<void> {
     const previous = this.#queues.get(card.workItemId) ?? Promise.resolve();
     // A run end can be told from work a step of this same run started (the phase's session), which
     // still carries the claim that step held. The input is new work on the run: it claims it afresh.
-    const next = previous
-      .catch(() => undefined)
-      .then(() => runOutsideRunFenceScope(() => this.#resume(card, inputId, pending)));
+    const next = previous.catch(() => undefined).then(() => runOutsideRunFenceScope(work));
     this.#queues.set(card.workItemId, next);
     void next
       .catch(() => undefined)
