@@ -6,9 +6,14 @@
  * All durable agents share a single function, so cancelling one run tore down
  * every other run in the deployment — and only the targeted run's snapshot was
  * marked canceled, so the rest died silently.
+ *
+ * A cancel can also arrive after the run already finished (a retried or late
+ * cancel event). It must leave the finished run's final status and results
+ * untouched, while still cancelling a run that is live.
  */
 import { Mastra } from '@mastra/core/mastra';
 import { MockStore } from '@mastra/core/storage';
+import type { WorkflowRunStatus } from '@mastra/core/workflows';
 import { Inngest } from 'inngest';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -41,6 +46,54 @@ function createFunctionConfigs(workflowId: string, opts: Record<string, unknown>
     .commit();
 
   return { workflow: workflow as any, configs };
+}
+
+// Builds a workflow registered on a fresh Mastra with a real in-memory store,
+// then creates a run so a snapshot exists to cancel.
+async function createStoredRun(workflowId: string) {
+  const inngest = new Inngest({ id: 'cancel-terminal-test' });
+  const { createWorkflow, createStep } = init(inngest);
+  const step = createStep({
+    id: 'step1',
+    inputSchema: z.object({ value: z.string() }),
+    outputSchema: z.object({ value: z.string() }),
+    execute: async ({ inputData }) => inputData,
+  });
+  const workflow = createWorkflow({
+    id: workflowId,
+    inputSchema: z.object({ value: z.string() }),
+    outputSchema: z.object({ value: z.string() }),
+    steps: [step],
+  })
+    .then(step)
+    .commit();
+
+  const store = new MockStore();
+  const mastra = new Mastra({
+    workflows: { [workflowId]: workflow as any },
+    storage: store as any,
+  });
+  // The same workflows domain store `cancel()` reads and writes.
+  const workflowsStore = (await mastra.getStorage()!.getStore('workflows'))!;
+
+  const run = await workflow.createRun({ runId: `${workflowId}-run` });
+  return { inngest, run, store: workflowsStore, workflowId };
+}
+
+// `createRun` persists a 'pending' snapshot; overwrite its status to set up the
+// state a late cancel would see.
+async function seedSnapshot(
+  store: MockStore['stores']['workflows'],
+  workflowName: string,
+  runId: string,
+  status: WorkflowRunStatus,
+) {
+  const snapshot = await store.loadWorkflowSnapshot({ workflowName, runId });
+  await store.persistWorkflowSnapshot({
+    workflowName,
+    runId,
+    snapshot: { ...snapshot!, status },
+  });
 }
 
 describe('inngest cancel event scoping', () => {
@@ -165,6 +218,61 @@ describe('inngest cancel event scoping', () => {
 
     expect(nestedInvokeData.runId).toBeTruthy();
     expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+// A cancel event can arrive after the run already finished (Inngest retries, a
+// client cancels late, a resume races a failure). The cancel must not rewrite a
+// terminal snapshot back to `canceled`, but it must still cancel a live run.
+describe('inngest cancel leaves terminal snapshots alone', () => {
+  const TERMINAL = ['success', 'failed', 'canceled', 'tripwire', 'bailed'] as const;
+  const LIVE = ['running', 'pending', 'waiting', 'suspended', 'paused', 'skipped'] as const;
+
+  it.each(TERMINAL)('keeps a %s run as-is and sends no cancel event', async status => {
+    const { inngest, run, store, workflowId } = await createStoredRun(`cancel-terminal-${status}`);
+    await seedSnapshot(store, workflowId, run.runId, status);
+    const sendSpy = vi.spyOn(inngest, 'send').mockResolvedValue({ ids: ['evt'] } as any);
+
+    await run.cancel();
+
+    const stored = await store.loadWorkflowSnapshot({ workflowName: workflowId, runId: run.runId });
+    expect(stored?.status).toBe(status);
+    expect(sendSpy).not.toHaveBeenCalled();
+  });
+
+  it.each(LIVE)('cancels a live %s run', async status => {
+    const { inngest, run, store, workflowId } = await createStoredRun(`cancel-live-${status}`);
+    await seedSnapshot(store, workflowId, run.runId, status);
+    const sendSpy = vi.spyOn(inngest, 'send').mockResolvedValue({ ids: ['evt'] } as any);
+
+    await run.cancel();
+
+    const stored = await store.loadWorkflowSnapshot({ workflowName: workflowId, runId: run.runId });
+    expect(stored?.status).toBe('canceled');
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // The run can finish between the terminal-status check and the write. The
+  // compare-and-set is what keeps a finished run's snapshot from being rewritten.
+  it('does not overwrite a snapshot that finished between the check and the write', async () => {
+    const { inngest, run, store, workflowId } = await createStoredRun('cancel-race');
+    await seedSnapshot(store, workflowId, run.runId, 'success');
+    vi.spyOn(inngest, 'send').mockResolvedValue({ ids: ['evt'] } as any);
+
+    // Report a live status to the caller while the stored row is already terminal,
+    // so the early check passes and only the guarded write can save the snapshot.
+    const realLoad = store.loadWorkflowSnapshot.bind(store);
+    vi.spyOn(store, 'loadWorkflowSnapshot').mockImplementation(async args => {
+      const snapshot = await realLoad(args);
+      return snapshot ? { ...snapshot, status: 'running' } : snapshot;
+    });
+    const persistSpy = vi.spyOn(store, 'persistWorkflowSnapshot');
+
+    await run.cancel();
+
+    expect(persistSpy).toHaveBeenCalledWith(expect.objectContaining({ expectedStatus: expect.any(Array) }));
+    const stored = await realLoad({ workflowName: workflowId, runId: run.runId });
+    expect(stored?.status).toBe('success');
   });
 });
 
