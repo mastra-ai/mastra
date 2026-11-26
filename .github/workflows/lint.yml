@@ -268,6 +268,9 @@ jobs:
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
+      - name: Test the CI routing scripts
+        run: pnpm vitest run --config .github/scripts/vitest.config.ts
+
       - name: Run lint and format checks
         run: pnpm lint
 

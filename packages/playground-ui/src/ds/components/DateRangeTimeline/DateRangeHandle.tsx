@@ -1,8 +1,8 @@
-import { format } from 'date-fns';
 import type { KeyboardEventHandler, PointerEventHandler } from 'react';
 import { parseDate } from './lib/date-range-timeline';
 import type { DateBoundary } from './lib/date-range-timeline';
 import { cn } from '@/lib/utils';
+import { formatDate } from '@/utils/date-format';
 
 interface DateRangeHandleProps {
   boundary: DateBoundary;
@@ -29,7 +29,7 @@ export function DateRangeHandle({
 }: DateRangeHandleProps) {
   const label = boundary === 'from' ? 'Start date handle' : 'End date handle';
   const date = parseDate(valueText);
-  const accessibleValue = date ? format(date, 'MMMM d, yyyy') : valueText;
+  const accessibleValue = date ? formatDate(date, 'date-long') : valueText;
 
   return (
     <div
