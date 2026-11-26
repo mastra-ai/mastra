@@ -3,13 +3,15 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
-import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createBoardRegistry } from '../boards/index.js';
 import { PHASE_EXIT_METADATA_KEY } from '../boards/phase-automation.js';
 import { FactoryRuleRejectedError } from '../rules/dispatch-errors.js';
+import { observeSessionPhaseOutcome } from '../rules/phase-outcome-move.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryTransitionRequest } from '../rules/transition-service.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -207,6 +209,66 @@ describe('the workflow board engine', () => {
     await engine.runEnded({ ...binding, runEnd: 'run-1' }, engine);
 
     expect(told).toEqual([false, false]);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'probing',
+      phase: 'planning',
+      probes: 1,
+    });
+  });
+
+  it('counts one run end once when two workers tell of it, each from its own session object', async () => {
+    const { engine, item, binding } = await setup();
+    const openRuns = (await createFactoryStorageForTests()).openRuns;
+    const run = {
+      kickoffId: 'decision-1',
+      bindingId: binding.id,
+      role: binding.role,
+      startedBy: 'user-1',
+      orgId: ORG,
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      sessionId: 'session-1',
+      threadId: 'thread-1',
+      branch: 'factory/item',
+    };
+    await openRuns.open(run);
+    // Each worker holds its own object for the card's session; both read the one ledger.
+    const worker = () => {
+      const listeners = new Set<(event: AgentControllerEvent) => void>();
+      const session = {
+        subscribe: (listener: (event: AgentControllerEvent) => void) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+      };
+      const told: Promise<boolean>[] = [];
+      observeSessionPhaseOutcome(session, {
+        binding: async () => binding,
+        boardEngine: () => ({
+          requestMove: request => engine.requestMove(request),
+          runEnded: (ended, held) => {
+            const answer = engine.runEnded(ended, held);
+            told.push(answer);
+            return answer;
+          },
+        }),
+        openRun: async () => (await openRuns.listByThread('thread-1')).at(-1)?.kickoffId,
+      });
+      const end = () => listeners.forEach(listener => listener({ type: 'agent_end', reason: 'complete' }));
+      return { end, told };
+    };
+    const ranIt = worker();
+    worker();
+
+    // The run ends on one worker. The other worker's dispatcher reads that end from the ledger and
+    // tells of it by the run's kickoff id; its own session object never saw a run end.
+    ranIt.end();
+    await vi.waitFor(() => expect(ranIt.told).toHaveLength(1));
+    await openRuns.end(run.kickoffId, { reason: 'complete', endedAt: Date.now() });
+    await openRuns.close(run, Date.now());
+    await expect(Promise.all(ranIt.told)).resolves.toEqual([false]);
+    await expect(engine.runEnded({ ...binding, runEnd: run.kickoffId }, engine)).resolves.toBe(false);
+
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
       state: 'probing',
       phase: 'planning',

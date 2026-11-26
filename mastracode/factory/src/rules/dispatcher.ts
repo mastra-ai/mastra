@@ -2007,7 +2007,12 @@ export class FactoryDecisionDispatcher {
                   // the run did no work.
                   await this.#reconcileRunBinding?.(binding);
                   if (
-                    await this.#boardEngine.runEnded({ ...binding, runEnd: latestRunEnd(session) }, this.#boardEngine)
+                    await this.#boardEngine.runEnded(
+                      // The ledger's row names the run for every worker; without a ledger only this
+                      // process tells of the end.
+                      { ...binding, runEnd: this.#openRuns ? deliveryId : latestRunEnd(session) },
+                      this.#boardEngine,
+                    )
                   )
                     return;
                   if (workingRevision === null) return;

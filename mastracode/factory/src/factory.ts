@@ -2673,7 +2673,14 @@ export class MastraFactory {
           sessionId: row.sessionId,
         });
       };
-      observeSessionPhaseOutcome(session, { boardEngine: () => boardEngine, binding: runBinding });
+      observeSessionPhaseOutcome(session, {
+        boardEngine: () => boardEngine,
+        binding: runBinding,
+        openRun: async () => {
+          const threadId = session.thread.getId();
+          return threadId ? (await openRunsStorage.listByThread(threadId)).at(-1)?.kickoffId : undefined;
+        },
+      });
       // A run that waits for a person's yes or no leaves its card waiting on that answer.
       const runPaused = async () => {
         if (!boardEngine?.runPaused) return;
