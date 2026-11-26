@@ -3,52 +3,24 @@ import { verifyJwks } from '@mastra/auth';
 import { sessionEncryption } from '@workos/authkit-session';
 import type { User } from '@workos-inc/node';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+import { workosSdkMock } from './_types/workos-sdk-mock';
 import { MastraAuthWorkos } from './index';
 
-// Mock the WorkOS class
-const mockListOrganizationMemberships = vi.fn();
-const mockGetUser = vi.fn();
-const mockWorkOSConstructor = vi.fn();
-const mockCreateOrganizationMembership = vi.fn();
-const mockCreateOrganization = vi.fn();
-const mockGetOrganizationByExternalId = vi.fn();
-const mockAuthenticateWithCode = vi.fn();
+// One shared mock for the WorkOS SDK, registered identically by every test file
+// in this package. The package runs with `isolate: false`, so the first file to
+// import the SDK decides the mock that every later file receives — two
+// different mocks made the suites depend on which file ran first. See
+// ./_types/workos-sdk-mock.ts.
+vi.mock('@workos-inc/node');
 
-vi.mock('@workos-inc/node', () => {
-  // Use a class for constructor (Vitest v4 requirement)
-  class MockWorkOS {
-    userManagement: any;
-    organizations: any;
-
-    constructor(apiKey?: string, options?: any) {
-      mockWorkOSConstructor(apiKey, options);
-      this.userManagement = {
-        getJwksUrl: vi.fn().mockReturnValue('https://mock-jwks-url'),
-        listOrganizationMemberships: mockListOrganizationMemberships,
-        getUser: mockGetUser,
-        createOrganizationMembership: mockCreateOrganizationMembership,
-        authenticateWithCode: mockAuthenticateWithCode,
-      };
-      this.organizations = {
-        createOrganization: mockCreateOrganization,
-        getOrganizationByExternalId: mockGetOrganizationByExternalId,
-      };
-    }
-  }
-
-  // Mock the GenerateLinkIntent enum used by admin-portal.ts
-  const GenerateLinkIntent = {
-    SSO: 'sso',
-    DSync: 'dsync',
-    AuditLogs: 'audit_logs',
-    LogStreams: 'log_streams',
-  };
-
-  return {
-    WorkOS: MockWorkOS,
-    GenerateLinkIntent,
-  };
-});
+const mockWorkOSConstructor = workosSdkMock.construct;
+const mockListOrganizationMemberships = workosSdkMock.userManagement.listOrganizationMemberships;
+const mockGetUser = workosSdkMock.userManagement.getUser;
+const mockCreateOrganizationMembership = workosSdkMock.userManagement.createOrganizationMembership;
+const mockCreateOrganization = workosSdkMock.organizations.createOrganization;
+const mockGetOrganizationByExternalId = workosSdkMock.organizations.getOrganizationByExternalId;
+const mockAuthenticateWithCode = workosSdkMock.userManagement.authenticateWithCode;
 
 // Mock the verifyJwks function
 vi.mock('@mastra/auth', () => ({
