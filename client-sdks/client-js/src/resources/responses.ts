@@ -73,13 +73,13 @@ function hydrateStreamEvent(event: ResponsesStreamEvent | ResponsePayload): Resp
 }
 
 function parseSseBlock(block: string): ResponsesStreamEvent | null {
-  const normalizedBlock = block.replace(/\r\n/g, '\n').trim();
-  if (!normalizedBlock) {
+  const trimmedBlock = block.trim();
+  if (!trimmedBlock) {
     return null;
   }
 
-  const dataLines = normalizedBlock
-    .split('\n')
+  const dataLines = trimmedBlock
+    .split(/\r\n|\n|\r/)
     .filter(line => line.startsWith('data:'))
     .map(line => line.slice('data:'.length).trim());
 
@@ -93,6 +93,25 @@ function parseSseBlock(block: string): ResponsesStreamEvent | null {
   }
 
   return hydrateStreamEvent(JSON.parse(data)) as ResponsesStreamEvent;
+}
+
+/**
+ * Locates the first blank-line event separator, accepting `\r\n\r\n`, `\n\n` or `\r\r`.
+ * Returns the earliest match so mixed line endings cannot merge frames; the caller must
+ * wait for more input when none is found rather than guessing a partial boundary.
+ */
+function findSseBoundary(text: string): { index: number; length: number } | null {
+  const candidates = [
+    { index: text.indexOf('\r\n\r\n'), length: 4 },
+    { index: text.indexOf('\n\n'), length: 2 },
+    { index: text.indexOf('\r\r'), length: 2 },
+  ].filter(candidate => candidate.index !== -1);
+
+  if (!candidates.length) {
+    return null;
+  }
+
+  return candidates.reduce((earliest, candidate) => (candidate.index < earliest.index ? candidate : earliest));
 }
 
 export class ResponsesStream implements AsyncIterable<ResponsesStreamEvent> {
@@ -117,17 +136,17 @@ export class ResponsesStream implements AsyncIterable<ResponsesStreamEvent> {
         const { done, value } = await reader.read();
         buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
 
-        let boundaryIndex = buffer.indexOf('\n\n');
-        while (boundaryIndex !== -1) {
-          const block = buffer.slice(0, boundaryIndex);
-          buffer = buffer.slice(boundaryIndex + 2);
+        let boundary = findSseBoundary(buffer);
+        while (boundary) {
+          const block = buffer.slice(0, boundary.index);
+          buffer = buffer.slice(boundary.index + boundary.length);
 
           const parsed = parseSseBlock(block);
           if (parsed) {
             yield parsed;
           }
 
-          boundaryIndex = buffer.indexOf('\n\n');
+          boundary = findSseBoundary(buffer);
         }
 
         if (done) {
