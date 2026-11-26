@@ -257,6 +257,48 @@ describe('rebuildRunToolsFromMastra request context', () => {
     }
   });
 
+  it("drops request-built tools the resuming caller's build omits, keeping processor replacements", async () => {
+    const runId = 'stale-segment-omitted-tool';
+    const aliceTools = {
+      approve: { id: 'approve', built: 'alice' },
+      admin: { id: 'admin', built: 'alice' },
+      search: { id: 'search', built: 'alice' },
+    };
+    const processorSearch = { id: 'search', built: 'processor' };
+    const tools = { ...aliceTools, search: processorSearch };
+    globalRunRegistry.set(runId, {
+      model: {},
+      requestTools: aliceTools,
+      baseTools: tools,
+      tools,
+      requestContextSegment: 'segment-1',
+    } as any);
+    const agent = {
+      ...makeAgent(),
+      // Bob may not use `admin` or `search`.
+      getToolsForExecution: vi.fn().mockResolvedValue({ approve: { id: 'approve', built: 'bob' } }),
+    };
+
+    try {
+      await rebuildRunToolsFromMastra({
+        mastra: makeMastra(agent),
+        runId,
+        agentId: 'agent-1',
+        state: {} as any,
+        requestContext: new RequestContext<unknown>([[DURABLE_CONTEXT_SEGMENT_KEY, 'segment-2']]),
+        rehydrateProcessors: true,
+        replaceStale: true,
+      });
+      const replaced = globalRunRegistry.get(runId)!;
+      const expected = { approve: { id: 'approve', built: 'bob' }, search: processorSearch };
+      expect(replaced.tools).toEqual(expected);
+      expect(replaced.baseTools).toEqual(expected);
+      expect(replaced.requestTools).toEqual({ approve: { id: 'approve', built: 'bob' } });
+    } finally {
+      globalRunRegistry.delete(runId);
+    }
+  });
+
   it('does not replace an entry a later segment published during the rebuild', async () => {
     const runId = 'superseded-segment';
     const entry: Record<string, unknown> = {

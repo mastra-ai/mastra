@@ -133,8 +133,9 @@ export function getEntrySegment(entry: RunRegistryEntry | undefined, runId: stri
 
 /**
  * Swap in `requestTools`, rebuilt for a new caller, wherever the entry still holds a tool built for
- * an earlier request, and rebind processor-added tools to `requestContext`. Tools a processor added,
- * replaced or withheld are kept as the processor left them (#25960, #27544).
+ * an earlier request, drop request-built tools the new build omits, and rebind processor-added tools
+ * to `requestContext`. Tools a processor added, replaced or withheld are kept as the processor left
+ * them (#25960, #27544).
  */
 export function refreshRunRequestTools(
   entry: RunRegistryEntry,
@@ -148,14 +149,16 @@ export function refreshRunRequestTools(
       const configured = name in current ? current[name] === previous?.[name] : !previous || !(name in previous);
       if (configured) next[name] = tool;
     }
+    // A request-built tool the new caller's build no longer returns must not run for them.
+    for (const [name, tool] of Object.entries(previous ?? {})) {
+      if (!(name in requestTools) && next[name] === tool) delete next[name];
+    }
     return next;
   };
   entry.tools = rebindProcessorTools(refresh(entry.tools ?? {}, entry.requestTools), requestContext);
   if (entry.baseTools)
     entry.baseTools = rebindProcessorTools(refresh(entry.baseTools, entry.requestTools), requestContext);
-  // Tools this rebuild did not produce still hold their earlier build, so
-  // keep that as their baseline; otherwise a later resume can never refresh them.
-  entry.requestTools = { ...entry.requestTools, ...requestTools };
+  entry.requestTools = requestTools;
 }
 
 /**
