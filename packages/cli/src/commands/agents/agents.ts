@@ -87,7 +87,7 @@ export function registerAgentsCommand(program: Command) {
     .action(
       wrapAction(async (agentId: string, _opts, command: Command) => {
         const opts = options(command);
-        await (await projectClient(opts)).getAgent(agentId).delete();
+        await (await (await projectClient(opts)).getAgent(agentId)).delete();
         print(opts, { id: agentId, deleted: true }, () => `${pc.green('Deleted agent')} ${agentId}`);
       }),
     );
@@ -100,7 +100,7 @@ export function registerAgentsCommand(program: Command) {
     .action(
       wrapAction(async (agentId: string, message: string, _opts, command: Command) => {
         const opts = options<{ resource: string; thread?: string }>(command);
-        const agent = (await projectClient(opts)).getAgent(agentId);
+        const agent = await (await projectClient(opts)).getAgent(agentId);
         const text = await streamReply(agent, message, opts.resource, opts.thread, !opts.json);
         if (opts.json) console.info(JSON.stringify({ agentId, text }, null, 2));
         else process.stdout.write('\n');
@@ -119,7 +119,7 @@ export function registerAgentsCommand(program: Command) {
         const opts = options<{ resource?: string; thread?: string }>(command);
         const resource = opts.resource ?? `cli-${userInfo().username}`;
         const thread = opts.thread ?? randomUUID();
-        const agent = (await projectClient(opts)).getAgent(agentId);
+        const agent = await (await projectClient(opts)).getAgent(agentId);
 
         console.info(
           pc.dim(`Chatting with ${agentId} as ${resource} in thread ${thread}. Type /exit or press Ctrl+D to leave.`),
@@ -167,12 +167,9 @@ async function streamReply(
     ...(thread ? { memory: { thread, resource } } : {}),
   });
   let text = '';
-  await response.processDataStream({
-    onChunk: async chunk => {
-      if (chunk.type !== 'text-delta') return;
-      text += chunk.payload.text;
-      if (write) process.stdout.write(chunk.payload.text);
-    },
-  });
+  for await (const delta of response.textStream) {
+    text += delta;
+    if (write) process.stdout.write(delta);
+  }
   return text;
 }

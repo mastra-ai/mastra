@@ -110,6 +110,14 @@ describe('mastra agents', () => {
     expect(result.stderr).toContain('Agent not found');
   }, 120_000);
 
+  it('exits non-zero with the reason when a run fails partway through the reply', async () => {
+    const agent = await cli.json<{ id: string }>(['agents', 'create', '--name', 'Support', '--instructions', 'Hi']);
+    const result = await cli.run(['agents', 'run', agent.id, 'Are you overloaded?', '--resource', 'user-1']);
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toContain('Let me ');
+    expect(result.stderr).toContain('Model provider overloaded');
+  }, 120_000);
+
   it('asks for a project when none is given, set or linked', async () => {
     delete cli.env.MASTRA_PROJECT_ID;
     const result = await cli.run(['agents', 'list']);

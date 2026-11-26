@@ -155,10 +155,16 @@ export async function startPlatformApi() {
       agents.set(agent.id, agent);
       return send(201, agent);
     }
-    if ((m = rest.match(/^\/agents\/([^/]+)$/)) && method === 'DELETE') {
-      if (agents.get(m[1]!)?.projectId !== projectId) return send(404, { error: 'Agent not found' });
-      agents.delete(m[1]!);
-      return send(204);
+    if ((m = rest.match(/^\/agents\/([^/]+)$/))) {
+      const agent = agents.get(m[1]!);
+      if (agent?.projectId !== projectId) return send(404, { error: 'Agent not found' });
+      if (method === 'GET') {
+        return send(200, { name: agent.name, instructions: agent.instructions, modelId: 'openai/gpt-5-mini' });
+      }
+      if (method === 'DELETE') {
+        agents.delete(m[1]!);
+        return send(204);
+      }
     }
     if ((m = rest.match(/^\/agents\/([^/]+)\/stream$/))) {
       const agent = agents.get(m[1]!);
@@ -177,6 +183,15 @@ export async function startPlatformApi() {
         threads.set(thread, history);
       }
       res.writeHead(200, { 'content-type': 'text/event-stream' });
+      // The model provider fails partway through the reply.
+      if (String(body.messages).includes('overload')) {
+        const partial = { type: 'text-delta', runId: 'run_1', from: 'AGENT', payload: { id: 't', text: 'Let me ' } };
+        const error = { type: 'error', runId: 'run_1', from: 'AGENT', payload: { error: 'Model provider overloaded' } };
+        res.write(`data: ${JSON.stringify(partial)}\n\n`);
+        res.write(`data: ${JSON.stringify(error)}\n\n`);
+        res.end('data: [DONE]\n\n');
+        return;
+      }
       const reply = [`${agent.name} here. `, `You asked: ${body.messages}`];
       if (earlier) reply.push(` (earlier you said: ${earlier})`);
       for (const text of reply) {
