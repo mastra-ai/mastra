@@ -89,16 +89,28 @@ export class SentenceTransformer extends TextTransformer {
     // Text before the final word, used to spot an earlier numbered-list marker.
     const prefix = lastWord ? trimmed.slice(0, trimmed.length - lastWord.length) : trimmed;
 
-    // A bare integer ending in a period is a numbered-list marker, not a sentence-final
-    // number, when it opens the sentence, follows a configured ender, starts a line or a
-    // colon-labelled prefix (e.g. `Steps: 1. ... 2. ...`), or has an earlier bare-number
-    // marker in the same sentence (e.g. `1. First 2. Second`).
+    // A bare integer ending in a period is a numbered-list marker (not a sentence-final
+    // number) when one of these holds:
+    //  - it opens the sentence (`5. Fifth`);
+    //  - it follows a configured ender;
+    //  - it starts a line (`\n2. Second`);
+    //  - an earlier bare-number marker already appears in the sentence
+    //    (`1. First 2. Second`);
+    //  - it is the first marker of a colon-introduced list that continues in the remaining
+    //    text (`Steps: 1. Open 2. Save`).
+    // A colon-labelled value (`Result: 5. Next sentence.`) is NOT a list marker: the label
+    // happens to contain a colon, but no further marker follows, so the sentence still ends.
+    const startsLine = /(?:^|\n)\s*$/.test(prefix);
+    const hasEarlierMarker = /(?:^|\s)\d+\.\s/.test(prefix);
+    const previousIsColonLabel = previous !== undefined && previous.endsWith(':');
+    const continuesAsList = previousIsColonLabel && /\s\d+\.\s/.test(remainingText);
     const isListMarker =
       /^\d+$/.test(baseWord) &&
       (!previous ||
         this.sentenceEnders.includes(previous.slice(-1)) ||
-        /(^|\n|:)\s*$/.test(prefix) ||
-        /(?:^|\s)\d+\.\s/.test(prefix));
+        startsLine ||
+        hasEarlierMarker ||
+        continuesAsList);
 
     return !this.isCommonAbbreviation(baseWord, isListMarker);
   }

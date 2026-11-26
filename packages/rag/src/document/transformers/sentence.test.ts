@@ -155,6 +155,14 @@ describe('SentenceTransformer boundaries', () => {
       expect(split('Steps: 1. Open 2. Edit 3. Save the file.')).toEqual(['Steps: 1. Open 2. Edit 3. Save the file.']);
     });
 
+    it('still ends a sentence after a colon-labelled value', () => {
+      // The label happens to end with a colon, but no further list marker follows, so the
+      // integer is a sentence-final number, not a list marker.
+      expect(split('Result: 5. Next sentence.')).toEqual(['Result: 5.', 'Next sentence.']);
+      expect(split('Total: 5. Another line.')).toEqual(['Total: 5.', 'Another line.']);
+      expect(split('It was built in 2020. Then it grew.')).toEqual(['It was built in 2020.', 'Then it grew.']);
+    });
+
     it('still requires whitespace after ASCII enders', () => {
       expect(split('Hello.World')).toEqual(['Hello.World']);
     });
