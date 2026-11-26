@@ -4,8 +4,8 @@
 import { FGADeniedError } from '@internal/auth/ee';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { MastraFGAWorkos, WorkOSFGAMembershipResolutionError } from './fga-provider';
 import { workosSdkMock } from './_types/workos-sdk-mock';
+import { MastraFGAWorkos, WorkOSFGAMembershipResolutionError } from './fga-provider';
 
 // One shared mock for the WorkOS SDK, registered identically by every test file
 // in this package. The package runs with `isolate: false`, so the first file to
