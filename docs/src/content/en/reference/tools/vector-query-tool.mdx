@@ -233,6 +233,46 @@ thrown. Note that `id` and `description` can only be set at creation time.
               },
             ],
           },
+          {
+            name: 'mongodb',
+            type: 'MongoDBConfig',
+            description: 'Configuration specific to MongoDB Atlas vector search',
+            isOptional: true,
+            properties: [
+              {
+                type: 'MongoDBConfig',
+                parameters: [
+                  {
+                    name: 'numCandidates',
+                    description:
+                      'Number of candidates considered before selecting the top-K results. Must be at least topK. Defaults to 20 * topK, capped at 10,000.',
+                    isOptional: true,
+                    type: 'number',
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            name: 'turbopuffer',
+            type: 'TurbopufferConfig',
+            description: 'Configuration specific to turbopuffer',
+            isOptional: true,
+            properties: [
+              {
+                type: 'TurbopufferConfig',
+                parameters: [
+                  {
+                    name: 'consistency',
+                    description:
+                      "Query consistency level. 'strong' (default) sees all data written before the query started; 'eventual' has lower latency but may miss recent writes.",
+                    isOptional: true,
+                    type: "'strong' | 'eventual'",
+                  },
+                ],
+              },
+            ],
+          },
         ],
       },
     ],
