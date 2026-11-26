@@ -134,6 +134,8 @@ class ReplicaPubSub extends EventEmitterPubSub {
   readonly forwarded: Array<{ runId: string; signalId: string }> = [];
   /** Set to hold this replica's announcement that `runId` registered until the test releases it. */
   heldRegistration?: { runId: string; reached: ReturnType<typeof gate>; release: ReturnType<typeof gate> };
+  /** Released once this replica unsubscribed from `topic`. */
+  unsubscribedFrom?: { topic: string; done: ReturnType<typeof gate> };
 
   override async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>, options?: { localOnly?: boolean }) {
     const data = event.data as { type?: string; runId?: string; signal?: { id: string } } | undefined;
@@ -147,6 +149,11 @@ class ReplicaPubSub extends EventEmitterPubSub {
       await held.release.promise;
     }
     return super.publish(topic, event, options);
+  }
+
+  override async unsubscribe(topic: string, cb: Parameters<EventEmitterPubSub['unsubscribe']>[1]) {
+    await super.unsubscribe(topic, cb);
+    if (this.unsubscribedFrom?.topic === topic) this.unsubscribedFrom.done.release();
   }
 }
 
@@ -537,6 +544,66 @@ describe('the end of a run whose thread a storage-backed run of another replica 
     // Runs no workers: the replicas share one emitter without competing consumers, and the in-memory workflows store
     // has no step guards, so two replicas running workers would both execute each step.
     const winner = replica({ memory: () => memory, workers: false });
+    // The holder watches the thread, so it learns that the winning run keeps its signals in storage.
+    const observer = await holder.agent.subscribeToThread(scope);
+    const observed = observer.stream[Symbol.asyncIterator]();
+    const { runId, done } = await startRun(holder);
+    // The executing process closed the run before this send was stored, so it is left for the thread's next run.
+    await memoryStore.closeSignalRun({ threadId: scope.threadId, runId, consumedIds: [] });
+    const left = holder.agent.sendSignal({ type: 'user-message', contents: 'LEFT_FOR_THE_WINNER' }, scope);
+    await expect(left.accepted).resolves.toEqual({ action: 'deliver', runId });
+
+    // The run's end-of-run check waits to take the lease over until the other replica's run holds the thread.
+    const transfer = { key: leaseKey, requested: gate(), release: gate(), answered: gate() };
+    const release = { key: leaseKey, released: gate() };
+    holder.pubsub.heldTransfer = transfer;
+    holder.pubsub.releaseOf = release;
+    toolGate.release();
+    await done;
+    await transfer.requested.promise;
+    await release.released.promise;
+    // The winning run's claims wait until the holder's check ended: the holder then drops its subscription to the
+    // thread, which only the check still used once the test's observer is gone.
+    const topic = agentThreadStreamTopic(scope.resourceId, scope.threadId);
+    const checkEnded = { topic, done: gate() };
+    const winnerRunId = `winner-run-${crypto.randomUUID()}`;
+    memoryStore.beforeClaim = async claiming => {
+      if (claiming === winnerRunId) await checkEnded.done.promise;
+    };
+    const winning = winner.agent.stream('Second', {
+      runId: winnerRunId,
+      memory: { thread: scope.threadId, resource: scope.resourceId },
+      maxSteps: 4,
+    });
+    // The holder saw the winning run register.
+    for (let chunk = await observed.next(); !chunk.done; chunk = await observed.next()) {
+      if ((chunk.value as { runId?: string }).runId === winnerRunId) break;
+    }
+    const observerGone = { topic, done: gate() };
+    holder.pubsub.unsubscribedFrom = observerGone;
+    observer.unsubscribe();
+    await observerGone.done.promise;
+    holder.pubsub.unsubscribedFrom = checkEnded;
+    transfer.release.release();
+    for await (const _chunk of (await winning).fullStream);
+
+    expect(holder.pubsub.forwarded.filter(forward => forward.runId === winnerRunId)).toEqual([]);
+    expect(prompts).toHaveLength(3);
+    expect(occurrences(prompts[1], 'LEFT_FOR_THE_WINNER')).toBe(0);
+    expect(occurrences(prompts[2], 'LEFT_FOR_THE_WINNER')).toBe(1);
+    expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
+  });
+
+  it('leaves a signal it left pending for that run when the memory is a fixed instance on the same store, and the run receives it once', async () => {
+    const storage = new InMemoryStore();
+    const memoryStore = new SharedMemory();
+    storage.stores.memory = memoryStore;
+    const { scope, leaseKey, prompts, toolGate, replica, startRun } = replicas(storage);
+    const memory = new MockMemory({ storage });
+    const holder = replica({ memory });
+    // Runs no workers: the replicas share one emitter without competing consumers, and the in-memory workflows store
+    // has no step guards, so two replicas running workers would both execute each step.
+    const winner = replica({ memory, workers: false });
     // The holder watches the thread, so it learns that the winning run keeps its signals in storage.
     const observer = await holder.agent.subscribeToThread(scope);
     const observed = observer.stream[Symbol.asyncIterator]();

@@ -894,6 +894,41 @@ describe('signals of a running evented agent kept in memory storage', () => {
     expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
   });
 
+  it("reports a forwarded signal it stored for a run to that run's pending-signal listeners once", async () => {
+    const memoryStore = new ObservedMemory();
+    const { agent, scope, prompts, toolGate, start } = setup({ memoryStore });
+    const { stream, done } = await start();
+    const notified: Array<{ id: string }> = [];
+    const unsubscribe = agentThreadStreamRuntime.subscribePendingSignals(
+      stream.runId,
+      signals => notified.push(...signals),
+      agent.getPubSub(),
+    );
+    const signal = createSignal({ type: 'user', contents: 'FORWARDED_TO_THE_RUN' });
+    const stored = gate();
+    memoryStore.afterEnqueue = async message => {
+      if (message.id === signal.id) stored.release();
+    };
+    // A replica that does not hold the run forwards the signal without storing it, and this process stores it.
+    await agent.getPubSub().publish(agentThreadStreamTopic(scope.resourceId, scope.threadId), {
+      type: 'signal-enqueued',
+      runId: stream.runId,
+      data: {
+        type: 'signal-enqueued',
+        runId: stream.runId,
+        signal: JSON.parse(JSON.stringify(signal)),
+        sourceId: 'another-replica',
+      },
+    });
+    await stored.promise;
+    toolGate.release();
+    await done;
+    unsubscribe();
+
+    expect(notified.map(({ id }) => id)).toEqual([signal.id]);
+    expect(occurrences(prompts[1], 'FORWARDED_TO_THE_RUN')).toBe(1);
+  });
+
   it.each(['sent in this process', 'forwarded by another process'] as const)(
     "does not report a signal stored for a run to the thread's next run when its insert answered after that run started (%s)",
     async path => {
