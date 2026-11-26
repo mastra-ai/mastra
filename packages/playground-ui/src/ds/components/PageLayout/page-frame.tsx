@@ -12,13 +12,9 @@ export interface PageFrameProps {
   body?: 'scroll' | 'fixed';
 }
 
-const scrollBodyWithHeader =
-  'flex h-full min-h-min flex-col [&>:last-child:is([data-slot=empty-state-fill],[data-slot=spinner-fill],.h-full,:has(>[data-slot=empty-state-fill]),:has(>[data-slot=spinner-fill]))]:grow [&>:last-child:is([data-slot=empty-state-fill],[data-slot=spinner-fill],.h-full,:has(>[data-slot=empty-state-fill]),:has(>[data-slot=spinner-fill]))]:basis-0';
-
-// The 32px end space is for pages that scroll as a whole. A last item that fills the height and scrolls on its own (a
-// full-height table, a list capped at the page height, a centered empty state) sits on the 16px gutter, like the sides.
-const fillsToBottom =
-  'has-[>:last-child:is([data-slot=empty-state-fill],[data-slot=spinner-fill],.h-full,.max-h-full),>:last-child>:is([data-slot=empty-state-fill],[data-slot=spinner-fill])]:pb-0';
+// `page-fill` (components.css): the body's last item fills the rest of the page. With a header above it, it grows
+// into the space left; either way it ends on the 16px gutter instead of the 32px end space.
+const scrollBodyWithHeader = 'flex h-full min-h-min flex-col page-fill:*:last:grow page-fill:*:last:basis-0';
 
 // A page's `BrandLoader` centers on the whole frame, header included: where the route's loader sat before the frame
 // mounted. The scroll area around it steps aside as the containing block.
@@ -64,7 +60,7 @@ export function PageFrame({
                 : cn(
                     'mx-auto w-full max-w-(--breakpoint-2xl) pb-8',
                     header ? scrollBodyWithHeader : 'h-full min-h-min',
-                    fillsToBottom,
+                    'page-fill:pb-0',
                     pageLoader,
                   )
             }
