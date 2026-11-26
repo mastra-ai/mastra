@@ -244,6 +244,7 @@ const sidebars = {
         { type: 'doc', id: 'core/getToolById', label: '.getToolById()' },
         { type: 'doc', id: 'core/getVector', label: '.getVector()' },
         { type: 'doc', id: 'core/getWorkflow', label: '.getWorkflow()' },
+        { type: 'doc', id: 'core/getWorkspaceById', label: '.getWorkspaceById()' },
         { type: 'doc', id: 'core/listAgents', label: '.listAgents()' },
         { type: 'doc', id: 'core/listClassifiers', label: '.listClassifiers()' },
         { type: 'doc', id: 'core/listGateways', label: '.listGateways()' },

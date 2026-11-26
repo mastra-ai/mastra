@@ -1436,6 +1436,27 @@ The standalone `ObservationalMemory` class accepts all the same options as the `
 ]}
 />
 
+## Hosted Observational Memory
+
+A memory implementation that runs Observational Memory itself, instead of through the `observational-memory` processor (for example a hosted backend), can extend `MastraMemory` and override these methods. Memory routes then report its settings and records. The base class returns `undefined` from each method, which means the memory doesn't provide them.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'getObservationalMemoryConfig',
+    type: '(args: { requestContext?: RequestContext }) => Promise<ObservationalMemorySettings | undefined>',
+    description:
+      'Returns the Observational Memory settings: `enabled`, `scope` (`thread` or `resource`), and optionally `messageTokens` and `observationTokens` thresholds.',
+  },
+  {
+    name: 'getObservationalMemoryRecords',
+    type: '(args: GetObservationalMemoryRecordsInput) => Promise<ObservationalMemoryRecords | undefined>',
+    description:
+      'Returns the current record (`null` before the first observation) and past generations in `history`, newest first. Input accepts `threadId`, `resourceId`, `historyLimit`, `from`, `to`, `offset` and `requestContext`. Callers check thread access before calling it.',
+  },
+]}
+/>
+
 ## Recall tool
 
 When `retrieval` is truthy, Mastra registers a `recall` tool that pages through raw messages behind observation group ranges. With the default resource scope, the tool can list threads (`mode: "threads"`) and browse another thread through `threadId`. It also supports cross-thread search. Set `retrieval: { vector: true }` for semantic search (`mode: "search"`), or use `scope: 'thread'` to restrict the tool to the current thread. The tool is automatically added to the agent.
