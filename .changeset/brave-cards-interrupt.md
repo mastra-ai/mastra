@@ -12,6 +12,7 @@ const boardEngine: FactoryBoardEngineFactory = context => {
   return {
     ...inner,
     requestMove: request => inner.requestMove(request),
+    requestPlacement: placement => inner.requestPlacement(placement),
     runEnded: (binding, engine) => inner.runEnded(binding, engine),
     cardDeleted: async card => console.log('deleted', card.workItemId),
   };

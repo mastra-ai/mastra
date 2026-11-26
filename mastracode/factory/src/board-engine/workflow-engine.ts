@@ -174,8 +174,8 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
   /**
    * Stops the run in flight on a card a person moves into another phase that runs, and waits for it
    * to end: the person's move wins over the run, instead of being refused while the card is busy.
-   * A run that hasn't ended in time is given up on, and the move goes ahead. A move the board
-   * wouldn't take anyway (another revision, no such edge) stops nothing.
+   * A run that hasn't ended in time keeps its record and its card, and the move is refused as
+   * busy. A move the board wouldn't take anyway (another revision, no such edge) stops nothing.
    */
   async #interrupts(request: FactoryTransitionRequest): Promise<boolean> {
     const runs = this.#context.runs;
