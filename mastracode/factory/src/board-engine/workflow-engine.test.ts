@@ -191,6 +191,22 @@ describe('the workflow board engine', () => {
     await expect(engine.cardDeleted({ workItemId: randomUUID() })).resolves.toBeUndefined();
   });
 
+  it("starts no run for a card that is gone, when its session's run ends or pauses or it is moved after the delete", async () => {
+    const { storage, engine, mastra, item, binding } = await setup();
+    const workflow = mastra.getWorkflow('factory-board');
+    await engine.requestMove(await personMove(storage, item.id, 'intake', 'drag-1')());
+    const late = await personMove(storage, item.id, 'done', 'drag-2')();
+    await storage.delete({ orgId: ORG, id: item.id });
+    await engine.cardDeleted({ workItemId: item.id });
+
+    // Deleting a card doesn't stop its session, whose run can end long after.
+    await expect(engine.runEnded(binding, engine)).resolves.toBe(false);
+    await expect(engine.runPaused(binding)).resolves.toBeUndefined();
+    await expect(engine.requestMove(late)).resolves.toMatchObject({ status: 'rejected' });
+
+    expect(await workflow.getWorkflowRunById(boardRunId(item.id))).toBeNull();
+  });
+
   it("commits a person's move anyway, giving up on the run, when the stopped run doesn't end in time", async () => {
     const { storage, runsUrl, item } = await setup();
     const { calls, runs } = goingRun(false);
