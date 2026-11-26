@@ -19,10 +19,16 @@
     "qwen3.8-27b"
   ],
   "reasoning": {
-    "deepseek-v4.1-flash-552b": [
+    "gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "glm5.3-754b": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "deepseek-v4.1-flash-1017-tl5": [
@@ -31,22 +37,10 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "gpt-oss-120b": [
+    "deepseek-v4.1-flash-552b": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "qwen3.8-27b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "glm5.3-754b": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "medium", "high", "max"]
       }
     ],
     "mistral4-119b": [
@@ -59,6 +53,12 @@
       {
         "type": "effort",
         "values": ["none", "high"]
+      }
+    ],
+    "qwen3.8-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
     "kolibri-1-tl5": [

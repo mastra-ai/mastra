@@ -3,7 +3,7 @@
   "temperature": ["subconscious/deepseek-v4.1-flash-marathon", "subconscious/glm-5.3-marathon"],
   "structuredOutput": ["subconscious/deepseek-v4.1-flash-marathon", "subconscious/glm-5.3-marathon"],
   "reasoning": {
-    "subconscious/deepseek-v4.1-flash-marathon": [
+    "subconscious/glm-5.3-marathon": [
       {
         "type": "toggle"
       },
@@ -12,7 +12,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "subconscious/glm-5.3-marathon": [
+    "subconscious/deepseek-v4.1-flash-marathon": [
       {
         "type": "toggle"
       },

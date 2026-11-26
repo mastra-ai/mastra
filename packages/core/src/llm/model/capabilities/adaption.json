@@ -25,7 +25,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "gemma-4-26b-a4b-it": [
+    "gemma-4-31b-it": [
       {
         "type": "toggle"
       }
@@ -35,15 +35,10 @@
         "type": "toggle"
       }
     ],
-    "qwen3.8-27b": [
+    "glm-5.2": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "gemma-4-31b-it": [
-      {
-        "type": "toggle"
+        "values": ["none", "high", "max"]
       }
     ],
     "deepseek-v4-flash": [
@@ -52,10 +47,15 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "glm-5.2": [
+    "qwen3.8-27b": [
       {
         "type": "effort",
-        "values": ["none", "high", "max"]
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "gemma-4-26b-a4b-it": [
+      {
+        "type": "toggle"
       }
     ]
   }

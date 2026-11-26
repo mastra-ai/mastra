@@ -41,6 +41,11 @@
     "@cf/zai-org/glm-5.3"
   ],
   "reasoning": {
+    "@cf/google/gemma-4-26b-a4b-it": [
+      {
+        "type": "toggle"
+      }
+    ],
     "@cf/deepseek-ai/deepseek-v4.1-flash-1017": [
       {
         "type": "effort",
@@ -73,18 +78,13 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "@cf/google/gemma-4-26b-a4b-it": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "@cf/openai/gpt-oss-20b": [
+    "@cf/openai/gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "@cf/openai/gpt-oss-120b": [
+    "@cf/openai/gpt-oss-20b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
