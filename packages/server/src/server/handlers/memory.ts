@@ -232,20 +232,31 @@ function paginateThreads({
 
 const THREAD_LIST_BATCH_SIZE = 100;
 
+function threadSortKey(thread: StorageThreadType, field: 'createdAt' | 'updatedAt'): number {
+  return new Date(thread[field]).getTime();
+}
+
 /**
  * Pages a thread listing that has to be filtered in process (FGA, branch ancestry, legacy branch
  * rows): reads storage in fixed batches, filters each batch, and keeps only the requested page, so
- * memory stays bounded by one batch plus one page. Every matching row is still read, which keeps
- * `total` exact. Thread IDs are deduplicated in case a batch boundary repeats a row whose sort key ties.
+ * thread payloads stay bounded by one batch plus one page (seen IDs still grow with the scan).
+ * Every matching row is still read, which keeps `total` exact.
+ *
+ * Several adapters order only by the sort field, so rows that tie on it can come back in a
+ * different order for each OFFSET query and a batch boundary inside a tie can drop rows. When a
+ * batch starts with the same sort key the previous batch ended on, the scan restarts as one
+ * unpaged read, which is what the route did before batching.
  */
 async function listFilteredThreadsInBatches({
   listBatch,
   filterBatch,
+  sortField,
   page,
   perPage,
 }: {
-  listBatch: (batch: { page: number; perPage: number }) => Promise<StorageListThreadsOutput>;
+  listBatch: (batch: { page: number; perPage: number | false }) => Promise<StorageListThreadsOutput>;
   filterBatch: (threads: StorageThreadType[]) => Promise<StorageThreadType[]> | StorageThreadType[];
+  sortField: 'createdAt' | 'updatedAt';
   page?: number;
   perPage?: number | false;
 }): Promise<StorageListThreadsOutput> {
@@ -257,8 +268,25 @@ async function listFilteredThreadsInBatches({
   const seenIds = new Set<string>();
   const pagedThreads: StorageThreadType[] = [];
   let total = 0;
+  let previousLastKey: number | undefined;
   for (let batchPage = 0; ; batchPage++) {
     const batch = await listBatch({ page: batchPage, perPage: THREAD_LIST_BATCH_SIZE });
+    const firstThread = batch.threads[0];
+    if (previousLastKey !== undefined && firstThread && threadSortKey(firstThread, sortField) === previousLastKey) {
+      const all = await listBatch({ page: 0, perPage: false });
+      const unique = [...new Map(all.threads.map(thread => [thread.id, thread])).values()];
+      const filtered = await filterBatch(unique);
+      const pageThreads = filtered.slice(start, end);
+      return {
+        threads: pageThreads,
+        page: effectivePage,
+        perPage: effectivePerPage,
+        total: filtered.length,
+        hasMore: start + pageThreads.length < filtered.length,
+      };
+    }
+    const lastThread = batch.threads[batch.threads.length - 1];
+    if (lastThread) previousLastKey = threadSortKey(lastThread, sortField);
     const unseen = batch.threads.filter(thread => {
       if (seenIds.has(thread.id)) return false;
       seenIds.add(thread.id);
@@ -1470,6 +1498,7 @@ export const LIST_THREADS_ROUTE = createRoute({
 
         return listFilteredThreadsInBatches({
           listBatch: batch => memory.listThreads({ filter, ...batch, orderBy }),
+          sortField: orderBy?.field ?? 'createdAt',
           filterBatch: async threads => {
             const authorizedThreads = filterWithFGA
               ? await filterAccessibleThreads({ mastra, requestContext, threads })
@@ -1512,6 +1541,7 @@ export const LIST_THREADS_ROUTE = createRoute({
           }
           return listFilteredThreadsInBatches({
             listBatch: batch => memoryStore.listThreads({ filter, ...batch, orderBy }),
+            sortField: orderBy?.field ?? 'createdAt',
             filterBatch: async threads =>
               sanitizeLegacyThreadListOrThrow(
                 filterWithFGA ? await filterAccessibleThreads({ mastra, requestContext, threads }) : threads,
