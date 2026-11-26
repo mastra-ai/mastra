@@ -129,6 +129,11 @@ export type FilterBarContextValue = {
    * default "Couldn't load values.".
    */
   describeSuggestionsError?: (error: unknown) => string | undefined;
+  /**
+   * Multi-value ("is any of" / "is none of") editors apply their selection when dismissed
+   * (outside click or Tab out) instead of through a Done button. See `FilterBarProps`.
+   */
+  applyMultiSelectOnDismiss?: boolean;
 };
 
 const FilterBarContext = createContext<FilterBarContextValue | null>(null);
@@ -167,6 +172,11 @@ export type FilterBarProviderProps = {
    * default "Couldn't load values.".
    */
   describeSuggestionsError?: (error: unknown) => string | undefined;
+  /**
+   * Multi-value ("is any of" / "is none of") editors apply their selection when dismissed
+   * (outside click or Tab out) instead of through a Done button. See `FilterBarProps`.
+   */
+  applyMultiSelectOnDismiss?: boolean;
   children: ReactNode;
 };
 
@@ -214,6 +224,7 @@ export function FilterBarProvider({
   maxDepth = DEFAULT_MAX_GROUP_DEPTH,
   ariaLabel,
   describeSuggestionsError,
+  applyMultiSelectOnDismiss = false,
   children,
 }: FilterBarProviderProps) {
   const segments = useRef(new Map<SegmentKey, HTMLElement>());
@@ -602,6 +613,7 @@ export function FilterBarProvider({
       announcement,
       ariaLabel,
       describeSuggestionsError,
+      applyMultiSelectOnDismiss,
     }),
     [
       fields,
@@ -643,6 +655,7 @@ export function FilterBarProvider({
       announcement,
       ariaLabel,
       describeSuggestionsError,
+      applyMultiSelectOnDismiss,
     ],
   );
 

@@ -43,6 +43,15 @@ export type FilterBarProps = FilterBarValueProps & {
    * to explain a server limit. Return `undefined` to keep the default "Couldn't load values.".
    */
   describeSuggestionsError?: (error: unknown) => string | undefined;
+  /**
+   * Opt-in. Multi-value operators (arity `many`, e.g. "is any of" / "is none of") apply their
+   * selection when the value editor is dismissed — outside click or Tab out — instead of through
+   * a Done button. Toggling options stays local while the editor is open; an unchanged selection
+   * applies nothing, an emptied existing filter is removed and an empty new filter is not added.
+   * Escape and Cancel discard the edit. Typed text is never applied on dismissal: it becomes a
+   * value only through Enter. Ctrl/Cmd+Enter still applies from the keyboard.
+   */
+  applyMultiSelectOnDismiss?: boolean;
   /** Accessible label of the trailing "remove every filter" button. */
   clearLabel?: string;
   className?: string;
@@ -107,6 +116,7 @@ export function FilterBar({
   maxDepth,
   'aria-label': ariaLabel = 'Filters',
   describeSuggestionsError,
+  applyMultiSelectOnDismiss,
   clearLabel = 'Clear filters',
   className,
   children,
@@ -121,6 +131,7 @@ export function FilterBar({
       maxDepth={maxDepth}
       ariaLabel={ariaLabel}
       describeSuggestionsError={describeSuggestionsError}
+      applyMultiSelectOnDismiss={applyMultiSelectOnDismiss}
     >
       <FilterBarSurface className={className} clearLabel={clearLabel}>
         {children}

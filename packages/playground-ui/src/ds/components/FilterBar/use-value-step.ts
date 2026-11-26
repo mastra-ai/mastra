@@ -14,9 +14,24 @@ export type UseValueStepOptions = {
   /** Replaces the query; many arity clears it after adding typed text to the selection. */
   setQuery: (query: string) => void;
   onCommit: (value: FilterBarValue) => void;
+  /**
+   * Many arity: the selection is applied with `applySelection` when the editor is dismissed, and
+   * Ctrl/Meta+Enter applies it the same way (an empty selection commits `[]`, an unchanged one
+   * calls `onCancel` instead of committing).
+   */
+  applyOnDismiss?: boolean;
+  /** Called by Ctrl/Meta+Enter in `applyOnDismiss` mode when there is nothing to apply. */
+  onCancel?: () => void;
 };
 
 const toStrings = (value: FilterBarValue | undefined): string[] => (Array.isArray(value) ? value.map(String) : []);
+
+/** Same values regardless of order or repeats. */
+const sameValues = (a: string[], b: string[]) => {
+  const left = new Set(a);
+  const right = new Set(b);
+  return left.size === right.size && [...left].every(v => right.has(v));
+};
 
 /**
  * Shared value-editing logic for the typeahead value step and the chip value
@@ -33,6 +48,8 @@ export function useValueStep({
   initialValue,
   setQuery,
   onCommit,
+  applyOnDismiss = false,
+  onCancel,
 }: UseValueStepOptions) {
   const isMany = operator?.arity === 'many';
   // Selection is tracked as option strings; values are parsed to the field type on commit.
@@ -123,6 +140,29 @@ export function useValueStep({
     return commitFreeText();
   }
 
+  /**
+   * Many arity: typed text that Enter would add to the selection because it matches no
+   * suggestion. It is not part of the selection until Enter adds it.
+   */
+  const pendingText =
+    isMany && suggestions.options.length === 0 && canCommitFreeText(query.trim()) ? query.trim() : undefined;
+
+  /**
+   * Many arity, apply-on-dismiss: commits the selection unless it matches the value the editor
+   * opened with (order and repeats aside). An emptied selection commits `[]`; the caller decides
+   * whether that removes a filter or adds nothing. Typed text is left out unless `withTypedText`
+   * (Ctrl/Meta+Enter). Returns `false` when nothing was committed.
+   */
+  function applySelection(withTypedText = false) {
+    const values =
+      withTypedText && pendingText !== undefined && !selected.includes(pendingText)
+        ? [...selected, pendingText]
+        : selected;
+    if (sameValues(values, toStrings(initialValueRef.current))) return false;
+    commit(values);
+    return true;
+  }
+
   /** Done (or Ctrl/Meta+Enter) on a multi-selection. */
   function commitDone() {
     // Typed text that matches no suggestion is a value being entered (Enter would add it), so it
@@ -140,7 +180,9 @@ export function useValueStep({
     if (event.key !== 'Enter') return false;
     if (isMany && (event.ctrlKey || event.metaKey)) {
       event.preventDefault();
-      return commitDone();
+      if (!applyOnDismiss) return commitDone();
+      if (!applySelection(true)) onCancel?.();
+      return true;
     }
     if (highlighted === null) {
       event.preventDefault();
@@ -167,6 +209,8 @@ export function useValueStep({
     handleKeyDown,
     submitFreeText,
     commitDone,
+    pendingText,
+    applySelection,
   };
 }
 
