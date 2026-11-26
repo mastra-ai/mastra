@@ -25,6 +25,7 @@ import type { ToolsInput } from '../../types';
 import { isDurableAgentLike } from '../../types';
 import { recordRunSavedMessages } from '../run-message-refs';
 import {
+  getEntrySegment,
   getRunRegistryEntry,
   getStepSegment,
   globalRunRegistry,
@@ -569,6 +570,8 @@ export async function rebuildRunToolsFromMastra(options: {
   } = options;
   if (!mastra) return undefined;
 
+  // A later segment may publish its own entry while this rebuild awaits; only replace the one seen here.
+  const segmentBeforeRebuild = getEntrySegment(getRunRegistryEntry(runId, mastra as Mastra | undefined), runId);
   let agentResolved = false;
   try {
     const agent = await resolveRunAgent(mastra, agentId, runId, options.agentVersionId);
@@ -650,7 +653,8 @@ export async function rebuildRunToolsFromMastra(options: {
         registryModel.__metadataOnly !== true &&
         (existing.baseTools !== undefined || existing.tools !== undefined);
       // Re-checked here: a sibling step of the same segment may already have replaced the entry.
-      if (options.replaceStale && isStaleRunRegistryEntry(existing, runId, requestContext)) {
+      const staleEntry = isStaleRunRegistryEntry(existing, runId, requestContext);
+      if (options.replaceStale && staleEntry && getEntrySegment(existing, runId) === segmentBeforeRebuild) {
         // Memory and workspace stay: the save queue is bound to the entry's memory, and a warm resume
         // keeps them too. Which thread and resource they touch comes from the run.
         refreshRunRequestTools(existing, tools, resolveRequestContext);
@@ -659,7 +663,7 @@ export async function rebuildRunToolsFromMastra(options: {
         existing.requestContext = resolveRequestContext;
         existing.requestContextRebuilt = true;
         existing.requestContextSegment = getStepSegment(runId, requestContext);
-      } else if (options.rehydrateProcessors && !existing.requestContext) {
+      } else if (options.rehydrateProcessors && !existing.requestContext && !staleEntry) {
         existing.requestContext = resolveRequestContext;
         existing.requestContextRebuilt = true;
         existing.requestContextSegment = getStepSegment(runId, requestContext);

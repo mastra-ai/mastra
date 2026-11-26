@@ -120,9 +120,15 @@ export function isStaleRunRegistryEntry(
   if (!entry) return false;
   const stepSegment = getStepSegment(runId, stepContext);
   if (!stepSegment) return false;
-  const entrySegment =
-    (runId ? getExecutionClaim(entry.requestContext, runId)?.executionId : undefined) ?? entry.requestContextSegment;
+  const entrySegment = getEntrySegment(entry, runId);
   return entrySegment !== undefined && entrySegment !== stepSegment;
+}
+
+/** The segment the entry's tools and context were built for, if it records one. */
+export function getEntrySegment(entry: RunRegistryEntry | undefined, runId: string | undefined) {
+  return (
+    (runId ? getExecutionClaim(entry?.requestContext, runId)?.executionId : undefined) ?? entry?.requestContextSegment
+  );
 }
 
 /**

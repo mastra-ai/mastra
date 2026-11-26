@@ -257,6 +257,42 @@ describe('rebuildRunToolsFromMastra request context', () => {
     }
   });
 
+  it('does not replace an entry a later segment published during the rebuild', async () => {
+    const runId = 'superseded-segment';
+    const entry: Record<string, unknown> = {
+      model: {},
+      tools: { approve: { id: 'approve', built: 'alice' } },
+      requestContextSegment: 'segment-1',
+    };
+    globalRunRegistry.set(runId, entry as any);
+    const laterTools = { approve: { id: 'approve', built: 'carol' } };
+    const agent = {
+      ...makeAgent(),
+      getToolsForExecution: vi.fn().mockImplementation(async () => {
+        // Segment 3 publishes its entry while segment 2 is still building.
+        entry.tools = laterTools;
+        entry.requestContextSegment = 'segment-3';
+        return { approve: { id: 'approve', built: 'bob' } };
+      }),
+    };
+
+    try {
+      await rebuildRunToolsFromMastra({
+        mastra: makeMastra(agent),
+        runId,
+        agentId: 'agent-1',
+        state: {} as any,
+        requestContext: new RequestContext<unknown>([[DURABLE_CONTEXT_SEGMENT_KEY, 'segment-2']]),
+        rehydrateProcessors: true,
+        replaceStale: true,
+      });
+      expect(entry.tools).toBe(laterTools);
+      expect(entry.requestContextSegment).toBe('segment-3');
+    } finally {
+      globalRunRegistry.delete(runId);
+    }
+  });
+
   it('keeps tools built for the current segment', async () => {
     const runId = 'current-segment-keep';
     const tools = { approve: { id: 'approve', built: 'alice' } };
