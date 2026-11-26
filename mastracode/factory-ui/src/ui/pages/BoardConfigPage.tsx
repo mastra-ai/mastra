@@ -1,4 +1,3 @@
-import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import type { ReactNode } from 'react';
@@ -6,6 +5,7 @@ import type { ReactNode } from 'react';
 import { BoardRequestError, useBoardQuery } from '../../hooks/useBoardEditor';
 import { BoardCanvas } from '../domains/boardCanvas/components/BoardCanvas';
 import { BoardSettingsTabs, CanvasFrame } from '../domains/boardCanvas/components/CanvasChrome';
+import { BoardHeaderSkeleton, PhaseFlowSkeleton } from '../domains/boardCanvas/components/CanvasSkeleton';
 import { BoardDraftProvider } from '../domains/boardConfig/BoardDraftProvider';
 import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
@@ -31,9 +31,13 @@ function BoardConfigBody() {
 
   if (query.isPending) {
     return (
-      <StatusFrame factoryId={factory.id} boardId={boardId}>
-        <BrandLoader fill />
-      </StatusFrame>
+      <CanvasFrame
+        label="Board settings"
+        tabs={<BoardSettingsTabs factoryId={factory.id} boardId={boardId} active="settings" />}
+        header={<BoardHeaderSkeleton />}
+      >
+        <PhaseFlowSkeleton />
+      </CanvasFrame>
     );
   }
   if (query.isError && query.error instanceof BoardRequestError && query.error.code === 'board_not_found') {
@@ -71,7 +75,7 @@ function BoardConfigBody() {
   );
 }
 
-/** Until the board loads, the canvas keeps its tabs and controls in place, so switching views never drops them. */
+/** When the board can't show, the canvas keeps its tabs and controls in place, so switching views never drops them. */
 function StatusFrame({ factoryId, boardId, children }: { factoryId: string; boardId: string; children: ReactNode }) {
   return (
     <CanvasFrame

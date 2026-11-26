@@ -21,10 +21,13 @@ interface BoardHeaderProps {
   onChange: (patch: Pick<BoardDraft, 'name'> | Pick<BoardDraft, 'description'>) => void;
 }
 
+/** The header's box, shared with the canvas skeleton so a loading board holds the same shape. */
+export const BOARD_HEADER = 'mb-10 flex max-w-2xl flex-col gap-1';
+
 /** The board's name and description as the page's title, edited where they're shown, and why the board can't change. */
 export function BoardHeader({ board, draft, readOnly, manageable, locked, writes, onChange }: BoardHeaderProps) {
   return (
-    <header className="mb-10 flex max-w-2xl flex-col gap-1">
+    <header className={BOARD_HEADER}>
       <div className="flex items-center gap-2">
         <Txt as="h1" variant="display" tone="ink" className="min-w-0">
           <InlineText

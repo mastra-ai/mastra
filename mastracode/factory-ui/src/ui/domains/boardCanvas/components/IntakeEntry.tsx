@@ -17,6 +17,9 @@ import { elbowPath, LINK_STROKE, offsetWithin, Port } from './FlowLinks';
 const FADE =
   'duration-normal ease-out-custom transition-opacity motion-reduce:transition-none group-data-dragging/flow:opacity-0';
 
+/** The intake card's box, shared with the canvas skeleton so a loading board holds the same shape. */
+export const INTAKE_CARD = 'relative mb-8 flex w-89.5 flex-col gap-1 rounded-2xl px-3.25 pt-2.75 pb-3 max-sm:w-full';
+
 /**
  * Where new issues and pull requests come onto the board: where it stands in the intake order, and a port the
  * intake line leaves from when a trigger on the board takes them.
@@ -33,14 +36,7 @@ export function IntakeEntry({
   linked: boolean;
 }) {
   return (
-    <section
-      data-intake-start=""
-      aria-labelledby="canvas-intake"
-      className={cn(
-        raisedSurfaceStyle,
-        'relative mb-8 flex w-89.5 flex-col gap-1 rounded-2xl px-3.25 pt-2.75 pb-3 max-sm:w-full',
-      )}
-    >
+    <section data-intake-start="" aria-labelledby="canvas-intake" className={cn(raisedSurfaceStyle, INTAKE_CARD)}>
       <div className="flex min-h-5.5 items-center gap-2">
         <IconArrowInbox className="text-muted-foreground size-icon-sm shrink-0" aria-hidden />
         <Txt as="h2" id="canvas-intake" variant="card-title-strong" tone="ink" className="min-w-0 flex-1 truncate">

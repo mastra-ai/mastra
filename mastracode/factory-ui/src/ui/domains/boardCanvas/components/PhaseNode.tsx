@@ -39,6 +39,9 @@ interface PhaseNodeProps {
   moves?: { required: ReadonlySet<string>; onChange: (nextPhases: string[]) => void };
 }
 
+/** A phase card's box, shared with the canvas skeleton so a loading board holds the same shape. */
+export const PHASE_CARD = 'relative flex w-75 flex-col gap-1.75 rounded-2xl px-3.25 pt-2.75 pb-3 max-sm:w-full';
+
 /** A phase on the canvas: who works its cards, how they leave, and where they can go next. */
 export function PhaseNode({ boardId, phase, phases, total, to, emphasis, problem, unreached, moves }: PhaseNodeProps) {
   const next = nextPhasesOf(phase, phases).filter(key => key !== phase.key);
@@ -60,7 +63,8 @@ export function PhaseNode({ boardId, phase, phases, total, to, emphasis, problem
       className={cn(
         raisedSurfaceStyle,
         surfaceStateLayerStyle,
-        'group/node relative flex w-75 scroll-mt-20 scroll-mb-40 flex-col gap-1.75 rounded-2xl px-3.25 pt-2.75 pb-3 max-sm:w-full',
+        'group/node scroll-mt-20 scroll-mb-40',
+        PHASE_CARD,
         'duration-normal ease-out-custom transition-[opacity,box-shadow] motion-reduce:transition-none',
         'has-focus-visible:[--surface-rim:var(--border-focus)] group-data-dragging/row:shadow-overlay',
         emphasis === 'selected' && SELECTED_RING,

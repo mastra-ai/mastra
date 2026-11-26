@@ -50,11 +50,11 @@ interface PhaseFlowProps {
 
 const RAIL = 'border-muted-foreground/35 border-l-2';
 /** The rules beside a phase, and the gap their lines cross into its card; on a phone, the rules above the card. */
-const RULES_SIDE = 'mr-4 w-89.5 shrink-0 max-sm:mr-0 max-sm:w-full';
+export const RULES_SIDE = 'mr-4 w-89.5 shrink-0 max-sm:mr-0 max-sm:w-full';
 /** The cards' column and the link down its middle; on a phone, the link runs down the left gutter, by the ports. */
-const CARD_SIDE = 'flex w-75 shrink-0 justify-center max-sm:w-10';
+export const CARD_SIDE = 'flex w-75 shrink-0 justify-center max-sm:w-10';
 /** The session a phase runs in, bracketing the phases that share one. A phone has no room beside the cards for it. */
-const SESSION_SIDE = 'w-30 shrink-0 max-sm:hidden';
+export const SESSION_SIDE = 'w-30 shrink-0 max-sm:hidden';
 /** A dashed pill that adds a rule or a phase where it stands, shown on hover, or always where there is no hover. */
 const ADD_HERE =
   'border-border-strong text-caption text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-full border border-dashed focus-visible:opacity-100';
