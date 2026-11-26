@@ -54,6 +54,7 @@ vi.mock('commander', () => {
 
   class OptionMock {
     hideHelp = vi.fn().mockReturnThis();
+    choices = vi.fn().mockReturnThis();
   }
 
   return {

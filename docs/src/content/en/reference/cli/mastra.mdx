@@ -1084,6 +1084,175 @@ Use the [`list`](#list) command to get the correct ID.
 
 List all available scorer templates. Use the ID for the `add` command.
 
+## Mastra platform commands
+
+`mastra projects`, `mastra agents`, `mastra memory`, `mastra knowledge`, `mastra filesystems`, and `mastra sandboxes` manage a project on Mastra platform: the project itself, its managed agents, and the hosted Memory, Knowledge, file systems, and sandboxes agents use. Environments and databases are managed with [`mastra env`](#mastra-env).
+
+These commands act as the signed-in user (run [`mastra auth login`](#mastra-auth-login) first, or set `MASTRA_API_TOKEN` in CI). The organization comes from `--org`, then `MASTRA_ORG_ID`, then the current organization. The project comes from `--project <id|slug>`, then `MASTRA_PROJECT_ID`, then the `.mastra-project.json` file in the current directory.
+
+Every option is available as a flag and no command prompts, so they run unattended in scripts and CI. Provisioning commands wait until the resource is ready and exit with an error if provisioning fails. Pass `--no-wait` to return as soon as the request is accepted. Every command accepts `--json` to print machine-readable output.
+
+Creating and deleting Memory and Knowledge instances requires the `admin` role in the organization.
+
+## `mastra projects`
+
+Manages the organization's projects.
+
+```bash
+mastra projects list
+mastra projects create "Support Desk" --region eu
+mastra projects delete <project>
+```
+
+`projects create` prints the new project's ID as `MASTRA_PROJECT_ID`. `projects delete` deletes the project and everything in it.
+
+## `mastra agents`
+
+Creates and runs managed agents in the current project.
+
+### `mastra agents setup`
+
+Sets the current project up to run managed agents and waits until it's ready. [`mastra agents create`](#mastra-agents-create) runs this step for you when the project isn't set up yet.
+
+```bash
+mastra agents setup
+```
+
+### `mastra agents create`
+
+Creates a managed agent and prints its ID.
+
+```bash
+mastra agents create --name Support --instructions "Answer billing questions." --model openai/gpt-5-mini
+```
+
+#### `--name`
+
+Agent name. Required.
+
+#### `--instructions`
+
+System instructions. Required.
+
+#### `--description`
+
+Agent description.
+
+#### `--model`
+
+Gateway model as `provider/model`. Defaults to `openai/gpt-5-mini`.
+
+#### `--connection`
+
+ID of a Connect connection whose tools the agent can use. Repeat the flag for more than one.
+
+#### `--skill`
+
+ID of a stored skill to attach. Repeat the flag for more than one.
+
+#### `--builtin-tool`
+
+Built-in Platform tool to enable, for example `list_agents`. Repeat the flag for more than one.
+
+#### `--no-code-mode`
+
+Exposes the agent's tools directly instead of through code mode.
+
+### `mastra agents list`
+
+Lists the project's managed agents.
+
+### `mastra agents delete`
+
+Deletes a managed agent.
+
+```bash
+mastra agents delete <agentId>
+```
+
+### `mastra agents run`
+
+Sends a message to a managed agent and streams its reply to stdout.
+
+```bash
+mastra agents run <agentId> "Where is my invoice?" --resource user-1 --thread thread-1
+```
+
+#### `--resource`
+
+End user the agent acts for. Required.
+
+#### `--thread`
+
+Conversation thread to continue or start. When set, the conversation is saved to memory under `--resource`.
+
+### `mastra agents chat`
+
+Chats with a managed agent. Each line you type is sent as a message, and the replies stream back. The whole conversation stays in one memory thread. Type `/exit` or press Ctrl+D to leave, and the CLI prints the command to continue the same conversation later.
+
+```bash
+mastra agents chat <agentId> --resource user-1
+```
+
+Without a terminal, `chat` reads one message per line from stdin and prints only the replies:
+
+```bash
+printf 'Where is my invoice?\nIt was for March\n' | mastra agents chat <agentId> --resource user-1
+```
+
+#### `--resource`
+
+End user the agent acts for. Defaults to `cli-` followed by your OS user name.
+
+#### `--thread`
+
+Conversation thread to continue. Defaults to a new thread.
+
+## `mastra memory`
+
+Provisions hosted Memory instances. `memory create` prints the instance ID as `MASTRA_MEMORY_INSTANCE_ID`. Pass `--env` to scope an instance to one environment.
+
+```bash
+mastra memory list
+mastra memory create support-memory --env production
+mastra memory delete <instanceId>
+```
+
+## `mastra knowledge`
+
+Provisions hosted Knowledge instances. `knowledge create` prints the instance ID as `MASTRA_KNOWLEDGE_INSTANCE_ID`.
+
+```bash
+mastra knowledge list
+mastra knowledge create
+mastra knowledge delete <instanceId>
+```
+
+## `mastra filesystems`
+
+Provisions file systems. A file system belongs to an environment: pass `--env`, or the CLI uses the production environment.
+
+```bash
+mastra filesystems list --env staging
+mastra filesystems create uploads --env staging
+mastra filesystems delete <filesystemId>
+```
+
+## `mastra sandboxes`
+
+Starts sandboxes and runs commands in them. A sandbox belongs to an environment: pass `--env`, or the CLI uses the production environment.
+
+```bash
+mastra sandboxes create --idle-timeout 30
+mastra sandboxes list
+mastra sandboxes exec <sandboxId> --cwd /home/user --var DEBUG=1 -- ls -la
+mastra sandboxes destroy <sandboxId>
+```
+
+`sandboxes create` also accepts `--public-ports`, which lets anyone with a port's URL reach it without signing in, and `--network-isolation ISOLATED|PRIVATE`.
+
+`sandboxes exec` runs the command placed after `--`, prints its output when it finishes, and exits with the command's exit code. Pass `--var KEY=VALUE` (repeatable) to set environment variables for the command, and `--timeout <seconds>` to stop waiting for it, in which case the exit code is `124`. If the sandbox doesn't exist, the command fails instead of starting a new sandbox. `sandboxes list` hides destroyed sandboxes unless you pass `--all`.
+
 ## `mastra create`
 
 Create a standalone Mastra project with the same project-creation flow as [`create-mastra`](/reference/cli/create-mastra).

@@ -58,6 +58,7 @@
     "@expo/devcert": "^1.2.2",
     "@mastra/deployer": "workspace:^",
     "@mastra/loggers": "workspace:^",
+    "@mastra/platform": "workspace:^",
     "archiver": "^8.0.0",
     "commander": "^14.0.3",
     "dotenv": "^17.4.2",
@@ -87,6 +88,7 @@
     "@types/node": "22.19.15",
     "@types/semver": "^7.8.0",
     "@types/serve-handler": "^6.1.4",
+    "@types/ws": "^8.18.2",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "memfs": "^4.80.0",
@@ -96,6 +98,7 @@
     "type-fest": "^5.10.0",
     "typescript": "catalog:",
     "vitest": "catalog:",
+    "ws": "^8.22.0",
     "zod": "catalog:"
   },
   "peerDependencies": {

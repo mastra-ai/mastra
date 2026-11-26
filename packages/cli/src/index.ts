@@ -17,6 +17,7 @@ import { migrate } from './commands/actions/migrate';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
 import { startStudio } from './commands/actions/start-studio';
+import { registerAgentsCommand } from './commands/agents/agents.js';
 import { collect, registerApiCommand } from './commands/api/index';
 import { loginAction, logoutAction } from './commands/auth/login';
 import { listOrgsAction, switchOrgAction } from './commands/auth/orgs';
@@ -29,7 +30,12 @@ import { unifiedDeployAction } from './commands/deploy/index.js';
 import { envSuggestionsAction } from './commands/env/deploy-suggestions.js';
 import { registerEnvCommands } from './commands/env/index.js';
 import { buildExperimentWorker } from './commands/experiment/build';
+import { registerFilesystemsCommand } from './commands/filesystems/filesystems.js';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
+import { registerKnowledgeCommand } from './commands/knowledge/knowledge.js';
+import { registerMemoryCommand } from './commands/memory/memory.js';
+import { registerProjectsCommand } from './commands/projects/projects.js';
+import { registerSandboxesCommand } from './commands/sandboxes/sandboxes.js';
 import { serverDeployAction } from './commands/server/deploy';
 import { serverSuggestionsAction } from './commands/server/deploy-suggestions';
 import { envListAction, envSetAction, envUnsetAction, envImportAction, envPullAction } from './commands/server/env';
@@ -105,6 +111,13 @@ program
   .action(initProject);
 
 registerApiCommand(program);
+
+registerAgentsCommand(program);
+registerProjectsCommand(program);
+registerMemoryCommand(program);
+registerKnowledgeCommand(program);
+registerFilesystemsCommand(program);
+registerSandboxesCommand(program);
 
 const tracesCommand = program.command('traces').description('Manage observability traces');
 const traceImportCommand = tracesCommand.command('import');
