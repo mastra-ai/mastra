@@ -9,7 +9,8 @@
 import type { AnthropicProviderOptions } from '@ai-sdk/anthropic-v6';
 import type { DeepSeekLanguageModelChatOptions } from '@ai-sdk/deepseek-v7';
 import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google-v6';
-import type { OpenAIResponsesProviderOptions } from '@ai-sdk/openai-v6';
+import type { OpenAIResponsesProviderOptions as OpenAIResponsesProviderOptionsV6 } from '@ai-sdk/openai-v6';
+import type { OpenAIResponsesProviderOptions } from '@ai-sdk/openai-v7';
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { SharedV3ProviderOptions } from '@ai-sdk/provider-v6';
 import type { SharedV4ProviderOptions } from '@ai-sdk/provider-v7';
@@ -70,7 +71,7 @@ export type AzureWebSocketOptions = Omit<ResponsesWebSocketOptions, 'url'> & {
    */
   url?: string;
 };
-export type AzureProviderOptions = OpenAIResponsesProviderOptions & {
+export type AzureProviderOptions = OpenAIResponsesProviderOptionsV6 & {
   /**
    * Select the transport used for streaming responses.
    * - `fetch` uses HTTP streaming.
@@ -106,7 +107,7 @@ export type DeepSeekProviderOptions = DeepSeekChatOptions;
  * });
  * ```
  */
-export type ProviderOptions = (SharedV2ProviderOptions | SharedV3ProviderOptions) & {
+export type ProviderOptions = (SharedV2ProviderOptions | SharedV3ProviderOptions | SharedV4ProviderOptions) & {
   anthropic?: AnthropicProviderOptions & Record<string, any>;
   deepseek?: DeepSeekProviderOptions & Record<string, any>;
   google?: GoogleProviderOptions & Record<string, any>;

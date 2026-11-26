@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v6';
-import { createOpenAI } from '@ai-sdk/openai-v6';
+import { createOpenAI } from '@ai-sdk/openai-v7';
 import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 import type { LanguageModelV4 } from '@ai-sdk/provider-v7';

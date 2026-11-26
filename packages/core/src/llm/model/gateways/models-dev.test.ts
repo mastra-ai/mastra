@@ -49,6 +49,7 @@ vi.mock('@ai-sdk/google-v6', () => ({ createGoogleGenerativeAI: createGoogleGene
 vi.mock('@ai-sdk/groq-v7', () => ({ createGroq: createGroqMock }));
 vi.mock('@ai-sdk/mistral-v6', () => ({ createMistral: createMistralMock }));
 vi.mock('@ai-sdk/openai-v6', () => ({ createOpenAI: createOpenAIMock }));
+vi.mock('@ai-sdk/openai-v7', () => ({ createOpenAI: createOpenAIMock }));
 vi.mock('@ai-sdk/perplexity-v6', () => ({ createPerplexity: createPerplexityMock }));
 vi.mock('@ai-sdk/togetherai-v7', () => ({ createTogetherAI: createTogetherAIMock }));
 vi.mock('@ai-sdk/xai-v7', () => ({ createXai: createXaiMock }));
