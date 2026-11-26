@@ -358,7 +358,7 @@ In an agent's [channel](/docs/channels) thread, the paused call shows a card wit
 
 Each button on the current card checks the platform first. When the provider is already connected, for example from your app, the call finishes as connected, even after **Cancel**. Buttons that serve a different resource are the exception, as described below.
 
-The card needs an adapter that shows buttons and a `toolDisplay` mode other than `'text'`. In `'text'` mode no card is posted. The user's next message resumes the call through [automatic tool resumption](/docs/agents/human-in-the-loop#automatic-tool-resumption), and the model writes the resume data, for example `{ action: 'connect' }` when the user asks to connect. The same ownership rule applies, with the message's author in place of the user who selected a button.
+The card needs an adapter that shows buttons and a `toolDisplay` mode other than `'text'`. In `'text'` mode no card is posted. The user's next message resumes the call through [automatic tool resumption](/docs/agents/human-in-the-loop#automatic-tool-resumption), and the model writes the resume data, for example `{ action: 'connect' }` when the user asks to connect. The same ownership rule applies, with the message's author in place of the user who selected a button. Any member's message can resume the call this way, because `toolApprovers` only applies to buttons.
 
 The sign-in link is never in the thread, in the card, in the tool's result, or in logs. When Mastra can't deliver it privately, or the platform can't start a sign-in, the card asks the user to connect the provider from your app instead, and still offers **I've connected** and **Cancel**.
 
@@ -367,7 +367,9 @@ Only the person the conversation belongs to can start a sign-in. Mastra compares
 - When it resolves for a different resource as the call starts, for example when another member asks in someone else's thread and the toolset follows the user who wrote, the call shows no card. It returns right away, telling the agent the provider can't be connected from this conversation and should be connected from your app.
 - When it resolves for a different resource as a button is selected, for example when another member selects it, **Connect** and **I've connected** leave the card unchanged and only **Cancel** ends the call.
 
-The call also returns without a card when the model's tool call ID is too long for a [button ID](/reference/agents/channels#toolresumebutton). Who may answer the card at all follows the adapter's [`toolApprovers`](/reference/agents/channels#per-adapter-options) setting.
+The call also returns without a card when the model's tool call ID is too long for a [button ID](/reference/agents/channels#toolresumebutton). Who may select the card's buttons at all follows the adapter's [`toolApprovers`](/reference/agents/channels#per-adapter-options) setting.
+
+When Mastra can't resolve the user's resource ID, ownership can't be checked, so no sign-in starts. Instead the user gets a private notice to connect from your app, and the card offers **I've connected** and **Cancel**. That happens when a `resolveResourceId` hook fails, and on every text-mode reply when a hook is configured, since for messages the hook only runs on the one that starts a conversation.
 
 By default a channel conversation's resource is `<platform>:<userId>` of the user who started it. To scope the toolset to that user, derive `resourceId` from the channel request context:
 
