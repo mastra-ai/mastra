@@ -1,7 +1,7 @@
 /**
- * A run started by one caller and approved by another: the model steps after the approved call are
- * offered the tools the approving caller would get. Each tool source below depends on the caller.
- * Whose context the approved call itself runs with is not asserted here.
+ * A run started by one caller and approved by another: the approved call runs with the approving
+ * caller's context, and the model steps after it are offered the tools the approving caller would get.
+ * Each tool source below depends on the caller.
  */
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
@@ -161,6 +161,7 @@ describe.each(['default', 'evented'] as const)('resume by another caller (%s)', 
       // Bob's agent and default tools, and the resume's own toolsets. A resume cannot repeat call-time
       // toolsets over HTTP, so without them the same process keeps the starting call's; another process
       // never had them.
+      expect(log.ran).toEqual(['approve:bob']);
       const keepsStartingToolsets = !resumeToolsets && path === 'same process';
       expect(log.offered[1]).toEqual([
         ...(keepsStartingToolsets ? ['alice_call'] : []),
@@ -283,11 +284,101 @@ describe('crash recovery, then resume by another caller', () => {
         ...(resumeToolsets ? { toolsets: { resume: { bob_call: freshTool('bob_call') } } } : {}),
       }),
     );
+    expect(log.ran).toEqual(['approve:bob']);
     expect(log.offered.at(-1)).toEqual([
       'approve',
       'bob_agent',
       ...(resumeToolsets ? ['bob_call'] : []),
       'bob_default',
     ]);
+  });
+});
+
+describe('approving a call to a tool only the starting caller has', () => {
+  function adminModel() {
+    return new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        const answered = prompt.some(message => message.role === 'tool');
+        const parts = answered
+          ? [
+              { type: 'text-start', id: 't' },
+              { type: 'text-delta', id: 't', delta: 'done' },
+              { type: 'text-end', id: 't' },
+              { type: 'finish', finishReason: 'stop', usage },
+            ]
+          : [
+              { type: 'tool-call', toolCallId: 'call-1', toolName: 'alice_admin', input: '{}' },
+              { type: 'finish', finishReason: 'tool-calls', usage },
+            ];
+        return {
+          stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }, ...parts] as any[]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      },
+    });
+  }
+
+  function adminRuntime(engine: 'plain' | 'default' | 'evented', storage: InMemoryStore, log: Log) {
+    const agent = new Agent({
+      id: 'admin-agent',
+      name: 'admin-agent',
+      instructions: 'Use your tools.',
+      model: adminModel(),
+      tools: ({ requestContext }) =>
+        requestContext.get('who') === 'alice'
+          ? { alice_admin: tool('alice_admin', log, true) }
+          : { bob_tool: tool('bob_tool', log) },
+    });
+    const runtime =
+      engine === 'plain' ? agent : engine === 'evented' ? createEventedAgent({ agent }) : createDurableAgent({ agent });
+    new Mastra({ agents: { admin: runtime as any }, storage, logger: false });
+    return runtime;
+  }
+
+  it.each([
+    ['plain', 'same process'],
+    ['plain', 'fresh process'],
+    ['default', 'same process'],
+    ['default', 'fresh process'],
+    ['evented', 'same process'],
+    ['evented', 'fresh process'],
+  ] as const)('%s, %s: the call fails instead of running as the starting caller', async (engine, path) => {
+    globalRunRegistry.clear();
+    const storage = new InMemoryStore();
+    const log: Log = { offered: [], ran: [] };
+    const starter = adminRuntime(engine, storage, log) as Agent;
+    const stream = await starter.stream('Go', { requestContext: caller('alice') });
+    let toolCallId: string | undefined;
+    for await (const chunk of stream.fullStream as AsyncIterable<any>) {
+      if (chunk.type === 'tool-call-approval') {
+        toolCallId = chunk.payload.toolCallId;
+        break;
+      }
+    }
+    expect(toolCallId).toBeTruthy();
+    const workflows = (await storage.getStore('workflows'))!;
+    await vi.waitFor(async () => {
+      const runs = await Promise.all(
+        ['agentic-loop', DurableStepIds.AGENTIC_LOOP].map(workflowName =>
+          workflows.getWorkflowRunById({ runId: stream.runId, workflowName }),
+        ),
+      );
+      expect(runs.some(run => (run?.snapshot as any)?.status === 'suspended')).toBe(true);
+    });
+
+    let approver = starter;
+    if (path === 'fresh process') {
+      globalRunRegistry.clear();
+      approver = adminRuntime(engine, storage, log) as Agent;
+    }
+    const errors: string[] = [];
+    for await (const chunk of (
+      await approver.approveToolCall({ runId: stream.runId, toolCallId: toolCallId!, requestContext: caller('bob') })
+    ).fullStream as AsyncIterable<any>) {
+      if (chunk.type === 'tool-error') errors.push(String(chunk.payload?.error?.message ?? chunk.payload?.error));
+    }
+
+    expect(log.ran).toEqual([]);
+    expect(errors.join('\n')).toContain('alice_admin');
   });
 });

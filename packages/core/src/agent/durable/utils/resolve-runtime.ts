@@ -16,6 +16,7 @@ import type {
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext, withoutLiveRequestKeys } from '../../../request-context';
 import { getNeedsApprovalFn, isApprovalExempt } from '../../../tools/toolchecks';
 import type { CoreTool, RequireToolApproval, ToolApprovalContext } from '../../../tools/types';
+import { refreshStepToolsForCaller } from '../../../utils';
 import type { Workspace } from '../../../workspace';
 import type { Agent } from '../../agent';
 import type { MessageList } from '../../message-list';
@@ -116,34 +117,46 @@ export { restoreRequestContext };
  * Rebuild a hydrated entry's request-built tools for another segment's caller. Call-time toolsets
  * only exist in the process that received them, so the earlier call's are kept.
  */
-async function rebuildToolsForSegment(
+export async function rebuildToolsForSegment(
   mastra: Mastra,
   entry: RunRegistryEntry,
   {
     runId,
     agentId,
-    input,
+    agentVersionId,
+    state,
+    options,
     requestContext,
-  }: { runId: string; agentId: string; input: DurableAgenticWorkflowInput; requestContext: RequestContext },
+  }: {
+    runId: string;
+    agentId: string;
+    agentVersionId?: string;
+    state: Pick<DurableAgenticWorkflowInput['state'], 'threadId' | 'resourceId' | 'memoryConfig'>;
+    options?: DurableAgenticWorkflowInput['options'];
+    requestContext: RequestContext;
+  },
 ): Promise<Record<string, CoreTool>> {
-  const resolved = await resolveRunAgent(mastra, agentId, runId, input.agentVersionId);
+  const resolved = await resolveRunAgent(mastra, agentId, runId, agentVersionId);
   const agent = isDurableAgentLike(resolved) && resolved.agent !== resolved ? resolved.agent : resolved;
   const requestTools = await agent.getToolsForExecution({
     runId,
-    threadId: input.state.threadId,
-    resourceId: input.state.resourceId,
+    threadId: state.threadId,
+    resourceId: state.resourceId,
     requestContext,
-    memoryConfig: input.state.memoryConfig,
-    autoResumeSuspendedTools: input.options?.autoResumeSuspendedTools,
-    clientTools: input.options?.clientTools as ToolsInput | undefined,
+    memoryConfig: state.memoryConfig,
+    autoResumeSuspendedTools: options?.autoResumeSuspendedTools,
+    clientTools: options?.clientTools as ToolsInput | undefined,
     delegation: entry.delegation,
     methodType: entry.methodType ?? 'stream',
     backgroundTaskEnabled: Boolean(entry.backgroundTaskManager),
-    backgroundTaskPolicy: input.options?.backgroundTaskPolicy,
+    backgroundTaskPolicy: options?.backgroundTaskPolicy,
     model: entry.model,
   });
+  const keep = new Set(entry.callToolsetToolNames ?? []);
+  // The suspended step's tools, so an approved call runs with this segment's caller too.
+  entry.tools = refreshStepToolsForCaller(entry.tools ?? {}, entry.requestTools, requestTools, requestContext, keep);
   const keptToolsets = Object.fromEntries(
-    (entry.callToolsetToolNames ?? []).flatMap(name => {
+    [...keep].flatMap(name => {
       const tool = entry.requestTools?.[name];
       return tool && !(name in requestTools) ? [[name, tool] as const] : [];
     }),
@@ -398,7 +411,9 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       tools = await rebuildToolsForSegment(mastra, globalEntry, {
         runId,
         agentId,
-        input,
+        agentVersionId: input.agentVersionId,
+        state: input.state,
+        options: input.options,
         requestContext: restoreRequestContext(input.requestContextEntries, options.requestContext),
       });
       globalEntry.toolsSegment = stepSegment;

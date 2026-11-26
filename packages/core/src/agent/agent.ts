@@ -182,7 +182,7 @@ import type {
 import { validateToolInput } from '../tools/validation';
 import type { DynamicArgument } from '../types';
 import type { ToolOptions } from '../utils';
-import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge, rebindProcessorTools } from '../utils';
+import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge, refreshStepToolsForCaller } from '../utils';
 import { resolveDynamicArgument } from '../utils/dynamic-argument';
 import { slugify } from '../utils/slugify';
 import type { IMastraVoice } from '../voice';
@@ -15744,39 +15744,36 @@ export class Agent<
           backgroundTaskPolicy: resolvedOptions.backgroundTaskPolicy,
           model: entry.model,
         });
-        const refresh = (current: Record<string, CoreTool>, previous: Record<string, CoreTool> | undefined) => {
-          const next = { ...current };
-          for (const [name, tool] of Object.entries(requestTools)) {
-            // A name missing from current but present in previous was withheld by a processor.
-            const configured = name in current ? current[name] === previous?.[name] : !previous || !(name in previous);
-            if (configured) next[name] = tool;
-          }
-          return next;
-        };
+        // Call-time toolsets cannot be repeated by a resume over HTTP, so the earlier call's are kept
+        // unless this resume passes its own.
         for (const reg of new Set([entry, getRunRegistryEntry(runId, this.#mastra)])) {
           if (!reg) continue;
-          reg.tools = rebindProcessorTools(refresh(reg.tools ?? {}, reg.requestTools), resumeRequestContext);
+          const keep = new Set(options?.toolsets ? [] : (reg.callToolsetToolNames ?? []));
+          reg.tools = refreshStepToolsForCaller(
+            reg.tools ?? {},
+            reg.requestTools,
+            requestTools,
+            resumeRequestContext,
+            keep,
+          );
           // Later steps start from this caller's build, not the earlier caller's. Input processors run
-          // again every step, so the tools they add or withhold need no carrying over. Call-time
-          // toolsets cannot be repeated by a resume over HTTP, so the earlier call's are kept unless
-          // this resume passes its own.
-          const keptToolsets = options?.toolsets
-            ? {}
-            : Object.fromEntries(
-                (reg.callToolsetToolNames ?? []).flatMap(name => {
-                  const tool = reg.requestTools?.[name];
-                  return tool && !(name in requestTools) ? [[name, tool] as const] : [];
-                }),
-              );
+          // again every step, so the tools they add or withhold need no carrying over.
+          const keptToolsets = Object.fromEntries(
+            [...keep].flatMap(name => {
+              const tool = reg.requestTools?.[name];
+              return tool && !(name in requestTools) ? [[name, tool] as const] : [];
+            }),
+          );
           reg.baseTools = { ...keptToolsets, ...requestTools };
           reg.requestTools = reg.baseTools;
-          // The resumed segment's first step adopts these tools as its own.
-          reg.toolsSegment = undefined;
           if (options?.toolsets) reg.callToolsetToolNames = serializeToolsetToolNames(options.toolsets);
           if (options?.delegation) reg.delegation = resolvedOptions.delegation;
         }
       } catch (error) {
-        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] resume(${runId}) tool resolution failed: ${error}`);
+        // The entry's tools still close over the earlier caller, so the segment must not run on them.
+        this.#mastra?.getLogger?.()?.error?.(`[DurableAgent] resume(${runId}) tool resolution failed: ${error}`);
+        await executionFence.settle(async () => {});
+        throw error;
       }
     }
     setExecutionClaim(resumeRequestContext, runId, executionFence.claim);
@@ -15784,6 +15781,9 @@ export class Agent<
       if (!reg) continue;
       reg.executionFence = executionFence;
       reg.resumeToolCallId = resolvedOptions.toolCallId;
+      // This process holds tools for the resuming caller (refreshed above, or the same caller's), so the
+      // resumed segment adopts them instead of rebuilding.
+      if (!coldSnapshot) reg.toolsSegment = undefined;
     }
 
     // Install a fresh abort controller for the resumed segment. The original

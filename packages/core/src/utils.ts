@@ -496,6 +496,34 @@ export function rebindProcessorTools<T extends Record<string, unknown>>(tools: T
   return rebound as T;
 }
 
+/**
+ * Rebuilds a suspended step's tools for the caller resuming it. `previousRequestTools` are the
+ * tools built for the earlier caller's request; a step tool still identical to one of them is
+ * request-built. Request-built tools are replaced by `callerTools`, or dropped when the caller's
+ * build lacks them (unless named in `keep`), so nothing built for the earlier caller runs for the
+ * new one. Tools a processor added or swapped in are kept, processor-added ones rebuilt for
+ * `requestContext` (#27544), and tools a processor withheld stay withheld.
+ */
+export function refreshStepToolsForCaller<T extends Record<string, unknown>>(
+  stepTools: T,
+  previousRequestTools: Record<string, unknown> | undefined,
+  callerTools: Record<string, unknown>,
+  requestContext: RequestContext,
+  keep?: ReadonlySet<string>,
+): T {
+  const next: Record<string, unknown> = rebindProcessorTools({ ...stepTools }, requestContext);
+  for (const [name, tool] of Object.entries(stepTools)) {
+    if (previousRequestTools?.[name] !== tool) continue;
+    if (name in callerTools) next[name] = callerTools[name];
+    else if (!keep?.has(name)) delete next[name];
+  }
+  for (const [name, tool] of Object.entries(callerTools)) {
+    // A name the earlier request configured but the step lacks was withheld by a processor.
+    if (!(name in stepTools) && !(previousRequestTools && name in previousRequestTools)) next[name] = tool;
+  }
+  return next as T;
+}
+
 export function makeCoreToolV5(
   originalTool: ToolToConvert,
   options: ToolOptions,
