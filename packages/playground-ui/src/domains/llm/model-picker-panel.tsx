@@ -109,9 +109,11 @@ export function ModelPickerPanel({
   const deferredQuery = useDeferredValue(query);
   const searchBar = useMeasuredAutoHeight();
   const [scrolled, setScrolled] = useState(false);
-  // Providers without credentials wait behind "+N" (or a search) unless picked or filtered to.
+  // Providers without credentials, or not featured, wait behind "+N" (or a search) unless picked or filtered to.
   const inRow = (provider: ModelPickerProvider) =>
-    provider.connected !== false || provider.id === value?.provider || provider.id === providerFilter;
+    (provider.featured ?? provider.connected !== false) ||
+    provider.id === value?.provider ||
+    provider.id === providerFilter;
   const usable = providers.filter(inRow);
   const others = providers.filter(provider => !inRow(provider));
   const filtering = usable.length > 1 || others.length > 0;
@@ -216,16 +218,23 @@ export function ModelPickerPanel({
                 ) : null}
               </CommandGroup>
             ) : browsingMore ? (
-              <CommandGroup heading="Not connected">
-                {others.map(provider => (
-                  <ModelPickerProviderOption
-                    key={provider.id}
-                    provider={provider}
-                    onSelect={() => filterTo(provider.id)}
-                    renderProviderIcon={renderProviderIcon}
-                  />
-                ))}
-              </CommandGroup>
+              [
+                { heading: 'More providers', group: others.filter(provider => provider.connected !== false) },
+                { heading: 'Not connected', group: others.filter(provider => provider.connected === false) },
+              ].map(({ heading, group }) =>
+                group.length ? (
+                  <CommandGroup key={heading} heading={heading}>
+                    {group.map(provider => (
+                      <ModelPickerProviderOption
+                        key={provider.id}
+                        provider={provider}
+                        onSelect={() => filterTo(provider.id)}
+                        renderProviderIcon={renderProviderIcon}
+                      />
+                    ))}
+                  </CommandGroup>
+                ) : null,
+              )
             ) : (
               shownProviders.map(provider => (
                 <CommandGroup key={provider.id} heading={mixedProviders ? provider.name : undefined}>

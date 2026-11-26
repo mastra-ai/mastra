@@ -1,14 +1,14 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { AgentChatFeaturesProvider, useAgentThreadInput } from '@mastra/playground-ui/domains/agents/chat';
+import {
+  AgentChatFeaturesProvider,
+  SpeechInputButton,
+  useAgentThreadInput,
+} from '@mastra/playground-ui/domains/agents/chat';
 import type { AgentChatThreadInput } from '@mastra/playground-ui/domains/agents/chat';
 import { ChatMessagesLoadingSkeleton } from '@mastra/playground-ui/domains/agents/chat/agent-loading-skeletons';
 import { Thread as BaseThread } from '@mastra/playground-ui/domains/agents/chat/thread';
 import type { ThreadProps } from '@mastra/playground-ui/domains/agents/chat/thread';
 import { useChatMessages } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
-import { IconMicrophone } from '@mastra/playground-ui/icons/central/IconMicrophone';
-import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
-import { useSpeechRecognition } from '@mastra/react';
 import { useMcpAppTools } from '@mastra/react/hooks/mcps';
 import { useReadAloud } from '@mastra/react/hooks/voice';
 import { toast } from 'sonner';
@@ -77,7 +77,7 @@ function StudioThreadFeatures({
           modelWarning: <ComposerModelWarning />,
           modelSwitcher: <ComposerModelSwitcher />,
           modelSettings: agentId => <ComposerModelSettings agentId={agentId} />,
-          speechInput: speechProps => <SpeechInput {...speechProps} />,
+          speechInput: speechProps => <StudioSpeechInput {...speechProps} />,
           voiceCallPanel: <VoiceCallPanel voiceCall={voiceCall} />,
           voiceCallButton: <VoiceCallButton voiceCall={voiceCall} />,
         },
@@ -94,39 +94,8 @@ function StudioThreadBody(props: ThreadProps) {
   return <BaseThread {...props} mcpAppTools={mcpAppTools} />;
 }
 
-const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript: (text: string) => void }) => {
-  const [requestContext] = useEntityRequestContext('agent', agentId ?? '');
-  const { start, stop, isListening } = useSpeechRecognition({ agentId, requestContext });
-
-  return (
-    <Button
-      variant="ghost"
-      size="icon-md"
-      type="button"
-      tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
-      onClick={() => (isListening ? stop() : start(onTranscript))}
-    >
-      {isListening ? <CircleStopIcon /> : <IconMicrophone />}
-    </Button>
-  );
-};
-
-const CircleStopIcon = () => {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={quietTextHover}
-    >
-      <circle cx="12" cy="12" r="10" />
-      <rect width="6" height="6" x="9" y="9" rx="1" />
-    </svg>
-  );
+/** Dictation, with the agent's request context from Studio's settings. */
+const StudioSpeechInput = (props: { agentId?: string; onTranscript: (text: string) => void }) => {
+  const [requestContext] = useEntityRequestContext('agent', props.agentId ?? '');
+  return <SpeechInputButton {...props} requestContext={requestContext} />;
 };

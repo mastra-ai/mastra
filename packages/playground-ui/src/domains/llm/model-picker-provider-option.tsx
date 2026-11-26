@@ -9,7 +9,7 @@ interface ModelPickerProviderOptionProps {
   renderProviderIcon: (providerId: string) => ReactNode;
 }
 
-/** A provider that isn't connected; picking it lists its models. */
+/** A provider behind "+N"; picking it lists its models. */
 export function ModelPickerProviderOption({ provider, onSelect, renderProviderIcon }: ModelPickerProviderOptionProps) {
   const count = provider.models.length;
   return (

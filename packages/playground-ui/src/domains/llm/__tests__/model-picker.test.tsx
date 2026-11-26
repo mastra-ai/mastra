@@ -258,4 +258,39 @@ describe('ModelPicker', () => {
       expect(optionNames(list)).toEqual(['Llama 4 Scout']);
     });
   });
+
+  // A gateway serves every vendor with one key: its vendors wait behind "+N" without reading as broken.
+  describe('when the vendors of one gateway are tucked behind "+N"', () => {
+    const vendors = ['anthropic', 'openai', 'xai'].map(
+      (id): ModelPickerProvider => ({
+        id,
+        name: id.toUpperCase(),
+        featured: false,
+        models: [{ id: `${id}-model` }],
+      }),
+    );
+
+    it('heads them "More providers" and marks none as not connected', () => {
+      const list = openPicker([{ ...anthropic, featured: false }, ...vendors.slice(1)]);
+
+      fireEvent.click(screen.getByRole('button', { name: '2 more providers' }));
+
+      expect(within(list).getByText('More providers')).toBeTruthy();
+      expect(within(list).queryByText('Not connected')).toBeNull();
+      fireEvent.click(within(list).getByRole('option', { name: /XAI/ }));
+      expect(screen.getByRole('button', { name: 'XAI' }).getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('keeps providers missing a key under their own "Not connected" heading', () => {
+      const groq: ModelPickerProvider = { id: 'groq', name: 'Groq', connected: false, models: [{ id: 'llama' }] };
+      const list = openPicker([anthropic, ...vendors.slice(1), groq]);
+
+      fireEvent.click(screen.getByRole('button', { name: '3 more providers' }));
+
+      const group = (heading: string) => within(list).getByText(heading).closest('[cmdk-group]')?.textContent;
+      expect(group('More providers')).toMatch(/OPENAI.*XAI/);
+      expect(group('More providers')).not.toMatch(/Groq/);
+      expect(group('Not connected')).toMatch(/Groq/);
+    });
+  });
 });

@@ -2,14 +2,14 @@ import { DEFAULT_THINKING_LEVEL } from '@mastra/factory/default-thinking-level';
 import { MODEL_ID_PATTERN } from '@mastra/factory/model-packs';
 import type { ModelPackModel } from '@mastra/factory/model-packs';
 import { ThinkingLevelRamp } from '@mastra/playground-ui/components/ThinkingLevel';
-import { ModelPicker } from '@mastra/playground-ui/domains/llm';
+import { ModelPicker, catalogModelPickerValue, findCatalogModel } from '@mastra/playground-ui/domains/llm';
 import type { ModelPickerValue } from '@mastra/playground-ui/domains/llm';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
 import { useState } from 'react';
 
 import type { AvailableModelOption } from '../../../../../../hooks/useAvailableModels';
-import { catalogModelPickerValue, findPickerModel, modelPickerProviders } from '../../../../../lib/modelPickerCatalog';
+import { factoryModelPickerProviders } from '../../../../../lib/modelPickerCatalog';
 import { ALL_THINKING_LEVEL_OPTIONS, THINKING_LEVEL_LABELS } from '../../../../chat/services/thinkingLevels';
 import { ModelPackEntryLabel, renderPackProviderIcon } from './ModelPackEntryLabel';
 
@@ -44,12 +44,12 @@ export function ModelPackModelPicker({
 
   return (
     <ModelPicker
-      providers={modelPickerProviders(
+      providers={factoryModelPickerProviders(
         models.filter(model => model.id === entry?.modelId || !occupiedIds.has(model.id)),
       )}
       value={value}
       onValueChange={selection => {
-        const modelId = findPickerModel(models, selection)?.id ?? `${selection.provider}/${selection.model}`;
+        const modelId = findCatalogModel(models, selection)?.id ?? `${selection.provider}/${selection.model}`;
         if (!disabled) void onChange({ modelId, thinkingLevel });
       }}
       customModel={modelId => {

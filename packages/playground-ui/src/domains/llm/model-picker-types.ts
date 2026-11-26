@@ -10,8 +10,13 @@ export interface ModelPickerModel {
 export interface ModelPickerProvider {
   id: string;
   name: string;
-  /** `false` marks the provider as missing credentials. */
+  /** `false` marks the provider as missing credentials: a red dot and "Not connected". */
   connected?: boolean;
+  /**
+   * Whether it gets its own filter pill. Defaults to `connected !== false`. Set `false` to tuck a usable provider
+   * behind "+N" (e.g. the vendors one gateway serves), without marking it as missing credentials.
+   */
+  featured?: boolean;
   models: ModelPickerModel[];
 }
 
