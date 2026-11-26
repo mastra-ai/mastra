@@ -94,6 +94,19 @@ export interface FactoryBoardEngineContext {
   workItems: Pick<WorkItemsStorage, 'get'>;
   /** The boards cards are filed on, built in and stored. */
   boards: BoardRegistry | ProjectBoardSource;
+  /** The runs on a card's sessions, for an engine that stops them when a person moves the card. */
+  runs?: FactoryCardRuns;
+}
+
+type CardAddress = Pick<FactoryTransitionRequest, 'orgId' | 'factoryProjectId' | 'workItemId'>;
+
+export interface FactoryCardRuns {
+  /** Whether a run is in flight on any of the card's sessions. */
+  inFlight(card: CardAddress): Promise<boolean>;
+  /** Stops the runs in flight on the card's sessions, as a person's Stop does; they end on their own time. */
+  stop(card: CardAddress): Promise<void>;
+  /** Gives up on runs that did not end after a stop: their records close as aborted. */
+  abandon(card: CardAddress): Promise<void>;
 }
 
 export type FactoryBoardEngineFactory = (context: FactoryBoardEngineContext) => FactoryBoardEngine;

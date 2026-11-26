@@ -3306,6 +3306,38 @@ export class FactoryDecisionDispatcher {
   }
 
   /**
+   * Stops the runs in flight on the card's active seats, as a person's Stop does: the stop is
+   * recorded on each seat first, so its run settles as stopped and isn't run again.
+   */
+  async stopRunsOnCard(card: { orgId: string; factoryProjectId: string; workItemId: string }): Promise<void> {
+    for (const binding of await this.#activeBindings(card)) {
+      await this.#storage.requestRunBindingStop({ orgId: card.orgId, sessionId: binding.sessionId, at: new Date() });
+      const session = await this.#controller.getSession(binding.sessionId);
+      if (session?.stream.isActive()) session.abort();
+    }
+  }
+
+  /** Closes the open-run records of the card's active seats as aborted: runs given up on after a stop. */
+  async abandonRunsOnCard(card: { orgId: string; factoryProjectId: string; workItemId: string }): Promise<void> {
+    if (!this.#openRuns) return;
+    for (const binding of await this.#activeBindings(card)) {
+      const session = await this.#controller.getSession(binding.sessionId);
+      if (!session) continue;
+      for (const open of await listThreadOpenRuns(session, this.#openRuns, binding.threadId)) {
+        if (open.bindingId === binding.id) {
+          await this.#openRuns.end(open.kickoffId, { reason: 'aborted', endedAt: Date.now() });
+        }
+      }
+    }
+  }
+
+  async #activeBindings(card: { orgId: string; factoryProjectId: string; workItemId: string }) {
+    return (await this.#storage.listRunBindings(card.orgId, card.factoryProjectId, card.workItemId)).filter(
+      binding => binding.status === 'active',
+    );
+  }
+
+  /**
    * Whether a run is in flight on `binding`: live here, or live on another dispatcher. An open-run
    * entry with nothing live behind it is an orphan of a dead process and does not count. Reads the
    * binding's own thread, which the session may have switched away from.
