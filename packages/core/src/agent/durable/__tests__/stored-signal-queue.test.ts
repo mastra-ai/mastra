@@ -52,6 +52,8 @@ class ObservedMemory extends InMemoryMemory {
   readonly calls: SignalsCall[] = [];
   /** Runs before each insert reaches the store. */
   beforeEnqueue?: (message: MastraDBMessage, toRunId?: string) => Promise<void>;
+  /** Runs after each insert committed, before its answer reaches the caller. */
+  afterEnqueue?: (message: MastraDBMessage) => Promise<void>;
   /** The next insert fails before writing. */
   failNextEnqueue = false;
   /** Runs before each claim reaches the store. */
@@ -75,7 +77,9 @@ class ObservedMemory extends InMemoryMemory {
       throw new Error('memory storage unavailable');
     }
     this.calls.push({ op: 'enqueue', id: args.message.id, ...(args.toRunId ? { toRunId: args.toRunId } : {}) });
-    return super.enqueuePendingSignal(args);
+    const written = await super.enqueuePendingSignal(args);
+    await this.afterEnqueue?.(args.message);
+    return written;
   }
 
   override async claimPendingSignals(args: { threadId: string; runId: string; consumedIds: string[] }) {
@@ -708,6 +712,69 @@ describe('signals of a running evented agent kept in memory storage', () => {
         expect(pubsub.forwarded).toEqual([left.signal.id]);
         expect(pending).toEqual([]);
       }
+    },
+  );
+
+  it.each(['sent in this process', 'forwarded by another process'] as const)(
+    "does not report a signal stored for a run to the thread's next run when its insert answered after that run started (%s)",
+    async path => {
+      const memoryStore = new ObservedMemory();
+      const { agent, scope, prompts, toolGate, start } = setup({ memoryStore });
+      const { stream, done } = await start();
+      // The insert for the first run commits, and its answer reaches the sender only after the next run started.
+      const committed = gate();
+      const answer = gate();
+      memoryStore.afterEnqueue = async () => {
+        memoryStore.afterEnqueue = undefined;
+        committed.release();
+        await answer.promise;
+      };
+      const signal = createSignal({ type: 'user', contents: 'SENT_TO_THE_FIRST_RUN' });
+      let accepted: Promise<unknown> | undefined;
+      if (path === 'sent in this process') {
+        accepted = agent.sendSignal(signal, scope).accepted;
+      } else {
+        // A replica that does not hold the run forwards the signal without storing it, and this process stores it.
+        await agent.getPubSub().publish(agentThreadStreamTopic(scope.resourceId, scope.threadId), {
+          type: 'signal-enqueued',
+          runId: stream.runId,
+          data: {
+            type: 'signal-enqueued',
+            runId: stream.runId,
+            signal: JSON.parse(JSON.stringify(signal)),
+            sourceId: 'another-replica',
+          },
+        });
+      }
+      await committed.promise;
+      toolGate.release();
+      await done;
+      expect(occurrences(prompts[1], 'SENT_TO_THE_FIRST_RUN')).toBe(1);
+
+      const nextRunId = `next-run-${crypto.randomUUID()}`;
+      const preparing = gate();
+      memoryStore.beforeSetSignalRun = async () => {
+        memoryStore.beforeSetSignalRun = undefined;
+        preparing.release();
+      };
+      const next = agent.stream('Second', {
+        runId: nextRunId,
+        memory: { thread: scope.threadId, resource: scope.resourceId },
+        maxSteps: 4,
+      });
+      await preparing.promise;
+      const notified: unknown[] = [];
+      const unsubscribe = agentThreadStreamRuntime.subscribePendingSignals(
+        nextRunId,
+        signals => notified.push(...signals),
+        agent.getPubSub(),
+      );
+      answer.release();
+      if (accepted) await expect(accepted).resolves.toEqual({ action: 'deliver', runId: stream.runId });
+      for await (const _chunk of (await next).fullStream);
+      unsubscribe();
+
+      expect(notified).toEqual([]);
     },
   );
 
