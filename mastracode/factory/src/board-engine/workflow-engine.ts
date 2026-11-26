@@ -25,6 +25,7 @@ import type {
   FactoryCardPlacement,
   FactoryCardPlacementResult,
   FactoryRunEndedBinding,
+  FactorySubmittedMove,
 } from './engine.js';
 
 /**
@@ -185,6 +186,46 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
   }
 
   /**
+   * Takes on a person's move that looks good from here and answers it later: the move may wait on
+   * the card's run being stopped. Anything else is answered on the spot.
+   */
+  async submitMove(request: FactoryTransitionRequest): Promise<FactorySubmittedMove> {
+    if (!(await this.#movable(request))) return { answered: await this.requestMove(request) };
+    const settled = this.requestMove(request);
+    // Whoever holds `settled` hears of a failure; nobody holding it must not crash the process.
+    settled.catch(() => undefined);
+    return { inputId: globalThis.crypto.randomUUID(), settled };
+  }
+
+  /**
+   * Whether a person's move within the card's board passes the checks that need no commit: the
+   * card sits in one phase at the revision the person saw, its board allows the move, and the
+   * request wasn't answered before (one that was is answered the same again, and moves nothing).
+   */
+  async #movable(request: FactoryTransitionRequest): Promise<{ mayStartRun: boolean; userId: string } | undefined> {
+    if (request.actor.type !== 'human' || request.ingress.type !== 'human') return undefined;
+    if (request.initialEntry || request.cause === 'run_start') return undefined;
+    if (request.toBoard !== undefined && request.toBoard !== request.board) return undefined;
+    const item = await this.#context.workItems.get({ orgId: request.orgId, id: request.workItemId });
+    const from = item?.stages.length === 1 ? item.stages[0] : undefined;
+    if (!item || !from || item.revision !== request.expectedRevision || boardForWorkItem(item) !== request.board) {
+      return undefined;
+    }
+    const board = (await toBoardSource(this.#context.boards).load(request)).get(request.board);
+    if (!board || !Object.prototype.hasOwnProperty.call(board.phases, request.stage)) return undefined;
+    if (from === request.stage ? request.reenter !== true : !board.allowsTransition(from, request.stage)) {
+      return undefined;
+    }
+    const answered = await this.#context.workItems.getTransitionResultByIngress?.(
+      request.orgId,
+      request.factoryProjectId,
+      request.ingress.identity,
+    );
+    if (answered) return undefined;
+    return { mayStartRun: phaseMayStartRun(board.phaseKind(request.stage)), userId: request.actor.id };
+  }
+
+  /**
    * Stops the run in flight on a card a person moves into another phase that runs, and waits for it
    * to end: the person's move wins over the run, instead of being refused while the card is busy.
    * A run that hasn't ended in time keeps its record and its card, and the move is refused as
@@ -193,28 +234,12 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
    */
   async #interrupts(request: FactoryTransitionRequest): Promise<boolean> {
     const runs = this.#context.runs;
-    if (!runs || request.actor.type !== 'human' || request.ingress.type !== 'human') return false;
-    if (request.initialEntry || request.cause === 'run_start') return false;
-    if (request.toBoard !== undefined && request.toBoard !== request.board) return false;
-    const item = await this.#context.workItems.get({ orgId: request.orgId, id: request.workItemId });
-    const from = item?.stages.length === 1 ? item.stages[0] : undefined;
-    if (!item || !from || item.revision !== request.expectedRevision || boardForWorkItem(item) !== request.board) {
-      return false;
-    }
-    const board = (await toBoardSource(this.#context.boards).load(request)).get(request.board);
-    if (!board || !Object.prototype.hasOwnProperty.call(board.phases, request.stage)) return false;
-    if (from === request.stage ? request.reenter !== true : !board.allowsTransition(from, request.stage)) return false;
-    if (!phaseMayStartRun(board.phaseKind(request.stage)) || !(await runs.inFlight(request))) return false;
-    // A request already answered is answered the same again, whatever it asks now: it moves nothing.
-    const answered = await this.#context.workItems.getTransitionResultByIngress?.(
-      request.orgId,
-      request.factoryProjectId,
-      request.ingress.identity,
-    );
-    if (answered) return false;
+    const move = runs ? await this.#movable(request) : undefined;
+    if (!runs || !move) return false;
+    if (!move.mayStartRun || !(await runs.inFlight(request))) return false;
     // A run another process holds, or one on a session the person may not drive, isn't stopped
     // from here, so the move is refused as busy at once instead of after the wait.
-    if (!(await runs.stop(request, { userId: request.actor.id }))) return false;
+    if (!(await runs.stop(request, { userId: move.userId }))) return false;
     const deadline = Date.now() + this.#interruptWaitMs;
     for (let wait = 50; await runs.inFlight(request); wait = Math.min(wait * 2, 1_000)) {
       // Still going: the run keeps its record and its card, and the move is refused as busy.

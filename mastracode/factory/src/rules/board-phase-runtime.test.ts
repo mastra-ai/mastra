@@ -572,6 +572,21 @@ describe.each([
         const feature = await card('the feature', []);
         await vi.waitFor(() => expect(planning).toBeGreaterThan(0), { timeout: 15_000 });
 
+        // The board's feed, where a move answered 202 is told to have landed.
+        const feed = await send('GET', `/web/factory/projects/${project.id}/feed-events`);
+        let heard = '';
+        const reader = feed.body!.getReader();
+        release.add(() => void reader.cancel().catch(() => undefined));
+        void (async () => {
+          const decoder = new TextDecoder();
+          for (;;) {
+            const { done, value } = await reader.read().catch(() => ({ done: true, value: undefined }));
+            if (done) return;
+            heard += decoder.decode(value, { stream: true });
+          }
+        })();
+        await vi.waitFor(() => expect(heard).toContain(': ping'));
+
         const drag = await send('POST', `/web/factory/projects/${project.id}/work-items/${feature.id}/transition`, {
           board: 'delivery',
           stage: 'building',
@@ -588,8 +603,13 @@ describe.each([
           expect(aborted).toBe(0);
           return;
         }
-        expect(drag.status, JSON.stringify(answer)).toBe(200);
-        expect(answer.result).toMatchObject({ status: 'accepted', stage: 'building' });
+        // The move is taken on at once, and lands once the run it stopped has ended.
+        expect(drag.status, JSON.stringify(answer)).toBe(202);
+        expect(answer).toEqual({ inputId: expect.any(String) });
+        await vi.waitFor(
+          () => expect(heard).toContain(`data: ${JSON.stringify({ inputId: answer.inputId, status: 'accepted' })}`),
+          { timeout: 15_000 },
+        );
         expect(aborted).toBeGreaterThan(0);
         // Building's run starts after the stopped one and ends the card's work; the stopped
         // Planning run wasn't run again, and the card entered Building once.

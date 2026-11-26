@@ -82,11 +82,23 @@ export interface FactoryBoardEngine {
    * for a card it has no record of.
    */
   describe?(card: Pick<FactoryTransitionRequest, 'workItemId'>): Promise<FactoryCardRunState | undefined>;
+  /**
+   * Asks to move a card without waiting for the move, for an engine whose moves can take a while.
+   * The engine checks what it can tell right away (the card, its revision, the move's edge). A
+   * move that passes is answered with an input id and settles later; one that doesn't is
+   * answered on the spot, as `requestMove` would.
+   */
+  submitMove?(request: FactoryTransitionRequest): Promise<FactorySubmittedMove>;
   /** Tells the engine a card was deleted, for an engine that keeps something per card to let go of. */
   cardDeleted?(card: Pick<FactoryTransitionRequest, 'workItemId'>): Promise<void>;
   /** Workflows the engine runs cards on; `MastraFactory` registers them with the host's Mastra. */
   readonly workflows?: Readonly<Record<string, AnyWorkflow>>;
 }
+
+/** A move taken on to settle later under `inputId`, or one answered right away. */
+export type FactorySubmittedMove =
+  | { inputId: string; settled: Promise<FactoryTransitionResult> }
+  | { answered: FactoryTransitionResult };
 
 /** The services an engine is built from; the host's `boardEngine` factory receives them. */
 export interface FactoryBoardEngineContext {
