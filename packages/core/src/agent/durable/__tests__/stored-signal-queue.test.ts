@@ -24,6 +24,7 @@ import { createTool } from '../../../tools';
 import { warnUnsharedAgentSignals } from '../../../workflows/evented/setup-warning';
 import { Agent } from '../../agent';
 import { createSignal } from '../../signals';
+import { agentThreadStreamRuntime } from '../../thread-stream-runtime';
 import { agentThreadStreamTopic } from '../../thread-stream-topic';
 import { createEventedAgent } from '../create-evented-agent';
 import { globalRunRegistry } from '../run-registry';
@@ -1248,7 +1249,7 @@ describe('a run whose total deadline fires in the process that executes its step
 });
 
 describe('a parked run that is aborted', () => {
-  it.each(['acknowledged abort', 'stream abort'] as const)(
+  it.each(['acknowledged abort', 'stream abort', 'abort requested by another process'] as const)(
     "closes it with the signal it took, and a signal pending for it is the thread's next turn (%s)",
     async path => {
       const memoryStore = new ObservedMemory();
@@ -1277,7 +1278,9 @@ describe('a parked run that is aborted', () => {
       const pending = agent.sendSignal({ type: 'user', contents: 'PENDING_WHILE_PARKED' }, scope);
       await expect(pending.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
       if (path === 'acknowledged abort') await agent.__abortRunAcknowledged(stream.runId);
-      else expect(agent.abortRunStream(stream.runId)).toBe(true);
+      else if (path === 'stream abort') expect(agent.abortRunStream(stream.runId)).toBe(true);
+      // The request a process that does not hold the run publishes on the thread, as its thread abort does.
+      else await agentThreadStreamRuntime.requestThreadRunAbort(agent.getPubSub(), scope, stream.runId);
       await promptsReached(3);
 
       expect(occurrences(prompts[2], 'PENDING_WHILE_PARKED')).toBe(1);
@@ -1292,6 +1295,7 @@ describe('a parked run that is aborted', () => {
         runId: stream.runId,
         consumedIds: [taken!.signal.id],
       });
+      expect(await memoryStore.getSignalRun({ threadId: scope.threadId })).not.toBe(stream.runId);
     },
   );
 

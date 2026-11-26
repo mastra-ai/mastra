@@ -2370,8 +2370,12 @@ export class AgentThreadStreamRuntime {
           }
           if (state.preparedRunsById.has(data.runId) || this.#isParkedRun(state, data.runId)) {
             // A parked (suspended) run has no prepared run left, but abortRun's
-            // parked branch releases it so the thread stops blocking on it.
-            this.abortRun(data.runId, resolvedPubSub);
+            // parked branch releases it so the thread stops blocking on it, closing a
+            // storage-backed one's stored signals as a direct abort does.
+            const agent = state.threadRunsById.get(data.runId)?.agent;
+            this.abortRun(data.runId, resolvedPubSub, {
+              closeStoredRun: agent && (runId => agent.__closeParkedRunSignals?.(runId)),
+            });
           } else {
             // Durable runs own their controller outside the thread runtime.
             state.threadRunsById.get(data.runId)?.agent.abortRunStream?.(data.runId);
