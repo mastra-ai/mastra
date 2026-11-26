@@ -192,9 +192,9 @@ export const PageWithFullHeightList: Story = {
     const list = within(canvasElement).getByText('Run 1').closest('ul');
     const body = list?.closest<HTMLElement>('[style*="overflow"]');
     if (!list || !body) throw new Error('Missing the page parts');
-    const listBox = list.getBoundingClientRect();
-    const bodyBox = body.getBoundingClientRect();
-    await expect(bodyBox.bottom - listBox.bottom).toBeCloseTo(listBox.left - bodyBox.left, 0);
+    // The side gutter is the body's padding: on wide screens the content also centers, which is not part of it.
+    const gutter = parseFloat(getComputedStyle(body).paddingLeft);
+    await expect(body.getBoundingClientRect().bottom - list.getBoundingClientRect().bottom).toBeCloseTo(gutter, 0);
     await expect(body.scrollHeight).toBeLessThanOrEqual(body.clientHeight);
   },
 };
