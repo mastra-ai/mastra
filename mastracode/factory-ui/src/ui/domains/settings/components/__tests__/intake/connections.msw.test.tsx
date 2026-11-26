@@ -125,11 +125,9 @@ describe('IntakeSection connections', () => {
     platformAccounts('incident-io', []);
     renderIntakeSection();
 
-    await userEvent.click(
-      within(await screen.findByRole('region', { name: 'Sources' })).getByRole('button', {
-        name: 'Connect incident.io',
-      }),
-    );
+    const connect = await screen.findByRole('button', { name: 'Connect incident.io' });
+    expect(screen.getByRole('region', { name: 'Sources' })).toContainElement(connect);
+    await userEvent.click(connect);
     const dialog = await screen.findByRole('dialog');
     await userEvent.type(within(dialog).getByLabelText('incident.io API key'), 'incident-secret');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Connect' }));

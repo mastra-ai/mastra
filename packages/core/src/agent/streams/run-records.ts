@@ -12,7 +12,6 @@
  * record simply makes the run unknown, so callers are refused.
  */
 import type { MastraServerCache } from '../../cache/base';
-import { RUN_LOG_TTL_MS } from '../../events/topics';
 
 /**
  * - `running`: a process is executing the run and listens for abort requests.
@@ -48,8 +47,16 @@ export interface AgentRunRecordTarget {
   threadId?: string;
 }
 
-/** Lifetime of a record. Matches the stream log so ownership never outlives the history it guards by more than one write. */
-export const AGENT_RUN_RECORD_TTL_MS = RUN_LOG_TTL_MS;
+/**
+ * Lifetime of a running or suspended run's record. Deliberately much longer
+ * than the stream log's retention: the record is a single small key, and it is
+ * what lets any replica authorize `observe()`/abort/resume on a run parked
+ * overnight on a tool approval — long after its replay log expired (the log
+ * is recreated with later indices and observers resync; see
+ * `MastraServerCache.listPushIndexed`). A finished run's record is deleted by
+ * run cleanup; this lifetime bounds it when cleanup never runs.
+ */
+export const AGENT_RUN_RECORD_TTL_MS = 24 * 60 * 60 * 1000;
 
 export const agentRunRecordKey = (agentId: string, runId: string): string => `agent.run.${agentId}.${runId}`;
 

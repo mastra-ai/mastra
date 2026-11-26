@@ -1,17 +1,11 @@
 import type { BoardPhaseKind } from '@mastra/factory/boards';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
-import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
-import { IconFlag2 } from '@mastra/playground-ui/icons/central/IconFlag2';
-import { IconPlay } from '@mastra/playground-ui/icons/central/IconPlay';
-import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
-import type { ReactNode } from 'react';
+import { PhaseWalkthrough as SharedPhaseWalkthrough } from '@mastra/playground-ui/domains/factory';
+import type { PhaseOutline as SharedPhaseOutline } from '@mastra/playground-ui/domains/factory';
+import type { ComponentProps } from 'react';
 
 import type { InstalledPhaseInfo, StoredPhaseInfo } from '../../../../api/types';
 import { nextPhasesOf } from '../boardDraft';
-import { approvalText, toolLabel, unattended } from '../phaseSummary';
-import { Muted, NextPhases, Step } from './PhaseTimeline';
-
+import { approvalText, toolLabel } from '../phaseSummary';
 /** What the walkthrough reads from a phase, whether it comes from the saved board or from the one being edited. */
 export interface PhaseOutline {
   key: string;
@@ -32,60 +26,22 @@ export function outlineOfInstalled(phase: InstalledPhaseInfo): PhaseOutline {
   return { ...phase, key: phase.id, name: phase.name ?? phase.title, runs: Boolean(phase.skill) };
 }
 
-/**
- * A card's way through a phase, top to bottom: how it gets in, how the work starts, who does it, how it ends and where
- * the card can go next. The Overview and the board's column headers both read a phase this way; each brings what it
- * can show of the rules, the start and the agent.
- */
+/** The shared walkthrough, with this host's tool labels and approval wording. */
 export function PhaseWalkthrough({
-  boardId,
   phase,
   phases,
-  arrivals,
-  starts,
-  agent,
-}: {
-  boardId: string;
+  ...rest
+}: Omit<ComponentProps<typeof SharedPhaseWalkthrough>, 'phase' | 'phases'> & {
   phase: PhaseOutline;
   phases: readonly PhaseOutline[];
-  arrivals: ReactNode;
-  starts: ReactNode;
-  agent: ReactNode;
 }) {
-  const idle = unattended(phase.kind);
-  return (
-    <ol aria-label={`${phase.name}, step by step`} className="flex flex-col">
-      <Step label="In" icon={IconArrowInbox}>
-        {arrivals}
-      </Step>
-      {phase.runs && (
-        <Step label="Starts" icon={IconPlay}>
-          {starts}
-        </Step>
-      )}
-      <Step label="Work" icon={phase.runs ? IconRobot : idle.icon}>
-        {phase.runs ? (
-          <>
-            {agent}
-            {phase.tools?.map(id => (
-              <Muted key={id}>{toolLabel(id)}</Muted>
-            ))}
-          </>
-        ) : (
-          <Muted>{idle.text}</Muted>
-        )}
-      </Step>
-      {phase.exitTool && (
-        <Step label="Ends with" icon={IconFlag2}>
-          <Txt as="span" variant="caption" tone="ink" className="truncate">
-            {phase.exitTool.id}
-          </Txt>
-          <Muted>{approvalText(phase.exitTool)}</Muted>
-        </Step>
-      )}
-      <Step label="Next" icon={IconArrowRight}>
-        <NextPhases boardId={boardId} next={phase.nextPhases ?? []} phases={phases} />
-      </Step>
-    </ol>
-  );
+  return <SharedPhaseWalkthrough {...rest} phase={sharedOutline(phase)} phases={phases.map(sharedOutline)} />;
+}
+
+export function sharedOutline(phase: PhaseOutline): SharedPhaseOutline {
+  return {
+    ...phase,
+    tools: phase.tools?.map(toolLabel),
+    exitTool: phase.exitTool ? { id: phase.exitTool.id, approval: approvalText(phase.exitTool) } : null,
+  };
 }

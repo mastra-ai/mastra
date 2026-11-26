@@ -22,7 +22,13 @@ import type {
 } from '../../db/client';
 import { withClientWriteLock } from '../../db/write-lock';
 import { KNOWLEDGE_IMPORTER_DDL, LibSQLKnowledgeImporters } from './importers';
-import { KNOWLEDGE_PAGE_DDL, KNOWLEDGE_PAGE_TABLES, LibSQLKnowledgePages, upgradeKnowledgePinKinds } from './pages';
+import {
+  KNOWLEDGE_PAGE_DDL,
+  KNOWLEDGE_PAGE_TABLES,
+  LibSQLKnowledgePages,
+  upgradeKnowledgeActivityFeed,
+  upgradeKnowledgePinKinds,
+} from './pages';
 
 interface Executor {
   execute(statement: string | { sql: string; args?: InValue[] }): Promise<ResultSet>;
@@ -132,11 +138,23 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       supportsPinKinds: true,
       supportsTransactions: true,
       supportsActivityDateRange: true,
+      supportsActivityAscending: true,
     } as const;
   }
 
   override async dangerouslyClearAll(): Promise<void> {
     await this.#pages.clearAll();
+  }
+
+  /**
+   * Run once after restoring an older copy of the database file, or after moving the app to a copy
+   * that was behind (the store can't detect that). Not needed when an embedded replica only lags its
+   * primary: it catches up on sync. Oldest-first positions held from
+   * before are then refused and readers restart from `since`, instead of skipping the events that
+   * reuse the numbers they passed.
+   */
+  rebaseActivityFeed(): Promise<void> {
+    return this.#pages.rebaseActivityFeed();
   }
 
   // Schema-4 page store: delegates to LibSQLKnowledgePages.
@@ -177,6 +195,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         sql: `INSERT OR IGNORE INTO "${TABLE_KNOWLEDGE_PAGES_STATE}" (id, schemaVersion) VALUES ('knowledge', ?)`,
         args: [KNOWLEDGE_PAGES_SCHEMA_VERSION],
       });
+      await upgradeKnowledgeActivityFeed(tx);
     });
   }
 

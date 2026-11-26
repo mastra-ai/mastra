@@ -229,6 +229,51 @@ Tool display, approval prompts, error messages, and typing status are unaffected
 
 The channel instructions Mastra adds to the agent's prompt follow this setting: with text hidden, the agent is told that only what it posts with tools reaches the conversation, and that it can skip a message by not posting anything.
 
+### Reply mode
+
+Set `replyMode: 'tool'` to have the agent post only through a `reply_in_thread` tool. Mastra installs the tool and everything around it:
+
+- Reply text and tool calls stay out of the thread. `textDisplay` and `toolDisplay` default to `'hidden'`.
+- The typing status names the agent's current step, for example "is listing repo root", using each tool call's `description` argument.
+- With `streaming: true` on the adapter, `reply_in_thread` streams into the thread while the model writes it. Without it, each reply posts once it's complete.
+- The agent's prompt tells it to post a one-line opener on long work, then the outcome, and to write for people rather than agents.
+- If the agent goes five minutes without posting, it's reminded to post a status.
+
+Add [`threadLink`](/reference/channels/thread-link) to end the first reply of each new thread with a link to your web UI. A full example:
+
+```typescript title="src/mastra/agents/your-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+export const yourAgent = new Agent({
+  id: 'your-agent',
+  name: 'Your Agent',
+  instructions: 'You help the team with their work.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  channels: {
+    adapters: {
+      slack: {
+        adapter: createSlackAdapter(),
+        streaming: true,
+        replyMode: {
+          instructions: ['Link tickets as [ABC-123](<ticket url>).'],
+          reminderAfterMs: 10 * 60_000,
+        },
+        threadLink: ({ threadId }) => `https://app.example.com/threads/${threadId}`,
+      },
+    },
+  },
+})
+```
+
+`instructions` adds your own lines to the reply prompt. Pass a function, `({ canReply }) => string[]`, to vary them by whether the run can post. If you set `textDisplay: 'show'`, the agent's text posts directly and gets the same prompt, but no `reply_in_thread` tool. Settings you set on the adapter yourself, such as `toolDisplay`, win over the reply mode defaults.
+
+Runs that didn't start from a message, such as a schedule or a web chat on a thread that started in a channel, find the thread from their memory thread and post there too.
+
+:::note
+Reply mode has only been tested with Slack. The typing status is cut to 50 characters to fit Slack's inline status.
+:::
+
 ## Runs that don't start from a message
 
 A thread that started in a channel can also run from elsewhere, such as a schedule, a Studio prompt, or a signal waking the agent. Those runs get the same channel instructions as a run started by a message. The agent knows its identity in the channel and whether its text replies are posted there. Because the system prompt is identical for both kinds of run, it stays cached.

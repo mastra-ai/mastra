@@ -16,20 +16,21 @@ import { createKnowledgeUlid, KnowledgeConflictError, KnowledgeNotFoundError } f
 import type {
   AddKnowledgeNoteInput,
   CreateKnowledgePageInput,
+  KnowledgeListedPin,
   KnowledgeNote,
   KnowledgeNoteListOutput,
   KnowledgePage,
+  KnowledgePageActivityAction,
+  KnowledgePageActivityEvent,
+  KnowledgePageActivityInput,
   KnowledgePageBodyLink,
   KnowledgePageLinkCounts,
   KnowledgePageLinkEdge,
   KnowledgePageLinkKind,
-  KnowledgePageActivityAction,
-  KnowledgePageActivityEvent,
   KnowledgePageListOutput,
   KnowledgePageSearchHit,
-  KnowledgePageTemplateInput,
   KnowledgePageStore,
-  KnowledgeListedPin,
+  KnowledgePageTemplateInput,
   KnowledgePin,
   KnowledgePinKind,
   KnowledgeProvenance,
@@ -1779,13 +1780,13 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     return hits;
   }
 
-  async listPageActivity(input: {
-    read: KnowledgeReadScope;
-    scopeId?: string;
-    pageId?: string;
-    cursor?: string;
-    limit?: number;
-  }): Promise<{ events: KnowledgePageActivityEvent[]; nextCursor?: string }> {
+  async listPageActivity(
+    input: KnowledgePageActivityInput,
+  ): Promise<{ events: KnowledgePageActivityEvent[]; nextCursor?: string }> {
+    // This store doesn't report supportsActivityAscending: refuse rather than answer newest first.
+    if (input.order === 'asc' || input.after !== undefined) {
+      throw new RangeError('This Knowledge store does not support oldest-first activity (supportsActivityAscending)');
+    }
     const core = await loadPagesCore();
     const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const ids = await this.#readable(input.read);

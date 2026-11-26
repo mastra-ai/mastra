@@ -10,11 +10,11 @@ import type { ExecutionResult } from './executor';
 import { resolveTarget } from './resolve-target';
 import { executeWithRetries } from './retries';
 import {
-  createItemScorerResolver,
+  createScorerResolver,
   EXPERIMENT_ITEM_SCORER_NOT_FOUND,
   experimentScoreKey,
   flushForTrajectoryScorers,
-  resolveScorers,
+  itemScorerNotFoundError,
   runScorersForItem,
 } from './scorer';
 import type { ItemToolMock, UnmockedToolPolicy } from './tool-mocks';
@@ -82,10 +82,11 @@ export interface ExecuteExperimentItemOutput {
  * Temporal activity) converges on a single row.
  *
  * Scorer precedence mirrors the in-process runner: experiment `scorerIds` →
- * item `scorerIds` → dataset `scorerIds` → none. An item scorer reference to
- * an unregistered scorer is a deterministic preflight failure
+ * item `scorerIds` → dataset `scorerIds` → none. Stored scorers are loaded on
+ * demand at every level. A scorer that can't be resolved (e.g. a stored scorer
+ * deleted after the experiment started) is a deterministic preflight failure
  * ({@link EXPERIMENT_ITEM_SCORER_NOT_FOUND}): the target is not executed and
- * the error is recorded on the row.
+ * the error is recorded on the row; other items are unaffected.
  *
  * Applies the same per-item run options as the in-process runner (model
  * override, tool mocks, timeout, retries) but excludes its loop-level concerns:
@@ -120,21 +121,20 @@ export async function executeExperimentItem(args: ExecuteExperimentItemArgs): Pr
   }
 
   // Scorer precedence: experiment scorerIds → item scorerIds → dataset scorerIds → none.
-  let scorers: MastraScorer<any, any, any, any>[] = [];
+  // Every level loads stored scorers on demand: this may run in a process that never hydrated them.
+  // A scorer that can't be resolved fails only this item.
+  const resolveScorerEntries = createScorerResolver(mastra);
+  let scorers: MastraScorer<any, any, any, any>[];
   let scorerConfigError: ExecutionResult['error'] = null;
-  if (experiment.scorerIds != null) {
-    scorers = resolveScorers(mastra, [...new Set(experiment.scorerIds)]);
-  } else if (item.scorerIds !== undefined) {
-    const resolution = await createItemScorerResolver(mastra)(item.scorerIds);
+  if (item.scorerIds !== undefined && experiment.scorerIds == null) {
+    const resolution = await resolveScorerEntries(item.scorerIds);
     scorers = resolution.scorers;
-    if (resolution.missingIds.length > 0) {
-      scorerConfigError = {
-        code: EXPERIMENT_ITEM_SCORER_NOT_FOUND,
-        message: `Item scorer configuration references unregistered scorer IDs: ${resolution.missingIds.join(', ')}`,
-      };
-    }
+    scorerConfigError = itemScorerNotFoundError('Item', resolution.missingIds);
   } else {
-    scorers = resolveScorers(mastra, [...new Set(args.datasetScorerIds ?? [])]);
+    const source = experiment.scorerIds != null ? 'Experiment' : 'Dataset';
+    const resolution = await resolveScorerEntries(experiment.scorerIds ?? args.datasetScorerIds ?? []);
+    scorers = resolution.scorers;
+    scorerConfigError = itemScorerNotFoundError(source, resolution.missingIds);
   }
 
   // Resolve the experiments store before executing the target so a

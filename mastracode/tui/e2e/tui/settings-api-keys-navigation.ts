@@ -16,7 +16,7 @@ export const settingsApiKeysNavigationScenario = {
     await selectMenuRow(terminal, /API Keys/i);
 
     await runtime.waitForScreenText(/API Keys/i, terminal, 8_000);
-    await runtime.waitForScreenText(/No key configured\. Press Enter to add one\.|Enter add\/update/i, terminal, 8_000);
+    await runtime.waitForScreenText(/No key configured\. Press Enter to add one\./i, terminal, 8_000);
     await runtime.waitForScreenText(/302ai/i, terminal, 8_000);
 
     terminal.keyCtrlC();

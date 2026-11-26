@@ -33,6 +33,7 @@ import type { LazyPageComponent } from './layouts/PageSuspense';
 import { AppRouteErrorPage, RouteErrorPage } from './layouts/RouteErrorPage';
 import {
   createLoadOnEntry,
+  prefetchAppLayout,
   prefetchBoard,
   prefetchCardDraft,
   prefetchComposer,
@@ -42,7 +43,6 @@ import {
   prefetchRuleDecisions,
   prefetchRetiredReviewBoard,
   prefetchSessionFrame,
-  prefetchSidebar,
   reloadOnAnotherThread,
   retiredReviewBoardSearch,
 } from './routeLoaders';
@@ -276,7 +276,7 @@ export function createAppRoutes(services?: RouteLoaderServices, holdsNavigation?
                 {
                   element: <AppLayout />,
                   // Load the chat code while its session links appear, before a card or session is clicked.
-                  ...loadOnEntry(prefetchSidebar, chatPages),
+                  ...loadOnEntry(prefetchAppLayout, chatPages),
                   children: [
                     {
                       // Errors replace only the page, preserving the shell and its providers.

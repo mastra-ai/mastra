@@ -21,6 +21,22 @@ import {
 // test that still does.
 const fixture = vi.hoisted(() => ({ home: '', packageRoot: '' }));
 
+// The developer's shell must not decide which gateways sync or whether the registry auto-refreshes
+// on import: a real MASTRA_GATEWAY_API_KEY enables the Mastra gateway and adds a `mastra` provider
+// to every sync. Hoisted so the module-level auto-refresh check in provider-registry.ts sees it too.
+const REGISTRY_ENV = vi.hoisted(() => {
+  const keys = [
+    'MASTRA_GATEWAY_API_KEY',
+    'MASTRA_GATEWAY_VERSION',
+    'MASTRA_GATEWAY_URL',
+    'MASTRA_DEV',
+    'MASTRA_AUTO_REFRESH_PROVIDERS',
+    'MASTRA_OFFLINE',
+  ];
+  for (const key of keys) vi.stubEnv(key, undefined);
+  return keys;
+});
+
 vi.mock('node:os', async importOriginal => {
   const actual = await importOriginal<typeof import('node:os')>();
   const { join } = await import('node:path');
@@ -53,6 +69,7 @@ beforeEach(() => {
   // No test here may reach models.dev or Netlify: a sync that is not mocked fails instead of
   // writing live provider data into whichever fixture is current when it resolves.
   vi.stubGlobal('fetch', () => Promise.reject(new Error('provider-registry tests must not use the network')));
+  for (const key of REGISTRY_ENV) vi.stubEnv(key, undefined);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mastra-provider-registry-'));
   fixtureRoots.push(root);
   fixture.home = path.join(root, 'home');
@@ -81,6 +98,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 afterAll(() => {

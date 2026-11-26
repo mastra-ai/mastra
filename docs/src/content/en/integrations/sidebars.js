@@ -769,6 +769,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'tools/exa',
+          label: 'Exa',
+          customProps: { icon: 'https://app.nango.dev/images/template-logos/exa.svg' },
+        },
+        {
+          type: 'doc',
           id: 'tools/firecrawl',
           label: 'Firecrawl',
           customProps: { icon: '/img/integrations/firecrawl.svg' },

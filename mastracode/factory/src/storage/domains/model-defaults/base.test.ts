@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import type { ModelPack } from '../../../model-packs.js';
 import { createFactoryStorageForTests } from '../../test-utils.js';
 
 describe('ModelDefaultsStorage', () => {
@@ -66,27 +67,58 @@ describe('ModelDefaultsStorage', () => {
     expect(await seed.modelDefaults.clear({ orgId: 'org-1', userId: 'user-1' })).toBe(false);
   });
 
-  it('a personal thinking level needs a personal model and survives a model change', async () => {
+  it('reads a row saved before packs as a single Default pack', async () => {
     const seed = await createFactoryStorageForTests();
     const user = { orgId: 'org-1', userId: 'user-1' };
-
-    expect(await seed.modelDefaults.setThinkingLevel({ ...user, thinkingLevel: 'high' })).toBeNull();
-    expect(await seed.modelDefaults.get(user)).toBeNull();
-
-    await seed.modelDefaults.set({ ...user, modelId: 'openai/gpt-5.6' });
-    expect(await seed.modelDefaults.get(user)).toMatchObject({ modelId: 'openai/gpt-5.6', thinkingLevel: null });
-    expect(await seed.modelDefaults.setThinkingLevel({ ...user, thinkingLevel: 'high' })).toMatchObject({
-      thinkingLevel: 'high',
+    await seed.storage.ops.insertOne('user_default_models', {
+      org_id: 'org-1',
+      user_id: 'user-1',
+      model_id: 'anthropic/claude-opus-5.5',
+      thinking_level: 'high',
+      updated_at: new Date(),
     });
-    expect(await seed.modelDefaults.get(user)).toMatchObject({ thinkingLevel: 'high' });
 
-    await seed.modelDefaults.set({ ...user, modelId: 'anthropic/claude-opus-5' });
     expect(await seed.modelDefaults.get(user)).toMatchObject({
-      modelId: 'anthropic/claude-opus-5',
+      modelId: 'anthropic/claude-opus-5.5',
       thinkingLevel: 'high',
+      modelPacks: [
+        { id: 'default', name: 'Default', models: [{ modelId: 'anthropic/claude-opus-5.5', thinkingLevel: 'high' }] },
+      ],
+      defaultModelPackId: 'default',
+    });
+  });
+
+  it('stores personal packs, mirrors the default pack into the default model, and deletes the row when empty', async () => {
+    const seed = await createFactoryStorageForTests();
+    const user = { orgId: 'org-1', userId: 'user-1' };
+    const build: ModelPack = {
+      id: 'build',
+      name: 'Build',
+      models: [
+        { modelId: 'anthropic/claude-opus-5.5', thinkingLevel: 'medium' },
+        { modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'high' },
+      ],
+    };
+    const cheap: ModelPack = {
+      id: 'cheap',
+      name: 'Cheap',
+      models: [{ modelId: 'deepseek/deepseek-flash', thinkingLevel: 'low' }],
+    };
+
+    expect(
+      await seed.modelDefaults.setModelPacks({ ...user, modelPacks: [build, cheap], defaultModelPackId: 'cheap' }),
+    ).toMatchObject({ modelId: 'deepseek/deepseek-flash', thinkingLevel: 'low', defaultModelPackId: 'cheap' });
+
+    await seed.modelDefaults.setModelPacks({ ...user, modelPacks: [build, cheap], defaultModelPackId: 'build' });
+    await seed.modelDefaults.set({ ...user, modelId: 'openai/gpt-5.6-sol' });
+    expect(await seed.modelDefaults.get(user)).toMatchObject({
+      modelId: 'openai/gpt-5.6-sol',
+      thinkingLevel: 'medium',
+      modelPacks: [{ ...build, models: [{ modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'medium' }] }, cheap],
+      defaultModelPackId: 'build',
     });
 
-    await seed.modelDefaults.clear(user);
+    expect(await seed.modelDefaults.setModelPacks({ ...user, modelPacks: [], defaultModelPackId: null })).toBeNull();
     expect(await seed.modelDefaults.get(user)).toBeNull();
   });
 });

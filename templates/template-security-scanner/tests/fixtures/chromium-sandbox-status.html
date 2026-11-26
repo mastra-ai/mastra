@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sandbox Status</title>
+    <link rel="stylesheet" href="chrome://resources/css/text_defaults.css" />
+    <style type="text/css">
+      #sandbox-status {
+        border: 1px solid gray;
+      }
+      #sandbox-status td {
+        border: 1px solid gray;
+        padding: 3px;
+        vertical-align: top;
+      }
+      #evaluation {
+        font-weight: bold;
+      }
+      .good {
+        background-color: rgb(143, 218, 146);
+      }
+      .bad {
+        background-color: rgb(249, 156, 149);
+      }
+      .medium {
+        background-color: rgb(255, 255, 90);
+      }
+      .info {
+        background-color: rgb(169, 217, 239);
+      }
+    </style>
+
+    <script type="module" src="sandbox_internals.js"></script>
+  </head>
+  <body>
+    <h1>Sandbox Status</h1>
+
+    <table id="sandbox-status">
+      <tr>
+        <td class="good">Layer 1 Sandbox</td>
+        <td class="good">Namespace</td>
+      </tr>
+      <tr>
+        <td class="good">PID namespaces</td>
+        <td class="good">Yes</td>
+      </tr>
+      <tr>
+        <td class="good">Network namespaces</td>
+        <td class="good">Yes</td>
+      </tr>
+      <tr>
+        <td class="good">Seccomp-BPF sandbox</td>
+        <td class="good">Yes</td>
+      </tr>
+      <tr>
+        <td class="good">Seccomp-BPF sandbox supports TSYNC</td>
+        <td class="good">Yes</td>
+      </tr>
+      <tr>
+        <td class="bad">Ptrace Protection with Yama LSM (Broker)</td>
+        <td class="bad">No</td>
+      </tr>
+      <tr>
+        <td class="bad">Ptrace Protection with Yama LSM (Non-broker)</td>
+        <td class="bad">No</td>
+      </tr>
+    </table>
+    <p id="evaluation">You are adequately sandboxed.</p>
+  </body>
+</html>

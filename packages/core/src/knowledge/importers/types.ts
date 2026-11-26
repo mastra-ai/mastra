@@ -108,6 +108,8 @@ export type KnowledgeImporterErrorCode =
   | 'credential_missing'
   | 'importer_missing_from_deploy'
   | 'importer_error'
+  /** An op, or a state saved with `ctx.state.set`, is bigger than the host takes in one flush. */
+  | 'flush_too_large'
   /** Hard deadline reached; the cursor stays behind what didn't land. */
   | 'stopped'
   /** Recorded by a host that ended the run: its runner stopped renewing the lease. */

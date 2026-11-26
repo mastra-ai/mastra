@@ -18,7 +18,7 @@ import { EventedExecutionEngine } from '../../workflows/evented/execution-engine
 import { WorkflowEventProcessor } from '../../workflows/evented/workflow-event-processor';
 import { Agent } from '../agent';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-ownership';
-import { agentThreadStreamRuntime } from '../thread-stream-runtime';
+import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { DurableStepIds } from './constants';
 import { createEventedAgent } from './create-evented-agent';
 import {
@@ -109,9 +109,20 @@ it('settles a failed evented setup after claiming the thread lease without start
   });
   const mastra = new Mastra({ agents: { agent }, storage, pubsub, workers: false, logger: false });
   const workflow = agent.getWorkflow();
+  const order: string[] = [];
+  const publish = pubsub.publish.bind(pubsub);
+  const publishSpy = vi.spyOn(pubsub, 'publish').mockImplementation(async (...args) => {
+    if (args[1].type === 'run-registered') {
+      // Keep registration pending while the independent stream subscription becomes ready.
+      await new Promise(resolve => setTimeout(resolve, 100));
+      order.push('registered');
+    }
+    return publish(...args);
+  });
   let leaseOwner: string | undefined;
   const failure = new Error('run creation failed after leasing the thread');
   const createRun = vi.spyOn(workflow, 'createRun').mockImplementation(async () => {
+    order.push('dispatch');
     leaseOwner = await pubsub.getLeaseOwner('resource\u0000thread');
     throw failure;
   });
@@ -126,6 +137,7 @@ it('settles a failed evented setup after claiming the thread lease without start
         if (chunk.type === 'error') errors.push(chunk.payload.error);
       }
       expect(errors).toEqual([expect.objectContaining({ message: failure.message })]);
+      expect(order).toEqual(['registered', 'dispatch']);
       expect(leaseOwner).toContain('mastra:thread-lease:');
       await expect.poll(async () => (await workflows.getRunOwnership({ runId }))?.live).toBe(false);
       expect(await workflows.loadWorkflowRunStatus({ workflowName: DurableStepIds.AGENTIC_LOOP, runId })).toBeNull();
@@ -134,6 +146,64 @@ it('settles a failed evented setup after claiming the thread lease without start
       await cleanup();
     }
   } finally {
+    publishSpy.mockRestore();
+    createRun.mockRestore();
+    await mastra.shutdown();
+  }
+});
+
+it('leaves the thread available when another execution takes over during the thread lease claim', async () => {
+  const pubsub = sharedPubSub();
+  const storage = new InMemoryStore();
+  const workflows = (await storage.getStore('workflows'))!;
+  const { model } = deliveryModel('must not run');
+  const memory = new MockMemory({ storage });
+  const agent = createEventedAgent({
+    agent: new Agent({ id: 'agent', name: 'agent', instructions: 'Answer.', model, memory }),
+    pubsub,
+  });
+  const mastra = new Mastra({ agents: { agent }, storage, pubsub, workers: false, logger: false });
+  const runId = 'taken-over-during-thread-claim';
+  const threadKey = 'resource\u0000thread';
+  const claiming = Promise.withResolvers<void>();
+  const resumeClaim = Promise.withResolvers<void>();
+  const claim = agentThreadStreamRuntime.claimDurableThreadLease.bind(agentThreadStreamRuntime);
+  const lease = vi.spyOn(agentThreadStreamRuntime, 'claimDurableThreadLease').mockImplementation(async (...args) => {
+    claiming.resolve();
+    await resumeClaim.promise;
+    return claim(...args);
+  });
+  const createRun = vi.spyOn(agent.getWorkflow(), 'createRun').mockRejectedValue(new Error('stale workflow started'));
+  try {
+    const streaming = agent.stream('Answer.', { runId, memory: { resource: 'resource', thread: 'thread' } });
+    void streaming.catch(() => {});
+    try {
+      await claiming.promise;
+      await streaming;
+      const execution = getRunRegistryEntry(runId, mastra)!.workflowExecution!;
+      const owner = await pubsub.getLeaseOwner(threadKey);
+      expect(owner).toContain(runId);
+      const current = (await workflows.getRunOwnership({ runId }))!;
+      const successor = await workflows.claimRunOwnership({
+        runId,
+        ownerId: 'successor',
+        leaseMs: 60_000,
+        force: true,
+        expectedGeneration: current.generation,
+      });
+      expect(successor.acquired).toBe(true);
+      resumeClaim.resolve();
+      await execution;
+
+      expect(await pubsub.getLeaseOwner(threadKey)).toBeUndefined();
+      expect(createRun).not.toHaveBeenCalled();
+      expect(await workflows.getRunOwnership({ runId })).toMatchObject({ ownerId: 'successor', live: true });
+    } finally {
+      resumeClaim.resolve();
+      await (await streaming).cleanup();
+    }
+  } finally {
+    lease.mockRestore();
     createRun.mockRestore();
     await mastra.shutdown();
   }
@@ -612,7 +682,7 @@ afterEach(async () => {
   vi.useRealTimers();
 });
 
-async function createExecution(storageBacked = true) {
+async function createExecution(storageBacked = true, coordinatorRenews = false) {
   const storage = new InMemoryStore();
   const workflowsStore = (await storage.getStore('workflows'))!;
   const pubsub = new EventEmitterPubSub();
@@ -625,7 +695,7 @@ async function createExecution(storageBacked = true) {
     runId: 'run',
     mode: 'acquire',
   });
-  coordinator.stopHeartbeat();
+  if (!coordinatorRenews) coordinator.stopHeartbeat();
   const event: Event = {
     id: 'delivery',
     type: 'workflow.step.run',
@@ -1307,12 +1377,15 @@ it('still marks a participant lost when a takeover rejected its renewal before t
   successor.stopHeartbeat();
 });
 
-async function seedRunningRows(workflowsStore: Awaited<ReturnType<typeof createExecution>>['workflowsStore']) {
+async function seedRunningRows(
+  workflowsStore: Awaited<ReturnType<typeof createExecution>>['workflowsStore'],
+  status: 'running' | 'suspended' = 'running',
+) {
   for (const workflowName of [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION]) {
     await workflowsStore.persistWorkflowSnapshot({
       workflowName,
       runId: 'run',
-      snapshot: { runId: 'run', status: 'running', value: {}, context: {} } as any,
+      snapshot: { runId: 'run', status, value: {}, context: {} } as any,
     });
   }
 }
@@ -1846,9 +1919,52 @@ it.each(['expired', 'foreign'] as const)(
   },
 );
 
+const threadOwner = (runId: string, generation: number) =>
+  `mastra:thread-lease:${JSON.stringify([runId, 'generation', generation])}`;
+
+it('waits for a settling execution to release the thread lease before claiming it', async () => {
+  const pubsub = sharedPubSub();
+  await agentThreadStreamRuntime.claimDurableThreadLease(pubsub, 'first', 'thread', 'resource', 1);
+  setTimeout(
+    () => void agentThreadStreamRuntime.releaseDurableThreadLease(pubsub, 'first', 'thread', 'resource', 1),
+    300,
+  );
+  await agentThreadStreamRuntime.claimDurableThreadLease(pubsub, 'second', 'thread', 'resource', 1);
+  expect(await pubsub.getLeaseOwner('resource\u0000thread')).toBe(threadOwner('second', 1));
+});
+
+it('reports a thread lease conflict once the previous execution holds it past the wait', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  const pubsub = sharedPubSub();
+  await agentThreadStreamRuntime.claimDurableThreadLease(pubsub, 'first', 'thread', 'resource', 1);
+  let settled = false;
+  const claim = agentThreadStreamRuntime
+    .claimDurableThreadLease(pubsub, 'second', 'thread', 'resource', 1)
+    .finally(() => (settled = true));
+  claim.catch(() => {});
+  await vi.advanceTimersByTimeAsync(4_800);
+  expect(settled).toBe(false);
+  await vi.advanceTimersByTimeAsync(400);
+  await expect(claim).rejects.toBeInstanceOf(AgentThreadLeaseConflictError);
+  expect(await pubsub.getLeaseOwner('resource\u0000thread')).toBe(threadOwner('first', 1));
+});
+
+it('stops waiting for the thread lease when another execution takes it over', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  const pubsub = sharedPubSub();
+  const key = 'resource\u0000thread';
+  await agentThreadStreamRuntime.claimDurableThreadLease(pubsub, 'first', 'thread', 'resource', 1);
+  const claim = agentThreadStreamRuntime.claimDurableThreadLease(pubsub, 'second', 'thread', 'resource', 1);
+  claim.catch(() => {});
+  await pubsub.transferLease(key, threadOwner('first', 1), threadOwner('third', 1), EXECUTION_LEASE_TTL_MS);
+  await vi.advanceTimersByTimeAsync(300);
+  await expect(claim).rejects.toThrow(threadOwner('third', 1));
+  expect(await pubsub.getLeaseOwner(key)).toBe(threadOwner('third', 1));
+});
+
 it('stops admitting work after losing the captured thread lease', async () => {
   vi.useFakeTimers();
-  const { pubsub, mastra, event, coordinator } = await createExecution();
+  const { pubsub, mastra, event, coordinator } = await createExecution(true, true);
   await agentThreadStreamRuntime.claimDurableThreadLease(pubsub, 'run', 'thread', 'resource', coordinator.generation);
   event.data.requestContext[MASTRA_DURABLE_EXECUTIONS_KEY].run = {
     ...coordinator.claim,
@@ -1859,10 +1975,164 @@ it('stops admitting work after losing the captured thread lease', async () => {
   const key = 'resource\u0000thread';
   const owner = await pubsub.getLeaseOwner(key);
   await pubsub.transferLease(key, owner!, 'another-run', EXECUTION_LEASE_TTL_MS * 3);
-  await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS + 1);
-  await expect(participateInDurableExecution(mastra, event, async () => {})).rejects.toMatchObject({
+  const execute = vi.fn(async () => {});
+  await expect(participateInDurableExecution(mastra, event, execute)).rejects.toMatchObject({
     id: EXECUTION_UNVERIFIED_ERROR_ID,
   });
+  expect(execute).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS + 1);
+  await expect(participateInDurableExecution(mastra, event, execute)).rejects.toMatchObject({
+    id: EXECUTION_SUPERSEDED_ERROR_ID,
+  });
+  await expect(coordinator.callerLossError()).resolves.toMatchObject({ id: EXECUTION_UNVERIFIED_ERROR_ID });
+  expect(await pubsub.getLeaseOwner(key)).toBe('another-run');
+});
+
+it('reclaims a missing thread lease during in-flight work and interrupts it on takeover', async () => {
+  vi.useFakeTimers();
+  const { pubsub, mastra, event, coordinator } = await createExecution(true, true);
+  await agentThreadStreamRuntime.claimDurableThreadLease(pubsub, 'run', 'thread', 'resource', coordinator.generation);
+  event.data.requestContext[MASTRA_DURABLE_EXECUTIONS_KEY].run = {
+    ...coordinator.claim,
+    threadId: 'thread',
+    resourceId: 'resource',
+  };
+  const started = Promise.withResolvers<AbortSignal>();
+  const finish = Promise.withResolvers<void>();
+  const step = withExecutionFence({
+    execute: async (params: object) => {
+      const signal = getExecutionOwnershipGuard(params)!.composeSignal(undefined);
+      const aborted = new Promise<void>((_, reject) =>
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true }),
+      );
+      started.resolve(signal);
+      await Promise.race([finish.promise, aborted]);
+    },
+  });
+  const delivery = participateInDurableExecution(mastra, event, () =>
+    step.execute({
+      mastra,
+      requestContext: new RequestContext(Object.entries(event.data.requestContext)),
+      getInitData: () => ({ runId: 'run', agentId: 'agent' }),
+    }),
+  ).catch((error: unknown) => error);
+  const signal = await started.promise;
+  const key = 'resource\u0000thread';
+  try {
+    const owner = (await pubsub.getLeaseOwner(key))!;
+    await pubsub.releaseLease(key, owner);
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS * 2);
+    expect(signal.aborted).toBe(false);
+    expect(await pubsub.getLeaseOwner(key)).toBe(owner);
+    expect(await pubsub.acquireLease(key, 'another-run', EXECUTION_LEASE_TTL_MS)).toMatchObject({ acquired: false });
+
+    await pubsub.transferLease(key, owner, 'another-run', EXECUTION_LEASE_TTL_MS);
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    expect(signal.aborted).toBe(true);
+    expect(await delivery).toMatchObject({ id: EXECUTION_UNVERIFIED_ERROR_ID });
+    expect(await pubsub.getLeaseOwner(key)).toBe('another-run');
+  } finally {
+    finish.resolve();
+    await delivery;
+  }
+});
+
+it.each(['workflow.end', 'workflow.suspend'] as const)('handles a late heartbeat reclaim after %s', async type => {
+  vi.useFakeTimers();
+  const { workflowsStore, pubsub, mastra, event, coordinator } = await createExecution(true, true);
+  const key = 'resource\u0000thread';
+  await agentThreadStreamRuntime.claimDurableThreadLease(pubsub, 'run', 'thread', 'resource', coordinator.generation);
+  event.data.requestContext[MASTRA_DURABLE_EXECUTIONS_KEY].run = {
+    ...coordinator.claim,
+    threadId: 'thread',
+    resourceId: 'resource',
+  };
+  await participateInDurableExecution(mastra, event, async () => {});
+  const owner = (await pubsub.getLeaseOwner(key))!;
+  await pubsub.releaseLease(key, owner);
+  const entered = Promise.withResolvers<void>();
+  const grant = Promise.withResolvers<void>();
+  const acquire = pubsub.acquireLease.bind(pubsub);
+  vi.spyOn(pubsub, 'acquireLease').mockImplementationOnce(async (...args) => {
+    entered.resolve();
+    await grant.promise;
+    return acquire(...args);
+  });
+
+  await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+  await entered.promise;
+  if (type === 'workflow.suspend') await seedRunningRows(workflowsStore, 'suspended');
+  await settleEventedDurableExecution(mastra, { ...event, type });
+  grant.resolve();
+  await vi.advanceTimersByTimeAsync(0);
+
+  expect(await pubsub.getLeaseOwner(key)).toBe(type === 'workflow.suspend' ? owner : undefined);
+});
+
+it('retries a silent thread lease check without dropping storage ownership', async () => {
+  vi.useFakeTimers();
+  const { workflowsStore, pubsub, mastra, event, coordinator } = await createExecution();
+  await agentThreadStreamRuntime.claimDurableThreadLease(pubsub, 'run', 'thread', 'resource', coordinator.generation);
+  event.data.requestContext[MASTRA_DURABLE_EXECUTIONS_KEY].run = {
+    ...coordinator.claim,
+    threadId: 'thread',
+    resourceId: 'resource',
+  };
+  const entered = Promise.withResolvers<void>();
+  const late = Promise.withResolvers<boolean>();
+  vi.spyOn(pubsub, 'renewLease').mockImplementationOnce(() => {
+    entered.resolve();
+    return late.promise;
+  });
+  const execute = vi.fn(async () => {});
+  const delivery = participateInDurableExecution(mastra, event, execute).catch((error: unknown) => error);
+  await entered.promise;
+  expect(execute).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS);
+  expect(await delivery).toBeUndefined();
+  expect(execute).toHaveBeenCalledTimes(1);
+  expect(await workflowsStore.getRunOwnership({ runId: 'run' })).toMatchObject({ ownerId: coordinator.executionId });
+  late.resolve(false);
+});
+
+it('discards a late thread lease grant after storage ownership changes', async () => {
+  vi.useFakeTimers();
+  const { workflowsStore, pubsub, mastra, event, coordinator } = await createExecution();
+  const key = 'resource\u0000thread';
+  event.data.requestContext[MASTRA_DURABLE_EXECUTIONS_KEY].run = {
+    ...coordinator.claim,
+    threadId: 'thread',
+    resourceId: 'resource',
+  };
+  const entered = Promise.withResolvers<void>();
+  const grant = Promise.withResolvers<void>();
+  const acquire = pubsub.acquireLease.bind(pubsub);
+  vi.spyOn(pubsub, 'acquireLease').mockImplementationOnce(async (...args) => {
+    entered.resolve();
+    await grant.promise;
+    return acquire(...args);
+  });
+  const execute = vi.fn(async () => {});
+  const delivery = participateInDurableExecution(mastra, event, execute).catch((error: unknown) => error);
+  await entered.promise;
+  const successor = await ExecutionFence.claim({
+    workflowsStore,
+    leaseProvider: pubsub,
+    agentId: 'agent',
+    runId: 'run',
+    mode: 'takeover',
+  });
+  await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS);
+  expect(await delivery).toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+  expect(execute).not.toHaveBeenCalled();
+
+  grant.resolve();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(await pubsub.getLeaseOwner(key)).toBeUndefined();
+  await agentThreadStreamRuntime.claimDurableThreadLease(pubsub, 'run', 'thread', 'resource', successor.generation);
+  expect(await pubsub.getLeaseOwner(key)).toBe(
+    `mastra:thread-lease:${JSON.stringify(['run', 'generation', successor.generation])}`,
+  );
 });
 
 it('releases lease-backed executions when the terminal worker settles them', async () => {

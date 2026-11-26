@@ -17,6 +17,10 @@ const schema = process.env.LOADING_SCHEMA;
 const threadId = process.env.LOADING_THREAD;
 const toolMs = Number(process.env.LOADING_TOOL_MS);
 if (!runId || !schema || !threadId || !Number.isFinite(toolMs)) throw new Error('missing LOADING_* env');
+const runs = [{ runId, threadId }];
+if (process.env.PAUSED_SECOND_RUN_ID) {
+  runs.push({ runId: process.env.PAUSED_SECOND_RUN_ID, threadId: `${threadId}-second` });
+}
 
 const storage = new PostgresStore({
   id: `loading-${role}`,
@@ -38,9 +42,10 @@ const tool = createTool({
   inputSchema: z.object({ index: z.number().int().min(0).max(3) }),
   execute: async ({ index }, context) => {
     const callId = context.agent?.toolCallId;
+    const currentRunId = runs.find(run => run.threadId === context.agent?.threadId)?.runId ?? runId;
     const { id } = await storage.db.one(
       `INSERT INTO "${schema}".tool_executions (run_id, tool_call_id) VALUES ($1, $2) RETURNING id`,
-      [runId, callId],
+      [currentRunId, callId],
     );
     console.info(`tool-entered:${callId}`);
     await new Promise(resolve => setTimeout(resolve, toolMs));
@@ -94,16 +99,16 @@ const model = {
   },
 };
 
-const agent = createEventedAgent({
-  agent: new Agent({
-    id: 'loading-agent',
-    name: 'loading-agent',
-    instructions: 'Perform all operations.',
-    model,
-    tools: { recordedTool: tool },
-    memory: new Memory({ storage, options: { generateTitle: false } }),
-  }),
+const baseAgent = new Agent({
+  id: 'loading-agent',
+  name: 'loading-agent',
+  instructions: 'Perform all operations.',
+  model,
+  tools: { recordedTool: tool },
+  memory: new Memory({ storage, options: { generateTitle: false } }),
+  ...(runs.length > 1 ? { durable: { executionEngine: 'evented' } } : {}),
 });
+const agent = runs.length > 1 ? baseAgent : createEventedAgent({ agent: baseAgent });
 const mastra = new Mastra({
   storage,
   pubsub,
@@ -115,10 +120,17 @@ const mastra = new Mastra({
 if (role === 'worker') await mastra.startWorkers();
 console.info('loading-ready');
 if (role === 'api') {
-  const { output } = await agent.stream('Perform two operations.', {
-    runId,
-    memory: { resource: 'loading-resource', thread: threadId },
-  });
-  console.info(`caller-completed:${await output.text}`);
+  await Promise.all(
+    runs.map(async ({ runId, threadId }) => {
+      const result = await agent.stream('Perform two operations.', {
+        runId,
+        memory: { resource: 'loading-resource', thread: threadId },
+      });
+      const output = 'output' in result ? result.output : result;
+      const text = await output.text;
+      if (runs.length > 1) console.info(`paused-result:${runId}:${await output.finishReason}:${text}`);
+      else console.info(`caller-completed:${text}`);
+    }),
+  );
 }
 setInterval(() => {}, 1000);

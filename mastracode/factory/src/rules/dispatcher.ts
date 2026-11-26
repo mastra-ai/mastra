@@ -90,6 +90,7 @@ import {
 } from './dispatch-errors.js';
 import { isStatusEventDecision } from './event-rules.js';
 import { endPhaseGoal, PHASE_GOAL_METADATA_KEY, phaseGoalOf, startPhaseGoal } from './phase-goal.js';
+import { applyPhaseOutcome } from './phase-outcome-move.js';
 import { causeOf, isProviderCallError, publicFailureReason } from './public-failure-reason.js';
 import { isRunBearingDecision } from './run-bearing.js';
 import type { FactoryTransitionService } from './transition-service.js';
@@ -1995,11 +1996,19 @@ export class FactoryDecisionDispatcher {
                 },
                 async () => {
                   await this.#withOpenRunHeartbeat(deliveryId, () => run.settle());
-                  if (run.endReason() !== 'complete' || workingRevision === null || (await run.supersededAtEnd()))
-                    return;
+                  if (run.endReason() !== 'complete' || (await run.supersededAtEnd())) return;
                   // A final tool result can persist after agent_end. Read this binding's trailing
-                  // results before deciding the unchanged card means the run did no work.
+                  // results before applying the run's outcome or deciding the unchanged card means
+                  // the run did no work.
                   await this.#reconcileRunBinding?.(binding);
+                  if (
+                    await applyPhaseOutcome(
+                      { storage: this.#storage, boards: this.#boards, boardEngine: this.#boardEngine },
+                      binding,
+                    )
+                  )
+                    return;
+                  if (workingRevision === null) return;
                   const after = await this.#storage.get({ orgId: record.orgId, id: record.workItemId! });
                   if (after?.revision === workingRevision && !(await kickoffStale())) {
                     const linked = await this.#storage.listLinked({ item: after, limit: 100 });

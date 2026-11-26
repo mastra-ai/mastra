@@ -27,13 +27,13 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "z-ai/glm-5.3": [
+    "z-ai/glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "z-ai/glm-5.3-flash": [
+    "z-ai/glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
