@@ -1,26 +1,19 @@
 import { defaultModelPack } from '@mastra/factory/model-packs';
 import type { ModelPackSet } from '@mastra/factory/model-packs';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
 
 import { useDefaultModelQuery, useSetPersonalModelPacks } from '../../../../../../hooks/use-default-model';
 import { useScopeModelCatalogQuery } from '../../../../../../hooks/useAvailableModels';
-import { SkeletonRows } from '../../../../../ui/SkeletonRows';
 import { ModelPackList } from './ModelPackList';
+import { ModelPackListSkeleton } from './ModelPackListSkeleton';
 
 export function PersonalModelPacks() {
   const defaultsQuery = useDefaultModelQuery();
   const catalogQuery = useScopeModelCatalogQuery('user');
   const savePacks = useSetPersonalModelPacks();
 
-  if (defaultsQuery.isPending) {
-    return (
-      <SkeletonRows label="Loading your model packs" rows={1} className="gap-2">
-        <Skeleton aria-hidden className="h-control-sm w-full rounded-full motion-reduce:before:animate-none" />
-      </SkeletonRows>
-    );
-  }
+  if (defaultsQuery.isPending) return <ModelPackListSkeleton label="Loading your model packs" />;
   if (defaultsQuery.error) {
     return (
       <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">

@@ -177,6 +177,29 @@ for (const engine of ['durable', 'evented', 'native-default', 'native-evented'] 
       expect(types.at(-1)).toBe('finish');
     });
 
+    if (engine === 'evented' || engine === 'native-evented') {
+      it('starts a same-thread follow-up at finish while Redis release is delayed', async () => {
+        llm.on({ endpoint: 'chat' }, { content: 'Done.' });
+        producer.send({ cmd: 'followUpAtFinish', threadId: randomUUID() });
+
+        expect(await producer.next(e => e.type === 'follow-up-done')).toMatchObject({ text: 'Done.' });
+        expect(producer.events.some(e => e.type === 'follow-up-contended')).toBe(true);
+      });
+
+      // The first SET is stream registration, the second is the execution claim,
+      // and the third retries that claim after seeing the first run still owns it.
+      it.each([2, 3])(
+        'starts a same-thread follow-up when Redis releases between SET NX and GET (attempt %i)',
+        async releaseOnFailedSet => {
+          llm.on({ endpoint: 'chat' }, { content: 'Done.' });
+          producer.send({ cmd: 'followUpAtFinish', threadId: randomUUID(), releaseOnFailedSet });
+
+          await producer.next(e => e.type === 'follow-up-ownerless');
+          expect(await producer.next(e => e.type === 'follow-up-done')).toMatchObject({ text: 'Done.' });
+        },
+      );
+    }
+
     it('follows a live run owned by the other process and closes on its finish', async () => {
       llm.on(
         { endpoint: 'chat', predicate: (req: any) => !req.messages.some((m: any) => m.role === 'tool') },

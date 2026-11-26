@@ -1,3 +1,4 @@
+import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { FactorySessionOwner } from '../subscription-session.js';
@@ -439,6 +440,6 @@ describe('dispatchGitLabWebhook', () => {
         tags: { factoryProjectId: 'resource-1', projectRepositoryId: 'project-repository-1' },
       }),
     );
-    expect(a.session.thread.switch).toHaveBeenCalledWith({ threadId: 'thread-a', emitEvent: false });
+    expect(a.session.thread.switch).toHaveBeenCalledWith({ threadId: 'thread-a', emitEvent: false, requestContext: expect.any(RequestContext) });
   });
 });

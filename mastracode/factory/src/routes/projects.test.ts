@@ -1180,7 +1180,7 @@ describe('ProjectRoutes', () => {
       }
     }
 
-    async function seedEnvironment() {
+    async function seedEnvironment(sandbox: FactorySandbox = new StubFactorySandbox()) {
       const seed = await createFactoryStorageForTests();
       const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Env' } });
       const github = seed.sourceControl.forIntegration('github');
@@ -1217,10 +1217,7 @@ describe('ProjectRoutes', () => {
         context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
         await next();
       });
-      mountApiRoutes(
-        app as never,
-        projectRoutes(seed, ['github'], undefined, undefined, { sandbox: new StubFactorySandbox() }),
-      );
+      mountApiRoutes(app as never, projectRoutes(seed, ['github'], undefined, undefined, { sandbox }));
       return { seed, project, github, links, app };
     }
 
@@ -1450,6 +1447,64 @@ describe('ProjectRoutes', () => {
       // A patch that sets the rejected value itself is still refused.
       const refused = await patch(app, project.id, { settings: { memoryMb: 256 } });
       expect(refused.status).toBe(400);
+    });
+
+    describe('a setting whose schema became a list of choices', () => {
+      /** Offers CPU as a list, the way a provider does once a free range turns out to be wrong. */
+      class ChoiceFactorySandbox extends FactorySandbox<{ cpuCount?: number; label?: string }> {
+        readonly provider = 'stub';
+        readonly settings = {
+          type: 'object',
+          properties: {
+            cpuCount: { type: 'integer', default: 2, oneOf: [{ const: 1 }, { const: 2 }, { const: 4 }, { const: 8 }] },
+            label: { type: 'string' },
+          },
+          additionalProperties: false,
+        } as const;
+        create(_ctx: FactorySandboxContext) {
+          throw new Error('not constructed in route tests');
+        }
+      }
+      const read = async (app: Hono, projectId: string) =>
+        (await (await app.request(`/web/factory/projects/${projectId}/environment`)).json()).environment.settings;
+
+      it.each([3, 64, 0])(
+        'drops a stored %i that is not a choice when the environment is read, so the default applies, and saves that',
+        async stored => {
+          const { seed, project, app } = await seedEnvironment(new ChoiceFactorySandbox());
+          await seed.projects.update({
+            orgId: 'org-1',
+            id: project.id,
+            input: { sandboxSettings: { cpuCount: stored, label: 'kept' } },
+          });
+
+          expect(await read(app, project.id)).toEqual({ label: 'kept' });
+          expect((await seed.projects.getById({ id: project.id }))?.sandboxSettings).toEqual({ label: 'kept' });
+        },
+      );
+
+      it('clears the stored settings when the only stored value is not a choice', async () => {
+        const { seed, project, app } = await seedEnvironment(new ChoiceFactorySandbox());
+        await seed.projects.update({ orgId: 'org-1', id: project.id, input: { sandboxSettings: { cpuCount: 3 } } });
+
+        expect(await read(app, project.id)).toEqual({});
+        expect((await seed.projects.getById({ id: project.id }))?.sandboxSettings).toBeNull();
+      });
+
+      it('leaves an offered value alone', async () => {
+        const { seed, project, app } = await seedEnvironment(new ChoiceFactorySandbox());
+        await seed.projects.update({ orgId: 'org-1', id: project.id, input: { sandboxSettings: { cpuCount: 4 } } });
+        const before = (await seed.projects.getById({ id: project.id }))?.updatedAt;
+
+        expect(await read(app, project.id)).toEqual({ cpuCount: 4 });
+        expect((await seed.projects.getById({ id: project.id }))?.updatedAt).toEqual(before);
+      });
+
+      it('still refuses a save that sets a value that is not a choice', async () => {
+        const { project, app } = await seedEnvironment(new ChoiceFactorySandbox());
+
+        expect((await patch(app, project.id, { settings: { cpuCount: 3 } })).status).toBe(400);
+      });
     });
 
     it('reports no sandbox and refuses settings when the factory has none configured', async () => {
@@ -1692,7 +1747,7 @@ describe('ProjectRoutes', () => {
         expect(environment.sandbox.capabilities.builds).toEqual({ available: true, history: true });
         expect(environment.buildTriggers).toEqual({
           schedule: { enabled: false, cron: null, timezone: null, scheduleAvailable: true },
-          push: { enabled: false, debounceMinutes: 10 },
+          push: { enabled: false, debounceMinutes: 30 },
         });
         expect(environment.build).toBeNull();
         expect(environment.buildRequested).toBeUndefined();

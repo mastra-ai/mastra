@@ -70,6 +70,12 @@ export type MastraFactorySandboxOption = FactorySandbox | MastraFactorySandboxCo
 export interface SessionSetupGate {
   /** True when the sandbox already carries a marker for the current setup command. */
   setupDone: boolean;
+  /**
+   * True when the environment build already ran this setup command and it
+   * failed. The boot must not run it again: the same command on a session's
+   * sandbox fails the same way and holds the session up while it does.
+   */
+  failedInBuild?: boolean;
   /** Write the marker once the setup command succeeded. Best-effort. */
   markSetupDone: () => Promise<void>;
 }
@@ -394,24 +400,29 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+/** The probe's exit code for a setup command the environment build ran and saw fail. */
+const SETUP_FAILED_IN_BUILD_EXIT_CODE = 3;
+
 /**
- * The list-form marker probe: trust a repository's marker only when its
- * checkout exists, the marker names this command, and the template did not
- * record the repository in `setup-failed` (a failed per-repo setup still
- * writes the marker because every step ran; the failure list says it failed).
+ * The list-form marker probe. A repository's setup is `done` when its
+ * checkout exists and the marker names this command. The template writes the
+ * marker even when the command failed, because every step ran, and records
+ * the repository in `setup-failed`: that is `failed-in-build`. Anything else,
+ * including a probe that could not run, is `missing`.
  */
-async function repoMarkerMatches(
+async function probeRepoSetup(
   sandbox: WorkspaceSandbox,
   root: string,
   repoDir: string,
   content: string,
-): Promise<boolean> {
+): Promise<'done' | 'failed-in-build' | 'missing'> {
   const marker = `${root}/${repoSetupMarkerPath(repoDir)}`;
   const failed = `${root}/${SETUP_FAILED_MARKER_PATH}`;
   const probe = await sandbox.executeCommand!(
-    `test -d "${root}/${repoDir}/.git" && test -f "${marker}" && [ "$(cat "${marker}")" = ${shellQuote(content)} ] && ! grep -qxF -- ${shellQuote(repoDir)} "${failed}" 2>/dev/null`,
+    `test -d "${root}/${repoDir}/.git" && test -f "${marker}" && [ "$(cat "${marker}")" = ${shellQuote(content)} ] || exit 1; if grep -qxF -- ${shellQuote(repoDir)} "${failed}" 2>/dev/null; then exit ${SETUP_FAILED_IN_BUILD_EXIT_CODE}; fi`,
   );
-  return probe.exitCode === 0;
+  if (probe.exitCode === 0) return 'done';
+  return probe.exitCode === SETUP_FAILED_IN_BUILD_EXIT_CODE ? 'failed-in-build' : 'missing';
 }
 
 /** Write a repository's marker and drop it from `setup-failed`. Best-effort, like `writeMarker`. */
@@ -474,21 +485,25 @@ export function createEnvironmentSetupHook(
     for (const repo of environment.repos) {
       const repoDir = repositoryDirectoryName(repo.slug);
       const marker = repo.setupCommand?.trim() ? setupMarkerContent(repo.setupCommand) : undefined;
-      const setupDone = marker
-        ? await timedPhase(`workspace.setup-marker(${repoDir})`, () =>
-            repoMarkerMatches(sandbox, root, repoDir, marker),
-          )
-        : true;
+      const setup = marker
+        ? await timedPhase(`workspace.setup-marker(${repoDir})`, () => probeRepoSetup(sandbox, root, repoDir, marker))
+        : 'done';
+      const setupDone = setup === 'done';
+      const failedInBuild = setup === 'failed-in-build';
       if (marker) {
-        process.stderr.write(
-          `[factory:setup] ${repo.slug}: ${setupDone ? 'marker matches, skipping setup command' : 'no matching marker, setup command will run'} (${root}/${repoSetupMarkerPath(repoDir)})\n`,
-        );
+        const outcome = setupDone
+          ? 'marker matches, skipping setup command'
+          : failedInBuild
+            ? 'setup command failed in the environment build, not running it again'
+            : 'no matching marker, setup command will run';
+        process.stderr.write(`[factory:setup] ${repo.slug}: ${outcome} (${root}/${repoSetupMarkerPath(repoDir)})\n`);
       }
       repos.push({
         ...repo,
         dir: `${root}/${repoDir}`,
         gate: {
           setupDone,
+          ...(failedInBuild ? { failedInBuild } : {}),
           markSetupDone: () => (marker ? writeRepoMarker(sandbox, root, repoDir, marker) : Promise.resolve()),
         },
       });

@@ -17,7 +17,6 @@ import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { factoryWorkItemUrl } from '../links.js';
 import { transitionBodySchema } from '../routes/contracts.js';
-import { MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
 import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
@@ -33,7 +32,15 @@ import {
   retryFactoryDecision,
 } from '../work-items/decision-actions.js';
 import type { FactoryDecisionActionResult } from '../work-items/decision-actions.js';
-import { MAX_TEXT, findWorkItem, workItemRefSchema, truncate, workItemNotFound, workItemStage } from './read-tools.js';
+import {
+  MAX_TEXT,
+  findWorkItem,
+  resolveBoardRef,
+  workItemRefSchema,
+  truncate,
+  workItemNotFound,
+  workItemStage,
+} from './read-tools.js';
 import { requirePerson } from './scope.js';
 import type { FactoryToolScope } from './scope.js';
 
@@ -197,16 +204,20 @@ export function createFactoryWorkItemTools(
             .string()
             .trim()
             .min(1)
-            .max(MAX_BOARD_IDENTIFIER_LENGTH)
+            .max(200)
             .optional()
-            .describe("The board's key, when the person picked one; files it in that board's first phase."),
+            .describe(
+              'The board the person picked, by its id (e.g. "work") or its displayed name; files it in that board\'s first phase.',
+            ),
         })
         .strict(),
-      execute: async ({ title, description, repository, board }) => {
+      execute: async ({ title, description, repository, board: boardRef }) => {
         if (repository) await requireRepository(repository);
+        const boards = await toBoardSource(deps.boards).load(project);
+        const board = boardRef === undefined ? undefined : resolveBoardRef(boards, boardRef);
         const created = await createFactoryWorkItem({
           workItems: deps.workItems,
-          boards: await toBoardSource(deps.boards).load(project),
+          boards,
           boardEngine: deps.boardEngine,
           intakeRoutes: deps.intakeRoutes,
           intakeEvaluator: deps.intakeEvaluator,

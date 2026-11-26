@@ -13,6 +13,7 @@ import type { AvailableModelOption } from '../../../../../../hooks/useAvailableM
 import { THINKING_LEVEL_LABELS } from '../../../../chat/services/thinkingLevels';
 import { ModelPackEntryLabel } from './ModelPackEntryLabel';
 import { ModelPackModelPicker } from './ModelPackModelPicker';
+import { PACK_FALLBACK_CLASS, PACK_MODEL_ROW_CLASS } from './packLayout';
 
 const EMPTY_CATALOG: AvailableModelOption[] = [];
 
@@ -57,7 +58,7 @@ export function ModelPackTimeline({
               <li
                 key={label}
                 ref={index === focusIndex ? focusModelPicker : undefined}
-                className={cn('group/model relative min-w-0', index > 0 && 'ms-5 ps-2')}
+                className={cn('group/model relative min-w-0', index > 0 && PACK_FALLBACK_CLASS)}
               >
                 {index > 0 && (
                   <span
@@ -114,7 +115,7 @@ export function ModelPackTimeline({
                     )}
                   </div>
                 ) : (
-                  <div className="text-label flex min-w-0 items-center gap-1.5 px-3 py-1">
+                  <div className={PACK_MODEL_ROW_CLASS}>
                     <span className="sr-only">{label}: </span>
                     <ModelPackEntryLabel entry={entry} renderProviderIcon={renderProviderIcon} />
                     <span className="sr-only">, thinking: {THINKING_LEVEL_LABELS[entry.thinkingLevel]}</span>

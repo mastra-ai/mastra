@@ -2,7 +2,10 @@ import type { GlobalSettings, StorageSettings } from '@mastra/code-sdk/onboardin
 import { describe, expect, it } from 'vitest';
 
 import {
+  addHeaderToCustomProviderInSettings,
   addModelToCustomProviderInSettings,
+  endpointModelsToOffer,
+  headersForCustomProviderUrlChange,
   removeCustomProviderFromSettings,
   removeModelFromCustomProviderInSettings,
   upsertCustomProviderInSettings,
@@ -162,5 +165,45 @@ describe('custom provider model mutations', () => {
 
     expect(removed).toBe(true);
     expect(settings.customProviders).toEqual([]);
+  });
+});
+
+describe('custom provider headers', () => {
+  it('refuses a header whose name a saved header already uses in another case', () => {
+    const saved = [{ name: 'X-Org', value: 'org-1', secret: true }];
+    const settings = createSettings({
+      customProviders: [{ name: 'Acme', url: 'https://llm.acme.dev/v1', models: [], headers: saved }],
+    });
+
+    expect(addHeaderToCustomProviderInSettings(settings, 'acme', { name: 'x-org', value: 'org-2' })).toBeTruthy();
+    expect(settings.customProviders[0]?.headers).toEqual(saved);
+  });
+
+  it.each([
+    ['the same origin', 'https://llm.acme.dev/v2/', ['X-Secret', 'X-Legacy', 'X-Region']],
+    ['another host', 'https://proxy.example.com/v1', ['X-Region']],
+    ['another port', 'https://llm.acme.dev:8443/v1', ['X-Region']],
+  ])('keeps secret headers only on the same origin: %s', (_case, nextUrl, keptNames) => {
+    const headers = [
+      { name: 'X-Secret', value: 'secret-value', secret: true },
+      { name: 'X-Legacy', value: 'saved-before-flags' },
+      { name: 'X-Region', value: 'eu', secret: false },
+    ];
+
+    const { kept } = headersForCustomProviderUrlChange(headers, 'https://llm.acme.dev/v1', nextUrl);
+
+    expect(kept.map(header => header.name)).toEqual(keptNames);
+  });
+});
+
+describe('endpointModelsToOffer', () => {
+  it('leaves out configured ids, ids saved under the provider prefix and menu labels', () => {
+    const offered = endpointModelsToOffer(
+      ['acme/acme-small', 'acme-small', 'acme/acme-large', 'other/acme-large', 'Done', 'Add all'],
+      { name: 'Acme', models: ['acme-small'] },
+      ['Add all', 'Done'],
+    );
+
+    expect(offered).toEqual(['acme-large', 'other/acme-large']);
   });
 });

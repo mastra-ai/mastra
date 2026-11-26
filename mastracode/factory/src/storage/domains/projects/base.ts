@@ -9,7 +9,7 @@ import type { ModelPack, ModelPackSet } from '../../../model-packs.js';
 import { stampNewProjectIntake } from '../boards/base.js';
 import { FACTORY_INTAKE_ROUTE_LOCKS_SCHEMA } from '../boards/schemas.js';
 
-export const DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES = 10;
+export const DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES = 30;
 export const FACTORY_MODEL_SCOPES = ['factory', 'user', 'hybrid'] as const;
 export type FactoryModelScope = (typeof FACTORY_MODEL_SCOPES)[number];
 /** The single credential scope one session or run resolves from; `hybrid` is never effective. */
@@ -310,6 +310,8 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
         description: input.description ?? null,
         default_model_id: input.defaultModelId ?? null,
         model_scope: input.modelScope ?? 'hybrid',
+        // Written here because a database created earlier keeps its old column default.
+        build_push_debounce_minutes: DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES,
         created_at: now,
         updated_at: now,
       });

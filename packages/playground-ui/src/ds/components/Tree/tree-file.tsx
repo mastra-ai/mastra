@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useTreeContext, useTreeDepth } from './tree-context';
+import { useTreeContext, useTreeDepth, useTreeFileIndent } from './tree-context';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -12,6 +12,7 @@ export interface TreeFileProps {
 export const TreeFile = React.forwardRef<HTMLLIElement, TreeFileProps>(({ id, className, children }, ref) => {
   const treeCtx = useTreeContext();
   const depth = useTreeDepth();
+  const indent = useTreeFileIndent();
   const isSelected = id != null && treeCtx?.selectedId === id;
 
   const handleClick = (e: React.MouseEvent<HTMLLIElement>) => {
@@ -48,8 +49,7 @@ export const TreeFile = React.forwardRef<HTMLLIElement, TreeFileProps>(({ id, cl
         isSelected && 'bg-fill-hover text-foreground',
         className,
       )}
-      // +18 offsets past the chevron (size-3 = 12px) + flex gap (gap-1.5 = 6px) that folders have
-      style={{ paddingLeft: depth * 12 + 18 }}
+      style={{ paddingLeft: indent }}
       onClick={handleClick}
       onFocus={handleFocus}
       onKeyDown={handleKeyDown}

@@ -129,6 +129,10 @@ import {
 } from './create-inngest-agentic-workflow';
 import { keepSuspendedRunScopes } from './resume-scopes';
 
+// Matches Core's DURABLE_CONTEXT_SEGMENT_KEY. Inlined rather than imported because the peer range
+// admits Core releases that predate that export; older Core ignores the key.
+const DURABLE_CONTEXT_SEGMENT_KEY = '__mastra_durableContextSegment';
+
 class InngestAgentPubSubRouter extends PubSub {
   constructor(
     private readonly defaultPubsub: PubSub,
@@ -1400,9 +1404,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   async function triggerWorkflow(
     runId: string,
     workflowInput: any,
-    tracingOptions?: { traceId: string; parentSpanId: string },
-    actor?: ActorSignal,
-    deadline?: RunDeadline,
+    tracingOptions: { traceId: string; parentSpanId: string } | undefined,
+    actor: ActorSignal | undefined,
+    deadline: RunDeadline | undefined,
+    contextSegment: string,
   ): Promise<void> {
     const eventName = `workflow.${InngestDurableStepIds.AGENTIC_LOOP}`;
 
@@ -1412,7 +1417,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         inputData: workflowInput,
         runId,
         resourceId: workflowInput.state?.resourceId,
-        requestContext: withSegmentDeadline(workflowInput.requestContextEntries ?? {}, deadline),
+        requestContext: withSegmentDeadline(
+          { ...workflowInput.requestContextEntries, [DURABLE_CONTEXT_SEGMENT_KEY]: contextSegment },
+          deadline,
+        ),
         tracingOptions,
         actor,
       }),
@@ -1616,6 +1624,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         { onExternalAbort: () => void requestRemoteAbort(runId) },
       );
       registryEntry.abortController = abortController;
+      const contextSegment = crypto.randomUUID();
+      registryEntry.requestContextSegment = contextSegment;
       const { clear: clearTotalTimeout, deadline: segmentDeadline } = armTotalTimeout(
         registryEntry,
         abortController,
@@ -1757,7 +1767,14 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             return;
           }
           try {
-            await triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor, segmentDeadline);
+            await triggerWorkflow(
+              runId,
+              workflowInput,
+              tracingOptions,
+              streamOptions?.actor,
+              segmentDeadline,
+              contextSegment,
+            );
           } catch (error) {
             if (persistedRunning) await deleteRunSnapshots(runId);
             throw error;
@@ -2078,6 +2095,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // context, as core `DurableAgent.resume` does.
       existingEntry.requestContext = callbackOptions.requestContext;
       existingEntry.requestContextRebuilt = false;
+      const contextSegment = crypto.randomUUID();
+      existingEntry.requestContextSegment = contextSegment;
       // The resumed execution reports under its own span pair. The claim is held, so this resume is
       // the one the workers run; they end the pair where the run finishes or parks again.
       const resumeSegment = openResumeSegment(runId, suspendedSnapshot, callbackOptions.requestContext);
@@ -2304,7 +2323,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             inputData: resumeData,
             runId,
             resourceId: resumeOptions?.resourceId,
-            requestContext: withSegmentDeadline(requestContext, segmentDeadline),
+            requestContext: withSegmentDeadline(
+              { ...requestContext, [DURABLE_CONTEXT_SEGMENT_KEY]: contextSegment },
+              segmentDeadline,
+            ),
             tracingOptions,
             actor: resumeOptions?.actor,
             resume: {

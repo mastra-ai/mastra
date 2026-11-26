@@ -116,6 +116,9 @@ class OrgCustomProvidersSnapshot {
         name: record.name,
         url: record.url,
         apiKey: record.apiKey ?? undefined,
+        // Left out when unset, as `parseCustomProviders` does for settings.json.
+        ...(record.authScheme ? { authScheme: record.authScheme } : {}),
+        ...(record.headers.length > 0 ? { headers: record.headers } : {}),
         models: record.models,
       };
       const owned = record.userId === null ? organization : (members.get(record.userId) ?? []);

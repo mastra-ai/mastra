@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 
 import { TaskList } from '@/ds/components/ai/task-list';
 import { ChatShell } from '@/ds/components/ChatShell';
-import { Skeleton } from '@/ds/components/Skeleton';
+import { Skeleton, SkeletonText } from '@/ds/components/Skeleton';
 import { Spinner } from '@/ds/components/Spinner';
 import { Sizes } from '@/ds/tokens/sizes';
 import { cn } from '@/utils/cn';
@@ -125,8 +125,17 @@ export function TranscriptHistoryLoader({ loading }: { loading: boolean }) {
 export function TranscriptLoading() {
   return (
     <div role="status" aria-label="Loading messages" className="flex w-full flex-col gap-6">
-      {[0, 1, 2].map(row => (
-        <Skeleton key={row} aria-hidden className="h-16 w-full rounded-lg motion-reduce:before:animate-none" />
+      {[0, 1, 2].map(turn => (
+        <div key={turn} aria-hidden className="flex flex-col">
+          {['w-1/2', 'w-1/3'].map(width => (
+            <div key={width} className="flex h-6 items-center gap-2">
+              <Skeleton className="size-4 shrink-0 rounded-sm motion-reduce:before:animate-none" />
+              <Skeleton className={cn('h-3', width, 'motion-reduce:before:animate-none')} />
+            </div>
+          ))}
+          <SkeletonText line="text-body" className="w-full motion-reduce:before:animate-none" />
+          <SkeletonText line="text-body" className="w-2/3 motion-reduce:before:animate-none" />
+        </div>
       ))}
     </div>
   );

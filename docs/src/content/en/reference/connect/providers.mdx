@@ -11,7 +11,7 @@ import { ProviderLogo } from '@site/src/components/connect/provider-logo';
 
 # Provider toolsets
 
-This page documents generated toolsets for 34 providers (1260 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
+This page documents generated toolsets for 35 providers (1263 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
 
 Tool keys are stable identifiers of the form `<provider>_<action>` and are the values accepted by `allowTools` and `disallowTools`. Toolsets are versioned with the package: the exact list depends on the installed `@mastra/connect` version, and this page reflects the version it was generated from.
 
@@ -23,6 +23,7 @@ MCP providers ([Attio](/integrations/crm/attio), [Canva](/integrations/other/can
 | <ProviderLogo slug="clerk" mono /> [Clerk](#clerk) | `clerk` | 42 |
 | <ProviderLogo slug="discord" /> [Discord](#discord) | `discord` | 34 |
 | <ProviderLogo slug="elevenlabs" mono /> [ElevenLabs](#elevenlabs) | `elevenlabs` | 35 |
+| <ProviderLogo src="https://app.nango.dev/images/template-logos/exa.svg" /> [Exa](#exa) | `exa` | 3 |
 | <ProviderLogo slug="figma" /> [Figma](#figma) | `figma` | 29 |
 | <ProviderLogo src="https://app.nango.dev/images/template-logos/fireflies.svg" /> [Fireflies.ai](#firefliesai) | `fireflies` | 27 |
 | <ProviderLogo slug="github" mono /> [GitHub](#github) | `github` | 49 |
@@ -204,6 +205,22 @@ Provider ID: `elevenlabs` · 35 tools
 | `elevenlabs_speech_to_text` | Transcribe audio or video with ElevenLabs Scribe, from base64 audio or a URL. Can tag sound events and label speakers. Uses transcription credits. |
 | `elevenlabs_text_to_speech` | Convert text to speech with an ElevenLabs voice. Returns the audio base64-encoded; the model only sees a summary of it. Uses character credits. |
 | `elevenlabs_update_agent` | Update a Conversational AI agent |
+
+## Exa
+
+Provider ID: `exa` · 3 tools
+
+:::note
+
+Exa bills each search, contents, and answer call to the API key on the connection. The `deep` search types run multi-step searches that take several seconds and cost more than `auto` or `lite`.
+
+:::
+
+| Tool | Description |
+| - | - |
+| `exa_answer` | Generate an AI answer to a question, backed by live web citations. |
+| `exa_get_contents` | Retrieve full page text, highlights, or a summary for one or more URLs. |
+| `exa_search` | Search the web with Exa and return ranked results, optionally with each page's text, highlights, or summary. |
 
 ## Figma
 

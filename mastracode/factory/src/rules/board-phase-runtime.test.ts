@@ -322,6 +322,17 @@ it.skipIf(!postgresUrl || !redisUrl)(
             timeout: 15_000,
           })
           .toBe(title);
+        // The title comes from finalization, so it is persisted even when the model step fails.
+        // The reply only exists if the model step's Factory processors could read the live controller.
+        await expect
+          .poll(
+            async () => {
+              const { messages } = await memory!.listMessages({ threadId: sessionId, perPage: false });
+              return JSON.stringify(messages.filter(message => message.role === 'assistant'));
+            },
+            { timeout: 15_000 },
+          )
+          .toContain('The login flow is repaired.');
       } finally {
         await runtime.close();
       }

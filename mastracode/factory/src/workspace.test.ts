@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => ({
   updates: [] as Array<{ set: Record<string, unknown>; where: unknown }>,
   /** When set, the stub models a local-provider callback rooted at <localRoot>/<sessionId>. */
   localRoot: null as string | null,
+  /** How the stub reports its start: a fresh sandbox, or a reattach to an existing one. */
+  startOutcome: 'created' as 'created' | 'connected',
   /** When false, the stub models a provider with no separate physical id (undefined `sandboxId`). */
   physicalId: true,
   createSandbox: vi.fn((ctx: { sessionId: string; sandboxId?: string }) => {
@@ -47,7 +49,7 @@ const mocks = vi.hoisted(() => ({
         // the sandbox errored and rejects start().
         sandbox.status = 'running';
         try {
-          await onStart?.({ sandbox, outcome: 'created' });
+          await onStart?.({ sandbox, outcome: mocks.startOutcome });
         } catch (error) {
           sandbox.status = 'error';
           throw error;
@@ -197,6 +199,7 @@ afterEach(async () => {
   mocks.updates.splice(0);
   mocks.createSandbox.mockClear();
   mocks.localRoot = null;
+  mocks.startOutcome = 'created';
   mocks.markerPresent = false;
   __clearSessionSandboxesForTests();
   __clearSessionEnvironmentsForTests();
@@ -4136,6 +4139,7 @@ describe('factory environment sandbox context', () => {
     project?: Record<string, unknown>;
     workspaceRegistry?: FactoryWorkspaceRegistry;
     sandboxEnvs?: CreateWorkspaceFactoryOptions['sandboxEnvs'];
+    onSandboxCreated?: CreateWorkspaceFactoryOptions['onSandboxCreated'];
   }) {
     const github = fakeGithubIntegration();
     const repositories = new Map(
@@ -4173,6 +4177,7 @@ describe('factory environment sandbox context', () => {
       projects: projects as any,
       workspaceRegistry: options.workspaceRegistry,
       ...(options.sandboxEnvs ? { sandboxEnvs: options.sandboxEnvs } : {}),
+      ...(options.onSandboxCreated ? { onSandboxCreated: options.onSandboxCreated } : {}),
     });
     return { resolver, projects, sandbox, github };
   }
@@ -4345,6 +4350,81 @@ describe('factory environment sandbox context', () => {
     expect(mocks.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repository-2' });
   });
 
+  it.each([true, false])(
+    'asks for the commits the active template was built from (build on push: %s)',
+    async buildOnPushEnabled => {
+      const built = { 'octocat/hello': 'a'.repeat(40), 'octocat/docs': 'b'.repeat(40) };
+      const { resolver } = environmentFixture({
+        links: twoLinks,
+        project: { buildOnPushEnabled, activeTemplateHeads: built },
+      });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+
+      await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+      const ctx = mocks.createSandbox.mock.calls[0]![0] as any;
+      // The same answers a build gives the provider, so the session names the template that build made.
+      await expect(ctx.resolveHead('https://github.com/octocat/hello.git')).resolves.toBe(built['octocat/hello']);
+      await expect(ctx.resolveHead('https://github.com/octocat/docs.git')).resolves.toBe(built['octocat/docs']);
+      // A repository added since that build is left to the template's own lookup.
+      await expect(ctx.resolveHead('https://github.com/octocat/new.git')).resolves.toBeUndefined();
+    },
+  );
+
+  it('leaves the commits to the template when no template was built yet', async () => {
+    const onSandboxCreated = vi.fn();
+    const { resolver } = environmentFixture({
+      links: twoLinks,
+      project: { buildOnPushEnabled: true, activeTemplateHeads: null },
+      onSandboxCreated,
+    });
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+
+    const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    await workspace!.sandbox!.getInfo!();
+
+    expect('resolveHead' in (mocks.createSandbox.mock.calls[0]![0] as any)).toBe(false);
+    // The template's own lookup already starts the first build.
+    expect(onSandboxCreated).not.toHaveBeenCalled();
+  });
+
+  it('asks for a rebuild when a sandbox is created from the built template, not when a workspace is only resolved', async () => {
+    const onSandboxCreated = vi.fn();
+    const { resolver } = environmentFixture({
+      links: twoLinks,
+      project: { activeTemplateHeads: { 'octocat/hello': 'a'.repeat(40) } },
+      onSandboxCreated,
+    });
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+
+    const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    expect(onSandboxCreated).not.toHaveBeenCalled();
+
+    await workspace!.sandbox!.getInfo!();
+    expect(onSandboxCreated).toHaveBeenCalledTimes(1);
+    expect(onSandboxCreated).toHaveBeenCalledWith(expect.objectContaining({ id: 'factory-1' }));
+  });
+
+  it('does not ask for a rebuild when a sandbox reattaches instead of booting from the template', async () => {
+    mocks.startOutcome = 'connected';
+    const onSandboxCreated = vi.fn();
+    const { resolver } = environmentFixture({
+      links: twoLinks,
+      project: { activeTemplateHeads: { 'octocat/hello': 'a'.repeat(40) } },
+      onSandboxCreated,
+    });
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+
+    const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    await workspace!.sandbox!.getInfo!();
+
+    expect(onSandboxCreated).not.toHaveBeenCalled();
+  });
+
   it('passes no working directory or workspace setup when the project leaves them unset', async () => {
     const { resolver, sandbox } = environmentFixture({
       links: twoLinks,
@@ -4419,7 +4499,7 @@ describe('factory environment sandbox context', () => {
      */
     async function boot(
       resolver: (args: any) => Promise<any>,
-      markers: { repos?: Record<string, boolean>; workspace?: boolean } = {},
+      markers: { repos?: Record<string, boolean | 'failed-in-build'>; workspace?: boolean } = {},
     ) {
       const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
       const sandbox = mocks.createSandbox.mock.results[0]!.value as { exec: ReturnType<typeof vi.fn> };
@@ -4428,7 +4508,8 @@ describe('factory environment sandbox context', () => {
         const text = String(command);
         const repoProbe = /test -d "[^"]*\/([^/"]+)\/\.git" && test -f/.exec(text);
         if (repoProbe) {
-          return { exitCode: markers.repos?.[repoProbe[1]!] ? 0 : 1, stdout: '', stderr: '' };
+          const marker = markers.repos?.[repoProbe[1]!];
+          return { exitCode: marker === 'failed-in-build' ? 3 : marker ? 0 : 1, stdout: '', stderr: '' };
         }
         if (text.includes('workspace-setup"') && text.startsWith('test -f')) {
           return { exitCode: markers.workspace ? 0 : 1, stdout: '', stderr: '' };
@@ -5040,6 +5121,28 @@ describe('factory environment sandbox context', () => {
           error: 'Setup command failed (exit 1): fatal: https://***@github.com/octocat/docs',
         },
       ]);
+      warn.mockRestore();
+    });
+
+    it('starts without running a setup command the environment build already saw fail, and reports it failed', async () => {
+      const { resolver, github } = environmentFixture({
+        links: [twoLinks[0]!, { ...twoLinks[1]!, setupCommand: 'pnpm docs' }],
+      });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await expect(
+        boot(resolver, { repos: { hello: 'failed-in-build', docs: 'failed-in-build' }, workspace: true }),
+      ).resolves.toBeDefined();
+
+      expect(mocks.runSetupCommand).not.toHaveBeenCalled();
+      expect(peekSessionEnvironment('session-a')?.repositories).toMatchObject([
+        { slug: 'octocat/hello', setupStatus: 'failed' },
+        { slug: 'octocat/docs', setupStatus: 'failed' },
+      ]);
+      // The build's own result stays on the repository: a session start has nothing new to record.
+      expect((github.sourceControlStorage.projectRepositories as any).setBuildStatus).not.toHaveBeenCalled();
       warn.mockRestore();
     });
 
