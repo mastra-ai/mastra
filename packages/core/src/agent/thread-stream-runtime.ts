@@ -6580,8 +6580,9 @@ export class AgentThreadStreamRuntime {
           state.threadKeysByRunId.delete(nextRunId);
           this.#cleanupPreparedRun(state, nextRunId);
           if (!owns.acquired) {
-            // The rows stay pending: a claim takes every pending row of the thread, so the run holding it claims them
-            // if it reads this store, else the thread's next run that does. This follow-up never started.
+            // The rows stay pending. A run holding the thread that reads this store claims them at its next model
+            // request, or, past its last one, its own end-of-run check starts a follow-up with them; otherwise the
+            // thread's next run that reads this store claims them. This follow-up never started.
             state.storedSignals.returnFollowUpInput(key, signal.id);
             return;
           }
