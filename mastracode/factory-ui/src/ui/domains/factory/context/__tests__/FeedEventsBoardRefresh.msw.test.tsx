@@ -433,6 +433,37 @@ describe('FeedEventsProvider, on the board', () => {
       expect(shownStages()).toEqual(['review']);
     });
 
+    it('settles from an answer the feed carried before the 202 arrived', async () => {
+      const stream = pushableFeedStream(PROJECT_ID);
+      server.use(stream.handler);
+      const { requests, board } = boardEndpoints();
+      const answered = Promise.withResolvers<void>();
+      server.use(
+        http.post(`${BOARD_URL}/item-1/transition`, async () => {
+          // The move settled before the route's answer got back: its frame comes first.
+          board.stage = 'review';
+          stream.move({ inputId: 'input-1', status: 'accepted' });
+          stream.push();
+          await answered.promise;
+          return HttpResponse.json({ inputId: 'input-1' }, { status: 202 });
+        }),
+      );
+      const rendered = await renderQuietBoard(stream);
+      const [item] = rendered.result.current.cards.data ?? [];
+      if (!item) throw new Error('the board never loaded its card');
+      const before = { ...requests };
+      act(() => rendered.result.current.move.mutate({ item, board: 'review', stage: 'review' }));
+      // The frame after the answer was read, so the answer was too, with nobody waiting for it yet.
+      await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
+      await waitFor(() => expect(requests.decisions).toBeGreaterThan(before.decisions));
+      expect(rendered.result.current.move.isPending).toBe(true);
+
+      answered.resolve();
+      await waitFor(() => expect(rendered.result.current.move.data).toEqual({ status: 'landed', inputId: 'input-1' }));
+      await waitForMutationsIdle(rendered.client);
+      expect(rendered.result.current.cards.data?.[0]?.stages).toEqual(['review']);
+    });
+
     it('puts the card back when the feed says it was refused', async () => {
       const stream = pushableFeedStream(PROJECT_ID);
       const { rendered, shownStages } = await submitMove(stream);

@@ -922,12 +922,14 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             },
           };
           // An engine whose moves take a while answers as soon as the move looks good, and the
-          // board hears how it ended on its feed stream, under the input id answered here.
-          const submitted = boardEngine.submitMove ? await boardEngine.submitMove(request) : undefined;
-          if (submitted && 'inputId' in submitted) {
+          // board hears how it ended on its feed stream, under the input id answered here. Without
+          // a way to tell the board, the move is answered in full, as before.
+          const { announceMove } = this.deps;
+          const submitted = boardEngine.submitMove && announceMove ? await boardEngine.submitMove(request) : undefined;
+          if (submitted && announceMove && 'inputId' in submitted) {
             const { inputId } = submitted;
             const announce = (move: FeedMove) =>
-              this.deps.announceMove?.({ orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId }, move);
+              announceMove({ orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId }, move);
             void submitted.settled.then(
               settled =>
                 announce(
@@ -942,7 +944,8 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             );
             return c.json({ inputId }, 202);
           }
-          const result = submitted ? submitted.answered : await boardEngine.requestMove(request);
+          const result =
+            submitted && 'answered' in submitted ? submitted.answered : await boardEngine.requestMove(request);
           if (result.status === 'accepted') return c.json({ result });
           return c.json({ result }, result.code === 'stale' ? 409 : 422);
         },

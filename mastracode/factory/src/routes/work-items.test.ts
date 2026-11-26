@@ -32,6 +32,8 @@ let engineInputs: FactoryTransitionRequest[] = [];
 const deletedCards: string[] = [];
 /** Whether the routes' board engine takes moves on to settle later, as an engine with `submitMove` does. */
 let submitsMoves = false;
+let announcesMoves = true;
+let settlingFails = false;
 const SUBMITTED_INPUT_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 /** What the routes told the project's open boards about moves answered `202`. */
 const announcedMoves: Array<{ scope: { orgId: string; factoryProjectId: string }; move: FeedMove }> = [];
@@ -112,7 +114,12 @@ function buildApp(
       // No intake rules to read: the route list, as before intake order.
       intakeEvaluator: 'route-list',
       queueHealth: seed.queueHealth,
-      announceMove: (scope, move) => void announcedMoves.push({ scope, move }),
+      // Absent when a test turns it off: a host that wired no way to tell the board.
+      get announceMove() {
+        if (!announcesMoves) return undefined;
+        return (scope: { orgId: string; factoryProjectId: string }, move: FeedMove) =>
+          void announcedMoves.push({ scope, move });
+      },
       boardEngine: {
         cardDeleted: async card => void deletedCards.push(card.workItemId),
         // Absent unless a test turns it on: the default engine has no `submitMove`.
@@ -122,6 +129,9 @@ function buildApp(
             const card = await seed.workItems.get({ orgId: input.orgId, id: input.workItemId });
             // The check an engine can make right away; the rest of the move settles later.
             if (card?.revision !== input.expectedRevision) return { answered: await this.requestMove(input) };
+            if (settlingFails) {
+              return { inputId: SUBMITTED_INPUT_ID, settled: Promise.reject(new Error('The board run is gone.')) };
+            }
             return { inputId: SUBMITTED_INPUT_ID, settled: this.requestMove(input) };
           };
         },
@@ -919,6 +929,8 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
     });
     afterEach(() => {
       submitsMoves = false;
+      announcesMoves = true;
+      settlingFails = false;
     });
 
     it('answers 202 with an input id, and tells the board when the move landed', async () => {
@@ -958,6 +970,33 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
         reason: expect.stringContaining('does not allow moving from intake to missing'),
       });
       expect((await listItems())[0]?.stages).toEqual(['intake']);
+    });
+
+    it('tells the board the move failed when it broke after the 202', async () => {
+      settlingFails = true;
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const item = await createItem();
+      const res = await transition(item);
+      expect(res.status).toBe(202);
+
+      await vi.waitFor(() => expect(announcedMoves).toHaveLength(1));
+      expect(announcedMoves[0]?.move).toEqual({
+        inputId: SUBMITTED_INPUT_ID,
+        status: 'rejected',
+        code: 'failed',
+        reason: 'Factory could not move the card. Try again.',
+      });
+      expect((await listItems())[0]?.stages).toEqual(['intake']);
+      warn.mockRestore();
+    });
+
+    it('answers the whole move, as before, when nothing can tell the board how it ended', async () => {
+      announcesMoves = false;
+      const item = await createItem();
+      const res = await transition(item);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ result: { status: 'accepted', stage: 'planning' } });
+      expect((await listItems())[0]?.stages).toEqual(['planning']);
     });
   });
 
