@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createAnthropic } from '@ai-sdk/anthropic-v6';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider-v6';
 import { MastraError } from '../../../error/index.js';
@@ -67,15 +68,19 @@ export class MastraGateway extends MastraModelGateway {
 
   /**
    * Gateway v2 deployments are signaled by MASTRA_GATEWAY_VERSION=v2 (set by the platform)
-   * or by a v2 (organization) API key prefix, which predates the env var signal.
+   * or by a v2 (organization) API key prefix, which predates the env var signal. A v1 project
+   * key (`msk_`) is always served by v1, so it wins over the env var.
    * Keep in sync with isGatewayV2 in @mastra/server's gateway-memory-client.
    * Public so the server can ask a registered gateway instance for its
-   * effective v2 state (the instance may carry a v2 key via config.apiKey
+   * effective v2 state (the instance may carry a key via config.apiKey
    * that env-only checks cannot see).
    */
   isV2(): boolean {
-    if (process.env['MASTRA_GATEWAY_VERSION'] === 'v2') return true;
     const key = this.config?.apiKey ?? process.env['MASTRA_GATEWAY_API_KEY'];
+    // A v1 project key (`msk_`) is always served by v1, so it wins over the env var.
+    // The v2 prefixes (`msk-gateway-`, `mskv2_`) do not start with `msk_`.
+    if (key?.startsWith('msk_')) return false;
+    if (process.env['MASTRA_GATEWAY_VERSION'] === 'v2') return true;
     return !!key && (key.startsWith('msk-gateway-') || key.startsWith('mskv2_'));
   }
 
@@ -85,27 +90,12 @@ export class MastraGateway extends MastraModelGateway {
     let models = openrouterConfig?.models ?? [];
     if (isV2) {
       const apiKey = await this.getApiKey();
-      const response = await (this.config?.customFetch ?? fetch)(`${this.getBaseUrl()}/v1/models`, {
-        headers: this.config?.customFetch ? withGatewayAuthHeader(apiKey) : { Authorization: `Bearer ${apiKey}` },
-        signal: AbortSignal.timeout(10_000),
-      });
-      if (!response.ok) throw new Error(`Gateway model catalog unavailable (${response.status})`);
-      const body: unknown = await response.json();
-      if (!body || typeof body !== 'object' || !('data' in body) || !Array.isArray(body.data)) {
-        throw new Error('Gateway model catalog has an invalid response');
-      }
-      // The Mastra gateway model uses the OpenAI-compatible chat transport.
-      // Models offered only through another endpoint cannot be selected here.
-      models = body.data
-        .filter(
-          (item): item is { id: string; endpoints: string[] } =>
-            !!item &&
-            typeof item === 'object' &&
-            typeof item.id === 'string' &&
-            Array.isArray(item.endpoints) &&
-            item.endpoints.includes('chat'),
-        )
-        .map(item => item.id);
+      // Gateway v2 reads the key only from Authorization or x-api-key. A custom fetch is a v1
+      // pass-through that owns Authorization, so the catalogue request uses the plain global fetch.
+      const fetchImpl = globalThis.fetch;
+      models = await loadCachedV2Catalog(fetchImpl, `${this.getBaseUrl()}\n${hashApiKey(apiKey)}`, () =>
+        this.fetchV2Catalog(fetchImpl, apiKey),
+      );
     }
 
     const providers = {
@@ -122,6 +112,32 @@ export class MastraGateway extends MastraModelGateway {
     };
 
     return providers;
+  }
+
+  private async fetchV2Catalog(fetchImpl: typeof fetch, apiKey: string): Promise<string[]> {
+    const response = await fetchImpl(`${this.getBaseUrl()}/v1/models`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) {
+      throw new GatewayCatalogError(`Gateway model catalog unavailable (${response.status})`, response.status);
+    }
+    const body: unknown = await response.json();
+    if (!body || typeof body !== 'object' || !('data' in body) || !Array.isArray(body.data)) {
+      throw new Error('Gateway model catalog has an invalid response');
+    }
+    // The Mastra gateway model uses the OpenAI-compatible chat transport.
+    // Models offered only through another endpoint cannot be selected here.
+    return body.data
+      .filter(
+        (item): item is { id: string; endpoints: string[] } =>
+          !!item &&
+          typeof item === 'object' &&
+          typeof item.id === 'string' &&
+          Array.isArray(item.endpoints) &&
+          item.endpoints.includes('chat'),
+      )
+      .map(item => item.id);
   }
 
   async buildUrl(_modelId: string): Promise<string> {
@@ -172,6 +188,9 @@ export class MastraGateway extends MastraModelGateway {
         baseURL,
         headers: withGatewayAuthHeader(apiKey, headers),
         fetch: this.config.customFetch,
+        // Strict mode adds stream_options.include_usage to streaming requests only,
+        // so routes that report usage in a separate final chunk still return it.
+        compatibility: 'strict',
       }).chat(fullModelId) as unknown as GatewayLanguageModel;
     }
 
@@ -183,6 +202,154 @@ export class MastraGateway extends MastraModelGateway {
         'User-Agent': MASTRA_USER_AGENT,
         ...headers,
       },
+      // Strict mode adds stream_options.include_usage to streaming requests only.
+      compatibility: 'strict',
     }).chat(fullModelId) as unknown as GatewayLanguageModel;
   }
+}
+
+/** How long a v2 model catalogue is reused before it is fetched again. */
+const V2_CATALOG_TTL_MS = 60_000;
+/** How long the last good v2 catalogue is still served while refreshes fail. */
+const V2_CATALOG_STALE_IF_ERROR_MS = 10 * 60_000;
+/**
+ * How long to wait after a failed request before trying again: the last good catalogue is served
+ * meanwhile, or, when there is none, the failure is thrown again.
+ */
+const V2_CATALOG_RETRY_AFTER_ERROR_MS = 15_000;
+/** Most catalogues kept per fetch implementation. */
+const V2_CATALOG_MAX_ENTRIES = 100;
+
+/** A catalogue request that got an HTTP error status. */
+class GatewayCatalogError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = 'GatewayCatalogError';
+  }
+}
+
+interface V2CatalogEntry {
+  models?: string[];
+  fetchedAt?: number;
+  retryAt?: number;
+  pending?: Promise<string[]>;
+  /**
+   * The last failure, rethrown until `failedUntil` without a new request when there is no list to
+   * fall back on, or the list passes the stale window before the retry wait ends.
+   */
+  failure?: unknown;
+  failedUntil?: number;
+}
+
+/**
+ * v2 model catalogues, first by the global fetch in effect when the request was made, then by
+ * base URL and API key hash. A replaced global fetch (instrumentation, test doubles) gets its own
+ * entries, so a list from one is never served through another. The raw key is never stored.
+ */
+let v2CatalogCaches = new WeakMap<typeof fetch, Map<string, V2CatalogEntry>>();
+
+/** Only an in-memory cache key, so the raw key is not held. Not a password hash. */
+function hashApiKey(apiKey: string): string {
+  return createHash('sha256').update(apiKey).digest('hex');
+}
+
+/** A 401 or 403 means the key was rejected, so a list cached for it must not be served. */
+function isRejectedKey(error: unknown): boolean {
+  return error instanceof GatewayCatalogError && (error.status === 401 || error.status === 403);
+}
+
+/**
+ * Drops settled entries past the stale window (keeping a failure that is still remembered), then
+ * the oldest settled ones over the size cap.
+ */
+function pruneV2Catalogs(cache: Map<string, V2CatalogEntry>, now: number): void {
+  for (const [key, entry] of cache) {
+    const failureRemembered = entry.failedUntil !== undefined && now < entry.failedUntil;
+    const listExpired = entry.fetchedAt === undefined || now - entry.fetchedAt >= V2_CATALOG_STALE_IF_ERROR_MS;
+    if (!entry.pending && !failureRemembered && listExpired) cache.delete(key);
+  }
+  for (const [key, entry] of cache) {
+    if (cache.size <= V2_CATALOG_MAX_ENTRIES) break;
+    if (!entry.pending) cache.delete(key);
+  }
+}
+
+/**
+ * Returns the cached v2 catalogue for `cacheKey`, fetching it when it is missing or older than
+ * the TTL. Concurrent callers share one request. When a refresh fails with a timeout, a network
+ * error or a server error, the last good catalogue is returned for a bounded time, and the next
+ * attempt waits a short while, also when the catalogue becomes too old to return during that wait:
+ * the error is then thrown. Without a catalogue to fall back on, the error is thrown, and the
+ * same error is thrown again without a new request for that short while, so callers during an
+ * outage do not each wait for the request timeout. A rejected key (401 or 403) drops the cached
+ * catalogue and is never remembered, so every call asks the gateway again.
+ */
+function loadCachedV2Catalog(
+  fetchImpl: typeof fetch,
+  cacheKey: string,
+  load: () => Promise<string[]>,
+): Promise<string[]> {
+  let cache = v2CatalogCaches.get(fetchImpl);
+  if (!cache) {
+    cache = new Map();
+    v2CatalogCaches.set(fetchImpl, cache);
+  }
+  const entries = cache;
+  const entry = entries.get(cacheKey);
+  const now = Date.now();
+  if (entry?.models && entry.fetchedAt !== undefined) {
+    const age = now - entry.fetchedAt;
+    const fresh = age < V2_CATALOG_TTL_MS;
+    const backingOff = entry.retryAt !== undefined && now < entry.retryAt && age < V2_CATALOG_STALE_IF_ERROR_MS;
+    if (fresh || backingOff) return Promise.resolve(entry.models);
+  }
+  if (entry?.failedUntil !== undefined && now < entry.failedUntil) return Promise.reject(entry.failure);
+  if (entry?.pending) return entry.pending;
+
+  const pending = load().then(
+    models => {
+      const settledAt = Date.now();
+      entries.delete(cacheKey);
+      entries.set(cacheKey, { models, fetchedAt: settledAt });
+      pruneV2Catalogs(entries, settledAt);
+      return models;
+    },
+    error => {
+      const previous = entries.get(cacheKey);
+      const settledAt = Date.now();
+      if (
+        !isRejectedKey(error) &&
+        previous?.models &&
+        previous.fetchedAt !== undefined &&
+        settledAt - previous.fetchedAt < V2_CATALOG_STALE_IF_ERROR_MS
+      ) {
+        entries.set(cacheKey, {
+          models: previous.models,
+          fetchedAt: previous.fetchedAt,
+          retryAt: settledAt + V2_CATALOG_RETRY_AFTER_ERROR_MS,
+          // The list may pass the stale window before the retry wait ends. The failure is then
+          // thrown for the rest of the wait, without a new request.
+          failure: error,
+          failedUntil: settledAt + V2_CATALOG_RETRY_AFTER_ERROR_MS,
+        });
+        return previous.models;
+      }
+      entries.delete(cacheKey);
+      if (!isRejectedKey(error)) {
+        entries.set(cacheKey, { failure: error, failedUntil: settledAt + V2_CATALOG_RETRY_AFTER_ERROR_MS });
+        pruneV2Catalogs(entries, settledAt);
+      }
+      throw error;
+    },
+  );
+  entries.set(cacheKey, { ...entry, pending });
+  return pending;
+}
+
+/** @internal Clear the cached v2 model catalogues. For testing only. */
+export function _resetMastraGatewayCatalogCache(): void {
+  v2CatalogCaches = new WeakMap();
 }
