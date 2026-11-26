@@ -28,10 +28,10 @@ afterAll(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-function tempDbUrl(): string {
+function tempDbUrl(fileName = 'mastra.db'): string {
   const dir = mkdtempSync(join(tmpdir(), 'libsql-pending-signals-'));
   dirs.push(dir);
-  return `file:${join(dir, 'mastra.db')}`;
+  return `file:${join(dir, fileName)}`;
 }
 
 // The memory suite on a file database, with the conformance races split over a second store on
@@ -231,21 +231,27 @@ describe('LibSQL pending signals', () => {
     it('runs init repeatedly and concurrently from two instances on an existing database', async () => {
       const url = tempDbUrl();
       const { thread, messageIds } = await createDatabaseWithoutSignalColumns(url);
-      const first = new MemoryLibSQL({ url });
-      const second = new MemoryLibSQL({ url });
+      const clients = [createClient({ url }), createClient({ url })];
+      try {
+        const [first, second] = clients.map(client => new MemoryLibSQL({ client }));
 
-      await Promise.all([first.init(), second.init()]);
-      await first.init();
-      await second.init();
+        await Promise.all([first!.init(), second!.init()]);
+        await first!.init();
+        await second!.init();
 
-      const columns = await columnsOf(url, 'mastra_messages');
-      expect(columns.filter(name => name === 'signalStatus' || name === 'signalClaimedBy')).toEqual([
-        'signalStatus',
-        'signalClaimedBy',
-      ]);
-      expect((await columnsOf(url, 'mastra_threads')).filter(name => name === 'signalRunId')).toEqual(['signalRunId']);
-      const listed = await second.listMessages({ threadId: thread.id, perPage: false });
-      expect(listed.messages.map(message => message.id)).toEqual(messageIds);
+        const columns = await columnsOf(url, 'mastra_messages');
+        expect(columns.filter(name => name === 'signalStatus' || name === 'signalClaimedBy')).toEqual([
+          'signalStatus',
+          'signalClaimedBy',
+        ]);
+        expect((await columnsOf(url, 'mastra_threads')).filter(name => name === 'signalRunId')).toEqual([
+          'signalRunId',
+        ]);
+        const listed = await second!.listMessages({ threadId: thread.id, perPage: false });
+        expect(listed.messages.map(message => message.id)).toEqual(messageIds);
+      } finally {
+        for (const client of clients) client.close();
+      }
     });
 
     it('creates a partial index on the thread and claim order', async () => {
@@ -327,6 +333,35 @@ describe('LibSQL pending signals', () => {
         expect(await memory.getSignalRun({ threadId: thread.id })).toBe(runId);
 
         await memory.updateThread({ id: thread.id, title: 'updated', metadata: { kept: true } });
+        expect(await memory.getSignalRun({ threadId: thread.id })).toBe(runId);
+      } finally {
+        await store.close();
+      }
+    });
+
+    it('saves a thread whose table has columns added under names that are not plain identifiers', async () => {
+      const url = tempDbUrl();
+      await (await openMemory(url)).store.close();
+      const client = createClient({ url });
+      try {
+        await client.execute(`ALTER TABLE mastra_threads ADD COLUMN "display-color" TEXT`);
+        // The column name `a"b`, with a double quote in it.
+        await client.execute(`ALTER TABLE mastra_threads ADD COLUMN "a""b" TEXT`);
+      } finally {
+        client.close();
+      }
+
+      const { store, memory } = await openMemory(url);
+      try {
+        const thread = createSampleThread() as StorageThreadType;
+        await expect(memory.saveThread({ thread })).resolves.toMatchObject({ id: thread.id });
+        const runId = `run-${randomUUID()}`;
+        await memory.setSignalRun({ threadId: thread.id, runId });
+
+        await expect(memory.saveThread({ thread: { ...thread, title: 'renamed' } })).resolves.toMatchObject({
+          title: 'renamed',
+        });
+        expect(await memory.getThreadById({ threadId: thread.id })).toMatchObject({ title: 'renamed' });
         expect(await memory.getSignalRun({ threadId: thread.id })).toBe(runId);
       } finally {
         await store.close();
@@ -473,6 +508,48 @@ describe('LibSQL pending signals', () => {
       }
     });
 
+    it('returns every message with perPage false when a signal is saved with an older createdAt between the count and the read', async () => {
+      const url = tempDbUrl();
+      const peer = await openMemory(url);
+      let toSave: MastraDBMessage | undefined;
+      // Right after the count statement, another connection saves the claimed signal as a message.
+      const { client } = recordingClient(url, async ({ sql }) => {
+        if (!toSave || !sql.includes('SELECT (SELECT COUNT(*)')) return;
+        const message = toSave;
+        toSave = undefined;
+        await peer.memory.saveMessages({ messages: [message] });
+      });
+      const store = new LibSQLStore({ id: 'list-all-during-save', client });
+      await store.init();
+      const memory = (await store.getStore('memory'))!;
+      try {
+        for (const byResource of [false, true]) {
+          const thread = await newThread(memory);
+          const runId = `run-${randomUUID()}`;
+          await memory.setSignalRun({ threadId: thread.id, runId });
+          const message = createSampleMessageV2({ threadId: thread.id, resourceId: thread.resourceId });
+          await memory.saveMessages({ messages: [message] });
+          const signal = signalFor(thread);
+          await memory.enqueuePendingSignal({ message: signal, toRunId: runId });
+          await memory.claimPendingSignals({ threadId: thread.id, runId, consumedIds: [] });
+          toSave = { ...signal, createdAt: new Date(message.createdAt.getTime() - 60_000) };
+
+          const listed = byResource
+            ? await memory.listMessagesByResourceId({ resourceId: thread.resourceId, perPage: false })
+            : await memory.listMessages({ threadId: thread.id, perPage: false });
+          expect(toSave).toBeUndefined();
+          expect({ byResource, ids: listed.messages.map(row => row.id), hasMore: listed.hasMore }).toEqual({
+            byResource,
+            ids: [signal.id, message.id],
+            hasMore: false,
+          });
+        }
+      } finally {
+        await store.close();
+        await peer.store.close();
+      }
+    });
+
     it('deletes a thread and its rows in one write, so a run send either lands before and is deleted or finds no thread', async () => {
       const url = tempDbUrl();
       const peer = await openMemory(url);
@@ -532,16 +609,34 @@ describe('LibSQL pending signals', () => {
   });
 
   describe('pendingSignalsSharedAcrossProcesses', () => {
+    // The client opens an in-memory database when the decoded path of a `file:` url without an
+    // authority is exactly `:memory:`. Any other path is a file other processes can open.
+    const urls = () => [
+      { url: tempDbUrl(), shared: true },
+      { url: ':memory:', shared: false },
+      { url: 'file::memory:', shared: false },
+      { url: 'file::memory:?cache=shared', shared: false },
+      { url: 'file:%3Amemory%3A', shared: false },
+      { url: tempDbUrl('my%3Amemory%3A.db'), shared: true },
+      { url: tempDbUrl(':memory:backup.db'), shared: true },
+    ];
+
     it('is true for a file database and false for an in-memory one', async () => {
-      const file = new LibSQLStore({ id: 'shared-file', url: tempDbUrl() });
-      const memoryDb = new LibSQLStore({ id: 'shared-memory', url: ':memory:' });
-      const sharedCache = new LibSQLStore({ id: 'shared-cache', url: 'file::memory:?cache=shared' });
+      const stores = urls().map(({ url, shared }) => ({
+        url,
+        shared,
+        store: new LibSQLStore({ id: `shared-${randomUUID()}`, url }),
+      }));
       try {
-        expect((await file.getStore('memory'))!.pendingSignalsSharedAcrossProcesses).toBe(true);
-        expect((await memoryDb.getStore('memory'))!.pendingSignalsSharedAcrossProcesses).toBe(false);
-        expect((await sharedCache.getStore('memory'))!.pendingSignalsSharedAcrossProcesses).toBe(false);
+        const reported = await Promise.all(
+          stores.map(async ({ url, store }) => ({
+            url,
+            shared: (await store.getStore('memory'))!.pendingSignalsSharedAcrossProcesses,
+          })),
+        );
+        expect(reported).toEqual(stores.map(({ url, shared }) => ({ url, shared })));
       } finally {
-        await Promise.all([file.close(), memoryDb.close(), sharedCache.close()]);
+        await Promise.all(stores.map(({ store }) => store.close()));
       }
     });
 
@@ -559,18 +654,27 @@ describe('LibSQL pending signals', () => {
       }
     });
 
-    it('follows the url or client when the memory domain is built directly', () => {
-      expect(new MemoryLibSQL({ url: tempDbUrl() }).pendingSignalsSharedAcrossProcesses).toBe(true);
-      expect(new MemoryLibSQL({ url: ':memory:' }).pendingSignalsSharedAcrossProcesses).toBe(false);
-      expect(new MemoryLibSQL({ client: createClient({ url: tempDbUrl() }) }).pendingSignalsSharedAcrossProcesses).toBe(
-        false,
-      );
+    // The domain has no close, so the clients it opens from a url stay open until the process exits.
+    it('follows the url when the memory domain is built directly', () => {
+      const cases = urls();
       expect(
-        new MemoryLibSQL({ client: createClient({ url: 'http://127.0.0.1:1' }) }).pendingSignalsSharedAcrossProcesses,
-      ).toBe(true);
+        cases.map(({ url }) => ({ url, shared: new MemoryLibSQL({ url }).pendingSignalsSharedAcrossProcesses })),
+      ).toEqual(cases);
       expect(
         new MemoryLibSQL({ url: tempDbUrl(), sharedAcrossProcesses: false }).pendingSignalsSharedAcrossProcesses,
       ).toBe(false);
+    });
+
+    it('counts a client passed to the memory domain directly only when it is remote', () => {
+      const local = createClient({ url: tempDbUrl() });
+      const remote = createClient({ url: 'http://127.0.0.1:1' });
+      try {
+        expect(new MemoryLibSQL({ client: local }).pendingSignalsSharedAcrossProcesses).toBe(false);
+        expect(new MemoryLibSQL({ client: remote }).pendingSignalsSharedAcrossProcesses).toBe(true);
+      } finally {
+        local.close();
+        remote.close();
+      }
     });
   });
 
@@ -611,6 +715,30 @@ describe('LibSQL pending signals', () => {
         await memory.cancelPendingSignals({ threadId: thread.id, ids: [...unknownIds, sent[3]!, sent[1]!, sent[4]!] }),
       ).toEqual([sent[3], sent[1], sent[4]]);
       expect((await memory.listPendingSignals({ threadId: thread.id })).map(message => message.id)).toEqual([sent[2]]);
+    } finally {
+      await store.close();
+    }
+  });
+
+  it('orders rows with the same createdAt by id in code unit order, not by UTF-8 bytes', async () => {
+    const url = tempDbUrl();
+    const { store, memory } = await openMemory(url);
+    try {
+      const thread = await newThread(memory);
+      const runId = `run-${randomUUID()}`;
+      await memory.setSignalRun({ threadId: thread.id, runId });
+      const createdAt = new Date('2025-04-01T00:00:00.000Z');
+      // U+1F600 is the surrogate pair D83D DE00, below U+FFFD in code units and above it in UTF-8 bytes.
+      const prefix = `signal-${randomUUID()}-`;
+      const sorted = [`${prefix}\u{1F600}`, `${prefix}\uFFFD`];
+      for (const id of [...sorted].reverse()) {
+        await memory.enqueuePendingSignal({ message: { ...signalFor(thread, id), createdAt } });
+      }
+
+      expect((await memory.listPendingSignals({ threadId: thread.id })).map(message => message.id)).toEqual(sorted);
+      expect(
+        (await memory.claimPendingSignals({ threadId: thread.id, runId, consumedIds: [] })).map(message => message.id),
+      ).toEqual(sorted);
     } finally {
       await store.close();
     }

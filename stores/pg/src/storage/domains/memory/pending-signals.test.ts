@@ -227,13 +227,55 @@ function raceTests(ctx: Ctx) {
   );
 
   it(
-    'settles a thread deletion racing claims, a close, a cancel, saves, updates and deletes without a deadlock',
+    'settles a thread transfer racing a save that moves the thread messages to another thread without a deadlock',
+    async () => {
+      for (let iteration = 0; iteration < ITERATIONS; iteration++) {
+        const source = await newThread();
+        const target = await newThread(source.resourceId);
+        // Dated in id order and inserted in the reverse order. The thread's index returns the rows
+        // newest first and the heap in insertion order, so either scan meets them in the reverse
+        // of the lock order.
+        const prefix = `msg-${randomUUID()}`;
+        const base = Date.now() - 300_000;
+        const messages = Array.from({ length: 40 }, (_, index) => ({
+          ...createSampleMessageV2({
+            threadId: source.id,
+            resourceId: source.resourceId,
+            createdAt: new Date(base + index * 1000),
+          }),
+          id: `${prefix}-${String(index).padStart(2, '0')}`,
+        }));
+        for (const message of reversed(messages)) await ctx.memory.saveMessages({ messages: [message] });
+
+        const results = await startShifted<unknown>(
+          [
+            () => ctx.peer.saveMessages({ messages: messages.map(message => ({ ...message, threadId: target.id })) }),
+            () => ctx.memory.updateThreadResourceId({ threadId: source.id, resourceId: `resource-${randomUUID()}` }),
+          ],
+          iteration,
+        );
+
+        expect(results.filter(result => result.status === 'rejected').map(result => codesOf(result.reason))).toEqual(
+          [],
+        );
+        const moved = await ctx.memory.listMessages({ threadId: target.id, perPage: false });
+        expect(sorted(ids(moved.messages))).toEqual(sorted(ids(messages)));
+      }
+    },
+    RACE_TIMEOUT,
+  );
+
+  it(
+    'settles a thread deletion racing claims, a close, a cancel, sends, saves, updates and deletes, leaving no row of the thread',
     async () => {
       for (let iteration = 0; iteration < ITERATIONS; iteration++) {
         const { thread, runId, claimed, pending, all } = await threadWithSignals();
 
         const results = await startShifted<unknown>(
           [
+            ...[ctx.memory, ctx.peer].map(
+              store => () => store.enqueuePendingSignal({ message: signalFor(thread), toRunId: runId }),
+            ),
             () => claim(thread, runId),
             () => ctx.peer.closeSignalRun({ threadId: thread.id, runId, consumedIds: [claimed[0]!.id] }),
             () => ctx.memory.cancelPendingSignals({ threadId: thread.id, ids: reversed(ids(all)) }),
@@ -248,14 +290,21 @@ function raceTests(ctx: Ctx) {
           iteration,
         );
 
-        // A save that finds the thread already deleted is refused; nothing else may fail.
+        // A save that finds the thread already deleted is refused; nothing else may fail. A send
+        // after the close or the deletion is refused.
         for (const result of results) {
-          if (result.status === 'fulfilled') continue;
+          if (result.status === 'fulfilled') {
+            if (typeof result.value === 'string') {
+              expect(['accepted', 'run-closed', 'thread-not-found']).toContain(result.value);
+            }
+            continue;
+          }
           expect(codesOf(result.reason)).toEqual([]);
           expect(String(result.reason)).toContain(`Thread ${thread.id} not found`);
         }
+        expect(await ctx.memory.getThreadById({ threadId: thread.id })).toBeNull();
         expect(await ctx.memory.getSignalRun({ threadId: thread.id })).toBeNull();
-        expect((await rowsOf(thread)).filter(row => row.status !== null || row.claimedBy !== null)).toEqual([]);
+        expect(await rowsOf(thread)).toEqual([]);
       }
     },
     RACE_TIMEOUT,
@@ -334,16 +383,19 @@ describe('Pending signals on connections that default to REPEATABLE READ', () =>
       for (let iteration = 0; iteration < ITERATIONS; iteration++) {
         const thread = await newThread();
         const runId = await startRun(thread);
-        await sendMany(thread, 2);
+        const seeded = ids(await sendMany(thread, 2));
         const resourceId = `resource-${randomUUID()}`;
         const messages = Array.from({ length: 6 }, () => signalFor(thread));
+        const accepted: string[] = [];
 
         const results = await startShifted<unknown>(
           [
-            ...messages.map(
-              (message, index) => () =>
-                (index % 2 === 0 ? ctx.memory : ctx.peer).enqueuePendingSignal({ message, toRunId: runId }),
-            ),
+            ...messages.map((message, index) => async () => {
+              const store = index % 2 === 0 ? ctx.memory : ctx.peer;
+              const result = await store.enqueuePendingSignal({ message, toRunId: runId });
+              expect(['accepted', 'thread-not-found']).toContain(result);
+              if (result === 'accepted') accepted.push(message.id);
+            }),
             () => ctx.peer.updateThreadResourceId({ threadId: thread.id, resourceId }),
           ],
           iteration,
@@ -352,12 +404,8 @@ describe('Pending signals on connections that default to REPEATABLE READ', () =>
         // A send either lands before the transfer and moves with it, or finds the thread under
         // another resource and is refused.
         expect(results.filter(result => result.status === 'rejected')).toEqual([]);
-        for (const result of results) {
-          if (result.status === 'fulfilled' && typeof result.value === 'string') {
-            expect(['accepted', 'thread-not-found']).toContain(result.value);
-          }
-        }
         const pending = await ctx.memory.listPendingSignals({ threadId: thread.id });
+        expect(sorted(ids(pending))).toEqual(sorted([...seeded, ...accepted]));
         expect(pending.filter(row => row.resourceId !== resourceId).map(row => row.id)).toEqual([]);
       }
     },

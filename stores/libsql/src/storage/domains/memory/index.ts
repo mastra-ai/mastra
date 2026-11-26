@@ -78,6 +78,7 @@ const OM_CAS_CONFLICT = Symbol('om-cas-conflict');
 /** A stored OM row plus a WHERE fragment matching exactly that row state. */
 type OMRow = { record: ObservationalMemoryRecord; guard: { sql: string; args: InValue[] } };
 import { parseSqlIdentifier } from '@mastra/core/utils';
+import { isInMemoryDatabaseUrl } from '../../../shared/single-connection-client';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import type {
@@ -202,7 +203,7 @@ export class MemoryLibSQL extends MemoryStorage {
     // `LibSQLStore` passes what it knows of the whole connection config. Built directly, a domain on a url
     // is shared unless the database lives in memory, and a client passed in only when it is remote.
     this.#sharedAcrossProcesses =
-      config.sharedAcrossProcesses ?? ('url' in config ? !config.url.includes(':memory:') : isRemoteClient(client));
+      config.sharedAcrossProcesses ?? ('url' in config ? !isInMemoryDatabaseUrl(config.url) : isRemoteClient(client));
     this.#db = new LibSQLDB({
       client,
       maxRetries: config.maxRetries,
@@ -700,7 +701,8 @@ export class MemoryLibSQL extends MemoryStorage {
       const total = await this.#countVisibleMessages(whereClause, queryParams);
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
-      const limitValue = perPageInput === false ? total : perPage;
+      // Not limited by `total`: a row can become visible between the count and this read.
+      const limitValue = perPageInput === false ? -1 : perPage;
       const dataResult = await this.#client.execute({
         sql: `SELECT id, content, role, type, "createdAt", "resourceId", "thread_id" FROM ${TABLE_MESSAGES} ${whereClause} AND ${VISIBLE_MESSAGE_CONDITION} ${orderByStatement} LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, offset],
@@ -871,7 +873,8 @@ export class MemoryLibSQL extends MemoryStorage {
       const total = await this.#countVisibleMessages(whereClause, queryParams);
 
       // Step 1: Get paginated messages
-      const limitValue = perPageInput === false ? total : perPage;
+      // Not limited by `total`: a row can become visible between the count and this read.
+      const limitValue = perPageInput === false ? -1 : perPage;
       const dataResult = await this.#client.execute({
         sql: `SELECT id, content, role, type, "createdAt", "resourceId", "thread_id" FROM ${TABLE_MESSAGES} ${whereClause} AND ${VISIBLE_MESSAGE_CONDITION} ${orderByStatement} LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, offset],
@@ -2094,9 +2097,18 @@ export class MemoryLibSQL extends MemoryStorage {
     }
   }
 
-  /** Rows in the shape message reads return, kept in the order the query gave. */
+  /**
+   * Rows in the shape message reads return, ordered by createdAt, then id in code unit order.
+   * SQLite compares text as UTF-8 bytes, which orders some ids differently.
+   */
   #parseSignalRows(rows: Record<string, unknown>[]): MastraDBMessage[] {
-    return rows.map(row => this.parseRow(row));
+    return rows
+      .map(row => this.parseRow(row))
+      .sort((a, b) => {
+        const byCreatedAt = a.createdAt.getTime() - b.createdAt.getTime();
+        if (byCreatedAt !== 0) return byCreatedAt;
+        return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+      });
   }
 
   #pendingSignalError(operation: string, error: unknown, details: Record<string, string>): MastraError {
