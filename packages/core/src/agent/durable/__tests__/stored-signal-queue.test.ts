@@ -160,6 +160,48 @@ class UnackedReportingPubSub extends BrokerLikePubSub {
   }
 }
 
+/**
+ * A pubsub on which a run of another process, whose memory storage this process cannot resolve, takes a thread's
+ * lease at the next acquire or transfer of it. Publishes of a forward to that run are recorded, or fail as a broker
+ * that is down refuses them.
+ */
+class LeaseTakenElsewherePubSub extends EventEmitterPubSub {
+  readonly remoteRunId = `remote-run-${crypto.randomUUID()}`;
+  /** The thread whose lease the remote run takes. */
+  takeLeaseOf?: string;
+  failForwards = false;
+  readonly forwarded: string[] = [];
+  readonly forwardAttempted = gate();
+
+  async #take(key: string) {
+    if (!this.takeLeaseOf || !key.includes(this.takeLeaseOf)) return;
+    this.takeLeaseOf = undefined;
+    const current = await super.getLeaseOwner(key);
+    if (current) await super.releaseLease(key, current);
+    await super.acquireLease(key, this.remoteRunId, 60_000);
+  }
+
+  override async acquireLease(key: string, owner: string, ttlMs: number) {
+    await this.#take(key);
+    return super.acquireLease(key, owner, ttlMs);
+  }
+
+  override async transferLease(key: string, fromOwner: string, toOwner: string, ttlMs: number) {
+    await this.#take(key);
+    return super.transferLease(key, fromOwner, toOwner, ttlMs);
+  }
+
+  override async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>, options?: { localOnly?: boolean }) {
+    const data = event.data as { type?: string; runId?: string; signal?: { id: string } } | undefined;
+    if (data?.type === 'signal-enqueued' && data.runId === this.remoteRunId) {
+      this.forwardAttempted.release();
+      if (this.failForwards) throw new Error('broker unavailable');
+      this.forwarded.push(data.signal!.id);
+    }
+    return super.publish(topic, event, options);
+  }
+}
+
 /** A broker-like pubsub whose first release of a thread's lease waits for the test, as a slow lease provider's does. */
 class HeldReleasePubSub extends BrokerLikePubSub {
   /** The thread whose lease release is held. */
@@ -633,6 +675,41 @@ describe('signals of a running evented agent kept in memory storage', () => {
     expect(occurrences(followUps[0], 'FORWARDED_AFTER_CLOSE')).toBe(1);
     expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
   });
+
+  it.each([
+    ['deletes its row once the forward was published', false],
+    ['keeps its row pending when the forward cannot be published', true],
+  ] as const)(
+    'hands a signal the run left to a run of another process that took the thread, and %s',
+    async (_case, failForwards) => {
+      const memoryStore = new ObservedMemory();
+      const pubsub = new LeaseTakenElsewherePubSub();
+      const { agent, scope, prompts, toolGate, start } = setup({ memoryStore, pubsub });
+      const { stream, done } = await start();
+      // The executing process closed the run before this send was stored, so it is left for the thread's next run.
+      await memoryStore.closeSignalRun({ threadId: scope.threadId, runId: stream.runId, consumedIds: [] });
+      const left = agent.sendSignal({ type: 'user', contents: 'LEFT_BY_THE_RUN' }, scope);
+      await expect(left.accepted).resolves.toEqual({ action: 'deliver', runId: stream.runId });
+      // The run's end-of-run check finds the thread taken by a run whose memory storage this process can't resolve.
+      pubsub.failForwards = failForwards;
+      pubsub.takeLeaseOf = scope.threadId;
+      toolGate.release();
+      await done;
+      await pubsub.forwardAttempted.promise;
+      await agentThreadStreamRuntime.storedSignalWritesSettled({ store: memoryStore, ...scope }, agent.getPubSub());
+
+      expect(prompts).toHaveLength(2);
+      expect(prompts.some(prompt => textOf(prompt).includes('LEFT_BY_THE_RUN'))).toBe(false);
+      const pending = (await memoryStore.listPendingSignals({ threadId: scope.threadId })).map(row => row.id);
+      if (failForwards) {
+        expect(pubsub.forwarded).toEqual([]);
+        expect(pending).toEqual([left.signal.id]);
+      } else {
+        expect(pubsub.forwarded).toEqual([left.signal.id]);
+        expect(pending).toEqual([]);
+      }
+    },
+  );
 
   it('starts the next turn for a send that lands as the run ends, before the run gave its lease back', async () => {
     // Shared by every process, as a store behind a pubsub that reaches other processes is.
