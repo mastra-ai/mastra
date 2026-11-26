@@ -77,6 +77,9 @@ export {
   searchTool,
   indexContentTool,
   executeCommandTool,
+  createRecreateSandboxTool,
+  RECREATE_SANDBOX_TOOL_ID,
+  type RecreateSandboxToolOptions,
   // Helpers
   requireWorkspace,
   requireFilesystem,
