@@ -17,21 +17,35 @@ import type { FactoryTransitionRequest } from '../rules/transition-service.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { boardRunId } from './board-workflow.js';
-import type { FactoryBoardEngine } from './engine.js';
+import type { FactoryBoardEngine, FactoryCardRuns } from './engine.js';
 import { WorkflowBoardEngine } from './workflow-engine.js';
 
 const ORG = 'org-1';
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 
 /** One process: an engine on the card storage, its workflow run by a Mastra on the shared run storage. */
-function replica(storage: WorkItemsStorage, runsUrl: string, before?: () => Promise<void>) {
+function replica(
+  storage: WorkItemsStorage,
+  runsUrl: string,
+  before?: () => Promise<void>,
+  runs?: FactoryCardRuns,
+  interruptWaitMs?: number,
+) {
   const boards = createBoardRegistry();
-  const transitionService = new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards });
+  const transitionService = new FactoryTransitionService({
+    storage,
+    configVersion: 'rules-v1',
+    boards,
+    ...(runs ? { runInFlight: runs.inFlight } : {}),
+  });
   const transition = async (request: FactoryTransitionRequest) => {
     await before?.();
     return transitionService.transition(request);
   };
-  const engine = new WorkflowBoardEngine({ transitionService: { transition }, workItems: storage, boards });
+  const engine = new WorkflowBoardEngine(
+    { transitionService: { transition }, workItems: storage, boards, ...(runs ? { runs } : {}) },
+    { interruptWaitMs },
+  );
   const mastra = new Mastra({
     storage: new LibSQLStore({ id: `board-runs-${randomUUID()}`, url: runsUrl }),
     workflows: engine.workflows,
@@ -90,6 +104,71 @@ function personMove(storage: WorkItemsStorage, id: string, stage: string, identi
 }
 
 describe('the workflow board engine', () => {
+  /** A card whose planning run is going until it is stopped, or forever when `ends` is false. */
+  function goingRun(ends: boolean) {
+    const calls: string[] = [];
+    let inFlight = true;
+    const runs: FactoryCardRuns = {
+      inFlight: async () => inFlight,
+      stop: async () => {
+        calls.push('stop');
+        if (ends) setTimeout(() => (inFlight = false), 20);
+      },
+      abandon: async () => void calls.push('abandon'),
+    };
+    return { calls, runs };
+  }
+
+  it('stops the run on a card a person moves into another phase that runs, and commits the move once it ended', async () => {
+    const { storage, runsUrl, item } = await setup();
+    const { calls, runs } = goingRun(true);
+    const { engine } = replica(storage, runsUrl, undefined, runs);
+
+    const result = await engine.requestMove(await personMove(storage, item.id, 'execute', 'drag-1')());
+
+    expect(result).toMatchObject({ status: 'accepted', stage: 'execute' });
+    expect(calls).toEqual(['stop']);
+  });
+
+  it("commits a person's move anyway, giving up on the run, when the stopped run doesn't end in time", async () => {
+    const { storage, runsUrl, item } = await setup();
+    const { calls, runs } = goingRun(false);
+    const { engine } = replica(storage, runsUrl, undefined, runs, 120);
+
+    const result = await engine.requestMove(await personMove(storage, item.id, 'execute', 'drag-1')());
+
+    expect(result).toMatchObject({ status: 'accepted', stage: 'execute' });
+    expect(calls).toEqual(['stop', 'abandon']);
+    expect((await storage.get({ orgId: ORG, id: item.id }))!.stages).toEqual(['execute']);
+  });
+
+  it('stops nothing for a move the board would refuse, a move no person made, or a move to a phase that runs nothing', async () => {
+    const { storage, runsUrl, item } = await setup();
+    const { calls, runs } = goingRun(true);
+    const { engine } = replica(storage, runsUrl, undefined, runs);
+    const move = (stage: string) => personMove(storage, item.id, stage, `drag-${stage}`)();
+
+    // No such edge, and a revision the card has moved past.
+    expect(await engine.requestMove(await move('pr-review'))).toMatchObject({
+      status: 'rejected',
+      code: 'invalid_transition',
+    });
+    expect(await engine.requestMove({ ...(await move('execute')), expectedRevision: 1 })).toMatchObject({
+      status: 'rejected',
+      code: 'stale',
+    });
+    await engine.requestMove({
+      ...(await move('execute')),
+      actor: { type: 'rule', id: 'rule-1' },
+      ingress: { type: 'rule', identity: 'rule-1:execute' },
+      expectedRevision: 1,
+    });
+    expect(calls).toEqual([]);
+    // Intake runs nothing: the run keeps going while the card rests there.
+    expect(await engine.requestMove(await move('intake'))).toMatchObject({ status: 'accepted' });
+    expect(calls).toEqual([]);
+  });
+
   it("moves a card through the card's one board run, answering each request with the transition's result", async () => {
     const { storage, engine, mastra, item } = await setup();
 
