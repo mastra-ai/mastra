@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MockMemory } from '../../../../memory';
 import { createTool } from '../../../../tools';
@@ -191,6 +191,20 @@ describeForAllEngines(
         collectChunks: true,
       });
       expect(first.chunks!.some(c => c.type === 'tool-call-suspended')).toBe(true);
+
+      // The suspension is saved on the thread, which is what a later turn (or another process)
+      // resumes from.
+      await vi.waitFor(async () => {
+        const { messages } = await sharedMemory.recall({ threadId, resourceId });
+        const suspended = messages.flatMap(m => Object.values((m.content.metadata as any)?.suspendedTools ?? {}));
+        expect(suspended).toEqual([
+          expect.objectContaining({
+            toolName: 'ask-user',
+            toolCallId: 'call-book',
+            suspendPayload: { question: 'Which color?' },
+          }),
+        ]);
+      });
 
       const second = await runLoopScenario({
         engine,
