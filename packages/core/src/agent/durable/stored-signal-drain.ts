@@ -197,10 +197,11 @@ export async function claimStoredSignals({
 
 /**
  * The drain of a storage-backed run at one site: `undefined` when the run's
- * signals are not stored, `drain()` resolves `undefined` when the run is
- * aborted or the store failed, so the saved consumed set stays as it is. A
- * failed claim takes nothing, as the loop's other drain points do: the rows
- * come back at the next drain.
+ * signals are not stored, `drain()` resolves `undefined` when the store could
+ * not be resolved or a read failed, so the saved consumed set stays as it is.
+ * A failed claim takes nothing, as the loop's other drain points do: the rows
+ * come back at the next drain. It does not check for an abort; callers check
+ * before calling it.
  */
 export function storedSignalDrain({
   mastra,
