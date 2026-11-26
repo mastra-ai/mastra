@@ -26,6 +26,9 @@ export interface SignalActiveRunPeerArgs {
    * Fail this run here after its second model call: that call answers only once
    * the test sends `answer`, and every write of a step result that holds its
    * answer fails, as with a workflows store that lost its database for good.
+   * The worker drops `signal-available` events, as when a hint is lost: a hint
+   * would cut the held call short and the run's next call would take the
+   * signal the test sends while the call is held.
    */
   failRunId?: string;
   /** The agent's memory uses this database instead of the Mastra instance's storage. */
@@ -70,6 +73,27 @@ function reportHandledHints(pubsub: UnixSocketPubSub, onHandled: (signalId: stri
         const signalId = (event.data as { signalId?: unknown } | undefined)?.signalId;
         if (event.type === 'signal-available' && typeof signalId === 'string') onHandled(signalId);
       }
+    };
+    wrappers.set(cb, wrapped);
+    return subscribe(topic, wrapped, options);
+  };
+  pubsub.unsubscribe = async (topic, cb) => {
+    const wrapped = wrappers.get(cb);
+    wrappers.delete(cb);
+    return unsubscribe(topic, wrapped ?? cb);
+  };
+}
+
+/** Acknowledges `signal-available` events on `pubsub`'s control topics without handing them to their subscribers. */
+function dropHints(pubsub: UnixSocketPubSub) {
+  const wrappers = new Map<EventCallback, EventCallback>();
+  const subscribe = pubsub.subscribe.bind(pubsub);
+  const unsubscribe = pubsub.unsubscribe.bind(pubsub);
+  pubsub.subscribe = async (topic, cb, options) => {
+    if (!topic.startsWith('agent.control.')) return subscribe(topic, cb, options);
+    const wrapped: EventCallback = async (event, ack, nack, extend) => {
+      if (event.type === 'signal-available') return ack?.();
+      return cb(event, ack, nack, extend);
     };
     wrappers.set(cb, wrapped);
     return subscribe(topic, wrapped, options);
@@ -135,6 +159,7 @@ runPeer<SignalActiveRunPeerArgs>(async peer => {
   const runner = createEventedAgent({ agent });
   const pubsub = peer.pubsub();
   if (reasoning) reportHandledHints(pubsub, signalId => void peer.signal('hint-handled', { signalId }));
+  if (failRunId) dropHints(pubsub);
   const mastra = new Mastra({
     agents: { [agentId]: runner },
     storage,
