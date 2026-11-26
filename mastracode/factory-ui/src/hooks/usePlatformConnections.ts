@@ -67,6 +67,14 @@ function useInvalidateProviderState(provider: PlatformConnectProviderId) {
             queryClient.invalidateQueries({ queryKey: queryKeys.incidentioSources() }),
           ]
         : []),
+      ...(provider === 'linear'
+        ? [
+            queryClient.invalidateQueries({ queryKey: queryKeys.linearStatus() }),
+            queryClient.invalidateQueries({ queryKey: queryKeys.linearProjects() }),
+            queryClient.invalidateQueries({ queryKey: queryKeys.linearTeams() }),
+            queryClient.invalidateQueries({ queryKey: ['linear', 'issue'] }),
+          ]
+        : []),
       ...(gitlab
         ? [
             // GitLab lists self-hosted connections too, so either flow changes both listings.
