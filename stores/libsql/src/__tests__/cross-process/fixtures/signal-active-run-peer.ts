@@ -5,6 +5,7 @@
  * reported to the test.
  */
 import { createEventedAgent } from '@mastra/core/agent/durable';
+import type { EventCallback, UnixSocketPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 
@@ -15,7 +16,11 @@ import { createStepAgent, gate } from '../step-agent';
 
 export interface SignalActiveRunPeerArgs {
   agentId: string;
-  /** The first model call thinks until it is cut short, instead of calling the tool. */
+  /**
+   * The first model call thinks until it is cut short or the test sends `release-reasoning`, instead of calling the
+   * tool. The worker reports `hint-handled` each time its control subscription finished handling a
+   * `signal-available` event, and `reasoning-ended` with how that call ended.
+   */
   reasoning?: boolean;
   /**
    * Fail this run here after its second model call: that call answers only once
@@ -48,6 +53,31 @@ async function failStepResultWrites(storage: LibSQLStore, runId: string, text: s
   workflows.appendWorkflowRunEntries = async args => {
     if (fails(args)) throw new Error(`The workflows store refused a step result of run ${runId}`);
     return appendWorkflowRunEntries(args);
+  };
+}
+
+/** Calls `onHandled` each time a control-topic subscriber of `pubsub` finished handling a `signal-available` event. */
+function reportHandledHints(pubsub: UnixSocketPubSub, onHandled: (signalId: string) => void) {
+  const wrappers = new Map<EventCallback, EventCallback>();
+  const subscribe = pubsub.subscribe.bind(pubsub);
+  const unsubscribe = pubsub.unsubscribe.bind(pubsub);
+  pubsub.subscribe = async (topic, cb, options) => {
+    if (!topic.startsWith('agent.control.')) return subscribe(topic, cb, options);
+    const wrapped: EventCallback = async (event, ack, nack) => {
+      try {
+        await cb(event, ack, nack);
+      } finally {
+        const signalId = (event.data as { signalId?: unknown } | undefined)?.signalId;
+        if (event.type === 'signal-available' && typeof signalId === 'string') onHandled(signalId);
+      }
+    };
+    wrappers.set(cb, wrapped);
+    return subscribe(topic, wrapped, options);
+  };
+  pubsub.unsubscribe = async (topic, cb) => {
+    const wrapped = wrappers.get(cb);
+    wrappers.delete(cb);
+    return unsubscribe(topic, wrapped ?? cb);
   };
 }
 
@@ -87,8 +117,13 @@ runPeer<SignalActiveRunPeerArgs>(async peer => {
     ...(reasoning
       ? {
           reasoningAt: 1,
-          onReasoning: ({ aborted }: { aborted: boolean }) => {
-            void peer.signal(aborted ? 'reasoning-cut-short' : 'reasoning-reached', { pid: process.pid });
+          releaseReasoning: peer.waitFor('release-reasoning').then(
+            () => {},
+            () => new Promise<void>(() => {}),
+          ),
+          onReasoning: ({ state }: { state: 'reached' | 'cut-short' | 'answered' }) => {
+            if (state === 'reached') void peer.signal('reasoning-reached', { pid: process.pid });
+            else void peer.signal('reasoning-ended', { pid: process.pid, state });
           },
         }
       : {}),
@@ -98,10 +133,12 @@ runPeer<SignalActiveRunPeerArgs>(async peer => {
     holdModelCall: call => (failRunId && call === 2 ? answer.promise : undefined),
   });
   const runner = createEventedAgent({ agent });
+  const pubsub = peer.pubsub();
+  if (reasoning) reportHandledHints(pubsub, signalId => void peer.signal('hint-handled', { signalId }));
   const mastra = new Mastra({
     agents: { [agentId]: runner },
     storage,
-    pubsub: peer.pubsub(),
+    pubsub,
     logger: false,
     workers: peer.workers ? undefined : false,
   });
