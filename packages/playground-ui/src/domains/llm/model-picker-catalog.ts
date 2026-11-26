@@ -46,9 +46,8 @@ export function findCatalogModel<T extends ModelPickerCatalogModel>(
   catalog: readonly T[],
   { provider, model }: ModelPickerValue,
 ): T | undefined {
-  const fullId = `${provider}/${model}`;
   return catalog.find(option => {
     const value = catalogModelPickerValue(option);
-    return value?.provider === provider && (option.id === fullId || option.id === model);
+    return value?.provider === provider && value.model === model;
   });
 }

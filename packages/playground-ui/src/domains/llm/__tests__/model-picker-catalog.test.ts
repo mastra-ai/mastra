@@ -39,4 +39,13 @@ describe('model picker catalog', () => {
     expect(findCatalogModel(catalog, { provider: 'anthropic', model: 'claude-opus-4-7' })).toBe(catalog[1]);
     expect(findCatalogModel(catalog, { provider: 'openai', model: 'claude-opus-4-7' })).toBeUndefined();
   });
+
+  it('tells apart ids that repeat the provider prefix', () => {
+    const catalog = [
+      { id: 'openrouter/auto', provider: 'openrouter' },
+      { id: 'openrouter/openrouter/auto', provider: 'openrouter' },
+    ];
+    expect(findCatalogModel(catalog, { provider: 'openrouter', model: 'openrouter/auto' })).toBe(catalog[1]);
+    expect(findCatalogModel(catalog, { provider: 'openrouter', model: 'auto' })).toBe(catalog[0]);
+  });
 });

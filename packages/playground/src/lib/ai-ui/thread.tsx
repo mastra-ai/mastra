@@ -9,6 +9,7 @@ import { Thread as BaseThread } from '@mastra/playground-ui/domains/agents/chat/
 import type { ThreadProps } from '@mastra/playground-ui/domains/agents/chat/thread';
 import { useChatMessages } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { useSpeechRecognition } from '@mastra/react';
 import { useMcpAppTools } from '@mastra/react/hooks/mcps';
 import { useReadAloud } from '@mastra/react/hooks/voice';
 import { toast } from 'sonner';
@@ -95,7 +96,8 @@ function StudioThreadBody(props: ThreadProps) {
 }
 
 /** Dictation, with the agent's request context from Studio's settings. */
-const StudioSpeechInput = (props: { agentId?: string; onTranscript: (text: string) => void }) => {
-  const [requestContext] = useEntityRequestContext('agent', props.agentId ?? '');
-  return <SpeechInputButton {...props} requestContext={requestContext} />;
+const StudioSpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript: (text: string) => void }) => {
+  const [requestContext] = useEntityRequestContext('agent', agentId ?? '');
+  const { start, stop, isListening } = useSpeechRecognition({ agentId, requestContext });
+  return <SpeechInputButton isListening={isListening} onStart={() => start(onTranscript)} onStop={stop} />;
 };
