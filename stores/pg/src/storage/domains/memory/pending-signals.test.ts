@@ -227,13 +227,16 @@ function raceTests(ctx: Ctx) {
   );
 
   it(
-    'settles a thread deletion racing claims, a close, a cancel, saves, updates and deletes without a deadlock',
+    'settles a thread deletion racing claims, a close, a cancel, sends, saves, updates and deletes, leaving no row of the thread',
     async () => {
       for (let iteration = 0; iteration < ITERATIONS; iteration++) {
         const { thread, runId, claimed, pending, all } = await threadWithSignals();
 
         const results = await startShifted<unknown>(
           [
+            ...[ctx.memory, ctx.peer].map(
+              store => () => store.enqueuePendingSignal({ message: signalFor(thread), toRunId: runId }),
+            ),
             () => claim(thread, runId),
             () => ctx.peer.closeSignalRun({ threadId: thread.id, runId, consumedIds: [claimed[0]!.id] }),
             () => ctx.memory.cancelPendingSignals({ threadId: thread.id, ids: reversed(ids(all)) }),
@@ -248,14 +251,21 @@ function raceTests(ctx: Ctx) {
           iteration,
         );
 
-        // A save that finds the thread already deleted is refused; nothing else may fail.
+        // A save that finds the thread already deleted is refused; nothing else may fail. A send
+        // after the close or the deletion is refused.
         for (const result of results) {
-          if (result.status === 'fulfilled') continue;
+          if (result.status === 'fulfilled') {
+            if (typeof result.value === 'string') {
+              expect(['accepted', 'run-closed', 'thread-not-found']).toContain(result.value);
+            }
+            continue;
+          }
           expect(codesOf(result.reason)).toEqual([]);
           expect(String(result.reason)).toContain(`Thread ${thread.id} not found`);
         }
+        expect(await ctx.memory.getThreadById({ threadId: thread.id })).toBeNull();
         expect(await ctx.memory.getSignalRun({ threadId: thread.id })).toBeNull();
-        expect((await rowsOf(thread)).filter(row => row.status !== null || row.claimedBy !== null)).toEqual([]);
+        expect(await rowsOf(thread)).toEqual([]);
       }
     },
     RACE_TIMEOUT,
