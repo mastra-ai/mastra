@@ -13,8 +13,12 @@ The `.getWorkspaceById()` method returns a workspace registered with the Mastra 
 
 ```typescript
 const workspace = mastra.getWorkspaceById('workspace-123')
+```
 
-const existing = mastra.getWorkspaceById('workspace-123', { optional: true })
+Check for a workspace without throwing:
+
+```typescript
+const existing = mastra.getWorkspaceById('workspace-456', { optional: true })
 if (!existing) {
   // Create and register the workspace
 }
