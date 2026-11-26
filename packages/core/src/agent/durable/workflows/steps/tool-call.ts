@@ -744,7 +744,13 @@ export function createDurableToolCallStep() {
           logger,
         });
         registryEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-        staleRebuildContext = rebuilt?.requestContext;
+        // Never fall back to a tool whose closure belongs to the earlier caller.
+        if (!rebuilt || isStaleRunRegistryEntry(registryEntry, runId, requestContext)) {
+          throw new Error(
+            `[DurableAgent:${initData.agentId}] Could not rebuild tools for the current caller of run ${runId}`,
+          );
+        }
+        staleRebuildContext = rebuilt.requestContext;
       }
 
       let tool = registryEntry?.tools?.[toolName];
