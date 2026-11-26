@@ -113,11 +113,13 @@ function matchLineEnding(text: string, index: number): number {
  * `\n\n`, `\r\r` and the mixed forms `\n\r\n`, `\n\r` and `\r\n\r` are all recognised. Scanning
  * for the earliest ending pair keeps mixed line endings from merging frames.
  *
- * While the stream is open, a pair that would end on a lone `\r` at the very end of the buffer is
- * withheld: that CR may be the first half of a CRLF that has not arrived yet, so the caller waits
- * for more input instead of guessing a partial boundary. At EOF (`done`) the pair is accepted.
+ * A single ending is never a separator, so a buffer ending mid-CRLF (…`\r`) reports no boundary
+ * and the caller waits for the next read. Once a second line ending is present the pair is a
+ * complete blank line and is returned immediately, even when its last character is a `\r` that a
+ * later read might extend to `\r\n`: two endings separate the frames either way, so holding it
+ * back would stall a quiet CR-framed stream until more input or EOF arrives.
  */
-function findSseBoundary(text: string, done = false): { index: number; length: number } | null {
+function findSseBoundary(text: string): { index: number; length: number } | null {
   let index = 0;
 
   while (index < text.length) {
@@ -129,12 +131,7 @@ function findSseBoundary(text: string, done = false): { index: number; length: n
 
     const second = matchLineEnding(text, index + first);
     if (second) {
-      const length = first + second;
-      const endsOnTrailingCr = text[index + length - 1] === '\r' && index + length === text.length;
-      if (!endsOnTrailingCr || done) {
-        return { index, length };
-      }
-      return null;
+      return { index, length: first + second };
     }
 
     index += first;
@@ -165,7 +162,7 @@ export class ResponsesStream implements AsyncIterable<ResponsesStreamEvent> {
         const { done, value } = await reader.read();
         buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
 
-        let boundary = findSseBoundary(buffer, done);
+        let boundary = findSseBoundary(buffer);
         while (boundary) {
           const block = buffer.slice(0, boundary.index);
           buffer = buffer.slice(boundary.index + boundary.length);
@@ -175,7 +172,7 @@ export class ResponsesStream implements AsyncIterable<ResponsesStreamEvent> {
             yield parsed;
           }
 
-          boundary = findSseBoundary(buffer, done);
+          boundary = findSseBoundary(buffer);
         }
 
         if (done) {

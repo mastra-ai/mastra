@@ -986,6 +986,52 @@ describe('Responses Resource', () => {
         await iterator.return?.();
       }
     });
+
+    it('emits a complete CR-framed event before the stream ends', async () => {
+      // A blank line of two bare carriage returns must be emitted as soon as the second CR
+      // arrives; holding it back in case that CR becomes a CRLF stalls a quiet CR-framed
+      // stream indefinitely. (#31000)
+      const controller = mockOpenSseStream();
+      const encoder = new TextEncoder();
+
+      const stream = await client.responses.create({
+        model: 'openai/gpt-5',
+        agent_id: 'support-agent',
+        input: 'Say hello',
+        stream: true,
+      });
+      const iterator = stream[Symbol.asyncIterator]();
+
+      try {
+        const first = iterator.next();
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(textDeltaEvent)}\r\r`));
+
+        const firstResult = await withTimeout(first, 2000, 'first CR-framed stream event');
+        expect(firstResult.done).toBe(false);
+        expect(firstResult.value).toMatchObject({
+          type: 'response.output_text.delta',
+          sequence_number: 1,
+          delta: 'Hello',
+        });
+
+        const second = iterator.next();
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(buildCompletedEvent())}\r\r`));
+
+        const secondResult = await withTimeout(second, 2000, 'second CR-framed stream event');
+        expect(secondResult.done).toBe(false);
+        expect(secondResult.value).toMatchObject({
+          type: 'response.completed',
+          response: { output_text: 'Hello world' },
+        });
+      } finally {
+        try {
+          controller.close();
+        } catch {
+          // Already closed.
+        }
+        await iterator.return?.();
+      }
+    });
   });
 
   it('retrieves a stored response', async () => {
