@@ -517,7 +517,7 @@ Returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSigna
 
 For an agent using [evented durable execution](/docs/harness/durable-agents#execution-variants), registered with a `Mastra` instance, whose memory uses [storage that keeps pending signals](/docs/server/pubsub#signals-sent-to-a-running-evented-agent), a signal sent to the active run is stored until the run takes it. The run takes it at its next model request. If the run makes none, the signal waits for the thread's next run. `accepted` depends on which process writes the signal to storage:
 
-- The process that holds the run writes the signal. Another process writes it too when the agent's `memory` is a `Memory` instance and that process was already following the thread's events when the run started. `accepted` then resolves after the write and rejects when the write fails.
+- The process that holds the run writes the signal. Another process writes it too when that process was already following the thread's events when the run started, the agent's `memory` is a `Memory` instance, and its storage [shares pending signals across processes](/docs/server/pubsub#signals-sent-to-a-running-evented-agent). `accepted` then resolves after the write and rejects when the write fails.
 - Any other process forwards the signal to the process that holds the run and resolves `deliver` when it forwards it, before the signal is stored.
 - When a process writes the signal for a run another process holds and finds that run already ended, `accepted` resolves `{ action: 'blocked', reason: 'thread-blocked', runId }`. The signal isn't kept, so send it again.
 
