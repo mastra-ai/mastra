@@ -96,21 +96,22 @@ export class SentenceTransformer extends TextTransformer {
     //  - it starts a line (`\n2. Second`);
     //  - an earlier bare-number marker already appears in the sentence
     //    (`1. First 2. Second`);
-    //  - it is the first marker of a colon-introduced list that continues in the remaining
-    //    text (`Steps: 1. Open 2. Save`).
-    // A colon-labelled value (`Result: 5. Next sentence.`) is NOT a list marker: the label
-    // happens to contain a colon, but no further marker follows, so the sentence still ends.
+    //  - it opens a colon-introduced numbered list (`Steps: 1. Open 2. Save`).
+    // The colon lookahead stays bounded to the list itself: the first marker must be `1`
+    // and item `2` must follow, so neither a colon-labelled value (`Result: 5. The score
+    // was 6. Done.`) nor an unrelated later list (`Result: 5. Next. 1. First item.`) can
+    // suppress the sentence boundary after the number.
     const startsLine = /(?:^|\n)\s*$/.test(prefix);
     const hasEarlierMarker = /(?:^|\s)\d+\.\s/.test(prefix);
-    const previousIsColonLabel = previous !== undefined && previous.endsWith(':');
-    const continuesAsList = previousIsColonLabel && /\s\d+\.\s/.test(remainingText);
+    const startsColonList =
+      baseWord === '1' && previous !== undefined && previous.endsWith(':') && /\s2\.\s/.test(remainingText);
     const isListMarker =
       /^\d+$/.test(baseWord) &&
       (!previous ||
         this.sentenceEnders.includes(previous.slice(-1)) ||
         startsLine ||
         hasEarlierMarker ||
-        continuesAsList);
+        startsColonList);
 
     return !this.isCommonAbbreviation(baseWord, isListMarker);
   }

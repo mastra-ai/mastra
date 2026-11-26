@@ -156,11 +156,21 @@ describe('SentenceTransformer boundaries', () => {
     });
 
     it('still ends a sentence after a colon-labelled value', () => {
-      // The label happens to end with a colon, but no further list marker follows, so the
+      // The label happens to end with a colon, but no list starting at `1.` follows, so the
       // integer is a sentence-final number, not a list marker.
       expect(split('Result: 5. Next sentence.')).toEqual(['Result: 5.', 'Next sentence.']);
       expect(split('Total: 5. Another line.')).toEqual(['Total: 5.', 'Another line.']);
       expect(split('It was built in 2020. Then it grew.')).toEqual(['It was built in 2020.', 'Then it grew.']);
+    });
+
+    it('keeps the boundary when a number appears later in the paragraph', () => {
+      // The later numbers are sentence-final, not markers continuing a list opened by the
+      // colon label, so the boundary after `5.` must not be suppressed by the lookahead.
+      expect(split('Result: 5. The score was 6. Done.')).toEqual(['Result: 5.', 'The score was 6.', 'Done.']);
+      expect(split('Result: 5. Next sentence. 1. First item.')).toEqual([
+        'Result: 5.',
+        'Next sentence. 1. First item.',
+      ]);
     });
 
     it('still requires whitespace after ASCII enders', () => {
