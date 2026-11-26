@@ -28,7 +28,9 @@ export interface ConnectPromptProvider {
  * Structured output of the connect-prompt tool. Chat UIs detect
  * `type: 'connect-prompt'` and render the providers as a connect card; the
  * card drives the mounted `userConnectRoutes()` flow (session → launch gate →
- * status polling), so the tool itself never creates sessions or handles URLs.
+ * status polling). In Slack, Telegram and Teams threads the tool starts the
+ * session itself when the owner clicks Connect and sends the link only to
+ * them; the link never goes into this payload, a card, or the tool's result.
  */
 export interface ConnectPromptPayload {
   type: 'connect-prompt';
@@ -117,7 +119,7 @@ async function sendPrivately(run: ChannelRun, name: string, link: ConnectUrl): P
   try {
     const sent = await run.thread.postEphemeral(
       run.actor!.userId,
-      `Connect ${name}: ${link.connectUrl}\nThis link is only for you and stops working at ${link.expiresAt}.`,
+      `Connect ${name}: ${link.connectUrl}\nThis link is only for you.`,
       { fallbackToDM: true },
     );
     return sent !== null;
@@ -215,6 +217,7 @@ export function buildConnectPromptTool({
           error,
         });
         if (!requested) return failed('It is no longer available to connect.');
+        const previous = agent?.suspendPayload as ChannelConnectPromptPayload | undefined;
         if (payload.providers[0]?.connected) {
           const settled = connections.find(
             connection =>
@@ -225,7 +228,6 @@ export function buildConnectPromptTool({
         }
         if (resumed.action === 'cancel') return failed(CONNECT_CANCELLED_ERROR);
 
-        const previous = agent?.suspendPayload as ChannelConnectPromptPayload | undefined;
         const toolCallId = agent!.toolCallId;
         const pause = async (next: Omit<ChannelConnectPromptPayload, keyof ConnectPromptPayload>) => {
           await agent!.suspend({ ...payload, ...next } satisfies ChannelConnectPromptPayload);
@@ -233,7 +235,7 @@ export function buildConnectPromptTool({
         };
         const waiting = (
           text: string,
-          signIn: Pick<ChannelConnectPromptPayload, 'connectionId' | 'expiresAt'> | undefined = previous,
+          signIn: Pick<ChannelConnectPromptPayload, 'connectionId' | 'expiresAt'> | undefined,
         ) =>
           pause({
             connectionId: signIn?.connectionId,
@@ -249,13 +251,16 @@ export function buildConnectPromptTool({
             // The platform drops a sign-in that was never finished.
             if (!signIn || expired) return failed(EXPIRED_ERROR);
           }
-          return waiting(`${name} isn't connected yet. Finish in the private link, then press I've connected.`);
+          return waiting(`${name} isn't connected yet. Finish signing in, then press I've connected.`, previous);
         }
 
         // Connect: only the person the conversation belongs to may start a
-        // sign-in, since the account they connect serves this resource.
+        // sign-in, since the account they connect serves this resource. The
+        // toolset's scope must be the conversation's too: one resolved per
+        // request from the channel's actor would otherwise follow the clicker.
         const run = getChannelRun(context?.requestContext);
-        if (!run?.actor || run.actorResourceId !== resourceId) {
+        const owner = agent?.resourceId ?? resourceId;
+        if (!run?.actor || resourceId !== owner || run.actorResourceId !== owner) {
           if (run?.actor) {
             await run.thread
               .postEphemeral(run.actor.userId, NOT_OWNER_NOTICE, { fallbackToDM: false })
@@ -263,14 +268,23 @@ export function buildConnectPromptTool({
           }
           return pause({ channelCard: connectPromptCard(toolCallId, name) });
         }
-        const session = await createSession(requested.id);
-        const link = await getConnectUrl(session.connectionId);
-        const delivered = await sendPrivately(run, name, link);
+        // Only a sign-in the user got a link for decides what I've connected
+        // reports; otherwise they connect from the app, which starts its own.
+        let signIn: Pick<ChannelConnectPromptPayload, 'connectionId' | 'expiresAt'> | undefined;
+        try {
+          const session = await createSession(requested.id);
+          const link = await getConnectUrl(session.connectionId);
+          if (await sendPrivately(run, name, link)) {
+            signIn = { connectionId: session.connectionId, expiresAt: link.expiresAt };
+          }
+        } catch {
+          // The platform couldn't start a sign-in here; the app still can.
+        }
         return waiting(
-          delivered
+          signIn
             ? `I sent you a private link to connect ${name}. When you're done, press I've connected.`
             : `I couldn't send you a private link. Connect ${name} from the app, then press I've connected.`,
-          { connectionId: session.connectionId, expiresAt: link.expiresAt },
+          signIn,
         );
       }
       if (resumed) {

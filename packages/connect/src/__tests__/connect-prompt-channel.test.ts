@@ -2,6 +2,7 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { Agent } from '@mastra/core/agent';
 import { AgentChannels } from '@mastra/core/channels';
 import { Mastra } from '@mastra/core/mastra';
+import type { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -30,7 +31,7 @@ type Row = {
  * resource-owned row; the launch gate serves its link only under that
  * resource's assertion, as the platform does.
  */
-function fakePlatform(options: { expiresAt?: string } = {}) {
+function fakePlatform(options: { expiresAt?: string; sessionsFail?: boolean } = {}) {
   const rows: Row[] = [];
   const calls: string[] = [];
   const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -53,6 +54,7 @@ function fakePlatform(options: { expiresAt?: string } = {}) {
       });
     }
     if (url.pathname === `/v2/projects/${PROJECT_ID}/integrations/linear/connect-sessions` && method === 'POST') {
+      if (options.sessionsFail) return Response.json({ error: 'connection limit reached' }, { status: 409 });
       const { resourceId } = JSON.parse(String(init?.body)) as { resourceId: string };
       const id = `c_${rows.length + 1}`;
       rows.push({
@@ -188,21 +190,44 @@ function actionsOf(body: string): string[] {
   return Array.from(body.matchAll(new RegExp(`tool_resume:${TOOL_CALL_ID}:([a-z]+)`, 'g')), match => match[1]!);
 }
 
-async function setup(options: { ephemeral?: 'native' | 'unsupported' | 'throws'; expiresAt?: string } = {}) {
-  const platform = fakePlatform({ expiresAt: options.expiresAt });
-  const resolveTools = connect({ projectId: PROJECT_ID, client: platform.client, resourceId: 'slack:U-ALICE' });
+async function setup(
+  options: {
+    ephemeral?: 'native' | 'unsupported' | 'throws';
+    expiresAt?: string;
+    /** Scope the toolset to whoever the channel says is acting, as a per-request resolver might. */
+    scopeToActor?: boolean;
+    sessionsFail?: boolean;
+    /** Who may click; defaults to anyone so the connect tool's own ownership check is under test. */
+    toolApprovers?: 'anyone' | 'requester';
+  } = {},
+) {
+  const platform = fakePlatform({ expiresAt: options.expiresAt, sessionsFail: options.sessionsFail });
+  const resolveTools = options.scopeToActor
+    ? connect({
+        projectId: PROJECT_ID,
+        client: platform.client,
+        resourceId: ctx => {
+          const channel = (ctx?.requestContext as RequestContext | undefined)?.get('channel') as
+            | { platform: string; userId: string }
+            | undefined;
+          return channel ? `${channel.platform}:${channel.userId}` : undefined;
+        },
+      })
+    : connect({ projectId: PROJECT_ID, client: platform.client, resourceId: 'slack:U-ALICE' });
   const { model, prompts } = connectingModel();
   const agent = new Agent({
     id: 'connect-agent',
     name: 'Bot',
     instructions: 'Use Linear.',
     model,
-    tools: await resolveTools(),
+    tools: options.scopeToActor ? ({ requestContext }) => resolveTools({ requestContext }) : await resolveTools(),
   });
   const { adapter, recorded } = recordingAdapter(options.ephemeral ?? 'native');
   // Anyone may click, so the tool's own ownership check is what stops Bob.
   const channels = new AgentChannels({
-    adapters: { slack: { adapter: adapter as any, streaming: false, toolApprovers: 'anyone' } },
+    adapters: {
+      slack: { adapter: adapter as any, streaming: false, toolApprovers: options.toolApprovers ?? 'anyone' },
+    },
   });
   agent.setChannels(channels);
   const mastra = new Mastra({ logger: false, storage: new InMemoryStore(), agents: { agent } });
@@ -255,7 +280,7 @@ async function setup(options: { ephemeral?: 'native' | 'unsupported' | 'throws';
   });
   await vi.waitFor(() => expect(shownActions()).toEqual(['connect', 'cancel']), { timeout: 5000 });
 
-  return { platform, recorded, resolveTools, prompts, shownActions, replies, click, cards };
+  return { platform, recorded, resolveTools, prompts, shownActions, replies, click, cards, agent };
 }
 
 /** Every message other members of the thread can see. */
@@ -323,6 +348,94 @@ describe('request_connection in a channel thread', () => {
 
     // The owner can still connect afterwards.
     await t.click('connect');
+    expect(t.platform.sessionsCreated()).toBe(1);
+    expect(t.shownActions()).toEqual(['check', 'cancel']);
+  });
+
+  it("starts no sign-in for someone else even when the toolset follows the channel's actor", async () => {
+    const t = await setup({ scopeToActor: true });
+    await t.click('connect', bob);
+
+    expect(t.platform.sessionsCreated()).toBe(0);
+    expect(t.shownActions()).toEqual(['connect', 'cancel']);
+
+    await t.click('connect');
+    expect(t.platform.sessionsCreated()).toBe(1);
+    expect(t.shownActions()).toEqual(['check', 'cancel']);
+  });
+
+  it("still knows the sign-in after I've connected was pressed too early", async () => {
+    const t = await setup();
+    await t.click('connect');
+    await t.click('check');
+    t.platform.settle('failed');
+    await t.click('check');
+
+    await vi.waitFor(() => expect(t.replies()).toHaveLength(1));
+    expect(t.replies()[0]).toContain('Tool said: Linear could not be connected: The sign-in did not finish.');
+  });
+
+  it('tells the user to connect from the app when the platform cannot start a sign-in', async () => {
+    const t = await setup({ sessionsFail: true });
+    await t.click('connect');
+
+    expect(t.cards().at(-1)!.body).toContain("I couldn't send you a private link. Connect Linear from the app");
+    expect(t.shownActions()).toEqual(['check', 'cancel']);
+    expect(t.recorded.filter(entry => entry.kind === 'ephemeral')).toEqual([]);
+  });
+
+  it("ignores the undelivered link's expiry once the user was told to connect from the app", async () => {
+    const t = await setup({ ephemeral: 'unsupported', expiresAt: '2000-01-01T00:00:00Z' });
+    await t.click('connect');
+    await t.click('check');
+
+    expect(t.cards().at(-1)!.body).toContain("Linear isn't connected yet.");
+    expect(t.shownActions()).toEqual(['check', 'cancel']);
+    expect(t.replies()).toEqual([]);
+  });
+
+  it('finishes once the user connected from the app after the link could not be sent', async () => {
+    const t = await setup({ ephemeral: 'unsupported' });
+    await t.click('connect');
+    t.platform.rows.push({
+      id: 'c_app',
+      integrationId: 'linear',
+      status: 'active',
+      resourceId: 'slack:U-ALICE',
+      connectedByUserId: null,
+      connectedAt: null,
+      createdAt: '2026-11-26T00:00:00Z',
+      accountLabel: null,
+    });
+    await t.click('check');
+
+    await vi.waitFor(() => expect(t.replies()).toHaveLength(1));
+    expect(t.replies()[0]).toContain('Tool said: Linear connected successfully.');
+  });
+
+  it('keeps the sign-in link out of the paused call, its result and what the model sees', async () => {
+    const t = await setup();
+    await t.click('connect');
+    const paused = await t.agent.listSuspendedRuns({});
+    expect(paused.runs).toHaveLength(1);
+    const pausedPayload = JSON.stringify(paused.runs[0]!.toolCalls);
+    expect(pausedPayload).toContain('"connectionId"');
+    expect(pausedPayload).not.toContain('connect.example');
+    expect(pausedPayload).not.toContain('secret-session-token');
+
+    t.platform.settle('active');
+    await t.click('check');
+    await vi.waitFor(() => expect(t.replies()).toHaveLength(1));
+    const seenByModel = JSON.stringify(t.prompts);
+    expect(seenByModel).toContain('Linear connected successfully.');
+    expect(seenByModel).not.toContain('connect.example');
+    expect(seenByModel).not.toContain('secret-session-token');
+  });
+
+  it('lets the owner connect when only the requester may answer cards', async () => {
+    const t = await setup({ toolApprovers: 'requester' });
+    await t.click('connect');
+
     expect(t.platform.sessionsCreated()).toBe(1);
     expect(t.shownActions()).toEqual(['check', 'cancel']);
   });

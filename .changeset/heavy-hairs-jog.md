@@ -1,6 +1,5 @@
 ---
 '@mastra/connect': minor
-'@mastra/core': patch
 ---
 
 Added a Connect card for `request_connection` in Slack, Telegram and Teams threads. Before, a thread where the agent asked the user to connect an account stayed stuck, because nothing was posted for the paused call.
