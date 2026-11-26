@@ -51,7 +51,7 @@ export const customProviderEndpointChecksScenario = {
     terminal.write('\r');
     await runtime.waitForScreenText(/Header name/i, terminal, 8_000);
     terminal.write('X-Org-Secret\r');
-    await runtime.waitForScreenText(/Is X-Org-Secret a secret\?/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Is X-Org-Secret a secret/i, terminal, 8_000);
     terminal.write('\r');
     await runtime.waitForScreenText(/Value for X-Org-Secret/i, terminal, 8_000);
     terminal.write(secretValue);
