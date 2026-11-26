@@ -7,6 +7,7 @@ import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router/dom';
 
 import { ApiConfigProvider, createApiConfig } from '../api/config';
+import { FactoryPlatformConnect } from './domains/settings/components/FactoryPlatformConnect';
 import { createQueryClient } from '../query-client';
 import { captureInstallPrompt } from './lib/pwa';
 import { createAppRouter } from './router';
@@ -37,8 +38,10 @@ createRoot(document.getElementById('root')!).render(
       <TooltipProvider delayDuration={0}>
         <QueryClientProvider client={queryClient}>
           <ApiConfigProvider config={api}>
-            <RouterProvider router={router} />
-            <Toaster position="bottom-right" />
+            <FactoryPlatformConnect>
+              <RouterProvider router={router} />
+              <Toaster position="bottom-right" />
+            </FactoryPlatformConnect>
           </ApiConfigProvider>
         </QueryClientProvider>
       </TooltipProvider>

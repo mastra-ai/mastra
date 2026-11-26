@@ -6,3 +6,4 @@ export * from './session-belt-label';
 export * from './sidebar-list-states';
 export * from './models';
 export * from './preferences';
+export * from './intake';
