@@ -24,7 +24,7 @@ function parseHttpUrl(url: string): URL | undefined {
 }
 
 function isBlockedHostname(hostname: string): boolean {
-  const normalizedHostname = hostname.toLowerCase();
+  const normalizedHostname = hostname.toLowerCase().replace(/\.$/, '');
   return normalizedHostname === 'localhost' || normalizedHostname.endsWith('.localhost');
 }
 

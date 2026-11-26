@@ -50,6 +50,9 @@ beforeAll(async () => {
     } else if (url.pathname === '/to-localhost') {
       res.writeHead(301, { location: `http://localhost:${port}/page` });
       res.end();
+    } else if (url.pathname === '/to-localhost-dot') {
+      res.writeHead(301, { location: `http://localhost.:${port}/page` });
+      res.end();
     } else if (url.pathname === '/to-file') {
       res.writeHead(302, { location: 'file:///etc/passwd' });
       res.end();
@@ -147,21 +150,26 @@ describe('web_fetch when the Node request API is not implemented (Cloudflare Wor
     expect(result.content).toBe('a'.repeat(100_000));
   });
 
-  it.each(['http://127.0.0.1/', 'http://10.1.2.3/', 'http://[::1]/', 'http://localhost/', 'http://api.localhost/'])(
-    'blocks the literal private host %s without sending a request',
-    async url => {
-      const result = await runTool(url);
+  it.each([
+    'http://127.0.0.1/',
+    'http://10.1.2.3/',
+    'http://[::1]/',
+    'http://localhost/',
+    'http://localhost./',
+    'http://api.localhost/',
+  ])('blocks the literal private host %s without sending a request', async url => {
+    const result = await runTool(url);
 
-      expect(result).toEqual({
-        content: 'Failed to fetch URL: URL resolves to a private or reserved address.',
-        isError: true,
-      });
-    },
-  );
+    expect(result).toEqual({
+      content: 'Failed to fetch URL: URL resolves to a private or reserved address.',
+      isError: true,
+    });
+  });
 
   it.each([
     ['a private IP', '/to-private', 'URL resolves to a private or reserved address.'],
     ['localhost', '/to-localhost', 'URL resolves to a private or reserved address.'],
+    ['localhost with a trailing dot', '/to-localhost-dot', 'URL resolves to a private or reserved address.'],
     ['a non-HTTP scheme', '/to-file', 'Redirect target must use HTTP or HTTPS.'],
   ])('checks redirect targets on every hop and refuses %s', async (_label, path, message) => {
     const result = await runTool(testUrl(path));
