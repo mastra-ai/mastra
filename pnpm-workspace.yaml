@@ -260,8 +260,8 @@ minimumReleaseAgeExclude:
   - '@vitest/spy@5.1.0'
   - '@vitest/utils@5.1.0'
   - deepmerge-ts@8.0.2
-  # Renovate security update: zod@3.25.76
-  - zod@4.6.5 || 3.25.76
+  # Renovate security update: zod@3.25.76 || 4.6.6
+  - zod@4.6.5 || 3.25.76 || 4.6.6
   - zod@4.6.7
   # Renovate security update: brace-expansion@2.1.4 || 5.0.9
   - brace-expansion@2.1.4 || 5.0.9
@@ -394,7 +394,7 @@ overrides:
   # Docs Gateway API pages: Postman publishes openapi-to-postmanv2 from CI only some of the time,
   # so newer 6.x releases fail trustPolicy. 6.4.1 is the newest one with a trusted publisher.
   'docusaurus-plugin-openapi-docs>openapi-to-postmanv2': 6.4.1
-  client-js-e2e-tests-zod-v3>zod: ^3.25.76
+  client-js-e2e-tests-zod-v3>zod: ^4.6.6
   client-js-e2e-tests-zod-v4>zod: ^4.6.7
   # >=1.6.13 fixes stored XSS via javascript: redirect_uri in oidc-provider/mcp
   # (GHSA Dependabot alert #2266).
