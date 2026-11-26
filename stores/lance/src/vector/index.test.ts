@@ -743,6 +743,58 @@ describe('Lance vector store tests', () => {
 
           await vectorDB.deleteTable(tableName);
         });
+
+        it('should preserve mixed metadata after createIndex pre-creates an empty table', async () => {
+          const tableName = 'lance-mixed-preindex-' + Date.now();
+
+          // createIndex leaves an empty table with only id, vector, and _metadata_json.
+          // A following batch whose first row has only null metadata and whose later row
+          // has typed values must still upsert without a "field not in schema" error.
+          await vectorDB.createIndex({
+            indexConfig: {
+              type: 'ivfflat',
+              numPartitions: 1,
+              numSubVectors: 1,
+            },
+            indexName: indexColumn,
+            dimension: 3,
+            tableName,
+          });
+
+          await vectorDB.upsert({
+            indexName: indexColumn,
+            tableName,
+            vectors: [
+              [0.1, 0.2, 0.3],
+              [0.4, 0.5, 0.6],
+              [0.7, 0.8, 0.9],
+            ],
+            metadata: [{ stage: null, profile: { note: null } }, { stage: 'ready', profile: { note: 'present' } }, {}],
+            ids: ['mixed-preindex-1', 'mixed-preindex-2', 'mixed-preindex-3'],
+          });
+
+          const results = await vectorDB.query({
+            indexName: indexColumn,
+            tableName,
+            queryVector: [0.1, 0.2, 0.3],
+            topK: 10,
+          });
+          const byId = new Map(results.map(r => [r.id, r.metadata]));
+          expect(byId.get('mixed-preindex-1')).toEqual({ stage: null, profile: { note: null } });
+          expect(byId.get('mixed-preindex-2')).toEqual({ stage: 'ready', profile: { note: 'present' } });
+          expect(byId.get('mixed-preindex-3')).toEqual({});
+
+          const filtered = await vectorDB.query({
+            indexName: indexColumn,
+            tableName,
+            queryVector: [0.1, 0.2, 0.3],
+            topK: 10,
+            filter: { stage: 'ready' },
+          });
+          expect(filtered.map(r => r.id)).toEqual(['mixed-preindex-2']);
+
+          await vectorDB.deleteTable(tableName);
+        });
       });
     });
 
