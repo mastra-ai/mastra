@@ -4435,7 +4435,10 @@ describe('factory environment sandbox context', () => {
     const BUILDING = "The sandbox can't start yet: the environment is being built.";
 
     it('refuses commands without starting a sandbox until a build finishes, then boots that build', async () => {
-      const awaitEnvironmentBuild = vi.fn(async () => BUILDING);
+      const awaitEnvironmentBuild = vi
+        .fn<NonNullable<CreateWorkspaceFactoryOptions['awaitEnvironmentBuild']>>()
+        .mockResolvedValueOnce({ refuse: BUILDING })
+        .mockResolvedValue({});
       const { resolver, project } = environmentFixture({
         links: twoLinks,
         project: { activeTemplateHeads: null },
@@ -4458,17 +4461,39 @@ describe('factory environment sandbox context', () => {
       const built = { 'octocat/hello': 'a'.repeat(40), 'octocat/docs': 'b'.repeat(40) };
       (project as Record<string, unknown>).activeTemplateHeads = built;
       await workspace!.sandbox!.executeCommand!('echo ok');
+      await workspace!.sandbox!.executeCommand!('echo again');
       expect(created.start).toHaveBeenCalledTimes(1);
-      expect(awaitEnvironmentBuild).toHaveBeenCalledTimes(1);
+      // Settled once the sandbox may boot; later commands do not ask again.
+      expect(awaitEnvironmentBuild).toHaveBeenCalledTimes(2);
       const ctx = mocks.createSandbox.mock.calls[0]![0] as any;
       await expect(ctx.resolveHead('https://github.com/octocat/hello.git')).resolves.toBe(built['octocat/hello']);
+    });
+
+    it('tells the agent what the decision says about the build its sandbox boots from', async () => {
+      const note =
+        "The environment's latest saved change failed to build (boom), so this sandbox runs the previous build.";
+      const { resolver } = environmentFixture({
+        links: twoLinks,
+        awaitEnvironmentBuild: async () => ({ note }),
+      });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+
+      const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      await workspace!.sandbox!.executeCommand!('echo ok');
+
+      const signal = await new FactoryEnvironmentStateProcessor().computeStateSignal({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        contextWindow: { hasSnapshot: false },
+      } as never);
+      expect((signal as { contents: string }).contents).toContain(`\n${note}`);
     });
 
     it('fails a start that did not come through a command while nothing is built', async () => {
       const { resolver } = environmentFixture({
         links: twoLinks,
         project: { activeTemplateHeads: null },
-        awaitEnvironmentBuild: async () => BUILDING,
+        awaitEnvironmentBuild: async () => ({ refuse: BUILDING }),
       });
       addProject({ setupCommand: 'pnpm i' });
       addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
@@ -5207,7 +5232,7 @@ describe('factory environment sandbox context', () => {
         environmentFixture({
           links,
           project: { activeTemplateHeads: built },
-          awaitEnvironmentBuild: async () => 'unused',
+          awaitEnvironmentBuild: async () => ({}),
         });
 
       it('never runs a setup command the build does not have, and says it is not built', async () => {

@@ -68,6 +68,7 @@ import { repositoryDirectoryName } from './sandbox/workdir.js';
 import {
   clearSessionEnvironment,
   recordSessionEnvironment,
+  setSessionEnvironmentBuildNote,
   setSessionEnvironmentNote,
 } from './session/environment-state-processor.js';
 import type { SessionEnvironmentRepositoryState } from './session/environment-state-processor.js';
@@ -557,15 +558,16 @@ export interface CreateWorkspaceFactoryOptions {
    */
   onSandboxCreated?: (project: FactoryProject) => void;
   /**
-   * Called before a command when the session's environment has no finished
-   * build: starts one if needed, remembers the session so it hears when the
+   * Called before a session's first command to decide whether its sandbox
+   * boots now. With no finished build, or one built before a saved change, it
+   * starts a build if needed, remembers the session so it hears when the
    * build ends, and returns what the command should fail with. Without it,
    * sessions boot and run setup commands as before.
    */
   awaitEnvironmentBuild?: (
     project: FactoryProject,
     target: { sessionId: string; threadId?: string },
-  ) => Promise<string | undefined>;
+  ) => Promise<{ refuse?: string; note?: string }>;
   /** The Factory's sandbox environment variables, applied to each session sandbox. */
   sandboxEnvs?: Pick<SandboxEnvStore, 'resolve' | 'revisions'>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
@@ -824,26 +826,27 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       ? resolvedEnvironment
       : undefined;
     // A Factory whose environment is built as a template runs setup commands
-    // only in that build, and a session never boots without one: with no
-    // finished build its commands fail fast with what the build is doing.
+    // only in that build, and a session boots only a build of the environment
+    // as saved: with no finished build, or one built before a saved change,
+    // its commands fail fast with what the build is doing.
     const setupOnlyInBuild = Boolean(environment && factorySandbox.builds && options.awaitEnvironmentBuild);
-    // The commits of the build the sandbox boots from; read again before a
-    // command while there is none, so a build that finishes is picked up.
+    // The commits of the build the sandbox boots from, settled before the
+    // first command; asked again before a command while the session waits.
     let builtHeads = templateHeads;
+    let buildDecided = !setupOnlyInBuild || !sessionEnvironment;
     const awaitBuiltEnvironment = async (): Promise<void> => {
-      if (builtHeads || !setupOnlyInBuild || !sessionEnvironment) return;
+      if (buildDecided || !sessionEnvironment) return;
       const project =
         (await projects?.get({ orgId: session.orgId, id: sessionEnvironment.project.id })) ??
         sessionEnvironment.project;
-      if (project.activeTemplateHeads) {
-        builtHeads = project.activeTemplateHeads;
-        return;
-      }
-      const message = await options.awaitEnvironmentBuild!(project, {
+      const decision = await options.awaitEnvironmentBuild!(project, {
         sessionId: session.sessionId,
         ...(ctx?.threadId ? { threadId: ctx.threadId } : {}),
       });
-      if (message) throw new EnvironmentNotBuiltError(message);
+      if (decision.refuse) throw new EnvironmentNotBuiltError(decision.refuse);
+      builtHeads = project.activeTemplateHeads ?? undefined;
+      setSessionEnvironmentBuildNote(session.sessionId, decision.note ?? null);
+      buildDecided = true;
     };
     // `GH_TOKEN` should reach every environment repository, the session's own
     // first; the refresh tool re-mints for the same set.

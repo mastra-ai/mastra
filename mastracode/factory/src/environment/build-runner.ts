@@ -17,6 +17,7 @@ import {
   environmentBuildContextWithEnv,
   environmentBuildDebounced,
   errorReason,
+  readEnvironmentBuildInputs,
   resolveEnvironmentHeads,
 } from './build.js';
 import { resolveProjectEnvironment } from './session-environment.js';
@@ -49,6 +50,16 @@ export interface EnvironmentBuildWaiter {
   threadId?: string;
 }
 
+/**
+ * Whether a session's sandbox may boot now: `refuse` is what its command fails
+ * with while it waits on a build, `note` what the agent is told about the
+ * build it boots from.
+ */
+export interface EnvironmentBuildDecision {
+  refuse?: string;
+  note?: string;
+}
+
 export const ENVIRONMENT_BUILT_MESSAGE = 'The environment build finished; the sandbox is ready.';
 
 export class EnvironmentBuildRunner {
@@ -62,7 +73,7 @@ export class EnvironmentBuildRunner {
   readonly #awaitingRun = new Set<string>();
   readonly #notifySession: EnvironmentBuildRunnerOptions['notifySession'];
   /** Sessions refused a sandbox until the project's build ends, by project. */
-  readonly #waiting = new Map<string, Map<string, EnvironmentBuildWaiter>>();
+  readonly #waiting = new Map<string, Map<string, EnvironmentBuildWaiter & { rebuild: boolean }>>();
   /** Why the project's last build failed, while it has no finished build. Cleared by the next started build. */
   readonly #failed = new Map<string, string>();
   #scheduleAvailable = false;
@@ -182,30 +193,61 @@ export class EnvironmentBuildRunner {
   };
 
   /**
-   * A session's command needs a sandbox and the project has no finished
-   * build: start one unless one is running, and remember the session so it
-   * hears how the build ends. Resolves to what the command should fail with.
-   * A build that already failed is not retried here, since it would fail the
-   * same way; the settings page shows it and can start another.
+   * Decide whether a session's sandbox boots now. It boots from the finished
+   * build when that build has the environment as saved now. With no finished
+   * build, or one built before a saved change (settings, repositories, setup
+   * commands, Build variables), it waits: a build starts unless one is running,
+   * and the session is told how it ends. A build that already failed is not
+   * retried here, since it would fail the same way; a session then boots the
+   * previous build if there is one, else it is refused with the failure.
    */
   readonly awaitEnvironmentBuild = async (
-    project: Pick<FactoryProject, 'id'>,
+    project: FactoryProject,
     waiter: EnvironmentBuildWaiter,
-  ): Promise<string | undefined> => {
+  ): Promise<EnvironmentBuildDecision> => {
+    const rebuild = Boolean(project.activeTemplateHeads);
+    if (rebuild && !(await this.#builtBeforeChange(project))) return {};
     const failed = this.#failed.get(project.id);
     const outcome = failed === undefined ? await this.start(project.id, 'manual') : undefined;
     if (outcome?.outcome === 'unavailable' || (outcome?.outcome === 'skipped' && outcome.reason === 'no_environment')) {
-      return undefined;
+      return {};
     }
-    const waiting = this.#waiting.get(project.id) ?? new Map<string, EnvironmentBuildWaiter>();
-    waiting.set(waiter.sessionId, waiter);
-    this.#waiting.set(project.id, waiting);
     const reason = failed ?? (outcome?.outcome === 'failed' ? outcome.reason : undefined);
-    if (reason !== undefined) {
-      return `The environment build failed: ${reason}. Fix it on the environment settings page, or start a build there; you'll be told when one finishes.`;
+    if (rebuild && reason !== undefined) {
+      return {
+        note: `The environment's latest saved change failed to build (${reason}), so this sandbox runs the previous build. See the environment settings page.`,
+      };
     }
-    return "The sandbox can't start yet: the environment is being built. You'll be told when it finishes, usually within 15 minutes.";
+    const waiting = this.#waiting.get(project.id) ?? new Map<string, EnvironmentBuildWaiter & { rebuild: boolean }>();
+    waiting.set(waiter.sessionId, { ...waiter, rebuild });
+    this.#waiting.set(project.id, waiting);
+    if (reason !== undefined) {
+      return {
+        refuse: `The environment build failed: ${reason}. Fix it on the environment settings page, or start a build there; you'll be told when one finishes.`,
+      };
+    }
+    return {
+      refuse: rebuild
+        ? "The sandbox can't start yet: the environment is being rebuilt with its latest saved change. You'll be told when it finishes, usually within 15 minutes."
+        : "The sandbox can't start yet: the environment is being built. You'll be told when it finishes, usually within 15 minutes.",
+    };
   };
+
+  /** Whether the active build predates a saved change; a build pinned before its inputs were recorded never does. */
+  async #builtBeforeChange(project: FactoryProject): Promise<boolean> {
+    const sourceControl = this.#deps.sourceControl;
+    if (!project.activeTemplateInputs || !sourceControl) return false;
+    try {
+      const { buildInputs } = await readEnvironmentBuildInputs(project, sourceControl, this.#deps.sandboxEnvs);
+      return buildInputs !== project.activeTemplateInputs;
+    } catch (error) {
+      this.#logger?.info('environment inputs could not be read; booting the active build', {
+        factoryProjectId: project.id,
+        reason: errorReason(error),
+      });
+      return false;
+    }
+  }
 
   /** Tell every session waiting on the project's build how it ended. */
   #buildEnded(projectId: string, result: EnvironmentBuildWorkflowResult): void {
@@ -214,11 +256,14 @@ export class EnvironmentBuildRunner {
     const waiting = this.#waiting.get(projectId);
     if (!waiting || !this.#notifySession) return;
     this.#waiting.delete(projectId);
-    const message =
-      result.status === 'ready'
-        ? ENVIRONMENT_BUILT_MESSAGE
-        : `The environment build failed: ${result.reason ?? 'the build did not finish'}. See the environment settings page.`;
-    for (const waiter of waiting.values()) {
+    const failure = `The environment build failed: ${result.reason ?? 'the build did not finish'}. See the environment settings page.`;
+    for (const { rebuild, ...waiter } of waiting.values()) {
+      const message =
+        result.status === 'ready'
+          ? ENVIRONMENT_BUILT_MESSAGE
+          : rebuild
+            ? `${failure} The sandbox starts from the previous build.`
+            : failure;
       this.#notifySession(waiter, message).catch((error: unknown) => {
         this.#logger?.info('environment build waiter could not be told', {
           factoryProjectId: projectId,

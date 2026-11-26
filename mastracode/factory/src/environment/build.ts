@@ -145,6 +145,17 @@ function withBuildEnv(
   };
 }
 
+/** The project's environment as saved now and the fingerprint a build of it would record. */
+export async function readEnvironmentBuildInputs(
+  project: FactoryProject,
+  sourceControl: Pick<EnvironmentBuildSourceControl, 'storage'>,
+  sandboxEnvs: Pick<SandboxEnvStore, 'resolve'> | undefined,
+) {
+  const environment = await resolveProjectEnvironment(sourceControl.storage, project);
+  const buildEnv = await environmentBuildEnv(project, sandboxEnvs);
+  return { environment, buildEnv, buildInputs: environmentBuildInputs(environment, buildEnv.buildEnvRevision) };
+}
+
 /**
  * Fingerprint of everything a build bakes into the template besides the
  * repository heads: provider settings, the repositories and their order,
@@ -272,11 +283,7 @@ export async function runEnvironmentBuild(
   const debounces = input.trigger === 'push' || input.trigger === 'session';
   if (debounces && environmentBuildDebounced(initial, now())) return { outcome: 'skipped', reason: 'debounced' };
 
-  const readInputs = async (project: FactoryProject) => {
-    const environment = await resolveProjectEnvironment(sourceControl.storage, project);
-    const buildEnv = await environmentBuildEnv(project, deps.sandboxEnvs);
-    return { environment, buildEnv, buildInputs: environmentBuildInputs(environment, buildEnv.buildEnvRevision) };
-  };
+  const readInputs = (project: FactoryProject) => readEnvironmentBuildInputs(project, sourceControl, deps.sandboxEnvs);
   // A `settings` run builds only for a project with a template whose inputs
   // moved; checked before any head lookup, so a save that changed nothing the
   // template bakes never calls GitHub or the provider.

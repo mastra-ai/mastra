@@ -244,8 +244,8 @@ describe('factory-environment-build workflow', () => {
       const second = await runner.awaitEnvironmentBuild(project, { sessionId: 's-2', threadId: 't-2' });
       await runner.awaitEnvironmentBuild(project, { sessionId: 's-1', threadId: 't-1' });
 
-      expect(first).toMatch(/the environment is being built/);
-      expect(second).toBe(first);
+      expect(first.refuse).toMatch(/the environment is being built\./);
+      expect(second).toEqual(first);
       expect(starts).toHaveBeenCalledTimes(1);
       expect(notifySession).not.toHaveBeenCalled();
 
@@ -278,7 +278,87 @@ describe('factory-environment-build workflow', () => {
       );
 
       const next = await runner.awaitEnvironmentBuild(project, { sessionId: 's-2', threadId: 't-2' });
-      expect(next).toMatch(/^The environment build failed: boom\. Fix it on the environment settings page/);
+      expect(next.refuse).toMatch(/^The environment build failed: boom\. Fix it on the environment settings page/);
+      expect(starts).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('sessions after a saved environment change', () => {
+    // A runner whose polls never wait, with one finished build already active.
+    async function builtRunner() {
+      const project = await seedProject(seed);
+      const sandbox = new BuildingSandbox();
+      const starts = vi.spyOn(sandbox.builds, 'start');
+      const notifySession = vi.fn(async () => {});
+      let mastra: Mastra | undefined;
+      const runner = new EnvironmentBuildRunner(depsFor(seed, sandbox), {
+        getMastra: () => mastra,
+        sleep: async () => {},
+        notifySession,
+      });
+      mastra = bootMastra(runner);
+      await runner.start(project.id, 'manual');
+      await vi.waitFor(async () =>
+        expect((await seed.projects.getById({ id: project.id }))?.activeTemplateInputs).toEqual(expect.any(String)),
+      );
+      const current = async () => (await seed.projects.getById({ id: project.id }))!;
+      const change = () =>
+        seed.projects.update({ orgId: 'org-1', id: project.id, input: { sandboxSettings: { cpuCount: 4 } } });
+      return { project, sandbox, starts, notifySession, runner, current, change };
+    }
+
+    it('boots the active build while it has the environment as saved', async () => {
+      const { runner, starts, current } = await builtRunner();
+
+      await expect(runner.awaitEnvironmentBuild(await current(), { sessionId: 's-1' })).resolves.toEqual({});
+      expect(starts).toHaveBeenCalledTimes(1);
+    });
+
+    it('waits on a rebuild with the saved change, then boots it', async () => {
+      const { sandbox, runner, starts, notifySession, current, change } = await builtRunner();
+      // The first read is the active build's, checked for a build still running.
+      sandbox.statuses = ['ready', 'building', 'ready'];
+      await change();
+
+      const decision = await runner.awaitEnvironmentBuild(await current(), { sessionId: 's-1', threadId: 't-1' });
+
+      expect(decision.refuse).toMatch(/being rebuilt with its latest saved change/);
+      expect(starts).toHaveBeenCalledTimes(2);
+      await vi.waitFor(() =>
+        expect(notifySession).toHaveBeenCalledWith({ sessionId: 's-1', threadId: 't-1' }, ENVIRONMENT_BUILT_MESSAGE),
+      );
+      await expect(runner.awaitEnvironmentBuild(await current(), { sessionId: 's-2' })).resolves.toEqual({});
+      expect(starts).toHaveBeenCalledTimes(2);
+    });
+
+    it('boots the previous build, and says so, once the rebuild with the change failed', async () => {
+      const { sandbox, runner, starts, notifySession, current, change } = await builtRunner();
+      sandbox.statuses = ['ready', 'building', 'failed'];
+      sandbox.failedError = 'setup exited 1';
+      await change();
+
+      await runner.awaitEnvironmentBuild(await current(), { sessionId: 's-1', threadId: 't-1' });
+      await vi.waitFor(() =>
+        expect(notifySession).toHaveBeenCalledWith(
+          { sessionId: 's-1', threadId: 't-1' },
+          'The environment build failed: setup exited 1. See the environment settings page. The sandbox starts from the previous build.',
+        ),
+      );
+
+      const next = await runner.awaitEnvironmentBuild(await current(), { sessionId: 's-1', threadId: 't-1' });
+      expect(next).toEqual({
+        note: "The environment's latest saved change failed to build (setup exited 1), so this sandbox runs the previous build. See the environment settings page.",
+      });
+      expect(starts).toHaveBeenCalledTimes(2);
+    });
+
+    it('boots a build pinned before its inputs were recorded without waiting', async () => {
+      const { runner, starts, current, change } = await builtRunner();
+      await change();
+
+      await expect(
+        runner.awaitEnvironmentBuild({ ...(await current()), activeTemplateInputs: null }, { sessionId: 's-1' }),
+      ).resolves.toEqual({});
       expect(starts).toHaveBeenCalledTimes(1);
     });
   });

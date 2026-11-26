@@ -85,8 +85,19 @@ export function setSessionEnvironmentNote(sessionId: string, note: string | null
   entry.state = note ? { ...rest, note } : rest;
 }
 
+// What the agent is told about the build its sandbox booted from; kept apart
+// from the state, which every boot records afresh.
+const buildNotes = new Map<string, string>();
+
+/** Set or clear what the agent is told about the environment build its sandbox runs. */
+export function setSessionEnvironmentBuildNote(sessionId: string, note: string | null): void {
+  if (note) buildNotes.set(sessionId, note);
+  else buildNotes.delete(sessionId);
+}
+
 export function clearSessionEnvironment(sessionId: string): void {
   environments.delete(sessionId);
+  buildNotes.delete(sessionId);
 }
 
 export function peekSessionEnvironment(sessionId: string): SessionEnvironmentState | undefined {
@@ -100,6 +111,7 @@ export function peekSessionEnvironmentTeardown(sessionId: string): SessionEnviro
 
 export function __clearSessionEnvironmentsForTests(): void {
   environments.clear();
+  buildNotes.clear();
 }
 
 function escapeText(value: string): string {
@@ -144,7 +156,11 @@ export class FactoryEnvironmentStateProcessor implements Processor<'factory-envi
     const state = environments.get(sessionId)?.state;
     if (!state) return;
     const untrusted = isUntrustedCheckout(args.requestContext);
-    const cacheKey = environmentCacheKey(state) + (untrusted ? ':untrusted' : '');
+    const buildNote = buildNotes.get(sessionId);
+    const cacheKey =
+      environmentCacheKey(state) +
+      (buildNote ? `:${environmentCacheKey({ ...state, note: buildNote })}` : '') +
+      (untrusted ? ':untrusted' : '');
     const hasBase = Boolean(args.lastSnapshot) && args.contextWindow.hasSnapshot;
     if (hasBase && (args.tracking?.currentCacheKey ?? args.lastSnapshot?.metadata?.state?.cacheKey) === cacheKey)
       return;
@@ -163,6 +179,7 @@ export class FactoryEnvironmentStateProcessor implements Processor<'factory-envi
       (untrusted
         ? ''
         : "\nA directory's AGENTS.md loads after you open a file there with view or an edit tool, not through execute_command. Before your first change in a directory, read any AGENTS.md in it or its parent directories you have not seen yet.") +
+      (buildNote ? `\n${escapeText(buildNote)}` : '') +
       (state.note ? `\n${escapeText(state.note)}` : '');
     return {
       id: STATE_ID,
