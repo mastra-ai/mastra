@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { fn } from 'storybook/test';
 import type { LogLevel, LogRecord, LogViewLine } from '../../types';
-import type { LogViewOrder } from '../log-view-list';
+import type { LogViewNextPage, LogViewOrder } from '../log-view-list';
 import { LogView, filterLogsByFields } from './index';
 import type { LogViewHeight } from './index';
 import type { FilterBarItem } from '@/ds/components/FilterBar';
@@ -65,6 +65,7 @@ const logs: SandboxLine[] = [
 interface CompositionProps {
   logs: SandboxLine[];
   order?: LogViewOrder;
+  nextPage?: LogViewNextPage;
   wrap?: boolean;
   search?: boolean;
   fieldChips?: boolean;
@@ -200,6 +201,19 @@ export const Loading: Story = {
 export const LoadingOlder: Story = {
   args: { hasNextPage: true, isFetchingNextPage: true },
   parameters: describe('The loading line sits at the older end and keeps its height between pages.'),
+};
+
+export const LoadingNewer: Story = {
+  args: {
+    logs: Array.from({ length: 8 }, () => logs.map(log => ({ ...log }))).flat(),
+    order: 'oldest-first',
+    nextPage: 'newer',
+    hasNextPage: true,
+    isFetchingNextPage: true,
+  },
+  parameters: describe(
+    'nextPage="newer" for an API that pages forward in time: the list opens at the top and newer logs load at the bottom.',
+  ),
 };
 
 export const Empty: Story = {

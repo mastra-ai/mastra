@@ -170,6 +170,10 @@ Pass `hasNextPage`, `isFetchingNextPage` and `onFetchNextPage` from your infinit
 
 <Canvas of={LogViewStories.LoadingOlder} />
 
+Some APIs page forward in time instead, returning newer logs on each page. Pass `nextPage="newer"` with `order="oldest-first"`. The list then opens on the oldest line at the top, and a "Loading newer logs" line at the bottom loads the next page as it comes into view.
+
+<Canvas of={LogViewStories.LoadingNewer} />
+
 ## Wrapping
 
 Long lines wrap by default, so nothing is hidden. Pass `wrap={false}` to keep each line on one row and scroll the list sideways, which keeps columns of similar lines aligned.
