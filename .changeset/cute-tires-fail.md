@@ -12,7 +12,7 @@ For these agents, `accepted` resolves once the signal is saved, so a resolved `d
 
 **`cancelQueuedMessages` now returns a promise**
 
-`Agent.cancelQueuedMessages` now returns a promise, for every agent. It resolves with every cancelled id once the cancellation finished, including signals kept in memory storage. A signal the run already took is not cancelled. Code that reads its result without `await` has to add one.
+`Agent.cancelQueuedMessages` now returns a promise, for every agent. It resolves with the IDs this process cancelled, including ones it deleted from memory storage when it knows the thread's store: this process started the thread's current run and that run hasn't ended, or the agent's memory is a fixed instance and this process knows the thread's run keeps its signals in storage. Other processes cancel matching input when they get the request, and those IDs are not in the result. A signal a run already took stays delivered. Code that reads its result without `await` has to add one.
 
 Before:
 
