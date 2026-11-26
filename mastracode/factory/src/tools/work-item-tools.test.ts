@@ -2,7 +2,13 @@ import assert from 'node:assert';
 
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { DispatcherBoardEngine } from '../board-engine/engine.js';
 import { createBoardRegistry } from '../boards/index.js';
+import type { BoardRegistry } from '../boards/index.js';
+import { boardRegistryOf } from '../boards/registry.js';
+import { compileStoredBoard } from '../boards/stored-board.js';
+import { workSeedWithTriage } from '../boards/work-seeds.js';
+import { workBoard } from '../boards/work.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { FactoryDeferredDecisionRecord } from '../storage/domains/work-items/base.js';
@@ -34,7 +40,9 @@ async function setup({
   actorProfile,
   interactive = true,
   intakeOrder = false,
+  boards = createBoardRegistry(),
 }: {
+  boards?: BoardRegistry;
   interactive?: boolean;
   /** Files by intake order over the project's stored rules, which start out empty. */
   intakeOrder?: boolean;
@@ -42,7 +50,6 @@ async function setup({
   actorProfile?: FactoryToolScope['actorProfile'];
 } = {}) {
   const seed = await createFactoryStorageForTests();
-  const boards = createBoardRegistry();
   // Two linked repositories, so a card that names neither is ambiguous. Only
   // the reads the repository check makes are stubbed.
   const linked = [
@@ -83,7 +90,7 @@ async function setup({
     {
       workItems: seed.workItems,
       boards,
-      transitionService,
+      boardEngine: { requestMove: transitionService.transition },
       auditRecorder,
       sessions: { getSourceControlBySessionId: async () => sourceControl },
       // Without intake rules to read, the route list, as before intake order.
@@ -147,6 +154,32 @@ describe('factory_create_work_item', () => {
       board: 'work',
       stages: ['intake'],
     });
+  });
+
+  it('files on a renamed board by the name people see, and refuses a name two boards share', async () => {
+    const renamed = (key: string, name: string) =>
+      compileStoredBoard({ ...workSeedWithTriage(), key, name }, workBoard);
+    const { run, workItems } = await setup({
+      intakeOrder: true,
+      boards: boardRegistryOf([renamed('work', 'Open source')]),
+    });
+    const created = await run<{ id: string }>('factory_create_work_item', {
+      title: 'Odd one',
+      description: 'x',
+      board: 'OPEN source',
+    });
+    expect(await workItems.getForProject('org-1', 'project-1', created.id)).toMatchObject({
+      board: 'work',
+      stages: ['intake'],
+    });
+
+    const shared = await setup({
+      intakeOrder: true,
+      boards: boardRegistryOf([renamed('work', 'Platform'), renamed('platform-two', 'Platform')]),
+    });
+    await expect(
+      shared.run('factory_create_work_item', { title: 'Odd one', description: 'x', board: 'platform' }),
+    ).rejects.toThrow(/matches more than one board; use its id instead: work \(Platform\), platform-two \(Platform\)/);
   });
 
   it('stamps the caller’s name and avatar on what it records, so the board can show who filed and moved it', async () => {
@@ -739,7 +772,7 @@ describe("a card's work requested from a chat", () => {
       ...createFactoryWorkItemTools(toolScope, {
         workItems: seed.workItems,
         boards,
-        transitionService: service,
+        boardEngine: new DispatcherBoardEngine({ transitionService: service, workItems: seed.workItems, boards }),
         auditRecorder: { record: vi.fn(async () => null) } as never,
         sessions: { getSourceControlBySessionId: async () => null },
         intakeEvaluator: 'route-list',

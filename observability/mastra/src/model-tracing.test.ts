@@ -140,6 +140,17 @@ describe('ModelSpanTracker', () => {
     expect(testExporter.getSpansByType(SpanType.MODEL_STEP)).toHaveLength(1);
   });
 
+  it('keeps the response id when the first provider chunk opens the inference', async () => {
+    const model = tracing.startSpan({ type: SpanType.MODEL_GENERATION, name: 'generation' });
+    const tracker = new ModelSpanTracker(model);
+    tracker.startStep();
+    await consumeStream(
+      tracker.wrapInferenceStream(createMockStream([{ type: 'response-metadata', payload: { id: 'resp-1' } }])),
+    );
+    tracker.interruptInference();
+    expect(testExporter.getSpansByType(SpanType.MODEL_INFERENCE)[0]?.attributes?.responseId).toBe('resp-1');
+  });
+
   it('forwards every chunk when tracing bookkeeping throws', async () => {
     const model = tracing.startSpan({ type: SpanType.MODEL_GENERATION, name: 'generation' });
     const tracker = new ModelSpanTracker(model);

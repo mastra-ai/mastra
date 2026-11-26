@@ -101,6 +101,59 @@ describe('defineBoard phase fields', () => {
     expect(board.phases.backlog.nextPhases).toEqual(['done']);
   });
 
+  it("keeps a working phase's outcomes, each going to one of its next phases, and rejects any that cannot", () => {
+    const outcomes = [
+      { key: 'ship', label: 'Ready to ship', to: 'done' },
+      { key: 'back', label: 'Needs more work', to: 'backlog' },
+    ];
+    const board = release({
+      backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['build'] },
+      build: { name: 'Build', kind: 'working', nextPhases: ['done', 'backlog'], outcomes },
+      done: { name: 'Done', kind: 'terminal' },
+    });
+    expect(board.phases.build).toMatchObject({ outcomes, nextPhases: ['done', 'backlog'] });
+
+    const build = (fields: Record<string, unknown>) =>
+      release({
+        backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['build'] },
+        build: { name: 'Build', kind: 'working', nextPhases: ['done'], ...fields },
+        done: { name: 'Done', kind: 'terminal' },
+      });
+    expect(() => build({ outcomes: [{ key: 'back', label: 'Back', to: 'backlog' }] })).toThrow(
+      new BoardDefinitionError(
+        'Phase "build" outcome "back" goes to "backlog", which is not one of its nextPhases (done).',
+      ),
+    );
+    expect(() =>
+      build({
+        outcomes: [
+          { key: 'ship', label: 'Ship', to: 'done' },
+          { key: 'ship', label: 'Ship again', to: 'done' },
+        ],
+      }),
+    ).toThrow(new BoardDefinitionError('Phase "build" declares outcome "ship" more than once.'));
+    expect(() => build({ outcomes: [{ key: 'ship', to: 'done' }] })).toThrow(
+      new BoardDefinitionError('Phase "build" outcome "ship" needs a label.'),
+    );
+    expect(() => build({ outcomes: [{ key: 'ship', label: 'Ship', to: 'done', move: true }] })).toThrow(
+      new BoardDefinitionError('Phase "build" outcomes may only set key, label and to.'),
+    );
+    expect(() => build({ outcomes: [] })).toThrow(
+      new BoardDefinitionError('Phase "build" outcomes must list 1 to 20 outcomes.'),
+    );
+    expect(() =>
+      release({
+        backlog: {
+          name: 'Backlog',
+          kind: 'resting',
+          nextPhases: ['done'],
+          outcomes: [{ key: 'ship', label: 'Ship', to: 'done' }],
+        },
+        done: { name: 'Done', kind: 'terminal' },
+      }),
+    ).toThrow(new BoardDefinitionError('Phase "backlog" is resting; only a working phase lists outcomes.'));
+  });
+
   it('runs a working phase in the work context unless it names one, and rejects conflicting names', () => {
     const board = release({
       backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['build'] },
@@ -209,7 +262,7 @@ describe('defineBoard phase fields', () => {
     });
     expect(board.phases.building.exitTool).toEqual({ id: 'ship_it', autoApprove: false });
 
-    // The exit tool does not move the card; the agent does, with factory_transition_work_item.
+    // The exit tool adds no rule that moves the card: its success is the phase's outcome, applied when the run ends.
     expect(board.tools).toEqual({});
     expect(board.phases.planning.nextPhases).toEqual(['building', 'backlog']);
   });
@@ -244,7 +297,7 @@ describe('defineBoard phase fields', () => {
         backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['moving'] },
         moving: { name: 'Moving', kind: 'working', exitTool: 'factory_transition_work_item', nextPhases: ['backlog'] },
       }),
-    ).toThrow('Phase "moving" cannot end with factory_transition_work_item: that tool already moves the card.');
+    ).toThrow('Phase "moving" cannot end with factory_transition_work_item: that tool already ends the phase.');
     expect(() =>
       release({
         backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['one'] },
@@ -414,7 +467,7 @@ describe('defineBoard phase fields', () => {
     expect(warn.mock.calls[0]![0]).toBe(
       '[Mastra Factory] Board "legacy-release" uses deprecated fields: title → name, phases.backlog.title → name, ' +
         'phases.backlog.next → nextPhases, phases.build.title → name, phases.build.role → runner.context, ' +
-        'phases.build.outcomes → nextPhases, phases.done.title → name. They still work but will be removed in a ' +
+        'phases.build.outcomes map → nextPhases, or a list of outcomes, phases.done.title → name. They still work but will be removed in a ' +
         'future release. It also declares phases.build.onEnter, phases.build.onExit, which are ignored; use ' +
         "runner.skill to start a phase's run.",
     );

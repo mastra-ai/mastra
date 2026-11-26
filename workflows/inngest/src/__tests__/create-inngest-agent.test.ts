@@ -13,6 +13,7 @@ import {
   AGENT_STREAM_TOPIC,
   AgentControlEventTypes,
   AgentStreamEventTypes,
+  DURABLE_CONTEXT_SEGMENT_KEY,
   DURABLE_STOP_WHEN_ERROR_ID,
   agentThreadStreamRuntime,
   createDurableAgentStream,
@@ -1226,11 +1227,13 @@ describe('InngestAgent parity surface', () => {
         await publishStepAndFinish(durableAgent, runId);
         await vi.waitFor(() => expect(fired).toEqual(['onFinish:anon:acme']));
         const resumeEvent = sendSpy.mock.calls.map(([event]) => event as any).find(event => event.data?.resume);
-        // No user, roles or permissions from the starting run. The only other key is the
-        // framework's segment-span carrier (#30812); this resume opened no spans, so it is null.
+        // No user, roles or permissions from the starting run. The other keys are the framework's
+        // segment-span carrier (#30812), null because this resume opened no spans, and the
+        // segment identity that keeps steps from reusing another caller's live context.
         expect(resumeEvent.data.requestContext).toEqual({
           tenant: 'acme',
           mastra__durableSegments: { [runId]: null },
+          [DURABLE_CONTEXT_SEGMENT_KEY]: expect.any(String),
         });
       } finally {
         result.cleanup();
@@ -1702,6 +1705,7 @@ describe('InngestAgent parity surface', () => {
               requestId: 'request-1',
               // The segment-span carrier every resume adds (#30812); no spans opened here.
               mastra__durableSegments: { [runId]: null },
+              [DURABLE_CONTEXT_SEGMENT_KEY]: expect.any(String),
             },
             tracingOptions: {
               traceId: 'trace-1',

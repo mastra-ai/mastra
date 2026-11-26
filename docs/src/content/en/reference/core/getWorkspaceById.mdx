@@ -1,0 +1,62 @@
+---
+title: "Reference: Mastra.getWorkspaceById() | Core"
+description: "The .getWorkspaceById() method returns a registered workspace by its ID."
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.getWorkspaceById()
+
+The `.getWorkspaceById()` method returns a workspace registered with the Mastra instance. By default, it throws when no workspace exists for the ID. Pass `{ optional: true }` to get `undefined` instead, for example to check whether a workspace exists before creating it.
+
+## Usage example
+
+```typescript
+const workspace = mastra.getWorkspaceById('workspace-123')
+```
+
+Check for a workspace without throwing:
+
+```typescript
+const existing = mastra.getWorkspaceById('workspace-456', { optional: true })
+if (!existing) {
+  // Create and register the workspace
+}
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'The ID of the workspace to return.',
+  },
+  {
+    name: 'options',
+    type: '{ optional?: boolean }',
+    description:
+      'Set `optional` to `true` to return `undefined` for an unknown ID instead of logging and throwing an error.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'workspace',
+    type: 'Workspace | undefined',
+    description:
+      'The registered workspace. `undefined` only when `optional` is `true` and no workspace exists for the ID.',
+  },
+]}
+/>
+
+## Related
+
+- [Mastra.removeWorkspace()](/reference/core/removeWorkspace)
+- [Workspace class](/reference/workspace/workspace-class)

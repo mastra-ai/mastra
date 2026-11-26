@@ -1,6 +1,6 @@
 {
   "name": "@mastra/redis-streams",
-  "version": "0.9.1-alpha.1",
+  "version": "0.9.2-alpha.0",
   "description": "Mastra Redis Streams PubSub integration",
   "license": "Apache-2.0",
   "type": "module",
@@ -58,7 +58,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.86.0-0 <2.0.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

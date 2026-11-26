@@ -9,6 +9,7 @@ import { getKeybindings, wrapTextWithAnsi } from '@earendil-works/pi-tui';
 import type { Component, SelectItem, SelectListTheme } from '@earendil-works/pi-tui';
 
 import type { MouseAware, MousePoint, MouseTarget } from '../mouse/hit-test.js';
+import { ListWindow } from './list-window.js';
 
 const SELECTED_PREFIX = '→ ';
 const UNSELECTED_PREFIX = '  ';
@@ -30,6 +31,7 @@ export class WrappingSelectList implements Component, MouseAware {
   private items: SelectItem[];
   private filteredItems: SelectItem[];
   private selectedIndex = 0;
+  private readonly window = new ListWindow();
   private maxVisible: number;
   private theme: SelectListTheme;
   /** When true, items are toggled (space) and confirmed together (enter) instead of selected one at a time. */
@@ -44,7 +46,7 @@ export class WrappingSelectList implements Component, MouseAware {
   onConfirmMulti?: (items: SelectItem[]) => void;
 
   /**
-   * `card` style (inline prompts): an accent ❯ cursor and a bold label instead of a highlighted row,
+   * `card` style (inline prompts): an accent cursor and a bold label instead of a highlighted row,
    * and ●/○ instead of [x]/[ ] in multi-select mode.
    */
   private cardStyle: CardListStyle | undefined;
@@ -105,6 +107,10 @@ export class WrappingSelectList implements Component, MouseAware {
     return lines;
   }
 
+  menuWindow(): ListWindow {
+    return this.window;
+  }
+
   /** Maps a row to the (possibly multi-row) item drawn there. Clicks select, or toggle in multi-select mode. */
   mouseTarget(point: MousePoint): MouseTarget | undefined {
     const { startIndex, endIndex } = this.visibleRange();
@@ -133,11 +139,7 @@ export class WrappingSelectList implements Component, MouseAware {
   }
 
   private visibleRange(): { startIndex: number; endIndex: number } {
-    const startIndex = Math.max(
-      0,
-      Math.min(this.selectedIndex - Math.floor(this.maxVisible / 2), this.filteredItems.length - this.maxVisible),
-    );
-    return { startIndex, endIndex: Math.min(startIndex + this.maxVisible, this.filteredItems.length) };
+    return this.window.range(this.selectedIndex, this.filteredItems.length, this.maxVisible);
   }
 
   private toggleChecked(item: SelectItem): void {

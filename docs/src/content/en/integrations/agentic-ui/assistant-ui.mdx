@@ -156,6 +156,10 @@ Run Mastra as a standalone server and connect your Next.js frontend (with Assist
     ```
 
     Now, the Assistant UI frontend will send chat requests directly to your running Mastra server.
+
+    :::note
+    This setup doesn't save conversations in [Mastra memory](/docs/memory/overview). To save them, send a `memory` object with a `thread` ID for the conversation and a `resource` ID for the user with each request. Visit [Using Mastra Memory](/integrations/agentic-ui/ai-sdk-ui#using-mastra-memory) for an example.
+    :::
   </StepItem>
 
   <StepItem>

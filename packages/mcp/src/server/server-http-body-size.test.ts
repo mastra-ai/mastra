@@ -51,6 +51,9 @@ describe('MCPServer HTTP request body size', () => {
       method: 'tools/call',
       params: { name: 'sizeTool', arguments: { text: 'x'.repeat(5 * MIB) } },
       headers: { 'mcp-name': 'sizeTool' },
+      // The server rejects on the declared Content-Length and closes the connection. Uploading the
+      // body would race that close (EPIPE/ECONNRESET, sometimes before the 413 is read).
+      withholdBody: true,
     });
 
     expect(response.status).toBe(413);
@@ -85,6 +88,7 @@ describe('MCPServer HTTP request body size', () => {
       method: 'tools/call',
       params: { name: 'sizeTool', arguments: { text: 'z'.repeat(2 * 1024) } },
       headers: { 'mcp-name': 'sizeTool' },
+      withholdBody: true,
     });
 
     expect(response.status).toBe(413);

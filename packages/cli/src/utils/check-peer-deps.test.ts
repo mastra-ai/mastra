@@ -33,7 +33,7 @@ describe('checkMastraPeerDeps', () => {
       packageJson: {},
     } as ReturnType<typeof getPackageInfo>);
 
-    const mismatches = await checkMastraPeerDeps(packages);
+    const mismatches = await checkMastraPeerDeps(packages, process.cwd());
     expect(mismatches).toEqual([]);
   });
 
@@ -64,7 +64,7 @@ describe('checkMastraPeerDeps', () => {
       } as ReturnType<typeof getPackageInfo>;
     });
 
-    const mismatches = await checkMastraPeerDeps(packages);
+    const mismatches = await checkMastraPeerDeps(packages, process.cwd());
     expect(mismatches).toHaveLength(1);
     expect(mismatches[0]).toEqual({
       package: '@mastra/memory',
@@ -102,7 +102,7 @@ describe('checkMastraPeerDeps', () => {
       } as ReturnType<typeof getPackageInfo>;
     });
 
-    const mismatches = await checkMastraPeerDeps(packages);
+    const mismatches = await checkMastraPeerDeps(packages, process.cwd());
     expect(mismatches).toHaveLength(0);
   });
 
@@ -133,7 +133,7 @@ describe('checkMastraPeerDeps', () => {
       } as ReturnType<typeof getPackageInfo>;
     });
 
-    const mismatches = await checkMastraPeerDeps(packages);
+    const mismatches = await checkMastraPeerDeps(packages, process.cwd());
     expect(mismatches).toHaveLength(0);
   });
 
@@ -151,7 +151,7 @@ describe('checkMastraPeerDeps', () => {
       },
     } as ReturnType<typeof getPackageInfo>);
 
-    const mismatches = await checkMastraPeerDeps(packages);
+    const mismatches = await checkMastraPeerDeps(packages, process.cwd());
     expect(mismatches).toHaveLength(0);
   });
 
@@ -182,7 +182,7 @@ describe('checkMastraPeerDeps', () => {
       } as ReturnType<typeof getPackageInfo>;
     });
 
-    const mismatches = await checkMastraPeerDeps(packages);
+    const mismatches = await checkMastraPeerDeps(packages, process.cwd());
     expect(mismatches).toHaveLength(0);
   });
 
@@ -203,7 +203,7 @@ describe('checkMastraPeerDeps', () => {
         } as ReturnType<typeof getPackageInfo>;
       });
 
-      await expect(checkMastraPeerDeps(packages)).resolves.toEqual([]);
+      await expect(checkMastraPeerDeps(packages, process.cwd())).resolves.toEqual([]);
     },
   );
 });

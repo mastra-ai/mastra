@@ -189,6 +189,22 @@ describe('usePendingConnect', () => {
       expect(result.current.settled).toBeNull();
       resolveAuth?.();
     });
+
+    it('cancel closes the hosted connect window too', async () => {
+      const popup = stubPopup();
+      server.use(
+        sessionHandler,
+        http.get(statusPath, () => HttpResponse.json({ ...connectPromptStatusActive, status: 'pending' })),
+      );
+
+      const { result } = renderPendingConnect();
+      act(() => result.current.connect(hostedProvider));
+      await waitFor(() => expect(result.current.pending).not.toBeNull());
+
+      act(() => result.current.cancel());
+      expect(popup.close).toHaveBeenCalled();
+      expect(result.current.pending).toBeNull();
+    });
   });
 
   describe('when the connection settles active', () => {

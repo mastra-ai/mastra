@@ -72,7 +72,7 @@ import type {
 import { parsePartialJson, processDataStream } from '../utils/ai-sdk-v4';
 import { getClientToolModelOutput } from '../utils/client-tool-model-output';
 import { processClientTools } from '../utils/process-client-tools';
-import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
+import { isHandlerFailure, processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
 import { createSseEventSplitter } from '../utils/sse-event-splitter';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { BaseResource } from './base';
@@ -106,6 +106,31 @@ type ToolCallRespondFn<OUTPUT> = (
 ) => Promise<FullOutput<OUTPUT>>;
 
 type ClientToolObservabilityContext = { traceparent: string; tracestate?: string; baggage?: string };
+
+// Errors waiting for the consumer to read the chunks already queued on a stream,
+// because erroring a ReadableStream discards its queue. See errorAfterQueuedChunks.
+const pendingStreamErrors = new WeakMap<ReadableStreamDefaultController<Uint8Array>, unknown>();
+
+// Legacy streams report a failure after their writable closes, once the reader has every chunk.
+const legacyStreamErrors = new WeakMap<WritableStream<Uint8Array>, unknown>();
+
+/**
+ * Errors the stream once the consumer has read every chunk already enqueued, so a
+ * reader still gets the partial response before the failure. The stream's `pull`
+ * (see createCancellableStream) delivers a deferred error when its queue drains.
+ */
+function errorAfterQueuedChunks(controller: ReadableStreamDefaultController<Uint8Array>, error: unknown) {
+  if (controller.desiredSize === null || pendingStreamErrors.has(controller)) return;
+  if (controller.desiredSize > 0) {
+    try {
+      controller.error(error);
+    } catch {
+      // Already closed
+    }
+    return;
+  }
+  pendingStreamErrors.set(controller, error);
+}
 
 type ClientToolObservabilityEnvelope = {
   parentContext: ClientToolObservabilityContext;
@@ -976,6 +1001,10 @@ export class Agent extends BaseResource {
           } catch (error) {
             agent.deleteLatestSignalRuntimeOptions({ resourceId, threadId });
             console.error('Error running client-tool continuation:', error);
+            // Surface the failure to the caller instead of swallowing it, so a
+            // rejected continuation rejects processDataStream with the original
+            // error rather than reconnecting or resolving as if it succeeded.
+            throw error;
           } finally {
             agent.deleteSignalRuntimeOptions(runId);
           }
@@ -1857,7 +1886,11 @@ export class Agent extends BaseResource {
       async pull(controller) {
         const { done, value } = await innerReader.read();
         if (done) {
-          controller.close();
+          if (legacyStreamErrors.has(writable)) {
+            controller.error(legacyStreamErrors.get(writable));
+          } else {
+            controller.close();
+          }
         } else {
           controller.enqueue(value);
         }
@@ -2316,6 +2349,11 @@ export class Agent extends BaseResource {
       start(controller) {
         readableController = controller;
       },
+      pull(controller) {
+        if (pendingStreamErrors.has(controller)) {
+          controller.error(pendingStreamErrors.get(controller));
+        }
+      },
       cancel(reason) {
         abortController.abort(reason);
       },
@@ -2343,8 +2381,15 @@ export class Agent extends BaseResource {
     const detachSignal = signal;
     signal = mergeAbortSignals(detachSignal, transportAbort.signal);
     let cancellationTimer: ReturnType<typeof setTimeout> | undefined;
-    const stopCancellation = () => cancellationAbort.abort();
+    let cancelling = false;
+    // A consumer detach ends the retry; the SDK's own cancel after an onChunk failure must not end
+    // a cancellation the caller already started, which keeps running until acknowledged or the cap.
+    const keepCancelling = () => cancelling && isHandlerFailure(detachSignal?.reason);
+    const stopCancellation = () => {
+      if (!keepCancelling()) cancellationAbort.abort();
+    };
     const cancelExecution = () => {
+      cancelling = true;
       cancellationTimer = setTimeout(
         () => cancellationAbort.abort(new Error('Agent run cancellation was not acknowledged')),
         10_000,
@@ -2388,6 +2433,8 @@ export class Agent extends BaseResource {
     const cleanupCancellation = () => {
       callerSignal?.removeEventListener('abort', cancelExecution);
       detachSignal?.removeEventListener('abort', stopCancellation);
+      // The in-flight retry clears its own cap when it ends.
+      if (keepCancelling()) return;
       clearTimeout(cancellationTimer);
       stopCancellation();
     };
@@ -2432,6 +2479,8 @@ export class Agent extends BaseResource {
     const isAborted = () => Boolean(signal?.aborted || callerSignal?.aborted);
     const isAbortError = (error: unknown) => isAborted() || (error as Error)?.name === 'AbortError';
     const safeClose = () => {
+      // A failure is waiting for the consumer to drain the queue; closing would hide it.
+      if (pendingStreamErrors.has(controller)) return;
       try {
         controller.close();
       } catch {
@@ -2503,10 +2552,11 @@ export class Agent extends BaseResource {
           { signal },
         )
         .catch(error => {
-          if (!isAbortError(error)) {
-            console.error('Error piping to controller:', error);
+          if (isAbortError(error)) {
+            safeClose();
+          } else {
+            errorAfterQueuedChunks(controller, error);
           }
-          safeClose();
         });
 
       // Surface the abort to a consumer that is still reading (e.g. when a caller-provided
@@ -2782,9 +2832,8 @@ export class Agent extends BaseResource {
                   signal,
                 );
               } catch (error) {
-                if (!isAbortError(error)) {
-                  console.error('Error processing recursive stream response:', error);
-                }
+                // Fail the outer stream instead of leaving it open with a half-finished reply.
+                if (!isAbortError(error)) throw error;
               }
             } else {
               // Close the controller after all processing is complete
@@ -2817,16 +2866,17 @@ export class Agent extends BaseResource {
         lastMessage: undefined,
       })
         .catch(async error => {
-          if (!isAbortError(error)) {
-            console.error('Error processing stream response:', error);
-          }
-          // On error, wait for pipe to complete then close the controller
+          // Let the pipe finish so the consumer still receives everything the server sent.
           try {
             await pipePromise;
           } catch {
             // pipePromise already has its own .catch; ignore here.
           }
-          safeClose();
+          if (isAbortError(error)) {
+            safeClose();
+          } else {
+            errorAfterQueuedChunks(controller, error);
+          }
         })
         .finally(() => {
           cleanupCancellation();
@@ -3888,7 +3938,7 @@ export class Agent extends BaseResource {
 
       // Pipe one branch to the writable stream. Passing the signal lets an abort
       // cancel this tee branch so the underlying response body is released.
-      streamForWritable
+      const pipePromise = streamForWritable
         .pipeTo(writable, {
           preventClose: true,
           signal,
@@ -3898,6 +3948,15 @@ export class Agent extends BaseResource {
             console.error('Error piping to writable stream:', error);
           }
         });
+
+      // Close the writable once everything piped has been written, marking the failure so
+      // the reader errors after the partial response instead of hanging or ending normally.
+      const failStream = async (error: unknown) => {
+        if (isAbortError(error) || legacyStreamErrors.has(writable)) return;
+        await pipePromise;
+        legacyStreamErrors.set(writable, error);
+        writable.close().catch(() => {});
+      };
 
       // Process the other branch for chat response handling
       const processingStream = signal
@@ -4015,11 +4074,7 @@ export class Agent extends BaseResource {
                   },
                   writable,
                   signal,
-                ).catch(error => {
-                  if (!isAbortError(error)) {
-                    console.error('Error processing stream response:', error);
-                  }
-                });
+                ).catch(error => failStream(error));
               }
             }
           } else {
@@ -4030,11 +4085,7 @@ export class Agent extends BaseResource {
           }
         },
         lastMessage: undefined,
-      }).catch(error => {
-        if (!isAbortError(error)) {
-          console.error('Error processing stream response:', error);
-        }
-      });
+      }).catch(error => failStream(error));
     } catch (error) {
       if (!isAbortError(error)) {
         console.error('Error processing stream response:', error);

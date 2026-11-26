@@ -13,6 +13,8 @@ import { PgFactoryStorage, PostgresStore } from '@mastra/pg';
 import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import type { FactoryBoardEngineFactory } from '../board-engine/engine.js';
+import { createWorkflowBoardEngine } from '../board-engine/workflow-engine.js';
 import { MastraFactory } from '../factory.js';
 import { resolveGithubRules } from '../integrations/github/default-rules.js';
 import { GithubIntegration } from '../integrations/github/integration.js';
@@ -219,7 +221,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
     }
 
     /** Boots one replica: a real `MastraFactory` with its API mounted on Hono. */
-    async function boot(newStorage: () => FactoryStorage, orgId: string, options: { boards?: InstalledBoard[] } = {}) {
+    async function boot(
+      newStorage: () => FactoryStorage,
+      orgId: string,
+      options: { boards?: InstalledBoard[]; boardEngine?: FactoryBoardEngineFactory } = {},
+    ) {
       const storage = newStorage();
       // Every session sandbox of this boot shares one home directory, so a file
       // seeded for it is where the session's own workspace filesystem reads.
@@ -521,9 +527,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
 
       /**
        * The agent, answering only what was just asked of it (the messages after its last turn):
-       * started on the plan skill with Shipyard's instructions, it submits a plan; once the plan
-       * is approved, it moves the card to Building. Anything else gets a text answer, which ends
-       * the run.
+       * started on the plan skill with Shipyard's instructions, it submits a plan; the approved plan
+       * is Planning's outcome, so Factory moves the card to Building once the run ends. Started on
+       * the build skill, it reports Building's `done` outcome. It never moves the card itself.
+       * Anything else gets a text answer, which ends the run.
        */
       function shipyardAgent(input: string): ToolCall | undefined {
         const items = JSON.parse(input) as { type?: string; role?: string; output?: string }[];
@@ -534,12 +541,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         if (asked.includes('<skill name=\\"factory-plan\\">') && asked.includes(PLAN_NOTE)) {
           return { name: 'submit_plan', args: { path: PLAN_PATH } };
         }
-        if (items[lastTurn]?.type === 'function_call_output' && items[lastTurn].output?.includes('Plan approved.')) {
-          const revision = Number([...input.matchAll(/expectedRevision (\d+)/g)].at(-1)?.[1]);
-          return {
-            name: 'factory_transition_work_item',
-            args: { stage: 'execute', expectedRevision: revision, rationale: 'Plan approved.' },
-          };
+        if (asked.includes('<skill name=\\"factory-build\\">') && asked.includes('Quick fix')) {
+          return { name: 'factory_report_outcome', args: { outcome: 'done', reason: 'Nothing left to change.' } };
         }
         return undefined;
       }
@@ -700,10 +703,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         return requests.filter(body => body.includes(`<skill name=\\"${skill}\\">`) && body.includes(title));
       }
 
-      it("runs Shipyard's configuration: edited phases and its intake route change what Factory runs", async () => {
+      /** Shipyard's edited phases and intake route change what Factory runs. */
+      async function runShipyard(boardEngine?: FactoryBoardEngineFactory) {
         const requests = stubModel(shipyardAgent);
         const orgId = `org-${randomUUID()}`;
-        const replica = await boot(database(), orgId);
+        const replica = await boot(database(), orgId, boardEngine ? { boardEngine } : {});
         const projectId = await runnableProject(replica, orgId);
         await configureShipyard(replica, projectId);
         // The plan the auto-approved submission names has to be readable when the plan run submits it.
@@ -737,8 +741,14 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         // card, and its plan is approved for it: the card moves on to Building.
         await ruleMoves(replica, orgId, projectId, quick, 'planning');
         await ruleMoves(replica, orgId, projectId, large, 'planning');
-        await vi.waitFor(async () => expect(await stagesOf(quick)).toEqual(['execute']), { timeout: 30_000 });
+        // Building's run reports `done`, and Factory moves the card there once that run ends. No session
+        // was offered, or called, a tool that moves the card: every move came from a reported outcome.
+        await vi.waitFor(async () => expect(await stagesOf(quick)).toEqual(['done']), { timeout: 30_000 });
         expect(runsOf(requests, 'factory-plan', 'Quick fix')[0]).toContain(PLAN_NOTE);
+        expect(runsOf(requests, 'factory-build', 'Quick fix')).not.toEqual([]);
+        const history = (await replica.workItems.get({ orgId, id: quick.id }))!.stageHistory.map(entry => entry.stage);
+        expect(history.slice(-3)).toEqual(['planning', 'execute', 'done']);
+        expect(requests.some(body => body.includes('factory_transition_work_item'))).toBe(false);
 
         // The unlabelled card's plan run waits for a person.
         expect(await stagesOf(large)).toEqual(['planning']);
@@ -781,6 +791,14 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           { timeout: 20_000 },
         );
         expect(runsOf(requests, 'factory-review', 'Add rate limiting')).not.toEqual([]);
+      }
+
+      it("runs Shipyard's configuration: edited phases and its intake route change what Factory runs", async () => {
+        await runShipyard();
+      }, 120_000);
+
+      it("runs Shipyard's configuration on the workflow board engine", async () => {
+        await runShipyard(createWorkflowBoardEngine);
       }, 120_000);
 
       it("moves a card through a new project's Work, which has no Triage, starting Planning's run from Intake", async () => {

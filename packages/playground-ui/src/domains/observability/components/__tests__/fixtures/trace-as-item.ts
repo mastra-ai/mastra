@@ -20,3 +20,9 @@ export function createTraceDetails(input: unknown, output: unknown): GetSpanResp
     updatedAt: timestamp,
   };
 }
+
+/** An agent run's input as older runs recorded it: the messages wrapped in `{ messages }`. */
+export function createAgentRunInput() {
+  const messages = [{ role: 'user', content: 'What is the weather in Seattle?' }];
+  return { input: { messages }, messages };
+}

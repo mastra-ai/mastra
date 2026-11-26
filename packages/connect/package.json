@@ -1,6 +1,6 @@
 {
   "name": "@mastra/connect",
-  "version": "1.5.0-alpha.4",
+  "version": "1.6.0-alpha.1",
   "description": "Use Mastra platform integration connections as agent toolsets",
   "type": "module",
   "main": "./dist/index.js",
@@ -30,6 +30,8 @@
     "build:watch": "pnpm build:lib --watch",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "generate-provider": "tsx scripts/generate-provider.ts",
+    "generate:event-payloads": "tsx scripts/generate-event-payloads.ts",
+    "generate:event-types": "tsx scripts/generate-event-types.ts",
     "generate:provider-docs": "tsx scripts/generate-provider-docs.ts",
     "lint": "oxlint --type-aware .",
     "lint:fix": "oxlint --type-aware --fix .",
@@ -38,7 +40,7 @@
     "smoke-test": "tsx scripts/smoke-test/index.ts",
     "smoke-test:channels": "tsx scripts/smoke-test/channels/index.ts",
     "sync-templates": "tsx scripts/sync-templates.ts",
-    "test": "vitest run && tsc --noEmit"
+    "test": "vitest run && tsc --noEmit && tsc --noEmit -p type-tests/augmented"
   },
   "keywords": [
     "mastra",
@@ -76,6 +78,7 @@
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
+    "yaml": "^2.9.1",
     "zod": "catalog:"
   },
   "dependencies": {

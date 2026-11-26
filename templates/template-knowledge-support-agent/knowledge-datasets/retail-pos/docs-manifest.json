@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "id": "retail-pos-docs",
+  "version": "2026-11-20.1",
+  "pages": [
+    {
+      "key": "network-guide-0",
+      "path": "guides/network",
+      "title": "Square Terminal network checks",
+      "file": "network.md",
+      "scope": {
+        "kind": "docs",
+        "profile": "retailops-store-42"
+      },
+      "kind": "reference",
+      "description": "Square Terminal network checks",
+      "source": {
+        "kind": "original summary of official Square guidance",
+        "url": "https://squareup.com/help/us/en/article/8350-troubleshoot-network-connection-on-square-terminal",
+        "verifiedOn": "2026-11-20"
+      },
+      "links": ["safety-policy-0"]
+    },
+    {
+      "key": "payments-guide-0",
+      "path": "guides/payments",
+      "title": "Square Terminal payment errors and diagnostics",
+      "file": "payments.md",
+      "scope": {
+        "kind": "docs",
+        "profile": "retailops-store-42"
+      },
+      "kind": "reference",
+      "description": "Square Terminal payment errors and diagnostics",
+      "source": {
+        "kind": "original summary of official Square guidance",
+        "url": "https://squareup.com/help/us/en/article/8351-troubleshoot-payment-errors-on-square-terminal",
+        "verifiedOn": "2026-11-20"
+      },
+      "links": ["safety-policy-0"]
+    },
+    {
+      "key": "printer-guide-0",
+      "path": "guides/printer",
+      "title": "Square printer connection checks",
+      "file": "printer.md",
+      "scope": {
+        "kind": "docs",
+        "profile": "retailops-store-42"
+      },
+      "kind": "reference",
+      "description": "Square printer connection checks",
+      "source": {
+        "kind": "original summary of official Square guidance",
+        "url": "https://squareup.com/help/us/en/article/5515-printer-troubleshooting",
+        "verifiedOn": "2026-11-20"
+      },
+      "links": ["safety-policy-0"]
+    },
+    {
+      "key": "safety-policy-0",
+      "path": "policies/safe-changes",
+      "title": "Example team support safety",
+      "file": "retail-policy.md",
+      "scope": {
+        "kind": "tenant",
+        "profile": "retailops-store-42"
+      },
+      "kind": "policy",
+      "source": {
+        "kind": "example team policy",
+        "license": "Apache-2.0"
+      }
+    },
+    {
+      "key": "network-guide-2",
+      "path": "guides/network",
+      "title": "Square Terminal network checks",
+      "file": "network.md",
+      "scope": {
+        "kind": "docs",
+        "profile": "fieldretail-store-42"
+      },
+      "kind": "reference",
+      "description": "Square Terminal network checks",
+      "source": {
+        "kind": "original summary of official Square guidance",
+        "url": "https://squareup.com/help/us/en/article/8350-troubleshoot-network-connection-on-square-terminal",
+        "verifiedOn": "2026-11-20"
+      },
+      "links": ["safety-policy-2"]
+    },
+    {
+      "key": "payments-guide-2",
+      "path": "guides/payments",
+      "title": "Square Terminal payment errors and diagnostics",
+      "file": "payments.md",
+      "scope": {
+        "kind": "docs",
+        "profile": "fieldretail-store-42"
+      },
+      "kind": "reference",
+      "description": "Square Terminal payment errors and diagnostics",
+      "source": {
+        "kind": "original summary of official Square guidance",
+        "url": "https://squareup.com/help/us/en/article/8351-troubleshoot-payment-errors-on-square-terminal",
+        "verifiedOn": "2026-11-20"
+      },
+      "links": ["safety-policy-2"]
+    },
+    {
+      "key": "printer-guide-2",
+      "path": "guides/printer",
+      "title": "Square printer connection checks",
+      "file": "printer.md",
+      "scope": {
+        "kind": "docs",
+        "profile": "fieldretail-store-42"
+      },
+      "kind": "reference",
+      "description": "Square printer connection checks",
+      "source": {
+        "kind": "original summary of official Square guidance",
+        "url": "https://squareup.com/help/us/en/article/5515-printer-troubleshooting",
+        "verifiedOn": "2026-11-20"
+      },
+      "links": ["safety-policy-2"]
+    },
+    {
+      "key": "safety-policy-2",
+      "path": "policies/safe-changes",
+      "title": "Example team support safety",
+      "file": "retail-policy.md",
+      "scope": {
+        "kind": "tenant",
+        "profile": "fieldretail-store-42"
+      },
+      "kind": "policy",
+      "source": {
+        "kind": "example team policy",
+        "license": "Apache-2.0"
+      }
+    }
+  ]
+}

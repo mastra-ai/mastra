@@ -6,6 +6,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type * as authStudioModule from '@mastra/auth-studio';
+import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { resolveCustomProviders } from '@mastra/code-sdk/agents/custom-provider-source';
 import { getDynamicInstructions } from '@mastra/code-sdk/agents/instructions';
 import { tools as connectTools } from '@mastra/connect';
@@ -17,6 +18,7 @@ import { Knowledge } from '@mastra/core/knowledge';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, AuthInitContext, IMastraAuthProvider, ServerConfig } from '@mastra/core/server';
+import { CompositeAuth } from '@mastra/core/server';
 import { createSkill } from '@mastra/core/skills';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
@@ -35,6 +37,7 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { MCPClient, MCPServer } from '@mastra/mcp';
 import { PgVector } from '@mastra/pg';
 import { Hono } from 'hono';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { z } from 'zod';
 import { defineBoard } from './boards/index.js';
@@ -1054,6 +1057,7 @@ describe('MastraFactory.prepare', () => {
       'channel-identity',
       'skill-overrides',
       'voice-settings',
+      'open-runs',
     ]);
     expect(storage.domainNames().every(name => storage.isDomainReady(name))).toBe(true);
   });
@@ -1455,12 +1459,12 @@ describe('MastraFactory.prepare', () => {
       mountApiRoutes(app as never, routes);
 
       const features = await (await app.request('/web/config/features')).json();
-      const mountsMcp = routes.some(route => route.path === '/web/factory/projects/:projectId/mcp');
+      const mountsMcp = routes.some(route => route.path === '/mcp');
       expect({ features: features.mcp, mountsMcp }).toEqual({ features: serves, mountsMcp: serves });
     }
   });
 
-  it('registers the Factory transition tool only for exact active bindings', async () => {
+  it('registers the Factory outcome tool only for exact active bindings', async () => {
     const storage = fakeStorage();
     const config = await prepareFactory({ storage });
     const workItems = storage.getDomain<WorkItemsStorage>('work-items');
@@ -1491,7 +1495,7 @@ describe('MastraFactory.prepare', () => {
       getState: () => ({ factoryProjectId: binding.factoryProjectId }),
     });
 
-    await expect(extraTools({ requestContext })).resolves.toHaveProperty('factory_transition_work_item');
+    await expect(extraTools({ requestContext })).resolves.toHaveProperty('factory_report_outcome');
     lookup.mockResolvedValue(null);
     await expect(extraTools({ requestContext })).resolves.toEqual({});
   });
@@ -1571,7 +1575,7 @@ describe('MastraFactory.prepare', () => {
       const config = await prepareFactory({
         storage,
         tools: {
-          factory_transition_work_item: createTool({ id: 'impostor', description: 'x', execute: async () => ({}) }),
+          factory_report_outcome: createTool({ id: 'impostor', description: 'x', execute: async () => ({}) }),
           tickets_lookup: createTool({ id: 'tickets_lookup', description: 'y', execute: async () => ({}) }),
         },
       });
@@ -1600,11 +1604,11 @@ describe('MastraFactory.prepare', () => {
 
       const resolveTurn = () => (config.extraTools as ExtraTools)({ requestContext });
       for (const tools of [await resolveTurn(), await resolveTurn()]) {
-        expect(tools.factory_transition_work_item.id).not.toBe('impostor');
+        expect(tools.factory_report_outcome.id).not.toBe('impostor');
         expect(tools.tickets_lookup.id).toBe('tickets_lookup');
       }
       const clashWarnings = warn.mock.calls.filter(([message]) =>
-        String(message).includes("configured tool 'factory_transition_work_item'"),
+        String(message).includes("configured tool 'factory_report_outcome'"),
       );
       expect(clashWarnings).toHaveLength(1);
     });
@@ -2662,7 +2666,7 @@ describe('MastraFactory.prepare', () => {
       authStorage: {},
     });
     const app = await createHonoServer(new Mastra({ server: { ...server, apiRoutes } }), { tools: {} });
-    const url = 'http://localhost/web/factory/projects/fp-1/mcp';
+    const url = 'http://localhost/mcp';
     const origin = 'https://inspector.example.com';
 
     const preflight = await app.request(url, {
@@ -2689,14 +2693,108 @@ describe('MastraFactory.prepare', () => {
     const challenge = anonymous.headers
       .get('WWW-Authenticate')
       ?.match(/^Bearer resource_metadata="(https?:\/\/[^/"]+)(\/\.well-known\/oauth-protected-resource\/[^"]+)"$/);
-    expect(challenge?.[2]).toBe('/.well-known/oauth-protected-resource/web/factory/projects/fp-1/mcp');
+    expect(challenge?.[2]).toBe('/.well-known/oauth-protected-resource/mcp');
 
     const metadata = await app.request(`http://localhost${challenge![2]}`, { headers: { Origin: origin } });
     expect(metadata.status).toBe(200);
     expect(await metadata.json()).toMatchObject({
-      resource: `${challenge![1]}/web/factory/projects/fp-1/mcp`,
+      resource: `${challenge![1]}/mcp`,
       authorization_servers: ['https://auth.example.com'],
     });
+  });
+
+  it('refuses tokens issued for the MCP endpoint on every other route', async () => {
+    // Like self-managed WorkOS, this provider checks a bearer's signature and issuer but not its audience.
+    const provider = fakeProvider({
+      authenticateToken: vi.fn(async (token: string) =>
+        token ? { id: 'user_1', email: 'a@b.com', organizationId: 'org_1' } : null,
+      ),
+    });
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      auth: provider,
+      publicUrl: 'https://factory.example.com',
+      mcp: { authorizationServers: ['https://auth.example.com'] },
+    });
+    const server = (config.buildServerConfig as () => ServerConfig)();
+    const apiRoutes = (config.buildApiRoutes as (deps: object) => ApiRoute[])({
+      controller: sessionNotifierStub,
+      authStorage: {},
+    });
+    const app = await createHonoServer(new Mastra({ server: { ...server, apiRoutes } }), { tools: {} });
+    const jwt = (claims: object) =>
+      ['{"alg":"none"}', JSON.stringify({ sub: 'user_1', ...claims }), 'sig']
+        .map(part => Buffer.from(part).toString('base64url'))
+        .join('.');
+    const status = async (path: string, token: string) =>
+      (await app.request(`http://localhost${path}`, { headers: { Authorization: `Bearer ${token}` } })).status;
+
+    const mcpTokens = [
+      jwt({ aud: 'https://factory.example.com/mcp' }),
+      jwt({ aud: ['https://factory.example.com/mcp', 'https://other.example.com'] }),
+    ];
+    const otherToken = jwt({ aud: 'https://other.example.com' });
+    for (const path of ['/web/factory/projects', '/api/agents']) {
+      expect(await status(path, otherToken)).toBe(200);
+      for (const token of mcpTokens) expect(await status(path, token)).toBe(401);
+    }
+    // `/auth/me` is ungated, so it authenticates for itself.
+    const me = await app.request('http://localhost/auth/me', { headers: { Authorization: `Bearer ${mcpTokens[0]}` } });
+    expect(await me.json()).toMatchObject({ authenticated: false });
+  });
+
+  it.each([
+    ['WorkOS', (workos: MastraAuthWorkos) => workos],
+    ['WorkOS inside CompositeAuth', (workos: MastraAuthWorkos) => new CompositeAuth([workos])],
+    [
+      'WorkOS inside nested CompositeAuths',
+      (workos: MastraAuthWorkos) => new CompositeAuth([new CompositeAuth([workos])]),
+    ],
+  ])('with %s, refuses tokens issued for any other resource', async (_name, wrap) => {
+    // WorkOS verifies a bearer's signature against its JWKS but never its audience.
+    const { publicKey, privateKey } = await generateKeyPair('RS256');
+    const jwks = { keys: [{ ...(await exportJWK(publicKey)), kid: 'key-1', alg: 'RS256', use: 'sig' }] };
+    const jwksServer = createServer((_req, res) =>
+      res.setHeader('content-type', 'application/json').end(JSON.stringify(jwks)),
+    );
+    jwksServer.listen(0, '127.0.0.1');
+    await once(jwksServer, 'listening');
+    onTestFinished(() => void jwksServer.close());
+    const provider = new MastraAuthWorkos({
+      apiKey: 'sk_test',
+      clientId: 'client_test',
+      redirectUri: 'https://factory.example.com/auth/callback',
+      trustJwtClaims: true,
+    });
+    vi.spyOn(provider.getWorkOS().userManagement, 'getJwksUrl').mockReturnValue(
+      `http://127.0.0.1:${(jwksServer.address() as AddressInfo).port}/jwks`,
+    );
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      auth: wrap(provider),
+      publicUrl: 'https://factory.example.com',
+      mcp: { authorizationServers: ['https://auth.example.com'] },
+    });
+    const server = (config.buildServerConfig as () => ServerConfig)();
+    const apiRoutes = (config.buildApiRoutes as (deps: object) => ApiRoute[])({
+      controller: sessionNotifierStub,
+      authStorage: {},
+    });
+    const app = await createHonoServer(new Mastra({ server: { ...server, apiRoutes } }), { tools: {} });
+    const sign = (audience?: string) => {
+      const jwt = new SignJWT({ sub: 'user_1', org_id: 'org_1' })
+        .setProtectedHeader({ alg: 'RS256', kid: 'key-1' })
+        .setIssuer('https://api.workos.com')
+        .setExpirationTime('5m');
+      return (audience ? jwt.setAudience(audience) : jwt).sign(privateKey);
+    };
+    const status = async (token: string) =>
+      (await app.request('http://localhost/api/agents', { headers: { Authorization: `Bearer ${token}` } })).status;
+
+    expect(await status(await sign())).toBe(200);
+    expect(await status(await sign('https://factory.example.com/mcp'))).toBe(401);
+    expect(await status(await sign('https://other.factory.mastra.cloud/mcp'))).toBe(401);
+    expect(await status(await sign('https://platform.mastra.ai/v1/mcp'))).toBe(401);
   });
 
   it('registers the per-tenant credential resolver when auth is configured', async () => {
@@ -3292,6 +3390,12 @@ describe('MastraFactory.prepare integrations', () => {
     const names = (args.workers ?? []).map(worker => worker.name);
     expect(names.filter(name => name === 'platform-connect-event-poller')).toHaveLength(1);
     expect(names).not.toContain('platform-gitlab-events');
+    // Linear's events come through the shared poller; no Linear poller of its own.
+    expect(names.filter(name => name.startsWith('platform-linear'))).toEqual([]);
+    const poller = args.workers!.find(worker => worker.name === 'platform-connect-event-poller') as unknown as {
+      diagnostics(): { integrations: string[] };
+    };
+    expect(poller.diagnostics().integrations.sort()).toEqual(['gitlab', 'linear']);
   });
 
   it('runs no Platform Connect event poller when no installed integration reads event logs', async () => {

@@ -2,13 +2,14 @@ import { RequestContext } from '@mastra/core/request-context';
 import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
+import { DispatcherBoardEngine } from '../../board-engine/engine.js';
 import { createBoardRegistry } from '../../boards/index.js';
-import { ProjectBoardCache } from '../../boards/project-boards.js';
 
+import { ProjectBoardCache } from '../../boards/project-boards.js';
 import { createTriageWorkRegistry } from '../../boards/test-utils.js';
 import { workSeedWithSelfReview } from '../../boards/work-migrations.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
-import { createFactoryTransitionTools } from '../../rules/tools.js';
+import { createFactoryOutcomeTools } from '../../rules/tools.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
 import type { StoredBoardInput } from '../../storage/domains/boards/base.js';
 import {
@@ -345,21 +346,32 @@ async function harness(
       session: { id: `session-${sessions}`, ownerId: 'code', modeId: 'build' },
       getState: () => ({ factoryProjectId: project.id }),
     });
-    const tools = await createFactoryTransitionTools({ requestContext, storage: workItems, transitionService, boards });
-    const transition = tools.factory_transition_work_item as unknown as {
+    const tools = await createFactoryOutcomeTools({ requestContext, storage: workItems, boards });
+    const report = tools.factory_report_outcome as unknown as {
       execute: (input: unknown, context: unknown) => Promise<unknown>;
     };
     const verdict = tools.factory_record_review_verdict as
-      | { execute: (input: unknown, context: unknown) => Promise<unknown> }
-      | undefined;
+      { execute: (input: unknown, context: unknown) => Promise<unknown> } | undefined;
+    const binding = async () =>
+      (await workItems.findActiveRunBindingForSession({
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+        sessionId: `resource-${session}`,
+      }))!;
+    const session = sessions;
     return {
       tools,
-      /** The agent's own move, through the tool it is given. */
-      transition: async (stage: string) =>
-        transition.execute(
-          { stage, expectedRevision: (await card(id)).revision, rationale: 'Maintenance: ready to plan.' },
-          { requestContext, agent: { toolCallId: `transition-${sessions}` } },
+      /** The agent reports how its phase ended, through the tool it is given. */
+      report: (outcome: string) =>
+        report.execute(
+          { outcome, reason: 'Maintenance: ready to plan.' },
+          { requestContext, agent: { toolCallId: `report-${session}` } },
         ),
+      /** The agent's run ends: Factory applies the outcome it reported through the board engine. */
+      runEnds: async () => {
+        const engine = new DispatcherBoardEngine({ transitionService, workItems, boards });
+        return engine.runEnded(await binding(), engine);
+      },
       verdict: (input: { verdict: 'approve' | 'request changes'; findings?: string }) =>
         verdict!.execute(
           { reviewedHeadSha: SHA, ...input },
@@ -411,6 +423,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('the pull reques
         await expect(
           selfReviewer.verdict({ verdict: 'request changes', findings: 'Missing test.' }),
         ).resolves.toMatchObject({ status: 'recorded', verdict: 'request changes' });
+        // The verdict is the phase's outcome; the card moves once the reviewer's run ends.
+        expect(await h.card(id)).toMatchObject({ stages: [loop.selfReview] });
+        await expect(selfReviewer.runEnds()).resolves.toBe(true);
         expect(await h.card(id)).toMatchObject({
           stages: [loop.build],
           metadata: expect.objectContaining({ selfReviewVerdict: 'request changes', selfReviewRounds: 1 }),
@@ -476,7 +491,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('the pull reques
       expect(pushed.map(entry => entry.status)).not.toContain('proposed');
     });
 
-    it("sends the card back to rest when its pull request closes unmerged", async () => {
+    it('sends the card back to rest when its pull request closes unmerged', async () => {
       const h = await harness(backend, loop);
       const id = await cardInBuild(h);
       await h.authored(id);
@@ -539,7 +554,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])("a triage agent'
       expect(issue).toMatchObject({ board: 'ship', stages: ['think'], autonomyArmedAt: null });
 
       const triage = await h.agent(issue!.id, 'triage');
-      await expect(triage.transition('plan')).resolves.toMatchObject({ status: 'accepted' });
+      await expect(triage.report('plan')).resolves.toMatchObject({ status: 'reported', outcome: 'plan', to: 'Plan' });
+      expect(await h.card(issue!.id)).toMatchObject({ stages: ['think'] });
+      await expect(triage.runEnds()).resolves.toBe(true);
       await h.settle();
 
       expect(await h.card(issue!.id)).toMatchObject({ board: 'ship', stages: ['plan'] });

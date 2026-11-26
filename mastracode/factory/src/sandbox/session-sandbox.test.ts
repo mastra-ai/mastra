@@ -396,7 +396,7 @@ describe('environment setup hook', () => {
   const runWith = (log: string[]) => async (sb: WorkspaceSandbox, env: SessionEnvironmentGate) => {
     for (const repo of env.repos) {
       await sb.executeCommand!(`mkdir -p "${repo.dir}/.git"`);
-      if (repo.gate.setupDone) continue;
+      if (repo.gate.setupDone || repo.gate.failedInBuild) continue;
       log.push(repo.slug);
       await sb.executeCommand!(`cd "${repo.dir}" && touch setup-ran.txt`);
       await repo.gate.markSetupDone();
@@ -464,20 +464,51 @@ describe('environment setup hook', () => {
     );
   });
 
-  it('runs a repo listed in setup-failed even when its marker matches, and clears it on success', async () => {
+  it('reports a repo the environment build listed in setup-failed as failed there, on every start', async () => {
     const boot = path.join(dir, 'failed');
     await plantRepo(boot, 'api', API);
     await plantRepo(boot, 'docs', DOCS);
+    await fs.writeFile(path.join(boot, '.mastra-sandbox/workspace-setup'), setupMarkerContent(WORKSPACE));
+    await fs.writeFile(path.join(boot, '.mastra-sandbox/setup-failed'), 'docs\n');
+    const gates: Array<Record<string, { setupDone: boolean; failedInBuild?: boolean }>> = [];
+    const capture = () =>
+      createEnvironmentSetupHook(
+        async (_sb, env) => {
+          gates.push(
+            Object.fromEntries(
+              env.repos.map(repo => [
+                repo.slug,
+                { setupDone: repo.gate.setupDone, failedInBuild: repo.gate.failedInBuild },
+              ]),
+            ),
+          );
+        },
+        'sess-env',
+        'acme/api',
+        { repos, workspaceSetupCommand: WORKSPACE },
+      );
+
+    await new LocalSandbox({ workingDirectory: boot, onStart: capture() })._start();
+    await new LocalSandbox({ workingDirectory: boot, onStart: capture() })._start();
+
+    const expected = {
+      'acme/api': { setupDone: true, failedInBuild: undefined },
+      'acme/docs': { setupDone: false, failedInBuild: true },
+    };
+    expect(gates).toEqual([expected, expected]);
+    await expect(fs.readFile(path.join(boot, '.mastra-sandbox/setup-failed'), 'utf8')).resolves.toBe('docs\n');
+  });
+
+  it('runs a repo listed in setup-failed when its marker names a different command, and clears it on success', async () => {
+    const boot = path.join(dir, 'failed-then-edited');
+    await plantRepo(boot, 'api', API);
+    await plantRepo(boot, 'docs', 'an older docs command');
     await fs.writeFile(path.join(boot, '.mastra-sandbox/workspace-setup'), setupMarkerContent(WORKSPACE));
     await fs.writeFile(path.join(boot, '.mastra-sandbox/setup-failed'), 'docs\n');
     const log: string[] = [];
     await new LocalSandbox({ workingDirectory: boot, onStart: hook(log) })._start();
     expect(log).toEqual(['acme/docs']);
     await expect(fs.readFile(path.join(boot, '.mastra-sandbox/setup-failed'), 'utf8')).resolves.toBe('');
-
-    const again: string[] = [];
-    await new LocalSandbox({ workingDirectory: boot, onStart: hook(again) })._start();
-    expect(again).toEqual([]);
   });
 
   it('a missing checkout reads as not done even when the marker matches', async () => {

@@ -1,5 +1,6 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useRef } from 'react';
+import { useImperativeHandle, useRef } from 'react';
+import type { LogViewLine } from '../../types';
 import type { LogViewListProps } from '../log-view-list';
 import { LogViewRow } from './log-view-row';
 import { OlderLogsEdge } from './older-logs-edge';
@@ -10,9 +11,9 @@ import { Txt } from '@/ds/components/Txt';
 const ROW_HEIGHT = 24;
 const OVERSCAN = 8;
 
-export type LogViewRowsProps = Omit<LogViewListProps, 'isLoading'>;
+export type LogViewRowsProps<T extends LogViewLine> = Omit<LogViewListProps<T>, 'isLoading'>;
 
-export function LogViewRows({
+export function LogViewRows<T extends LogViewLine>({
   logs,
   isFetchingNextPage,
   hasNextPage,
@@ -21,8 +22,10 @@ export function LogViewRows({
   onLogClick,
   order = 'newest-first',
   wrap = true,
+  timeFractionDigits,
   onFetchNextPage,
-}: LogViewRowsProps) {
+  ref,
+}: LogViewRowsProps<T>) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const isOldestFirst = order === 'oldest-first';
 
@@ -46,6 +49,13 @@ export function LogViewRows({
     onNavigate: index => virtualizer.scrollToIndex(index),
   });
 
+  useImperativeHandle(ref, () => ({
+    scrollToLog: logId => {
+      const index = logs.findIndex(log => logIdMap.get(log) === logId);
+      if (index >= 0) virtualizer.scrollToIndex(index, { align: 'center' });
+    },
+  }));
+
   const loadOlder = () => {
     if (hasNextPage && !isFetchingNextPage) onFetchNextPage?.();
   };
@@ -56,7 +66,7 @@ export function LogViewRows({
   const olderEdge = hasNextPage && <OlderLogsEdge isFetching={isFetchingNextPage} onVisible={loadOlder} />;
 
   return (
-    <LogStream scrollRef={scrollRef} wrap={wrap} className="flex-1">
+    <LogStream scrollRef={scrollRef} wrap={wrap} fractionDigits={timeFractionDigits} className="flex-1">
       <LogStream.Header>
         <LogStream.HeaderCell>Time</LogStream.HeaderCell>
         <LogStream.HeaderCell>Level</LogStream.HeaderCell>
@@ -80,6 +90,7 @@ export function LogViewRows({
             index={item.index}
             featured={id === featuredLogId}
             wrap={wrap}
+            timeFractionDigits={timeFractionDigits}
             measureRef={virtualizer.measureElement}
             keyboardProps={getRowProps(item.index)}
             onLogClick={onLogClick}

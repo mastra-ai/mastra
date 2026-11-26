@@ -38,6 +38,8 @@ import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 const user = { workosId: 'user-1', organizationId: 'org-1' };
 
 type Viewer = typeof user;
+/** Everyone in these tests is an org admin except this member. */
+const MEMBER = { workosId: 'member-1', organizationId: 'org-1' };
 
 type RouteOptions = Parameters<typeof buildSourceControlSessionRoutes>[0];
 
@@ -59,7 +61,7 @@ function buildApp(
   mountApiRoutes(
     app as never,
     buildSourceControlSessionRoutes({
-      auth: fakeRouteAuth(),
+      auth: fakeRouteAuth({ isOrganizationAdmin: async (_orgId, userId) => userId !== MEMBER.workosId }),
       sourceControls,
       projects,
       memorySettings,
@@ -133,6 +135,13 @@ async function startOwnershipController(id: string, storage = new InMemoryStore(
   });
   await controller.init();
   return controller;
+}
+
+async function capabilities(app: Hono, sessionId: string) {
+  const body = (await (await app.request(`/web/user-sessions/${sessionId}`)).json()) as {
+    session: { capabilities: { takeOwnership: boolean; switchModel: boolean; ownershipLock?: string } };
+  };
+  return body.session.capabilities;
 }
 
 function takeOwnership(app: Hono, sessionId: string, expectedOwnerId: string, headers: Record<string, string> = {}) {
@@ -248,10 +257,11 @@ describe('source-control session routes', () => {
     ).resolves.toMatchObject({ address, binding: { id: prepared.binding.id } });
     expect(session.state.get()).toMatchObject({ untrustedCheckout: true, baseRef: 'main' });
 
-    const unsubscribe = observeSessionRunEnd(session, { audit: seed.audit });
+    const unsubscribe = observeSessionRunEnd(session, { audit: seed.audit, openRuns: seed.openRuns });
     onTestFinished(unsubscribe);
     await recordSessionRunStart(session, {
       audit: seed.audit,
+      openRuns: seed.openRuns,
       actorType: 'human',
       observedEnd: () => undefined,
       run: {
@@ -267,20 +277,17 @@ describe('source-control session routes', () => {
         branch: row.branch,
       },
     });
-    await expect(listSessionOpenRuns(session)).resolves.toEqual([
+    await expect(listSessionOpenRuns(session, seed.openRuns)).resolves.toEqual([
       expect.objectContaining({ sessionId, threadId, kickoffId: 'review-kickoff' }),
     ]);
+    await expect(seed.openRuns.listByThread(sessionId)).resolves.toEqual([]);
     const memory = await storage.getStore('memory');
     const persistedThread = await memory!.getThreadById({ threadId });
-    expect(persistedThread?.metadata?.[FACTORY_OPEN_RUNS_SETTING]).toEqual([
-      expect.objectContaining({ sessionId, threadId }),
-    ]);
+    expect(persistedThread?.metadata).not.toHaveProperty(FACTORY_OPEN_RUNS_SETTING);
     await expect(memory!.getThreadById({ threadId: sessionId })).resolves.toBeNull();
     session.emit({ type: 'agent_end', reason: 'complete' });
     await waitForSessionRunAudit(session);
-    await expect(listSessionOpenRuns(session)).resolves.toEqual([]);
-    const endedThread = await memory!.getThreadById({ threadId });
-    expect(endedThread?.metadata?.[FACTORY_OPEN_RUNS_SETTING]).toEqual([]);
+    await expect(listSessionOpenRuns(session, seed.openRuns)).resolves.toEqual([]);
     const { events } = await seed.audit.list({ orgId: 'org-1' });
     expect(events.filter(event => event.action === 'factory.run.started')).toHaveLength(1);
     expect(events.filter(event => event.action === 'factory.run.ended')).toHaveLength(1);
@@ -936,25 +943,59 @@ describe('source-control session routes', () => {
       workosId: 'user-2',
       organizationId: 'org-1',
     });
-    const capabilities = async (app: Hono, sessionId: string) => {
-      const body = (await (await app.request(`/web/user-sessions/${sessionId}`)).json()) as {
-        session: { capabilities: { takeOwnership: boolean; switchModel: boolean } };
-      };
-      return body.session.capabilities;
-    };
     const offersTakeover = async (app: Hono, sessionId: string) => (await capabilities(app, sessionId)).takeOwnership;
 
     expect(await offersTakeover(teammate, 'user-session')).toBe(true);
     expect(await offersTakeover(owner, 'user-session')).toBe(false);
+    await expect(capabilities(teammate, 'user-session')).resolves.not.toHaveProperty('ownershipLock');
     await expect(capabilities(teammate, 'user-session')).resolves.toMatchObject({ switchModel: false });
     await expect(capabilities(owner, 'user-session')).resolves.toMatchObject({ switchModel: true });
-    for (const sessionId of ['slack-thread', 'factory-run', 'side-session']) {
-      expect(await offersTakeover(teammate, sessionId)).toBe(false);
+    await expect(capabilities(owner, 'factory-run')).resolves.not.toHaveProperty('ownershipLock');
+    for (const [sessionId, lock] of [
+      ['slack-thread', 'slack-thread'],
+      ['factory-run', 'card'],
+      ['side-session', 'side-session'],
+    ] as const) {
+      await expect(capabilities(teammate, sessionId)).resolves.toMatchObject({
+        takeOwnership: false,
+        ownershipLock: lock,
+      });
       const refused = await takeOwnership(teammate, sessionId, 'user-1');
       expect(refused.status).toBe(409);
       await expect(refused.json()).resolves.toEqual({ error: 'Only user sessions can change owner' });
       await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({ userId: 'user-1' });
     }
+  });
+
+  it('lets an org admin change the model of a card session the Factory owns, and keeps a member locked out', async () => {
+    const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
+    await sourceControl.sessions.create({
+      sessionId: 'factory-phase',
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: `factory-project:${project.id}`,
+      branch: 'factory/run-1',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    const controller = { queryThreadById: async () => null } as unknown as RouteOptions['controller'];
+    const workItems: RouteOptions['workItems'] = {
+      clearSessionReferences: async () => 0,
+      hasRunBindingForSession: async ({ sessionId }) => sessionId === 'factory-phase',
+    };
+    const admin = buildApp([sourceControl], seed, controller, workItems);
+    const member = buildApp([sourceControl], seed, controller, workItems, MEMBER);
+
+    await expect(capabilities(admin, 'factory-phase')).resolves.toMatchObject({
+      switchModel: true,
+      takeOwnership: false,
+      ownershipLock: 'card',
+    });
+    await expect(capabilities(member, 'factory-phase')).resolves.toMatchObject({
+      switchModel: false,
+      takeOwnership: false,
+      ownershipLock: 'card',
+    });
   });
 
   it('lists and opens a session stored in the GitLab partition', async () => {

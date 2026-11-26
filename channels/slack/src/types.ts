@@ -73,6 +73,18 @@ interface SlackAdapterChannelConfigBase {
    * @default false
    */
   generativeUI?: boolean;
+
+  /**
+   * Reply through a `reply_in_thread` tool instead of posting reply text and
+   * tool calls. See `ChannelAdapterConfig['replyMode']`.
+   */
+  replyMode?: ChannelAdapterConfig['replyMode'];
+
+  /**
+   * Link the first reply of a new thread to your web UI. See
+   * `ChannelAdapterConfig['threadLink']`.
+   */
+  threadLink?: ChannelAdapterConfig['threadLink'];
 }
 
 /**

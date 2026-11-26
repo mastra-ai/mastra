@@ -41,3 +41,8 @@ export function TreeDepthProvider({ children, depth }: { children: React.ReactNo
 export function useTreeDepth(): number {
   return React.useContext(TreeDepthContext);
 }
+
+// +18 offsets past the chevron (size-3 = 12px) + flex gap (gap-1.5 = 6px) that folders have
+export function useTreeFileIndent(): number {
+  return useTreeDepth() * 12 + 18;
+}

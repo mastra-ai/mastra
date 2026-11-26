@@ -36,18 +36,19 @@ describe('factory-triage source branches', () => {
     const awaitingApproval = content.split('**Awaiting approval:**')[1]?.split('\n\n')[0];
     expect(awaitingApproval).toContain('For a card in `triage`');
     expect(awaitingApproval).toContain('When prior acceptance is not established');
-    expect(awaitingApproval).toContain("If `rest` appears in the `factory-phase` signal's `Next phases`");
-    expect(awaitingApproval).toContain('request a transition to `rest`');
     expect(awaitingApproval).toContain(
-      'If `rest` is not in `Next phases`, report that the board must allow a transition',
+      "If the `factory-phase` signal's `Outcomes:` line has one going to `rest`, report it",
     );
-    expect(awaitingApproval).toContain('do not request an invalid transition or change the label');
+    expect(awaitingApproval).toContain(
+      'If no outcome goes to `rest`, say that the board must allow one to its resting phase',
+    );
+    expect(awaitingApproval).toContain('do not report another outcome or change the label');
     expect(awaitingApproval).toContain('retain `status: needs approval`');
     expect(awaitingApproval).toContain(
-      'If the card is not in `triage`, stop without changing labels or requesting a transition',
+      'If the card is not in `triage`, stop without changing labels or reporting an outcome',
     );
     expect(awaitingApproval).toContain(
-      'If the handoff or its `Type` is missing, state that in the rationale without inventing a `Type`',
+      'If the handoff or its `Type` is missing, state that in the reason without inventing a `Type`',
     );
   });
 
@@ -63,7 +64,7 @@ describe('factory-triage source branches', () => {
     expect(awaitingApproval).toContain('do not return it to `rest` for a second approval');
     expect(awaitingApproval).toContain('When prior acceptance is not established');
     expect(content).toContain('For previously approved open work, use `Route: Plan fix`');
-    expect(content).toContain('if none is in `Next phases`, report the missing board transition');
+    expect(content).toContain('if none is listed, say the board lacks that outcome');
     expect(content).toContain('or for already-approved work:');
   });
 
@@ -82,7 +83,7 @@ describe('factory-triage source branches', () => {
     expect(content).toContain(
       "Never add it for an item routed to Planning without approval by either the board's explicit routing criteria or the trusted-author fallback under a generic board approval waiver",
     );
-    expect(content).toContain('request the phase confirmed bugs use without adding `status: needs approval`');
+    expect(content).toContain('report the outcome confirmed bugs use without adding `status: needs approval`');
   });
 
   it('keeps the GitHub and Linear branches', () => {

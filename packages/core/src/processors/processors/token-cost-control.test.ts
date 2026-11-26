@@ -997,7 +997,10 @@ describe('TokenCostControl', () => {
       );
     });
 
-    it('thread scope includes correct scopeKey from MastraMemory', async () => {
+    it.each([
+      ['thread scope includes correct scopeKey from MastraMemory', 'thread', 'thread:scoped-thread'],
+      ['resource scope includes correct scopeKey from MastraMemory', 'resource', 'resource:scoped-resource'],
+    ] as const)('%s', async (_title, scope, scopeKey) => {
       const obsStorage = createMockObservabilityStorage({
         inputCost: 1.0,
         outputCost: 1.0,
@@ -1006,7 +1009,7 @@ describe('TokenCostControl', () => {
 
       const guard = new TokenCostControl({
         maxCost: 1.0,
-        scope: 'thread',
+        scope,
       });
       (guard as any).observabilityStorage = obsStorage;
 
@@ -1027,44 +1030,8 @@ describe('TokenCostControl', () => {
       } catch (error) {
         const tripwire = error as TripWire<any>;
         expect(tripwire.options.metadata).toMatchObject({
-          scope: 'thread',
-          scopeKey: 'thread:scoped-thread',
-        });
-      }
-    });
-
-    it('resource scope includes correct scopeKey from MastraMemory', async () => {
-      const obsStorage = createMockObservabilityStorage({
-        inputCost: 1.0,
-        outputCost: 1.0,
-        costUnit: 'usd',
-      });
-
-      const guard = new TokenCostControl({
-        maxCost: 1.0,
-        scope: 'resource',
-      });
-      (guard as any).observabilityStorage = obsStorage;
-
-      const requestContext = new RequestContext();
-      requestContext.set('MastraMemory', {
-        thread: { id: 'scoped-thread' },
-        resourceId: 'scoped-resource',
-      });
-
-      const args = createInputStepArgs({
-        stepNumber: 1,
-        requestContext,
-      });
-
-      try {
-        await guard.processInputStep(args);
-        expect.fail('Expected TripWire to be thrown');
-      } catch (error) {
-        const tripwire = error as TripWire<any>;
-        expect(tripwire.options.metadata).toMatchObject({
-          scope: 'resource',
-          scopeKey: 'resource:scoped-resource',
+          scope,
+          scopeKey,
         });
       }
     });
@@ -1180,8 +1147,16 @@ describe('TokenCostControl', () => {
       });
     });
 
-    it('soft threshold fires onViolation with threshold soft and does not abort (warn strategy)', async () => {
-      const obsStorage = createMockObservabilityStorage({ inputCost: 0.25, outputCost: 0.2, costUnit: 'usd' });
+    it.each([
+      [
+        'soft threshold fires onViolation with threshold soft and does not abort (warn strategy)',
+        0.25,
+        'trace-soft-warn',
+        'soft',
+      ],
+      ['at exactly maxCost only the hard path fires', 0.3, 'trace-exact-limit', 'hard'],
+    ] as const)('%s', async (_title, inputCost, input, expected) => {
+      const obsStorage = createMockObservabilityStorage({ inputCost, outputCost: 0.2, costUnit: 'usd' });
       const guard = new TokenCostControl({ maxCost: 0.5, scope: 'run', strategy: 'warn', warnAtPercent: 80 });
       guard.__registerMastra(createMockMastra(obsStorage));
       const onViolation = vi.fn();
@@ -1189,12 +1164,12 @@ describe('TokenCostControl', () => {
 
       const args = createInputStepArgs({
         stepNumber: 1,
-        tracing: createMockTracing('trace-soft-warn') as any,
+        tracing: createMockTracing(input) as any,
       });
 
       await expect(guard.processInputStep(args)).resolves.toBeUndefined();
       expect(onViolation).toHaveBeenCalledTimes(1);
-      expect(onViolation.mock.calls[0]![0].detail.threshold).toBe('soft');
+      expect(onViolation.mock.calls[0]![0].detail.threshold).toBe(expected);
     });
 
     it('soft warning fires once across multiple steps sharing the same state object', async () => {
@@ -1259,23 +1234,6 @@ describe('TokenCostControl', () => {
       await expect(guard.processInputStep(args)).resolves.toBeUndefined();
       expect(onViolation).not.toHaveBeenCalled();
       expect(mockLogger.warn).not.toHaveBeenCalled();
-    });
-
-    it('at exactly maxCost only the hard path fires', async () => {
-      const obsStorage = createMockObservabilityStorage({ inputCost: 0.3, outputCost: 0.2, costUnit: 'usd' });
-      const guard = new TokenCostControl({ maxCost: 0.5, scope: 'run', strategy: 'warn', warnAtPercent: 80 });
-      guard.__registerMastra(createMockMastra(obsStorage));
-      const onViolation = vi.fn();
-      guard.onViolation = onViolation;
-
-      const args = createInputStepArgs({
-        stepNumber: 1,
-        tracing: createMockTracing('trace-exact-limit') as any,
-      });
-
-      await expect(guard.processInputStep(args)).resolves.toBeUndefined();
-      expect(onViolation).toHaveBeenCalledTimes(1);
-      expect(onViolation.mock.calls[0]![0].detail.threshold).toBe('hard');
     });
   });
 

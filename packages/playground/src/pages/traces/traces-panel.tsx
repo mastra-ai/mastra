@@ -1,5 +1,6 @@
 import { CreateDatasetDialog } from '@mastra/playground-ui/domains/datasets';
-import { TraceAsItemDialog } from '@mastra/playground-ui/domains/observability/components/trace-as-item-dialog';
+import { TraceDatasetItemDialog } from '@mastra/playground-ui/domains/observability/components/trace-dataset-item-dialog';
+import { useTraceAsItemData } from '@mastra/playground-ui/domains/observability/hooks/use-trace-as-item-data';
 import { ScoreAsItemDialog } from '@mastra/playground-ui/domains/scores/components/score-as-item-dialog';
 import { TraceScoresList } from '@mastra/playground-ui/domains/scores/components/trace-scores-list';
 import {
@@ -13,6 +14,7 @@ import { TraceThreadPanel } from '@mastra/playground-ui/domains/traces/component
 import { TracesExplorer, resolveTracesSupport } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
 import type {
   TracesExplorerCapabilities,
+  TracesExplorerPanelDatasetDialogArgs,
   TracesExplorerTraces,
   TracesMetricsSupport,
   TracesSelection,
@@ -89,9 +91,7 @@ export const TracesPanel = memo(function TracesPanel({
           onOpenScore={(traceId, scoreId) => navigate(traceScoreLink(traceId, scoreId))}
         />
       )}
-      renderDatasetDialog={dialog => (
-        <TraceAsItemDialog {...dialog} renderCreateDatasetDialog={props => <CreateDatasetDialog {...props} />} />
-      )}
+      renderDatasetDialog={dialog => <StudioTraceDatasetItemDialog {...dialog} />}
       onOpenScoreTrace={(traceId, spanId) => navigate(paths.traceLink(traceId, spanId))}
       renderScoreDatasetDialog={dialog => <ScoreAsItemDialog {...dialog} />}
       headerActionsSlot={({ traceId, spans }) => (
@@ -100,3 +100,18 @@ export const TracesPanel = memo(function TracesPanel({
     />
   );
 });
+
+/** Saves the open trace as a dataset item, prefilled from the trace once the dialog opens. */
+function StudioTraceDatasetItemDialog({ traceId, rootSpanId, isOpen, onClose }: TracesExplorerPanelDatasetDialogArgs) {
+  const data = useTraceAsItemData({ traceId, rootSpanId, enabled: isOpen });
+
+  return (
+    <TraceDatasetItemDialog
+      {...data}
+      traceId={traceId}
+      isOpen={isOpen}
+      onClose={onClose}
+      renderCreateDatasetDialog={props => <CreateDatasetDialog {...props} />}
+    />
+  );
+}

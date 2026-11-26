@@ -728,7 +728,7 @@ export class FactoryTransitionService {
               code: 'approval_required',
               reason:
                 exitTool.id === 'submit_plan'
-                  ? `${fromPhase!.name} ends when submit_plan comes back with an approved plan; until then the card stays here. Call submit_plan and wait for a person to approve the plan (or for it to be approved automatically), then move the card into ${board.phases[request.stage]?.name ?? request.stage} with factory_transition_work_item.`
+                  ? `${fromPhase!.name} ends when submit_plan comes back with an approved plan; until then the card stays here. Call submit_plan and wait for a person to approve the plan (or for it to be approved automatically); its approval is the outcome that moves the card into ${board.phases[request.stage]?.name ?? request.stage}.`
                   : `${fromPhase!.name} ends when ${exitTool.id} succeeds; until then the card stays here. A person can also move it from the Factory board or a chat they are signed in to.`,
             };
           }
