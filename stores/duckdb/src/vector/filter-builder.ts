@@ -232,9 +232,7 @@ function buildOperatorCondition(field: string, operators: Record<string, unknown
           const scalarClause = scalarEquality ? ` OR (${scalarEquality})` : '';
 
           // TRY_CAST returns NULL if not an array, so the scalar clause covers non-arrays.
-          conditions.push(
-            `(list_has_any(TRY_CAST(${jsonPath} AS VARCHAR[]), [${stringLiterals}])${scalarClause})`,
-          );
+          conditions.push(`(list_has_any(TRY_CAST(${jsonPath} AS VARCHAR[]), [${stringLiterals}])${scalarClause})`);
         } else {
           // Empty array - no matches
           conditions.push('1=0');
