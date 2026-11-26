@@ -431,6 +431,8 @@ export class MCPServer extends MCPServerBase {
     this.loadAppResources(config.appResources);
     this.appsRequireClientSupport = config.appsRequireClientSupport ?? false;
     this.skillsConfig = config.skills;
+    // Creating the source checks the config (such as `pageSize`) now; the catalog itself is built on first use.
+    if (this.skillsConfig) this.skillSource();
     this.requestStateCodec = this.createRequestStateCodec(config.requestState);
     this.eventsOptions = config.eventsOptions ?? {};
     this.legacy = config.legacy ?? 'reject';
@@ -2151,23 +2153,36 @@ export class MCPServer extends MCPServerBase {
       return [];
     };
 
-    const listResources = async (ctx: ServerContext, requestContext: RequestContext): Promise<Resource[]> => [
+    const ownResources = async (ctx: ServerContext, requestContext: RequestContext): Promise<Resource[]> => [
       ...appResourcesFor(ctx),
-      ...(hasSkills ? ((await this.skillSource().listResources?.(ctx)) ?? []) : []),
       ...((await options?.listResources({
         extra: toToolExecutionContext(ctx, this.name).extra,
         requestContext,
       })) ?? []),
     ];
 
+    // Skills that can't be listed leave the other resources listed; the skills methods report the failure.
+    const skillResources = async (ctx: ServerContext): Promise<Resource[]> => {
+      if (!hasSkills) return [];
+      try {
+        return (await this.skillSource().listResources?.(ctx)) ?? [];
+      } catch (error) {
+        this.logger.warn(
+          `Skills left out of resources/list: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return [];
+      }
+    };
+
     // A listed resource wins; otherwise the URI may expand one of the caller's own
-    // templates, so a read stays scoped to what that caller was advertised.
+    // templates, so a read stays scoped to what that caller was advertised. Skill files
+    // are read through the skills source, so lookup doesn't depend on listing them.
     const findResource = async (
       uri: string,
       ctx: ServerContext,
       requestContext: RequestContext,
     ): Promise<Resource | undefined> => {
-      const listed = (await listResources(ctx, requestContext)).find(r => r.uri === uri);
+      const listed = (await ownResources(ctx, requestContext)).find(r => r.uri === uri);
       if (listed || !options?.resourceTemplates) return listed;
       const templates = await options.resourceTemplates({
         extra: toToolExecutionContext(ctx, this.name).extra,
@@ -2180,12 +2195,20 @@ export class MCPServer extends MCPServerBase {
     // Providers are re-evaluated with the current request every time; resource
     // lists are scoped per caller and never cached on the shared server.
     this.setTracedHandler(server, 'resources/list', async (_request, ctx, trace) => ({
-      resources: await listResources(ctx, trace.requestContext),
+      resources: [
+        ...appResourcesFor(ctx),
+        ...(await skillResources(ctx)),
+        ...((await options?.listResources({
+          extra: toToolExecutionContext(ctx, this.name).extra,
+          requestContext: trace.requestContext,
+        })) ?? []),
+      ],
     }));
 
     this.setTracedHandler(server, 'resources/read', async (request, ctx, trace) => {
       const uri = request.params.uri;
-      if (hasSkills && uri.startsWith('skill://')) {
+      // File-backed skills are all `skill://`; a custom source may serve its own scheme.
+      if (hasSkills && (uri.startsWith('skill://') || 'source' in this.skillsConfig!)) {
         const file = await this.skillSource().read(uri, ctx);
         if (file) return { contents: [skillFileContents(uri, file)] };
       }

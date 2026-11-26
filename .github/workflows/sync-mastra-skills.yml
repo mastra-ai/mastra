@@ -48,7 +48,9 @@ jobs:
         with:
           ref: main
           token: ${{ steps.app-auth.outputs.token }}
-          fetch-depth: 1
+          # Full history (without old file contents), so `git pull --rebase` finds a merge base when main moves.
+          fetch-depth: 0
+          filter: blob:none
           persist-credentials: true
 
       - name: Setup pnpm and Node.js

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { serveHTTP } from '../server/__tests__/harness.mock';
 import type { ServedHTTP } from '../server/__tests__/harness.mock';
 import { MCPServer } from '../server/server';
+import type { SkillSource } from '../server/skills';
 import { MCPClient } from './configuration';
 import { SkillVerificationError } from './index';
 
@@ -75,5 +76,37 @@ describe('MCPClient skills', () => {
     await expect(mcp.skills.get('docs', 'skill://nope/SKILL.md')).rejects.toMatchObject({
       id: 'MCP_CLIENT_GET_SKILL_FAILED',
     });
+  });
+});
+
+describe('MCPClient skills timeout', () => {
+  it('applies the configured timeout to skill requests', async () => {
+    let release!: () => void;
+    const stalled = new Promise<void>(resolve => (release = resolve));
+    const source: SkillSource = {
+      list: async () => {
+        await stalled;
+        return { skills: [] };
+      },
+      get: async () => {
+        await stalled;
+        return undefined;
+      },
+      read: async () => undefined,
+    };
+    const served = await serveHTTP(new MCPServer({ name: 'Slow', version: '1.0.0', tools: {}, skills: { source } }));
+    const mcp = new MCPClient({ id: 'skills-timeout-test', servers: { slow: { url: served.url } }, timeout: 300 });
+    try {
+      const started = Date.now();
+      // A server that fails to list is logged and left out.
+      expect(await mcp.skills.list()).toEqual({});
+      const error = await mcp.skills.get('slow', 'skill://a/SKILL.md').catch(e => e);
+      expect(error.cause).toMatchObject({ code: 'REQUEST_TIMEOUT', data: { timeout: 300 } });
+      expect(Date.now() - started).toBeLessThan(5_000);
+    } finally {
+      release();
+      await mcp.disconnect();
+      await served.close();
+    }
   });
 });

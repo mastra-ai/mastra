@@ -1843,20 +1843,32 @@ To decide yourself what each caller gets, pass a `SkillSource` from the MCP SDK 
 
 ```typescript
 import { MCPServer } from '@mastra/mcp'
-import type { SkillSource } from '@mastra/mcp'
+import type { MCPSkill, SkillSource } from '@mastra/mcp'
 
-const source: SkillSource = {
-  async list() {
-    return { skills: await registry.listSkills() }
-  },
-  async get(uri) {
-    return registry.getSkill(uri)
-  },
-  async read(uri) {
-    const text = await registry.readFile(uri)
-    return text === undefined ? undefined : { text }
-  },
+// Your own store of skill entries and file contents
+interface SkillRegistry {
+  listSkills(): Promise<MCPSkill[]>
+  getSkill(uri: string): Promise<MCPSkill | undefined>
+  readFile(uri: string): Promise<string | undefined>
 }
+
+function registrySource(registry: SkillRegistry): SkillSource {
+  return {
+    async list() {
+      return { skills: await registry.listSkills() }
+    },
+    async get(uri) {
+      return registry.getSkill(uri)
+    },
+    async read(uri) {
+      const text = await registry.readFile(uri)
+      return text === undefined ? undefined : { text }
+    },
+  }
+}
+
+declare const registry: SkillRegistry
+const source = registrySource(registry)
 
 const server = new MCPServer({
   id: 'registry-server',
@@ -1867,7 +1879,7 @@ const server = new MCPServer({
 })
 ```
 
-Each skill lists its files with their digests, or `resources: 'dynamic'` when its files change too often to hash. `read` returns `{ text }` or `{ bytes }`, with an optional `mimeType`, or `undefined` for a file it doesn't serve. A source can also implement `readDirectory` to answer `resources/directory/read`, and `listResources` to add entries to `resources/list`. Without `readDirectory`, the server declares no directory reads.
+Each skill lists its files with their digests, or `resources: 'dynamic'` when its files change too often to hash. `read` returns `{ text }` or `{ bytes }`, with an optional `mimeType`, or `undefined` for a file it doesn't serve. A source may serve files under its own URI scheme, such as `github://`. `resources/read` asks the source first and falls back to the server's other resources when it returns `undefined`. A source can also implement `readDirectory` to answer `resources/directory/read`, and `listResources` to add entries to `resources/list`. Without `readDirectory`, the server declares no directory reads.
 
 To read skills from a server, use the [`MCPClient` `skills` property](/reference/tools/mcp-client#skills-property).
 

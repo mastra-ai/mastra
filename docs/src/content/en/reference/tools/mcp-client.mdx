@@ -981,7 +981,9 @@ mcpClient.resources.onListChanged('myWeatherServer', () => {
 
 ### `skills` property
 
-Reads [Agent Skills](https://agentskills.io) that servers serve over the [MCP Skills extension](https://modelcontextprotocol.io/extensions/skills/overview). Every file is checked against the size and SHA-256 digest the server listed for it. A file that isn't listed, or doesn't match, throws an error whose `cause` is a `SkillVerificationError`.
+Reads [Agent Skills](https://agentskills.io) that servers serve over the [MCP Skills extension](https://modelcontextprotocol.io/extensions/skills/overview). When a skill lists its files, every file is checked against the size and SHA-256 digest the server listed for it. A file that isn't listed, or doesn't match, throws an error whose `cause` is a `SkillVerificationError`.
+
+A skill with `resources: 'dynamic'` lists no files, so its files are returned unchecked with `verified: false`. If your application needs verified content, check `verified` before using a file.
 
 ```typescript
 const skills = await mcp.skills.list()

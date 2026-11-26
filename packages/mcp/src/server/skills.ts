@@ -74,6 +74,8 @@ interface ListedFile {
 }
 
 interface Catalog {
+  /** Distinguishes rebuilt catalogs, so a cursor from an older one is refused. */
+  generation: number;
   skills: Skill[];
   byUri: Map<string, Skill>;
   files: Map<string, ListedFile>;
@@ -122,8 +124,10 @@ function encodeSegment(segment: string): string {
   return segment.replace(/[^\w!$&'()*+,.:;=@[\]|~-]/gu, char => encodeURIComponent(char));
 }
 
+// Like the SDK, the first segment is the URI's authority and is encoded strictly.
 function uriOf(segments: readonly string[]): string {
-  return `skill://${segments.map(encodeSegment).join('/')}`;
+  const [authority, ...path] = segments;
+  return `skill://${[encodeURIComponent(authority!), ...path.map(encodeSegment)].join('/')}`;
 }
 
 function splitPath(path: string): string[] | undefined {
@@ -135,7 +139,8 @@ function splitPath(path: string): string[] | undefined {
 }
 
 const encoder = new TextEncoder();
-const strictDecoder = new TextDecoder('utf-8', { fatal: true });
+// Keeps a leading BOM, so the text the client re-encodes matches the listed size and digest.
+const strictDecoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 
 function toBytes(content: string | Uint8Array): Uint8Array {
   return typeof content === 'string' ? encoder.encode(content) : content;
@@ -207,15 +212,17 @@ function skillFilesFor(config: MCPServerSkillFiles, warn: (message: string) => v
   return { list: dir => files.list(at(dir)), read: path => files.read(at(path)) };
 }
 
-/** Every file path under the root, skipping entries that can't be served. */
-async function walk(files: SkillFiles, warn: (message: string) => void): Promise<string[]> {
+/** Every file and directory path under the root, skipping entries that can't be served. */
+async function walk(files: SkillFiles, warn: (message: string) => void): Promise<{ paths: string[]; dirs: string[] }> {
   const paths: string[] = [];
+  const dirs: string[] = [];
   const visit = async (dir: string): Promise<void> => {
     for (const entry of await files.list(dir)) {
       const path = dir === '' ? entry.name : `${dir}/${entry.name}`;
       if (splitPath(path)?.join('/') !== path) {
         warn(`Skill file name ${JSON.stringify(path)} cannot be served (skipped)`);
       } else if (entry.kind === 'directory') {
+        dirs.push(path);
         await visit(path);
       } else if (entry.kind === 'file') {
         paths.push(path);
@@ -225,7 +232,7 @@ async function walk(files: SkillFiles, warn: (message: string) => void): Promise
     }
   };
   await visit('');
-  return paths.sort();
+  return { paths: paths.sort(), dirs };
 }
 
 /**
@@ -241,7 +248,7 @@ async function buildCatalog(
   const prefix = config.prefix === undefined ? [] : splitPath(config.prefix);
   if (prefix === undefined) throw new TypeError(`Invalid skills prefix: ${JSON.stringify(config.prefix)}`);
 
-  const paths = await walk(files, warn);
+  const { paths, dirs: walkedDirs } = await walk(files, warn);
   if (paths.includes('SKILL.md')) warn('A SKILL.md at the skills root has no skill folder (skipped)');
   const skillDirs = paths.filter(path => path.endsWith('/SKILL.md')).map(path => path.slice(0, -'/SKILL.md'.length));
 
@@ -273,6 +280,10 @@ async function buildCatalog(
     }
     skills.push(skill);
     const dirSegments = dir.split('/');
+    // Empty folders are listed too, so reading one returns no entries rather than an error.
+    for (const path of walkedDirs) {
+      if (path === dir || path.startsWith(`${dir}/`)) servedDirs.add(path);
+    }
     for (const path of inside) {
       const uri = uriOf([...prefix, ...path.split('/')]);
       const resource = resources.get(uri)!;
@@ -293,6 +304,11 @@ async function buildCatalog(
   const dirs = new Map<string, Resource[]>();
   for (const dir of servedDirs) {
     const children = new Map<string, Resource>();
+    for (const sub of servedDirs) {
+      if (!sub.startsWith(`${dir}/`) || sub.slice(dir.length + 1).includes('/')) continue;
+      const name = sub.slice(dir.length + 1);
+      children.set(name, { uri: uriOf([...prefix, ...sub.split('/')]), name, mimeType: DIRECTORY_MIME_TYPE });
+    }
     for (const path of servedPaths) {
       if (!path.startsWith(`${dir}/`)) continue;
       const [name, ...rest] = path.slice(dir.length + 1).split('/');
@@ -309,6 +325,7 @@ async function buildCatalog(
 
   skills.sort(byUri);
   return {
+    generation: 0,
     skills,
     byUri: new Map(skills.map(skill => [skill.uri, skill])),
     files: servedFiles,
@@ -323,18 +340,48 @@ async function buildCatalog(
   };
 }
 
-function page<T>(items: readonly T[], cursor: string | undefined, size: number): { items: T[]; nextCursor?: string } {
+/** One page of `items`. A cursor names the catalog it came from; after a rebuild it is refused. */
+function page<T>(
+  items: readonly T[],
+  cursor: string | undefined,
+  size: number,
+  generation: number,
+): { items: T[]; nextCursor?: string } {
   let offset = 0;
   if (cursor !== undefined) {
-    offset = Number(cursor);
-    if (!Number.isSafeInteger(offset) || offset < 0 || offset > items.length) {
+    const match = /^(\d+)\.(\d+)$/.exec(cursor);
+    offset = Number(match?.[2]);
+    if (!match || !Number.isSafeInteger(offset) || offset > items.length) {
       throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Invalid cursor: ${cursor}`);
+    }
+    if (Number(match[1]) !== generation) {
+      throw new ProtocolError(
+        ProtocolErrorCode.InvalidParams,
+        'The skills changed since this cursor was issued; list again',
+      );
     }
   }
   const next = offset + size;
   return next < items.length
-    ? { items: items.slice(offset, next), nextCursor: String(next) }
+    ? { items: items.slice(offset, next), nextCursor: `${generation}.${next}` }
     : { items: items.slice(offset) };
+}
+
+/**
+ * Whether `path` is confirmed gone: the nearest ancestor folder that can still be listed doesn't hold the
+ * next segment. If nothing can be listed, the failure may be transient, so it isn't confirmed.
+ */
+async function isMissing(files: SkillFiles, path: string): Promise<boolean> {
+  const segments = path.split('/');
+  for (let depth = segments.length - 1; depth >= 0; depth--) {
+    try {
+      const entries = await files.list(segments.slice(0, depth).join('/'));
+      return !entries.some(entry => entry.name === segments[depth]);
+    } catch {
+      // This folder may be gone as well; check its parent.
+    }
+  }
+  return false;
 }
 
 /**
@@ -343,12 +390,17 @@ function page<T>(items: readonly T[], cursor: string | undefined, size: number):
  * request lists the skills afresh.
  */
 function catalogSource(config: MCPServerSkillFiles, warn: (message: string) => void): SkillSource {
-  const files = skillFilesFor(config, warn);
   const pageSize = config.pageSize ?? DEFAULT_PAGE_SIZE;
+  if (!Number.isSafeInteger(pageSize) || pageSize < 1) {
+    throw new TypeError(`skills.pageSize must be a positive integer (got ${pageSize})`);
+  }
+  const files = skillFilesFor(config, warn);
   let built: Promise<Catalog> | undefined;
+  let generation = 0;
   const catalog = (): Promise<Catalog> => {
     if (!built) {
-      const building = buildCatalog(config, files, warn);
+      const current = ++generation;
+      const building = buildCatalog(config, files, warn).then(result => ({ ...result, generation: current }));
       built = building;
       // A failed build is retried on the next request.
       building.catch(error => {
@@ -361,16 +413,18 @@ function catalogSource(config: MCPServerSkillFiles, warn: (message: string) => v
 
   return {
     async list({ cursor }) {
-      const { items, nextCursor } = page((await catalog()).skills, cursor, pageSize);
+      const { skills, generation } = await catalog();
+      const { items, nextCursor } = page(skills, cursor, pageSize, generation);
       return { skills: items, ...(nextCursor === undefined ? {} : { nextCursor }) };
     },
     async get(uri) {
       return (await catalog()).byUri.get(uri);
     },
     async readDirectory(uri, { cursor }) {
-      const children = (await catalog()).dirs.get(uri);
+      const { dirs, generation } = await catalog();
+      const children = dirs.get(uri);
       if (!children) return undefined;
-      const { items, nextCursor } = page(children, cursor, pageSize);
+      const { items, nextCursor } = page(children, cursor, pageSize, generation);
       return { resources: items, ...(nextCursor === undefined ? {} : { nextCursor }) };
     },
     async listResources() {
@@ -389,7 +443,14 @@ function catalogSource(config: MCPServerSkillFiles, warn: (message: string) => v
         }
         return undefined;
       }
-      const bytes = await files.read(file.path);
+      let bytes: Uint8Array;
+      try {
+        bytes = await files.read(file.path);
+      } catch (error) {
+        // A deleted file drops out of the next listing; other failures may be transient and keep the catalog.
+        if (built === current && (await isMissing(files, file.path))) built = undefined;
+        throw error;
+      }
       if (bytes.byteLength !== file.size || (await sha256(bytes)) !== file.digest) {
         if (built === current) built = undefined;
         throw new ProtocolError(

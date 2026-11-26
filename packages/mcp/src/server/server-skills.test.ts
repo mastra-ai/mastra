@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ConsoleLogger } from '@mastra/core/logger';
@@ -232,7 +232,7 @@ describe('MCPServer skills options', () => {
 
         const page = await rawRequest(served.url, { method: 'skills/list', params: {} });
         expect(page.json().result.skills).toHaveLength(1);
-        expect(page.json().result.nextCursor).toBe('1');
+        expect(page.json().result.nextCursor).toBe('1.1');
         const bad = await rawRequest(served.url, { method: 'skills/list', params: { cursor: 'x' } });
         expect(bad.json().error).toMatchObject({ code: -32602 });
 
@@ -450,6 +450,201 @@ describe('MCPServer skills from other sources', () => {
           params: { uri: 'skill://report' },
         });
         expect(directory.json().error).toMatchObject({ code: -32601 });
+      } finally {
+        await client.close();
+      }
+    } finally {
+      await served.close();
+    }
+  });
+});
+
+describe('MCPServer skills edge cases', () => {
+  let base: string;
+
+  beforeAll(async () => {
+    base = await mkdtemp(join(tmpdir(), 'mcp-skills-edges-'));
+  });
+
+  afterAll(async () => {
+    await rm(base, { recursive: true, force: true });
+  });
+
+  async function skillsFolder(name: string, files: Record<string, string>, emptyDirs: string[] = []) {
+    const root = join(base, name);
+    for (const [path, content] of Object.entries(files)) {
+      await mkdir(join(root, path, '..'), { recursive: true });
+      await writeFile(join(root, path), content);
+    }
+    for (const dir of emptyDirs) await mkdir(join(root, dir), { recursive: true });
+    return root;
+  }
+
+  it("keeps the server's own resources readable when the skills folder is missing", async () => {
+    const server = new MCPServer({
+      name: 'Both',
+      version: '1.0.0',
+      legacy: 'stateless',
+      tools: {},
+      skills: { files: new LocalFilesystem({ basePath: base }), root: 'no-such-folder' },
+      resources: {
+        listResources: async () => [{ uri: 'file://notes.txt', name: 'notes' }],
+        getResourceContent: async () => ({ text: 'notes' }),
+      },
+    });
+    server.__setLogger(new ConsoleLogger({ level: 'silent' }));
+    const served = await serveHTTP(server);
+    try {
+      const client = await connectClient(served.url);
+      try {
+        expect((await client.readResource({ uri: 'file://notes.txt' })).contents[0]).toMatchObject({ text: 'notes' });
+        expect((await client.listResources()).resources.map(r => r.uri)).toEqual(['file://notes.txt']);
+        // The skills methods still report the failure.
+        await expect(new SkillsClient(client).list()).rejects.toThrow(/no-such-folder/);
+      } finally {
+        await client.close();
+      }
+    } finally {
+      await served.close();
+    }
+  });
+
+  it('reads files a custom SkillSource serves under its own URI scheme', async () => {
+    const uri = 'github://owner/repo/skills/refunds/SKILL.md';
+    const source: SkillSource = {
+      list: async () => ({ skills: [] }),
+      get: async () => undefined,
+      read: async requested => (requested === uri ? { text: skillMd('refunds', 'Refunds') } : undefined),
+    };
+    const served = await serveHTTP(createServer({ source }));
+    try {
+      const client = await connectClient(served.url);
+      try {
+        expect((await client.readResource({ uri })).contents[0]).toMatchObject({
+          uri,
+          text: skillMd('refunds', 'Refunds'),
+        });
+        await expect(client.readResource({ uri: 'github://owner/repo/other.md' })).rejects.toThrow(/not found/);
+      } finally {
+        await client.close();
+      }
+    } finally {
+      await served.close();
+    }
+  });
+
+  it('refuses a page size that cannot advance the cursor', () => {
+    for (const pageSize of [0, -1, 1.5, Number.NaN]) {
+      expect(() => createServer({ files: { 'a/SKILL.md': skillMd('a', 'A') }, pageSize })).toThrow(/pageSize/);
+    }
+  });
+
+  it('refuses a cursor from before the skills were listed afresh', async () => {
+    const root = await skillsFolder('paging', { 'b/SKILL.md': skillMd('b', 'B'), 'c/SKILL.md': skillMd('c', 'C') });
+    const served = await serveHTTP(createServer({ files: new LocalFilesystem({ basePath: root }), pageSize: 1 }));
+    try {
+      const first = await rawRequest(served.url, { method: 'skills/list', params: {} });
+      expect(first.json().result.skills.map((skill: { uri: string }) => skill.uri)).toEqual(['skill://b/SKILL.md']);
+      const cursor = first.json().result.nextCursor;
+
+      // A changed file fails its read and drops the catalog; a new skill then sorts before `b`.
+      await writeFile(join(root, 'b', 'SKILL.md'), skillMd('b', 'B, changed'));
+      await skillsFolder('paging', { 'a/SKILL.md': skillMd('a', 'A') });
+      const client = await connectClient(served.url);
+      try {
+        await expect(client.readResource({ uri: 'skill://b/SKILL.md' })).rejects.toThrow(/changed since it was listed/);
+      } finally {
+        await client.close();
+      }
+
+      const next = await rawRequest(served.url, { method: 'skills/list', params: { cursor } });
+      expect(next.json().error).toMatchObject({ code: -32602, message: expect.stringMatching(/list again/) });
+      const relisted = await rawRequest(served.url, { method: 'skills/list', params: {} });
+      expect(relisted.json().result.skills.map((skill: { uri: string }) => skill.uri)).toEqual(['skill://a/SKILL.md']);
+    } finally {
+      await served.close();
+    }
+  });
+
+  it('lists the skills afresh after a listed file is deleted', async () => {
+    const root = await skillsFolder('deleted', {
+      'demo/SKILL.md': skillMd('demo', 'Demo'),
+      'demo/references/NOTES.md': 'notes',
+    });
+    const served = await serveHTTP(createServer({ files: new LocalFilesystem({ basePath: root }) }));
+    try {
+      const client = await connectClient(served.url);
+      try {
+        const skillsClient = new SkillsClient(client);
+        const [before] = (await skillsClient.list()).skills;
+        expect(Array.isArray(before!.resources) && before!.resources.map(r => r.uri)).toContain(
+          'skill://demo/references/NOTES.md',
+        );
+        await unlink(join(root, 'demo', 'references', 'NOTES.md'));
+        await expect(client.readResource({ uri: 'skill://demo/references/NOTES.md' })).rejects.toThrow();
+        const [after] = (await skillsClient.list()).skills;
+        expect(Array.isArray(after!.resources) && after!.resources.map(r => r.uri)).toEqual(['skill://demo/SKILL.md']);
+      } finally {
+        await client.close();
+      }
+    } finally {
+      await served.close();
+    }
+  });
+
+  it('serves a file starting with a byte order mark with its digest verified', async () => {
+    const served = await serveHTTP(
+      createServer({ files: { 'a/SKILL.md': skillMd('a', 'A'), 'a/notes.md': '\uFEFF# Notes\n' } }),
+    );
+    try {
+      const client = await connectClient(served.url);
+      try {
+        const skillsClient = new SkillsClient(client);
+        const [a] = (await skillsClient.list()).skills;
+        expect(await skillsClient.read(a!, 'notes.md')).toMatchObject({ verified: true, text: '\uFEFF# Notes\n' });
+      } finally {
+        await client.close();
+      }
+    } finally {
+      await served.close();
+    }
+  });
+
+  it('serves under a prefix whose characters need encoding as a URI authority', async () => {
+    const served = await serveHTTP(
+      createServer({ prefix: 'team:ops', files: { 'a/SKILL.md': skillMd('a', 'A'), 'a/run.md': 'run' } }),
+    );
+    try {
+      const client = await connectClient(served.url);
+      try {
+        const skillsClient = new SkillsClient(client);
+        const [a] = (await skillsClient.list()).skills;
+        expect(a?.uri).toBe('skill://team%3Aops/a/SKILL.md');
+        expect(await skillsClient.read(a!, 'run.md')).toMatchObject({ verified: true, text: 'run' });
+        expect((await skillsClient.readDirectory('skill://team%3Aops/a')).resources.map(r => r.name)).toEqual([
+          'SKILL.md',
+          'run.md',
+        ]);
+      } finally {
+        await client.close();
+      }
+    } finally {
+      await served.close();
+    }
+  });
+
+  it('reads an empty folder inside a skill as a directory with no entries', async () => {
+    const root = await skillsFolder('empty-dir', { 'a/SKILL.md': skillMd('a', 'A') }, ['a/assets']);
+    const served = await serveHTTP(createServer({ files: new LocalFilesystem({ basePath: root }) }));
+    try {
+      const client = await connectClient(served.url);
+      try {
+        const skillsClient = new SkillsClient(client);
+        expect((await skillsClient.readDirectory('skill://a')).resources).toEqual([
+          { uri: 'skill://a/SKILL.md', name: 'SKILL.md', mimeType: 'text/markdown', size: expect.any(Number) },
+          { uri: 'skill://a/assets', name: 'assets', mimeType: 'inode/directory' },
+        ]);
+        expect((await skillsClient.readDirectory('skill://a/assets')).resources).toEqual([]);
       } finally {
         await client.close();
       }

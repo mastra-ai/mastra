@@ -2177,10 +2177,26 @@ export class InternalMastraMCPClient extends MastraBase {
 
   private skillsClient?: SkillsClient;
 
-  /** Lists, gets and reads this server's Agent Skills (SEP-2640), verifying every file against its digest. */
-  get skills(): SkillsClient {
-    this.skillsClient ??= new SkillsClient(this.client);
-    return this.skillsClient;
+  /**
+   * Lists, gets and reads this server's Agent Skills (SEP-2640) with the configured request timeout.
+   * Files of skills with a manifest are verified against its sizes and digests; `"dynamic"` skills are
+   * not (`verified: false`).
+   */
+  get skills(): Pick<SkillsClient, 'supported' | 'directoryRead' | 'list' | 'get' | 'read' | 'readDirectory'> {
+    const client = (this.skillsClient ??= new SkillsClient(this.client));
+    const options = { timeout: this.timeout };
+    return {
+      get supported() {
+        return client.supported;
+      },
+      get directoryRead() {
+        return client.directoryRead;
+      },
+      list: params => client.list(params, options),
+      get: uri => client.get(uri, options),
+      read: (skill, ref) => client.read(skill, ref, options),
+      readDirectory: uri => client.readDirectory(uri, options),
+    };
   }
 
   /** Reads, answers and cancels this server's tasks (SEP-2663). */

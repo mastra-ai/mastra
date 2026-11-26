@@ -6,7 +6,7 @@ Added Agent Skills over MCP. `MCPServer` serves skills to clients that support t
 
 **Serve skills**
 
-Each folder holding a `SKILL.md` is a skill. Clients list the skills, then load a skill's files when a task needs them. Serve them from a workspace filesystem, an object of file contents, or your own `SkillSource`. Only each file's size and digest stay in memory; files are read when a client asks for them.
+Each folder holding a `SKILL.md` is a skill. Clients list the skills, then load a skill's files when a task needs them. Serve them from a workspace filesystem, an object of file contents, or your own `SkillSource`. Skills served from a filesystem keep only each file's size and digest in memory and read the file again when a client asks for it.
 
 ```ts
 import { MCPServer } from '@mastra/mcp';
@@ -23,7 +23,7 @@ const server = new MCPServer({
 
 **Read skills**
 
-Every file is checked against the size and digest the server listed for it, so a changed or unlisted file is refused.
+When a skill lists its files, every file is checked against the size and digest the server listed for it, so a changed or unlisted file is refused. Skills with `resources: 'dynamic'` list no files, so their files come back with `verified: false`.
 
 ```ts
 const { docsServer } = await mcp.skills.list();
