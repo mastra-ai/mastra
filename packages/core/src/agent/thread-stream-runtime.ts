@@ -5365,6 +5365,51 @@ export class AgentThreadStreamRuntime {
     return store?.store.pendingSignalsSharedAcrossProcesses ? store : undefined;
   }
 
+  /**
+   * Whether the run `runId` holding the thread reads `store`, as far as this
+   * process can tell without resolving a memory given as a function.
+   *
+   * `'same'`: a run held here whose store is `store`, or a run of this agent
+   * held elsewhere that announced it keeps its signals in storage, when the
+   * agent's memory is a fixed instance whose store is `store` and is shared.
+   *
+   * `'other'`:
+   * - a run held here that keeps its signals in memory;
+   * - a run only reserved here, which has no record yet;
+   * - a run held here whose store is another one;
+   * - a run held elsewhere that this process has not seen announce itself as storage-backed;
+   * - a run held elsewhere when `store` is not shared across processes;
+   * - a storage-backed run of this agent held elsewhere whose store is another one and shared.
+   *
+   * `'unknown'`: a storage-backed run whose store can't be resolved here, such
+   * as one held elsewhere of another agent or of a memory given as a function,
+   * or whose store, resolved here, is not shared across processes.
+   *
+   * A memory resolution for a run held elsewhere that throws rejects this
+   * call; one for a run held here that fails answers `'unknown'`.
+   */
+  async #winnerReadsStore(
+    state: AgentThreadRuntimeState,
+    agent: Agent<any, any, any, any>,
+    runId: string,
+    key: string,
+    store: ThreadSignalsStore,
+  ): Promise<'same' | 'other' | 'unknown'> {
+    if (state.threadRunsById.has(runId) || state.threadKeysByRunId.has(runId)) {
+      const record = state.threadRunsById.get(runId);
+      if (!record || !this.#isStorageBacked(record)) return 'other';
+      const resolved = await this.#signalsStoreOf(record);
+      if (!resolved) return 'unknown';
+      return resolved.store === store.store ? 'same' : 'other';
+    }
+    if (!state.remoteStoredRunIds.has(runId) || !store.store.pendingSignalsSharedAcrossProcesses) return 'other';
+    // Another agent's run, or a memory given as a function, can't be compared without the run's request context.
+    if (!this.#mayStoreForRunHeldElsewhere(state, agent, runId)) return 'unknown';
+    const resolved = await this.#runSignalsStore(state, agent, runId, key);
+    if (!resolved) return 'unknown';
+    return resolved.store === store.store ? 'same' : 'other';
+  }
+
   /** Whether `run` keeps its signals in storage, resolved or not. */
   #isStorageBacked(run: Pick<EndedThreadRun, 'signalsStore' | 'resolveSignalsStore'>): boolean {
     return !!(run.signalsStore || run.resolveSignalsStore);
@@ -6719,13 +6764,20 @@ export class AgentThreadStreamRuntime {
             // Another run holds the thread; it takes the rows at its next claim, or its own end-of-run check does.
             // This follow-up never started, so a later check may start one with the same input.
             state.storedFollowUpInputs.get(key)?.delete(signal.id);
-            const winnerStore = winnerRunId
-              ? await this.#runSignalsStore(state, previousRun.agent, winnerRunId, key)
-              : undefined;
-            if (!winnerRunId || winnerStore?.store === store.store) return;
-            // A winner that doesn't read this store gets, through its holder, the rows still pending here, in order.
-            // A row is deleted only once its forward was published. From the first forward that fails, the rows
-            // stay pending for the thread's next run that reads this store.
+            if (!winnerRunId) return;
+            // A winner that reads this store claims the rows itself. One whose store can't be compared here leaves
+            // them pending too: it is the signal run of its own store, normally this one. A winner known not to read
+            // this store gets them through its holder, each row deleted only once its forward was published.
+            const reads = await this.#winnerReadsStore(state, previousRun.agent, winnerRunId, key, store);
+            if (reads === 'unknown') {
+              previousRun.agent
+                .__getLogger?.()
+                ?.debug?.(
+                  "Left the signals an ended run left pending: the run holding the thread may read another store, and this process can't tell",
+                  { runId: previousRun.runId, winnerRunId },
+                );
+            }
+            if (reads !== 'other') return;
             await this.#writeStoredSignals(state, key, async () => {
               const pending = new Set(
                 (await store.store.listPendingSignals({ threadId: store.threadId })).map(row => row.id),
