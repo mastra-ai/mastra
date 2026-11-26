@@ -648,6 +648,8 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s paused tool cards', 
     };
 
     const seen: Array<{ action?: string; actor?: string; actorResourceId?: string }> = [];
+    /** What a resumed call reads back: the step its last suspend saved, and the conversation's resource. */
+    const resumes: Array<{ step?: string; resourceId?: string }> = [];
     let releaseNext = () => {};
     /** Hold the tool after a `next` click, until `releaseNext()`, before it shows the next step. */
     const holdNext = new Promise<void>(resolve => (releaseNext = resolve));
@@ -660,12 +662,17 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s paused tool cards', 
         const run = getChannelRun(context.requestContext);
         const action = (context.agent?.resumeData as { action?: string } | undefined)?.action;
         seen.push({ action, actor: run?.actor?.userId, actorResourceId: run?.actorResourceId });
+        if (action) {
+          const step = (context.agent?.suspendPayload as { step?: string } | undefined)?.step;
+          resumes.push({ step, resourceId: context.agent?.resourceId });
+        }
         const id = context.agent!.toolCallId;
         if (action === 'done') return 'finished';
         if (action === 'stop') return 'stopped';
         if (action === 'next' && options.holdNext) await holdNext;
         await context.agent!.suspend({
           channelCard: card(id, action === 'next' ? ['done', 'stop'] : ['next', 'stop']),
+          step: action ?? 'start',
         });
       },
     });
@@ -754,6 +761,7 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s paused tool cards', 
       llm,
       adapter,
       seen,
+      resumes,
       resumeStream,
       cardMessage,
       click,
@@ -785,6 +793,11 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s paused tool cards', 
         timeout: 5000,
       });
       expect(t.seen[2]).toMatchObject({ action: 'done', actor: 'U1' });
+      // A tool keeps its own state across steps in its suspend payload.
+      expect(t.resumes).toEqual([
+        { step: 'start', resourceId: 'slack:U1' },
+        { step: 'next', resourceId: 'slack:U1' },
+      ]);
       expect(JSON.stringify(t.llm.getRequests().at(-1)?.body)).toContain('finished');
       expect(t.resumeStream).toHaveBeenCalledTimes(2);
     } finally {
