@@ -450,6 +450,14 @@ export function createKnowledgeSequenceTests(createStore: () => Promise<Knowledg
           properties,
           writtenBy: importer,
         });
+      const cyclic: Record<string, unknown> = { a: 1 };
+      cyclic.self = cyclic;
+      const hooked: Record<string, unknown> = { payload: 'x'.repeat(20_000) };
+      Object.defineProperty(hooked, 'toJSON', { value: () => ({}) });
+      const hookedList = [1];
+      Object.defineProperty(hookedList, 'toJSON', { value: () => [] });
+      const getter = Object.defineProperty({}, 'n', { get: () => 1, enumerable: true });
+      const symbolKey = { [Symbol('s')]: 1, a: 1 };
       for (const properties of [
         { omitted: undefined },
         { nested: { omitted: undefined } },
@@ -459,12 +467,23 @@ export function createKnowledgeSequenceTests(createStore: () => Promise<Knowledg
         { when: new Date(0) },
         { fn: () => 1 },
         { big: 1n },
+        { list: new Array(1) },
+        { list: [1, , 2] },
+        cyclic,
+        hooked,
+        { nested: hookedList },
+        getter,
+        symbolKey,
       ]) {
         await expect(put(properties)).rejects.toBeInstanceOf(KnowledgeSequenceItemInvalidError);
       }
       expect((await sequences.listItems({ sequenceId: page.id, read: 'all', limit: 10 })).items).toEqual([]);
-      const ok = await put({ a: null, b: [1, 'x', { c: true }] });
-      expect(ok).toMatchObject({ status: 'created', item: { properties: { a: null, b: [1, 'x', { c: true }] } } });
+      const shared = { c: true };
+      const ok = await put({ a: null, b: [1, 'x', null, shared], d: shared });
+      expect(ok).toMatchObject({
+        status: 'created',
+        item: { properties: { a: null, b: [1, 'x', null, { c: true }], d: { c: true } } },
+      });
     });
 
     it('takes a parent only from the same sequence, one level deep, and a deleted parent still counts', async () => {

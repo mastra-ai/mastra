@@ -343,14 +343,30 @@ export function knowledgeSequenceItemSearchText(
   return parts.join('\n').toLowerCase();
 }
 
-/** Whether `value` survives JSON unchanged: so what's stored, compared and counted is what was given. */
-function isJsonValue(value: unknown): boolean {
+/**
+ * Whether `value` survives JSON unchanged, so what's validated, measured, compared and stored is
+ * the same value: plain objects and arrays of own, enumerable data properties (no getters, symbol
+ * keys, hidden `toJSON` hooks or holes), no cycles, finite numbers, strings, booleans and null.
+ */
+function isJsonValue(value: unknown, ancestors: Set<object> = new Set()): boolean {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
   if (typeof value === 'number') return Number.isFinite(value);
-  if (Array.isArray(value)) return value.every(isJsonValue);
-  if (typeof value !== 'object') return false;
+  if (typeof value !== 'object' || ancestors.has(value)) return false;
+  const array = Array.isArray(value);
   const proto = Object.getPrototypeOf(value);
-  return (proto === Object.prototype || proto === null) && Object.values(value).every(isJsonValue);
+  if (array ? proto !== Array.prototype : proto !== Object.prototype && proto !== null) return false;
+  const keys = Reflect.ownKeys(value).filter(key => !(array && key === 'length'));
+  if (array && keys.length !== (value as unknown[]).length) return false;
+  const children: unknown[] = [];
+  for (const key of keys) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
+    if (typeof key !== 'string' || !descriptor.enumerable || !('value' in descriptor)) return false;
+    children.push(descriptor.value);
+  }
+  ancestors.add(value);
+  const ok = children.every(child => isJsonValue(child, ancestors));
+  ancestors.delete(value);
+  return ok;
 }
 
 function invalid(field: string, message: string): never {
@@ -393,7 +409,7 @@ export function checkKnowledgeSequenceItemInput(input: UpsertKnowledgeSequenceIt
     if (!isJsonValue(properties)) {
       invalid(
         'properties',
-        'must hold only JSON values: no undefined, functions, non-finite numbers or class instances.',
+        'must be plain JSON: no undefined, holes, cycles, getters, hidden or symbol keys, functions, non-finite numbers or class instances.',
       );
     }
     if (new TextEncoder().encode(JSON.stringify(properties)).length > MAX_KNOWLEDGE_SEQUENCE_ITEM_PROPERTIES_BYTES) {
