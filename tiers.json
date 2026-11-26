@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-11-25",
+  "updated": "2026-11-26",
   "scope": "all",
   "files": {
     ".github/scripts/ci-routing.test.ts": {
@@ -14629,8 +14629,8 @@
     },
     "packages/core/src/loop/shared/steps/execute-tool-core.test.ts": {
       "tier": "in",
-      "since": "2026-11-16",
-      "last_failure": "2026-11-16",
+      "since": "2026-11-26",
+      "last_failure": "2026-11-26",
       "reason": "versioning-fail",
       "pr_failures": {
         "133235611609": {
@@ -27285,8 +27285,8 @@
     },
     "packages/playground/src/pages/agents/agent/__tests__/thread-page.msw.test.tsx": {
       "tier": "in",
-      "since": "2026-11-24",
-      "last_failure": "2026-11-24",
+      "since": "2026-11-26",
+      "last_failure": "2026-11-26",
       "reason": "versioning-fail",
       "pr_failures": {
         "135882898948": {
