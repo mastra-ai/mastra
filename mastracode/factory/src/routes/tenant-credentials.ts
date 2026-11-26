@@ -26,14 +26,18 @@ import {
   setCredentialStoreProvider,
 } from '@mastra/code-sdk/agents/credential-resolver';
 import { getOAuthProvider, PROVIDER_DEFAULT_MODELS } from '@mastra/code-sdk/auth/storage';
-import type { AuthCredential, CredentialStore, OAuthCredential } from '@mastra/code-sdk/auth/types';
+import type { AuthCredential, CredentialStore, OAuthAccountRecord, OAuthCredential } from '@mastra/code-sdk/auth/types';
 import { MASTRA_GATEWAY_PROVIDER } from '@mastra/code-sdk/onboarding/settings';
 import { MASTRA_GATEWAY_PREFIX } from '@mastra/code-sdk/providers/model-ids';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MiddlewareHandler } from 'hono';
 
 import { isOAuthCredentialExpired } from '../storage/domains/credentials/base.js';
-import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
+import type {
+  CredentialAccount,
+  ModelCredentialsStorage,
+  ResolvedCredential,
+} from '../storage/domains/credentials/base.js';
 import { getAuthProviderId, getTenantCredentialsStorage, storedScopeFor, tenantOrgId } from './provider-credentials.js';
 import type { RouteAuth } from './route.js';
 
@@ -51,6 +55,14 @@ export class TenantCredentialStore implements CredentialStore {
   readonly #credentials: ModelCredentialsStorage | undefined;
   readonly #deploymentProviders: ReadonlySet<string>;
   #snapshot = new Map<string, AuthCredential>();
+  /** Each provider's OAuth subscriptions, first account first. */
+  #accounts = new Map<string, CredentialAccount[]>();
+  /**
+   * The subscription each provider's model calls start on. Rotation moves it
+   * when one runs out; it lives in memory per replica, so a restart starts
+   * over on the first account and spends at most one rate-limited request.
+   */
+  #activeAccountIds = new Map<string, string>();
   #fetchedAt = 0;
   #hydrating: Promise<void> | undefined;
 
@@ -85,13 +97,21 @@ export class TenantCredentialStore implements CredentialStore {
   async #hydrate(): Promise<void> {
     const storage = await getTenantCredentialsStorage(this.#credentials);
     if (!storage) return; // Keep the last tenant-scoped snapshot.
-    const records = await storage.listCredentials(this.#orgId, this.#userId);
-    const next = new Map<string, AuthCredential>();
     const storageScope = storedScopeFor(this.#scope);
+    const [records, accounts] = await Promise.all([
+      storage.listCredentials(this.#orgId, this.#userId),
+      storage.listAccounts(this.#orgId, this.#userId),
+    ]);
+    const next = new Map<string, AuthCredential>();
     for (const record of records.filter(r => r.scope === storageScope)) {
       next.set(record.provider, record.credential);
     }
+    const nextAccounts = new Map<string, CredentialAccount[]>();
+    for (const account of accounts.filter(a => a.scope === storageScope)) {
+      nextAccounts.set(account.provider, [...(nextAccounts.get(account.provider) ?? []), account]);
+    }
     this.#snapshot = next;
+    this.#accounts = nextAccounts;
     this.#fetchedAt = Date.now();
   }
 
@@ -102,8 +122,9 @@ export class TenantCredentialStore implements CredentialStore {
     }
   }
 
+  /** The credential of the subscription the provider's model calls are on, else its API key. */
   get(provider: string): AuthCredential | undefined {
-    return this.#snapshot.get(provider);
+    return this.#account(provider, this.#activeAccountId(provider))?.credential ?? this.#snapshot.get(provider);
   }
 
   getStoredApiKey(provider: string): string | undefined {
@@ -111,18 +132,102 @@ export class TenantCredentialStore implements CredentialStore {
     return cred?.type === 'api_key' ? cred.key : undefined;
   }
 
+  /** The provider's OAuth subscriptions as the account-rotation processor reads them. */
+  listAccounts(provider: string): OAuthAccountRecord[] {
+    const accounts = this.#accounts.get(provider) ?? [];
+    const activeId = this.#activeAccountId(provider);
+    return accounts.map((account, index) => ({
+      ...account.credential,
+      type: 'oauth-account',
+      id: account.id,
+      label: account.label ?? `Account ${index + 1}`,
+      addedAt: account.addedAt.toISOString(),
+      active: account.id === activeId,
+    }));
+  }
+
+  getActiveAccount(provider: string): OAuthAccountRecord | undefined {
+    return this.listAccounts(provider).find(account => account.active);
+  }
+
+  /** Move the provider's model calls to `accountId`, or to the next subscription after the active one. */
+  activateAccount(provider: string, accountId?: string): OAuthAccountRecord | undefined {
+    const accounts = this.listAccounts(provider);
+    const activeIndex = accounts.findIndex(account => account.active);
+    const next =
+      accountId === undefined
+        ? accounts.length > 1
+          ? accounts[(activeIndex + 1) % accounts.length]
+          : undefined
+        : accounts.find(account => account.id === accountId);
+    if (!next) return undefined;
+    this.#activeAccountIds.set(provider, next.id);
+    return { ...next, active: true };
+  }
+
+  #activeAccountId(provider: string): string | undefined {
+    const accounts = this.#accounts.get(provider) ?? [];
+    const cursor = this.#activeAccountIds.get(provider);
+    return accounts.find(account => account.id === cursor)?.id ?? accounts[0]?.id;
+  }
+
+  /** Keep the snapshot and the account list in step with what storage just returned. */
+  #remember(provider: string, accountId: string, credential: AuthCredential): void {
+    const accounts = this.#accounts.get(provider) ?? [];
+    const index = accounts.findIndex(account => account.id === accountId);
+    if (index <= 0) this.#snapshot.set(provider, credential);
+    if (index >= 0 && credential.type === 'oauth') {
+      this.#accounts.set(provider, accounts.with(index, { ...accounts[index]!, credential }));
+    }
+  }
+
+  #account(provider: string, accountId: string | undefined): CredentialAccount | undefined {
+    return this.#accounts.get(provider)?.find(account => account.id === accountId);
+  }
+
   /**
-   * Authoritative fetch-time resolution: re-reads only the selected scope and
-   * refreshes expired OAuth tokens under the domain's row lock. Mirrors
-   * `AuthStorage.getApiKey` semantics: `undefined` on missing credential or
-   * failed refresh (caller surfaces a re-login error).
+   * Read one subscription (`accountId`, else the active one) from storage. When
+   * the active one was removed elsewhere, calls start over on the first.
    */
-  async getApiKey(provider: string): Promise<string | undefined> {
+  async #resolve(
+    storage: ModelCredentialsStorage,
+    provider: string,
+    accountId: string | undefined,
+  ): Promise<ResolvedCredential | undefined> {
+    const target = accountId ?? this.#activeAccountId(provider);
+    const scope = storedScopeFor(this.#scope);
+    const resolved = await storage.resolveCredential(this.#orgId, this.#userId, provider, scope, target);
+    if (resolved || accountId !== undefined || target === undefined) return resolved;
+    this.#forget(provider, target);
+    return storage.resolveCredential(this.#orgId, this.#userId, provider, scope);
+  }
+
+  #forget(provider: string, accountId: string | undefined): void {
+    if (accountId === undefined) {
+      this.#snapshot.delete(provider);
+      this.#accounts.delete(provider);
+      return;
+    }
+    const accounts = this.#accounts.get(provider) ?? [];
+    this.#accounts.set(
+      provider,
+      accounts.filter(account => account.id !== accountId),
+    );
+  }
+
+  /**
+   * Authoritative fetch-time resolution of the active subscription, or of
+   * `accountId` when rotation picked one for this request: re-reads only the
+   * selected scope and refreshes expired OAuth tokens under the domain's row
+   * lock. Mirrors `AuthStorage.getApiKey` semantics: `undefined` on missing
+   * credential or failed refresh (caller surfaces a re-login error).
+   */
+  async getApiKey(provider: string, accountId?: string): Promise<string | undefined> {
     const storage = await getTenantCredentialsStorage(this.#credentials);
     if (!storage) {
       // Domain unavailable: best effort from the snapshot; expired OAuth
       // tokens cannot be refreshed without the domain's lock.
-      const cred = this.#snapshot.get(provider);
+      const cred = accountId === undefined ? this.get(provider) : this.#account(provider, accountId)?.credential;
       if (cred?.type === 'api_key') return cred.key;
       if (cred?.type === 'oauth' && !isOAuthCredentialExpired(cred)) {
         return getOAuthProvider(provider)?.getApiKey(cred);
@@ -130,12 +235,12 @@ export class TenantCredentialStore implements CredentialStore {
       return undefined;
     }
 
-    const resolved = await storage.resolveCredential(this.#orgId, this.#userId, provider, storedScopeFor(this.#scope));
+    const resolved = await this.#resolve(storage, provider, accountId);
     if (!resolved) {
-      this.#snapshot.delete(provider);
+      this.#forget(provider, accountId);
       return undefined;
     }
-    this.#snapshot.set(provider, resolved.credential);
+    this.#remember(provider, resolved.accountId, resolved.credential);
 
     if (resolved.credential.type === 'api_key') {
       return resolved.credential.key;
@@ -148,43 +253,42 @@ export class TenantCredentialStore implements CredentialStore {
       return oauthProvider.getApiKey(resolved.credential);
     }
 
-    return this.#refreshOAuth(storage, resolved.scope, provider, isOAuthCredentialExpired);
+    return this.#refreshOAuth(storage, resolved, isOAuthCredentialExpired);
   }
 
   /**
-   * Refresh the OAuth credential even though it hasn't expired. The
+   * Refresh an OAuth credential even though it hasn't expired. The
    * account-rotation processor calls this once when the provider rejects the
    * token (401/403): providers can revoke an access token before the expiry
    * recorded at sign-in. Only the token this store last served is replaced, so
    * when another session or replica already refreshed it the newer token is
    * reused instead of rotating the refresh token again.
    */
-  async forceRefreshActiveAccount(provider: string): Promise<string | undefined> {
+  async forceRefreshActiveAccount(provider: string, accountId?: string): Promise<string | undefined> {
     const storage = await getTenantCredentialsStorage(this.#credentials);
     if (!storage) return undefined;
-    const served = this.#snapshot.get(provider);
-    const resolved = await storage.resolveCredential(this.#orgId, this.#userId, provider, storedScopeFor(this.#scope));
+    const served = accountId === undefined ? this.get(provider) : this.#account(provider, accountId)?.credential;
+    const resolved = await this.#resolve(storage, provider, accountId);
     if (resolved?.credential.type !== 'oauth') return undefined;
     const rejectedAccess = served?.type === 'oauth' ? served.access : resolved.credential.access;
     return this.#refreshOAuth(
       storage,
-      resolved.scope,
-      provider,
+      resolved,
       current => isOAuthCredentialExpired(current) || current.access === rejectedAccess,
     );
   }
 
   async #refreshOAuth(
     storage: ModelCredentialsStorage,
-    scope: 'user' | 'org',
-    provider: string,
+    resolved: ResolvedCredential,
     needsRefresh: (current: OAuthCredential) => boolean,
   ): Promise<string | undefined> {
+    const { provider, accountId } = resolved;
     const oauthProvider = getOAuthProvider(provider);
     if (!oauthProvider) return undefined;
     // Refresh at the scope the credential actually lives at (OAuth rows are
     // user-scoped by policy, but resolve defensively from the record).
-    const rowTenant = scope === 'user' ? { orgId: this.#orgId, userId: this.#userId } : { orgId: this.#orgId };
+    const rowTenant = resolved.scope === 'user' ? { orgId: this.#orgId, userId: this.#userId } : { orgId: this.#orgId };
     try {
       const refreshed = await storage.refreshOAuth(
         rowTenant,
@@ -194,9 +298,10 @@ export class TenantCredentialStore implements CredentialStore {
           ...(await oauthProvider.refreshToken(current)),
         }),
         needsRefresh,
+        accountId,
       );
       if (!refreshed) return undefined;
-      this.#snapshot.set(provider, refreshed);
+      this.#remember(provider, accountId, refreshed);
       return oauthProvider.getApiKey(refreshed);
     } catch {
       // Refresh failed — user needs to re-login (same posture as AuthStorage).

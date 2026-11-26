@@ -358,6 +358,37 @@ function getTriedInstances(state: Record<string, unknown>): Set<string> {
   return created;
 }
 
+/** The tried set of each request's rotation, for {@link requestHasUntriedAccount}. */
+const triedByRequest = new WeakMap<object, Set<string>>();
+
+function getRequestTriedInstances({
+  state,
+  requestContext,
+}: Pick<ProcessAPIErrorArgs, 'state' | 'requestContext'>): Set<string> {
+  const tried = getTriedInstances(state);
+  if (requestContext) triedByRequest.set(requestContext, tried);
+  return tried;
+}
+
+/**
+ * Whether rotation can still move this failed request to a subscription of the
+ * provider it hasn't used. While it can, a rate limit switches subscription
+ * instead of waiting out `Retry-After` on the one that is limited.
+ */
+export function requestHasUntriedAccount(
+  args: Pick<ProcessAPIErrorArgs, 'error' | 'requestContext'>,
+  store: CredentialStore,
+): boolean {
+  const { requestContext } = args;
+  const providerId = providerFromError(args.error) ?? providerFromSession(args);
+  if (!providerId || isRequestAccountRoutingExhausted(requestContext, providerId)) return false;
+  const route = resolveAccountRoute(args);
+  if (route?.providerId === providerId && getRouteTargetAccountId(route) !== undefined) return false;
+  const current = getRequestAccountSelection(requestContext, providerId) ?? store.getActiveAccount?.(providerId)?.id;
+  const tried = requestContext ? triedByRequest.get(requestContext) : undefined;
+  return (store.listAccounts?.(providerId) ?? []).some(account => account.id !== current && !tried?.has(account.id));
+}
+
 function getForcedRefreshInstances(state: Record<string, unknown>): Set<string> {
   const existing = state.forcedAuthRefresh;
   if (existing instanceof Set) return existing;
@@ -389,6 +420,37 @@ export function isAccountSwitchReason(value: unknown): value is AccountSwitchPar
   // Own-property check: `in` would accept prototype names like 'toString',
   // which would then interpolate the inherited function into the notice text.
   return typeof value === 'string' && Object.prototype.hasOwnProperty.call(REASON_TEXT, value);
+}
+
+/** Reads a persisted switch part; `null` when it is not one. */
+export function parseAccountSwitchPart(data: unknown): AccountSwitchPartData | null {
+  if (!data || typeof data !== 'object') return null;
+  const record = data as Record<string, unknown>;
+  if (typeof record.provider !== 'string' || !isAccountSwitchReason(record.reason)) return null;
+  const endpoint = (value: unknown): { id: string; label: string } | null => {
+    if (!value || typeof value !== 'object') return null;
+    const entry = value as Record<string, unknown>;
+    if (typeof entry.id !== 'string' || typeof entry.label !== 'string') return null;
+    return { id: entry.id, label: entry.label };
+  };
+  // `null` is the explicit persisted marker for "no usable account" (pool
+  // exhaustion). Anything else that doesn't parse is schema drift and must not
+  // collapse to `null` either — that renders as "All accounts unavailable",
+  // misreporting a rotation as exhaustion. Unknown endpoint instead.
+  const toEndpoint = (value: unknown): { id: string; label: string } | null => {
+    if (value === null || value === undefined) return null;
+    return endpoint(value) ?? { id: 'unknown', label: 'unknown' };
+  };
+  return {
+    provider: record.provider,
+    from: endpoint(record.from),
+    to: toEndpoint(record.to),
+    reason: record.reason,
+    at: typeof record.at === 'string' ? record.at : '',
+    // A12 exclusivity flag: without it a pinned route's exhaustion would
+    // re-render from history as "all accounts unavailable".
+    ...(record.exclusive === true ? { exclusive: true } : {}),
+  };
 }
 
 /**
@@ -720,7 +782,7 @@ export class AccountRotationProcessor implements Processor {
     // (a cascade can visit several providers), so comparing its raw size to
     // this provider's account count would falsely report exhaustion when an
     // earlier provider in the same request already used up accounts.
-    const tried = getTriedInstances(state);
+    const tried = getRequestTriedInstances(args);
     if (active) tried.add(active.id);
     // The tried-set is request-global and shared across providers after a
     // route hop, so exhaustion must count only this provider's ids.
@@ -906,7 +968,7 @@ export class AccountRotationProcessor implements Processor {
       return { retry: false };
     }
 
-    const tried = getTriedInstances(args.state);
+    const tried = getRequestTriedInstances(args);
     for (const account of accounts) tried.add(account.id);
 
     const active = getRequestActiveAccount(args, store, providerId);

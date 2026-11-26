@@ -45,6 +45,7 @@ function makeAuthStorage(opts: { loggedIn?: string[]; storedKeys?: string[] }): 
     get: (provider: string) => (loggedIn.has(provider) ? { type: 'oauth', refresh: 'r', access: 'a' } : undefined),
     isLoggedIn: (provider: string) => loggedIn.has(provider),
     hasStoredApiKey: (provider: string) => storedKeys.has(provider),
+    listAccounts: () => [],
   } as unknown as AuthStorage;
 }
 
@@ -183,6 +184,29 @@ describe('listProviders', () => {
     });
 
     expect(list[0]?.source).toBe('none');
+  });
+
+  it('lists each Claude subscription signed in on this machine, in the order calls move through them', async () => {
+    const dir = await fs.mkdtemp(join(tmpdir(), 'factory-local-accounts-'));
+    try {
+      const auth = new AuthStorage(join(dir, 'auth.json'));
+      const expires = Date.now() + 3_600_000;
+      await auth.addAccount('anthropic', { access: 'a-work', refresh: 'r-work', expires }, { label: 'work' });
+      await auth.addAccount('anthropic', { access: 'a-home', refresh: 'r-home', expires }, { label: 'home' });
+
+      const [anthropic] = await listProviders({
+        controller: makeAgentController([{ provider: 'anthropic', hasApiKey: false }]),
+        authStorage: auth,
+      });
+
+      expect(anthropic?.accounts).toEqual([
+        { id: expect.any(String), label: 'work' },
+        { id: expect.any(String), label: 'home' },
+      ]);
+      expect(JSON.stringify(anthropic)).not.toContain('a-work');
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('advertises web OAuth capability for supported providers only', async () => {
@@ -584,6 +608,53 @@ describe('provider key routes with a tenant', () => {
     expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'anthropic')).toBeDefined();
   });
 
+  describe('with several Claude subscriptions', () => {
+    const expires = Date.now() + 3_600_000;
+    const listedAccounts = async (user: typeof userA) =>
+      (await (await buildApp(user).request('/web/config/providers')).json()).providers.find(
+        (p: { provider: string }) => p.provider === 'anthropic',
+      )?.accounts;
+
+    beforeEach(async () => {
+      const mine = { orgId: 'org1', userId: 'user-a' };
+      await seed.credentials.addAccount(
+        mine,
+        'anthropic',
+        { type: 'oauth', access: 'a-work', refresh: 'r-work', expires },
+        { label: 'work@example.com' },
+      );
+      await seed.credentials.addAccount(mine, 'anthropic', {
+        type: 'oauth',
+        access: 'a-home',
+        refresh: 'r-home',
+        expires,
+      });
+      await seed.credentials.addAccount(
+        { orgId: 'org1' },
+        'anthropic',
+        { type: 'oauth', access: 'a-team', refresh: 'r-team', expires },
+        { label: 'team@example.com' },
+      );
+    });
+
+    it("lists the caller's subscriptions, then the org's, without their tokens", async () => {
+      const accounts = await listedAccounts(userA);
+
+      expect(accounts).toEqual([
+        { id: expect.any(String), scope: 'user', label: 'work@example.com' },
+        { id: expect.any(String), scope: 'user' },
+        { id: expect.any(String), scope: 'org', label: 'team@example.com' },
+      ]);
+      expect(JSON.stringify(accounts)).not.toMatch(/a-work|r-work/);
+    });
+
+    it("shows another member only the org's subscription", async () => {
+      expect(await listedAccounts(userB)).toEqual([
+        { id: expect.any(String), scope: 'org', label: 'team@example.com' },
+      ]);
+    });
+  });
+
   it("GET /web/config/providers reflects the caller's own view", async () => {
     await putKey(buildApp(userA), { key: 'sk-mine' });
 
@@ -620,6 +691,10 @@ describe('provider key routes with a tenant', () => {
 
     it('shows as expired instead of signed in', async () => {
       expect(await listedAnthropic()).toMatchObject({ userCredential: 'oauth', userCredentialExpired: true });
+    });
+
+    it('marks the subscription that must be signed in again', async () => {
+      expect((await listedAnthropic()).accounts).toEqual([{ id: expect.any(String), scope: 'user', expired: true }]);
     });
 
     it('stops showing as expired once the user signs in again', async () => {

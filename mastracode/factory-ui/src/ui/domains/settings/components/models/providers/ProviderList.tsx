@@ -1,5 +1,4 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import type { StatusPresentation } from '@mastra/playground-ui/components/StatusIndicators';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { useState } from 'react';
@@ -12,7 +11,7 @@ import { AddApiKeyDialog } from '../../AddApiKeyDialog';
 import { ProviderOAuthDialog } from '../../ProviderOAuthDialog';
 import {
   CREDENTIAL_STATUS,
-  SIGN_IN_EXPIRED_LABEL,
+  SIGN_IN_EXPIRED_STATUS,
   credentialAt,
   sharedSourceStatus,
   signInExpiredAt,
@@ -28,12 +27,6 @@ import { CustomProviderRow } from './CustomProviderRow';
 import { ProviderRows, ProviderRowsSkeleton } from './ProviderRows';
 
 const ORG_SCOPE_AUDIENCE = 'Shared with every Factory in your organization.';
-
-const SIGN_IN_EXPIRED_STATUS: StatusPresentation = {
-  label: SIGN_IN_EXPIRED_LABEL,
-  tone: 'error',
-  description: 'Could not renew this sign-in. Sign in again to keep using it.',
-};
 
 /** The custom endpoint dialog: adding one, or editing the one with this id. */
 type CustomProviderDialogState = { mode: 'add' } | { mode: 'edit'; id: string };

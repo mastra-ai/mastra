@@ -9,16 +9,24 @@ import { IconArrowBoxLeft } from '@mastra/playground-ui/icons/central/IconArrowB
 import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
 import { IconKey2 } from '@mastra/playground-ui/icons/central/IconKey2';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
 import {
+  useRemoveProviderAccount,
   useRemoveProviderKey,
   useSignOutProviderOAuth,
   useStartProviderOAuth,
 } from '../../../../../../hooks/use-providers';
-import { signInRequest } from '../../provider-credential';
-import type { CredentialScope, ProviderCredential } from '../../provider-credential';
+import {
+  CREDENTIAL_STATUS,
+  SIGN_IN_EXPIRED_STATUS,
+  accountLabel,
+  accountsAt,
+  signInRequest,
+} from '../../provider-credential';
+import type { CredentialScope, ProviderAccount, ProviderCredential } from '../../provider-credential';
 import { ConnectedRow, ProviderIcon } from './ProviderRows';
 
 export interface ProviderConnection {
@@ -37,6 +45,11 @@ const REMOVING_STATUS: StatusPresentation = {
   label: 'Removing…',
   tone: 'progress',
   description: 'Deleting the saved API key',
+};
+const REMOVING_ACCOUNT_STATUS: StatusPresentation = {
+  label: 'Removing…',
+  tone: 'progress',
+  description: 'Signing this account out',
 };
 const STARTING_SIGN_IN_STATUS: StatusPresentation = {
   label: 'Starting sign-in…',
@@ -89,9 +102,10 @@ export function ConnectedProviderRow({
     );
   };
 
-  const signInAgain = (onStarted: (provider: string, session: OAuthStartResponse) => void) => {
-    startOAuthMutation.mutate(signInRequest(provider, requestScope), {
-      onSuccess: session => onStarted(provider.provider, session),
+  const startSignIn = (target?: Parameters<typeof signInRequest>[2]) => {
+    if (!onOAuthStarted) return;
+    startOAuthMutation.mutate(signInRequest(provider, requestScope, target), {
+      onSuccess: session => onOAuthStarted(provider.provider, session),
       onError: error => toast.error(error.message || 'Failed to start sign-in'),
     });
   };
@@ -103,13 +117,20 @@ export function ConnectedProviderRow({
     );
   };
 
-  const canSignInAgain = signInExpired && provider.oauth?.supported === true && onOAuthStarted !== undefined;
+  const canSignIn = provider.oauth?.supported === true && onOAuthStarted !== undefined;
+  // Each subscription at this scope gets its own row once there are several,
+  // so the provider row then speaks for all of them.
+  const accounts = credential === 'oauth' ? accountsAt(provider, requestScope ?? 'user') : [];
+  const several = accounts.length > 1;
+  const rowStatus = several && !accounts.every(account => account.expired) ? CREDENTIAL_STATUS.oauth : status;
   const menu = credential ? (
     <CredentialMenu
       displayName={displayName}
       credential={credential}
       disabled={disabled || pending !== undefined}
-      onSignInAgain={canSignInAgain ? () => signInAgain(onOAuthStarted) : undefined}
+      onSignInAgain={canSignIn && signInExpired && !several ? () => startSignIn() : undefined}
+      onAddAccount={canSignIn ? () => startSignIn({ addAccount: true }) : undefined}
+      signOutLabel={several ? 'Sign out of all accounts' : 'Sign out'}
       onSignOut={signOut}
       onUpdateKey={provider.connectWithMastraAccount ? undefined : onUpdateKey}
       onRemoveKey={removeKey}
@@ -136,8 +157,89 @@ export function ConnectedProviderRow({
   }
 
   return (
-    <ConnectedRow icon={<ProviderIcon provider={provider.provider} />} title={displayName} status={pending ?? status}>
-      {menu}
+    <>
+      <ConnectedRow
+        icon={<ProviderIcon provider={provider.provider} />}
+        title={displayName}
+        detail={accounts.length === 1 ? accounts[0]?.label : undefined}
+        status={pending ?? rowStatus}
+      >
+        {menu}
+      </ConnectedRow>
+      {several &&
+        accounts.map((account, index) => (
+          <AccountRow
+            key={account.id}
+            provider={provider.provider}
+            account={account}
+            label={accountLabel(account, index)}
+            requestScope={requestScope}
+            disabled={disabled || pending !== undefined}
+            onSignInAgain={canSignIn ? () => startSignIn({ accountId: account.id }) : undefined}
+          />
+        ))}
+    </>
+  );
+}
+
+/** One of several subscriptions of a provider, under the provider's row. */
+function AccountRow({
+  provider,
+  account,
+  label,
+  requestScope,
+  disabled,
+  onSignInAgain,
+}: {
+  provider: string;
+  account: ProviderAccount;
+  label: string;
+  requestScope: CredentialScope | undefined;
+  disabled: boolean;
+  onSignInAgain: (() => void) | undefined;
+}) {
+  const removeMutation = useRemoveProviderAccount();
+  const remove = () => {
+    removeMutation.mutate(
+      { provider, accountId: account.id, scope: requestScope },
+      { onError: error => toast.error(error.message || 'Failed to remove account') },
+    );
+  };
+  const status = account.expired ? SIGN_IN_EXPIRED_STATUS : CREDENTIAL_STATUS.oauth;
+
+  return (
+    <ConnectedRow
+      icon={<span aria-hidden="true" className="size-icon-md shrink-0" />}
+      title={label}
+      status={removeMutation.isPending ? REMOVING_ACCOUNT_STATUS : status}
+    >
+      <DropdownMenu>
+        <DropdownMenu.Trigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`${label} actions`}
+              disabled={disabled || removeMutation.isPending}
+            >
+              <IconDotGrid1x3Horizontal />
+            </Button>
+          }
+        />
+        <DropdownMenu.Content align="end">
+          {account.expired && onSignInAgain && (
+            <>
+              <DropdownMenu.Item onClick={onSignInAgain}>
+                <IconArrowRotateClockwise /> Sign in again
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator />
+            </>
+          )}
+          <DropdownMenu.Item variant="destructive" onClick={remove}>
+            <IconArrowBoxLeft /> Remove account
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu>
     </ConnectedRow>
   );
 }
@@ -147,6 +249,8 @@ function CredentialMenu({
   credential,
   disabled,
   onSignInAgain,
+  onAddAccount,
+  signOutLabel,
   onSignOut,
   onUpdateKey,
   onRemoveKey,
@@ -155,6 +259,8 @@ function CredentialMenu({
   credential: ProviderCredential;
   disabled: boolean;
   onSignInAgain: (() => void) | undefined;
+  onAddAccount: (() => void) | undefined;
+  signOutLabel: string;
   onSignOut: () => void;
   onUpdateKey: (() => void) | undefined;
   onRemoveKey: () => void;
@@ -172,15 +278,18 @@ function CredentialMenu({
         {credential === 'oauth' ? (
           <>
             {onSignInAgain && (
-              <>
-                <DropdownMenu.Item onClick={onSignInAgain}>
-                  <IconArrowRotateClockwise /> Sign in again
-                </DropdownMenu.Item>
-                <DropdownMenu.Separator />
-              </>
+              <DropdownMenu.Item onClick={onSignInAgain}>
+                <IconArrowRotateClockwise /> Sign in again
+              </DropdownMenu.Item>
             )}
+            {onAddAccount && (
+              <DropdownMenu.Item onClick={onAddAccount}>
+                <IconPlusMedium /> Add another account
+              </DropdownMenu.Item>
+            )}
+            {(onSignInAgain || onAddAccount) && <DropdownMenu.Separator />}
             <DropdownMenu.Item variant="destructive" onClick={onSignOut}>
-              <IconArrowBoxLeft /> Sign out
+              <IconArrowBoxLeft /> {signOutLabel}
             </DropdownMenu.Item>
           </>
         ) : (

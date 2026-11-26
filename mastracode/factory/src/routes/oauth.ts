@@ -10,6 +10,10 @@
  * can start a flow with `{ scope: 'org' }` to share the credential with the
  * whole org. Local mode writes to the file-backed `AuthStorage`.
  *
+ * A provider can hold several subscriptions (two Claude Max plans, say):
+ * `{ addAccount: true }` signs in one more, `{ accountId }` signs in again to
+ * that one, and a start without either replaces the first, as before.
+ *
  * Tokens never leave the server; responses only carry flow metadata (URLs,
  * user codes, poll delays).
  */
@@ -26,6 +30,7 @@ import { pollCodexDeviceLogin, startCodexDeviceLogin } from '@mastra/code-sdk/au
 import type { CodexDeviceLoginPending } from '@mastra/code-sdk/auth/providers/openai-codex';
 import { pollXAIDeviceLogin, startXAIDeviceLogin } from '@mastra/code-sdk/auth/providers/xai';
 import type { XAIDeviceLoginPending } from '@mastra/code-sdk/auth/providers/xai';
+import { getOAuthProvider } from '@mastra/code-sdk/auth/storage';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { OAuthCredentials } from '@mastra/code-sdk/auth/types';
 import type { ApiRoute } from '@mastra/core/server';
@@ -33,7 +38,12 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
-import type { LoginCredentialScope, LoginSessionKind, LoginSessionRow } from '../storage/domains/credentials/base.js';
+import type {
+  LoginAccountTarget,
+  LoginCredentialScope,
+  LoginSessionKind,
+  LoginSessionRow,
+} from '../storage/domains/credentials/base.js';
 import { getAuthProviderId, resolveCredentialContext } from './provider-credentials.js';
 import type { CredentialContext } from './provider-credentials.js';
 import { loose, Route } from './route.js';
@@ -196,34 +206,68 @@ async function loadOwnedSession({
   return session;
 }
 
-/** Persist completed OAuth credentials — user-scoped unless the flow was started org-wide. */
+function readAccountTarget(body: Record<string, unknown>): LoginAccountTarget | undefined {
+  if (body.addAccount === true) return { add: true };
+  if (typeof body.accountId === 'string' && body.accountId) return { accountId: body.accountId };
+  return undefined;
+}
+
+/** Who the subscription belongs to, when the provider can tell. Only a label, so a lookup failure never fails the sign-in. */
+async function accountLabel(authProviderId: string, credentials: OAuthCredentials): Promise<string | undefined> {
+  return getOAuthProvider(authProviderId)
+    ?.getAccountLabel?.(credentials)
+    .catch(() => undefined);
+}
+
+/**
+ * Persist completed OAuth credentials — user-scoped unless the flow was
+ * started org-wide — onto the subscription the flow was started for.
+ */
 async function persistOAuthCredential({
   ctx,
   provider,
-  scope,
+  session,
   credentials,
   authStorage,
   onCredentialsChanged,
 }: {
   ctx: CredentialContext;
   provider: string;
-  scope: LoginCredentialScope | undefined;
+  session: Pick<LoginSessionRow, 'credentialScope' | 'accountTarget'>;
   credentials: OAuthCredentials;
   authStorage: AuthStorage | undefined;
   onCredentialsChanged: (tenant: { orgId: string; userId?: string }) => void;
 }): Promise<void> {
   const authProviderId = getAuthProviderId(provider);
+  const target = session.accountTarget;
   if (ctx.mode === 'tenant') {
+    const scope = session.credentialScope ?? 'user';
     const tenant = { orgId: ctx.orgId, ...(scope === 'org' ? {} : { userId: ctx.userId }) };
-    await ctx.storage.setCredential(tenant, authProviderId, {
-      type: 'oauth',
-      ...credentials,
-    });
+    const replaceAccountId = !target
+      ? (await ctx.storage.listAccounts(ctx.orgId, ctx.userId)).find(
+          account => account.provider === authProviderId && account.scope === scope,
+        )?.id
+      : 'accountId' in target
+        ? target.accountId
+        : undefined;
+    const label = await accountLabel(authProviderId, credentials);
+    await ctx.storage.addAccount(
+      tenant,
+      authProviderId,
+      { type: 'oauth', ...credentials },
+      { ...(label ? { label } : {}), ...(replaceAccountId ? { replaceAccountId } : {}) },
+    );
     onCredentialsChanged(tenant);
     return;
   }
   if (!authStorage) throw new Error('Credential storage is not available');
-  await authStorage.addAccount(authProviderId, credentials);
+  if (!target) await authStorage.addAccount(authProviderId, credentials);
+  else
+    await authStorage.addAccount(
+      authProviderId,
+      credentials,
+      'add' in target ? { activate: false } : { replaceAccountId: target.accountId },
+    );
 }
 
 async function readJsonBody(c: Context): Promise<Record<string, unknown>> {
@@ -251,6 +295,7 @@ export interface OAuthRoutesDeps extends RouteDependencies {
  *   - `POST   /web/config/providers/:provider/oauth/poll`               — one device-code poll
  *   - `DELETE /web/config/providers/:provider/oauth/session/:sessionId` — cancel a flow
  *   - `DELETE /web/config/providers/:provider/oauth`                    — sign out (caller only)
+ *   - `DELETE /web/config/providers/:provider/oauth/accounts/:accountId` — remove one subscription
  */
 export class OAuthRoutes extends Route<OAuthRoutesDeps> {
   routes(): ApiRoute[] {
@@ -291,6 +336,7 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 502);
           }
 
+          const accountTarget = readAccountTarget(body);
           const sessionId = globalThis.crypto.randomUUID();
           const tenant = sessionTenant(ctx);
           await (
@@ -302,6 +348,7 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
             provider,
             kind: flow.kind,
             ...(scope === 'org' && ctx.mode === 'tenant' ? { credentialScope: scope } : {}),
+            ...(accountTarget ? { accountTarget } : {}),
             pending: started.pending,
             expiresAt: new Date(started.expiresAt),
             nextPollAt: started.nextPollMs != null ? new Date(Date.now() + started.nextPollMs) : null,
@@ -369,7 +416,7 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
           await persistOAuthCredential({
             ctx,
             provider,
-            scope: session.credentialScope,
+            session: claimed,
             credentials,
             authStorage,
             onCredentialsChanged,
@@ -441,7 +488,7 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
             await persistOAuthCredential({
               ctx,
               provider,
-              scope: session.credentialScope,
+              session: claimed,
               credentials: result.credentials,
               authStorage,
               onCredentialsChanged,
@@ -508,6 +555,37 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
+        },
+      }),
+
+      registerApiRoute('/web/config/providers/:provider/oauth/accounts/:accountId', {
+        method: 'DELETE',
+        requiresAuth: false,
+        handler: async c => {
+          const ctx = await resolveCredentialContext({ c: loose(c), auth, credentials: modelCredentials });
+          if ('response' in ctx) return ctx.response;
+
+          const authProviderId = getAuthProviderId(c.req.param('provider'));
+          const accountId = c.req.param('accountId');
+          if (ctx.mode === 'tenant') {
+            // `?scope=org` removes a shared org subscription (admin-only).
+            const scope = c.req.query('scope') === 'org' ? 'org' : 'user';
+            if (scope === 'org' && !(await auth.isOrganizationAdmin(loose(c), ctx.orgId))) {
+              return c.json({ error: 'forbidden', message: 'Only org admins can remove an org-wide sign-in' }, 403);
+            }
+            const tenant = { orgId: ctx.orgId, ...(scope === 'org' ? {} : { userId: ctx.userId }) };
+            if (!(await ctx.storage.removeAccount(tenant, authProviderId, accountId))) {
+              return c.json({ error: 'account_not_found' }, 404);
+            }
+            onCredentialsChanged(tenant);
+            return c.json({ ok: true });
+          }
+          if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
+          if (!authStorage.listAccounts(authProviderId).some(account => account.id === accountId)) {
+            return c.json({ error: 'account_not_found' }, 404);
+          }
+          authStorage.removeAccount(authProviderId, accountId);
+          return c.json({ ok: true });
         },
       }),
     ];

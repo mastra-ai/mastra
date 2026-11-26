@@ -10,6 +10,11 @@ export type CredentialScope = 'user' | 'org';
 
 export const CREDENTIAL_LABEL: Record<ProviderCredential, string> = { oauth: 'Signed in', api_key: 'Key saved' };
 export const SIGN_IN_EXPIRED_LABEL = 'Sign-in expired';
+export const SIGN_IN_EXPIRED_STATUS: StatusPresentation = {
+  label: SIGN_IN_EXPIRED_LABEL,
+  tone: 'error',
+  description: 'Could not renew this sign-in. Sign in again to keep using it.',
+};
 export const ORG_SCOPE_MEMBER_REASON = 'Only organization admins can manage org-wide credentials.';
 
 /** Who can use a provider connected at each scope. */
@@ -78,7 +83,23 @@ export function isConnectedAt(provider: ProviderInfo, scope: CredentialScope): b
   return credentialAt(provider, scope) !== undefined || SHARED_SOURCE[provider.source] !== undefined;
 }
 
-export function signInRequest(provider: ProviderInfo, scope: CredentialScope | undefined): StartProviderOAuthArgs {
+export type ProviderAccount = NonNullable<ProviderInfo['accounts']>[number];
+
+/** The provider's subscriptions saved at this scope, in the order model calls move through them. Local mode has no scopes. */
+export function accountsAt(provider: ProviderInfo, scope: CredentialScope): ProviderAccount[] {
+  return (provider.accounts ?? []).filter(account => (account.scope ?? 'user') === scope);
+}
+
+/** How a subscription is named: whose it is when known, else its place in the order. */
+export function accountLabel(account: ProviderAccount, index: number): string {
+  return account.label ?? `Account ${index + 1}`;
+}
+
+export function signInRequest(
+  provider: ProviderInfo,
+  scope: CredentialScope | undefined,
+  target?: { addAccount: true } | { accountId: string },
+): StartProviderOAuthArgs {
   const modes = provider.oauth?.modes ?? [];
-  return { provider: provider.provider, mode: modes.length === 1 ? modes[0] : undefined, scope };
+  return { provider: provider.provider, mode: modes.length === 1 ? modes[0] : undefined, scope, ...target };
 }

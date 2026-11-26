@@ -39,6 +39,7 @@ import type { ModelPackSet, ResolvedModelSelection } from '../model-packs.js';
 import { resolveFactoryModelPolicy, routedPersonalDefaults } from '../session/credential-policy.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
 import type {
+  CredentialAccount,
   CredentialRecord,
   CredentialScope as StoredCredentialScope,
   LoginSessionKind,
@@ -80,6 +81,7 @@ import type { SessionAddress } from './model-pack-routes.js';
 import {
   credentialLabel,
   getAuthProviderId,
+  getTenantCredentialsStorage,
   listTenantCredentialsForRequest,
   MASTRA_GATEWAY_CATALOG_PROVIDER,
   resolveCredentialContext,
@@ -123,6 +125,17 @@ export type ProviderCredentialSource =
   | 'stored-user'
   | 'stored-org';
 
+/** One subscription signed in for a provider. Never carries its tokens. */
+export interface ProviderAccountInfo {
+  id: string;
+  /** Who the subscription belongs to, when the provider tells us. */
+  label?: string;
+  /** Tenant mode: whose subscription it is. */
+  scope?: StoredCredentialScope;
+  /** Tenant mode: its sign-in could not be renewed and must be redone. */
+  expired?: true;
+}
+
 /** A model provider with the current source of its credentials. */
 export interface ProviderInfo {
   provider: string;
@@ -150,6 +163,11 @@ export interface ProviderInfo {
   orgCredentialExpired?: true;
   /** Web OAuth sign-in capability, when the provider supports it. */
   oauth?: { supported: true; modes: LoginSessionKind[] };
+  /**
+   * The provider's signed-in subscriptions — in tenant mode the caller's, then
+   * the org's — in the order model calls move through them on a rate limit.
+   */
+  accounts?: ProviderAccountInfo[];
   /** The provider is a stored custom OpenAI-compatible endpoint. */
   custom?: true;
   /** Tenant mode: Factory can mint this provider's key with the caller's Mastra account (the Mastra Gateway). */
@@ -257,6 +275,7 @@ export async function listProviders({
   controller,
   authStorage,
   tenantCredentials,
+  tenantAccounts,
   deploymentProviders,
   listCustomProviders,
   connectWithMastraAccount,
@@ -264,6 +283,8 @@ export async function listProviders({
   controller: ModelCatalog;
   authStorage?: AuthStorage;
   tenantCredentials?: CredentialRecord[];
+  /** Tenant mode: the caller's and the org's OAuth subscriptions. */
+  tenantAccounts?: CredentialAccount[];
   deploymentProviders?: ReadonlySet<string>;
   listCustomProviders?: () => Promise<ScopedCustomProvider[]>;
   /** The auth provider can act on the Mastra platform as the caller. */
@@ -327,6 +348,19 @@ export async function listProviders({
       source = 'env';
     }
 
+    const accounts: ProviderAccountInfo[] = tenantCredentials
+      ? (tenantAccounts ?? [])
+          .filter(account => account.provider === authProviderId)
+          .map(account => ({
+            id: account.id,
+            scope: account.scope,
+            ...(account.label ? { label: account.label } : {}),
+            ...(account.refreshFailedAt ? { expired: true as const } : {}),
+          }))
+      : (authStorage?.listAccounts(authProviderId) ?? []).map(account => ({
+          id: account.id,
+          ...(account.label ? { label: account.label } : {}),
+        }));
     const flowKind = WEB_OAUTH_PROVIDERS[model.provider]?.flow;
     seen.set(model.provider, {
       provider: model.provider,
@@ -338,6 +372,7 @@ export async function listProviders({
       ...(orgCredential ? { orgCredential } : {}),
       ...(orgCredentialExpired ? { orgCredentialExpired: true as const } : {}),
       ...(flowKind ? { oauth: { supported: true as const, modes: [flowKind] } } : {}),
+      ...(accounts.length > 0 ? { accounts } : {}),
       // A server that already has a gateway key needs no key minted, so the one-click connect is not offered.
       ...(tenantCredentials &&
       connectWithMastraAccount &&
@@ -1431,6 +1466,12 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             // Tenant mode also reports whether the caller may write org-wide
             // keys, so the settings UI can gate the "Everyone in org" option.
             const tenant = auth.tenant(loose(c));
+            const tenantAccounts =
+              tenantCredentials && tenant
+                ? await (
+                    await getTenantCredentialsStorage(options.modelCredentials)
+                  )?.listAccounts(tenantOrgId(tenant), tenant.userId)
+                : undefined;
             const orgKeyAdmin = tenant ? await auth.isOrganizationAdmin(loose(c), tenantOrgId(tenant)) : undefined;
             const customProviders = options.customProviders;
             const listCustomProviders = customProviders
@@ -1445,6 +1486,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 controller,
                 authStorage: tenantCredentials ? undefined : authStorage,
                 tenantCredentials,
+                tenantAccounts,
                 deploymentProviders,
                 listCustomProviders,
                 connectWithMastraAccount,

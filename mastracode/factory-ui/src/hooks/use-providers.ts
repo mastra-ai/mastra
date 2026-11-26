@@ -125,15 +125,21 @@ export interface StartProviderOAuthArgs extends ProviderOAuthArgs {
   mode?: string;
   /** `'org'` shares the completed sign-in with the whole org (admin-only). */
   scope?: 'user' | 'org';
+  /** Sign in one more subscription beside the provider's others. */
+  addAccount?: true;
+  /** Sign in again to this subscription. */
+  accountId?: string;
 }
 
 export function useStartProviderOAuth() {
   const { client } = useApiConfig();
   return useMutation({
-    mutationFn: ({ provider, mode, scope }: StartProviderOAuthArgs) =>
+    mutationFn: ({ provider, mode, scope, addAccount, accountId }: StartProviderOAuthArgs) =>
       client.post<OAuthStartResponse>(`/web/config/providers/${encodeURIComponent(provider)}/oauth/start`, {
         ...(mode !== undefined ? { mode } : {}),
         ...(scope !== undefined ? { scope } : {}),
+        ...(addAccount ? { addAccount } : {}),
+        ...(accountId !== undefined ? { accountId } : {}),
       }),
   });
 }
@@ -193,6 +199,24 @@ export function useCancelProviderOAuth() {
 export interface SignOutProviderOAuthArgs extends ProviderOAuthArgs {
   /** `'org'` removes the shared org sign-in (admin-only). */
   scope?: 'user' | 'org';
+}
+
+export interface RemoveProviderAccountArgs extends ProviderOAuthArgs {
+  accountId: string;
+  /** `'org'` removes a shared org subscription (admin-only). */
+  scope?: 'user' | 'org';
+}
+
+export function useRemoveProviderAccount() {
+  const { client } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ provider, accountId, scope }: RemoveProviderAccountArgs) =>
+      client.del<{ ok: true }>(
+        `/web/config/providers/${encodeURIComponent(provider)}/oauth/accounts/${encodeURIComponent(accountId)}${scope ? `?scope=${scope}` : ''}`,
+      ),
+    onSuccess: () => invalidateCredentialDependentQueries(queryClient),
+  });
 }
 
 export function useSignOutProviderOAuth() {

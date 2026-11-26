@@ -708,3 +708,114 @@ describe('ProviderList custom endpoints', () => {
     expect(within(form).queryByRole('button', { name: /listed model/ })).not.toBeInTheDocument();
   });
 });
+
+describe('ProviderList with several subscriptions of one provider', () => {
+  const claude = (accounts: ProviderInfo['accounts']): ProviderInfo => ({
+    provider: 'anthropic',
+    source: 'oauth-user',
+    userCredential: 'oauth',
+    oauth: { supported: true, modes: ['paste-code'] },
+    accounts,
+  });
+  const WORK = { id: 'acc-work', scope: 'user' as const, label: 'work@example.com' };
+  const HOME = { id: 'acc-home', scope: 'user' as const };
+
+  const accountRow = async (label: string) => {
+    const row = (await screen.findByText(label)).closest('li');
+    if (!(row instanceof HTMLElement)) throw new Error(`Account row not found for ${label}`);
+    return row;
+  };
+
+  it('adds another Claude account from the row menu and lists both', async () => {
+    const providers = [claude([WORK])];
+    let startBody: unknown;
+    server.use(
+      http.get(PROVIDERS_URL, () => HttpResponse.json({ providers })),
+      http.post(oauthUrl('anthropic', 'start'), async ({ request }) => {
+        startBody = await request.json();
+        return HttpResponse.json(pasteCodeSession('session-add'));
+      }),
+      http.post(oauthUrl('anthropic', 'complete'), () => {
+        providers[0] = claude([WORK, HOME]);
+        return HttpResponse.json({ status: 'complete', ok: true });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    await screen.findByText('Anthropic');
+    expect(within(rowFor('anthropic')).getByText('work@example.com')).toBeInTheDocument();
+    await pickRowAction(user, 'anthropic', 'Add another account');
+    await user.type(await screen.findByLabelText('Authorization code'), 'code#state');
+    await user.click(screen.getByRole('button', { name: 'Complete sign in' }));
+
+    expect(startBody).toEqual({ mode: 'paste-code', addAccount: true });
+    expect(within(await accountRow('Account 2')).getByText('Signed in')).toBeInTheDocument();
+    expect(within(await accountRow('work@example.com')).getByText('Signed in')).toBeInTheDocument();
+  });
+
+  it('removes one account and keeps the provider on the other', async () => {
+    const providers = [claude([WORK, HOME])];
+    let removed: string | undefined;
+    server.use(
+      http.get(PROVIDERS_URL, () => HttpResponse.json({ providers })),
+      http.delete(`${PROVIDERS_URL}/anthropic/oauth/accounts/:accountId`, ({ params }) => {
+        removed = String(params.accountId);
+        providers[0] = claude([WORK]);
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    await user.click(within(await accountRow('Account 2')).getByRole('button', { name: 'Account 2 actions' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Remove account' }));
+
+    await waitFor(() => expect(removed).toBe('acc-home'));
+    await waitFor(() => expect(screen.queryByText('Account 2')).not.toBeInTheDocument());
+    expect(within(rowFor('anthropic')).getByText('work@example.com')).toBeInTheDocument();
+  });
+
+  it('signs in again to the one account whose sign-in expired', async () => {
+    stubProviders([claude([WORK, { ...HOME, expired: true }])]);
+    let startBody: unknown;
+    server.use(
+      http.post(oauthUrl('anthropic', 'start'), async ({ request }) => {
+        startBody = await request.json();
+        return HttpResponse.json(pasteCodeSession('session-again'));
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    const expired = await accountRow('Account 2');
+    expect(within(expired).getByText('Sign-in expired')).toBeInTheDocument();
+    expect(within(await accountRow('work@example.com')).getByText('Signed in')).toBeInTheDocument();
+    await user.click(within(expired).getByRole('button', { name: 'Account 2 actions' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Sign in again' }));
+
+    await waitFor(() => expect(startBody).toEqual({ mode: 'paste-code', accountId: 'acc-home' }));
+    expect(await screen.findByLabelText('Authorization code')).toBeInTheDocument();
+  });
+
+  it('signs out of every account at once from the provider row', async () => {
+    const providers = [claude([WORK, HOME])];
+    let signedOut = false;
+    server.use(
+      http.get(PROVIDERS_URL, () => HttpResponse.json({ providers })),
+      http.delete(`${PROVIDERS_URL}/anthropic/oauth`, () => {
+        signedOut = true;
+        providers[0] = { provider: 'anthropic', source: 'none', oauth: { supported: true, modes: ['paste-code'] } };
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    await screen.findByText('Account 2');
+    await pickRowAction(user, 'anthropic', 'Sign out of all accounts');
+
+    await waitFor(() => expect(signedOut).toBe(true));
+    await waitFor(() => expect(screen.queryByText('Anthropic')).not.toBeInTheDocument());
+  });
+});

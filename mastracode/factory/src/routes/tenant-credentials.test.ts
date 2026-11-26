@@ -233,6 +233,94 @@ describe('TenantCredentialStore', () => {
   });
 });
 
+describe('TenantCredentialStore with two Claude subscriptions', () => {
+  const FIRST = { type: 'oauth', refresh: 'r-first', access: 'a-first', expires: Date.now() + 3_600_000 } as const;
+  const SECOND = { type: 'oauth', refresh: 'r-second', access: 'a-second', expires: Date.now() + 3_600_000 } as const;
+
+  async function signInTwice(second: typeof SECOND | typeof EXPIRED_OAUTH = SECOND) {
+    await seed.credentials.addAccount(USER_TENANT, 'anthropic', FIRST, { label: 'work@example.com' });
+    await seed.credentials.addAccount(USER_TENANT, 'anthropic', second);
+    const [first, added] = await seed.credentials.listAccounts(ORG, USER);
+    const store = new TenantCredentialStore(ORG, USER, seed.credentials, 'user');
+    await store.ensureFresh();
+    return { store, firstId: first!.id, secondId: added!.id };
+  }
+
+  it('offers both subscriptions to rotation in sign-in order, starting on the first', async () => {
+    const { store, firstId, secondId } = await signInTwice();
+
+    expect(store.listAccounts('anthropic')).toMatchObject([
+      { id: firstId, label: 'work@example.com', active: true, access: 'a-first' },
+      { id: secondId, label: 'Account 2', active: false, access: 'a-second' },
+    ]);
+    expect(store.getActiveAccount('anthropic')?.id).toBe(firstId);
+    expect(store.listAccounts('openai')).toEqual([]);
+  });
+
+  it('keeps the next model call on the subscription rotation switched to', async () => {
+    const { store, secondId } = await signInTwice();
+
+    expect(store.activateAccount('anthropic')?.id).toBe(secondId);
+    expect(store.getActiveAccount('anthropic')?.id).toBe(secondId);
+    await expect(store.getApiKey('anthropic', secondId)).resolves.toBe('a-second');
+    expect(store.activateAccount('anthropic')?.label).toBe('work@example.com');
+  });
+
+  it('serves later model calls from the subscription rotation switched to', async () => {
+    const { store, secondId } = await signInTwice();
+    store.activateAccount('anthropic', secondId);
+
+    expect(store.get('anthropic')).toMatchObject({ access: 'a-second' });
+    await expect(store.getApiKey('anthropic')).resolves.toBe('a-second');
+  });
+
+  it('starts over on the first subscription when the active one was removed elsewhere', async () => {
+    const { store, secondId } = await signInTwice();
+    store.activateAccount('anthropic', secondId);
+    await seed.credentials.removeAccount(USER_TENANT, 'anthropic', secondId);
+
+    await expect(store.getApiKey('anthropic')).resolves.toBe('a-first');
+    expect(store.getActiveAccount('anthropic')?.label).toBe('work@example.com');
+  });
+
+  it('does not rotate a provider with a single subscription', async () => {
+    await seed.credentials.addAccount(USER_TENANT, 'anthropic', FIRST);
+    const store = new TenantCredentialStore(ORG, USER, seed.credentials, 'user');
+    await store.ensureFresh();
+
+    expect(store.activateAccount('anthropic')).toBeUndefined();
+  });
+
+  it('refreshes an expired second subscription without spending the first one', async () => {
+    const { store, secondId } = await signInTwice(EXPIRED_OAUTH);
+    refreshToken.mockResolvedValue({ refresh: 'r-new', access: 'a-new', expires: Date.now() + 3_600_000 });
+
+    await expect(store.getApiKey('anthropic', secondId)).resolves.toBe('a-new');
+    expect(refreshToken).toHaveBeenCalledTimes(1);
+    expect(refreshToken).toHaveBeenCalledWith(expect.objectContaining({ refresh: 'r-old' }));
+    expect(store.listAccounts('anthropic').map(account => account.access)).toEqual(['a-first', 'a-new']);
+    expect(await seed.credentials.getCredential(USER_TENANT, 'anthropic')).toMatchObject({ access: 'a-first' });
+  });
+
+  it('replaces a rejected token on the subscription that served it', async () => {
+    const { store, secondId } = await signInTwice();
+    refreshToken.mockResolvedValue({ refresh: 'r-2', access: 'a-2', expires: Date.now() + 3_600_000 });
+    await store.getApiKey('anthropic', secondId);
+
+    await expect(store.forceRefreshActiveAccount('anthropic', secondId)).resolves.toBe('a-2');
+    expect(refreshToken).toHaveBeenCalledWith(expect.objectContaining({ refresh: 'r-second' }));
+    expect(store.listAccounts('anthropic').map(account => account.access)).toEqual(['a-first', 'a-2']);
+  });
+
+  it('serves nothing for a subscription removed mid-request rather than another one', async () => {
+    const { store, secondId } = await signInTwice();
+    await seed.credentials.removeAccount(USER_TENANT, 'anthropic', secondId);
+
+    await expect(store.getApiKey('anthropic', secondId)).resolves.toBeUndefined();
+    expect(store.listAccounts('anthropic').map(account => account.id)).not.toContain(secondId);
+  });
+});
+
 describe('registerTenantCredentialResolver', () => {
   it('wires the SDK resolver to tenant stores derived from the request context', async () => {
     await seed.credentials.setCredential(USER_TENANT, 'openai', { type: 'api_key', key: 'user-key' });
