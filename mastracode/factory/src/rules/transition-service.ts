@@ -59,11 +59,6 @@ export interface FactoryTransitionRequest {
   initialEntry?: boolean;
   /** Starts the stage's runner again when the item already holds that stage, to restart work the entry invalidated. */
   reenter?: boolean;
-  /**
-   * Internal: the board engine stopped the card's run for this person's move, so the move isn't
-   * refused because the card is busy.
-   */
-  interruptedRun?: true;
   /** Internal proof that this move consumes an approved `submit_plan` result. */
   planApproved?: true;
   /** Internal: the tool whose successful result this move consumes (a tool-result rule's move). */
@@ -321,6 +316,19 @@ function stageTransitionMessage(
     return `This work was moved from the ${fromStage} stage on the ${boards.from} board to the ${toStage} stage on the ${boards.to} board.`;
   }
   return `This work was moved from the ${fromStage} stage to the ${toStage} stage.`;
+}
+
+const interruptedRuns = new WeakSet<FactoryTransitionRequest>();
+
+/**
+ * Internal to Factory's board engines: marks this very request object as a person's move whose
+ * card's run the engine stopped for it, so the move isn't refused because the card is busy. The
+ * mark is no field of the request: nothing a caller writes on a request sets it, a copy of the
+ * request doesn't carry it, and it is stored nowhere.
+ */
+export function markRunInterrupted(request: FactoryTransitionRequest): FactoryTransitionRequest {
+  interruptedRuns.add(request);
+  return request;
 }
 
 function isHumanTransition(request: FactoryTransitionRequest): boolean {
@@ -656,7 +664,7 @@ export class FactoryTransitionService {
     if (
       isHumanTransition(request) &&
       !request.initialEntry &&
-      !(request.interruptedRun && !crossesBoards) &&
+      !(interruptedRuns.has(request) && !crossesBoards) &&
       // Leaving the board strands whatever run is queued or underway, so every cross-board move of
       // a busy card is refused — whatever cause it names, even into a phase sharing the old one's
       // name or a phase that starts nothing itself.
