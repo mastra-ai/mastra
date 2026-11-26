@@ -2096,9 +2096,18 @@ export class MemoryLibSQL extends MemoryStorage {
     }
   }
 
-  /** Rows in the shape message reads return, kept in the order the query gave. */
+  /**
+   * Rows in the shape message reads return, ordered by createdAt, then id in code unit order.
+   * SQLite compares text as UTF-8 bytes, which orders some ids differently.
+   */
   #parseSignalRows(rows: Record<string, unknown>[]): MastraDBMessage[] {
-    return rows.map(row => this.parseRow(row));
+    return rows
+      .map(row => this.parseRow(row))
+      .sort((a, b) => {
+        const byCreatedAt = a.createdAt.getTime() - b.createdAt.getTime();
+        if (byCreatedAt !== 0) return byCreatedAt;
+        return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+      });
   }
 
   #pendingSignalError(operation: string, error: unknown, details: Record<string, string>): MastraError {
