@@ -28,7 +28,12 @@ class RecordingTxClient implements TxClient {
     throw new Error('not implemented');
   }
 
-  async manyOrNone<T = any>(): Promise<T[]> {
+  async manyOrNone<T = any>(query: string, values?: QueryValues): Promise<T[]> {
+    // The thread lock: every thread asked for exists.
+    if (query.includes('FOR NO KEY UPDATE') && Array.isArray(values)) {
+      this.queries.push({ query, values });
+      return (values[0] as string[]).map(id => ({ id })) as T[];
+    }
     return this.sourceMessages as T[];
   }
 

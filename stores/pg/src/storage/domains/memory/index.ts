@@ -812,7 +812,14 @@ export class MemoryPG extends MemoryStorage {
           `UPDATE ${threadsTable} SET "resourceId" = $1, "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id = $2`,
           [resourceId, threadId],
         );
-        await t.none(`UPDATE ${messagesTable} SET "resourceId" = $1 WHERE thread_id = $2`, [resourceId, threadId]);
+        // In lock order: a save can be moving these rows to another thread without holding this one.
+        await t.none(
+          `WITH locked AS (
+             SELECT id FROM ${messagesTable} WHERE thread_id = $2 ORDER BY ${MESSAGE_LOCK_ORDER} FOR UPDATE
+           )
+           UPDATE ${messagesTable} m SET "resourceId" = $1 FROM locked WHERE m.id = locked.id`,
+          [resourceId, threadId],
+        );
 
         return { ...normalized, resourceId, updatedAt: new Date() };
       }, READ_COMMITTED);
@@ -1059,17 +1066,19 @@ export class MemoryPG extends MemoryStorage {
   /**
    * Locks thread rows before any of their message rows, as every writer of a thread's messages
    * does, so two writers of one thread run one after the other instead of waiting on each other's
-   * message rows.
+   * message rows. Returns the ids of the threads that exist and are now locked.
    */
-  async #lockThreads(t: Queryable, threadIds: string[]): Promise<void> {
-    if (threadIds.length === 0) return;
+  async #lockThreads(t: Queryable, threadIds: string[]): Promise<Set<string>> {
+    if (threadIds.length === 0) return new Set();
     const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
     const ids = [...new Set(threadIds)];
     // Rows are locked in the order the plan returns them; ORDER BY keeps two writes that span the
     // same threads (two multi-thread saves) in one order whatever plan each gets.
-    await t.none(`SELECT 1 FROM ${threadsTable} WHERE id = ANY($1::text[]) ORDER BY id COLLATE "C" FOR NO KEY UPDATE`, [
-      ids,
-    ]);
+    const rows = await t.manyOrNone<{ id: string }>(
+      `SELECT id FROM ${threadsTable} WHERE id = ANY($1::text[]) ORDER BY id COLLATE "C" FOR NO KEY UPDATE`,
+      [ids],
+    );
+    return new Set(rows.map(row => row.id));
   }
 
   /**
@@ -2029,19 +2038,20 @@ export class MemoryPG extends MemoryStorage {
         threadIds.add(message.threadId);
       }
 
+      const threadNotFound = (missingThreadId: string) =>
+        new MastraError({
+          id: createStorageErrorId('PG', 'SAVE_MESSAGES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Thread ${missingThreadId} not found`,
+          details: {
+            threadId: missingThreadId,
+          },
+        });
+
       for (const threadIdToCheck of threadIds) {
         const thread = await this.#getThreadById(this.#db.client, { threadId: threadIdToCheck });
-        if (!thread) {
-          throw new MastraError({
-            id: createStorageErrorId('PG', 'SAVE_MESSAGES', 'FAILED'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.THIRD_PARTY,
-            text: `Thread ${threadIdToCheck} not found`,
-            details: {
-              threadId: threadIdToCheck,
-            },
-          });
-        }
+        if (!thread) throw threadNotFound(threadIdToCheck);
       }
 
       // Sorted because a save can move rows out of a thread it does not lock: unsorted, it could
@@ -2049,7 +2059,11 @@ export class MemoryPG extends MemoryStorage {
       const messagesToSave = sortInMessageLockOrder(dedupeMessagesForSave(messages), message => message.id);
       await this.#db.client.tx(async t => {
         if (fence) await assertRunFence(t, this.#runFencesTable(), fence, 'saveMessages');
-        await this.#lockThreads(t, [...threadIds]);
+        // A thread deleted after the check above has no row left to lock.
+        const locked = await this.#lockThreads(t, [...threadIds]);
+        for (const threadIdToCheck of threadIds) {
+          if (!locked.has(threadIdToCheck)) throw threadNotFound(threadIdToCheck);
+        }
         for (let offset = 0; offset < messagesToSave.length; offset += MAX_MESSAGES_PER_INSERT) {
           const batch = messagesToSave.slice(offset, offset + MAX_MESSAGES_PER_INSERT);
           const values: unknown[] = [];
@@ -2522,8 +2536,8 @@ export class MemoryPG extends MemoryStorage {
     const messagesTable = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
     try {
       const deleted = await this.#db.client.tx(async t => {
-        // updateThreadResourceId updates the thread's rows in no particular order under its thread
-        // lock; without waiting for that lock, this delete could take rows in the opposite order.
+        // Waits for a close, a transfer or a deletion that holds the thread row, so the delete below
+        // reads the rows as that write left them: a row a close put back to pending can be cancelled.
         await t.none(`SELECT 1 FROM ${threadsTable} WHERE id = $1 FOR SHARE`, [threadId]);
         return t.manyOrNone<{ id: string }>(
           `WITH locked AS (
