@@ -72,8 +72,8 @@ export class FakePlatform {
     status: 200,
     body: {},
   });
-  /** Routes a test adds, tried before the built-in ones; `undefined` falls through. */
-  route: (method: string, path: string, body: unknown) => FakeReply | undefined = () => undefined;
+  /** Routes a test adds, tried before the built-in ones; `undefined` falls through. A promise holds the request until it settles. */
+  route: (method: string, path: string, body: unknown) => FakeReply | Promise<FakeReply> | undefined = () => undefined;
 
   #url = '';
 
@@ -110,7 +110,7 @@ export class FakePlatform {
     const url = new URL(req.url ?? '/', 'http://platform');
     const path = url.pathname;
     this.requests.push({ method, path, query: url.searchParams, ...(body === undefined ? {} : { body }) });
-    const reply = this.route(method, path, body) ?? this.#route(method, path, url.searchParams, body);
+    const reply = await (this.route(method, path, body) ?? this.#route(method, path, url.searchParams, body));
     res.statusCode = reply.status;
     for (const [name, value] of Object.entries(reply.headers ?? {})) res.setHeader(name, value);
     if (reply.body === undefined) {
@@ -149,6 +149,22 @@ export class FakePlatform {
           integrationId: decodeURIComponent(session[1]!),
           connectUrl: 'https://connect.example/session',
           sessionToken: 'session-token',
+          expiresAt: '2026-11-13T13:00:00.000Z',
+        },
+      };
+    }
+    const reconnect = /^\/v2\/connections\/([^/]+)\/reconnect-session$/.exec(path);
+    if (method === 'POST' && reconnect) {
+      const id = decodeURIComponent(reconnect[1]!);
+      const connection = this.orgConnections.find(c => c.id === id);
+      if (!connection) return problem(404, 'not_found');
+      return {
+        status: 201,
+        body: {
+          connectionId: id,
+          integrationId: connection.integrationId,
+          connectUrl: 'https://connect.example/reconnect',
+          sessionToken: 'reconnect-token',
           expiresAt: '2026-11-13T13:00:00.000Z',
         },
       };

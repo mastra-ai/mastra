@@ -136,7 +136,7 @@ describe('PlatformLinearIntegration', () => {
     );
 
     it('connects and reconnects workspaces through project-scoped Connect sessions', async () => {
-      fake.connect(linearWorkspace());
+      const connectionId = fake.connect(linearWorkspace());
       const { integration, auth } = await setup();
       const app = new Hono();
       mountApiRoutes(app, buildPlatformConnectRoutes({ auth, providers: integration.platformConnectProviders() }));
@@ -146,6 +146,12 @@ describe('PlatformLinearIntegration', () => {
       expect(
         fake.platform.count('POST', `/v2/projects/${fake.platform.projectId}/integrations/linear/connect-sessions`),
       ).toBe(1);
+      const reconnect = await app.request(
+        `/web/integrations/platform/linear/connections/${connectionId}/reconnect-session`,
+        { method: 'POST' },
+      );
+      expect(reconnect.status).toBe(201);
+      expect(fake.platform.count('POST', `/v2/connections/${connectionId}/reconnect-session`)).toBe(1);
       // Linear links only through migration and project-scoped sessions, never by linking org connections.
       const link = await app.request('/web/integrations/platform/linear/link-connections', { method: 'POST' });
       expect(link.status).toBe(404);
@@ -503,20 +509,34 @@ describe('PlatformLinearIntegration', () => {
 
     it('migrates on one replica at a time', async () => {
       fake.addLegacy(linearWorkspace());
+      let release: () => void = () => {};
+      fake.migrateGate = new Promise(resolve => (release = resolve));
       const first = await setup();
       const second = await setup();
       const pubsub = new EventEmitterPubSub();
+      const leases: boolean[] = [];
+      const acquire = pubsub.acquireLease.bind(pubsub);
+      vi.spyOn(pubsub, 'acquireLease').mockImplementation(async (...args) => {
+        const lease = await acquire(...args);
+        leases.push(lease.acquired);
+        return lease;
+      });
       await Promise.all([
         startMigrationWorker(first.integration, first.ctx, pubsub),
         startMigrationWorker(second.integration, second.ctx, pubsub),
       ]);
+
+      // One replica's migrate request is held open while the other decides on the lease.
+      await vi.waitFor(() => expect(leases).toHaveLength(2));
+      expect(leases.sort()).toEqual([false, true]);
+      expect(fake.platform.count('POST', '/v2/integrations/linear/migrate')).toBe(1);
+
+      release();
       await vi.waitFor(() =>
         expect(
           first.integration.migration.state.lastRunAt ?? second.integration.migration.state.lastRunAt,
         ).not.toBeNull(),
       );
-      // Give the other replica's boot tick time to run too.
-      await new Promise(resolve => setTimeout(resolve, 200));
       expect(fake.platform.count('POST', '/v2/integrations/linear/migrate')).toBe(1);
     });
 
@@ -566,8 +586,10 @@ describe('PlatformLinearIntegration', () => {
       const timers = vi.spyOn(globalThis, 'setTimeout');
       const retry = vi.fn();
 
-      await expect(integration.migration.sweep(retry)()).resolves.toMatchObject({ failed: 1 });
-      expect(timers.mock.calls.some(([, delay]) => delay === 60_000)).toBe(true);
+      const sweep = integration.migration.sweep(retry);
+      await expect(sweep()).resolves.toMatchObject({ failed: 1 });
+      const scheduled = timers.mock.calls.find(([, delay]) => delay === 60_000);
+      expect(scheduled).toBeDefined();
       await expect((await app.request('/web/linear/status')).json()).resolves.toMatchObject({
         connected: false,
         reason: 'migration_required',
@@ -579,8 +601,10 @@ describe('PlatformLinearIntegration', () => {
       ).rejects.toMatchObject({ status: 401 });
       expect(nonConnectRequests()).toEqual([]);
 
-      // The next run succeeds and clears the error.
-      await expect(integration.migration.sweep(retry)()).resolves.toMatchObject({ failed: 0, updated: 1 });
+      // The scheduled retry asks for another sweep, which succeeds and clears the error.
+      (scheduled![0] as () => void)();
+      expect(retry).toHaveBeenCalledOnce();
+      await expect(sweep()).resolves.toMatchObject({ failed: 0, updated: 1 });
       expect(integration.migration.state).toMatchObject({ required: false, lastError: null });
     });
 
@@ -593,8 +617,10 @@ describe('PlatformLinearIntegration', () => {
       const timers = vi.spyOn(globalThis, 'setTimeout');
       const retry = vi.fn();
 
-      await expect(integration.migration.sweep(retry)()).resolves.toMatchObject({ failed: 1 });
-      expect(timers.mock.calls.some(([, delay]) => delay === 60_000)).toBe(true);
+      const sweep = integration.migration.sweep(retry);
+      await expect(sweep()).resolves.toMatchObject({ failed: 1 });
+      const scheduled = timers.mock.calls.find(([, delay]) => delay === 60_000);
+      expect(scheduled).toBeDefined();
       expect(integration.migration.state).toMatchObject({
         required: true,
         pending: ['workspace-2'],
@@ -605,7 +631,10 @@ describe('PlatformLinearIntegration', () => {
       ).resolves.toMatchObject({ id: 'issue-1' });
 
       fake.failingMigrations.delete('workspace-2');
-      await expect(integration.migration.sweep(retry)()).resolves.toMatchObject({ failed: 0, updated: 1 });
+      (scheduled![0] as () => void)();
+      expect(retry).toHaveBeenCalledOnce();
+      await expect(sweep()).resolves.toMatchObject({ failed: 0, updated: 1 });
+      expect(fake.migrateRequests.at(-1)).toEqual({ linearWorkspaceIds: ['workspace-2'] });
       expect(integration.migration.state).toMatchObject({ required: false, pending: [], lastError: null });
     });
 
@@ -652,23 +681,24 @@ describe('PlatformLinearIntegration', () => {
       fake.addLegacy(linearWorkspace());
       const { app, integration } = await setup();
       const reconcile = vi.spyOn(integration, 'requestReconcile');
-      fake.nextMigrateReplies.push({
-        status: 409,
-        body: { type: 'linear_workspace_migrated', title: 'Conflict', status: 409 },
-        contentType: 'application/problem+json',
-      });
+      fake.migratedElsewhere.add('workspace-1');
       const conflict = await app.request('/web/integrations/platform/linear/migrate', { method: 'POST' });
       expect(conflict.status).toBe(200);
-      expect(reconcile).toHaveBeenCalledOnce();
-
-      const retried = await app.request('/web/integrations/platform/linear/migrate', { method: 'POST' });
-      expect(retried.status).toBe(200);
-      await expect(retried.json()).resolves.toMatchObject({
+      await expect(conflict.json()).resolves.toMatchObject({
         requested: ['workspace-1'],
-        connections: [expect.objectContaining({ connectionId: 'conn-migrated-workspace-1', migrated: true })],
         migration: { required: false },
       });
-      expect(reconcile).toHaveBeenCalledTimes(2);
+      expect(reconcile).toHaveBeenCalledOnce();
+      expect(integration.diagnostics()).toMatchObject({ migration: { required: false, pending: [] } });
+      await expect(integration.listWorkspaces()).resolves.toEqual([
+        expect.objectContaining({ connectionId: 'conn-migrated-workspace-1', linearWorkspaceId: 'workspace-1' }),
+      ]);
+
+      // Nothing is left to migrate, so asking again sends no migrate request.
+      const retried = await app.request('/web/integrations/platform/linear/migrate', { method: 'POST' });
+      expect(retried.status).toBe(200);
+      await expect(retried.json()).resolves.toMatchObject({ requested: [], migration: { required: false } });
+      expect(fake.platform.count('POST', '/v2/integrations/linear/migrate')).toBe(1);
     });
 
     it('refuses the migrate route to non-admins', async () => {
@@ -761,11 +791,43 @@ describe('PlatformLinearIntegration', () => {
     it('keeps sweeping and migrating on a server that still sets the old off switches', async () => {
       vi.stubEnv('MASTRACODE_LINEAR_RECONCILE_ENABLED', 'false');
       vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'false');
-      const { integration, ctx } = await setup();
-      expect(integration.workers(ctx).map(worker => worker.name)).toEqual([
+      fake.connect(linearWorkspace());
+      fake.addLegacy(linearWorkspace('workspace-2', { name: 'Legacy' }));
+      const { integration, ctx, seed } = await setup();
+      const factoryProject = await seed.projects.create({
+        orgId: 'org-1',
+        userId: 'user-1',
+        input: { name: 'Factory' },
+      });
+      await seed.intake.saveConfig({
+        orgId: 'org-1',
+        config: { linear: { enabled: true, sourceIds: [project1SourceId] } },
+      });
+      await seed.intake.setBinding({
+        orgId: 'org-1',
+        integrationId: 'linear',
+        sourceId: project1SourceId,
+        factoryProjectId: factoryProject.id,
+      });
+      const workers = integration.workers(ctx);
+      expect(workers.map(worker => worker.name)).toEqual([
         'linear-issue-reconcile',
         'linear-connect-migration-issue-reconcile',
       ]);
+      await Promise.all(workers.map(async worker => worker.init(workerDeps())));
+      await Promise.all(workers.map(async worker => worker.start()));
+      onTestFinished(async () => {
+        await Promise.all(workers.map(async worker => worker.stop()));
+      });
+      // The migration worker migrates, and the reconcile worker files the issue it finds.
+      await vi.waitFor(() => expect(fake.migrateRequests).toEqual([{ linearWorkspaceIds: ['workspace-2'] }]));
+      await vi.waitFor(async () =>
+        expect(
+          (await seed.workItems.listDeferredDecisions('org-1', factoryProject.id)).map(
+            record => (record.decision as { sourceKey?: string }).sourceKey,
+          ),
+        ).toEqual(['linear:ENG-42']),
+      );
     });
   });
 
@@ -1298,11 +1360,11 @@ describe('PlatformLinearIntegration', () => {
         connection: oauth,
         sourceId: team1SourceId,
         issueId: 'ENG-42',
-        state: { kind: 'byType', stateType: 'unstarted' },
+        state: { kind: 'byType', stateType: 'completed' },
       }),
-    ).resolves.toMatchObject({ id: 'issue-1', stateType: 'unstarted' });
+    ).resolves.toMatchObject({ id: 'issue-1', stateType: 'completed' });
+    expect(fake.ops('UpdateIssueState')).toEqual([expect.objectContaining({ workspaceId: 'workspace-1' })]);
     const dataOps = fake.ops().filter(op => op.operation !== 'Viewer');
-    expect(dataOps.length).toBeGreaterThan(0);
     expect(dataOps.every(op => op.workspaceId === 'workspace-1')).toBe(true);
   });
 

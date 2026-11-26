@@ -49,11 +49,15 @@ export class FakeLinear {
   readonly legacy = new Map<string, FakeLinearWorkspace>();
   /** Replies for the next migrate calls, in place of migrating. */
   readonly nextMigrateReplies: FakeReply[] = [];
+  /** Workspaces another deployment migrates just before this one's next migrate call, which then answers 409. */
+  readonly migratedElsewhere = new Set<string>();
   /** Workspaces the migrate endpoint reports as failed, leaving them on legacy tokens. */
   readonly failingMigrations = new Set<string>();
   /** Replies for the next migration-status reads. */
   readonly nextStatusReplies: FakeReply[] = [];
   readonly migrateRequests: Array<{ linearWorkspaceIds?: string[] }> = [];
+  /** While set, migrate calls wait for it before answering. */
+  migrateGate: Promise<void> | undefined;
 
   readonly #byConnection = new Map<string, FakeLinearWorkspace>();
   /** Migrated workspaces: workspace id → connection id. */
@@ -222,14 +226,28 @@ export class FakeLinear {
     }
   }
 
-  #route(method: string, path: string, body: unknown): FakeReply | undefined {
+  #route(method: string, path: string, body: unknown): FakeReply | Promise<FakeReply> | undefined {
     if (method === 'GET' && path === '/v2/integrations/linear/migration-status') {
       return this.nextStatusReplies.shift() ?? { status: 200, body: this.#status() };
     }
     if (method === 'POST' && path === '/v2/integrations/linear/migrate') {
       const input = (body ?? {}) as { linearWorkspaceIds?: string[] };
       this.migrateRequests.push(input);
-      return this.nextMigrateReplies.shift() ?? { status: 200, body: this.#migrate(input.linearWorkspaceIds) };
+      const reply = (): FakeReply => {
+        const queued = this.nextMigrateReplies.shift();
+        if (queued) return queued;
+        const elsewhere = (input.linearWorkspaceIds ?? [...this.legacy.keys()]).filter(id =>
+          this.migratedElsewhere.has(id),
+        );
+        if (elsewhere.length > 0) {
+          this.#migrate(elsewhere);
+          for (const id of elsewhere) this.migratedElsewhere.delete(id);
+          return problem(409, 'linear_workspace_migrated', 'The Linear workspace was already migrated.');
+        }
+        return { status: 200, body: this.#migrate(input.linearWorkspaceIds) };
+      };
+      const gate = this.migrateGate;
+      return gate ? gate.then(reply) : reply();
     }
     return undefined;
   }
