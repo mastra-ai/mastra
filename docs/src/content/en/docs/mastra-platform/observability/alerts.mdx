@@ -75,7 +75,7 @@ An alert that opens too often gets ignored. An alert that never opens misses pro
 
 The backtest chart runs your alert against past data and shows when it would have opened and closed. It doesn't send notifications. Change the threshold, window, or grouping and watch the chart update. Aim for an alert that would have opened only at times when you'd have wanted someone to act.
 
-The 6h, 1d, and 2d ranges replay every five-minute check and are the most accurate. Longer ranges, such as 7d, plot the measured value as a line against the threshold instead, because replaying every check would take too many queries. Use them to see trends, not to count how often the alert would open.
+The 6h, 1d, and 2d ranges replay every five-minute check and are the most accurate. Longer ranges, such as 7d, plot the measured value as a line against the threshold instead, so use them to see trends, not to count how often the alert would open.
 
 ### Stop an alert from flapping
 
@@ -87,7 +87,7 @@ For example, an alert opens when the error rate is above 5%. With a recovery lev
 
 Under **"Advanced"**, **"Wait for late data"** makes each check skip the newest data. Some exporters send spans in batches. A check that runs before a batch arrives sees too little data: an error rate can look too high, or a count too low.
 
-Keep it at None unless the alert opens and closes again within a few minutes without a real cause. Then choose the shortest delay that covers how late your spans arrive, such as 1m or 2m. With 2m and a 15-minute window, the 10:15 check reads 09:58 to 10:13. Checks still run every five minutes. A longer delay gives data more time to arrive, but delays every alert by the same amount.
+Keep it at "None" unless the alert opens and closes again within a few minutes without a real cause. Then choose the shortest delay that covers how late your spans arrive, such as 1m or 2m. With 2m and a 15-minute window, the 10:15 check reads 09:58 to 10:13. Checks still run every five minutes. A longer delay gives data more time to arrive, but delays every alert by the same amount.
 
 ## Related
 
