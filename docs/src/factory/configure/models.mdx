@@ -1,0 +1,98 @@
+---
+title: Models | Configuration
+description: Connect a model provider, choose models for each kind of work, and understand personal and organization credentials.
+---
+
+# Models
+
+Factory uses language models to investigate issues, plan changes, write code, and review pull requests. Connect a provider, then choose a model your account can use. Model access depends on your provider account.
+
+## Connect a provider
+
+Before saving provider credentials, configure [stored credential encryption](/reference/environment-variables#stored-credential-encryption) on the server.
+
+In onboarding, select a supported provider sign-in flow or supply an API key. For later changes, open **Settings → Models** and use the provider access controls. Complete sign-in in the provider's browser flow and return to Factory.
+
+## Choose the credential scope
+
+| Scope | Who can use it |
+| - | - |
+| Personal | The user who saved or connected the credential. Teammates need their own access unless an organization credential covers them. |
+| Organization | Users covered by the organization's configured provider access. Only authorized administrators can manage organization credentials. |
+
+Store credentials in Factory's credential settings or on the server. Don't include them in issues or repository instruction files.
+
+## Set the default model
+
+Choose the default model for tasks on your Factory's boards. When checking a run, confirm that its session uses the expected model and that the provider is connected.
+
+{/* vale Mastra.HeadingSentenceCase = NO */}
+
+## Use Mastra Gateway
+
+Mastra Gateway is the quickest way to give a Factory on Mastra platform access to models. One connection covers models from many providers, so you can switch between providers without adding a key for each one. Usage is billed to your organization's Mastra credits, which keeps model spend for the Factory in one place. To find which models Mastra Gateway supports and how to name them, see [Models and routing](https://mastra.ai/docs/mastra-platform/gateway/models-and-routing).
+
+You don't need an API key. Factory creates a gateway key for you, or reuses the one your account already has.
+
+### During onboarding
+
+When you create a Factory, the models step asks **Who pays for model usage?** Mastra Gateway is the recommended option for the company account:
+
+1. Choose **Mastra Gateway**.
+1. Select **Connect Mastra Gateway**. Factory creates the key and sets the gateway's default model as the Factory default.
+
+Only an organization administrator can connect Mastra Gateway for the company account. Until an administrator does, each person uses their own account.
+
+### After onboarding
+
+Open **Settings → Models → Add provider**. **Mastra Gateway** is listed first. Connect it the same way.
+
+When the credits run out, Factory shows a notice, and an organization administrator needs to add more.
+
+## Add a custom provider
+
+Use a custom provider for any endpoint with an OpenAI-compatible API, such as a self-hosted model server or your own model gateway. A provider saved in personal scope is available only to you. Save it in organization scope to share it with every Factory in the organization.
+
+1. Open **Settings → Models** and select **Add provider**, then choose **Custom endpoint**.
+1. Fill in the form:
+   - **Name**: A short identifier, such as `my-llm`.
+   - **Base URL**: The endpoint's API root, such as `https://api.example.com/v1`.
+   - **API key**: The key the endpoint expects, if any.
+   - **Auth scheme and headers** (optional): Send the key as `Authorization: Bearer <key>` or as an `x-api-key` header, and add any extra headers the endpoint needs on every request.
+   - **Models**: The model IDs to offer. Select **Test** to list the IDs the endpoint serves, then pick the ones you want. You can also type an ID the endpoint doesn't list. To pick every listed model at once, select **Add all N listed models**. After you pick some, the button adds the rest.
+1. Select **Test & save**. Factory calls the endpoint's `/models` route first and saves the provider only if the call succeeds. If it fails, the form shows the status and the endpoint's error message. Fix the settings, or select **Save anyway** to keep them untested.
+1. Choose one of the provider's models as a default or in a session's model picker.
+
+**Test** checks the connection without saving and doesn't call a model. To check a model, pick it under **Test a model** and select **Send test message**. Factory sends it one short message and shows the reply or the endpoint's error.
+
+Each custom header is secret by default. Factory stores a secret value encrypted and never shows it again. When you edit the provider, the field stays empty: leave it empty to keep the saved value, or type a new one. Select the eye icon on a header to make it plain. Factory then shows its value when you edit the provider. A saved key or secret header value is only reused while the base URL keeps the same scheme, host and port.
+
+The provider's row in **Settings → Models** shows the result of its last connection test:
+
+| Status | Meaning |
+| - | - |
+| _N_ models | The last test passed. _N_ is the number of models you configured. |
+| Check failed | The last test failed. The row shows the reason. |
+| Not verified | The provider hasn't been tested since its settings last changed. |
+| URL not allowed | This Factory refuses to call the base URL. Edit the provider to fix it. |
+
+To test a saved provider again, open its row menu and select **Test connection**.
+
+## Choose model routing for chats and runs
+
+Factory routes two kinds of work:
+
+- **Chats** you start in the web app or Slack.
+- **Work-item runs** Factory starts from GitHub, GitLab, Linear, Jira, and incident.io.
+
+Open **Settings → Models → Model routing** to choose a scope. The scope sends each kind of work to either **Personal defaults** or **Factory defaults**:
+
+| Scope | Chats | Work-item runs |
+| - | - | - |
+| Personal | Personal defaults | Personal defaults |
+| Hybrid | Personal defaults | Factory defaults |
+| Factory | Factory defaults | Factory defaults |
+
+**Personal defaults** is the default model you choose for yourself. **Factory defaults** is the model set for the Factory, using its organization credentials, so everyone who works in that Factory uses it. New Factories start on Hybrid routing.
+
+A routing change applies to new chats and runs. Running threads keep the model they already use. Open the model picker in a session's status line to change that session's model, or choose **Reset to your default** to return to the routed default.

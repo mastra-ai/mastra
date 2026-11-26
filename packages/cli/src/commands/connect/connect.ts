@@ -331,6 +331,7 @@ export async function connectProviderAction(
         integrationId: integration.id,
         authType: integration.authType,
         sessionToken: session.sessionToken,
+        apiBaseUrl: session.apiBaseUrl,
         credentials,
         params,
       });
@@ -346,9 +347,16 @@ export async function connectProviderAction(
     // OAuth goes straight to the provider's consent screen; any other auth
     // type falls back to Nango's hosted Connect UI, which renders the
     // provider-specific forms and setup guides.
-    const url = isOAuthAuthType(integration.authType)
-      ? oauthConnectUrl(integration.id, session.sessionToken, params)
-      : session.connectUrl;
+    let url: string;
+    try {
+      url = isOAuthAuthType(integration.authType)
+        ? oauthConnectUrl(integration.id, session.sessionToken, params, session.apiBaseUrl)
+        : session.connectUrl;
+    } catch (error) {
+      // An insecure session host is rejected here; unlink the pending connection.
+      await removeProjectConnection(ctx.token, ctx.orgId, ctx.projectId, session.connectionId).catch(() => {});
+      throw error;
+    }
     console.info(`\nOpening your browser to authorize ${pc.bold(integration.displayName)}…`);
     console.info(pc.dim(`If it doesn't open, visit:\n  ${url}\n`));
     try {
@@ -485,7 +493,7 @@ async function promptAuthFields(
       console.info(pc.dim(`  ${field.label}: ${field.documentationUrl}`));
     }
 
-    let answer: string | symbol;
+    let answer: string | typeof p.CANCEL_SYMBOL;
     if (field.options && field.options.length > 0) {
       answer = await p.select({
         message: field.label,
@@ -649,5 +657,5 @@ export async function removeConnectionAction(
 
 function describeConnection(provider: string, connection: ProjectConnection): string {
   const label = connectionLabel(connection);
-  return label ? `${provider.toLowerCase()} (${label})` : `${provider.toLowerCase()}`;
+  return label ? `${provider.toLowerCase()} (${label})` : provider.toLowerCase();
 }

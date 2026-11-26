@@ -4,6 +4,8 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import type { IdGenerator, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import { prepareJsonSchemaForOpenAIStrictMode } from '@mastra/schema-compat';
 import type { StructuredOutputOptions } from '../../../agent/types';
+import { getErrorFromUnknown } from '../../../error';
+import { hasFreeFormObject } from '../../../llm/model/free-form-object';
 import { validateModelTimeoutSettings } from '../../../llm/model/model-settings';
 import type { ModelMethodType } from '../../../llm/model/model.loop.types';
 import { modelSupportsStructuredOutput, modelSupportsTemperature } from '../../../llm/model/provider-registry';
@@ -54,11 +56,17 @@ function isContentChunk(chunk: unknown): boolean {
   );
 }
 
+const normalizedNonErrorThrows = new WeakSet<object>();
+
 /**
  * Whether a failed model call will be retried. Used by both `onFailedAttempt` and
  * `shouldRetry` so a terminal error never waits out a provider delay it will not use.
  */
 function isRetryableModelError(error: unknown): boolean {
+  // Non-Error throws are normalized only to keep their fields; p-retry never retried them.
+  if (normalizedNonErrorThrows.has(error as object)) {
+    return false;
+  }
   // A step budget covers the whole attempt, so burning what is left of it on retries
   // against the same model would only delay the fallback to the next one.
   if (isMastraTimeoutError(error)) {
@@ -86,11 +94,45 @@ function readStrictJsonSchemaOption(options: unknown): boolean | undefined {
  * Model-router models always advertise structured output support, so they keep deciding by
  * provider id.
  */
+// Native @ai-sdk/openai ids are 'openai.chat', 'openai.responses', ...; 'openai-compatible.*' reads its own provider options.
+const isNativeOpenAIProvider = (provider: string) => /^openai(\.|$)/.test(provider);
+
+// @ai-sdk/azure wraps the @ai-sdk/openai Chat and Responses models; `azure-openai` is the AzureOpenAIGateway router id.
+const isAzureOpenAIProvider = (provider: string) =>
+  provider === 'azure-openai' || provider === 'azure.chat' || provider === 'azure.responses';
+
+/**
+ * Whether @ai-sdk/azure sends this request as strict json_schema.
+ * AI SDK 5 (`v2`) defaults to non-strict; AI SDK 6+ defaults to strict.
+ */
+function azureSendsStrictJsonSchema(
+  model: { provider: string; specificationVersion?: unknown },
+  providerOptions: SharedProviderOptions | undefined,
+): boolean {
+  const options = providerOptions as Record<string, unknown> | undefined;
+  let strictJsonSchema: boolean | undefined;
+  if (model.provider === 'azure-openai') {
+    // AzureOpenAIGateway copies `azure` over `openai` before calling the Responses model.
+    strictJsonSchema = readStrictJsonSchemaOption(options?.azure) ?? readStrictJsonSchemaOption(options?.openai);
+  } else if (model.provider === 'azure.responses' && model.specificationVersion !== 'v2') {
+    // AI SDK 6+ Responses reads `azure`, and falls back to `openai` only when `azure` is absent.
+    strictJsonSchema = readStrictJsonSchemaOption(options?.azure ?? options?.openai);
+  } else {
+    // Chat models, and AI SDK 5 Responses models, read `openai` only.
+    strictJsonSchema = readStrictJsonSchemaOption(options?.openai);
+  }
+  return strictJsonSchema ?? model.specificationVersion !== 'v2';
+}
+
 export function usesOpenAIStrictJsonSchema(
-  model: Pick<MastraLanguageModel, 'provider'> & { supportsStructuredOutputs?: unknown },
+  model: Pick<MastraLanguageModel, 'provider'> & {
+    supportsStructuredOutputs?: unknown;
+    specificationVersion?: unknown;
+  },
   providerOptions?: SharedProviderOptions,
 ): boolean {
-  if (model.provider.startsWith('openai')) return true;
+  if (isNativeOpenAIProvider(model.provider)) return true;
+  if (isAzureOpenAIProvider(model.provider)) return azureSendsStrictJsonSchema(model, providerOptions);
   if (model instanceof ModelRouterLanguageModel || model.supportsStructuredOutputs !== true) return false;
 
   const providerKey = model.provider.split('.')[0]!;
@@ -229,6 +271,16 @@ type ExecutionProps<OUTPUT = undefined> = {
   shouldThrowError?: boolean;
   methodType: ModelMethodType;
   generateId?: IdGenerator;
+  /**
+   * Called when a provider request fails, before it is retried. A run that lost its thread lease while the
+   * request was out stops here, so the failed request is its last.
+   */
+  onRequestFailed?: () => void;
+  /**
+   * Called when a failed request is about to be sent again, after the retry delay. A run that lost its thread
+   * lease during that delay has already stopped, so this is only reached by a run that still holds it.
+   */
+  onRequestRetry?: () => void;
 };
 
 export function execute<OUTPUT = undefined>({
@@ -248,6 +300,8 @@ export function execute<OUTPUT = undefined>({
   shouldThrowError,
   methodType,
   generateId,
+  onRequestFailed,
+  onRequestRetry,
 }: ExecutionProps<OUTPUT>) {
   const v5 = new AISDKV5InputStream({
     component: 'LLM',
@@ -342,8 +396,20 @@ export function execute<OUTPUT = undefined>({
    */
   // Strict json_schema (OpenAI, and OpenAI-compatible providers with native structured output)
   // requires all properties to be required, additionalProperties: false, and no unsupported keywords.
+  const isOpenAIProvider = isNativeOpenAIProvider(model.provider);
+  // OpenAI rejects free-form objects in strict mode, so send those schemas non-strict instead of
+  // rewriting them into objects that can hold no keys. Mastra still validates the result against the schema.
+  const hasFreeFormOutput = hasFreeFormObject(responseFormat?.type === 'json' ? responseFormat.schema : undefined);
+  const sendNonStrict = isOpenAIProvider && providerOptions?.openai?.strictJsonSchema !== true && hasFreeFormOutput;
+  // The Azure strict flag is sent as the user set it, so a free-form schema cannot fall back to non-strict.
+  // Preparing it would remove every free-form key, so send it unprepared.
+  const keepAzureFreeFormSchema = isAzureOpenAIProvider(model.provider) && hasFreeFormOutput;
   const isStrictJsonSchemaMode =
-    responseFormat?.type === 'json' && !injectionMode && usesOpenAIStrictJsonSchema(model, providerOptions);
+    responseFormat?.type === 'json' &&
+    !injectionMode &&
+    !sendNonStrict &&
+    !keepAzureFreeFormSchema &&
+    usesOpenAIStrictJsonSchema(model, providerOptions);
 
   if (isStrictJsonSchemaMode && responseFormat?.schema) {
     responseFormat.schema = prepareJsonSchemaForOpenAIStrictMode(responseFormat.schema);
@@ -352,11 +418,11 @@ export function execute<OUTPUT = undefined>({
   // Only OpenAI providers read `providerOptions.openai`; OpenAI-compatible providers send strict by default
   // and read their own provider key.
   const providerOptionsToUse: SharedProviderOptions | undefined =
-    isStrictJsonSchemaMode && model.provider.startsWith('openai')
+    (isStrictJsonSchemaMode || sendNonStrict) && isOpenAIProvider
       ? {
           ...(providerOptions ?? {}),
           openai: {
-            strictJsonSchema: true,
+            strictJsonSchema: isStrictJsonSchemaMode,
             ...(providerOptions?.openai ?? {}),
           },
         }
@@ -393,7 +459,11 @@ export function execute<OUTPUT = undefined>({
         const pRetry = await import('p-retry');
         const retryResult = await pRetry
           .default(
-            async () => {
+            async attemptNumber => {
+              if (attemptNumber > 1) {
+                onRequestRetry?.();
+                abortSignal?.throwIfAborted();
+              }
               const firstChunkTimeout = createTimeoutAbortSignal({
                 parentSignal: abortSignal,
                 timeoutMs: methodType === 'stream' ? timeout?.firstChunkMs : undefined,
@@ -427,7 +497,14 @@ export function execute<OUTPUT = undefined>({
                 return streamResult as unknown as LanguageModelV2StreamResult;
               } catch (error) {
                 cleanupFirstChunkTimeout();
-                throw error;
+                onRequestFailed?.();
+                abortSignal?.throwIfAborted();
+                // p-retry rejects non-Error values as a TypeError containing String(error),
+                // discarding provider status and response fields needed downstream.
+                if (error instanceof Error) throw error;
+                const normalized = getErrorFromUnknown(error, { supportSerialization: false });
+                normalizedNonErrorThrows.add(normalized);
+                throw normalized;
               }
             },
             {

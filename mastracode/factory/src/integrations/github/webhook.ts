@@ -2,9 +2,11 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { NotificationPriority } from '@mastra/core/notifications';
 import type { Context } from 'hono';
+import { requestsChangesVerdict } from '../../review-verdict.js';
+import { announcePullRequest } from '../channel-thread-announcements.js';
 import { resolveSubscriptionSession, subscriptionRunContext } from '../subscription-session.js';
 import type { FactorySessionOwner } from '../subscription-session.js';
-import { GithubAppIdentity } from './app-identity.js';
+import type { GithubAppIdentity } from './app-identity.js';
 import type { GithubIntegration, GithubRepositoryPermission } from './integration.js';
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from './subscriptions.js';
 import type {
@@ -25,8 +27,8 @@ const SUPPORTED_GITHUB_WEBHOOK_EVENTS = new Set([
   'pull_request',
   'pull_request_review',
   'pull_request_review_comment',
-  // Direct pushes to the default branch drive base-checkpoint rebuilds. The
-  // rules engine and subscription dispatcher both ignore push events.
+  // Direct pushes to the default branch drive base-checkpoint rebuilds and
+  // the environment build hand-off; the subscription dispatcher ignores them.
   'push',
 ]);
 
@@ -407,11 +409,33 @@ const AUTHOR_GATED_KINDS = new Set([
  * reviewing a pull request it authored, so `factory-review` falls back to
  * posting its verdict as a comment under this login. Those comments have to
  * clear the author gate for the review handoff to reach the authoring agent;
- * the rules layer still decides which of them are worth acting on.
+ * the rules layer still decides which of them are worth acting on, and
+ * managed authoring subscriptions drop the ones that are not a request-changes
+ * verdict (see `isIgnoredFactoryAppComment`).
  */
 export function isFactoryAppSender(sender: string | undefined, slug: string | undefined): boolean {
   if (!sender || !slug) return false;
   return sender.toLowerCase() === `${slug.toLowerCase()}[bot]`;
+}
+
+/**
+ * Factory App comments on a PR the builder authored (approvals, demo links,
+ * the builder's own progress notes) are ignored by the default
+ * `pullRequestCommentCreated` rule unless they open with a request-changes
+ * verdict. Managed authoring subscriptions apply the same filter so those
+ * comments cannot wake the builder through the subscription path either.
+ */
+function isIgnoredFactoryAppComment(
+  notification: GithubWebhookNotification,
+  subscription: GithubSignalSubscriptionRow,
+  payload: Record<string, unknown>,
+  github: Pick<GithubWebhookDispatchIntegration, 'slug' | 'identity'> | undefined,
+): boolean {
+  if (notification.kind !== 'issue-comment-created') return false;
+  if (!isFactoryManagedAuthoringSubscription(subscription)) return false;
+  const sender = notification.metadata.sender;
+  if (!sender || !(github?.identity?.matches(sender) || isFactoryAppSender(sender, github?.slug))) return false;
+  return !requestsChangesVerdict(getString(getObject(payload.comment)?.body));
 }
 
 async function isAuthorizedGithubSender(
@@ -459,6 +483,23 @@ async function isAuthorizedGithubSender(
   }
 }
 
+/**
+ * Tell the chat thread that asked for this work that its pull request merged,
+ * which closes the thread out. Best effort: the agent already has the
+ * notification, so a chat failure must not turn it into a redelivery.
+ */
+function announceMerged(
+  dependencies: GithubWebhookDispatchDependencies,
+  subscription: GithubSignalSubscriptionRow,
+  url: string | undefined,
+): void {
+  if (!subscription.threadId) return;
+  const target = url ?? `https://github.com/${subscription.data.repositorySlug}/pull/${subscription.data.changeRequestId}`;
+  void announcePullRequest(dependencies.controller.getChannels?.(), subscription.threadId, 'merged', target).catch(
+    error => console.warn('[GitHub Webhook] merged announcement failed', { subscriptionId: subscription.id, error }),
+  );
+}
+
 export async function dispatchGithubWebhook(
   parsed: ParsedGithubWebhook,
   dependencies: GithubWebhookDispatchDependencies,
@@ -500,10 +541,18 @@ export async function dispatchGithubWebhook(
   let skipped = 0;
 
   for (const subscription of subscriptions) {
+    if (isIgnoredFactoryAppComment(notification, subscription, parsed.payload, dependencies.github)) {
+      skipped += 1;
+      continue;
+    }
     try {
+      let pendingRunContext: ReturnType<typeof subscriptionRunContext> | undefined;
+      const runContextOnce = () =>
+        (pendingRunContext ??= subscriptionRunContext(subscription, dependencies.github?.sourceControlStorage));
       const session = await resolveSubscriptionSession(dependencies.controller, subscription, {
         label: 'GitHub',
         sourceControl: dependencies.github?.sourceControlStorage,
+        runContext: runContextOnce,
       });
       // No session means this deployment does not hold the subscribed thread.
       // That is not a delivery failure, so it must not be retried or counted as
@@ -515,7 +564,7 @@ export async function dispatchGithubWebhook(
         continue;
       }
       const overrides = managedInlineReviewOverrides(notification, subscription);
-      const runContext = await subscriptionRunContext(subscription, dependencies.github?.sourceControlStorage);
+      const runContext = await runContextOnce();
       // Without a tenant identity the run fails closed on credential resolution
       // after routing has accepted the signal, and a terminal notification would
       // already have retired the subscription. Fail before sending so the target
@@ -552,6 +601,9 @@ export async function dispatchGithubWebhook(
         await retireSubscription(subscription.id, 'open');
       }
       delivered += 1;
+      if (notification.kind === 'pull-request-merged' && isFactoryManagedAuthoringSubscription(subscription)) {
+        announceMerged(dependencies, subscription, notificationTargetUrl(parsed.event, parsed.payload));
+      }
     } catch (error) {
       failed += 1;
       dependencies.onTargetError?.(subscription, error);

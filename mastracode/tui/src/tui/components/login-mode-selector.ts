@@ -5,78 +5,38 @@
  * an env var.
  */
 
-import { Box, Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
+import { Container } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
 import type { AuthMode } from '@mastra/code-sdk/auth/types';
 import { showModalOverlay } from '../overlay.js';
-import { theme } from '../theme.js';
+import type { MenuChrome } from './menu-chrome.js';
+import { MenuList } from './menu-list.js';
 
-export class LoginModeSelectorComponent extends Box {
-  private listContainer: Container;
-  private modes: ReadonlyArray<AuthMode>;
-  private selectedIndex = 0;
-  private onSelectCallback: (modeId: string) => void;
-  private onCancelCallback: () => void;
+export class LoginModeSelectorComponent extends Container implements MenuChrome {
+  private readonly list: MenuList;
 
   constructor(
-    providerName: string,
+    private readonly providerName: string,
     modes: ReadonlyArray<AuthMode>,
     onSelect: (modeId: string) => void,
     onCancel: () => void,
   ) {
-    super(2, 1, text => theme.bg('overlayBg', text));
-
-    this.modes = modes;
-    this.onSelectCallback = onSelect;
-    this.onCancelCallback = onCancel;
-
-    this.addChild(new Text(theme.fg('text', `How do you want to sign in to ${providerName}?`)));
-    this.addChild(new Spacer(1));
-
-    this.listContainer = new Container();
-    this.addChild(this.listContainer);
-
-    this.addChild(new Spacer(1));
-    this.addChild(new Text(theme.fg('muted', 'Press Enter to select, Escape to cancel')));
-
-    this.updateList();
+    super();
+    this.list = new MenuList(
+      modes.map(mode => ({ value: mode.id, label: mode.name, description: mode.description })),
+      12,
+    );
+    this.list.onSelect = item => onSelect(item.value);
+    this.list.onCancel = onCancel;
+    this.addChild(this.list);
   }
 
-  private updateList(): void {
-    this.listContainer.clear();
-
-    for (let i = 0; i < this.modes.length; i++) {
-      const mode = this.modes[i];
-      if (!mode) continue;
-
-      const isSelected = i === this.selectedIndex;
-      const prefix = isSelected ? theme.fg('accent', '→ ') : '  ';
-      const label = isSelected ? theme.fg('accent', mode.name) : mode.name;
-      this.listContainer.addChild(new Text(`${prefix}${label}`));
-
-      if (mode.description) {
-        this.listContainer.addChild(new Text(theme.fg('muted', `    ${mode.description}`)));
-      }
-    }
+  menuTitle(): string {
+    return `How do you want to sign in to ${this.providerName}?`;
   }
 
   handleInput(keyData: string): void {
-    const kb = getKeybindings();
-
-    if (kb.matches(keyData, 'tui.select.up')) {
-      this.selectedIndex = Math.max(0, this.selectedIndex - 1);
-      this.updateList();
-    } else if (kb.matches(keyData, 'tui.select.down')) {
-      this.selectedIndex = Math.min(this.modes.length - 1, this.selectedIndex + 1);
-      this.updateList();
-    } else if (kb.matches(keyData, 'tui.select.confirm')) {
-      const selected = this.modes[this.selectedIndex];
-      if (selected) {
-        this.onSelectCallback(selected.id);
-      }
-    } else if (kb.matches(keyData, 'tui.select.cancel')) {
-      this.onCancelCallback();
-    }
+    this.list.handleInput(keyData);
   }
 }
 
@@ -108,6 +68,6 @@ export async function promptAuthMode(
       },
     );
 
-    showModalOverlay(tui, selector, { widthPercent: 0.8, maxHeight: '60%' });
+    showModalOverlay(tui, selector);
   });
 }

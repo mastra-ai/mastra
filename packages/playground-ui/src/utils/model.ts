@@ -39,6 +39,9 @@ const WORD_NAMES = new Map([
 ]);
 
 const DATE_SUFFIX = /(-\d{8}|-\d{4}-\d{2}-\d{2}|-\d{2}-\d{4}|-\d{4})$/;
+const BEDROCK_VENDOR_PREFIXES = /^(?:[a-z]+\.)+/i;
+const BEDROCK_API_VERSION = /-v\d+:0$/;
+const WORD_WITH_MAJOR_VERSION = /^([a-z]{2,})(\d+)$/;
 
 const titleCase = (word: string) => WORD_NAMES.get(word) ?? word.charAt(0).toUpperCase() + word.slice(1);
 
@@ -49,7 +52,7 @@ function formatWord(word: string) {
 }
 
 export function formatModelName(model: string): string {
-  const base = model.split('/').pop() || model;
+  const base = (model.split('/').pop() || model).replace(BEDROCK_VENDOR_PREFIXES, '').replace(BEDROCK_API_VERSION, '');
   const tokens = base
     .toLowerCase()
     .replace(DATE_SUFFIX, '')
@@ -59,8 +62,11 @@ export function formatModelName(model: string): string {
   const words: string[] = [];
   for (const token of tokens) {
     const previous = words[words.length - 1];
+    const wordWithMajor = previous?.match(WORD_WITH_MAJOR_VERSION);
     if (previous && /^\d+$/.test(previous) && /^\d$/.test(token)) {
       words[words.length - 1] = `${previous}.${token}`;
+    } else if (wordWithMajor?.[1] && wordWithMajor[2] && /^\d$/.test(token)) {
+      words.splice(-1, 1, wordWithMajor[1], `${wordWithMajor[2]}.${token}`);
     } else {
       words.push(token);
     }
@@ -74,6 +80,16 @@ export function formatModelName(model: string): string {
 
 export function formatProviderName(provider: string): string {
   return PROVIDER_NAMES.get(provider) ?? provider.split(/[-_]/).filter(Boolean).map(titleCase).join(' ');
+}
+
+/** Compare catalog release dates newest first; unknown or invalid dates follow known dates. */
+export function compareModelReleaseDates(a?: string, b?: string): number {
+  const aTime = Date.parse(a ?? '');
+  const bTime = Date.parse(b ?? '');
+  const aKnown = Number.isFinite(aTime);
+  const bKnown = Number.isFinite(bTime);
+  if (aKnown && bKnown) return bTime - aTime;
+  return Number(bKnown) - Number(aKnown);
 }
 
 export function resolveModel(value: string): ResolvedModel {

@@ -4,7 +4,15 @@ import { Container, visibleWidth } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { describe, it, expect, vi } from 'vitest';
 import { reconcileChatBoundarySpacers } from '../../chat-boundary-reconciliation.js';
-import { theme, tintHex, ensureTerminalGlyphContrast } from '../../theme.js';
+import {
+  theme,
+  tintHex,
+  ensureTerminalGlyphContrast,
+  displayModeColor,
+  surfaceShade,
+  getContrastText,
+} from '../../theme.js';
+import { MAX_DISPLAYED_SHELL_OUTPUT } from '../../utils/bounded-output.js';
 import { getSpacingBetweenComponents } from '../chat-spacing.js';
 import { ToolExecutionComponentEnhanced, parseErrorFromContent } from '../tool-execution-enhanced.js';
 
@@ -46,6 +54,22 @@ describe('completed shell/process background status', () => {
       }
     },
   );
+
+  it('keeps a bounded tail of streaming shell output', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: 'example' },
+      { collapsedByDefault: false },
+      ui,
+    );
+    const chunk = 'x'.repeat(600 * 1024);
+    for (let i = 0; i < 4; i++) component.appendStreamingOutput(chunk);
+    component.appendStreamingOutput('last line\n');
+
+    const retained = (component as unknown as { streamingOutput: string }).streamingOutput;
+    expect(retained.length).toBe(MAX_DISPLAYED_SHELL_OUTPUT);
+    expect(retained.endsWith('last line\n')).toBe(true);
+  });
 
   it('marks nonzero shell exits as failed with and without background identity', () => {
     for (const background of [false, true]) {
@@ -737,11 +761,12 @@ describe('ToolExecutionComponentEnhanced compact display', () => {
       isError: false,
     });
 
+    const displayed = displayModeColor(modeColor);
     const output = component.render(100).join('\n');
-    expect(output).toContain(chalk.hex(modeColor)('▐'));
-    expect(output).toContain(chalk.bgHex(modeColor).hex('#000000').bold('view'));
-    expect(output).toContain(chalk.bgHex('#141414').hex(modeColor)('src/example.ts'));
-    expect(output).toContain(chalk.hex(ensureTerminalGlyphContrast(tintHex(modeColor, 0.35)))('│'));
+    expect(output).toContain(chalk.hex(displayed)('▐'));
+    expect(output).toContain(chalk.bgHex(displayed).hex(getContrastText(displayed)).bold('view'));
+    expect(output).toContain(chalk.bgHex(surfaceShade(1)).hex(displayed)('src/example.ts'));
+    expect(output).toContain(chalk.hex(ensureTerminalGlyphContrast(tintHex(displayed, 0.35)))('│'));
   });
 
   it('renders compact non-shell tool validation errors with actionable details', () => {

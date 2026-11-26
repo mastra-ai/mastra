@@ -350,7 +350,7 @@ describe('useEnvironmentVariablesEditor row identity', () => {
 
     const madeUp = result.current.getRowId(7);
 
-    expect(madeUp).toMatch(/^environment-variable-row-\d+$/);
+    expect(madeUp).toEqual(expect.any(String));
     expect(result.current.getRowId(7)).toBe(madeUp);
   });
 

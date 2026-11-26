@@ -1,4 +1,5 @@
 import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { FactoryWebTelemetry } from '../../telemetry/FactoryWebTelemetry';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
@@ -44,11 +45,12 @@ const AuthGuard = () => {
 
 const OnboardingGuard = () => {
   const pathname = useLocation().pathname;
-  const { data: factories, isPending: factoriesPending } = useFactoriesQuery();
+  const { data: factories, isPending: factoriesPending, isFetching, refetch } = useFactoriesQuery();
 
   if (factoriesPending) return <AuthPendingSkeleton label="Loading factories" />;
-  if ((factories?.length ?? 0) === 0 && pathname !== '/onboarding') return <Navigate to="/onboarding" replace />;
-  if (factories && factories.length > 0 && pathname === '/onboarding' && !hasResumableFactoryOnboarding(factories)) {
+  if (!factories) return <FactoriesUnavailableScreen retrying={isFetching} onRetry={() => void refetch()} />;
+  if (factories.length === 0 && pathname !== '/onboarding') return <Navigate to="/onboarding" replace />;
+  if (factories.length > 0 && pathname === '/onboarding' && !hasResumableFactoryOnboarding(factories)) {
     return <Navigate to={`/factories/${factories[0].id}`} replace />;
   }
 
@@ -76,10 +78,28 @@ function AuthNotConfiguredScreen() {
   );
 }
 
+function FactoriesUnavailableScreen({ retrying, onRetry }: { retrying: boolean; onRetry: () => void }) {
+  return (
+    <div className="bg-sidebar grid h-dvh w-full place-items-center px-6 text-center">
+      <div role="alert" className="max-w-md space-y-3">
+        <Txt as="h1" variant="heading" tone="ink">
+          Unable to load your factories
+        </Txt>
+        <Txt as="p" variant="body" tone="muted">
+          Try again in a moment.
+        </Txt>
+        <Button onClick={onRetry} loading={retrying}>
+          Retry
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function AuthPendingSkeleton({ label = 'Checking sign-in' }: { label?: string }) {
   return (
-    <div className="bg-sidebar flex h-dvh w-full items-center justify-center">
-      <BrandLoader size="lg" aria-label={label} />
+    <div className="bg-sidebar">
+      <BrandLoader fill="screen" aria-label={label} />
     </div>
   );
 }

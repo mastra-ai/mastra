@@ -12,6 +12,9 @@ The `.classifier()` method adds a configured [`Classifier`](/reference/classifie
 ## Usage example
 
 ```typescript filename="src/mastra/workflows/ticket-triage.ts"
+import { createWorkflow } from '@mastra/core/workflows'
+import { z } from 'zod'
+
 const workflow = createWorkflow({
   id: 'ticket-triage',
   inputSchema: z.object({ message: z.string() }),
@@ -89,6 +92,7 @@ Mappings use the same validated path grammar as other workflow steps and persist
 - Choice answers expose `answers.<question>.choice` and may include `probabilities`.
 - Score answers expose `answers.<question>.score` and may include `probabilities`.
 - Boolean answers expose the raw `P(true)` value as `answers.<question>.probability`. Apply an explicit threshold when routing.
+- Refused questions are `{ type: 'refusal' }` and have no `choice`, `score`, or `probability`.
 - `usage` contains normalized token usage.
 
 ## Retries and errors
@@ -100,6 +104,8 @@ Mappings use the same validated path grammar as other workflow steps and persist
 Register the classifier on the same `Mastra` instance that runs the workflow:
 
 ```typescript filename="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
 export const mastra = new Mastra({
   classifiers: { router },
   workflows: { workflow },

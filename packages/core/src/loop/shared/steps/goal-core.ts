@@ -18,10 +18,12 @@ import type { Mastra } from '../../../mastra';
 import type { MastraMemory } from '../../../memory';
 import type { ProcessorStreamWriterOptions } from '../../../processors';
 import { createProcessorSendSignal } from '../../../processors/send-signal';
-import { RequestContext } from '../../../request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../../request-context';
 import type { GoalObjectiveRecord } from '../../../storage/domains/thread-state/base';
 import type { ChunkType, GoalEvaluationActivity } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
+import type { DynamicArgument } from '../../../types';
+import { resolveDynamicArgument } from '../../../utils/dynamic-argument';
 import { runStreamCompletionScorers } from '../../network/validation';
 import type { StreamCompletionContext } from '../../network/validation';
 
@@ -265,7 +267,10 @@ export async function evaluateGoal(deps: {
   let judgeModelConfig: unknown = nonStringAgentJudge ?? effective.judgeModelId;
   if (typeof judgeModelConfig === 'function') {
     judgeModelConfig =
-      (await (judgeModelConfig as (args: any) => unknown)({ requestContext, mastra })) ?? effective.judgeModelId;
+      (await resolveDynamicArgument(judgeModelConfig as DynamicArgument<unknown>, {
+        requestContext: requestContext ?? new RequestContext(),
+        mastra,
+      })) ?? effective.judgeModelId;
   }
   if (!judgeModelConfig) {
     return { evaluated: false };
@@ -386,10 +391,21 @@ export async function evaluateGoal(deps: {
       // a custom scorer brings its own judging.
       const goalTools: ToolsInput | undefined =
         typeof goal.tools === 'function'
-          ? ((await (goal.tools as (args: any) => unknown)({ requestContext, mastra })) as ToolsInput | undefined)
+          ? ((await resolveDynamicArgument(goal.tools as DynamicArgument<unknown>, {
+              requestContext: requestContext ?? new RequestContext(),
+              mastra,
+            })) as ToolsInput | undefined)
           : goal.tools;
       const goalId = record.id ?? `${threadId}:${record.startedAt}`;
-      const judgeRequestContext = requestContext ? new RequestContext(requestContext.entries()) : undefined;
+      // Drop the run's reserved memory IDs: they take precedence over the judge's
+      // own `defaultMemoryOptions` and would bind the judge to the parent thread.
+      const judgeRequestContext = requestContext
+        ? new RequestContext<unknown>(
+            [...requestContext.entries()].filter(
+              ([key]) => key !== MASTRA_THREAD_ID_KEY && key !== MASTRA_RESOURCE_ID_KEY,
+            ),
+          )
+        : undefined;
       scorer = createGoalScorer({
         mastra,
         judgeModel,

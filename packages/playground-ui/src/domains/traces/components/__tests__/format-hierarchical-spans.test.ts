@@ -35,14 +35,6 @@ describe('formatHierarchicalSpans', () => {
   });
 
   describe('without anchorSpanId (trace mode)', () => {
-    it('uses spans with parentSpanId == null as roots', () => {
-      const result = formatHierarchicalSpans([span('root', null), span('child', 'root')]);
-      expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('root');
-      expect(result[0].spans).toHaveLength(1);
-      expect(getAt(getChildren(result[0]), 0).id).toBe('child');
-    });
-
     it('nests descendants under the correct parent across multiple levels', () => {
       const result = formatHierarchicalSpans([span('root', null), span('a', 'root'), span('b', 'a'), span('c', 'b')]);
       expect(result).toHaveLength(1);
@@ -161,7 +153,7 @@ describe('formatHierarchicalSpans', () => {
     expect(getAt(result, 0).latency).toBe(0);
   });
 
-  it('extends the displayed root endTime to the overall latest endedAt across the spans', () => {
+  it('extends the displayed root endTime to the latest endedAt in its subtree', () => {
     // When the anchor recorded ending before a descendant, the timeline is widened so the
     // root bar covers the whole subtree.
     const result = formatHierarchicalSpans([
@@ -171,6 +163,19 @@ describe('formatHierarchicalSpans', () => {
     expect(result[0].endTime).toBe('2026-05-12T10:00:05.000Z');
     // Latency follows: 5s = 5000ms.
     expect(result[0].latency).toBe(5000);
+  });
+
+  it('keeps each root to its own subtree when a trace has several roots', () => {
+    const result = formatHierarchicalSpans([
+      span('agent-run', null, { startedAt: '2026-05-12T10:00:00.000Z', endedAt: '2026-05-12T10:00:04.000Z' }),
+      span('llm', 'agent-run', { startedAt: '2026-05-12T10:00:00.010Z', endedAt: '2026-05-12T10:00:03.950Z' }),
+      span('scorer-run', null, { startedAt: '2026-05-12T10:00:04.005Z', endedAt: '2026-05-12T10:00:07.000Z' }),
+    ]);
+
+    expect(result.map(root => [root.id, root.endTime, root.latency])).toEqual([
+      ['agent-run', '2026-05-12T10:00:04.000Z', 4000],
+      ['scorer-run', '2026-05-12T10:00:07.000Z', 2995],
+    ]);
   });
 
   it('applies the same endTime extension when an anchorSpanId is the root', () => {

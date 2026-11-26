@@ -34,6 +34,8 @@ function toStorageRecord(task: BackgroundTask): Record<string, any> {
     completedAt: task.completedAt?.toISOString() ?? null,
     ownerId: task.ownerId ?? null,
     leaseExpiresAt: task.leaseExpiresAt?.toISOString() ?? null,
+    expiresAt: task.expiresAt?.toISOString() ?? null,
+    metadata: task.metadata ?? null,
   };
 }
 
@@ -60,10 +62,13 @@ function fromStorageRecord(record: Record<string, any>): BackgroundTask {
     completedAt: record.completedAt ? new Date(record.completedAt) : undefined,
     ownerId: record.ownerId ?? undefined,
     leaseExpiresAt: record.leaseExpiresAt ? new Date(record.leaseExpiresAt) : undefined,
+    expiresAt: record.expiresAt ? new Date(record.expiresAt) : undefined,
+    metadata: record.metadata ?? undefined,
   };
 }
 
 export class BackgroundTasksUpstash extends BackgroundTasksStorage {
+  override readonly supportsTaskExpiry = true;
   private client: Redis;
   #db: UpstashDB;
 
@@ -100,6 +105,8 @@ export class BackgroundTasksUpstash extends BackgroundTasksStorage {
     if ('completedAt' in update) patch.completedAt = update.completedAt?.toISOString() ?? null;
     if ('ownerId' in update) patch.ownerId = update.ownerId ?? null;
     if ('leaseExpiresAt' in update) patch.leaseExpiresAt = update.leaseExpiresAt?.toISOString() ?? null;
+    if ('expiresAt' in update) patch.expiresAt = update.expiresAt?.toISOString() ?? null;
+    if ('metadata' in update) patch.metadata = update.metadata ?? null;
     if (Object.keys(patch).length === 0) return false;
 
     const key = getKey(TABLE_BACKGROUND_TASKS, { id: taskId });
@@ -119,6 +126,9 @@ export class BackgroundTasksUpstash extends BackgroundTasksStorage {
         if ARGV[5] == '1' then
           if normalize(record.leaseExpiresAt) ~= normalize(cjson.decode(ARGV[6])) then return 0 end
         end
+        if ARGV[7] == '1' then
+          if normalize(record.suspendedAt) ~= normalize(cjson.decode(ARGV[8])) then return 0 end
+        end
         local patch = cjson.decode(ARGV[2])
         for field, value in pairs(patch) do record[field] = value end
         redis.call('SET', KEYS[1], cjson.encode(record))
@@ -132,6 +142,8 @@ export class BackgroundTasksUpstash extends BackgroundTasksStorage {
         JSON.stringify(options?.expectedOwnerId ?? null),
         options?.expectedLeaseExpiresAt !== undefined ? '1' : '0',
         JSON.stringify(options?.expectedLeaseExpiresAt?.toISOString() ?? null),
+        options?.expectedSuspendedAt !== undefined ? '1' : '0',
+        JSON.stringify(options?.expectedSuspendedAt?.toISOString() ?? null),
       ],
     );
     return Number(result) === 1;
@@ -174,6 +186,9 @@ export class BackgroundTasksUpstash extends BackgroundTasksStorage {
     }
     if (filter.runId) {
       tasks = tasks.filter(t => t.runId === filter.runId);
+    }
+    if (filter.hasExpiresAt !== undefined) {
+      tasks = tasks.filter(t => (t.expiresAt != null) === filter.hasExpiresAt);
     }
     if (filter.toolName) {
       tasks = tasks.filter(t => t.toolName === filter.toolName);

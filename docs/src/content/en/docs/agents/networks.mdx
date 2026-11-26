@@ -127,7 +127,7 @@ const stream = await routingAgent.network('Perform some sensitive action', {
 for await (const chunk of stream) {
   if (chunk.type === 'agent-execution-approval' || chunk.type === 'tool-execution-approval') {
     // Approve
-    const approvedStream = await routingAgent.approveNetworkToolCall(chunk.payload.toolCallId, {
+    const approvedStream = await routingAgent.approveNetworkToolCall({
       runId: stream.runId,
       memory: { thread: 'user-123', resource: 'my-app' },
     })
@@ -176,7 +176,7 @@ for await (const chunk of resumedStream) {
 
 ### Automatic resumption
 
-Set `autoResumeSuspendedTools` to `true` so the network resumes suspended primitives based on the user's next message. This creates a conversational flow where users provide the required information naturally.
+Set `autoResumeSuspendedTools` to `true` so the network resumes suspended primitives based on the user's next message. This creates a conversational flow where users provide the required information in conversation.
 
 ```typescript
 const stream = await routingAgent.network('Delete the old records', {

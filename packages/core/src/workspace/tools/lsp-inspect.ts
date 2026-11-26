@@ -13,24 +13,67 @@ import { z } from 'zod/v4';
 
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
+import type { WorkspaceFilesystem } from '../filesystem';
+import { CompositeFilesystem } from '../filesystem/composite-filesystem';
 import { requireWorkspace, emitWorkspaceMetadata } from './helpers';
 import { startWorkspaceSpan } from './tracing';
 
 const CURSOR_MARKER = '<<<';
 
 /**
- * Get a single line preview from a file at the specified line number.
- * Returns the trimmed line content, or null if the line cannot be read.
+ * Read a file as text through the workspace filesystem (supports remote sandboxes).
+ * The host filesystem is only used when the workspace has no filesystem: on a
+ * remote sandbox, a host file at the same path is unrelated content.
+ * Returns null if the file cannot be read.
  */
-async function getLinePreview(filePath: string, lineNumber: number): Promise<string | null> {
+async function readText(filesystem: WorkspaceFilesystem | undefined, filePath: string): Promise<string | null> {
+  if (filesystem) {
+    try {
+      const content = await filesystem.readFile(filePath, { encoding: 'utf-8' });
+      return typeof content === 'string' ? content : content.toString('utf-8');
+    } catch {
+      return null;
+    }
+  }
   try {
-    const content = await fs.readFile(filePath, 'utf-8');
-    const lines = content.split('\n');
-    const line = lines[lineNumber - 1];
-    return line?.trim() ?? null;
+    return await fs.readFile(filePath, 'utf-8');
   } catch {
     return null;
   }
+}
+
+/**
+ * Language servers report disk paths. A mounted filesystem routes mount paths, so map a disk path
+ * under a mount's resolved root back to that mount. Paths that match no mount are returned as is.
+ */
+function toWorkspacePath(filesystem: WorkspaceFilesystem | undefined, diskPath: string): string {
+  if (!(filesystem instanceof CompositeFilesystem)) return diskPath;
+  for (const mountPath of filesystem.mountPaths) {
+    const root = filesystem.resolveAbsolutePath(mountPath);
+    if (!root) continue;
+    const relative = path.relative(root, diskPath);
+    if (!relative.startsWith('..') && !path.isAbsolute(relative)) {
+      return path.posix.join(mountPath, relative.split(path.sep).join('/'));
+    }
+  }
+  return diskPath;
+}
+
+/**
+ * Get a single line preview from a file at the specified line number.
+ * Returns the trimmed line content, or null if the line cannot be read.
+ */
+async function getLinePreview(
+  filesystem: WorkspaceFilesystem | undefined,
+  filePath: string,
+  lineNumber: number,
+): Promise<string | null> {
+  const content = await readText(filesystem, toWorkspacePath(filesystem, filePath));
+  return content === null ? null : lineOf(content, lineNumber);
+}
+
+function lineOf(content: string, lineNumber: number): string | null {
+  return content.split('\n')[lineNumber - 1]?.trim() ?? null;
 }
 
 function getAbsolutePath(
@@ -174,17 +217,20 @@ export const lspInspectTool = createTool({
       workspace.filesystem?.resolveAbsolutePath?.bind(workspace.filesystem),
     );
 
-    let fileContent = '';
-    try {
-      fileContent = await fs.readFile(absolutePath, 'utf-8');
-    } catch {
-      fileContent = '';
+    // Read the path as the agent gave it: the workspace filesystem resolves its own paths, while
+    // `absolutePath` can be a host disk path that a mounted filesystem doesn't route.
+    const fileContent = await readText(workspace.filesystem, workspace.filesystem ? filePath : absolutePath);
+    if (fileContent === null) {
+      span.end({ success: false });
+      return {
+        error: `Could not read file: ${filePath}`,
+      };
     }
 
     // Get client and prepare for querying
     let queryResult;
     try {
-      queryResult = await lspManager.prepareQuery(absolutePath);
+      queryResult = await lspManager.prepareQuery(absolutePath, fileContent);
     } catch (err) {
       span.end({ success: false });
       return {
@@ -291,7 +337,13 @@ export const lspInspectTool = createTool({
         .filter(loc => !(loc.path === absolutePath && loc.line === line));
 
       if (definitionLocations.length > 0) {
-        const previews = await Promise.all(definitionLocations.map(loc => getLinePreview(loc.path, loc.line)));
+        const previews = await Promise.all(
+          definitionLocations.map(loc =>
+            loc.path === absolutePath
+              ? lineOf(fileContent, loc.line)
+              : getLinePreview(workspace.filesystem, loc.path, loc.line),
+          ),
+        );
         result.definition = definitionLocations.map((loc, i) => ({
           location: `${compressPath(loc.path)}:L${loc.line}:C${loc.character}`,
           preview: previews[i],

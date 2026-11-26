@@ -115,8 +115,11 @@ export interface TeamsProviderConfigBase {
   appTenantId?: string;
   /**
    * Bot application audience. Provisioned (delegated) bots default to
-   * `MultiTenant`.
-   * @default 'MultiTenant'
+   * `SingleTenant` — Microsoft deprecated new multitenant bot registrations
+   * (July 2025). The tenant defaults to the delegated token's `tid` claim
+   * when {@link appTenantId} is not set. Self-managed bots infer the type
+   * from whether `appTenantId` is provided.
+   * @default 'SingleTenant'
    */
   appType?: 'MultiTenant' | 'SingleTenant';
   /** Override the Bot Framework service URL (e.g. sovereign clouds). Forwarded to the adapter. */
@@ -228,6 +231,12 @@ export interface TeamsInstallation {
   entraObjectId?: string;
   /** Client secret the bot authenticates to Bot Framework with (encrypted at rest). */
   appPassword?: string;
+  /**
+   * Set when the stored secret could not be decrypted (the encryption key
+   * changed or was removed). The installation cannot route messages;
+   * disconnect and reconnect the agent to re-provision the bot.
+   */
+  secretUnreadable?: boolean;
   /** Entra tenant ID for single-tenant bots. */
   appTenantId?: string;
   /** Bot application audience. */

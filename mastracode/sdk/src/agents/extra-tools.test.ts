@@ -347,7 +347,7 @@ describe('createDynamicTools – extraTools', () => {
     ).resolves.toMatchObject({ notifications: [{ id: 'n1' }] });
     expect(notificationStore.listNotifications).toHaveBeenCalledWith({
       threadId: 'thread-1',
-      status: ['pending', 'delivered'],
+      status: ['pending', 'delivered', 'failed'],
       priority: undefined,
       source: undefined,
       limit: 21,

@@ -619,6 +619,44 @@ describe('ACP Event Mapper', () => {
     });
   });
 
+  describe('error events', () => {
+    it('records only non-retryable errors as the turn error', () => {
+      const state = createPromptState('session-1');
+
+      handleAgentControllerEvent(
+        { type: 'error', error: new Error('Retrying'), retryable: true },
+        state,
+        mockConnection,
+        mockSession,
+      );
+      expect(state.error).toBeUndefined();
+
+      handleAgentControllerEvent({ type: 'error', error: new Error('Fatal') }, state, mockConnection, mockSession);
+      expect(state.error?.message).toBe('Fatal');
+
+      handleAgentControllerEvent(
+        { type: 'error', error: new Error('Retrying again'), retryable: true },
+        state,
+        mockConnection,
+        mockSession,
+      );
+      expect(state.error?.message).toBe('Fatal');
+    });
+
+    it('maps a length finish reason to max_tokens', () => {
+      const state = createPromptState('session-1');
+
+      handleAgentControllerEvent(
+        { type: 'error', error: new Error('Too long'), finishReason: 'length' },
+        state,
+        mockConnection,
+        mockSession,
+      );
+
+      expect(state.stopReason).toBe('max_tokens');
+    });
+  });
+
   describe('null state handling', () => {
     it('ignores events when state is null', () => {
       const event: Extract<AgentControllerEvent, { type: 'message_update' }> = {

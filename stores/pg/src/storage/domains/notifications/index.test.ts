@@ -1,8 +1,9 @@
-import { TABLE_NOTIFICATIONS } from '@mastra/core/storage';
+import { TABLE_NOTIFICATIONS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import { Pool } from 'pg';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { exportSchemas, PostgresStore } from '../..';
+import { generateTableSQL } from '../../db';
 import { connectionString } from '../../test-utils';
 import { NotificationsPG } from './index';
 
@@ -267,6 +268,8 @@ describe('NotificationsPG', () => {
     expect(updated.summarySignalId).toBe('summary-1');
   });
 
+  // 1,200 sequential inserts: ~0.4 s alone, up to ~1.8 s (once >5 s) while other
+  // files hit the same server in parallel, so the default timeout is load-dependent.
   it('bulk status update accepts more ids than one statement can bind and returns each record once', async () => {
     const ids = Array.from({ length: 1200 }, (_, index) => `n-${index}`);
     for (const id of ids) {
@@ -286,7 +289,7 @@ describe('NotificationsPG', () => {
     expect(new Set(updated.map(notification => notification.id)).size).toBe(ids.length);
     expect(updated.every(notification => notification.status === 'seen')).toBe(true);
     await expect(store.listNotifications({ threadId: 'thread-1', status: 'pending' })).resolves.toEqual([]);
-  });
+  }, 20_000);
 
   it('updates the status of many notifications in one write, scoped to the thread', async () => {
     for (const id of ['a', 'b', 'c']) {
@@ -444,10 +447,113 @@ describe('NotificationsPG', () => {
     expect(ddl).toContain('idx_notifications_thread_status_updated');
     expect(ddl).toContain('idx_notifications_coalescing');
     expect(ddl).toContain('idx_notifications_due');
+    expect(ddl).toContain('PRIMARY KEY ("threadId", "id")');
   });
 
   async function expectIds(input: Parameters<NotificationsPG['listNotifications']>[0], ids: string[]) {
     const records = await store.listNotifications(input);
     expect(records.map(record => record.id)).toEqual(ids);
   }
+});
+
+describe('NotificationsPG primary key', () => {
+  let pool: Pool;
+
+  const primaryKeyColumns = async () => {
+    const rows = await pool.query<{ attname: string }>(
+      `SELECT a.attname FROM pg_index i
+       JOIN pg_class c ON c.oid = i.indrelid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord) ON true
+       JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = k.attnum
+       WHERE c.relname = $1 AND n.nspname = 'public' AND i.indisprimary
+       ORDER BY k.ord`,
+      [TABLE_NOTIFICATIONS],
+    );
+    return rows.rows.map(row => row.attname);
+  };
+
+  const insertRaw = (id: string, threadId: string) =>
+    pool.query(
+      `INSERT INTO "${TABLE_NOTIFICATIONS}" (id, "threadId", source, kind, priority, status, summary, "coalescedCount", "createdAt", "updatedAt", "deliveryAttempts")
+       VALUES ($1, $2, 'test', 'manual', 'medium', 'pending', 's', 1, now(), now(), 0)`,
+      [id, threadId],
+    );
+
+  const createLegacyTable = () =>
+    pool.query(generateTableSQL({ tableName: TABLE_NOTIFICATIONS, schema: TABLE_SCHEMAS[TABLE_NOTIFICATIONS] }));
+
+  beforeEach(async () => {
+    pool = createTestPool();
+    await pool.query(`DROP TABLE IF EXISTS "${TABLE_NOTIFICATIONS}"`);
+  });
+
+  afterEach(async () => {
+    await pool.query(`DROP TABLE IF EXISTS "${TABLE_NOTIFICATIONS}"`);
+    await pool.end();
+  });
+
+  it('creates new tables with the ("threadId", "id") primary key', async () => {
+    await new NotificationsPG({ pool }).init();
+    expect(await primaryKeyColumns()).toEqual(['threadId', 'id']);
+  });
+
+  it('adds the primary key to legacy tables created without it, idempotently', async () => {
+    await createLegacyTable();
+    await insertRaw('n1', 't1');
+    await insertRaw('n1', 't2');
+    expect(await primaryKeyColumns()).toEqual([]);
+
+    await new NotificationsPG({ pool }).init();
+    await new NotificationsPG({ pool }).init();
+
+    expect(await primaryKeyColumns()).toEqual(['threadId', 'id']);
+    await expect(insertRaw('n1', 't1')).rejects.toThrow(/duplicate key/);
+  });
+
+  it('warns and skips the migration when a legacy table contains duplicates', async () => {
+    await createLegacyTable();
+    await insertRaw('dup', 't1');
+    await insertRaw('dup', 't1');
+
+    const store = new NotificationsPG({ pool });
+    const warn = vi.fn();
+    store.__setLogger({ warn, info: vi.fn(), debug: vi.fn(), error: vi.fn() } as any);
+    await expect(store.init()).resolves.toBeUndefined();
+
+    expect(await primaryKeyColumns()).toEqual([]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('ADD PRIMARY KEY ("threadId", "id")'));
+  });
+
+  const rejectAlterTable = (error: Error) => {
+    const query = pool.query.bind(pool) as (...args: any[]) => any;
+    vi.spyOn(pool, 'query').mockImplementation(((text: unknown, ...rest: any[]) =>
+      typeof text === 'string' && text.includes('ADD PRIMARY KEY')
+        ? Promise.reject(error)
+        : query(text, ...rest)) as any);
+  };
+
+  it('warns and continues when the role lacks privilege to add the key', async () => {
+    await createLegacyTable();
+    rejectAlterTable(Object.assign(new Error('must be owner of table mastra_notifications'), { code: '42501' }));
+
+    const store = new NotificationsPG({ pool });
+    const warn = vi.fn();
+    store.__setLogger({ warn, info: vi.fn(), debug: vi.fn(), error: vi.fn() } as any);
+    await expect(store.init()).resolves.toBeUndefined();
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('ADD PRIMARY KEY ("threadId", "id")'));
+    vi.restoreAllMocks();
+    expect(await primaryKeyColumns()).toEqual([]);
+  });
+
+  it('wraps other migration failures in a MastraError', async () => {
+    await createLegacyTable();
+    rejectAlterTable(Object.assign(new Error('boom'), { code: 'XX000' }));
+
+    await expect(new NotificationsPG({ pool }).init()).rejects.toMatchObject({
+      id: 'MASTRA_STORAGE_PG_ADD_NOTIFICATIONS_PRIMARY_KEY_FAILED',
+    });
+    vi.restoreAllMocks();
+  });
 });

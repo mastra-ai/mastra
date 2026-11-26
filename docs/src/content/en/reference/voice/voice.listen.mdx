@@ -4,9 +4,6 @@ description: "The listen() method is a core function available in all Mastra voi
 packages:
   - "@mastra/core"
   - "@mastra/node-audio"
-  - "@mastra/voice-openai"
-  - "@mastra/voice-openai-realtime"
-  - "@mastra/voice-playai"
 ---
 
 # voice.listen()
@@ -39,6 +36,7 @@ Returns one of the following:
 
 - `Promise<string>`: A promise that resolves to the transcribed text
 - `Promise<NodeJS.ReadableStream>`: A promise that resolves to a stream of transcribed text (for streaming transcription)
+- `Promise<object>`: For providers that return structured results, such as Deepgram, which resolves to `{ transcript, words, raw }` plus `speakerSegments` when diarization is enabled
 - `Promise<void>`: For real-time providers that emit 'writing' events instead of returning text directly
 
 ## Provider-specific options
@@ -205,7 +203,7 @@ const voice = new CompositeVoice({
 const transcript = await voice.listen(audioStream)
 ```
 
-### Using AI SDK Model Providers
+### Using AI SDK model providers
 
 You can also use AI SDK transcription models directly with `CompositeVoice`:
 

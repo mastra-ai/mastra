@@ -490,6 +490,8 @@ export abstract class TrackingExporter<
   #pendingCleanups = new Map<string, ReturnType<typeof setTimeout>>();
   /** Waiting-queue replays started by setImmediate that haven't finished yet */
   #activeReplays = new Set<Promise<void>>();
+  /** Hard-cap enforcements started by getTraceData() that haven't finished yet */
+  #activeHardCapEnforcements = new Set<Promise<void>>();
   // Note: #traceMap maintains insertion order (JS Map spec), so we use
   // #traceMap.keys() to iterate traces oldest-first for cap enforcement.
 
@@ -598,6 +600,16 @@ export abstract class TrackingExporter<
       // A replay that started during this pass may have unblocked more events
       if (!progressed && this.#activeReplays.size === 0) return;
     }
+  }
+
+  /**
+   * Wait for fire-and-forget hard-cap enforcements, so the aborts they issue are
+   * handed to the vendor before flush() / shutdown() send or abort anything else.
+   * Only the ones running right now are joined; enforcements started by spans that
+   * arrive later belong to a later flush, so this never spins under traffic.
+   */
+  async #drainHardCapEnforcements(): Promise<void> {
+    await Promise.all([...this.#activeHardCapEnforcements]);
   }
 
   /**
@@ -1316,9 +1328,11 @@ export abstract class TrackingExporter<
       });
 
       // Enforce hard cap on total traces
-      this.#enforceHardCap().catch(error => {
+      const enforcement = this.#enforceHardCap().catch(error => {
         this.logger.error(`${this.name}: Error enforcing hard cap`, { error });
       });
+      this.#activeHardCapEnforcements.add(enforcement);
+      void enforcement.finally(() => this.#activeHardCapEnforcements.delete(enforcement));
     }
     return this.#traceMap.get(traceId)!;
   }
@@ -1363,6 +1377,7 @@ export abstract class TrackingExporter<
     if (!this.#shutdownStarted) {
       await this.#drainWaitingQueues();
     }
+    await this.#drainHardCapEnforcements();
     await this._flush();
   }
 
@@ -1391,6 +1406,7 @@ export abstract class TrackingExporter<
     // Finish replaying queued events that can still be processed, so spans that
     // already ended aren't aborted below
     await this.#drainWaitingQueues();
+    await this.#drainHardCapEnforcements();
     await this._preShutdown();
 
     // Cancel all pending cleanup timers

@@ -417,7 +417,7 @@ describe('durable parallel delegation approvals', () => {
     });
   }, 60000);
 
-  it('closes the caller stream on suspension via new Agent({ durable: true }) with closeOnSuspend: true', async () => {
+  it('closes a resumable plain Agent stream on suspension without durable execution checkpoints', async () => {
     const storage = new InMemoryStore();
     const gatedTool = createTool({
       id: 'gatedTool',
@@ -445,15 +445,12 @@ describe('durable parallel delegation approvals', () => {
       expect(drained.timedOut, `stream should close on suspension; chunks: ${drained.types.join(', ')}`).toBe(false);
       expect(drained.approvals.map(a => a?.toolCallId)).toEqual(['inner-solo']);
 
+      expect(mastra.getAgent('agent')).toBe(agent);
       const workflows = (await storage.getStore('workflows'))!;
-      await vi.waitFor(async () => {
-        const persisted = await workflows.getWorkflowRunById({
-          runId: result.runId,
-          workflowName: DurableStepIds.AGENTIC_LOOP,
-        });
-        const snapshot = typeof persisted?.snapshot === 'string' ? JSON.parse(persisted.snapshot) : persisted?.snapshot;
-        expect(snapshot?.status).toBe('suspended');
-      });
+      for (const workflowName of [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION]) {
+        const persisted = await workflows.getWorkflowRunById({ runId: result.runId, workflowName });
+        expect(persisted?.snapshot).toBeUndefined();
+      }
     } finally {
       (result as { cleanup?: () => void }).cleanup?.();
     }

@@ -42,6 +42,7 @@ type Story = StoryObj<typeof MessageScroller>;
 
 function MessageScrollerDemo({ autoScroll = false }: { autoScroll?: boolean }) {
   const [messages, setMessages] = useState(initialMessages);
+  const [busy, setBusy] = useState(false);
 
   const addTurn = () => {
     const turn = messages.filter(message => message.role === 'user').length + 1;
@@ -73,6 +74,9 @@ function MessageScrollerDemo({ autoScroll = false }: { autoScroll?: boolean }) {
         <Button size="sm" variant="ghost" onClick={prependHistory}>
           Load older history
         </Button>
+        <Button size="sm" variant="ghost" aria-pressed={busy} onClick={() => setBusy(current => !current)}>
+          {busy ? 'Stop reply' : 'Stream reply'}
+        </Button>
       </div>
       <MessageScrollerProvider autoScroll={autoScroll} defaultScrollPosition="end" preserveScrollOnPrepend>
         <MessageScroller className="h-96 rounded-xl border border-border bg-background">
@@ -90,7 +94,7 @@ function MessageScrollerDemo({ autoScroll = false }: { autoScroll?: boolean }) {
               ))}
             </MessageScrollerContent>
           </MessageScrollerViewport>
-          <MessageScrollerButton />
+          <MessageScrollerButton busy={busy} />
         </MessageScroller>
       </MessageScrollerProvider>
     </div>
@@ -99,6 +103,13 @@ function MessageScrollerDemo({ autoScroll = false }: { autoScroll?: boolean }) {
 
 export const Conversation: Story = {
   render: () => <MessageScrollerDemo />,
+  play: async ({ canvasElement }) => {
+    const viewport = canvasElement.querySelector<HTMLElement>('[data-slot="message-scroller-viewport"]');
+    if (!viewport) throw new Error('Expected the conversation scroll viewport');
+    const style = getComputedStyle(viewport);
+    await expect(style.overscrollBehaviorX).toBe('auto');
+    await expect(style.overscrollBehaviorY).toBe('contain');
+  },
 };
 
 export const AutoFollow: Story = {

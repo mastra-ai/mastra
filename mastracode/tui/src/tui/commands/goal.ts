@@ -10,20 +10,22 @@
  *   /goal clear       Drop the goal
  *   /goal judge       Set the goal judge model and max-attempt defaults
  */
-import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
+import { Container } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 import { createGoalReminderSignal } from '@mastra/code-sdk/goal-signal';
 import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import { isSessionStartupCancelledError } from '@mastra/core/agent-controller';
 import { GoalCyclesDialogComponent } from '../components/goal-cycles-dialog.js';
+import { MenuList } from '../components/menu-list.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
 import { DEFAULT_MAX_TURNS } from '../goal-manager.js';
 import type { GoalState } from '../goal-manager.js';
 import { showModalOverlay } from '../overlay.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
+import { requireLocal } from '../runtime.js';
 import { stripControlChars } from '../sanitize-ansi.js';
-import { getSelectListTheme, theme } from '../theme.js';
+import { theme } from '../theme.js';
 
 import type { SlashCommandContext } from './types.js';
 
@@ -50,7 +52,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
       ctx.showInfo('No goal to pause.');
       return;
     }
-    await goalManager.saveToThread(state);
+    await goalManager.saveToThread(requireLocal(state, '/goal'));
     ctx.updateStatusLine();
     ctx.showInfo(
       `Goal paused: "${stripControlChars(goal.objective)}" (${goal.turnsUsed}/${goal.maxTurns} turns used). Use /goal resume to continue.`,
@@ -75,7 +77,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
     }
 
     goalManager.resume();
-    await goalManager.saveToThread(state);
+    await goalManager.saveToThread(requireLocal(state, '/goal'));
     ctx.updateStatusLine();
 
     // The goal-reminder signal below is echoed back into the live stream as the
@@ -85,7 +87,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
       await state.session.sendSignal(createGoalReminderSignal(resumedGoal!)).accepted;
     } catch (err) {
       goalManager.pause();
-      await goalManager.saveToThread(state);
+      await goalManager.saveToThread(requireLocal(state, '/goal'));
       if (isSessionStartupCancelledError(err)) {
         ctx.showInfo('Interrupted');
         return;
@@ -100,9 +102,9 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
   // /goal clear
   if (subCommand === 'clear') {
     goalManager.clear();
-    if (!(await goalManager.deleteFromThread(state))) {
+    if (!(await goalManager.deleteFromThread(requireLocal(state, '/goal')))) {
       // Loading retries the delete once; only a retry that lands counts as cleared.
-      if (!(await goalManager.loadFromThread(state))) {
+      if (!(await goalManager.loadFromThread(requireLocal(state, '/goal')))) {
         ctx.updateStatusLine();
         ctx.showError('Could not clear the goal; it may still be active. Try /goal clear again.');
         return;
@@ -162,31 +164,29 @@ async function showGoalActionModal(ctx: SlashCommandContext): Promise<void> {
   const items: SelectItem[] = [
     {
       value: 'status',
-      label: `  Status  ${theme.fg('dim', goal ? formatGoalStatusRow(goal) : 'No goal set')}`,
+      label: 'Status',
+      description: goal ? formatGoalStatusRow(goal) : 'No goal set',
     },
   ];
 
   if (goal?.status === 'active') {
-    items.push({ value: 'pause', label: `  Pause  ${theme.fg('dim', 'Pause the continuation loop')}` });
+    items.push({ value: 'pause', label: 'Pause', description: 'Pause the continuation loop' });
   } else if (goal?.status === 'paused') {
-    items.push({ value: 'resume', label: `  Resume  ${theme.fg('dim', 'Resume and send a continuation')}` });
+    items.push({ value: 'resume', label: 'Resume', description: 'Resume and send a continuation' });
   }
 
   if (goal) {
-    items.push({ value: 'clear', label: `  Clear  ${theme.fg('dim', 'Drop the current goal')}` });
+    items.push({ value: 'clear', label: 'Clear', description: 'Drop the current goal' });
   }
 
   items.push(
-    { value: 'judge', label: `  Judge settings  ${theme.fg('dim', 'Set judge model and max attempts')}` },
-    { value: 'new-hint', label: `  New goal  ${theme.fg('dim', 'Type /goal <objective> to start')}` },
+    { value: 'judge', label: 'Judge settings', description: 'Set judge model and max attempts' },
+    { value: 'new-hint', label: 'New goal', description: 'Type /goal <objective> to start' },
   );
 
   return new Promise<void>(resolve => {
-    const container = new Box(4, 2, (text: string) => theme.bg('overlayBg', text));
-    container.addChild(new Text(theme.bold(theme.fg('accent', 'Goal Actions')), 0, 0));
-    container.addChild(new Spacer(1));
-
-    const selectList = new SelectList(items, items.length, getSelectListTheme());
+    const container = new Container();
+    const selectList = new MenuList(items, items.length);
     selectList.onSelect = async (item: SelectItem) => {
       ctx.state.ui.hideOverlay();
       try {
@@ -207,12 +207,10 @@ async function showGoalActionModal(ctx: SlashCommandContext): Promise<void> {
     };
 
     container.addChild(selectList);
-    container.addChild(new Spacer(1));
-    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
 
-    const modal = container as Box & { handleInput: (data: string) => void };
+    const modal = container as Container & { handleInput: (data: string) => void };
     modal.handleInput = (data: string) => selectList.handleInput(data);
-    showModalOverlay(ctx.state.ui, modal, { maxHeight: '60%' });
+    showModalOverlay(ctx.state.ui, modal, { title: 'Goal actions' });
   });
 }
 
@@ -221,7 +219,7 @@ export async function handleJudgeCommand(ctx: SlashCommandContext): Promise<void
   if (!defaults) return;
 
   const activeGoal = await ctx.state.goalManager.updateJudgeDefaults(
-    ctx.state,
+    requireLocal(ctx.state, '/goal'),
     defaults.judgeModelId,
     defaults.maxTurns,
   );
@@ -251,15 +249,18 @@ export async function startGoalWithDefaults(
 
 /**
  * Replace the thread's goal with `objective` without sending the goal reminder,
- * asking for judge defaults only if they are unset. Resolves to `null` when the
- * user cancels the defaults prompt or the goal could not be set.
+ * asking for judge defaults only if they are unset. With
+ * `useSessionModelAsJudge`, a missing judge default falls back to the session's
+ * current model instead of prompting. Resolves to `null` when the user cancels
+ * the defaults prompt or the goal could not be set.
  */
 export async function setGoalWithDefaults(
   ctx: SlashCommandContext,
   objective: string,
   cancelMessage = 'Goal cancelled.',
+  options: { useSessionModelAsJudge?: boolean } = {},
 ): Promise<GoalState | null> {
-  const defaults = getJudgeDefaults();
+  const defaults = getJudgeDefaults() ?? (options.useSessionModelAsJudge ? getSessionModelJudgeDefaults(ctx) : null);
   const judgeDefaults = defaults ?? (await promptForJudgeDefaults(ctx, cancelMessage));
   if (!judgeDefaults) return null;
 
@@ -271,6 +272,17 @@ function getJudgeDefaults(): JudgeDefaults | null {
   const judgeModelId = settings.models.goalJudgeModel;
   const maxTurns = settings.models.goalMaxTurns;
   if (!judgeModelId || typeof maxTurns !== 'number' || maxTurns <= 0) return null;
+  return { judgeModelId, maxTurns };
+}
+
+function getSessionModelJudgeDefaults(ctx: SlashCommandContext): JudgeDefaults | null {
+  const settings = loadSettings();
+  const judgeModelId = settings.models.goalJudgeModel || ctx.state.session.model.get();
+  if (!judgeModelId) return null;
+  const maxTurns =
+    typeof settings.models.goalMaxTurns === 'number' && settings.models.goalMaxTurns > 0
+      ? settings.models.goalMaxTurns
+      : DEFAULT_MAX_TURNS;
   return { judgeModelId, maxTurns };
 }
 
@@ -295,7 +307,7 @@ async function promptForJudgeDefaults(ctx: SlashCommandContext, cancelMessage: s
       tui: state.ui,
       models: availableModels,
       currentModelId: preselectedId,
-      title: 'Select Goal Judge Model',
+      title: 'Select goal judge model',
       onSelect: async (model: ModelItem) => {
         state.ui.hideOverlay();
         await promptForApiKeyIfNeeded(state.ui, model, ctx.authStorage);
@@ -317,11 +329,7 @@ async function promptForJudgeDefaults(ctx: SlashCommandContext, cancelMessage: s
           },
         });
 
-        state.ui.showOverlay(cyclesDialog, {
-          width: '50%',
-          maxHeight: '40%',
-          anchor: 'center',
-        });
+        showModalOverlay(state.ui, cyclesDialog, { widthPercent: 0.5, maxHeight: '40%' });
         cyclesDialog.focused = true;
       },
       onCancel: () => {
@@ -331,11 +339,7 @@ async function promptForJudgeDefaults(ctx: SlashCommandContext, cancelMessage: s
       },
     });
 
-    state.ui.showOverlay(selector, {
-      width: '80%',
-      maxHeight: '60%',
-      anchor: 'center',
-    });
+    showModalOverlay(state.ui, selector, { widthPercent: 0.8, maxHeight: '60%' });
     selector.focused = true;
   });
 }
@@ -370,7 +374,7 @@ async function setGoal(
       state.pendingNewThread = false;
     }
 
-    goal = await goalManager.setGoal(state, objective, judgeModelId, maxTurns);
+    goal = await goalManager.setGoal(requireLocal(state, '/goal'), objective, judgeModelId, maxTurns);
   } catch (error) {
     if (shouldPersistToCreatedThread) {
       goalManager.consumePersistOnNextThreadCreate();
@@ -386,7 +390,7 @@ async function setGoal(
     return null;
   }
 
-  await goalManager.saveToThread(state);
+  await goalManager.saveToThread(requireLocal(state, '/goal'));
   ctx.updateStatusLine();
   return goal;
 }
@@ -412,7 +416,7 @@ export async function sendGoalReminder(
     ).accepted;
   } catch (err) {
     goalManager.pause();
-    await goalManager.saveToThread(state);
+    await goalManager.saveToThread(requireLocal(state, '/goal'));
     if (isSessionStartupCancelledError(err)) {
       ctx.showInfo('Interrupted');
       return;

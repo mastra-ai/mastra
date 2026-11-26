@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ a5dad336b416 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -61,6 +61,7 @@ export function uploadDocumentTool(proxy: PlatformProxy) {
       const createResponse = await platformProxy.post({
         endpoint: '/drive/v3/files',
         params: {
+          supportsAllDrives: 'true',
           fields: 'id,name,mimeType,webViewLink,webContentLink',
         },
         data: metadataBody,
@@ -91,6 +92,7 @@ export function uploadDocumentTool(proxy: PlatformProxy) {
           endpoint: `/upload/drive/v3/files/${fileId}`,
           params: {
             uploadType: 'media',
+            supportsAllDrives: 'true',
             fields: 'id,name,mimeType,webViewLink,webContentLink',
           },
           headers: {
@@ -105,6 +107,9 @@ export function uploadDocumentTool(proxy: PlatformProxy) {
           await platformProxy
             .delete({
               endpoint: `/drive/v3/files/${fileId}`,
+              params: {
+                supportsAllDrives: 'true',
+              },
               retries: 3,
             })
             .catch(() => undefined);

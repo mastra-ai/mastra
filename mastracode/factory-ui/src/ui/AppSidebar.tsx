@@ -1,138 +1,106 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
-import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
-import { Settings } from 'lucide-react';
-import { useLocation, useNavigate, useParams } from 'react-router';
+import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
+import { useState } from 'react';
+import { useNavigate } from 'react-router';
 
-import { SidebarAccountLink } from './domains/auth/components/SidebarAccountLink';
+import { useBoardQuery } from '../hooks/useBoardEditor';
+import { BoardConfigNavigation } from './domains/boardConfig/components/BoardConfigNavigation';
+import { useShownDraft } from './domains/boardConfig/BoardDraftProvider';
+import { useBoardConfigRoute } from './domains/boardConfig/hooks/useBoardConfigRoute';
+import type { BoardConfigLocation } from './domains/boardConfig/boardConfigPaths';
+import { rememberedBoardPath } from './domains/factory/services/boardViews';
+
+import { SidebarSettingsLink } from './domains/auth/components/SidebarSettingsLink';
 import { FactorySection } from './domains/factory/components/FactorySection';
-import { SidebarAttention } from './domains/factory/components/SidebarAttention';
 import { SidebarGlobalSearchButton } from './domains/search/components/SidebarGlobalSearchButton';
 import { SettingsNavigation } from './domains/settings/components/SettingsNavigation';
-import { useCloseSettings } from './domains/settings/hooks/useCloseSettings';
-import { settingsSectionPath } from './domains/settings/settingsSections';
+import { useSettingsOpen } from './domains/settings/hooks/useSettingsOpen';
 import { FactorySwitcher } from './domains/workspaces/components/FactorySwitcher';
-import { UserSessionsSection } from './domains/workspaces/components/UserSessionsSection';
-import { WorkspacesSection } from './domains/workspaces/components/WorkspacesSection';
+import { SessionsSection } from './domains/workspaces/components/SessionsSection';
+import { SidebarNewSessionButton } from './domains/workspaces/components/SidebarNewSessionButton';
 
-function useSettingsOpen() {
-  const { pathname } = useLocation();
-  return /^\/factories\/[^/]+\/settings(?:\/|$)/.test(pathname);
-}
+const MAIN_VIEW = 'main';
+const BOARD_CONFIG_VIEW = 'board-config';
 
-function BetaBadge() {
-  return (
-    <Txt
-      as="span"
-      variant="meta"
-      className="bg-badge-green-subtle text-brand-green-indicator relative m-[0.1875rem] inline-block px-[0.1875rem] align-middle uppercase"
-    >
-      Beta
-      <span className="text-badge-green-edge absolute inset-x-[-0.1875rem] -top-px block transform-gpu">
-        <svg aria-hidden="true" height="1" stroke="currentColor" strokeDasharray="3.3 1" width="100%">
-          <line x1="0" x2="100%" y1="0.5" y2="0.5" />
-        </svg>
-      </span>
-      <span className="text-badge-green-edge absolute inset-x-[-0.1875rem] -bottom-px block transform-gpu">
-        <svg aria-hidden="true" height="1" stroke="currentColor" strokeDasharray="3.3 1" width="100%">
-          <line x1="0" x2="100%" y1="0.5" y2="0.5" />
-        </svg>
-      </span>
-      <span className="text-badge-green-edge absolute inset-y-[-0.1875rem] -left-px block transform-gpu">
-        <svg aria-hidden="true" height="100%" stroke="currentColor" strokeDasharray="3.3 1" width="1">
-          <line x1="0.5" x2="0.5" y1="0" y2="100%" />
-        </svg>
-      </span>
-      <span className="text-badge-green-edge absolute inset-y-[-0.1875rem] -right-px block transform-gpu">
-        <svg aria-hidden="true" height="100%" stroke="currentColor" strokeDasharray="3.3 1" width="1">
-          <line x1="0.5" x2="0.5" y1="0" y2="100%" />
-        </svg>
-      </span>
-    </Txt>
-  );
-}
-
-/**
- * Composition shell: each section owns its data through local query hooks,
- * focused chat hooks, or the router location, so nothing is wired through props here.
- */
 export function AppSidebar() {
   const settingsOpen = useSettingsOpen();
+  const pageHeaderOwnsToggle = useSidebar().desktopState === 'collapsed';
 
   return (
     <Sidebar aria-label="Main sidebar" className="h-full">
       <Sidebar.CommandHeader>
-        <Sidebar.Brand
-          logo={<LogoWithoutText aria-label="Mastra" role="img" className="text-foreground h-4 w-auto" />}
-          title={<BetaBadge />}
-        />
-        <SidebarGlobalSearchButton />
+        <FactorySwitcher />
+        <div className="ml-auto flex shrink-0 items-center gap-0.5">
+          <SidebarGlobalSearchButton />
+          {!pageHeaderOwnsToggle && <Sidebar.Trigger />}
+        </div>
       </Sidebar.CommandHeader>
       <Sidebar.Nav aria-label={settingsOpen ? 'Settings sections' : 'Main'}>
-        {settingsOpen ? (
-          <SettingsNavigation />
-        ) : (
-          <div className="flex min-h-0 flex-1 flex-col gap-4">
-            <section aria-label="Factory switcher">
-              <FactorySwitcher />
-            </section>
-            <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Navigation">
-              <FactorySection>
-                <WorkspacesSection />
-              </FactorySection>
-              <UserSessionsSection />
-            </section>
-          </div>
-        )}
+        {settingsOpen ? <SettingsNavigation /> : <MainNavigation />}
       </Sidebar.Nav>
-      <Sidebar.Footer aria-label="Attention, account, and settings">
-        <AppSidebarFooter />
+      <Sidebar.Footer aria-label="Account and settings">
+        <Sidebar.NavList>
+          <SidebarSettingsLink />
+        </Sidebar.NavList>
       </Sidebar.Footer>
     </Sidebar>
   );
 }
 
-function AppSidebarFooter() {
-  const { factoryId } = useParams<{ factoryId: string }>();
-  const settingsOpen = useSettingsOpen();
-  const closeSettings = useCloseSettings();
+/** The main navigation, which steps aside for a board's configuration pages while one is open. */
+function MainNavigation() {
   const navigate = useNavigate();
-  const location = useLocation();
-
-  const toggleSettings = () => {
-    if (settingsOpen) {
-      closeSettings();
-      return;
-    }
-    if (factoryId) {
-      void navigate(settingsSectionPath(factoryId, 'preferences'), { state: { from: location } });
-    }
-  };
+  const boardConfig = useBoardConfigRoute();
+  // The configuration view keeps its last board while it slides out after leaving.
+  const [shownConfig, setShownConfig] = useState(boardConfig);
+  if (boardConfig && !sameLocation(boardConfig, shownConfig)) setShownConfig(boardConfig);
 
   return (
-    <Sidebar.NavList>
-      <SidebarAttention />
-      <SidebarAccountLink />
-      <Sidebar.NavLink
-        asChild
-        link={{
-          name: 'Settings',
-          url: '#',
-          icon: <Settings />,
-        }}
-        isActive={settingsOpen}
-      >
-        <button
-          id="settings-trigger"
-          type="button"
-          onClick={toggleSettings}
-          aria-label="Settings"
-          aria-current={settingsOpen ? 'page' : undefined}
-        >
-          <Settings />
-          <Sidebar.NavLabel>Settings</Sidebar.NavLabel>
-        </button>
-      </Sidebar.NavLink>
-    </Sidebar.NavList>
+    <Sidebar.NavStack
+      value={boardConfig ? BOARD_CONFIG_VIEW : MAIN_VIEW}
+      rootValue={MAIN_VIEW}
+      // The URL decides the view; going back means leaving the configuration for its board.
+      onValueChange={() => {
+        if (boardConfig) void navigate(rememberedBoardPath(boardConfig.factoryId, boardConfig.boardId));
+      }}
+      className="min-h-0 flex-1"
+    >
+      <Sidebar.NavStack.Root className="flex min-h-0 flex-col gap-4">
+        <SidebarNewSessionButton />
+        <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Navigation">
+          <FactorySection />
+          <SessionsSection />
+        </section>
+      </Sidebar.NavStack.Root>
+      {shownConfig && <BoardConfigView {...shownConfig} />}
+    </Sidebar.NavStack>
+  );
+}
+
+function BoardConfigView(location: BoardConfigLocation) {
+  const board = useBoardQuery(location.factoryId, location.boardId).data?.board;
+  const name = useShownDraft(location.factoryId, location.boardId, board)?.name;
+
+  return (
+    <Sidebar.NavStack.View
+      value={BOARD_CONFIG_VIEW}
+      // The switcher below names the board; the back row says what the view is and, to assistive tech, where it leads.
+      title="Board settings"
+      backLabel={`Back to ${name || 'board'}`}
+      // The view accompanies a page of form fields: Escape there belongs to the fields, not to leaving.
+      closeOnEscape={false}
+    >
+      <BoardConfigNavigation {...location} />
+    </Sidebar.NavStack.View>
+  );
+}
+
+function sameLocation(a: BoardConfigLocation, b: BoardConfigLocation | undefined) {
+  return (
+    a.factoryId === b?.factoryId &&
+    a.boardId === b.boardId &&
+    a.phaseKey === b.phaseKey &&
+    a.skills === b.skills &&
+    a.rules === b.rules &&
+    a.intake === b.intake
   );
 }

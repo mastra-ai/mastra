@@ -141,7 +141,10 @@ describe('tool call concurrency resolution', () => {
   });
 
   describe("strategy: 'called'", () => {
-    it('parallelizes a pure-safe batch even when an approval tool is available', () => {
+    it.each([
+      ['parallelizes a pure-safe batch even when an approval tool is available', 'safe', 4],
+      ['serializes a batch that actually called an approval tool', 'approval', 1],
+    ] as const)('%s', (_title, value, expected) => {
       expect(
         resolveToolCallConcurrency({
           tools: {
@@ -151,9 +154,9 @@ describe('tool call concurrency resolution', () => {
           activeTools: ['safe', 'approval'],
           configuredConcurrency: 4,
           strategy: 'called',
-          calledToolNames: ['safe'],
+          calledToolNames: [value],
         }),
-      ).toBe(4);
+      ).toBe(expected);
     });
 
     it('serializes a batch that actually called a suspend tool', () => {
@@ -181,21 +184,6 @@ describe('tool call concurrency resolution', () => {
           configuredConcurrency: 4,
           strategy: 'called',
           calledToolNames: ['safe', 'suspend-by-id'],
-        }),
-      ).toBe(1);
-    });
-
-    it('serializes a batch that actually called an approval tool', () => {
-      expect(
-        resolveToolCallConcurrency({
-          tools: {
-            safe: safeTool,
-            approval: approvalTool,
-          },
-          activeTools: ['safe', 'approval'],
-          configuredConcurrency: 4,
-          strategy: 'called',
-          calledToolNames: ['approval'],
         }),
       ).toBe(1);
     });

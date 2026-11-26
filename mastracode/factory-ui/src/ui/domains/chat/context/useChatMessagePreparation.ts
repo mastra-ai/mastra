@@ -5,13 +5,15 @@ import { ChatTranscriptContext } from './ChatTranscriptContext';
 import { useChatSessionContext } from './useChatSessionContext';
 
 interface ChatMessagePreparation {
-  historyInitializing: boolean;
   preparing: boolean;
 }
 
 /**
  * Content readiness, not status: unlike `chatSessionPhase`, a live run does not
- * clear it — rejoining a running session still shows the prepare stepper.
+ * clear it — rejoining a running session still waits for its history. Only the
+ * thread's history gates it: entering a session provisions nothing, and the
+ * messages read does not need the session's metadata, so a transcript that has
+ * loaded shows while the rest of the session resolves.
  */
 export function useChatMessagePreparation(): ChatMessagePreparation {
   const messages = useContext(ChatThreadMessagesContext);
@@ -20,10 +22,7 @@ export function useChatMessagePreparation(): ChatMessagePreparation {
   // A deferred boundary renders before the transcript mounts; until then the
   // messages query is the only loading fact there is.
   const transcript = useContext(ChatTranscriptContext);
-  const { sessionError, sandboxPreparing } = useChatSessionContext();
-  const initializing = transcript ? transcript.initializing : sandboxPreparing || messages.isPending;
-  return {
-    historyInitializing: transcript?.historyInitializing ?? false,
-    preparing: !sessionError && initializing,
-  };
+  const { sessionError } = useChatSessionContext();
+  const loadingHistory = transcript ? transcript.loadingHistory : messages.isPending;
+  return { preparing: !sessionError && loadingHistory };
 }

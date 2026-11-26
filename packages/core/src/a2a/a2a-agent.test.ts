@@ -3,7 +3,7 @@ import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { SubAgent } from '../agent';
 import { Agent } from '../agent';
-import { RequestContext } from '../request-context';
+import { MASTRA_NORMALIZED_USER_KEY, RequestContext } from '../request-context';
 
 import { A2AAgent } from './a2a-agent';
 
@@ -193,6 +193,19 @@ describe('A2AAgent', () => {
 
     expect(agent.hasOwnMemory()).toBe(true);
     await expect(agent.getMemory()).resolves.toBe(memory);
+  });
+
+  it('passes the authenticated user to an injected dynamic memory factory', async () => {
+    const agent = new A2AAgent({ url: 'https://remote.example.com' });
+    const memory = {} as any;
+    const factory = vi.fn(({ user }: { user?: { id: string } }) => (user?.id === 'user-1' ? memory : undefined));
+    agent.__setMemory(factory as any);
+
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_NORMALIZED_USER_KEY, { id: 'user-1' });
+
+    await expect(agent.getMemory({ requestContext })).resolves.toBe(memory);
+    expect(factory).toHaveBeenCalledWith(expect.objectContaining({ requestContext, user: { id: 'user-1' } }));
   });
 
   it('caches the fetched agent card in memory', async () => {

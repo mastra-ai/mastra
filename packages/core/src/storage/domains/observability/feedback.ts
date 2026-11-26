@@ -7,6 +7,8 @@ export {
   type CreateFeedbackRecord,
   createFeedbackArgsSchema,
   type CreateFeedbackArgs,
+  replaceFeedbackBodySchema,
+  type ReplaceFeedbackBody,
   createFeedbackBodySchema,
   type CreateFeedbackBody,
   createFeedbackResponseSchema,

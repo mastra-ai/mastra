@@ -265,6 +265,8 @@ const STRICT_MODE_DROPPED_KEYWORDS = [
   'minProperties',
   'maxProperties',
   'patternProperties',
+  // z.record() emits this for its key type.
+  'propertyNames',
   'unevaluatedItems',
   'unevaluatedProperties',
   // Conditional/dependency keywords: unsupported by OpenAI strict mode with no
@@ -624,11 +626,10 @@ export function zodToJsonSchema(
 
     // Fix anyOf patterns for nullable fields - required for OpenAI compatibility
     return fixAnyOfNullable(jsonSchema);
-  } else {
-    // Zod v3 path - use the original converter
-    return zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
-      $refStrategy: strategy,
-      target,
-    }) as JSONSchema7;
   }
+  // Zod v3 path - use the original converter
+  return zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
+    $refStrategy: strategy,
+    target,
+  }) as JSONSchema7;
 }

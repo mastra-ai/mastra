@@ -36,6 +36,8 @@ import {
   handleSettingsCommand,
   handleConnectCommand,
   handleLoginCommand,
+  handleFactoryCommand,
+  handleLocalCommand,
   handleReviewCommand as handleReviewCmd,
   handleReportIssueCommand as handleReportIssueCmd,
   handleSetupCommand,
@@ -63,11 +65,15 @@ import {
   isGoalJudgeInputLocked,
   showGoalJudgeInputLockInfo,
 } from './goal-input-lock.js';
+import { isLocalOnlyCommand, requireLocal } from './runtime.js';
 import type { TUIState } from './state.js';
 
+/** Commands that need the in-process runtime (local agent, storage, auth, workspace, managers). */
 const TRACKED_COMMANDS = new Set([
   'connect',
   'login',
+  'factory',
+  'local',
   'model',
   'models',
   'packs',
@@ -80,6 +86,37 @@ const TRACKED_COMMANDS = new Set([
   'clone',
   'new',
 ]);
+
+/** Commands that open a menu when run without arguments. */
+const MENU_COMMANDS = new Set([
+  'settings',
+  'model',
+  'models',
+  'packs',
+  'threads',
+  'resume',
+  'think',
+  'login',
+  'logout',
+  'connect',
+  'goal',
+  'om',
+  'memory',
+  'subagents',
+  'theme',
+  'api-keys',
+  'mcp',
+  'plugins',
+  'browser',
+  'github',
+  'knowledge',
+]);
+
+/** The menu a slash command opens ("models" for "/models"), for the slot's loading row; else undefined. */
+export function menuCommandName(input: string): string | undefined {
+  const match = input.trim().match(/^\/([\w-]+)$/);
+  return match && MENU_COMMANDS.has(match[1]!) ? match[1] : undefined;
+}
 
 /**
  * Dispatch a slash command input to the appropriate handler.
@@ -150,6 +187,11 @@ export async function dispatchSlashCommand(
 
   const ctx = buildCtx();
   trackCommand(ctx, command);
+
+  if (!state.local && isLocalOnlyCommand(command)) {
+    showInfo(state, `/${command} is not available in Factory mode.`);
+    return true;
+  }
 
   if (command.startsWith('goal/')) {
     await handleGoalSourceCommand(state, command.slice('goal/'.length), args, ctx);
@@ -231,6 +273,12 @@ export async function dispatchSlashCommand(
       return true;
     case 'login':
       await handleLoginCommand(ctx, 'login');
+      return true;
+    case 'factory':
+      await handleFactoryCommand(ctx, args);
+      return true;
+    case 'local':
+      await handleLocalCommand(ctx);
       return true;
     case 'logout':
       await handleLoginCommand(ctx, 'logout');
@@ -365,8 +413,9 @@ async function handleGoalSourceCommand(
   if (goalSkill) {
     try {
       let workspace = ctx.getResolvedWorkspace();
-      if (!workspace && ctx.controller?.hasWorkspace?.()) {
-        workspace = await ctx.controller.resolveWorkspace({ session: ctx.state.session });
+      const local = requireLocal(state, 'Goal skills');
+      if (!workspace && local.controller.hasWorkspace()) {
+        workspace = await local.controller.resolveWorkspace({ session: local.session });
       }
       const skill = await workspace?.skills?.get(goalSkill.path || goalSkill.name);
       if (!skill || skill.metadata?.goal !== true) {

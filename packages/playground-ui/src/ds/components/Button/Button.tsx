@@ -2,36 +2,47 @@ import { Button as BaseButton } from '@base-ui/react/button';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import React from 'react';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Spinner } from '@/ds/components/Spinner/spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip/tooltip';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 import { Icon } from '@/ds/icons/Icon';
-import { iconSizeClasses, type IconSize } from '@/ds/icons/icon-size-classes';
-import { controlHeight, controlSizeClasses } from '@/ds/primitives/control-size';
+import { iconSizeClasses } from '@/ds/icons/icon-size-classes';
+import type { IconSize } from '@/ds/icons/icon-size-classes';
+import { controlIconState } from '@/ds/primitives/control-icon';
+import { controlHeight, controlSizeClasses, controlSpacing } from '@/ds/primitives/control-size';
 import {
   controlFocusBorderVisible,
   raisedControlSurfaceStyle,
   sharedFormElementDisabledStyle,
 } from '@/ds/primitives/form-element';
-import { controlStateColorTransition, focusRingOffset } from '@/ds/primitives/transitions';
+import { controlStateColorTransition, focusRing, focusRingOffset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
-// Adornments for text-mode buttons: gap between icon+label and larger radius.
-// - `[data-slot=button-icon]` styles the `<Icon>` wrapper rendered by the `icon` prop — the only
-//   supported way to pair an icon with a label (always on the left, fixed gap).
-// - `[&>svg]` only remains for label-less text-mode buttons (e.g. CopyButton) that pass a bare
-//   SVG as children.
-// Excluded from icon-mode because icon-mode wraps children in `<Icon>` and uses its own
-// `rounded-full` (circle).
+import './button.css';
+
+// Text-mode buttons are pills. Each size takes `--control-px` (the label's side padding) and
+// `--control-gap` from `controlSpacing`, shared with every other pill control. The
+// icon side gets 2px less, because a glyph draws inside its box: the icon then reads as far
+// from the edge as the label does (shadcn's Button uses the same 2px step).
+// - `[data-slot=button-icon(-end)]`: the `<Icon>` wrappers the `icon` / `iconEnd` props render.
+// - `>svg`: a bare SVG passed as a leading child, before the label.
+// A button with no label takes an icon-mode size instead: a fixed square with its own
+// `rounded-full`, so it reads as a circle rather than a padded pill (lint rule
+// `mastra/icon-button-size`).
+// Insets are measured from the outer edge, border included: a variant with a real border (or a
+// segment a ButtonsGroup gives one) sets `--control-border` and the padding gives that width
+// back, so its label sits where a borderless `default` button's does.
 const TEXT_MODE_ADORNMENTS = cn(
-  'gap-[.75em] rounded-full',
-  '[&>[data-slot=button-icon]]:-ml-[.3em]',
-  '[&>[data-slot=button-icon-end]]:-mr-1',
-  '[&>svg]:mx-[-.3em]',
+  'rounded-full px-[calc(var(--control-px)-var(--control-border,0px))] [--control-icon-inset:2px]',
+  'has-[>[data-slot=button-icon]]:pl-[calc(var(--control-px)-2px-var(--control-border,0px))]',
+  'has-[>svg]:pl-[calc(var(--control-px)-2px-var(--control-border,0px))]',
+  'has-[>[data-slot=button-icon-end]]:pr-[calc(var(--control-px)-2px-var(--control-border,0px))]',
 );
 
 const LINK_LAYOUT = cn(
-  'relative size-auto gap-1 rounded-xs px-0 text-label',
+  'relative size-auto gap-1 rounded-xs px-0 text-label [--control-gap:0.25rem] [--control-icon-inset:0px]',
   'before:absolute before:-inset-x-2',
-  '[&>[data-slot=button-icon-end]]:mr-0 [&>[data-slot=button-icon]]:ml-0 [&>svg]:mx-0',
+  'has-[>[data-slot=button-icon-end]]:pr-0 has-[>[data-slot=button-icon]]:pl-0 has-[>svg]:pl-0',
 );
 
 const LINK_LABEL = cn(
@@ -42,19 +53,10 @@ const LINK_LABEL = cn(
   'after:transition-transform after:duration-fast after:ease-out-custom motion-reduce:after:transition-none',
 );
 
-// An icon is secondary to the label beside it, and on a neutral surface it says so with
-// a colour token rather than opacity. Opacity dims against whatever sits behind the
-// control, so the same glyph clears contrast on one surface and fails on another, and it
-// left icon-only buttons with no hover response at all: only their background moved.
-// Filled variants opt out because there the glyph colour carries the meaning.
-const NEUTRAL_ICON_STATE = cn(
-  '[&_svg]:text-muted-foreground not-disabled:hover:[&_svg]:text-foreground aria-disabled:[&_svg]:text-muted-foreground',
-);
-
 // eslint-disable-next-line react-refresh/only-export-components -- exported variant helper is part of Button's public API
 export const buttonVariants = cva(
   cn(
-    'inline-flex cursor-pointer items-center justify-center',
+    'inline-flex cursor-pointer items-center justify-center whitespace-nowrap',
     controlStateColorTransition,
     sharedFormElementDisabledStyle,
     'aria-disabled:pointer-events-none aria-disabled:cursor-not-allowed aria-disabled:text-muted-foreground',
@@ -70,30 +72,40 @@ export const buttonVariants = cva(
         default: cn(
           'border-0',
           raisedControlSurfaceStyle,
-          NEUTRAL_ICON_STATE,
+          controlIconState,
+          '[--control-icon-rest:var(--icon)]',
           'disabled:bg-fill-subtle aria-disabled:bg-fill-subtle',
         ),
         // Filled variants take the opaque ladder: their rest fill is a colour, not a rung
         // layered on the surface, so a state that thinned it would let whatever the button
-        // covers read through the hover it is meant to answer.
+        // covers read through the hover it is meant to answer. Their glyph colour carries the
+        // meaning, so they keep it with the label instead of taking `controlIconState`.
         primary: cn(
-          'border border-transparent bg-fill-inverse text-background not-disabled:hover:bg-fill-inverse-hover not-disabled:active:bg-fill-inverse-active',
+          'border border-transparent bg-fill-inverse text-background [--control-border:1px] not-disabled:hover:bg-fill-inverse-hover not-disabled:active:bg-fill-inverse-active',
           focusRingOffset,
           'focus-visible:border-transparent',
           'disabled:bg-fill-inverse-disabled disabled:text-background/75 aria-disabled:bg-fill-inverse-disabled aria-disabled:text-background/75',
         ),
         destructive: cn(
-          'border border-transparent bg-fill-destructive text-fill-destructive-foreground not-disabled:hover:bg-fill-destructive-hover not-disabled:active:bg-fill-destructive-active',
+          'border border-transparent bg-fill-destructive text-fill-destructive-foreground [--control-border:1px] not-disabled:hover:bg-fill-destructive-hover not-disabled:active:bg-fill-destructive-active',
           focusRingOffset,
           'focus-visible:border-transparent',
           'disabled:bg-fill-destructive-disabled disabled:text-fill-destructive-disabled-foreground aria-disabled:bg-fill-destructive-disabled aria-disabled:text-fill-destructive-disabled-foreground',
         ),
         'destructive-ghost': cn(
-          'border border-transparent bg-transparent text-destructive-foreground not-disabled:hover:bg-destructive-subtle not-disabled:hover:text-destructive-foreground not-disabled:active:bg-destructive-subtle-active',
+          'border border-transparent bg-transparent text-destructive-foreground [--control-border:1px] not-disabled:hover:bg-destructive-subtle not-disabled:hover:text-destructive-foreground not-disabled:active:bg-destructive-subtle-active',
           'disabled:bg-transparent disabled:text-placeholder aria-disabled:bg-transparent aria-disabled:text-placeholder',
         ),
         ghost: cn(
-          'border border-transparent bg-transparent text-muted-foreground not-disabled:hover:bg-fill-subtle not-disabled:hover:text-foreground not-disabled:active:bg-fill',
+          'border border-transparent bg-transparent text-muted-foreground [--control-border:1px] not-disabled:hover:bg-fill-subtle not-disabled:hover:text-foreground not-disabled:active:bg-fill',
+          controlIconState,
+          'disabled:bg-transparent aria-disabled:bg-transparent',
+        ),
+        // A persistent neutral fill for selected controls. Match default's borderless
+        // box so switching between the raised and subtle surfaces keeps labels in place.
+        subtle: cn(
+          'border-0 bg-fill-hover text-foreground not-disabled:hover:bg-fill-hover not-disabled:active:bg-fill',
+          focusRing,
           'disabled:bg-transparent aria-disabled:bg-transparent',
         ),
         link: cn(
@@ -104,15 +116,33 @@ export const buttonVariants = cva(
         ),
       },
       size: {
-        sm: cn(controlSizeClasses.sm, iconSizeClasses.sm, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
-        md: cn(controlSizeClasses.md, iconSizeClasses.md, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
-        lg: cn(controlSizeClasses.lg, iconSizeClasses.lg, 'px-[1em]', TEXT_MODE_ADORNMENTS),
+        sm: cn(
+          controlSizeClasses.sm,
+          iconSizeClasses.sm,
+          controlSpacing.sm,
+          'gap-(--control-gap)',
+          TEXT_MODE_ADORNMENTS,
+        ),
+        md: cn(
+          controlSizeClasses.md,
+          iconSizeClasses.md,
+          controlSpacing.md,
+          'gap-(--control-gap)',
+          TEXT_MODE_ADORNMENTS,
+        ),
+        lg: cn(
+          controlSizeClasses.lg,
+          iconSizeClasses.lg,
+          controlSpacing.lg,
+          'gap-(--control-gap)',
+          TEXT_MODE_ADORNMENTS,
+        ),
         // Icon sizes: square dimensions, fully rounded → circle. Active state inherits from variant
         // so icon-mode and text-mode use the same press feedback. The glyph is sized by the `Icon`
         // wrapper the component puts around an icon-mode child, keyed off the same scale.
-        'icon-sm': cn(controlHeight.sm, 'w-control-sm rounded-full'),
-        'icon-md': cn(controlHeight.md, 'w-control-md rounded-full'),
-        'icon-lg': cn(controlHeight.lg, 'w-control-lg rounded-full'),
+        'icon-sm': cn(controlHeight.sm, 'w-control-sm shrink-0 rounded-full'),
+        'icon-md': cn(controlHeight.md, 'w-control-md shrink-0 rounded-full'),
+        'icon-lg': cn(controlHeight.lg, 'w-control-lg shrink-0 rounded-full'),
       },
     },
     compoundVariants: [
@@ -143,6 +173,12 @@ export interface ButtonProps
   /** Leading icon, always rendered on the left of the label inside `<Icon>`. Ignored in icon-mode sizes. */
   icon?: React.ReactNode;
   iconEnd?: React.ReactNode;
+  /**
+   * The button's own action is in progress. A loader takes the place of the icon (`icon`, else `iconEnd`, else
+   * the glyph of an icon-mode size); a button without an icon gets the loader on the left. The label stays.
+   * Clicks do nothing while loading, and the button keeps focus, so `disabled` doesn't need to repeat it.
+   */
+  loading?: boolean;
   tooltip?: React.ReactNode;
   /** Side of the trigger the tooltip opens on. Defaults to `top`. */
   tooltipPosition?: 'top' | 'right' | 'bottom' | 'left';
@@ -176,6 +212,8 @@ function preventLinkActivation(event: React.SyntheticEvent): void {
   event.stopPropagation();
 }
 
+type LinkRenderProps = { href?: string; to?: string; target?: string; className?: string };
+
 // One icon step per control step: a glyph is sized by the rung it sits in, so the
 // same nominal size renders the same icon whether it arrives as an icon-mode child,
 // the `icon` prop, or a bare SVG.
@@ -193,16 +231,127 @@ function adornmentIconSize(variant: ButtonVariant, size: ButtonSize): IconSize {
   return iconSizeMap[size];
 }
 
-function ButtonAdornment({ slot, size, children }: { slot: string; size: IconSize; children: React.ReactNode }) {
-  if (!children) return undefined;
+/*
+ * Adornments for triggers that take the Button recipe without the Button component (Select,
+ * Combobox). They sit in the same slots as a Button's `icon` and `iconEnd`, so every trigger's
+ * leading icon and chevron share one size and one inset from the edge.
+ */
+
+/** A trigger's leading icon. */
+export function ButtonIcon({
+  size,
+  loading,
+  children,
+}: {
+  size: ButtonSize;
+  loading?: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <Icon data-slot={slot} size={size}>
+    <ButtonAdornment slot="button-icon" size={iconSizeMap[size]} loading={loading}>
       {children}
+    </ButtonAdornment>
+  );
+}
+
+/**
+ * The down chevron of a trigger that opens a list; static, it does not turn while open. Lucide's
+ * chevron ink spans the middle half of its box, twice a regular icon's inset, so it pulls in by
+ * 1/8em on each side to sit where a regular icon's ink would. Pass it as a Button's `iconEnd`.
+ */
+export function TriggerChevron() {
+  return <IconChevronDownMedium aria-hidden data-slot="trigger-chevron" className="mx-[-0.125em] shrink-0" />;
+}
+
+/** The trigger chevron in a Button's end slot. */
+export function ButtonChevron({ size }: { size: ButtonSize }) {
+  return (
+    <ButtonAdornment slot="button-icon-end" size={iconSizeMap[size]}>
+      <TriggerChevron />
+    </ButtonAdornment>
+  );
+}
+
+function ButtonAdornment({
+  slot,
+  size,
+  loading,
+  children,
+}: {
+  slot: string;
+  size: IconSize;
+  loading?: boolean;
+  children: React.ReactNode;
+}) {
+  if (!children && !loading) return undefined;
+  return (
+    <Icon data-slot={slot} data-loader-slot={loading ? loaderSlot(children) : undefined} size={size}>
+      {children}
+      {loading && <ButtonLoader />}
     </Icon>
   );
 }
 
-function ButtonLabel({ variant, children }: { variant: ButtonVariant; children: React.ReactNode }) {
+function loaderSlot(icon: React.ReactNode): 'replaced' | 'added' {
+  return icon ? 'replaced' : 'added';
+}
+
+// Hidden from assistive technology, and so from the button's name: `aria-busy` on the button says it.
+function ButtonLoader() {
+  return <Spinner data-slot="button-loader" size="sm" role="presentation" aria-hidden />;
+}
+
+// A loading button is aria-disabled but not unavailable. It keeps its own colours, since the disabled ones are too
+// faint for a label and a loader that still carry meaning, and it keeps the pointer, so its tooltip opens and a click
+// lands on it instead of falling through to a clickable row behind. It just doesn't answer hover and press, so the
+// recipe's classes for those states are left out; gating each one instead would change specificities that the
+// recipes built on `buttonVariants` (menu rows, triggers) override.
+const STATE_CLASS = /(?:hover|active|aria-disabled):/;
+
+// eslint-disable-next-line react-refresh/only-export-components -- shared with NoticeButton
+export function buttonLoadingClassName(className: string): string {
+  const classes = className.split(' ').filter(name => !STATE_CLASS.test(name));
+  return cn(classes, 'cursor-default');
+}
+
+function blockActivation(event: React.SyntheticEvent): void {
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+// Enter and Space press a button; the arrows open the menu it triggers, but still scroll the page. Every other key,
+// browser and app shortcuts included, goes through. (Base UI's `focusableWhenDisabled` cancels those too.)
+function blockActivationKeys(event: React.KeyboardEvent): void {
+  if (event.metaKey || event.ctrlKey) return;
+  if (event.key === 'Enter' || event.key === ' ') blockActivation(event);
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') event.stopPropagation();
+}
+
+// Not prevented, so a press still moves focus to the button.
+function stopPropagation(event: React.SyntheticEvent): void {
+  event.stopPropagation();
+}
+
+/**
+ * What every loading button puts on its element, whichever element that is. The handlers capture, so neither the
+ * button's own (a `render` element's included) nor a clickable parent's see the press.
+ */
+// eslint-disable-next-line react-refresh/only-export-components -- shared with NoticeButton
+export const BUTTON_LOADING_PROPS = {
+  disabled: undefined,
+  'aria-busy': true,
+  'aria-disabled': true,
+  'data-button-loading': '',
+  onClickCapture: blockActivation,
+  onAuxClickCapture: blockActivation,
+  onDoubleClickCapture: blockActivation,
+  onPointerDownCapture: stopPropagation,
+  onMouseDownCapture: stopPropagation,
+  onKeyDownCapture: blockActivationKeys,
+  onKeyUpCapture: blockActivationKeys,
+} as const;
+
+export function ButtonLabel({ variant, children }: { variant: ButtonVariant; children: React.ReactNode }) {
   if (variant !== 'link') return children;
   return (
     <span data-slot="button-label" className={LINK_LABEL}>
@@ -211,22 +360,17 @@ function ButtonLabel({ variant, children }: { variant: ButtonVariant; children: 
   );
 }
 
-// Walks React children, expanding `<></>` fragments so `isIconOnly` can inspect the real
-// elements inside. `<Button><><Icon/></></Button>` should still count as icon-only.
+// True when every child is an element (no label text). A text-sized button can still hold
+// only an icon when its size is forwarded from a wrapper, and it then needs a name too.
+// `<></>` fragments are expanded first: `<><svg />Save</>` has a label.
 function flattenChildren(children: React.ReactNode): React.ReactNode[] {
-  const result: React.ReactNode[] = [];
-  React.Children.forEach(children, child => {
-    if (React.isValidElement<{ children?: React.ReactNode }>(child) && child.type === React.Fragment) {
-      result.push(...flattenChildren(child.props.children));
-    } else {
-      result.push(child);
-    }
-  });
-  return result;
+  return React.Children.toArray(children).flatMap(child =>
+    React.isValidElement<{ children?: React.ReactNode }>(child) && child.type === React.Fragment
+      ? flattenChildren(child.props.children)
+      : [child],
+  );
 }
 
-// True when every child is a React element (no text/label). Used in text-mode to brighten the
-// SVG of label-less buttons so the glyph reads stronger.
 function isIconOnly(children: React.ReactNode): boolean {
   const flat = flattenChildren(children);
   return flat.length > 0 && flat.every(child => React.isValidElement(child));
@@ -252,6 +396,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       size,
       variant = 'default',
       disabled,
+      loading = false,
       children,
       icon,
       iconEnd,
@@ -266,25 +411,32 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
     const iconMode = variant !== 'link' && isIconButtonSize(size);
     const resolvedSize: ButtonSize = size ?? 'md';
     const resolvedVariant: ButtonVariant = variant ?? 'default';
-    const isLabelless = !iconMode && isIconOnly(children);
     const adornmentSize = adornmentIconSize(resolvedVariant, resolvedSize);
 
     // Icon-only buttons need an a11y label. If a string tooltip is provided, reuse it.
-    const ariaLabel = ariaLabelProp ?? ((iconMode || isLabelless) && typeof tooltip === 'string' ? tooltip : undefined);
+    const ariaLabel =
+      ariaLabelProp ?? ((iconMode || isIconOnly(children)) && typeof tooltip === 'string' ? tooltip : undefined);
+
+    const loaderAtEnd = loading && !icon && Boolean(iconEnd);
 
     const content = iconMode ? (
-      <Icon size={iconSizeMap[resolvedSize]}>{children}</Icon>
+      <Icon size={iconSizeMap[resolvedSize]} data-loader-slot={loading ? loaderSlot(children) : undefined}>
+        {children}
+        {loading && <ButtonLoader />}
+      </Icon>
     ) : (
       <>
-        <ButtonAdornment slot="button-icon" size={adornmentSize}>
+        <ButtonAdornment slot="button-icon" size={adornmentSize} loading={loading && !loaderAtEnd}>
           {icon}
         </ButtonAdornment>
         <ButtonLabel variant={resolvedVariant}>{children}</ButtonLabel>
-        <ButtonAdornment slot="button-icon-end" size={adornmentSize}>
+        <ButtonAdornment slot="button-icon-end" size={adornmentSize} loading={loaderAtEnd}>
           {iconEnd}
         </ButtonAdornment>
       </>
     );
+
+    const recipe = buttonVariants({ variant, size: resolvedSize });
 
     const sharedProps = {
       disabled,
@@ -300,8 +452,9 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       // Icon-mode is a square: a group that overrides the rung has to move the width with
       // the height or the circle turns into a pill (see buttons-group.css).
       'data-shape': iconMode ? 'icon' : undefined,
-      className: cn(buttonVariants({ variant, size: resolvedSize }), className),
+      className: cn(loading ? buttonLoadingClassName(recipe) : recipe, className),
       ...props,
+      ...(loading ? BUTTON_LOADING_PROPS : undefined),
     };
 
     // The deprecated `as` API keeps its original element path rather than going through
@@ -320,22 +473,34 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       ...(prefetch === undefined ? null : { prefetch }),
     };
 
-    const renderedLink = React.isValidElement(render) && isLinkElement(render) ? render : undefined;
+    const isLinkVariant = resolvedVariant === 'link';
+    const linkHref = href ?? to;
+    const linkRenderProps: LinkRenderProps = {
+      ...(linkHref === undefined ? null : { href: linkHref }),
+      ...(target === undefined ? null : { target }),
+    };
+    const renderedLink =
+      React.isValidElement(render) && isLinkElement(render)
+        ? render
+        : isLinkVariant
+          ? React.createElement('a', linkRenderProps)
+          : undefined;
     const renderedLinkProps = renderedLink?.props;
     const disabledHref = renderedLink?.type !== 'a' && renderedLinkProps?.href !== undefined ? '' : undefined;
     const disabledTo = renderedLinkProps?.to !== undefined ? '' : undefined;
-    const disabledLinkProps = disabled
-      ? {
-          href: disabledHref,
-          to: disabledTo,
-          'aria-disabled': true,
-          onClick: preventLinkActivation,
-          onAuxClick: preventLinkActivation,
-          onKeyDown: (event: React.KeyboardEvent) => {
-            if (event.key === 'Enter' || event.key === ' ') preventLinkActivation(event);
-          },
-        }
-      : undefined;
+    const disabledLinkProps =
+      disabled && !loading
+        ? {
+            ...(isLinkVariant ? null : { href: disabledHref }),
+            ...(isLinkVariant ? null : { to: disabledTo }),
+            'aria-disabled': true,
+            onClick: preventLinkActivation,
+            onAuxClick: preventLinkActivation,
+            onKeyDown: (event: React.KeyboardEvent) => {
+              if (event.key === 'Enter' || event.key === ' ') preventLinkActivation(event);
+            },
+          }
+        : undefined;
 
     const button = LegacyComponent ? (
       <LegacyComponent ref={ref} {...legacyLinkProps} {...sharedProps}>
@@ -346,6 +511,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
         ref,
         ...sharedProps,
         disabled: undefined,
+        type: undefined,
         ...disabledLinkProps,
         className: cn(sharedProps.className, renderedLink.props.className),
         children: content,

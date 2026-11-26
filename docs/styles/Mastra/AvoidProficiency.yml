@@ -1,6 +1,6 @@
 extends: existence
 message: "Avoid language that assumes proficiency level ('%s'). It can alienate learners."
-level: warning
+level: error
 ignorecase: true
 tokens:
   - '\beasy\b'
@@ -8,11 +8,9 @@ tokens:
   - '\bsimple\b'
   - '\bsimply\b'
   - '\bjust\b'
-  - '\bhard\b'
   - '\bstraightforward\b'
   - '\bobviously\b'
   - '\btrivial\b'
-  - obvious
   - everyone knows
   - common sense
   - common knowledge

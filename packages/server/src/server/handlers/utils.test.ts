@@ -1,7 +1,22 @@
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect } from 'vitest';
-import { sanitizeBody, stripClientCredentialHeaders } from './utils';
+import { MASTRA_SCOPES_KEY } from '../constants';
+import { applyEffectiveThreadId, mergeBodyRequestContext, sanitizeBody, stripClientCredentialHeaders } from './utils';
 
 describe('utils', () => {
+  describe('mergeBodyRequestContext', () => {
+    it('never lets a body set mastra__scopes', () => {
+      const empty = new RequestContext();
+      mergeBodyRequestContext(empty, { [MASTRA_SCOPES_KEY]: ['org:victim'], tenant: 'acme' });
+      expect(empty.has(MASTRA_SCOPES_KEY)).toBe(false);
+      expect(empty.get('tenant')).toBe('acme');
+
+      const middleware = new RequestContext([[MASTRA_SCOPES_KEY, ['org:acme']]]);
+      mergeBodyRequestContext(middleware, { [MASTRA_SCOPES_KEY]: ['org:victim'] });
+      expect(middleware.get(MASTRA_SCOPES_KEY)).toEqual(['org:acme']);
+    });
+  });
+
   describe('stripClientCredentialHeaders', () => {
     it('removes credential headers from modelSettings.headers and keeps the rest', () => {
       const body: Record<string, unknown> = {
@@ -70,6 +85,40 @@ describe('utils', () => {
       sanitizeBody(body, ['messages', 'system']);
 
       expect(body).toEqual({});
+    });
+  });
+
+  describe('applyEffectiveThreadId', () => {
+    it('returns the effective id for a string thread', () => {
+      expect(applyEffectiveThreadId('client-thread', 'ctx-thread')).toBe('ctx-thread');
+    });
+
+    it('keeps object fields and applies the effective id', () => {
+      expect(applyEffectiveThreadId({ id: 't1', title: 'T', metadata: { tenant_id: 42 } }, 't1')).toEqual({
+        id: 't1',
+        title: 'T',
+        metadata: { tenant_id: 42 },
+      });
+    });
+
+    it('lets a context thread id override the object id', () => {
+      expect(applyEffectiveThreadId({ id: 't1', metadata: { a: 1 } }, 'ctx-thread')).toEqual({
+        id: 'ctx-thread',
+        metadata: { a: 1 },
+      });
+    });
+
+    it('drops a client-supplied resourceId from an object thread', () => {
+      expect(applyEffectiveThreadId({ id: 't1', resourceId: 'other' } as { id: string }, 't1')).toEqual({ id: 't1' });
+    });
+
+    it('returns the thread unchanged when there is no effective id', () => {
+      expect(applyEffectiveThreadId(undefined, undefined)).toBeUndefined();
+      expect(applyEffectiveThreadId('t1', undefined)).toBe('t1');
+    });
+
+    it('returns the effective id when no thread was provided', () => {
+      expect(applyEffectiveThreadId(undefined, 'ctx-thread')).toBe('ctx-thread');
     });
   });
 });

@@ -6,7 +6,7 @@ import { hasResolvedOrg, seedSessionOrg } from '../session/org-seed.js';
 import type { IntegrationSubscription } from '../storage/domains/integrations/base.js';
 
 /** The Factory session row fields a woken session has to run as. */
-export type FactorySessionOwner = { userId: string; orgId: string };
+export type FactorySessionOwner = { userId: string; orgId: string; projectRepositoryId?: string | null };
 
 export interface SubscriptionSessionLookup {
   sessions: { getBySessionId(sessionId: string): Promise<FactorySessionOwner | null> };
@@ -75,9 +75,10 @@ export async function prepareSessionRunContext(
   sessionId: string,
   sourceControl: SubscriptionSessionLookup,
   options?: { expectedOrgId?: string },
-): Promise<'prepared' | 'unavailable' | 'organization-mismatch'> {
+): Promise<'prepared' | 'session-not-found' | 'organization-unresolved' | 'organization-mismatch'> {
   const sessionRow = await sourceControl.sessions.getBySessionId(sessionId);
-  if (!sessionRow || !hasResolvedOrg(sessionRow.orgId)) return 'unavailable';
+  if (!sessionRow) return 'session-not-found';
+  if (!hasResolvedOrg(sessionRow.orgId)) return 'organization-unresolved';
   if (options?.expectedOrgId !== undefined && sessionRow.orgId !== options.expectedOrgId) {
     return 'organization-mismatch';
   }
@@ -86,10 +87,46 @@ export async function prepareSessionRunContext(
   return 'prepared';
 }
 
+/**
+ * Create the controller session for a Factory session that isn't live, as its
+ * row's owner in the row's organization. Used when an event or message has to
+ * reach a session nobody has open: there is no signed-in user, so the session
+ * runs as the person it belongs to.
+ */
+export async function createSessionAsRowOwner(
+  controller: Pick<MountedMastraCode['controller'], 'createSession'>,
+  args: {
+    sessionId: string;
+    ownerResourceId: string;
+    row: FactorySessionOwner;
+    tags: Record<string, string>;
+    /** Bind this exact thread at creation instead of resuming or creating another. */
+    threadId?: string;
+  },
+) {
+  const requestContext = new RequestContext();
+  requestContext.set('user', { workosId: args.row.userId, organizationId: args.row.orgId });
+  const session = await controller.createSession({
+    id: args.sessionId,
+    ownerId: args.row.userId,
+    resourceId: args.ownerResourceId,
+    tags: args.tags,
+    ...(args.threadId ? { threadId: args.threadId } : {}),
+    requestContext,
+  });
+  await seedSessionOrg(session, args.row.orgId);
+  return session;
+}
+
 export async function resolveSubscriptionSession(
   controller: MountedMastraCode['controller'],
   subscription: SubscriptionSessionRow,
-  options: { label: string; sourceControl?: SubscriptionSessionLookup },
+  options: {
+    label: string;
+    sourceControl?: SubscriptionSessionLookup;
+    /** The delivery's run context ({@link subscriptionRunContext}), read only when the session must switch threads. */
+    runContext: () => Promise<RequestContext | undefined>;
+  },
 ) {
   const { label } = options;
   const { sessionId, resourceId, threadId } = subscription;
@@ -105,19 +142,14 @@ export async function resolveSubscriptionSession(
   // fabricate a session for a thread that lives somewhere else.
   //
   // Second: which resource owns it? The subscription records the Factory project
-  // as its `resourceId`, but an unscoped session is registered under its own id,
-  // so the stored value routinely names a resource that does not own the thread.
+  // as its `resourceId`, but the session may run under a different resource
+  // (its own id, for sessions created before Factory resources were shared).
   // The thread row is the authoritative answer; the stored id is only a fallback.
   const thread = await controller.queryThreadById({ threadId });
   if (!thread) return undefined;
   const ownerResourceId = thread.resourceId || resourceId;
-  const scope = subscription.sessionScope || undefined;
-  let session = await controller.getSessionByResource(ownerResourceId, scope);
+  let session = await controller.getSession(sessionId);
   if (!session) {
-    const tags = {
-      factoryProjectId: resourceId,
-      projectRepositoryId: subscription.data.projectRepositoryId,
-    };
     // Creating the session resolves its workspace, which authorizes the caller
     // against the Factory session row — no signed-in user, so run as its owner.
     // The session is created under the resource that owns the thread, so the
@@ -127,17 +159,19 @@ export async function resolveSubscriptionSession(
     if (!sessionRow) {
       throw new Error(`${label} subscription ${subscription.id} has no Factory session ${sessionId} to run as.`);
     }
-    const requestContext = new RequestContext();
-    requestContext.set('user', { workosId: sessionRow.userId, organizationId: sessionRow.orgId });
-    session = await controller.createSession({
-      id: sessionId,
-      ownerId: sessionRow.userId,
-      resourceId: ownerResourceId,
-      scope,
-      tags,
-      requestContext,
+    session = await createSessionAsRowOwner(controller, {
+      sessionId,
+      ownerResourceId,
+      row: sessionRow,
+      // The repository the session is filed under, not the subscribed pull
+      // request's: a session can follow a pull request in another repository of
+      // its environment, and source-control tools refuse a state that disagrees
+      // with the row.
+      tags: {
+        factoryProjectId: resourceId,
+        ...(sessionRow.projectRepositoryId ? { projectRepositoryId: sessionRow.projectRepositoryId } : {}),
+      },
     });
-    await seedSessionOrg(session, sessionRow.orgId);
   } else if (!hasResolvedOrg(session.state?.get()?.factoryOrgId)) {
     // A session created before the org seed existed carries the project tag and
     // no org, so capture would refuse for the rest of its life even though the
@@ -162,7 +196,13 @@ export async function resolveSubscriptionSession(
     await seedSessionOrg(session, session.state.get()?.factoryOrgId);
   }
   if (session.thread.getId() !== threadId) {
-    await session.thread.switch({ threadId, emitEvent: false });
+    // Switching loads the thread's memory, which resolves credentials for the
+    // caller; a webhook has no signed-in user, so switch as the run's tenant.
+    const requestContext = await options.runContext();
+    if (!requestContext) {
+      throw new Error(`${label} subscription ${subscription.id} has no resolvable tenant identity; not delivered.`);
+    }
+    await session.thread.switch({ threadId, emitEvent: false, requestContext });
   }
   if (session.thread.getId() !== threadId) {
     throw new Error(`Session ${sessionId} did not bind thread ${threadId}.`);

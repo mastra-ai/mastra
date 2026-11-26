@@ -1,6 +1,11 @@
 import type { ComponentType, ReactNode, SVGProps } from 'react';
 import { AgentCrumb, AgentSwitcher } from '@/domains/agents/agent-crumb';
-import { DatasetCrumb, DatasetSwitcher } from '@/domains/datasets/dataset-crumb';
+import {
+  DatasetCrumb,
+  DatasetSwitcher,
+  DatasetVersionCrumb,
+  DatasetVersionSwitcher,
+} from '@/domains/datasets/dataset-crumb';
 import { McpServerCrumb, McpServerSwitcher } from '@/domains/mcps/mcp-crumbs';
 import { ProcessorCrumb, ProcessorSwitcher } from '@/domains/processors/processor-crumb';
 import { ScorerCrumb, ScorerSwitcher } from '@/domains/scores/scorer-crumb';
@@ -78,4 +83,9 @@ export const datasetCrumb = {
   id: 'dataset',
   Component: DatasetCrumb,
   Switcher: DatasetSwitcher,
+} satisfies CrumbDef;
+export const datasetVersionCrumb = {
+  id: 'dataset-version',
+  Component: DatasetVersionCrumb,
+  Switcher: DatasetVersionSwitcher,
 } satisfies CrumbDef;

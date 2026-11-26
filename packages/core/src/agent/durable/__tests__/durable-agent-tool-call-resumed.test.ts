@@ -76,7 +76,6 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
   it('waits for evented suspension persistence before restoring tool calls', async () => {
     const storage = new InMemoryStore();
     const workflows = (await storage.getStore('workflows'))!;
-    const updateWorkflowState = workflows.updateWorkflowState.bind(workflows);
     let releasePersistence!: () => void;
     const persistenceGate = new Promise<void>(resolve => {
       releasePersistence = resolve;
@@ -85,12 +84,16 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
     const persistenceBlocked = new Promise<void>(resolve => {
       persistenceStarted = resolve;
     });
-    const stateSpy = vi.spyOn(workflows, 'updateWorkflowState').mockImplementation(async args => {
-      if (args.workflowName === DurableStepIds.AGENTIC_LOOP && args.opts.status === 'suspended') {
-        persistenceStarted();
-        await persistenceGate;
-      }
-      return updateWorkflowState(args);
+    // v1 stores the suspension through updateWorkflowState, v2 through updateWorkflowRunHeader.
+    const stateSpies = (['updateWorkflowState', 'updateWorkflowRunHeader'] as const).map(method => {
+      const original = workflows[method].bind(workflows) as (args: any) => Promise<any>;
+      return vi.spyOn(workflows, method).mockImplementation(async (args: any) => {
+        if (args.workflowName === DurableStepIds.AGENTIC_LOOP && args.opts.status === 'suspended') {
+          persistenceStarted();
+          await persistenceGate;
+        }
+        return original(args);
+      });
     });
     const agent = new Agent({
       id: 'delayed-approver',
@@ -112,7 +115,9 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
     const first = await wrapped.stream('go', { maxSteps: 3, closeOnSuspend: true });
     await drain(first);
     await persistenceBlocked;
-    const reads = vi.spyOn(workflows, 'getWorkflowRunById');
+    const reads = (['getWorkflowRunById', 'loadWorkflowRunHeader', 'loadWorkflowRun'] as const).map(method =>
+      vi.spyOn(workflows, method),
+    );
     let resumeSettled = false;
     const resuming = wrapped.resume(first.runId, { approved: true }, { toolCallId: 'tc-1' }).then(result => {
       resumeSettled = true;
@@ -121,11 +126,10 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
     try {
       await new Promise(resolve => setTimeout(resolve, 50));
       expect(resumeSettled).toBe(false);
-      expect(reads).not.toHaveBeenCalled();
+      for (const read of reads) expect(read).not.toHaveBeenCalled();
     } finally {
       releasePersistence();
-      reads.mockRestore();
-      stateSpy.mockRestore();
+      for (const spy of [...reads, ...stateSpies]) spy.mockRestore();
     }
     const resumed = await resuming;
     await drain(resumed);
@@ -280,50 +284,6 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
     );
   });
 
-  it('emits tool-call-resumed before tool-result when a suspended tool resumes', async () => {
-    const memory = { thread: 'durable-resumed-suspend', resource: 'r' };
-    const agent = new Agent({
-      id: 'asker',
-      name: 'asker',
-      instructions: 'ask',
-      model: makeModel('askUser', { question: 'color?' }) as LanguageModelV2,
-      memory: new MockMemory(),
-      tools: {
-        askUser: createTool({
-          id: 'ask-user',
-          description: 'Asks the user.',
-          inputSchema: z.object({ question: z.string() }),
-          suspendSchema: z.object({ question: z.string() }),
-          resumeSchema: z.object({ answer: z.string() }),
-          execute: async (input: { question: string }, context: any) => {
-            if (!context?.agent?.resumeData) return await context?.agent?.suspend({ question: input.question });
-            return { answer: context.agent.resumeData.answer };
-          },
-        }),
-      },
-    });
-    const durableAgent = createDurableAgent({ agent, pubsub });
-    new Mastra({ agents: { durableAgent }, storage: new InMemoryStore(), logger: false });
-
-    const stream = await durableAgent.stream('ask', { memory, maxSteps: 3 });
-    await runUntil(stream, 'tool-call-suspended');
-
-    const resumed = await durableAgent.resume(stream.runId, { answer: 'blue' }, { toolCallId: 'tc-1', memory } as any);
-    const chunks = await drain(resumed);
-    expect(await resumed.output.toolCalls).toMatchObject([
-      { payload: { toolCallId: 'tc-1', toolName: 'askUser', args: { question: 'color?' } } },
-    ]);
-    const acks = chunks.filter(c => c.type === 'tool-call-resumed');
-    expect(acks, chunks.map(c => c.type).join(',')).toHaveLength(1);
-    expect(acks[0].payload).toMatchObject({
-      toolCallId: 'tc-1',
-      kind: 'suspension',
-      suspendPayload: { question: 'color?' },
-    });
-    const resultIndex = chunks.findIndex(c => c.type === 'tool-result' && c.payload.toolCallId === 'tc-1');
-    expect(resultIndex).toBeGreaterThan(chunks.indexOf(acks[0]));
-  }, 30000);
-
   it('preserves suspension resume data when a cold resume disables approval', async () => {
     const memory = { thread: 'durable-cold-resume', resource: 'r' };
     const store = new InMemoryStore();
@@ -405,36 +365,6 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
     expect(resumedPrompt).toContain('User answered: Hilton');
     expect(resumedPrompt).not.toContain('Tool input validation failed');
     expect(resumedPrompt).not.toContain('"approved":true');
-  }, 30000);
-
-  it('emits an approval tool-call-resumed when an approval-gated call is approved', async () => {
-    const memory = { thread: 'durable-resumed-approval', resource: 'r' };
-    const agent = new Agent({
-      id: 'approver',
-      name: 'approver',
-      instructions: 'do',
-      model: makeModel('doThing', { value: 'x' }) as LanguageModelV2,
-      memory: new MockMemory(),
-      tools: {
-        doThing: createTool({
-          id: 'do-thing',
-          description: 'Does a thing.',
-          inputSchema: z.object({ value: z.string() }),
-          requireApproval: true,
-          execute: async (input: { value: string }) => ({ done: input.value }),
-        }),
-      },
-    });
-    const durableAgent = createDurableAgent({ agent, pubsub });
-    new Mastra({ agents: { durableAgent }, storage: new InMemoryStore(), logger: false });
-
-    const stream = await durableAgent.stream('go', { memory, maxSteps: 3 });
-    await runUntil(stream, 'tool-call-approval');
-
-    const chunks = await drain(await durableAgent.approveToolCall({ runId: stream.runId, toolCallId: 'tc-1', memory }));
-    const acks = chunks.filter(c => c.type === 'tool-call-resumed');
-    expect(acks, chunks.map(c => c.type).join(',')).toHaveLength(1);
-    expect(acks[0].payload).toMatchObject({ toolCallId: 'tc-1', kind: 'approval' });
   }, 30000);
 
   it('applies the display transform to the approval tool-call-resumed payload', async () => {

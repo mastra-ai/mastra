@@ -1,9 +1,11 @@
 import { ContextMenu as ContextMenuPrimitive } from '@base-ui/react/context-menu';
 import type { ContextMenuPopupProps, ContextMenuPositionerProps } from '@base-ui/react/context-menu';
-import { CheckIcon, ChevronDown } from 'lucide-react';
 import * as React from 'react';
+import { allowNativeMenuAfterRightPressOutside } from './native-context-menu';
+import { KeyLabel } from '@/ds/components/Kbd/key-label';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import {
   menuItemCheckClass,
   menuItemClass,
@@ -11,11 +13,13 @@ import {
   menuItemInsetClass,
   menuItemTrailingIconClass,
   menuLabelClass,
+  menuLabelInsetClass,
   menuPopupClass,
   menuPositionerClass,
   menuSeparatorClass,
   menuShortcutClass,
 } from '@/ds/primitives/menu-item';
+import { menuScrollPopupClass, MenuScrollArea } from '@/ds/primitives/menu-scroll-area';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
 
@@ -26,6 +30,10 @@ const ContextMenuSub = ContextMenuPrimitive.SubmenuRoot;
 const ContextMenuRadioGroup = ContextMenuPrimitive.RadioGroup;
 
 const ContextMenuTrigger = ContextMenuPrimitive.Trigger;
+
+const ContextMenuActionsContext = React.createContext<React.RefObject<ContextMenuPrimitive.Root.Actions | null> | null>(
+  null,
+);
 
 type ContextMenuContentPositionerProps = Omit<ContextMenuPositionerProps, keyof ContextMenuPopupProps>;
 
@@ -52,6 +60,7 @@ const ContextMenuContent = React.forwardRef<HTMLDivElement, ContextMenuContentPr
       disableAnchorTracking,
       collisionAvoidance,
       children,
+      onContextMenu,
       ...props
     },
     ref,
@@ -74,18 +83,23 @@ const ContextMenuContent = React.forwardRef<HTMLDivElement, ContextMenuContentPr
     // Why: same stacking as DropdownMenu (z-50). Inside a modal Dialog/Drawer the popup must
     // portal into the trap container to stay clickable and above it; explicit `container` wins.
     const resolvedContainer = usePortalContainer(container);
-    const menu = useFluidMenu<HTMLDivElement>();
+    const actions = React.useContext(ContextMenuActionsContext);
 
     return (
       <ContextMenuPrimitive.Portal container={resolvedContainer}>
         <ContextMenuPrimitive.Positioner className={menuPositionerClass} {...positionerProps}>
           <ContextMenuPrimitive.Popup
+            ref={ref}
             data-slot="context-menu-content"
-            className={cn(menuPopupClass, menu.containerClassName, className)}
+            className={cn(menuPopupClass, menuScrollPopupClass, className)}
             {...props}
-            {...menu.getContainerProps(props, ref)}
+            onContextMenu={event => {
+              onContextMenu?.(event);
+              // Base UI leaves the native menu to popup items; ours must not linger behind it.
+              actions?.current?.close();
+            }}
           >
-            <FluidMenuItems menu={menu}>{children}</FluidMenuItems>
+            <MenuScrollArea>{children}</MenuScrollArea>
           </ContextMenuPrimitive.Popup>
         </ContextMenuPrimitive.Positioner>
       </ContextMenuPrimitive.Portal>
@@ -104,7 +118,7 @@ type ContextMenuItemProps = ContextMenuPrimitive.Item.Props & {
 const ContextMenuItem = React.forwardRef<HTMLDivElement, ContextMenuItemProps>(
   ({ className, inset, variant = 'default', onSelect, onClick, ...props }, ref) => (
     <ContextMenuPrimitive.Item
-      ref={useFluidMenuItemRef(ref)}
+      ref={ref}
       data-inset={inset ? '' : undefined}
       data-variant={variant}
       onClick={event => {
@@ -124,15 +138,10 @@ ContextMenuItem.displayName = 'ContextMenuItem';
 
 const ContextMenuCheckboxItem = React.forwardRef<HTMLDivElement, ContextMenuPrimitive.CheckboxItem.Props>(
   ({ className, children, checked, ...props }, ref) => (
-    <ContextMenuPrimitive.CheckboxItem
-      ref={useFluidMenuItemRef(ref)}
-      checked={checked}
-      className={cn(menuItemClass, className)}
-      {...props}
-    >
+    <ContextMenuPrimitive.CheckboxItem ref={ref} checked={checked} className={cn(menuItemClass, className)} {...props}>
       {children}
       <ContextMenuPrimitive.CheckboxItemIndicator className={menuItemCheckClass}>
-        <CheckIcon />
+        <IconCheckmark2Medium />
       </ContextMenuPrimitive.CheckboxItemIndicator>
     </ContextMenuPrimitive.CheckboxItem>
   ),
@@ -141,10 +150,10 @@ ContextMenuCheckboxItem.displayName = 'ContextMenuCheckboxItem';
 
 const ContextMenuRadioItem = React.forwardRef<HTMLDivElement, ContextMenuPrimitive.RadioItem.Props>(
   ({ className, children, ...props }, ref) => (
-    <ContextMenuPrimitive.RadioItem ref={useFluidMenuItemRef(ref)} className={cn(menuItemClass, className)} {...props}>
+    <ContextMenuPrimitive.RadioItem ref={ref} className={cn(menuItemClass, className)} {...props}>
       {children}
       <ContextMenuPrimitive.RadioItemIndicator className={menuItemCheckClass}>
-        <CheckIcon />
+        <IconCheckmark2Medium />
       </ContextMenuPrimitive.RadioItemIndicator>
     </ContextMenuPrimitive.RadioItem>
   ),
@@ -155,7 +164,7 @@ type ContextMenuLabelProps = React.HTMLAttributes<HTMLDivElement> & { inset?: bo
 
 const ContextMenuLabel = React.forwardRef<HTMLDivElement, ContextMenuLabelProps>(
   ({ className, inset, ...props }, ref) => (
-    <div ref={ref} className={cn(menuLabelClass, inset && menuItemInsetClass, className)} {...props} />
+    <div ref={ref} className={cn(menuLabelClass, inset && menuLabelInsetClass, className)} {...props} />
   ),
 );
 ContextMenuLabel.displayName = 'ContextMenuLabel';
@@ -167,8 +176,12 @@ const ContextMenuSeparator = React.forwardRef<HTMLDivElement, ContextMenuPrimiti
 );
 ContextMenuSeparator.displayName = 'ContextMenuSeparator';
 
-const ContextMenuShortcut = ({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {
-  return <span className={cn(menuShortcutClass, className)} {...props} />;
+const ContextMenuShortcut = ({ className, children, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {
+  return (
+    <span className={cn(menuShortcutClass, className)} {...props}>
+      <KeyLabel>{children}</KeyLabel>
+    </span>
+  );
 };
 ContextMenuShortcut.displayName = 'ContextMenuShortcut';
 
@@ -177,13 +190,13 @@ type ContextMenuSubTriggerProps = ContextMenuPrimitive.SubmenuTrigger.Props & { 
 const ContextMenuSubTrigger = React.forwardRef<HTMLDivElement, ContextMenuSubTriggerProps>(
   ({ className, inset, children, ...props }, ref) => (
     <ContextMenuPrimitive.SubmenuTrigger
-      ref={useFluidMenuItemRef(ref)}
-      className={cn(menuItemClass, 'data-[popup-open]:text-foreground', inset && menuItemInsetClass, className)}
+      ref={ref}
+      className={cn(menuItemClass, inset && menuItemInsetClass, className)}
       {...props}
     >
       {children}
-      <span className={cn(menuItemTrailingIconClass, 'opacity-50')}>
-        <ChevronDown className="-rotate-90" />
+      <span className={menuItemTrailingIconClass}>
+        <IconChevronDownMedium className="-rotate-90" />
       </span>
     </ContextMenuPrimitive.SubmenuTrigger>
   ),
@@ -229,18 +242,17 @@ const ContextMenuSubContent = React.forwardRef<HTMLDivElement, ContextMenuSubCon
     };
 
     const resolvedContainer = usePortalContainer();
-    const menu = useFluidMenu<HTMLDivElement>();
 
     return (
       <ContextMenuPrimitive.Portal container={resolvedContainer}>
         <ContextMenuPrimitive.Positioner className={menuPositionerClass} {...positionerProps}>
           <ContextMenuPrimitive.Popup
+            ref={ref}
             data-slot="context-menu-sub-content"
-            className={cn(menuPopupClass, menu.containerClassName, className)}
+            className={cn(menuPopupClass, menuScrollPopupClass, className)}
             {...props}
-            {...menu.getContainerProps(props, ref)}
           >
-            <FluidMenuItems menu={menu}>{children}</FluidMenuItems>
+            <MenuScrollArea>{children}</MenuScrollArea>
           </ContextMenuPrimitive.Popup>
         </ContextMenuPrimitive.Positioner>
       </ContextMenuPrimitive.Portal>
@@ -260,10 +272,22 @@ function ContextMenu({
   onOpenChange?: ContextMenuPrimitive.Root.Props['onOpenChange'];
   children: React.ReactNode;
 }) {
+  const actions = React.useRef<ContextMenuPrimitive.Root.Actions | null>(null);
+
   return (
-    <ContextMenuRoot open={open} defaultOpen={defaultOpen} onOpenChange={onOpenChange}>
-      {children}
-    </ContextMenuRoot>
+    <ContextMenuActionsContext.Provider value={actions}>
+      <ContextMenuRoot
+        open={open}
+        defaultOpen={defaultOpen}
+        actionsRef={actions}
+        onOpenChange={(nextOpen, details) => {
+          onOpenChange?.(nextOpen, details);
+          allowNativeMenuAfterRightPressOutside(details);
+        }}
+      >
+        {children}
+      </ContextMenuRoot>
+    </ContextMenuActionsContext.Provider>
   );
 }
 

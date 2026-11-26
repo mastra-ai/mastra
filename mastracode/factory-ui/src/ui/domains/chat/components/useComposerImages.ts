@@ -1,14 +1,8 @@
-import { useRef, useState } from 'react';
-import type { ChangeEvent, ClipboardEvent, DragEvent } from 'react';
+import { toast } from '@mastra/playground-ui/components/Toaster';
+import type { ClipboardEvent, DragEvent } from 'react';
 
-import { useChatTranscript } from '../context/useChatTranscript';
-
-export interface PendingImage {
-  id: string;
-  data: string;
-  mediaType: string;
-  filename?: string;
-}
+import type { PendingImage } from '../context/ComposerImagesContext';
+import { useComposerImagesState } from '../context/useComposerImagesState';
 
 let pendingImageSequence = 0;
 
@@ -28,16 +22,10 @@ function readFileAsBase64(file: File): Promise<string> {
   });
 }
 
-export function useComposerImages({ onUserDraft, disabled }: { onUserDraft: boolean; disabled: boolean }) {
-  const { pushNotice } = useChatTranscript();
-  const [images, setImages] = useState<PendingImage[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+export function useComposerImages({ disabled }: { disabled: boolean }) {
+  const { images, setImages } = useComposerImagesState();
 
   const addImageFiles = async (fileList: Iterable<File>) => {
-    if (onUserDraft) {
-      pushNotice('Images can be attached once the session is ready.');
-      return;
-    }
     const imageFiles = Array.from(fileList).filter(
       file => file.type.startsWith('image/') && file.size <= MAX_IMAGE_BYTES,
     );
@@ -51,7 +39,7 @@ export function useComposerImages({ onUserDraft, disabled }: { onUserDraft: bool
     });
     if (accepted.length === 0) return;
 
-    const additions = await Promise.all(
+    const read = await Promise.allSettled(
       accepted.map(
         async (file): Promise<PendingImage> => ({
           id: `pending-image-${pendingImageSequence++}`,
@@ -61,7 +49,9 @@ export function useComposerImages({ onUserDraft, disabled }: { onUserDraft: bool
         }),
       ),
     );
-    setImages(current => [...current, ...additions]);
+    const additions = read.flatMap(result => (result.status === 'fulfilled' ? [result.value] : []));
+    if (additions.length < read.length) toast.error("Couldn't read an image. Try attaching it again.");
+    if (additions.length > 0) setImages(current => [...current, ...additions]);
   };
 
   const removeImage = (id: string) => {
@@ -84,10 +74,9 @@ export function useComposerImages({ onUserDraft, disabled }: { onUserDraft: bool
     void addImageFiles(files);
   };
 
-  const onFileInputChange = (event: ChangeEvent<HTMLInputElement>) => {
-    if (!disabled) void addImageFiles(event.target.files ?? []);
-    event.target.value = '';
+  const addFiles = (files: File[]) => {
+    if (!disabled) void addImageFiles(files);
   };
 
-  return { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange };
+  return { images, setImages, removeImage, onPaste, onDrop, addFiles };
 }

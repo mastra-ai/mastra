@@ -107,7 +107,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
    * const store = await LanceVectorStore.create('s3://bucket/db', { storageOptions: { timeout: '60s' } });
    * ```
    */
-  public static async create(uri: string, options?: ConnectionOptions & { id: string }): Promise<LanceVectorStore> {
+  public static async create(uri: string, options?: ConnectionOptions & { id?: string }): Promise<LanceVectorStore> {
     const instance = new LanceVectorStore(options?.id || crypto.randomUUID());
     try {
       instance.lanceClient = await connect(uri, options);
@@ -482,12 +482,22 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           const flattenedMetadata = this.flattenObject(metadataItem, 'metadata');
           // Add all flattened metadata properties to the row data object
           Object.entries(flattenedMetadata).forEach(([key, value]) => {
-            rowData[key] = value;
+            // Skip null values. A column that is null in every row of the batch cannot be
+            // type-inferred by Arrow/Lance, which fails the whole upsert. The null is still
+            // preserved losslessly in _metadata_json below.
+            if (value === null) {
+              return;
+            }
+            // Lance rejects '.' in top-level field names, so replace dots with underscores.
+            // This matches filterTranslator, which does the same when building metadata filters.
+            rowData[key.replace(/\./g, '_')] = value;
           });
           // Store lossless JSON representation for round-trip fidelity
           rowData['_metadata_json'] = JSON.stringify(metadataItem);
         } else {
-          rowData['_metadata_json'] = '';
+          // Store '{}' (not '') so empty metadata round-trips as {} instead of falling back to
+          // flat extraction, which would surface phantom null columns from sibling rows.
+          rowData['_metadata_json'] = '{}';
         }
 
         return rowData;
@@ -759,9 +769,8 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         // Table is now empty; index will be created when data is upserted and row count >= 256
         this.logger.debug(`Table ${resolvedTableName} created. Index creation deferred until data is available.`);
         return;
-      } else {
-        table = await this.lanceClient.openTable(resolvedTableName);
       }
+      table = await this.lanceClient.openTable(resolvedTableName);
 
       const metricType = this.mastraMetricToLance(metric);
 
@@ -1314,16 +1323,15 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
                     // If we're about to update this vector anyway, use the new value
                     if (update.vector) {
                       rowData[key] = update.vector;
-                    } else {
+                    } else if (Array.isArray(value)) {
                       // Ensure vector is a plain array
-                      if (Array.isArray(value)) {
-                        rowData[key] = [...value];
-                      } else if (typeof value === 'object' && value !== null) {
-                        // Handle vector objects by converting to array if needed
-                        rowData[key] = Array.from(value as any[]);
-                      } else {
-                        rowData[key] = value;
-                      }
+
+                      rowData[key] = [...value];
+                    } else if (typeof value === 'object' && value !== null) {
+                      // Handle vector objects by converting to array if needed
+                      rowData[key] = Array.from(value as any[]);
+                    } else {
+                      rowData[key] = value;
                     }
                   } else {
                     rowData[key] = value;

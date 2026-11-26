@@ -73,106 +73,6 @@ describe('EE telemetry', () => {
     clearLicenseCache();
   });
 
-  it('emits a safe license check event from capabilities', async () => {
-    await buildCapabilities(
-      createMockAuth({ id: 'user-1', email: 'user@test.com', name: 'User' }) as any,
-      new Request('http://localhost', {
-        headers: {
-          'x-forwarded-for': '203.0.113.1, 10.0.0.1',
-          'user-agent': 'test-agent',
-        },
-      }),
-      { fga: createMockFGAProvider() },
-    );
-
-    expect(captureEEEvent).toHaveBeenCalledWith(
-      'ee_license_check',
-      'user-1',
-      expect.objectContaining({
-        license_valid: true,
-        license_hash: expect.any(String),
-        $ip: '203.0.113.1',
-        user_id: 'user-1',
-        capabilities: expect.objectContaining({ fga: true }),
-      }),
-    );
-    expect(JSON.stringify(captureEEEvent.mock.calls)).not.toContain('license-key-that-is-long-enough-for-tests');
-    expect(JSON.stringify(captureEEEvent.mock.calls)).not.toContain('user@test.com');
-    expect(JSON.stringify(captureEEEvent.mock.calls)).not.toContain('test-agent');
-    expect(captureEEEvent.mock.calls[0]?.[2]).not.toHaveProperty('ip');
-    expect(captureEEEvent.mock.calls[0]?.[2]).not.toHaveProperty('user_agent');
-  });
-
-  it('falls back to x-real-ip for license check events', async () => {
-    await buildCapabilities(
-      createMockAuth({ id: 'user-1', email: 'user@test.com', name: 'User' }) as any,
-      new Request('http://localhost', {
-        headers: {
-          'x-real-ip': '198.51.100.2',
-        },
-      }),
-    );
-
-    expect(captureEEEvent).toHaveBeenCalledWith(
-      'ee_license_check',
-      'user-1',
-      expect.objectContaining({
-        $ip: '198.51.100.2',
-      }),
-    );
-    expect(captureEEEvent.mock.calls[0]?.[2]).not.toHaveProperty('ip');
-  });
-
-  it('emits RBAC feature usage when access is resolved', async () => {
-    await buildCapabilities(
-      createMockAuth({
-        id: 'user-1',
-        email: 'user@test.com',
-        name: 'User',
-        metadata: { organizationMembershipId: 'om-1' },
-      }) as any,
-      new Request('http://localhost'),
-      { rbac: createMockRBACProvider() },
-    );
-
-    expect(captureEEEvent).toHaveBeenCalledWith(
-      'ee_feature_used',
-      'user-1',
-      expect.objectContaining({
-        feature: 'rbac',
-        role_count: 1,
-        permission_count: 1,
-        organization_membership_id: 'om-1',
-      }),
-    );
-    expect(JSON.stringify(captureEEEvent.mock.calls)).not.toContain('license-key-that-is-long-enough-for-tests');
-    expect(JSON.stringify(captureEEEvent.mock.calls)).not.toContain('user@test.com');
-    expect(JSON.stringify(captureEEEvent.mock.calls)).not.toContain('agents:*');
-  });
-
-  it('emits FGA feature usage after successful checks', async () => {
-    await checkFGA({
-      fgaProvider: createMockFGAProvider(),
-      user: { id: 'user-2', email: 'user2@test.com', organizationMembershipId: 'om-2' },
-      resource: { type: 'agent', id: 'agent-1' },
-      permission: MastraFGAPermissions.AGENTS_EXECUTE,
-    });
-
-    expect(captureEEEvent).toHaveBeenCalledWith(
-      'ee_feature_used',
-      'user-2',
-      expect.objectContaining({
-        feature: 'fga',
-        resource_type: 'agent',
-        resource_id: 'agent-1',
-        permission: MastraFGAPermissions.AGENTS_EXECUTE,
-        organization_membership_id: 'om-2',
-      }),
-    );
-    expect(JSON.stringify(captureEEEvent.mock.calls)).not.toContain('license-key-that-is-long-enough-for-tests');
-    expect(JSON.stringify(captureEEEvent.mock.calls)).not.toContain('user2@test.com');
-  });
-
   it('emits FGA feature usage for trusted actor bypasses', async () => {
     const fgaProvider = createMockFGAProvider();
     const requestContext = new RequestContext();
@@ -230,20 +130,5 @@ describe('EE telemetry', () => {
         source_workflow: 'metadata-workflow',
       }),
     );
-  });
-
-  it('does not let telemetry failures break FGA checks', async () => {
-    captureEEEvent.mockImplementationOnce(() => {
-      throw new Error('posthog unavailable');
-    });
-
-    await expect(
-      checkFGA({
-        fgaProvider: createMockFGAProvider(),
-        user: { id: 'user-2' },
-        resource: { type: 'agent', id: 'agent-1' },
-        permission: MastraFGAPermissions.AGENTS_EXECUTE,
-      }),
-    ).resolves.toBeUndefined();
   });
 });

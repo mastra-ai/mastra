@@ -1,9 +1,11 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 
+import type { ApiClient } from '../api/client';
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import type {
+  MastraGatewayCredits,
   OAuthPollResponse,
   OAuthStartResponse,
   ProviderInfo,
@@ -11,14 +13,6 @@ import type {
   SaveProviderKeyResponse,
 } from '../api/types';
 
-/**
- * Providers + API-key management (mirrors the TUI `/api-keys` command).
- *
- * React Query owns the cache: the list is fetched once and deduped across
- * consumers, and the save/remove mutations invalidate the list so it refetches
- * the server's source of truth instead of optimistic local edits. Keys are
- * write-only — never read back.
- */
 /**
  * A credential change (key saved/removed, OAuth completed, signed out) alters
  * which models are runnable, so the model catalog must refetch along with the
@@ -28,14 +22,21 @@ function invalidateCredentialDependentQueries(queryClient: QueryClient) {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: queryKeys.providers() }),
     queryClient.invalidateQueries({ queryKey: queryKeys.availableModels() }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.voiceSettingsAll() }),
   ]);
+}
+
+export function providersQueryOptions(client: ApiClient) {
+  return queryOptions({
+    queryKey: queryKeys.providers(),
+    queryFn: () => client.get<ProvidersResponse>('/web/config/providers'),
+  });
 }
 
 export function useProvidersQuery() {
   const { client } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.providers(),
-    queryFn: () => client.get<ProvidersResponse>('/web/config/providers'),
+    ...providersQueryOptions(client),
     select: (body: ProvidersResponse): ProviderInfo[] => body.providers,
   });
 }
@@ -49,8 +50,7 @@ export function useProvidersQuery() {
 export function useOrgKeyAdminQuery() {
   const { client } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.providers(),
-    queryFn: () => client.get<ProvidersResponse>('/web/config/providers'),
+    ...providersQueryOptions(client),
     select: (body: ProvidersResponse): boolean => body.orgKeyAdmin ?? true,
   });
 }
@@ -73,6 +73,30 @@ export function useSaveProviderKey() {
         ...(scope !== undefined ? { scope } : {}),
       }),
     onSuccess: () => invalidateCredentialDependentQueries(queryClient),
+  });
+}
+
+const MASTRA_GATEWAY_CATALOG_PROVIDER = 'mastra';
+
+export function useConnectMastraGateway() {
+  const { client } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ scope }: { scope?: 'user' | 'org' }) =>
+      client.post<SaveProviderKeyResponse>(`/web/config/providers/${MASTRA_GATEWAY_CATALOG_PROVIDER}/connect`, {
+        scope,
+      }),
+    onSuccess: () => invalidateCredentialDependentQueries(queryClient),
+  });
+}
+
+/** A payment finished in another tab lands in the balance when the user comes back. */
+export function useMastraGatewayCreditsQuery() {
+  const { client } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.mastraGatewayCredits(),
+    queryFn: () => client.get<MastraGatewayCredits>(`/web/config/providers/${MASTRA_GATEWAY_CATALOG_PROVIDER}/credits`),
+    refetchOnWindowFocus: 'always',
   });
 }
 

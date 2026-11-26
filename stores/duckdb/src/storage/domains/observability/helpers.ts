@@ -1,4 +1,5 @@
 import { DuckDBConnection } from '../../db/index';
+import { readPreview } from './preview-compat';
 
 /** Shorthand for {@link DuckDBConnection.sqlValue}. */
 export const v = DuckDBConnection.sqlValue;
@@ -33,6 +34,18 @@ export function payloadJsonV(val: unknown): string {
 /** SQL for a payload column that maps the JSON `null` placeholder back to SQL NULL. */
 export function payloadColumnSql(column: string): string {
   return `NULLIF(${column}, '${JSON_NULL_PLACEHOLDER}')`;
+}
+
+/**
+ * The inclusive range of `dates`, used to bound lookups that find a page's rows by their keys.
+ *
+ * DuckDB cannot push an OR of key tuples (or a tuple semi-join) into the table scan, so without a
+ * range it decompresses the payload columns of the whole table. A range reaches the scan as a plain
+ * filter that zone maps can prune on, and it cannot change the result: it covers every looked-up row.
+ */
+export function timeRangeOf(dates: Date[]): [Date, Date] {
+  const times = dates.map(date => date.getTime());
+  return [new Date(Math.min(...times)), new Date(Math.max(...times))];
 }
 
 /**
@@ -89,4 +102,18 @@ export function parseJsonArray(value: unknown): unknown[] | null {
   if (value === null || value === undefined) return null;
   const parsed = parseJson(value);
   return Array.isArray(parsed) ? parsed : null;
+}
+
+/**
+ * Preview of a payload read back from a span_events JSON column, for rows written before previews
+ * were stored. JSON text goes through `buildPreviewFromJson`, so the result matches what the writer
+ * would have stored for the same value; an already decoded value goes through `buildPreview`.
+ */
+export function previewFromPayload(value: unknown): string | null {
+  return readPreview(null, value, typeof value === 'string');
+}
+
+/** A stored preview as the API returns it: `''` (nothing to preview) and NULL both become null. */
+export function apiPreview(value: unknown): string | null {
+  return readPreview(value);
 }

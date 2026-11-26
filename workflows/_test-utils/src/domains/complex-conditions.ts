@@ -62,8 +62,8 @@ export function createComplexConditionsWorkflows(ctx: WorkflowCreatorContext) {
       .then(step1)
       .branch([
         [
-          async ({ getStepResult }) => {
-            const step1Result = getStepResult(step1);
+          async ({ getStepResultAsync }) => {
+            const step1Result = await getStepResultAsync(step1);
             return step1Result?.status === 'success' || (step1Result?.status === 'partial' && step1Result?.score >= 70);
           },
           step2,
@@ -77,8 +77,8 @@ export function createComplexConditionsWorkflows(ctx: WorkflowCreatorContext) {
       })
       .branch([
         [
-          async ({ inputData, getStepResult }) => {
-            const step1Result = getStepResult(step1);
+          async ({ inputData, getStepResultAsync }) => {
+            const step1Result = await getStepResultAsync(step1);
             return !inputData.result || step1Result?.score < 70;
           },
           step3,

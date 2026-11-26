@@ -14,12 +14,128 @@
 
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 
 import { Memory } from '../../../index';
+
+describe('Per-request observational memory options (#27814)', () => {
+  for (const method of ['generate', 'stream'] as const) {
+    it.each([
+      { name: 'false', override: false, enabled: false },
+      { name: 'enabled: false', override: { enabled: false }, enabled: false },
+      { name: 'omitted', override: undefined, enabled: true },
+      { name: 'true', override: true, enabled: true },
+      { name: 'object', override: { enabled: true }, enabled: true },
+    ])(`${method} honors $name without changing the next run`, async ({ override, enabled }) => {
+      const store = new InMemoryStore();
+      const observer = createMockObserverModel();
+      const observe = vi.spyOn(observer, 'doStream');
+      const memory = new Memory({
+        storage: store,
+        options: {
+          lastMessages: 10,
+          observationalMemory: {
+            scope: 'thread',
+            observation: { model: observer, messageTokens: 20, bufferTokens: false },
+            reflection: { model: createMockReflectorModel(), observationTokens: 50_000 },
+          },
+        },
+      });
+      const prompts: string[] = [];
+      const actor = new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          prompts.push(JSON.stringify(prompt));
+          return {
+            content: [{ type: 'text', text: 'I can help.' }],
+            finishReason: 'stop',
+            usage: { inputTokens: 100, outputTokens: 10, totalTokens: 110 },
+            warnings: [],
+          };
+        },
+        doStream: async ({ prompt }) => {
+          prompts.push(JSON.stringify(prompt));
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'text-start', id: 'reply' },
+              { type: 'text-delta', id: 'reply', delta: 'I can help.' },
+              { type: 'text-end', id: 'reply' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 100, outputTokens: 10, totalTokens: 110 } },
+            ]),
+          };
+        },
+      });
+      const agent = new Agent({
+        id: 'runtime-om',
+        name: 'Runtime OM',
+        instructions: 'Help the user.',
+        model: actor,
+        memory,
+      });
+      const threadId = `runtime-om-${method}-${String(enabled)}-${typeof override}`;
+      const resourceId = 'runtime-resource';
+      await memory.saveThread({
+        thread: { id: threadId, resourceId, title: 'Runtime options', createdAt: new Date(), updatedAt: new Date() },
+      });
+      const history: MastraDBMessage[] = [
+        {
+          id: 'history',
+          threadId,
+          resourceId,
+          role: 'user',
+          type: 'text',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text: 'My historical password hint is violet tulips.' }] },
+        },
+      ];
+      await memory.saveMessages({ messages: history });
+      const engine = await memory.omEngine;
+      expect(engine).not.toBeNull();
+      await engine?.observe({ threadId, resourceId, messages: history, force: true });
+      expect((await engine?.getRecord(threadId, resourceId))?.activeObservations).toContain('User asked for help');
+      observe.mockClear();
+
+      const run = async (options?: { observationalMemory: typeof override }, prefix = '') => {
+        const args = { memory: { thread: threadId, resource: resourceId, options } };
+        const prompt = prefix + 'Please help with my next task. '.repeat(50);
+        const result = method === 'generate' ? await agent.generate(prompt, args) : await agent.stream(prompt, args);
+        expect(await result.text).toBe('I can help.');
+      };
+      await run(override === undefined ? undefined : { observationalMemory: override });
+      expect(observe.mock.calls.length > 0).toBe(enabled);
+      expect(prompts.join('\n').includes('User asked for help')).toBe(enabled);
+      if (!enabled) {
+        expect(prompts.join('\n')).toContain('violet tulips');
+        const recalled = await memory.recall({ threadId, resourceId, threadConfig: { observationalMemory: false } });
+        expect(JSON.stringify(recalled.messages)).toContain('Please help with my next task');
+      }
+
+      // The shared, lazily initialized engine must remain usable after a disabled request.
+      observe.mockClear();
+      prompts.length = 0;
+      await run();
+      expect(observe.mock.calls.length).toBeGreaterThan(0);
+      expect(prompts.join('\n')).toContain('User asked for help');
+
+      if (!enabled) {
+        prompts.length = 0;
+        await Promise.all([
+          run({ observationalMemory: override }, 'Concurrent disabled request: '),
+          run(undefined, 'Concurrent enabled request: '),
+        ]);
+        const disabledPrompt = prompts.find(prompt => prompt.includes('Concurrent disabled request: '));
+        const enabledPrompt = prompts.find(prompt => prompt.includes('Concurrent enabled request: '));
+        expect(disabledPrompt).toBeDefined();
+        expect(disabledPrompt).not.toContain('User asked for help');
+        expect(enabledPrompt).toContain('User asked for help');
+      }
+    });
+  }
+});
 
 // =============================================================================
 // Mock Model: Multi-step execution via tool call

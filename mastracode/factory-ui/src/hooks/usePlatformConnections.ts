@@ -1,10 +1,11 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import {
   createPlatformConnectSession,
   createPlatformReconnectSession,
+  isPlatformConnectUnavailableError,
   listPlatformConnections,
   runHeadlessAuth,
   waitForActiveConnection,
@@ -26,10 +27,32 @@ export function usePlatformConnectionsQuery(provider: PlatformConnectProviderId,
   });
 }
 
+/**
+ * Whether the org has an active Platform connection to one provider. A deployment without Platform
+ * (403/404) has none: that answer is data, not an error, so a page that reads it again doesn't ask
+ * again. Keyed under the provider's connections, so connecting or disconnecting refreshes it.
+ */
+export function activePlatformConnectionQueryOptions(baseUrl: string, provider: PlatformConnectProviderId) {
+  return queryOptions({
+    queryKey: [...queryKeys.platformConnections(provider), 'active'],
+    queryFn: async () => {
+      try {
+        const connections = await listPlatformConnections(baseUrl, provider);
+        return connections.some(connection => connection.status === 'active');
+      } catch (error) {
+        if (isPlatformConnectUnavailableError(error)) return false;
+        throw error;
+      }
+    },
+    retry: false,
+  });
+}
+
 /** Invalidate everything that reflects a provider's connection state. */
 function useInvalidateProviderState(provider: PlatformConnectProviderId) {
   const queryClient = useQueryClient();
   return async () => {
+    const gitlab = provider === 'gitlab' || provider === 'gitlab-self-hosted';
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: queryKeys.platformConnections(provider) }),
       ...(provider === 'jira'
@@ -44,8 +67,11 @@ function useInvalidateProviderState(provider: PlatformConnectProviderId) {
             queryClient.invalidateQueries({ queryKey: queryKeys.incidentioSources() }),
           ]
         : []),
-      ...(provider === 'gitlab'
+      ...(gitlab
         ? [
+            // GitLab lists self-hosted connections too, so either flow changes both listings.
+            queryClient.invalidateQueries({ queryKey: queryKeys.platformConnections('gitlab') }),
+            queryClient.invalidateQueries({ queryKey: queryKeys.platformConnections('gitlab-self-hosted') }),
             queryClient.invalidateQueries({ queryKey: ['gitlab', 'status'] }),
             queryClient.invalidateQueries({ queryKey: ['gitlab', 'projects'] }),
           ]
@@ -63,9 +89,13 @@ export function useConnectPlatformProviderMutation(provider: PlatformConnectProv
   const { baseUrl } = useApiConfig();
   const invalidate = useInvalidateProviderState(provider);
   return useMutation({
-    mutationFn: async (input: { credentials?: Record<string, string> } = {}) => {
+    mutationFn: async (input: { credentials?: Record<string, string>; params?: Record<string, string> } = {}) => {
       const session = await createPlatformConnectSession(baseUrl, provider);
-      await runHeadlessAuth({ session, ...(input.credentials ? { credentials: input.credentials } : {}) });
+      await runHeadlessAuth({
+        session,
+        ...(input.credentials ? { credentials: input.credentials } : {}),
+        ...(input.params ? { params: input.params } : {}),
+      });
       return waitForActiveConnection(baseUrl, provider, session.connectionId);
     },
     onSettled: invalidate,
@@ -79,7 +109,13 @@ export function useReconnectPlatformProviderMutation(provider: PlatformConnectPr
   return useMutation({
     mutationFn: async (input: { connectionId: string; credentials?: Record<string, string> }) => {
       const session = await createPlatformReconnectSession(baseUrl, provider, input.connectionId);
-      await runHeadlessAuth({ session, ...(input.credentials ? { credentials: input.credentials } : {}) });
+      // A reconnect renews the credential only: connection settings come from
+      // the server, so the connection cannot be moved to another instance.
+      await runHeadlessAuth({
+        session,
+        ...(input.credentials ? { credentials: input.credentials } : {}),
+        ...(session.params ? { params: session.params } : {}),
+      });
       return waitForActiveConnection(baseUrl, provider, input.connectionId);
     },
     onSettled: invalidate,

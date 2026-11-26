@@ -31,19 +31,24 @@ jobs:
       - name: Check for docs changes
         id: filter
         run: |
-          if git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -qE '^docs/|^\.github/scripts/(check-deleted-pages|validate-redirects)\.js$|^\.github/workflows/lint-docs\.yml$'; then
+          if git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -qE '^docs/|^\.github/scripts/(check-deleted-pages|validate-redirects)\.js$|^\.github/workflows/lint-docs\.yml$|^\.github/docs-sync\.json$'; then
             echo "docs=true" >> $GITHUB_OUTPUT
           else
             echo "docs=false" >> $GITHUB_OUTPUT
           fi
 
-  check-deleted-pages:
-    name: Check for deleted pages without redirects
+  lint-docs:
+    name: Lint docs
     needs: changes
     if: needs.changes.outputs.docs == 'true'
     runs-on: starsling-ubuntu-26.04
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+
     steps:
-      - name: Checkout PR branch
+      - name: Checkout repository
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         timeout-minutes: 20
         with:
@@ -51,8 +56,15 @@ jobs:
           # Partial clone: name-only diffs need trees, not blob contents.
           filter: blob:none
 
-      - name: Check for MDX changes
-        id: mdx-changes
+      - name: Setup pnpm and Node.js
+        id: setup
+        uses: ./.github/actions/setup-pnpm-node
+
+      # The deleted-pages, docs, Vale and redirect checks were separate jobs. Each still runs when
+      # one before it failed, so one red step doesn't hide the others.
+      - name: Check for deleted MDX pages
+        id: deleted-mdx
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: |
           if git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -q '\.mdx$'; then
             echo "has_changes=true" >> $GITHUB_OUTPUT
@@ -60,15 +72,9 @@ jobs:
             echo "has_changes=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Setup Node.js
-        if: steps.mdx-changes.outputs.has_changes == 'true'
-        uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
-        with:
-          node-version: '24.18.0'
-          package-manager-cache: false
-
       - name: Check for removed pages without redirects
-        if: steps.mdx-changes.outputs.has_changes == 'true'
+        id: deleted-pages
+        if: ${{ !cancelled() && steps.deleted-mdx.outputs.has_changes == 'true' }}
         run: node .github/scripts/check-deleted-pages.js
         env:
           BASE_REF: origin/${{ github.event.pull_request.base.ref }}
@@ -76,7 +82,7 @@ jobs:
           COREPACK_ENABLE_STRICT: '0'
 
       - name: Comment on PR if redirects are missing
-        if: failure()
+        if: ${{ failure() && steps.deleted-pages.outcome == 'failure' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         with:
           script: |
@@ -121,31 +127,101 @@ jobs:
               console.error('Failed to post comment:', error);
             }
 
-  validate-redirects:
-    name: Validate redirects
-    needs: changes
-    if: needs.changes.outputs.docs == 'true'
-    runs-on: starsling-ubuntu-26.04
+      # One command for formatting, frontmatter, sidebars, structure, links,
+      # remark-lint, and redirects. Vale runs below on changed files only.
+      # Warnings are printed but only errors fail the job.
+      - name: Run docs checks
+        id: docs-checks
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        working-directory: ./docs
+        run: pnpm check --no-vale
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 20
+      - name: Check for MDX changes
+        id: mdx-changes
+        if: ${{ !cancelled() && steps.docs-checks.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Three-dot diff compares against the merge-base so files that main
+          # moved/deleted after the branch point are not reported as "added"
+          # by a stale branch. The checkout is the PR merge ref, so also drop
+          # anything that doesn't exist there.
+          mapfile -t changed < <(
+            git diff --name-only --diff-filter=ACMRT \
+              "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" \
+              -- \
+              docs/src/content/en/docs \
+              docs/src/content/en/integrations \
+              docs/src/content/en/reference \
+              docs/src/mastra-code \
+              docs/src/agent-builder \
+              docs/src/factory \
+              | grep '\.mdx$' || true
+          )
 
-      - name: Setup pnpm and Node.js
-        uses: ./.github/actions/setup-pnpm-node
+          files=()
+          for f in "${changed[@]}"; do
+            if [ -f "$f" ]; then
+              files+=("$f")
+            fi
+          done
 
+          if [ "${#files[@]}" -gt 0 ]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            printf '%s\n' "${files[@]}" | jq -R -s -c 'split("\n")[:-1]' \
+              | sed 's/^/files=/' >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Prepare Vale CI config
+        id: vale-config
+        if: ${{ !cancelled() && steps.mdx-changes.outputs.has_changes == 'true' }}
+        run: |
+          sed \
+            -e '/^Packages =/d' \
+            -e 's#^StylesPath = styles#StylesPath = docs/styles#' \
+            docs/.vale.ini > .vale-ci.ini
+
+      # vale-action pipes results through reviewdog, and every reviewdog
+      # reporter (including github-check) downloads the PR diff, which the
+      # GitHub API rejects on diffs larger than 20,000 lines. The files list
+      # is already limited to changed MDX files by the local git diff above,
+      # so run the Vale CLI directly and let its exit code gate the job.
+      - name: Install Vale
+        id: vale-install
+        if: ${{ !cancelled() && steps.vale-config.outcome == 'success' }}
+        env:
+          VALE_VERSION: 3.27.0
+        run: |
+          curl -fsSL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz" \
+            | tar -xz -C /usr/local/bin vale
+          vale --version
+
+      - name: Lint with Vale
+        if: ${{ !cancelled() && steps.vale-install.outcome == 'success' }}
+        env:
+          CHANGED_FILES: ${{ steps.mdx-changes.outputs.files }}
+        run: |
+          mapfile -t files < <(jq -r '.[]' <<< "$CHANGED_FILES")
+          vale --config=.vale-ci.ini --minAlertLevel=error --output=line "${files[@]}"
+
+      # Last: generating the redirects rewrites docs/vercel*.json in the checkout when they're stale.
       - name: Verify generated vercel redirects are up to date
+        id: verify-redirects
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         working-directory: ./docs
         run: |
           pnpm generate-vercel-redirects
           git diff --exit-code -- vercel.json vercel.redirects.json
 
       - name: Run validate-redirects
+        id: validate-redirects
+        if: ${{ !cancelled() && steps.verify-redirects.outcome == 'success' }}
         run: node .github/scripts/validate-redirects.js
 
       - name: Comment on PR if redirect issues found
-        if: failure()
+        if: ${{ failure() && (steps.verify-redirects.outcome == 'failure' || steps.validate-redirects.outcome == 'failure') }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         with:
           script: |
@@ -189,108 +265,3 @@ jobs:
             } catch (error) {
               console.error('Failed to post comment:', error);
             }
-
-  lint-docs:
-    name: Lint docs
-    needs: changes
-    if: needs.changes.outputs.docs == 'true'
-    runs-on: starsling-ubuntu-26.04
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 20
-        with:
-          fetch-depth: 0
-          # Partial clone: name-only diffs need trees, not blob contents.
-          filter: blob:none
-
-      - name: Setup pnpm and Node.js
-        uses: ./.github/actions/setup-pnpm-node
-
-      - name: Check formatting
-        working-directory: ./docs
-        run: pnpm format:check
-
-      - name: Validate reference sidebar sort order
-        working-directory: ./docs
-        run: pnpm validate:reference-sidebar
-
-      - name: Check for MDX changes
-        id: mdx-changes
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Three-dot diff compares against the merge-base so files that main
-          # moved/deleted after the branch point are not reported as "added"
-          # by a stale branch. The checkout is the PR merge ref, so also drop
-          # anything that doesn't exist there.
-          mapfile -t changed < <(
-            git diff --name-only --diff-filter=ACMRT \
-              "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" \
-              -- \
-              docs/src/content/en/docs \
-              docs/src/content/en/integrations \
-              docs/src/content/en/reference \
-              | grep '\.mdx$' || true
-          )
-
-          files=()
-          for f in "${changed[@]}"; do
-            if [ -f "$f" ]; then
-              files+=("$f")
-            fi
-          done
-
-          if [ "${#files[@]}" -gt 0 ]; then
-            echo "has_changes=true" >> $GITHUB_OUTPUT
-            printf '%s\n' "${files[@]}" | jq -R -s -c 'split("\n")[:-1]' \
-              | sed 's/^/files=/' >> $GITHUB_OUTPUT
-          else
-            echo "has_changes=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Validate frontmatter
-        if: steps.mdx-changes.outputs.has_changes == 'true'
-        working-directory: ./docs
-        run: pnpm dlx tsx scripts/validate-frontmatter.ts
-
-      - name: Check for docs not linked in sidebars
-        if: steps.mdx-changes.outputs.has_changes == 'true'
-        working-directory: ./docs
-        run: pnpm validate:sidebar-docs
-
-      - name: Lint with remark
-        if: steps.mdx-changes.outputs.has_changes == 'true'
-        working-directory: ./docs
-        run: pnpm lint:remark
-
-      - name: Prepare Vale CI config
-        if: steps.mdx-changes.outputs.has_changes == 'true'
-        run: |
-          sed \
-            -e '/^Packages =/d' \
-            -e 's#^StylesPath = styles#StylesPath = docs/styles#' \
-            docs/.vale.ini > .vale-ci.ini
-
-      # vale-action pipes results through reviewdog, and every reviewdog
-      # reporter (including github-check) downloads the PR diff, which the
-      # GitHub API rejects on diffs larger than 20,000 lines. The files list
-      # is already limited to changed MDX files by the local git diff above,
-      # so run the Vale CLI directly and let its exit code gate the job.
-      - name: Install Vale
-        if: steps.mdx-changes.outputs.has_changes == 'true'
-        env:
-          VALE_VERSION: 3.23.0
-        run: |
-          curl -fsSL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz" \
-            | tar -xz -C /usr/local/bin vale
-          vale --version
-
-      - name: Lint with Vale
-        if: steps.mdx-changes.outputs.has_changes == 'true'
-        env:
-          CHANGED_FILES: ${{ steps.mdx-changes.outputs.files }}
-        run: |
-          mapfile -t files < <(jq -r '.[]' <<< "$CHANGED_FILES")
-          vale --config=.vale-ci.ini --minAlertLevel=error --output=line "${files[@]}"

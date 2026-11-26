@@ -1,93 +1,72 @@
-import type { FactoryUserSession } from './user-sessions';
+import {
+  SESSION_ROW_ALL_OWNERS,
+  SESSION_ROW_ALL_SOURCES,
+  SESSION_ROW_MY_SESSIONS,
+  SESSION_ROW_STATUSES,
+  sessionRowOwnerKey,
+} from '@mastra/factory/session/session-row-query';
+import type { SESSION_ROW_UPDATED_WITHIN } from '@mastra/factory/session/session-row-query';
+import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/DropdownMenu';
 
-export type UserSessionFilterStatus = 'all' | 'working' | 'initializing' | 'idle';
-export type UserSessionUpdatedFilter = 'all' | '24h' | '7d' | '30d';
+import type { SessionGroupHeading } from './sessionGroups';
+import { SESSION_STATUS_LABELS } from './sessionRows';
+import type { SessionActivityStatus, SessionOwner } from './sessionRows';
 
-export const ALL_SESSION_OWNERS = 'all';
-export const MY_SESSIONS = 'mine';
-export const SESSION_OWNER_PREFIX = 'owner:';
+export type SessionStatusFilter = 'all' | SessionActivityStatus;
+export type SessionUpdatedFilter = 'all' | (typeof SESSION_ROW_UPDATED_WITHIN)[number];
 
-export interface UserSessionFiltersState {
-  search: string;
+export const SESSION_STATUS_OPTIONS: readonly DropdownMenuRadioOption<SessionStatusFilter>[] = [
+  { value: 'all', label: 'All statuses' },
+  ...SESSION_ROW_STATUSES.map(status => ({ value: status, label: SESSION_STATUS_LABELS[status] })),
+];
+
+export const SESSION_UPDATED_OPTIONS: readonly DropdownMenuRadioOption<SessionUpdatedFilter>[] = [
+  { value: 'all', label: 'Any time' },
+  { value: '24h', label: 'Last 24 hours' },
+  { value: '7d', label: 'Last 7 days' },
+  { value: '30d', label: 'Last 30 days' },
+];
+
+export interface SessionFiltersState {
   owner: string;
-  status: UserSessionFilterStatus;
-  updated: UserSessionUpdatedFilter;
+  /** `all`, or where a session starts: `board:<board id>`, `user` or `slack`. */
+  source: string;
+  status: SessionStatusFilter;
+  updated: SessionUpdatedFilter;
 }
 
-export interface UserSessionFilterCandidate {
-  session: FactoryUserSession;
-  ownerName: string;
-  status: Exclude<UserSessionFilterStatus, 'all'>;
-}
-
-export const EMPTY_USER_SESSION_FILTERS: UserSessionFiltersState = {
-  search: '',
-  owner: ALL_SESSION_OWNERS,
+export const EMPTY_SESSION_FILTERS: SessionFiltersState = {
+  owner: SESSION_ROW_ALL_OWNERS,
+  source: SESSION_ROW_ALL_SOURCES,
   status: 'all',
   updated: 'all',
 };
 
-export function sessionOwnerFilterValue(userId: string): string {
-  return `${SESSION_OWNER_PREFIX}${userId}`;
-}
-
-/**
- * A known viewer starts on their own sessions, matching the work and review lists. An unknown
- * viewer has no sessions of their own, so they start on everyone's.
- */
-export function defaultUserSessionFilters(viewerUserId: string | undefined): UserSessionFiltersState {
-  return viewerUserId ? { ...EMPTY_USER_SESSION_FILTERS, owner: MY_SESSIONS } : EMPTY_USER_SESSION_FILTERS;
-}
-
-/** Counts the controls moved away from `defaults`, so the resting view never reads as filtered. */
-export function activeUserSessionFilterCount(
-  filters: UserSessionFiltersState,
-  defaults: UserSessionFiltersState = EMPTY_USER_SESSION_FILTERS,
-): number {
+export function activeSessionFilterCount(filters: SessionFiltersState): number {
   return (
-    Number(filters.search.trim() !== defaults.search.trim()) +
-    Number(filters.owner !== defaults.owner) +
-    Number(filters.status !== defaults.status) +
-    Number(filters.updated !== defaults.updated)
+    Number(filters.owner !== EMPTY_SESSION_FILTERS.owner) +
+    Number(filters.source !== EMPTY_SESSION_FILTERS.source) +
+    Number(filters.status !== EMPTY_SESSION_FILTERS.status) +
+    Number(filters.updated !== EMPTY_SESSION_FILTERS.updated)
   );
 }
 
-function matchesSearch(candidate: UserSessionFilterCandidate, search: string): boolean {
-  const normalizedSearch = search.trim().toLocaleLowerCase();
-  if (!normalizedSearch) return true;
-
-  const { session, ownerName } = candidate;
-  return [session.title, session.branch, ownerName, session.userId, session.sessionId].some(value =>
-    value?.toLocaleLowerCase().includes(normalizedSearch),
-  );
-}
-
-function matchesOwner(session: FactoryUserSession, owner: string, viewerUserId: string | undefined): boolean {
-  if (owner === ALL_SESSION_OWNERS) return true;
-  if (owner === MY_SESSIONS) return Boolean(viewerUserId) && session.userId === viewerUserId;
-  if (!owner.startsWith(SESSION_OWNER_PREFIX)) return false;
-  return session.userId === owner.slice(SESSION_OWNER_PREFIX.length);
-}
-
-function updatedCutoff(updated: UserSessionUpdatedFilter, now: number): number | undefined {
-  if (updated === 'all') return undefined;
-  const hours = updated === '24h' ? 24 : updated === '7d' ? 24 * 7 : 24 * 30;
-  return now - hours * 60 * 60 * 1_000;
-}
-
-export function filterUserSessions(
-  candidates: UserSessionFilterCandidate[],
-  filters: UserSessionFiltersState,
+export function sessionOwnerOptions(
+  owners: readonly SessionOwner[],
   viewerUserId: string | undefined,
-  now = Date.now(),
-): UserSessionFilterCandidate[] {
-  const cutoff = updatedCutoff(filters.updated, now);
+): DropdownMenuRadioOption<string>[] {
+  const viewerOption = viewerUserId ? [{ value: SESSION_ROW_MY_SESSIONS, label: 'Mine' }] : [];
+  const namedOptions = owners.map(({ userId, name }) => ({
+    value: sessionRowOwnerKey(userId),
+    label: name,
+  }));
+  return [{ value: SESSION_ROW_ALL_OWNERS, label: 'All owners' }, ...viewerOption, ...namedOptions];
+}
 
-  return candidates.filter(candidate => {
-    if (!matchesSearch(candidate, filters.search)) return false;
-    if (!matchesOwner(candidate.session, filters.owner, viewerUserId)) return false;
-    if (filters.status !== 'all' && candidate.status !== filters.status) return false;
-    if (cutoff !== undefined && new Date(candidate.session.updatedAt).getTime() < cutoff) return false;
-    return true;
-  });
+/** Every source the board grouping would list, so a source filter and a Board group always agree. */
+export function sessionSourceOptions(sources: readonly SessionGroupHeading[]): DropdownMenuRadioOption<string>[] {
+  return [
+    { value: SESSION_ROW_ALL_SOURCES, label: 'All sources' },
+    ...sources.map(({ key, label }) => ({ value: key, label })),
+  ];
 }

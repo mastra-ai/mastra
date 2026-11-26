@@ -47,9 +47,11 @@ function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
     mode: { switch: vi.fn().mockResolvedValue(undefined) },
     ...(sessionOverride ?? {}),
   };
+  const controller = { session, ...(agentControllerOverride ?? {}) };
   return {
     session,
-    controller: { session, ...(agentControllerOverride ?? {}) },
+    controller,
+    local: { controller, session },
     goalManager: {},
     gradientAnimator: undefined,
     projectInfo: { rootPath: '.', gitBranch: 'main' } as TUIState['projectInfo'],
@@ -844,12 +846,13 @@ describe('syncInitialThreadState', () => {
       ui: { terminal: { setTitle: vi.fn() } },
       currentThreadTitle: undefined,
     } as unknown as TUIState;
+    state.local = { controller: state.controller, session: state.session };
 
     await syncInitialThreadState(state);
 
     expect(state.currentThreadTitle).toBe('PR triage');
     expect(state.ui.terminal.setTitle).toHaveBeenCalledWith('Mastra Code - PR triage');
-    expect(state.goalManager.loadFromThread).toHaveBeenCalledWith(state);
+    expect(state.goalManager.loadFromThread).toHaveBeenCalledWith(state.local);
     expect(state.goalManager.loadFromThreadMetadata).toHaveBeenCalledWith({ goal: persistedGoal });
     expect(state.session.sendMessage).not.toHaveBeenCalled();
   });
@@ -1032,10 +1035,11 @@ describe('syncInitialThreadState', () => {
       ui: { terminal: { setTitle: vi.fn() } },
       currentThreadTitle: undefined,
     } as unknown as TUIState;
+    state.local = { controller: state.controller, session: state.session };
 
     await syncInitialThreadState(state);
 
-    expect(state.goalManager.loadFromThread).toHaveBeenCalledWith(state);
+    expect(state.goalManager.loadFromThread).toHaveBeenCalledWith(state.local);
     expect(state.goalManager.loadFromThreadMetadata).not.toHaveBeenCalled();
   });
 });
@@ -1100,7 +1104,7 @@ describe('background activity cancellation', () => {
     const hideOverlay = vi.fn();
     const tui = Object.create(MastraTUI.prototype) as any;
     tui.state = {
-      controller: { getMastra: () => ({ backgroundTaskManager: { cancel } }) },
+      local: { controller: { getMastra: () => ({ backgroundTaskManager: { cancel } }) } },
       ui: { hideOverlay },
     };
 
@@ -1116,7 +1120,7 @@ describe('background activity cancellation', () => {
     const hideOverlay = vi.fn();
     const tui = Object.create(MastraTUI.prototype) as any;
     tui.state = {
-      controller: { getMastra: () => undefined },
+      local: { controller: { getMastra: () => undefined } },
       ui: { hideOverlay },
     };
 

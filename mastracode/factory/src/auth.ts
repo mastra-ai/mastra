@@ -1,7 +1,9 @@
+import { MastraAuthStudio } from '@mastra/auth-studio';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
 import type { MessageAuthor } from '@mastra/core/agent-controller';
 import { MASTRA_MESSAGE_AUTHOR_KEY } from '@mastra/core/request-context';
 import {
+  CompositeAuth,
   registerApiRoute,
   isAuthHttpHandler,
   isCredentialsProvider,
@@ -19,7 +21,6 @@ import {
   isPlatformAuthSupportedHost,
 } from './platform-auth-host.js';
 import type { RouteAuth } from './routes/route.js';
-import { actorFromAuthUser } from './storage/domains/comments/actor.js';
 import { isFactoryTelemetryEnabled } from './telemetry.js';
 import { timedAboveThreshold } from './timing.js';
 
@@ -186,11 +187,12 @@ export function factoryAuthTenant(c: Context): FactoryAuthTenant | undefined {
 function messageAuthor(user: FactoryAuthUser): MessageAuthor | undefined {
   const userId = getFactoryAuthUserId(user);
   if (!userId) return undefined;
-  const actor = actorFromAuthUser(userId, user);
+  const name = user.name?.trim() || user.email?.trim();
+  const avatarUrl = user.avatarUrl?.trim();
   return {
-    id: actor.id,
-    ...(actor.displayName ? { name: actor.displayName } : {}),
-    ...(actor.avatarUrl ? { avatarUrl: actor.avatarUrl } : {}),
+    id: userId,
+    ...(name ? { name } : {}),
+    ...(avatarUrl ? { avatarUrl } : {}),
   };
 }
 
@@ -281,21 +283,70 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
   };
 }
 
+export interface FactoryAuthOptions {
+  /**
+   * The Factory MCP endpoint's resource URL. Bearer tokens issued for it (their
+   * `aud` names it) are refused everywhere else.
+   */
+  mcpResource?: string;
+  /**
+   * Whether bearer tokens authenticated by `provider` must carry no `aud`
+   * claim. True for providers that verify bearers by signature and issuer only
+   * (WorkOS, Platform): their logins carry no audience, so a token with one was
+   * issued for some other resource — another Factory's `/mcp`, Platform's MCP
+   * server — and must not authenticate here. Inside a `CompositeAuth`, it's
+   * asked about the wrapped provider that authenticated the token.
+   */
+  refuseAudienceBoundTokens?: (provider: IMastraAuthProvider) => boolean;
+}
+
+/** The bearer token's `aud` claim, read unverified; only ever used to refuse. */
+function bearerAudience(token: string): unknown {
+  const payload = token.split('.')[1];
+  if (!payload) return undefined;
+  try {
+    return (JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { aud?: unknown }).aud;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Resolve the authenticated user for a request via the provider. Never throws:
- * ordinary invalid/expired sessions resolve to `null`.
+ * ordinary invalid/expired sessions, MCP access tokens and tokens for other
+ * resources resolve to `null`.
  */
 async function authenticateRequest(
   provider: IMastraAuthProvider,
   token: string,
   raw: Request,
+  options: FactoryAuthOptions,
 ): Promise<FactoryAuthUser | null> {
+  const aud = bearerAudience(token);
+  const { mcpResource, refuseAudienceBoundTokens } = options;
+  if (mcpResource !== undefined && (aud === mcpResource || (Array.isArray(aud) && aud.includes(mcpResource)))) {
+    return null;
+  }
   try {
     const result = await provider.authenticateToken(token, raw);
+    if (aud !== undefined && result && refuseAudienceBoundTokens) {
+      // Follow nested composites to the provider that authenticated the token;
+      // one that can't say is refused too.
+      let authenticatedBy: IMastraAuthProvider | undefined = provider;
+      while (authenticatedBy instanceof CompositeAuth)
+        authenticatedBy = authenticatedBy.getAuthenticatedProvider(result);
+      if (!authenticatedBy || refuseAudienceBoundTokens(authenticatedBy)) return null;
+    }
     return toFactoryAuthUser(result);
   } catch {
     return null;
   }
+}
+
+/** The providers `provider` delegates to: itself, or every provider a `CompositeAuth` wraps. */
+export function authProviders(provider: IMastraAuthProvider | undefined): IMastraAuthProvider[] {
+  if (!provider) return [];
+  return provider instanceof CompositeAuth ? provider.getProviders().flatMap(authProviders) : [provider];
 }
 
 /**
@@ -319,6 +370,41 @@ async function ensureUserOrg(provider: IMastraAuthProvider, user: FactoryAuthUse
   }
 }
 
+/**
+ * The `org_id` claim of a JWT bearer token. Read only after the provider has
+ * verified the token, and only adopted when the user is a verified member of
+ * that org — so it picks among orgs the user already has, never grants one.
+ */
+export function bearerTokenOrgClaim(token: string | undefined): string | undefined {
+  const payload = token?.split('.')[1];
+  if (!payload) return undefined;
+  try {
+    const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { org_id?: unknown };
+    return typeof claims.org_id === 'string' && claims.org_id ? claims.org_id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Picks the request's org: an explicit `X-Mastra-Organization-Id` header, else
+ * a bearer token's `org_id` claim (MCP clients such as ChatGPT can't send the
+ * header, and the verify endpoint otherwise reports the user's default org).
+ * Either must name an org the user belongs to, else `false` — never fall back
+ * to another org than the one asked for. With neither, bootstraps the user's org.
+ */
+async function applyRequestedOrganization(
+  provider: IMastraAuthProvider,
+  c: Context,
+  token: string | undefined,
+  user: FactoryAuthUser,
+): Promise<boolean> {
+  const requested = (token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined) || bearerTokenOrgClaim(token);
+  if (requested) return selectRequestedOrganization(user, requested);
+  await ensureUserOrg(provider, user);
+  return true;
+}
+
 function selectRequestedOrganization(user: FactoryAuthUser, requestedOrganizationId: string): boolean {
   if (user.organizationId === requestedOrganizationId) return true;
   if (!user.organizationMembershipIds?.includes(requestedOrganizationId)) return false;
@@ -331,13 +417,27 @@ function selectRequestedOrganization(user: FactoryAuthUser, requestedOrganizatio
  * provider's (possibly partial) `ISessionProvider.getClearSessionHeaders`.
  */
 function providerClearCookies(provider: IMastraAuthProvider): string[] {
+  const cookies: string[] = [];
   const getClearSessionHeaders = (provider as Partial<ISessionProvider>).getClearSessionHeaders;
-  if (typeof getClearSessionHeaders !== 'function') return [];
-  const headers = getClearSessionHeaders.call(provider) ?? {};
-  const setCookie = headers['Set-Cookie'];
-  if (!setCookie) return [];
-  // A provider may join several clearing cookies into one header value.
-  return setCookie.split(/,(?=\s*[^;=,\s]+=)/).map(cookie => cookie.trim());
+  if (typeof getClearSessionHeaders === 'function') {
+    const headers = getClearSessionHeaders.call(provider) ?? {};
+    const setCookie = headers['Set-Cookie'];
+    // A provider may join several clearing cookies into one header value.
+    if (setCookie) cookies.push(...setCookie.split(/,(?=\s*[^;=,\s]+=)/).map(cookie => cookie.trim()));
+  }
+  cookies.push(...providerLegacySessionClearCookies(provider));
+  return cookies;
+}
+
+/**
+ * Expiring `Set-Cookie` values for legacy copies of the provider's session
+ * cookie (e.g. one an earlier release scoped to a shared parent domain), from
+ * the optional `ISessionProvider.getLegacySessionClearCookies`.
+ */
+function providerLegacySessionClearCookies(provider: IMastraAuthProvider): string[] {
+  const getLegacy = (provider as Partial<ISessionProvider>).getLegacySessionClearCookies;
+  if (typeof getLegacy !== 'function') return [];
+  return getLegacy.call(provider) ?? [];
 }
 
 /**
@@ -349,8 +449,9 @@ export async function isOrganizationAdmin(
   provider: IMastraAuthProvider | undefined,
   c: Context,
   organizationId: string,
+  options: FactoryAuthOptions = {},
 ): Promise<boolean> {
-  const user = await ensureFactoryAuthUser(provider, c);
+  const user = await ensureFactoryAuthUser(provider, c, options);
   if (!user || user.organizationId !== organizationId || !provider || !isOrganizationsProvider(provider)) {
     return false;
   }
@@ -369,12 +470,25 @@ export async function isOrganizationAdmin(
  * by `MastraFactory.prepare()` and handed to factory route modules at
  * construction — they never import the factory auth module directly.
  */
-export function createFactoryRouteAuth(provider: IMastraAuthProvider | undefined): RouteAuth {
+export function createFactoryRouteAuth(
+  provider: IMastraAuthProvider | undefined,
+  options: FactoryAuthOptions = {},
+): RouteAuth {
   return {
     enabled: () => provider !== undefined,
-    ensureUser: (c: Context) => ensureFactoryAuthUser(provider, c),
+    ensureUser: (c: Context) => ensureFactoryAuthUser(provider, c, options),
     tenant: (c: Context) => factoryAuthTenant(c),
-    isOrganizationAdmin: (c: Context, organizationId: string) => isOrganizationAdmin(provider, c, organizationId),
+    isOrganizationAdmin: (c: Context, organizationId: string) =>
+      isOrganizationAdmin(provider, c, organizationId, options),
+    ...(provider instanceof MastraAuthStudio
+      ? {
+          fetchPlatformAsUser: async (c: Context, path: string, init?: RequestInit) => {
+            const res = await provider.fetchAsRequestUser(c.req.raw, path, init);
+            forwardPendingResponseHeaders(provider, c);
+            return res;
+          },
+        }
+      : {}),
   };
 }
 
@@ -421,25 +535,21 @@ function forwardPendingResponseHeaders(provider: IMastraAuthProvider, c: Context
 export async function ensureFactoryAuthUser(
   provider: IMastraAuthProvider | undefined,
   c: Context,
+  options: FactoryAuthOptions = {},
 ): Promise<FactoryAuthUser | undefined> {
   const existing = getFactoryAuthUser(c);
   if (existing) return existing;
   if (!provider) return undefined;
 
   const token = getBearerToken(c.req.header('Authorization'));
-  const user = await authenticateRequest(provider, token, c.req.raw);
+  const user = await authenticateRequest(provider, token, c.req.raw, options);
   // Routes declared `requiresAuth: false` skip the gate, so this is their only
   // authentication — forward a renewed session cookie from here too.
   forwardPendingResponseHeaders(provider, c);
   if (!user) return undefined;
 
-  const requestedOrganizationId = token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined;
-  if (requestedOrganizationId) {
-    if (!selectRequestedOrganization(user, requestedOrganizationId)) {
-      throw new HTTPException(403, { message: 'organization_forbidden' });
-    }
-  } else {
-    await ensureUserOrg(provider, user);
+  if (!(await applyRequestedOrganization(provider, c, token, user))) {
+    throw new HTTPException(403, { message: 'organization_forbidden' });
   }
 
   c.set(FACTORY_AUTH_USER_KEY, user);
@@ -485,9 +595,14 @@ function isPlatformAuthCustomDomain(provider: IMastraAuthProvider, publicUrl?: s
  * `/auth/me` is public (the gate skips `/auth/*`), so it validates the session
  * itself rather than reading a value the gate would have stashed.
  */
-async function handleAuthMe(provider: IMastraAuthProvider, c: Context, publicUrl?: string): Promise<Response> {
+async function handleAuthMe(
+  provider: IMastraAuthProvider,
+  c: Context,
+  options: FactoryAuthOptions & { publicUrl?: string },
+): Promise<Response> {
+  const publicUrl = options.publicUrl;
   const token = getBearerToken(c.req.header('Authorization'));
-  const user = await authenticateRequest(provider, token, c.req.raw);
+  const user = await authenticateRequest(provider, token, c.req.raw, options);
   // Provider identity for the SPA: `/signin` renders the hosted-login button
   // for WorkOS and an email/password form for better-auth (with sign-up hidden
   // when the provider disables it).
@@ -677,8 +792,7 @@ function providerAuthRoutes(provider: IMastraAuthProvider, publicUrl?: string): 
               // Fallback for providers that expose ISessionProvider but leave
               // cookie construction to the server (e.g. MastraAuthStudio, which
               // returns just the sealed session as accessToken so
-              // getSessionHeaders can scope the cookie to this deployment's
-              // domain via MASTRA_COOKIE_DOMAIN / sharedApiUrl auto-detection).
+              // getSessionHeaders can issue this deployment's host-only cookie).
               // Mirrors packages/server/src/server/handlers/auth.ts:492-503.
               const resultUser = result.user as { id: string; organizationId?: string };
               const session = await provider.createSession(resultUser.id, {
@@ -690,6 +804,10 @@ function providerAuthRoutes(provider: IMastraAuthProvider, publicUrl?: string): 
               for (const [key, value] of Object.entries(provider.getSessionHeaders(session))) {
                 c.header(key, value, { append: true });
               }
+            }
+            // Signing in also expires legacy (e.g. shared parent-domain) session cookies.
+            for (const cookie of providerLegacySessionClearCookies(provider)) {
+              c.header('Set-Cookie', cookie, { append: true });
             }
             return c.redirect(returnTo);
           } catch {
@@ -769,13 +887,13 @@ function providerAuthRoutes(provider: IMastraAuthProvider, publicUrl?: string): 
 export function registerAuthRoutes(
   app: Hono<any>,
   provider: IMastraAuthProvider,
-  options: { publicUrl?: string } = {},
+  options: FactoryAuthOptions & { publicUrl?: string } = {},
 ): void {
   for (const route of providerAuthRoutes(provider, options.publicUrl)) {
     const methods = route.method === 'ALL' ? ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] : [route.method];
     app.on(methods, route.path, c => route.handler(c));
   }
-  app.get('/auth/me', c => handleAuthMe(provider, c, options.publicUrl));
+  app.get('/auth/me', c => handleAuthMe(provider, c, options));
 }
 
 /**
@@ -789,7 +907,10 @@ export function registerAuthRoutes(
  * `/auth/*` so it never blocks them. `/auth/*` is not under `/api`, so it is a
  * valid custom-route path.
  */
-export function buildAuthRoutes(provider: IMastraAuthProvider, options: { publicUrl?: string } = {}): ApiRoute[] {
+export function buildAuthRoutes(
+  provider: IMastraAuthProvider,
+  options: FactoryAuthOptions & { publicUrl?: string } = {},
+): ApiRoute[] {
   return [
     // `registerApiRoute` handlers see @mastra/core's bundled hono Context type,
     // which is structurally identical to (but nominally distinct from) the
@@ -805,7 +926,7 @@ export function buildAuthRoutes(provider: IMastraAuthProvider, options: { public
     registerApiRoute('/auth/me', {
       method: 'GET',
       requiresAuth: false,
-      handler: c => handleAuthMe(provider, c as unknown as Context, options.publicUrl),
+      handler: c => handleAuthMe(provider, c as unknown as Context, options),
     }),
   ];
 }
@@ -842,13 +963,28 @@ const SESSION_FAVICON_PATHS = new Set([
 ]);
 
 /**
+ * Request-context key marking an authenticated interactive turn. HTTP requests
+ * and linked Slack senders verified against their session owner can carry it;
+ * wakes, webhooks, and dispatcher turns cannot.
+ */
+export const FACTORY_INTERACTIVE_KEY = 'factoryInteractive';
+
+/** With auth disabled there is no gate; this marks every HTTP request as interactive instead. */
+export function createFactoryInteractiveMarker() {
+  return async (c: Context, next: () => Promise<void>): Promise<void> => {
+    c.get('requestContext')?.set(FACTORY_INTERACTIVE_KEY, true);
+    await next();
+  };
+}
+
+/**
  * Build the auth gate as a plain Hono middleware handler `(c, next)`. Protects
  * everything that is not a public `/auth/*` route: authenticated requests stash
  * the user on the context and continue; unauthenticated navigations redirect to
  * login and XHR/API calls get a 401 JSON. Shared by the local Hono server
  * (`mountFactoryAuth`) and the platform Mastra entry (`server.middleware`).
  */
-export function createFactoryAuthGate(provider: IMastraAuthProvider) {
+export function createFactoryAuthGate(provider: IMastraAuthProvider, options: FactoryAuthOptions = {}) {
   return async (c: Context, next: () => Promise<void>): Promise<Response | void> => {
     const path = c.req.path;
     if (path.startsWith('/auth/')) {
@@ -903,25 +1039,21 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     // A slow verification here delays EVERY protected request — surface
     // outliers so auth-backend latency is attributable from server logs.
     const user = await timedAboveThreshold('auth.gate.authenticate', 1_000, () =>
-      authenticateRequest(provider, token, c.req.raw),
+      authenticateRequest(provider, token, c.req.raw, options),
     );
     forwardPendingResponseHeaders(provider, c);
 
     if (user) {
-      const requestedOrganizationId = token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined;
-      if (requestedOrganizationId) {
-        if (!selectRequestedOrganization(user, requestedOrganizationId)) {
-          return c.json({ error: 'organization_forbidden' }, 403);
-        }
-      } else {
-        // Bootstrap a personal org for no-org accounts so the org id resolves on
-        // this request (see ensureFactoryAuthUser for the rationale).
-        await ensureUserOrg(provider, user);
+      // Without a requested org, no-org accounts get a bootstrapped personal org
+      // so the org id resolves on this request (see ensureFactoryAuthUser).
+      if (!(await applyRequestedOrganization(provider, c, token, user))) {
+        return c.json({ error: 'organization_forbidden' }, 403);
       }
       c.set(FACTORY_AUTH_USER_KEY, user);
       const requestContext = c.get('requestContext');
       requestContext?.set('user', user);
       requestContext?.set(MASTRA_MESSAGE_AUTHOR_KEY, messageAuthor(user));
+      requestContext?.set(FACTORY_INTERACTIVE_KEY, true);
       return next();
     }
 

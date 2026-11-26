@@ -61,8 +61,13 @@ export function resolveSlackAdapterConfig(channelConfig: SlackProviderConfig): S
     formatError,
     streaming: topLevelStreaming,
     textFormat,
+    textDisplay,
     typingStatus,
+    toolApprovers,
     toolDisplay: topLevelToolDisplay,
+    generativeUI,
+    replyMode,
+    threadLink,
   } = channelConfig;
   const topLevel = {
     cors,
@@ -70,8 +75,13 @@ export function resolveSlackAdapterConfig(channelConfig: SlackProviderConfig): S
     formatError,
     streaming: topLevelStreaming,
     textFormat,
+    textDisplay,
     typingStatus,
+    toolApprovers,
     toolDisplay: topLevelToolDisplay,
+    generativeUI,
+    replyMode,
+    threadLink,
   };
   const filteredTopLevel = Object.fromEntries(Object.entries(topLevel).filter(([, value]) => value !== undefined));
   const filteredAdapterConfig = Object.fromEntries(
@@ -85,8 +95,9 @@ export function resolveSlackAdapterConfig(channelConfig: SlackProviderConfig): S
   // Keep in sync with the `@default` JSDoc on `SlackAdapterChannelConfig` in ./types.ts.
   const merged = { ...filteredAdapterConfig, ...filteredTopLevel } as Partial<SlackAdapterChannelConfig>;
   const streaming = merged.streaming ?? true;
-  // `'grouped'` requires streaming; fall back to `'cards'` when streaming is off.
-  const toolDisplay = merged.toolDisplay ?? (streaming ? 'grouped' : 'cards');
+  // Reply mode keeps tool calls out of the thread. Otherwise `'grouped'`, which
+  // requires streaming; fall back to `'cards'` when streaming is off.
+  const toolDisplay = merged.toolDisplay ?? (merged.replyMode ? 'hidden' : streaming ? 'grouped' : 'cards');
   return {
     ...merged,
     streaming,

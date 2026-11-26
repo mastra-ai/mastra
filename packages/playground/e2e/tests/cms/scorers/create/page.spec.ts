@@ -110,7 +110,7 @@ async function openEditPage(page: Page) {
   const menu = page.getByRole('button', { name: 'Scorer actions menu' });
   await expect(menu).toBeVisible({ timeout: 10000 });
   await menu.click();
-  await page.getByRole('menuitem', { name: 'Edit Scorer' }).click();
+  await page.getByRole('menuitem', { name: 'Edit scorer' }).click();
 }
 
 test.describe('CMS create scorer page', () => {
@@ -256,9 +256,9 @@ test.describe('CMS create scorer page', () => {
       // Verify description
       await expect(page.getByRole('textbox', { name: /^Description/ })).toHaveValue(description);
 
-      // Verify provider/model selections persisted on the edit page.
-      await expect(page.getByRole('combobox').nth(1)).not.toContainText('Select provider');
-      await expect(page.getByRole('combobox').nth(2)).not.toContainText('Select model');
+      // Verify provider/model selections persisted on the edit page (the fields show the picked values).
+      await expect(page.getByRole('combobox').nth(1)).toHaveValue('OpenAI');
+      await expect(page.getByRole('combobox').nth(2)).toHaveValue('gpt-4o-mini');
 
       // Verify score range
       await expect(page.getByPlaceholder('Min')).toHaveValue('0');
@@ -301,38 +301,6 @@ test.describe('CMS create scorer page', () => {
 
       // Verify ratio rate input is not visible (sampling type is none by default)
       await expect(page.getByPlaceholder('Rate (0-1)')).not.toBeVisible();
-    });
-
-    test('data persists after page reload on edit page', async ({ page }) => {
-      await page.goto('/cms/scorers/create');
-
-      const scorerName = uniqueScorerName('Reload Persist');
-      const instructions = 'Evaluate response quality on a scale.';
-
-      await fillScorerFields(page, {
-        name: scorerName,
-        description: 'Test description for reload',
-        provider: 'OpenAI',
-        model: 'gpt-4o-mini',
-        instructions,
-      });
-
-      await page.getByRole('button', { name: 'Create scorer' }).click();
-
-      await expect(page).toHaveURL(/\/scorers\/[a-zA-Z0-9-]+/, { timeout: 15000 });
-
-      await openEditPage(page);
-
-      await expect(page).toHaveURL(/\/cms\/scorers\/[a-zA-Z0-9-]+\/edit/, { timeout: 15000 });
-
-      // Reload the page
-      await page.reload();
-
-      // Verify name persists after reload
-      await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue(scorerName, { timeout: 10000 });
-
-      // Verify instructions persist after reload
-      await expect(page.locator('.cm-content')).toContainText(instructions, { timeout: 10000 });
     });
   });
 

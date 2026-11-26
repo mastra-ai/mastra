@@ -207,6 +207,9 @@ export type LLMStreamObjectOptions<Z extends StandardSchemaWithJSON | undefined 
 
 export type {
   ProviderConfig,
+  ModelPricing,
+  ModelPricingRates,
+  ModelPricingTier,
   GatewayLanguageModel,
   MastraModelGatewayInterface,
   GatewayAuthRequest,

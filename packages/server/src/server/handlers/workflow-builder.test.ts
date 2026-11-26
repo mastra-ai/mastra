@@ -131,6 +131,31 @@ describe('POST /editor/workflow-builder/stream', () => {
     );
   });
 
+  it('forwards object thread metadata to the builder agent', async () => {
+    const stream = vi.fn().mockResolvedValue({ fullStream: Symbol('fullStream') });
+    const agent = { stream, getMemory: vi.fn().mockResolvedValue(undefined) };
+    const mastra = createEnabledMastra(agent);
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'server-resource');
+
+    await STREAM_WORKFLOW_BUILDER_ROUTE.handler({
+      mastra,
+      messages: [{ role: 'user', content: 'Create a workflow' }],
+      requestContext,
+      memory: { thread: { id: 'thread-1', metadata: { tenant_id: 42 } }, resource: 'body-resource' },
+    } as any);
+
+    expect(stream).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        memory: expect.objectContaining({
+          resource: 'server-resource',
+          thread: { id: 'thread-1', metadata: { tenant_id: 42 } },
+        }),
+      }),
+    );
+  });
+
   // The stream handler merges any body-supplied requestContext through the shared
   // mergeBodyRequestContext helper (same as agent execution routes), so the server
   // context stays authoritative. The authority semantics are covered below.

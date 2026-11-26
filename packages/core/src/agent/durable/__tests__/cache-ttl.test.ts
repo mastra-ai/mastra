@@ -5,7 +5,7 @@
  * the system behaves appropriately when cached events are no longer available.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { InMemoryServerCache } from '../../../cache/inmemory';
 import { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -14,11 +14,6 @@ import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
 
 describe('Cache TTL Expiry Behavior', () => {
   describe('InMemoryServerCache TTL', () => {
-    it('should support configurable TTL', () => {
-      const cache = new InMemoryServerCache({ ttlMs: 100 });
-      expect(cache).toBeInstanceOf(InMemoryServerCache);
-    });
-
     it('should expire cached items after TTL', async () => {
       // Use very short TTL for testing
       const cache = new InMemoryServerCache({ ttlMs: 50 });
@@ -153,8 +148,10 @@ describe('Cache TTL Expiry Behavior', () => {
         data: { chunk: 'New event' },
       });
 
-      // Should only receive new event (old one expired)
-      expect(receivedEvents).toHaveLength(1);
+      // Should only receive new event (old one expired). The first live frame
+      // after attach reconciles against the log asynchronously (the cursor
+      // sits below the epoch-seeded index), so wait for delivery.
+      await vi.waitFor(() => expect(receivedEvents).toHaveLength(1));
       expect(receivedEvents[0].data).toEqual({ chunk: 'New event' });
     });
 

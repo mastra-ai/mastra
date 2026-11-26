@@ -1,10 +1,32 @@
 import { describe, expect, it } from 'vitest';
-import { buildApiSchemaManifest } from './api-schema-manifest';
+import { z } from 'zod/v4';
+import { buildApiSchemaManifest, getApiSchemaPropertyNames } from './api-schema-manifest';
+import { createRoute } from './routes/route-builder';
 
 const apiSchemaManifest = buildApiSchemaManifest();
 const routeKeys = apiSchemaManifest.routes.map(route => `${route.method} ${route.path}`);
 
 describe('apiSchemaManifest', () => {
+  it('exposes accepted request fields and emitted response fields (#30050)', () => {
+    const route = createRoute({
+      method: 'POST',
+      path: '/widgets/:widgetId',
+      responseType: 'json',
+      pathParamSchema: z.object({ widgetId: z.string().transform(value => value.length) }),
+      queryParamSchema: z.object({ limit: z.string().transform(Number).default('10') }),
+      bodySchema: z.object({ name: z.string(), enabled: z.boolean().default(true) }),
+      responseSchema: z.object({ enabled: z.boolean().default(true) }),
+      handler: async () => ({ enabled: true }),
+    });
+    const [manifestRoute] = buildApiSchemaManifest([route]).routes;
+
+    expect(manifestRoute?.pathParamSchema?.properties?.widgetId).toMatchObject({ type: 'string' });
+    expect(manifestRoute?.queryParamSchema?.properties?.limit).toMatchObject({ type: 'string' });
+    expect(manifestRoute?.queryParamSchema?.required).toBeUndefined();
+    expect(manifestRoute?.bodySchema?.required).toEqual(['name']);
+    expect(manifestRoute?.responseSchema?.required).toEqual(['enabled']);
+  });
+
   it('includes route contracts required by the mastra api command tree', () => {
     expect(routeKeys).toEqual(
       expect.arrayContaining([
@@ -76,6 +98,18 @@ describe('apiSchemaManifest', () => {
       route => route.method === 'GET' && route.path === '/agents/:agentId',
     );
     expect(getAgent?.responseShape).toEqual({ kind: 'single' });
+  });
+
+  it('keeps thread-query CLI flags and pagination available for both request contracts', () => {
+    const threads = apiSchemaManifest.routes.find(
+      route => route.method === 'POST' && route.path === '/observability/threads/query',
+    );
+    expect(getApiSchemaPropertyNames(threads?.bodySchema)).toEqual(['orderBy', 'page', 'timeRange', 'traces', 'where']);
+    expect(threads?.responseShape).toEqual({
+      kind: 'object-property',
+      listProperty: 'threads',
+      paginationProperty: 'page',
+    });
   });
 
   it('converts path, query, and body route schemas to JSON Schema', () => {

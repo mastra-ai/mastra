@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { Mastra } from '@mastra/core/mastra';
+import { createSkill } from '@mastra/core/skills';
 import { MastraSandbox } from '@mastra/core/workspace';
 import type { ProviderStatus } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
@@ -62,57 +63,36 @@ const release = defineBoard({
       title: 'Queued',
       kind: 'resting',
       next: 'preparing',
-      onEnter: {
-        issue: context => {
-          if (context.item.parentWorkItemId) return;
-          return {
-            type: 'upsertLinkedWorkItem',
-            idempotencyKey: `${context.ingress.id}:release-child`,
-            board: 'release',
-            stage: 'queued',
-            source: 'github-issue',
-            sourceKey: 'release:43',
-            title: 'Publish linked release',
-            url: null,
-          };
-        },
-      },
     },
     preparing: {
       title: 'Preparing',
       kind: 'working',
-      role: 'release-preparer',
+      runner: { context: 'release-preparer', skill: 'prepare-release' },
       next: 'shipping',
-      onEnter: {
-        issue: context => ({
-          type: 'invokeSkill',
-          idempotencyKey: `${context.ingress.id}:prepare`,
-          role: 'release-preparer',
-          prompt: 'Prepare the release and transition to shipping.',
-        }),
-      },
     },
     shipping: {
       title: 'Shipping',
       kind: 'working',
-      role: 'release-publisher',
+      runner: { context: 'release-publisher', skill: 'publish-release' },
       next: 'shipped',
-      onEnter: {
-        issue: context => ({
-          type: 'invokeSkill',
-          idempotencyKey: `${context.ingress.id}:publish`,
-          role: 'release-publisher',
-          prompt: 'Publish the release.',
-        }),
-      },
     },
     shipped: { title: 'Shipped', kind: 'terminal' },
   },
 });
 
+const releaseSkills = [
+  createSkill({
+    name: 'prepare-release',
+    description: 'Prepare a release',
+    instructions: 'Prepare the release and report the shipping outcome.',
+  }),
+  createSkill({ name: 'publish-release', description: 'Publish a release', instructions: 'Publish the release.' }),
+];
+
 describe('custom board public runtime', () => {
   it.each([true, false])(
-    'executes a lifecycle-linked release through both roles and terminal tool-result dispatch (includeDefaultBoards: %s)',
+    // The retired includeDefaultBoards changes nothing: Work is installed either way.
+    'executes a release through both phase runners and terminal tool-result dispatch (includeDefaultBoards: %s)',
     async includeDefaultBoards => {
       // The mocked fetch below makes any key work, but gateway auth resolution
       // still requires the env var to be present — CI has no OPENAI_API_KEY.
@@ -126,23 +106,20 @@ describe('custom board public runtime', () => {
         const body = input instanceof Request ? await input.clone().text() : String(init?.body ?? '');
         const phaseText = JSON.stringify(JSON.parse(body).input);
         phaseRequests.push(phaseText);
-        const currentRevision = [
-          ...phaseText.matchAll(/Use factory_transition_work_item with expectedRevision (\d+)/g),
-        ].at(-1)?.[1];
+        // The preparer reports the outcome its phase signal lists; Factory moves the card once its run ends.
+        const listsShipping = phaseText.includes('Outcomes: shipping: Shipping');
         const publishing = handoffRequested && !publishRequested && phaseText.includes('Role: release-publisher');
         if (publishing || (!handoffRequested && phaseText.includes('Role: release-preparer'))) {
-          if (!publishing && currentRevision === undefined) throw new Error('Missing Factory phase expectedRevision.');
+          if (!publishing && !listsShipping) throw new Error('Missing Factory phase outcomes.');
           if (publishing) publishRequested = true;
           else handoffRequested = true;
           const item = {
             id: publishing ? 'fc_publish' : 'fc_release',
             type: 'function_call',
             call_id: publishing ? 'call_publish' : 'call_release_handoff',
-            name: publishing ? 'execute_command' : 'factory_transition_work_item',
+            name: publishing ? 'execute_command' : 'factory_report_outcome',
             arguments: JSON.stringify(
-              publishing
-                ? { command: 'echo published' }
-                : { stage: 'shipping', expectedRevision: Number(currentRevision), rationale: 'Release prepared.' },
+              publishing ? { command: 'echo published' } : { outcome: 'shipping', reason: 'Release prepared.' },
             ),
           };
           const events = [
@@ -213,6 +190,7 @@ describe('custom board public runtime', () => {
         sandbox: () => new ReleaseSandbox(),
         stateSecret: 'release-runtime-test-state-secret',
         boards: [release],
+        skills: releaseSkills,
         configVersion: 'release-runtime-v1',
         includeDefaultBoards,
         secretEncryption: createFactorySecretEncryption({ primary: { id: 'test', key: Buffer.alloc(32, 7) } }),
@@ -243,7 +221,7 @@ describe('custom board public runtime', () => {
         const settingsResponse = await app.request(`/web/factory/projects/${project.id}`, {
           method: 'PATCH',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ autoRunEnabled: true, defaultModelId: 'openai/gpt-5.6-sol' }),
+          body: JSON.stringify({ defaultModelId: 'openai/gpt-5.6-sol' }),
         });
         expect(settingsResponse.status).toBe(200);
         const sourceControl = github.sourceControlStorage;
@@ -266,9 +244,6 @@ describe('custom board public runtime', () => {
           orgId: 'release-org',
           connectionId: connection.id,
           repositoryId: repository.id,
-          createdByUserId: 'release-user',
-          sandboxProvider: 'local',
-          sandboxWorkdir: '/tmp/release-runtime',
         });
         const itemResponse = await post(`/web/factory/projects/${project.id}/work-items`, {
           board: 'release',
@@ -277,20 +252,8 @@ describe('custom board public runtime', () => {
         });
         expect(await itemResponse.clone().json()).toMatchObject({ workItem: { board: 'release', stages: ['queued'] } });
         expect(itemResponse.status).toBe(200);
-        const { workItem: parent } = await itemResponse.json();
+        const { workItem } = await itemResponse.json();
         const workItems = storage.getDomain<WorkItemsStorage>('work-items');
-        const listChildren = async () =>
-          (await workItems.list({ orgId: 'release-org', factoryProjectId: project.id })).filter(
-            item => item.parentWorkItemId === parent.id,
-          );
-        await vi.waitFor(async () => expect(await listChildren()).toHaveLength(1), { timeout: 10_000 });
-        const [workItem] = await listChildren();
-        expect(workItem).toMatchObject({
-          board: 'release',
-          stages: ['queued'],
-          parentWorkItemId: parent.id,
-          externalSource: { integrationId: 'github', type: 'issue', externalId: 'release:43' },
-        });
         const transitionPath = `/web/factory/projects/${project.id}/work-items/${workItem.id}/transition`;
         const denied = await post(transitionPath, {
           board: 'release',
@@ -391,23 +354,30 @@ describe('custom board public runtime', () => {
         expect(bindings.map(binding => binding.role).sort()).toEqual(['release-preparer', 'release-publisher']);
         const publisher = bindings.find(binding => binding.role === 'release-publisher')!;
         const cursor = await workItems.getToolResultCursor('release-org', project.id, publisher.id);
-        expect(cursor).toMatchObject({ bindingId: publisher.id, lastMessageId: expect.any(String) });
+        expect(cursor).toMatchObject({ bindingId: publisher.id, lastMessageCreatedAt: expect.any(Date) });
         const decisions = await workItems.listDeferredDecisions('release-org', project.id);
         expect(decisions.map(record => record.decision.type).sort()).toEqual([
           'invokeSkill',
           'invokeSkill',
           'transition',
-          'upsertLinkedWorkItem',
         ]);
+        expect(
+          decisions.filter(record => record.decision.type === 'invokeSkill').map(record => record.decision),
+        ).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ role: 'release-preparer', skillName: 'prepare-release' }),
+            expect.objectContaining({ role: 'release-publisher', skillName: 'publish-release' }),
+          ]),
+        );
         expect(decisions.find(record => record.decision.type === 'transition')).toMatchObject({
           status: 'succeeded',
           decision: { board: 'release', stage: 'shipped' },
         });
         const evaluations = await storage.ops.findMany('factory_rule_evaluations', {});
         expect(evaluations.length).toBeGreaterThan(0);
-        expect(evaluations.every(row => row.rule_set_version === 'release-runtime-v1')).toBe(true);
-        expect(evaluations.filter(row => row.code === 'approval_required')).toHaveLength(1);
-        const toolIngresses = await storage.ops.findMany('factory_rule_ingress', { trigger_type: 'tool.result' });
+        const toolIngresses = (await storage.ops.findMany('factory_rule_ingress', {})).filter(row =>
+          String(row.identity).startsWith(`["${publisher.id}",`),
+        );
         expect(toolIngresses).toHaveLength(1);
         expect(evaluations.filter(row => row.ingress_id === toolIngresses[0]!.id)).toHaveLength(1);
         const terminal = await workItems.get({ orgId: 'release-org', id: workItem.id });
@@ -415,7 +385,6 @@ describe('custom board public runtime', () => {
         const replay = await post(transitionPath, approvedRequest);
         expect(await replay.json()).toMatchObject({ result });
         expect(await workItems.get({ orgId: 'release-org', id: workItem.id })).toEqual(terminal);
-        expect(await listChildren()).toHaveLength(1);
         expect(await workItems.listDeferredDecisions('release-org', project.id)).toEqual(decisions);
         expect(await storage.ops.findMany('factory_rule_evaluations', {})).toEqual(evaluations);
         expect(await workItems.getToolResultCursor('release-org', project.id, publisher.id)).toEqual(cursor);

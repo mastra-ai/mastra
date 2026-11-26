@@ -24,6 +24,7 @@ import {
   getActiveRouteMemoryModelId,
   getDynamicModel,
   resolveModel,
+  setHostModelRoute,
 } from './model.js';
 
 afterEach(() => {
@@ -189,6 +190,30 @@ describe('request-scoped credentials', () => {
   });
 });
 
+describe('Kimi and Copilot model ids', () => {
+  it.each(['kimi-code-plan-cn/k3', 'kimi-for-coding/k3', 'mastracode/kimi-for-coding/k3'])(
+    'resolves %s through the Kimi For Coding subscription provider',
+    modelId => {
+      process.env.KIMI_API_KEY = 'kimi-test-key';
+
+      const model = resolveModel(modelId) as unknown as { provider: string; modelId: string };
+
+      expect(model.provider).toBe('kimi-for-coding');
+      expect(model.modelId).toBe('k3');
+    },
+  );
+
+  it.each(['github-copilot/gpt-4.1', 'mastracode/github-copilot/gpt-4.1'])(
+    'resolves %s through the GitHub Copilot provider',
+    modelId => {
+      const model = resolveModel(modelId) as unknown as { provider: string; modelId: string };
+
+      expect(model.provider).toMatch(/^github-copilot/);
+      expect(model.modelId).toBe('gpt-4.1');
+    },
+  );
+});
+
 describe('getDynamicModel error branches', () => {
   it('points at the missing controller context when the run has no session request context at all', () => {
     const requestContext = new RequestContext();
@@ -247,6 +272,21 @@ describe('getDynamicModel model route', () => {
     expect((model as { model: { modelId?: string } }).model.modelId).toBe('claude-fable-5');
     expect((model as { id: string }).id).toBe('anthropic/claude-fable-5');
   });
+
+  it.each(['openai/gpt-5.6-sol:fast', 'openai/gpt-5.6-sol'])(
+    'keeps the resolved model canonical when the route stores %s',
+    routeModelId => {
+      const fastRoute = [{ ...route[1]!, modelId: routeModelId }, route[2]!];
+      const models = getDynamicModel(requestWithSession('openai/gpt-5.6-sol:fast', { route: fastRoute }));
+      if (!Array.isArray(models)) throw new Error('expected a model route');
+
+      expect(models.map(entry => entry.id)).toEqual(['openai', 'github-copilot']);
+      expect(models.map(entry => entry.model)).toMatchObject([
+        { id: 'openai/gpt-5.6-sol', model: { modelId: 'gpt-5.6-sol' } },
+        { id: 'github-copilot/gpt-4.1', model: { modelId: 'gpt-4.1' } },
+      ]);
+    },
+  );
 
   it('labels a custom-provider model with its provider/model ID', () => {
     const model = getDynamicModel(requestWithSession('mastracode/anthropic/claude-fable-5'));
@@ -335,6 +375,22 @@ describe('getDynamicModel model route', () => {
     expect((model as { model: { modelId?: string } }).model.modelId).toBe('gpt-5.4-mini');
   });
 
+  it('ignores a pending hop that does not match the marker schema', () => {
+    const requestContext = new RequestContext();
+    requestContext.set('controller', {
+      session: { modelId: 'anthropic/claude-fable-5', modeId: 'build' },
+      threadId: 'thread-1',
+      getState: () => ({
+        modelRoute: { entries: route },
+        mastracodePendingModelFallback: { toEntryId: 'openai', toModelId: 'openai/gpt-5.6-sol', threadId: 'thread-1' },
+      }),
+    });
+
+    const model = getDynamicModel({ requestContext });
+
+    expect((model as Array<{ id?: string }>).map(entry => entry.id)).toEqual(['anthropic', 'openai', 'github-copilot']);
+  });
+
   it('caps route resolution for persisted state that bypassed schema validation', () => {
     const oversizedRoute = Array.from({ length: MODEL_ROUTE_MAX_ENTRIES + 1 }, (_, index) => ({
       id: `route-${index}`,
@@ -364,6 +420,66 @@ describe('getDynamicModel model route', () => {
 
     expect((model as Array<{ id?: string }>).map(entry => entry.id)).toEqual(['anthropic', 'openai', 'anthropic#2']);
   });
+
+  it('starts a host route on its first model even when an earlier request left a pending hop', () => {
+    const request = requestWithSession('anthropic/claude-fable-5', {
+      threadId: 'thread-1',
+      pending: {
+        fromEntryId: 'anthropic/claude-fable-5',
+        toEntryId: 'openai/gpt-5.6-sol',
+        toModelId: 'openai/gpt-5.6-sol',
+        threadId: 'thread-1',
+        reason: 'pool-exhausted',
+        at: '2026-10-05T00:00:00.000Z',
+      },
+    });
+    setHostModelRoute(request.requestContext, [
+      { modelId: 'anthropic/claude-fable-5' },
+      { modelId: 'openai/gpt-5.6-sol' },
+    ]);
+
+    const model = getDynamicModel(request);
+
+    expect((model as Array<{ id?: string }>).map(entry => entry.id)).toEqual([
+      'anthropic/claude-fable-5',
+      'openai/gpt-5.6-sol',
+    ]);
+  });
+
+  it('runs the session model alone when the host route is empty, even with a pending hop', () => {
+    const request = requestWithSession('anthropic/claude-fable-5', {
+      threadId: 'thread-1',
+      pending: {
+        fromEntryId: 'anthropic/claude-fable-5',
+        toEntryId: 'openai/gpt-5.6-sol',
+        toModelId: 'openai/gpt-5.6-sol',
+        threadId: 'thread-1',
+        reason: 'pool-exhausted',
+        at: '2026-10-05T00:00:00.000Z',
+      },
+    });
+    setHostModelRoute(request.requestContext, []);
+
+    const model = getDynamicModel(request);
+
+    expect(Array.isArray(model)).toBe(false);
+    expect((model as { id: string }).id).toBe('anthropic/claude-fable-5');
+  });
+
+  it("runs a host route's first model instead of the session model", () => {
+    const request = requestWithSession('anthropic/claude-fable-5');
+    setHostModelRoute(request.requestContext, [
+      { modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'high' },
+      { modelId: 'anthropic/claude-fable-5' },
+    ]);
+
+    const model = getDynamicModel(request);
+
+    expect((model as Array<{ id?: string }>).map(entry => entry.id)).toEqual([
+      'openai/gpt-5.6-sol',
+      'anthropic/claude-fable-5',
+    ]);
+  });
 });
 
 describe('getActiveRouteMemoryModelId', () => {
@@ -388,7 +504,14 @@ describe('getActiveRouteMemoryModelId', () => {
       modelRoute: {
         entries: [{ ...entries[0], memoryModelId: 'anthropic/claude-haiku-4-5' }, entries[1]],
       },
-      mastracodePendingModelFallback: { toEntryId: 'openai', threadId: 'thread-1' },
+      mastracodePendingModelFallback: {
+        fromEntryId: 'anthropic',
+        toEntryId: 'openai',
+        toModelId: 'openai/gpt-5.6-sol',
+        threadId: 'thread-1',
+        reason: 'pool-exhausted',
+        at: '2026-10-05T00:00:00.000Z',
+      },
     };
     expect(getActiveRouteMemoryModelId(state, 'thread-1')).toBe('openai/gpt-5.4-mini');
     expect(getActiveRouteMemoryModelId(state, 'thread-2')).toBe('anthropic/claude-haiku-4-5');

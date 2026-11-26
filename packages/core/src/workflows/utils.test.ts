@@ -51,7 +51,7 @@ describe('cleanStepResult', () => {
     const result = {
       status: 'success',
       output: {},
-      metadata: { nestedRunId: 'run-123', customField: 'keep-me' },
+      metadata: { nestedRunId: 'run-123', foreachNestedRunIds: { 0: 'child-0' }, customField: 'keep-me' },
     };
     const cleaned = cleanStepResult(result) as any;
     expect(cleaned.metadata).toEqual({ customField: 'keep-me' });
@@ -361,6 +361,20 @@ describe('waitForSuspendedSnapshot', () => {
     expect(workflowsStore.loadWorkflowSnapshot).toHaveBeenCalledTimes(1);
   });
 
+  it('reports a claimed run whose row disappears instead of waiting out the timeout', async () => {
+    vi.useFakeTimers();
+    const workflowsStore = storeReturning(['pending', 'running', null]);
+    const onClaimedRunFinished = vi.fn();
+
+    const snapshotPromise = waitForSuspendedSnapshot(workflowsStore, 'workflow', 'run-1', { onClaimedRunFinished });
+    await vi.advanceTimersByTimeAsync(100);
+
+    await expect(snapshotPromise).resolves.toBeNull();
+    expect(onClaimedRunFinished).toHaveBeenCalledOnce();
+    expect(workflowsStore.loadWorkflowSnapshot).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
+
   it('uses a caller-requested grace period for a temporarily missing snapshot', async () => {
     vi.useFakeTimers();
     const workflowsStore = storeReturning([null, null, 'suspended']);
@@ -435,5 +449,45 @@ describe('abortableSleep', () => {
 
     await expect(sleep).resolves.toBeUndefined();
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  // Node and Bun fire a `setTimeout` delay above 2^31-1 ms after 1 ms.
+  describe('longer than the largest timer delay', () => {
+    const maxDelay = 2 ** 31 - 1;
+    const duration = 2 ** 31 + 60_000;
+
+    it('resolves only after the full duration', async () => {
+      let resolved = false;
+      void abortableSleep(duration).then(() => {
+        resolved = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(maxDelay);
+      expect(resolved).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(duration - maxDelay - 1);
+      expect(resolved).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(resolved).toBe(true);
+    });
+
+    it('clears the timer and resolves when aborted after the largest timer delay has passed', async () => {
+      const controller = new AbortController();
+      let resolved = false;
+      void abortableSleep(duration, controller.signal).then(() => {
+        resolved = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(maxDelay + 1_000);
+      expect(resolved).toBe(false);
+      expect(vi.getTimerCount()).toBe(1);
+
+      controller.abort();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(resolved).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    });
   });
 });

@@ -16,7 +16,13 @@ function assistantMessage(id: string, text: string): MastraDBMessage {
 }
 
 describe('MessageList response message rotation', () => {
-  it('Given a rotated response id, When the next response arrives, Then it lands in its own message', () => {
+  it.each([
+    ['Given a rotated response id, When the next response arrives, Then it lands in its own message', 'response-1'],
+    [
+      'Given a seal target that is not in the list, When the id rotates, Then the tail is sealed anyway',
+      'never-persisted',
+    ],
+  ] as const)('%s', (_title, input) => {
     const messageList = new MessageList({
       threadId: 'thread-1',
       generateMessageId: context => (context?.role === 'assistant' ? 'response-2' : 'user-1'),
@@ -24,22 +30,7 @@ describe('MessageList response message rotation', () => {
     messageList.add({ role: 'user', content: 'hi' }, 'input');
     messageList.add(assistantMessage('response-1', 'first'), 'response');
 
-    const nextMessageId = messageList.rotateResponseMessageId('response-1');
-    messageList.add(assistantMessage(nextMessageId, 'second'), 'response');
-
-    const assistantMessages = messageList.get.all.db().filter(message => message.role === 'assistant');
-    expect(assistantMessages.map(message => message.id)).toEqual(['response-1', 'response-2']);
-  });
-
-  it('Given a seal target that is not in the list, When the id rotates, Then the tail is sealed anyway', () => {
-    const messageList = new MessageList({
-      threadId: 'thread-1',
-      generateMessageId: context => (context?.role === 'assistant' ? 'response-2' : 'user-1'),
-    });
-    messageList.add({ role: 'user', content: 'hi' }, 'input');
-    messageList.add(assistantMessage('response-1', 'first'), 'response');
-
-    const nextMessageId = messageList.rotateResponseMessageId('never-persisted');
+    const nextMessageId = messageList.rotateResponseMessageId(input);
     messageList.add(assistantMessage(nextMessageId, 'second'), 'response');
 
     const assistantMessages = messageList.get.all.db().filter(message => message.role === 'assistant');

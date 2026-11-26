@@ -1,0 +1,124 @@
+---
+title: "Reference: builder.configuration.agent.models"
+description: "Reference for the Agent Builder model allowlist and default model admin input."
+---
+
+# `builder.configuration.agent.models`
+
+`builder.configuration.agent.models` is the admin-facing model policy input on `AgentBuilderOptions`. It controls which providers and models the Agent Builder exposes, and which model is pre-selected on new-agent create.
+
+See [Model policy](/model-policy) for concepts and worked examples.
+
+## Usage example
+
+```typescript title="src/mastra/index.ts"
+import { MastraEditor } from '@mastra/editor'
+
+new MastraEditor({
+  builder: {
+    enabled: true,
+    configuration: {
+      agent: {
+        models: {
+          allowed: [
+            { provider: 'openai', modelId: '__AI_SDK_OPENAI_MODEL_BASE__' },
+            { provider: 'anthropic', modelId: '__AI_SDK_ANTHROPIC_MODEL_SONNET__' },
+          ],
+        },
+      },
+    },
+  },
+})
+```
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'allowed',
+    type: 'ProviderModelEntry[]',
+    isOptional: true,
+    description:
+      'Allowlist of providers and models. Omit to allow every registered model. When non-empty, only the listed entries are selectable in the Builder.',
+    properties: [
+      {
+        type: 'KnownProviderEntry',
+        parameters: [
+          {
+            name: 'provider',
+            type: 'Provider',
+            description: 'Provider id from the generated provider registry (for example, `openai`, `anthropic`).',
+          },
+          {
+            name: 'modelId',
+            type: 'ModelForProvider<Provider>',
+            isOptional: true,
+            description: 'Specific model id for that provider. Omit to allow every model under the provider.',
+          },
+        ],
+      },
+      {
+        type: 'CustomProviderEntry',
+        parameters: [
+          {
+            name: 'kind',
+            type: "'custom'",
+            description: 'Discriminant marking this entry as a gateway or self-hosted provider not in the registry.',
+          },
+          {
+            name: 'provider',
+            type: 'string',
+            description: 'Provider id for the custom provider.',
+          },
+          {
+            name: 'modelId',
+            type: 'string',
+            isOptional: true,
+            description: 'Specific model id under the custom provider. Omit to allow every model under it.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'default',
+    type: 'DefaultModelEntry',
+    isOptional: true,
+    description:
+      'Pre-selected model on new-agent create. Same shape as `ProviderModelEntry`, but `modelId` is required. Must satisfy the `allowed` list when set.',
+    properties: [
+      {
+        type: 'DefaultModelEntry',
+        parameters: [
+          {
+            name: 'provider',
+            type: 'Provider | string',
+            description:
+              "Provider id. Use a `Provider` literal for known providers, or any `string` with `kind: 'custom'`.",
+          },
+          {
+            name: 'modelId',
+            type: 'string',
+            description: 'Required model id. Points at a specific model, not a whole provider.',
+          },
+          {
+            name: 'kind',
+            type: "'custom'",
+            isOptional: true,
+            description: "Required and set to `custom` when targeting a provider that isn't in the generated registry. Omit it for known providers.",
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Validation rules
+
+Mastra validates the admin policy at server boot and throws an error for invalid configurations.
+
+- `allowed` empty or omitted: no restriction. Every registered model is available.
+- When `allowed` is non-empty and a `default` is set: `default` must satisfy `isModelAllowed(allowed, default)`. A `default` that fails this check throws an error at startup. Add the model to `allowed` or change `default`.
+- To hide the end-user model picker, set `features.agent.model: false` in [AgentBuilderOptions](/reference/agent-builder-options). When the picker is hidden, provide a `default` so new agents resolve a model.

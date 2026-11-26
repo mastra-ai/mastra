@@ -36,6 +36,7 @@ function createHarness() {
     },
     buildStreamOptions: async () => ({}),
     buildSharedRunOptions: () => ({}),
+    resolveModeActiveTools: () => undefined,
     buildToolsets: async () => ({}),
     buildRequestContext: async requestContext => requestContext ?? new RequestContext(),
     persistTokenUsage: vi.fn(async () => {}),

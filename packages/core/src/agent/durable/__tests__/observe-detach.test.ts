@@ -17,7 +17,7 @@ import { Agent } from '../../agent';
 import { AGENT_STREAM_TOPIC } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import type { DurableAgent } from '../durable-agent';
-import { emitChunkEvent, emitFinishEvent } from '../stream-adapter';
+import { emitChunkEvent, emitFinishEvent, emitOwnershipClaimedEvent } from '../stream-adapter';
 
 const CLEANUP_MS = 30;
 const IDLE = 30;
@@ -53,7 +53,9 @@ describe('DurableAgent.observe() observer-only teardown (issue #25022)', () => {
     await pubsub.close();
   });
 
-  const spies = (runId: string) => {
+  const spies = async (runId: string) => {
+    // These tests observe an existing run, not an unavailable topic.
+    await emitOwnershipClaimedEvent(agent.pubsub, runId, 1);
     const topic = AGENT_STREAM_TOPIC(runId);
     const unsubscribe = vi.spyOn(agent.pubsub, 'unsubscribe');
     const clearTopic = vi.spyOn(agent.pubsub, 'clearTopic');
@@ -63,9 +65,22 @@ describe('DurableAgent.observe() observer-only teardown (issue #25022)', () => {
     };
   };
 
+  it('completes an unavailable run and settles public output promises without clearing history', async () => {
+    const clearTopic = vi.spyOn(agent.pubsub, 'clearTopic');
+    const result = await agent.observe(crypto.randomUUID());
+    const chunks = [];
+    for await (const chunk of result.fullStream) chunks.push(chunk);
+    expect(chunks).toEqual([]);
+    expect(
+      await within(Promise.allSettled([result.output.text, result.output.finishReason, result.output.usage])),
+    ).not.toBe('timeout');
+    await delay(CLEANUP_MS * 3);
+    expect(clearTopic).not.toHaveBeenCalled();
+  });
+
   it('detach() unsubscribes without tearing down the run', async () => {
     const runId = 'detach-run';
-    const s = spies(runId);
+    const s = await spies(runId);
     const { fullStream, detach } = await agent.observe(runId);
     const it$ = fullStream[Symbol.asyncIterator]();
 
@@ -85,7 +100,7 @@ describe('DurableAgent.observe() observer-only teardown (issue #25022)', () => {
     // its cancel can never reach the source on its own — detach() resolves the
     // pending read and lets return() complete.
     const runId = 'return-pending';
-    const s = spies(runId);
+    const s = await spies(runId);
     const { fullStream, detach } = await agent.observe(runId);
     const it$ = fullStream[Symbol.asyncIterator]();
 
@@ -102,7 +117,7 @@ describe('DurableAgent.observe() observer-only teardown (issue #25022)', () => {
 
   it('breaking out of for await unsubscribes without tearing down the run', async () => {
     const runId = 'break-loop';
-    const s = spies(runId);
+    const s = await spies(runId);
     const { fullStream } = await agent.observe(runId);
 
     const consumed = (async () => {
@@ -121,7 +136,7 @@ describe('DurableAgent.observe() observer-only teardown (issue #25022)', () => {
 
   it('a bare idleTimeoutMs ends the stream but keeps the run', async () => {
     const runId = 'bare-idle';
-    const s = spies(runId);
+    const s = await spies(runId);
     const onError = vi.fn();
     const { fullStream } = await agent.observe(runId, { idleTimeoutMs: IDLE, onError });
 
@@ -140,7 +155,7 @@ describe('DurableAgent.observe() observer-only teardown (issue #25022)', () => {
 
   it('idleTimeoutMs + isAlive reporting dead still schedules full cleanup', async () => {
     const runId = 'dead-idle';
-    const s = spies(runId);
+    const s = await spies(runId);
     const { fullStream } = await agent.observe(runId, { idleTimeoutMs: IDLE, isAlive: () => false });
 
     const consumed = (async () => {
@@ -154,7 +169,7 @@ describe('DurableAgent.observe() observer-only teardown (issue #25022)', () => {
 
   it('a FINISH event still schedules cleanup, and cleanup() is still full teardown', async () => {
     const finishRun = 'finish-run';
-    const f = spies(finishRun);
+    const f = await spies(finishRun);
     const { fullStream } = await agent.observe(finishRun);
     const consumed = (async () => {
       for await (const _ of fullStream) {
@@ -166,7 +181,7 @@ describe('DurableAgent.observe() observer-only teardown (issue #25022)', () => {
     await vi.waitFor(() => expect(f.topicCleared()).toBe(true), { timeout: 1000 });
 
     const cleanupRun = 'cleanup-run';
-    const c = spies(cleanupRun);
+    const c = await spies(cleanupRun);
     const { cleanup } = await agent.observe(cleanupRun);
     cleanup();
     expect(c.topicCleared()).toBe(true);
@@ -184,6 +199,7 @@ describe('DurableAgent.observe() observer-only teardown (issue #25022)', () => {
       cleanupTimeoutMs: 0,
     }) as DurableAgent;
     const runId = 'natural-end';
+    await emitOwnershipClaimedEvent(noCleanup.pubsub, runId, 1);
     const topic = AGENT_STREAM_TOPIC(runId);
     const unsubscribe = vi.spyOn(noCleanup.pubsub, 'unsubscribe');
     const { fullStream } = await noCleanup.observe(runId);
@@ -199,7 +215,7 @@ describe('DurableAgent.observe() observer-only teardown (issue #25022)', () => {
 
   it('one observer detaching does not affect another observer or replay', async () => {
     const runId = 'multi-observer';
-    const s = spies(runId);
+    const s = await spies(runId);
     const first = await agent.observe(runId);
     const second = await agent.observe(runId);
 

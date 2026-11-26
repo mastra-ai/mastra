@@ -200,9 +200,8 @@ export class QdrantFilterTranslator extends BaseFilterTranslator<QdrantVectorFil
       return {};
     } else if (conditions.length === 1 && isNested) {
       return conditions[0];
-    } else {
-      return { must: conditions };
     }
+    return { must: conditions };
   }
 
   private handleLogicalOperators(entries: [string, any][], isNested: boolean, fieldKey?: string): any | null {
@@ -212,6 +211,21 @@ export class QdrantFilterTranslator extends BaseFilterTranslator<QdrantVectorFil
     // Let handleFieldConditions handle it via the _specialNot path
     if (firstKey === '$not' && fieldKey) {
       return null;
+    }
+
+    // Mixed logical and field keys at the same level must be combined with AND.
+    // Without this, a logical key in any position drops or corrupts its siblings.
+    if (entries.length > 1) {
+      const isLogicalEntry = ([key]: [string, any]) =>
+        this.isLogicalOperator(key) && !this.isCustomOperator(key) && !(key === '$not' && fieldKey);
+      const hasLogical = entries.some(isLogicalEntry);
+      const hasField = entries.some(([key]) => !this.isLogicalOperator(key));
+
+      if (hasLogical && hasField) {
+        return {
+          must: entries.map(([key, value]) => this.translateNode({ [key]: value } as QdrantVectorFilter, true)),
+        };
+      }
     }
 
     if (firstKey && this.isLogicalOperator(firstKey) && !this.isCustomOperator(firstKey)) {

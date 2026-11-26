@@ -25,6 +25,7 @@ import type { ToolResult } from '../components/tool-execution-enhanced.js';
 import { DEFAULT_RENDER_COALESCE_MS, requestRender, flushRender } from '../render-scheduler.js';
 import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
 import { getMarkdownTheme } from '../theme.js';
+import { appendBoundedOutput } from '../utils/bounded-output.js';
 
 import type { EventHandlerContext } from './types.js';
 
@@ -553,7 +554,7 @@ export function handleShellOutput(
 ): void {
   const pending = pendingShellOutputs.get(toolCallId);
   if (pending) {
-    pending.output += output;
+    pending.output = appendBoundedOutput(pending.output, output);
     return;
   }
 

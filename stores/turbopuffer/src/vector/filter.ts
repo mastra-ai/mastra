@@ -112,6 +112,16 @@ export class TurbopufferFilterTranslator extends BaseFilterTranslator<
 
     const [key, value] = entries[0] as [string, any];
 
+    // Mixed logical and field keys at the same level must be combined with AND.
+    // Without this, a logical key in the first position drops its siblings and a
+    // logical key in a later position is misread as a field condition.
+    if (entries.length > 1 && entries.some(([entryKey]) => this.isLogicalOperator(entryKey))) {
+      const conditions = entries.map(([entryKey, entryValue]) =>
+        this.translateNode({ [entryKey]: entryValue } as TurbopufferVectorFilter),
+      );
+      return ['And', conditions] as TurbopufferFilter;
+    }
+
     // Handle logical operators
     if (key && this.isLogicalOperator(key)) {
       return this.translateLogical(key, value);
@@ -158,14 +168,13 @@ export class TurbopufferFilterTranslator extends BaseFilterTranslator<
           // For multiple comparison operators on one field
           const conditions = operators.map(op => this.translateOperator(field, op, value[op]));
           return ['And', conditions] as unknown as FilterCondition;
-        } else {
-          // For nested objects with multiple fields
-          const conditions = operators.map(op => {
-            const nestedField = `${field}.${op}`;
-            return this.translateFieldCondition(nestedField, value[op]);
-          });
-          return ['And', conditions] as unknown as FilterCondition;
         }
+        // For nested objects with multiple fields
+        const conditions = operators.map(op => {
+          const nestedField = `${field}.${op}`;
+          return this.translateFieldCondition(nestedField, value[op]);
+        });
+        return ['And', conditions] as unknown as FilterCondition;
       }
 
       // Single operator

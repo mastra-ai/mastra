@@ -682,6 +682,34 @@ describe('AutoExtractedMetrics', () => {
     expect(byName('mastra_model_output_text_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.0006);
   });
 
+  it('should emit token and cost metrics for classifier evaluation spans', () => {
+    setup();
+    const span = createMockSpan({
+      type: SpanType.CLASSIFIER_EVALUATION,
+      endTime: new Date('2026-01-01T00:00:01Z'),
+      attributes: {
+        classifierId: 'router',
+        provider: 'openai',
+        modelId: 'gpt-4o-mini',
+        usage: { inputTokens: 100, outputTokens: 20 },
+      },
+    });
+
+    vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(pricingRegistry);
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+    const byName = (name: string) => emittedMetrics.find(m => m.metric.name === name);
+    expect(byName('mastra_model_total_input_tokens')!.metric.value).toBe(100);
+    expect(byName('mastra_model_total_output_tokens')!.metric.value).toBe(20);
+    expect(byName('mastra_model_total_input_tokens')!.metric.costContext).toMatchObject({
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+    });
+    expect(byName('mastra_model_total_input_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.000015, 10);
+    expect(byName('mastra_model_total_output_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.000012, 10);
+  });
+
   it('should NOT emit metrics for unsupported span types', () => {
     setup();
     const span = createMockSpan({

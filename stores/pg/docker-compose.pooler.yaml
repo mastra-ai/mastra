@@ -1,6 +1,6 @@
 services:
   db:
-    image: pgvector/pgvector:0.8.4-pg16
+    image: pgvector/pgvector:0.8.7-pg16
     container_name: 'pg-pooler-test-db'
     ports:
       # Direct port (bypassing pgBouncer) so cleanup/teardown can run
@@ -37,7 +37,7 @@ services:
   # which is what amplifies the parallel-DDL burst into the reported
   # statement_timeout error. We simulate that here.
   toxiproxy:
-    image: ghcr.io/shopify/toxiproxy:2.12.0
+    image: ghcr.io/shopify/toxiproxy:2.13.0
     container_name: 'pg-pooler-test-toxiproxy'
     depends_on:
       - db
@@ -45,7 +45,7 @@ services:
       - '8475:8474' # admin API for the test setup hook
 
   pgbouncer:
-    image: edoburu/pgbouncer:v1.25.2-p0
+    image: edoburu/pgbouncer:v1.26.1-p0
     container_name: 'pg-pooler-test-bouncer'
     depends_on:
       - toxiproxy

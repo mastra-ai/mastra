@@ -24,7 +24,7 @@ async function createSession() {
 }
 
 describe('AgentController OM failure abort behavior', () => {
-  it('aborts stream and emits an error when OM buffering fails', async () => {
+  it('keeps the run going when OM buffering fails', async () => {
     const { session } = await createSession();
     const events: AgentControllerEvent[] = [];
     session.subscribe(event => events.push(event));
@@ -45,16 +45,42 @@ describe('AgentController OM failure abort behavior', () => {
       })(),
     });
 
-    expect(events.some(e => e.type === 'om_buffering_failed')).toBe(true);
-    const errorEvent = events.find(e => e.type === 'error');
-    expect(errorEvent?.type).toBe('error');
-    expect((errorEvent as Extract<AgentControllerEvent, { type: 'error' }>).error.message).toContain(
-      'Observational memory observation buffering failed: Bad Request',
-    );
-    expect(events.some(e => e.type === 'agent_end' && e.reason === 'aborted')).toBe(true);
+    const failureIndex = events.findIndex(e => e.type === 'om_buffering_failed');
+    expect(failureIndex).toBeGreaterThanOrEqual(0);
+    expect(events.findIndex(e => e.type === 'message_start')).toBeGreaterThan(failureIndex);
+    expect(events.some(e => e.type === 'error')).toBe(false);
+    expect(events.some(e => e.type === 'agent_end' && e.reason === 'aborted')).toBe(false);
     expect(session.run.isAbortRequested()).toBe(false);
-    expect(session.run.hasAbortController()).toBe(false);
-    expect(events.some(e => e.type === 'message_start')).toBe(false);
+  });
+
+  it('keeps the run going when OM buffering fails under the abort policy', async () => {
+    const { session } = await createSession();
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => events.push(event));
+
+    session.run.ensureAbortController();
+
+    await (session as any).processStream({
+      fullStream: (async function* () {
+        yield {
+          type: 'data-om-buffering-failed',
+          data: {
+            cycleId: 'c1b',
+            operationType: 'reflection',
+            error: 'Bad Request',
+            failurePolicy: 'abort',
+            failureKind: 'reflector-model',
+          },
+        };
+        yield { type: 'text-start', payload: { id: 't1b' } };
+      })(),
+    });
+
+    expect(events.some(e => e.type === 'om_buffering_failed')).toBe(true);
+    expect(events.some(e => e.type === 'message_start')).toBe(true);
+    expect(events.some(e => e.type === 'error')).toBe(false);
+    expect(events.some(e => e.type === 'agent_end' && e.reason === 'aborted')).toBe(false);
+    expect(session.run.isAbortRequested()).toBe(false);
   });
 
   it('aborts stream and emits an error when OM observation run fails', async () => {
@@ -88,6 +114,36 @@ describe('AgentController OM failure abort behavior', () => {
     expect(events.some(e => e.type === 'agent_end' && e.reason === 'aborted')).toBe(true);
     expect(session.run.isAbortRequested()).toBe(false);
     expect(events.some(e => e.type === 'message_start')).toBe(false);
+  });
+
+  it('says a memory failure stopped the run, and a later abort is plain again', async () => {
+    const { session } = await createSession();
+    const ends: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      if (event.type === 'agent_end') ends.push(event);
+    });
+
+    session.run.ensureAbortController();
+    await (session as any).processStream({
+      fullStream: (async function* () {
+        yield {
+          type: 'data-om-observation-failed',
+          data: { cycleId: 'c1', operationType: 'observation', error: 'insufficient_quota', durationMs: 5 },
+        };
+      })(),
+    });
+
+    session.run.ensureAbortController();
+    await (session as any).processStream({
+      fullStream: (async function* () {
+        yield { type: 'abort', payload: {} };
+      })(),
+    });
+
+    expect(ends).toEqual([
+      { type: 'agent_end', reason: 'aborted', abortReason: 'memory-failure' },
+      { type: 'agent_end', reason: 'aborted' },
+    ]);
   });
 
   it('continues the stream after an observer model buffering failure under continue policy', async () => {
@@ -231,7 +287,7 @@ describe('AgentController OM failure abort behavior', () => {
     ['both inherited', Object.create({ failurePolicy: 'continue', failureKind: 'observer-model' })],
   ] as const;
 
-  it.each(['data-om-buffering-failed', 'data-om-observation-failed'] as const)(
+  it.each(['data-om-observation-failed'] as const)(
     'fails closed for %s without complete own continuation metadata',
     async type => {
       for (const [name, metadata] of failClosedMetadataCases) {

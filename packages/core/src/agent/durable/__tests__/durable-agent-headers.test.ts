@@ -12,6 +12,8 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { captureOutcomeEvents } from '../../../loop/test-utils/aimock/outcome-test-utils';
+import { Mastra } from '../../../mastra';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
@@ -56,6 +58,11 @@ describe('DurableAgent header handling', () => {
       model: mockModel as LanguageModelV2,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    new Mastra({
+      logger: false,
+      agents: { [baseAgent.id]: durableAgent },
+      observability: captureOutcomeEvents().observability,
+    });
 
     const result = await durableAgent.prepare('Test', {
       modelSettings: {
@@ -72,6 +79,7 @@ describe('DurableAgent header handling', () => {
       temperature: 0.7,
     });
     expect(result.workflowInput.options.modelSettings?.headers).toBeUndefined();
+    expect(JSON.stringify(result.workflowInput)).not.toContain('custom-value');
 
     // Registry entry should have the headers
     expect(result.registryEntry.callTimeHeaders).toEqual({

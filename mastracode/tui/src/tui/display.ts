@@ -130,8 +130,14 @@ export function showFormattedError(
   const lines: Text[] = [new Text(theme.fg('error', errorText), 1, 0)];
 
   const isObservationalMemoryError = /observational memory|\bOM (?:observation|reflection)/i.test(error.message);
-  const omRole = /reflect/i.test(error.message) ? state.session.om.reflector : state.session.om.observer;
-  const hint = withOMGuidance(getErrorHint(parsed.type), isObservationalMemoryError ? omRole.modelId() : undefined);
+  const om = state.local?.session.om;
+  const omRole = /reflect/i.test(error.message) ? om?.reflector : om?.observer;
+  const hint = withOMGuidance(
+    state.factory && parsed.type === 'auth'
+      ? `Add the provider credential in Factory (${state.factory.url})`
+      : getErrorHint(parsed.type),
+    isObservationalMemoryError ? omRole?.modelId() : undefined,
+  );
   if (hint) {
     lines.push(new Text(theme.fg('muted', `  Hint: ${hint}`), 1, 0));
   }
@@ -156,8 +162,12 @@ function getErrorHint(errorType: string): string | null {
       return 'Use /model to select a different model';
     case 'context_length':
       return 'Use /new to start a fresh conversation';
+    case 'content_filter':
+      return 'Retry, rephrase, or use /model to switch models';
     case 'rate_limit':
       return 'Wait a moment and try again';
+    case 'quota':
+      return "Check the provider account's billing or usage allowance, or switch to another account";
     case 'network':
       return 'Check your internet connection';
     default:
@@ -273,6 +283,8 @@ export function runPermissionHooksForEvent(state: TUIState, event: AgentControll
       // Sandbox check first, mirroring the dispatch routing order.
       if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
         hookMgr.runPermissionRequest('sandbox_access', event.toolCallId, event.toolName, payload).catch(() => {});
+      } else if (event.toolName === 'ask_user') {
+        hookMgr.runPermissionRequest('ask_question', event.toolCallId, event.toolName, payload).catch(() => {});
       } else if (event.toolName === 'submit_plan') {
         hookMgr.runPermissionRequest('plan_approval', event.toolCallId, event.toolName, payload).catch(() => {});
       }

@@ -7,8 +7,11 @@
  * result to an exit code, and owns teardown + `process.exit`.
  */
 import { existsSync } from 'node:fs';
+import type { Writable } from 'node:stream';
 import { parseArgs } from 'node:util';
 
+import { onEmbedderPackageMissing } from '../agents/fastembed-subprocess.js';
+import { resolveSubagentsSetting } from '../agents/subagents/index.js';
 import { createMastraCode } from '../index.js';
 import { activateModePackInSettings, resolveModePackArg, resolvePackSelection } from '../onboarding/pack-activation.js';
 import { listBuiltinModePacks } from '../onboarding/packs.js';
@@ -22,7 +25,7 @@ import { setupDebugLogging } from '../utils/debug-log.js';
 import { releaseAllThreadLocks } from '../utils/thread-lock.js';
 
 import { buildParseArgsOptions, FLAGS, renderFlagUsage } from './flags.js';
-import { createHumanFormatState, formatHuman, formatJsonl, renderJsonResult } from './format.js';
+import { createHumanFormatState, formatHuman, formatJsonl, isJsonlEvent, renderJsonResult } from './format.js';
 import { permissionModeToPolicy } from './policy.js';
 import { runMC } from './run-mc.js';
 import type { PermissionMode, RunMode, ThinkingLevel } from './types.js';
@@ -155,6 +158,22 @@ Examples:
 }
 
 /**
+ * Wait until everything written to `stream` has been handed to the OS, since
+ * `process.exit()` drops writes a pipe has not accepted yet. Resolves `false`
+ * if the stream fails or closes first; never rejects or hangs on a gone reader.
+ */
+export function flushWritable(stream: Writable): Promise<boolean> {
+  if (stream.destroyed || stream.errored) return Promise.resolve(false);
+  if (stream.writableLength === 0) return Promise.resolve(true);
+  return new Promise(resolve => {
+    // Left attached: a stream can emit `error` after failing pending callbacks.
+    stream.once('error', () => resolve(false));
+    stream.once('close', () => resolve(false));
+    stream.write('', error => resolve(!error));
+  });
+}
+
+/**
  * Headless CLI entry point: parse arguments, read stdin, initialize MastraCode,
  * run via `runMC`, render output, and exit with the mapped code.
  */
@@ -222,11 +241,22 @@ export async function runMCCli(
   });
 
   let boot: Awaited<ReturnType<typeof createMastraCode>> | undefined;
+  // Memory contains embedder failures, so this is the only place a missing embedder package shows up.
+  // stderr in every output mode; the exit code is untouched because the run itself still works.
+  const stopEmbedderNotice = onEmbedderPackageMissing(error => {
+    process.stderr.write(`Warning: ${error.message}\n`);
+  });
   // Default to a non-zero exit so an unexpected throw before the run resolves
   // still surfaces as a failure to the caller / CI.
   let exitCode = 1;
   try {
-    boot = await createMastraCode({ settingsPath: args.settings, coAuthor: options?.coAuthor });
+    boot = await createMastraCode({
+      settingsPath: args.settings,
+      coAuthor: options?.coAuthor,
+      subagents: resolveSubagentsSetting(settings.preferences.subagentsEnabled),
+      // Headless approves submit_plan without starting a goal.
+      planApprovalStartsGoal: false,
+    });
     const { controller, session, mcpManager } = boot;
 
     const effectiveDefaults = resolveModelDefaults(settings, listBuiltinModePacks());
@@ -276,7 +306,7 @@ export async function runMCCli(
         const out = formatHuman(event, humanState);
         if (out.stdout) process.stdout.write(out.stdout);
         if (out.stderr) process.stderr.write(out.stderr);
-      } else if (args.output === 'jsonl') {
+      } else if (args.output === 'jsonl' && isJsonlEvent(event)) {
         process.stdout.write(JSON.stringify(formatJsonl(event)) + '\n');
       }
     }
@@ -338,7 +368,12 @@ export async function runMCCli(
     await stopProcessMemoryDiagnosticsWithTimeout(processMemoryDiagnostics, warning => {
       process.stderr.write(`Warning: ${warning}\n`);
     });
+    stopEmbedderNotice();
   }
 
+  // Let piped output (the final result line in particular) reach the reader
+  // before exiting. Output that never arrived must not count as success.
+  const [stdoutFlushed] = await Promise.all([flushWritable(process.stdout), flushWritable(process.stderr)]);
+  if (!stdoutFlushed && exitCode === 0) exitCode = 1;
   process.exit(exitCode);
 }

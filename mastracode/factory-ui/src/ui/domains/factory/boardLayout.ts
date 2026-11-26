@@ -1,6 +1,13 @@
-export const BOARD_LAYOUTS = ['board', 'list'] as const;
-export type BoardLayout = (typeof BOARD_LAYOUTS)[number];
-
-export const DEFAULT_BOARD_LAYOUT: BoardLayout = 'board';
-
-export const SKELETON_ROW_CLASS: Record<BoardLayout, string> = { board: 'h-24 w-full', list: 'h-10 w-full' };
+export {
+  BOARD_CARD_LAYOUT_CLASS,
+  BOARD_LAYOUT_QUERY,
+  BOARD_LAYOUTS,
+  BOARD_LIST_GROUP_HEADER_LAYOUT_CLASS,
+  BOARD_LIST_GROUP_HEADER_SURFACE_CLASS,
+  BOARD_LIST_ROW_LAYOUT_CLASS,
+  BOARD_SCROLL_SURFACE_CLASS,
+  boardLayoutFromParams,
+  boardLayoutParams,
+  DEFAULT_BOARD_LAYOUT,
+} from '@mastra/playground-ui/domains/factory';
+export type { BoardLayout } from '@mastra/playground-ui/domains/factory';

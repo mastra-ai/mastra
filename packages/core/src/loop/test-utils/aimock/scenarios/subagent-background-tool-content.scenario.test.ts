@@ -17,15 +17,14 @@ import { SCENARIO_MODEL_ID } from '../types';
  * continuation request carried a `role: "tool"` message with null content —
  * rejected by providers (e.g. Anthropic) with a 500.
  *
- * The background manager runs in `mode: 'producer'` so the dispatched task
- * stays pending and the supervisor's continuation turn deterministically
- * carries the placeholder (the previously-buggy path). `startWorkers: false`
- * alone is not enough: dispatch lazily auto-starts execution workers
- * (#19339), and on durable/evented the continuation crosses pubsub hops, so
- * the fast-completing task would win the race and the real sub-agent output
- * would replace the placeholder before the second LLM call. Producer mode
- * never registers a local worker, matching the source test's
- * "workers intentionally NOT started" condition on every engine.
+ * The background manager has no concurrency slots (`globalConcurrency: 0`,
+ * default `'queue'` backpressure), so the dispatched task is queued and stays
+ * pending, and the supervisor's continuation turn deterministically carries
+ * the placeholder (the previously-buggy path). `startWorkers: false` alone is
+ * not enough: dispatch lazily auto-starts execution workers (#19339), and on
+ * durable/evented the continuation crosses pubsub hops, so the
+ * fast-completing task would win the race and the real sub-agent output would
+ * replace the placeholder before the second LLM call.
  *
  * Ported from packages/core/src/agent/__tests__/subagent-background-tool-content.test.ts
  * to the cross-engine scenario matrix.
@@ -45,90 +44,95 @@ function toolResultContentsFor(requests: Array<{ body?: { messages?: unknown[] }
     .map(message => message.content);
 }
 
-describeForAllEngines('AIMock loop scenario: sub-agent background dispatch tool content', engine => {
-  const getMock = useLoopScenarioAimock();
+describeForAllEngines(
+  'AIMock loop scenario: sub-agent background dispatch tool content',
+  engine => {
+    const getMock = useLoopScenarioAimock();
 
-  function makeSubAgent(mockUrl: string) {
-    const openai = createOpenAI({
-      apiKey: 'aimock-test-key',
-      baseURL: `${mockUrl.replace(/\/+$/, '')}/v1`,
-    });
-    return new Agent({
-      id: 'helper',
-      name: 'helper',
-      description: 'A helper sub-agent.',
-      instructions: SUB_AGENT_INSTRUCTIONS,
-      model: openai(SCENARIO_MODEL_ID),
-    });
-  }
-
-  function scenarioFixtures(llm: any) {
-    // AIMock matches fixtures in registration order (first match wins), so the
-    // sub-agent's fixture must come first: the supervisor's turn-1 matcher
-    // below (`hasToolResult: false`) would otherwise also match the
-    // sub-agent's request and feed it the delegation tool call.
-    llm.on({ endpoint: 'chat', systemMessage: SUB_AGENT_INSTRUCTIONS }, { content: 'Hello from the sub-agent.' });
-    // Supervisor turn 1: delegate to the helper.
-    llm.on(
-      { endpoint: 'chat', hasToolResult: false },
-      { toolCalls: [{ id: 'call-1', name: 'agent-helper', arguments: { prompt: 'hi' } }] },
-    );
-    // Supervisor turn 2: the continuation that previously failed with null
-    // tool content when the delegation was backgrounded.
-    llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'done' });
-  }
-
-  it('sends non-empty tool content (the placeholder) for a backgrounded sub-agent delegation', async () => {
-    const mock = getMock();
-
-    const { requests } = await runLoopScenario({
-      engine,
-      llm: mock,
-      prompt: 'Please delegate.',
-      instructions: 'Delegate to the helper sub-agent.',
-      agents: { helper: makeSubAgent(mock.url) },
-      // Opt the delegation into background dispatch — this is what produces
-      // the placeholder result.
-      agentBackgroundTasks: { tools: { helper: { enabled: true } } },
-      // Producer mode: the task is persisted and the placeholder returned, but
-      // no local worker ever executes it — keeps the dispatched task pending so
-      // the continuation deterministically carries the placeholder (see
-      // docblock; startWorkers: false alone loses the race on durable/evented).
-      backgroundTasks: { enabled: true, mode: 'producer' },
-      startWorkers: false,
-      stopWhen: stepCountIs(3),
-      fixtures: scenarioFixtures,
-    });
-
-    const values = toolResultContentsFor(requests as any, 'call-1');
-    expect(values.length).toBeGreaterThan(0);
-    for (const value of values) {
-      // Before the fix this was undefined/null (toModelOutput read the absent
-      // `.text`), serializing to a null tool-message content the provider
-      // rejects with a 500.
-      expect(typeof value).toBe('string');
-      expect(value).toContain('Background task started');
+    function makeSubAgent(mockUrl: string) {
+      const openai = createOpenAI({
+        apiKey: 'aimock-test-key',
+        baseURL: `${mockUrl.replace(/\/+$/, '')}/v1`,
+      });
+      return new Agent({
+        id: 'helper',
+        name: 'helper',
+        description: 'A helper sub-agent.',
+        instructions: SUB_AGENT_INSTRUCTIONS,
+        model: openai(SCENARIO_MODEL_ID),
+      });
     }
-  });
 
-  it('runs the sub-agent inline (real content) when not opted into background', async () => {
-    const mock = getMock();
+    function scenarioFixtures(llm: any) {
+      // AIMock matches fixtures in registration order (first match wins), so the
+      // sub-agent's fixture must come first: the supervisor's turn-1 matcher
+      // below (`hasToolResult: false`) would otherwise also match the
+      // sub-agent's request and feed it the delegation tool call.
+      llm.on({ endpoint: 'chat', systemMessage: SUB_AGENT_INSTRUCTIONS }, { content: 'Hello from the sub-agent.' });
+      // Supervisor turn 1: delegate to the helper.
+      llm.on(
+        { endpoint: 'chat', hasToolResult: false },
+        { toolCalls: [{ id: 'call-1', name: 'agent-helper', arguments: { prompt: 'hi' } }] },
+      );
+      // Supervisor turn 2: the continuation that previously failed with null
+      // tool content when the delegation was backgrounded.
+      llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'done' });
+    }
 
-    const { requests } = await runLoopScenario({
-      engine,
-      llm: mock,
-      prompt: 'Please delegate.',
-      instructions: 'Delegate to the helper sub-agent.',
-      agents: { helper: makeSubAgent(mock.url) },
-      // No background opt-in: the delegation runs inline and returns the real answer.
-      stopWhen: stepCountIs(3),
-      fixtures: scenarioFixtures,
+    it('sends non-empty tool content (the placeholder) for a backgrounded sub-agent delegation', async () => {
+      const mock = getMock();
+
+      const { requests } = await runLoopScenario({
+        engine,
+        llm: mock,
+        prompt: 'Please delegate.',
+        instructions: 'Delegate to the helper sub-agent.',
+        agents: { helper: makeSubAgent(mock.url) },
+        // Opt the delegation into background dispatch — this is what produces
+        // the placeholder result.
+        agentBackgroundTasks: { tools: { helper: { enabled: true } } },
+        // No slots: the task is persisted and queued and the placeholder
+        // returned, but it never runs — keeps the dispatched task pending so the
+        // continuation deterministically carries the placeholder (see docblock;
+        // startWorkers: false alone loses the race on durable/evented).
+        backgroundTasks: { enabled: true, globalConcurrency: 0 },
+        startWorkers: false,
+        stopWhen: stepCountIs(3),
+        fixtures: scenarioFixtures,
+      });
+
+      const values = toolResultContentsFor(requests as any, 'call-1');
+      expect(values.length).toBeGreaterThan(0);
+      for (const value of values) {
+        // Before the fix this was undefined/null (toModelOutput read the absent
+        // `.text`), serializing to a null tool-message content the provider
+        // rejects with a 500.
+        expect(typeof value).toBe('string');
+        expect(value).toContain('Background task started');
+      }
     });
 
-    const values = toolResultContentsFor(requests as any, 'call-1');
-    expect(values.length).toBeGreaterThan(0);
-    for (const value of values) {
-      expect(value).toContain('Hello from the sub-agent.');
-    }
-  });
-});
+    it('runs the sub-agent inline (real content) when not opted into background', async () => {
+      const mock = getMock();
+
+      const { requests } = await runLoopScenario({
+        engine,
+        llm: mock,
+        prompt: 'Please delegate.',
+        instructions: 'Delegate to the helper sub-agent.',
+        agents: { helper: makeSubAgent(mock.url) },
+        // No background opt-in: the delegation runs inline and returns the real answer.
+        stopWhen: stepCountIs(3),
+        fixtures: scenarioFixtures,
+      });
+
+      const values = toolResultContentsFor(requests as any, 'call-1');
+      expect(values.length).toBeGreaterThan(0);
+      for (const value of values) {
+        expect(value).toContain('Hello from the sub-agent.');
+      }
+    });
+  },
+  // The shared Inngest Mastra is built without per-scenario `backgroundTasks` config.
+  { skip: ['inngest'] },
+);

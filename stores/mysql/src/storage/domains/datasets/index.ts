@@ -576,6 +576,15 @@ export class DatasetsMySQL extends DatasetsStorage {
 
       const filterParts: string[] = [];
       const filterArgs: any[] = [];
+      if (args.filters?.datasetIds !== undefined) {
+        // An empty list matches no datasets; `IN ()` is invalid SQL.
+        filterParts.push(
+          args.filters.datasetIds.length > 0
+            ? `\`id\` IN (${args.filters.datasetIds.map(() => '?').join(',')})`
+            : '1 = 0',
+        );
+        filterArgs.push(...args.filters.datasetIds);
+      }
       if (args.filters?.organizationId !== undefined) {
         filterParts.push(`${quoteIdentifier('organizationId', 'column name')} = ?`);
         filterArgs.push(args.filters.organizationId);
@@ -1161,6 +1170,11 @@ export class DatasetsMySQL extends DatasetsStorage {
 
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+      if (perPage === 0) {
+        return { items: [], pagination: { total, page, perPage: perPageForResponse, hasMore: true } };
+      }
+
       const limitValue = perPageInput === false ? total : perPage;
 
       const [rows] = await this.pool.execute<RowDataPacket[]>(

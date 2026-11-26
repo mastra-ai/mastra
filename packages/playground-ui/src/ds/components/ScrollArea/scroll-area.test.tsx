@@ -124,6 +124,12 @@ describe('ScrollArea', () => {
       expect(viewport.className).toContain('mask-b-from');
     });
 
+    it('styles the content wrapper through contentClassName', () => {
+      renderWithViewport({ contentClassName: 'caller-content' });
+
+      expect(getContent().classList.contains('caller-content')).toBe(true);
+    });
+
     it('hands the viewport to a callback ref', () => {
       const seen: Array<HTMLDivElement | null> = [];
       renderWithViewport({ ref: node => void seen.push(node) });
@@ -235,8 +241,8 @@ describe('ScrollArea', () => {
       const left = screen.getByRole('button', { name: 'Scroll left' });
       const right = screen.getByRole('button', { name: 'Scroll right' });
 
-      expect(left.querySelector('svg')?.classList.contains('lucide-chevron-left')).toBe(true);
-      expect(right.querySelector('svg')?.classList.contains('lucide-chevron-right')).toBe(true);
+      expect(left.querySelector('svg')?.dataset.centralIcon).toBe('IconChevronLeftMedium');
+      expect(right.querySelector('svg')?.dataset.centralIcon).toBe('IconChevronRightMedium');
     });
 
     it('keeps going while the button is held, at its ordinary speed', () => {

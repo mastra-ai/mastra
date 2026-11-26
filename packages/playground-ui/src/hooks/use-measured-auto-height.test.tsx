@@ -66,7 +66,7 @@ describe('useMeasuredAutoHeight', () => {
     const element = document.createElement('div');
     vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(createRect(72));
 
-    const { result } = renderHook(() => useMeasuredAutoHeight<HTMLDivElement>());
+    const { result } = renderHook(() => useMeasuredAutoHeight());
 
     act(() => {
       result.current.ref(element);
@@ -85,7 +85,7 @@ describe('useMeasuredAutoHeight', () => {
     vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(createRect(0));
     Object.defineProperty(element, 'scrollHeight', { configurable: true, value: 48 });
 
-    const { result } = renderHook(() => useMeasuredAutoHeight<HTMLDivElement>());
+    const { result } = renderHook(() => useMeasuredAutoHeight());
 
     act(() => {
       result.current.ref(element);
@@ -113,7 +113,7 @@ describe('useMeasuredAutoHeight', () => {
     const element = document.createElement('div');
     vi.spyOn(element, 'getBoundingClientRect').mockImplementation(() => createRect(height));
 
-    const { result } = renderHook(() => useMeasuredAutoHeight<HTMLDivElement>());
+    const { result } = renderHook(() => useMeasuredAutoHeight());
 
     act(() => {
       result.current.ref(element);
@@ -149,7 +149,7 @@ describe('useMeasuredAutoHeight', () => {
   it('has no height style before an element is attached', () => {
     vi.stubGlobal('ResizeObserver', undefined);
 
-    const { result } = renderHook(() => useMeasuredAutoHeight<HTMLDivElement>());
+    const { result } = renderHook(() => useMeasuredAutoHeight());
 
     expect(result.current.height).toBeNull();
     expect(result.current.heightStyle).toEqual({});
@@ -162,7 +162,7 @@ describe('useMeasuredAutoHeight', () => {
     const element = document.createElement('div');
     vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(createRect(72.2));
 
-    const { result } = renderHook(() => useMeasuredAutoHeight<HTMLDivElement>());
+    const { result } = renderHook(() => useMeasuredAutoHeight());
 
     act(() => {
       result.current.ref(element);
@@ -179,7 +179,7 @@ describe('useMeasuredAutoHeight', () => {
     const element = document.createElement('div');
     vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(createRect(72));
 
-    const { result } = renderHook(() => useMeasuredAutoHeight<HTMLDivElement>());
+    const { result } = renderHook(() => useMeasuredAutoHeight());
 
     act(() => {
       result.current.ref(element);
@@ -203,7 +203,7 @@ describe('useMeasuredAutoHeight', () => {
     const element = document.createElement('div');
     vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(createRect(72));
 
-    const { result } = renderHook(() => useMeasuredAutoHeight<HTMLDivElement>());
+    const { result } = renderHook(() => useMeasuredAutoHeight());
 
     act(() => {
       result.current.ref(element);
@@ -244,7 +244,7 @@ describe('useMeasuredAutoHeight', () => {
     const element = document.createElement('div');
     vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(createRect(72));
 
-    const { result, unmount } = renderHook(() => useMeasuredAutoHeight<HTMLDivElement>());
+    const { result, unmount } = renderHook(() => useMeasuredAutoHeight());
 
     act(() => {
       result.current.ref(element);

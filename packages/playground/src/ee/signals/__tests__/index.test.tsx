@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import '@/test/english-locale';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -213,22 +214,6 @@ describe('Trace Intelligence page', () => {
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
       expect(snapshotSignalNames[0]).toBe('goal,sentiment,behavior,outcome');
     });
-
-    it('keeps the single agent visible in the header selector', async () => {
-      renderSignalsPageWithShell();
-
-      await waitFor(() => expect(headerEntityCrumb().textContent).toContain('support-agent'));
-    });
-
-    it('shows the agent selector in the breadcrumb instead of a page-level control row', async () => {
-      renderSignalsPageWithShell();
-      await screen.findByRole('region', { name: 'Trace signal theme flow' });
-
-      const main = screen.getByRole('main');
-      expect(within(main).queryByRole('combobox')).toBeNull();
-      expect(screen.queryByText('Snapshot date')).toBeNull();
-      expect(within(main).getByRole('button', { name: 'Last 7 days' })).not.toBeNull();
-    });
   });
 
   describe('when an agent has custom and pending trace signals', () => {
@@ -258,10 +243,13 @@ describe('Trace Intelligence page', () => {
       renderSignalsPage();
 
       const pending = await screen.findByRole('list', { name: 'Pending trace signals' });
-      expect(within(pending).getByText('Handoff Quality')).not.toBeNull();
-      expect(within(pending).getByText('0 generated · 0 embedded')).not.toBeNull();
-      expect(within(pending).getByText('Resolution Detail')).not.toBeNull();
-      expect(within(pending).getByText('31 generated · 19 embedded')).not.toBeNull();
+      const handoff = within(pending).getByText('Handoff Quality').closest('li');
+      const resolution = within(pending).getByText('Resolution Detail').closest('li');
+      if (!handoff || !resolution) throw new Error('Expected both pending signal rows');
+      expect(within(handoff).getByText('0 generated')).not.toBeNull();
+      expect(within(handoff).getByText('0 embedded')).not.toBeNull();
+      expect(within(resolution).getByText('31 generated')).not.toBeNull();
+      expect(within(resolution).getByText('19 embedded')).not.toBeNull();
       expect(within(pending).queryByText('Legacy Risk')).toBeNull();
     });
   });
@@ -316,7 +304,7 @@ describe('Trace Intelligence page', () => {
   });
 
   describe('when an eligible agent is loaded with the default snapshot range', () => {
-    it('requests snapshots from the last seven days without a snapshot date label', async () => {
+    it('requests snapshots from the last seven days', async () => {
       vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-07-27T12:00:00.000Z').getTime());
       const snapshotRequests: URL[] = [];
       server.use(
@@ -333,7 +321,6 @@ describe('Trace Intelligence page', () => {
       renderSignalsPage();
 
       expect(await screen.findByRole('region', { name: 'Trace signal theme flow' })).not.toBeNull();
-      expect(screen.queryByText('Snapshot date')).toBeNull();
       expect(screen.getByRole('button', { name: 'Last 7 days' })).not.toBeNull();
       expect(snapshotRequests).toHaveLength(1);
       expect(snapshotRequests[0]?.searchParams.get('from')).toBe('2026-07-20T12:00:00.000Z');
@@ -517,9 +504,9 @@ describe('Trace Intelligence page', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Last 7 days' }));
       fireEvent.click(await screen.findByText('Custom range...'));
-      const endPanel = (await screen.findByText('End')).parentElement;
-      if (!endPanel) throw new Error('Custom range end panel was not rendered');
-      fireEvent.click(within(endPanel).getByRole('gridcell', { name: '25' }));
+      // The preset only sets a start (July 20th), so one click picks the end.
+      fireEvent.click(await screen.findByRole('button', { name: /July 25th, 2026/ }));
+      fireEvent.change(screen.getByLabelText('Start time'), { target: { value: '00:00' } });
       fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
 
       const expectedFrom = new Date(2026, 6, 20, 0, 0).toISOString();
@@ -579,7 +566,6 @@ describe('Trace Intelligence page', () => {
       expect(screen.getByText('87')).not.toBeNull();
       expect(screen.getByText('1 of 4')).not.toBeNull();
       expect(headerEntityCrumb().textContent).toContain('triage-agent');
-      expect(screen.queryByText('Snapshot date')).toBeNull();
       expect(screen.queryByRole('button', { name: 'Last 7 days' })).toBeNull();
     });
   });
@@ -606,26 +592,8 @@ describe('Trace Intelligence page', () => {
       );
       renderSignalsPageWithShell('billing-agent');
 
-      expect(await screen.findByText('Snapshot 1/2 · Jul 1 – 8, 2026 · 20 traces')).not.toBeNull();
+      expect(await screen.findByText('Snapshot 1/2. Jul 1 – 8, 2026. 20 traces')).not.toBeNull();
       expect(headerEntityCrumb().textContent).toContain('billing-agent');
-    });
-  });
-
-  describe('when an agent has no theme snapshots', () => {
-    it('shows that the analysis is waiting for traces', async () => {
-      server.use(
-        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
-        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
-          HttpResponse.json({ snapshots: [] }),
-        ),
-        http.get(`${BASE_URL}/api/learning/entities/support-agent/progress`, () =>
-          HttpResponse.json(processingProgressResponse),
-        ),
-      );
-
-      renderSignalsPage();
-
-      expect(await screen.findByText('No Trace Intelligence themes in this date range.')).not.toBeNull();
     });
   });
 });

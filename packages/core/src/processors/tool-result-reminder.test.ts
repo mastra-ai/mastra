@@ -281,7 +281,7 @@ describe('AgentsMDInjector', () => {
     expect(extractReminderMarkup(messageList)).toEqual([]);
   });
 
-  it('uses the reader from getReader instead of instance defaults when provided', async () => {
+  it('uses an asynchronous reader from getReader instead of instance defaults when provided', async () => {
     const messageList = new TestMessageList();
     const toolCallId = 'call-agents-reader';
     messageList.push(createUserMessage('Open the instructions'));
@@ -302,10 +302,10 @@ describe('AgentsMDInjector', () => {
       readFile: instanceReadFile,
       // Simulates serving content from a trusted git ref rather than the
       // (untrusted) working tree.
-      getReader: () => ({
-        pathExists: path => String(path) === '/repo/src/agents/nested/AGENTS.md',
-        isDirectory: () => false,
-        readFile: () => '# Trusted ref content',
+      getReader: async () => ({
+        pathExists: async path => String(path) === '/repo/src/agents/nested/AGENTS.md',
+        isDirectory: async () => false,
+        readFile: async () => '# Trusted ref content',
       }),
     });
 
@@ -732,6 +732,35 @@ describe('AgentsMDInjector', () => {
     expect(extractReminderMarkup(messageList)).toEqual([]);
   });
 
+  it('loads the statically loaded instruction paths once per processor request', async () => {
+    const messageList = new TestMessageList();
+    messageList.push(
+      createAssistantMessage({
+        format: 2,
+        parts: [
+          createToolInvocationPart(
+            'move',
+            { path: '/repo/a/AGENTS.md', destination: '/repo/b/AGENTS.md' },
+            'result',
+            {},
+          ),
+        ],
+      }),
+    );
+    const getIgnoredInstructionPaths = vi.fn(() => ['/repo/a/AGENTS.md', '/repo/b/AGENTS.md']);
+    const testProcessor = new AgentsMDInjector({
+      pathExists: () => true,
+      isDirectory: () => false,
+      readFile: () => FILE_CONTENT,
+      getIgnoredInstructionPaths,
+    });
+
+    await testProcessor.processInputStep(createProcessInputStepArgs(messageList, []));
+
+    expect(extractReminderMarkup(messageList)).toEqual([]);
+    expect(getIgnoredInstructionPaths).toHaveBeenCalledOnce();
+  });
+
   it('falls back to configured reminder text when file cannot be read', async () => {
     const messageList = new TestMessageList();
     const toolCallId = 'call-fallback';
@@ -764,44 +793,21 @@ describe('AgentsMDInjector', () => {
     ]);
   });
 
-  it('does not inject duplicate reminder for the same path and content', async () => {
-    const messageList = new TestMessageList();
-    const toolCallId = 'call-duplicate';
-    messageList.push(
-      createUserMessage(
-        `<system-reminder type="dynamic-agents-md" path="/repo/AGENTS.md">Project guidance from AGENTS</system-reminder>`,
-      ),
-    );
-    messageList.pushResponse(
-      createAssistantMessage({
-        format: 2,
-        parts: [createToolInvocationPart(toolCallId, { path: '/repo/src/index.ts' }, 'result', { ok: true })],
-      }),
-    );
-
-    const testProcessor = new AgentsMDInjector({
-      pathExists: path => String(path) === '/repo/AGENTS.md',
-      isDirectory: path => String(path) !== '/repo/src/index.ts',
-      readFile: () => 'Project guidance from AGENTS',
-    });
-
-    await testProcessor.processInputStep(
-      createProcessInputStepArgs(messageList, [createToolCall({ path: '/repo/src/index.ts' }, 'view', toolCallId)]),
-    );
-
-    expect(extractReminderMarkup(messageList)).toEqual([
+  it.each([
+    [
+      'does not inject duplicate reminder for the same path and content',
+      'call-duplicate',
       `<system-reminder type="dynamic-agents-md" path="/repo/AGENTS.md">Project guidance from AGENTS</system-reminder>`,
-    ]);
-  });
-
-  it('does not inject duplicate reminder when a prior reminder for the same path has different content', async () => {
+    ],
+    [
+      'does not inject duplicate reminder when a prior reminder for the same path has different content',
+      'call-duplicate-path',
+      `<system-reminder type="dynamic-agents-md" path="/repo/AGENTS.md">[truncated older content]</system-reminder>`,
+    ],
+  ] as const)('%s', async (_title, toolCallIdValue, input) => {
     const messageList = new TestMessageList();
-    const toolCallId = 'call-duplicate-path';
-    messageList.push(
-      createUserMessage(
-        `<system-reminder type="dynamic-agents-md" path="/repo/AGENTS.md">[truncated older content]</system-reminder>`,
-      ),
-    );
+    const toolCallId = toolCallIdValue;
+    messageList.push(createUserMessage(input));
     messageList.pushResponse(
       createAssistantMessage({
         format: 2,
@@ -819,9 +825,7 @@ describe('AgentsMDInjector', () => {
       createProcessInputStepArgs(messageList, [createToolCall({ path: '/repo/src/index.ts' }, 'view', toolCallId)]),
     );
 
-    expect(extractReminderMarkup(messageList)).toEqual([
-      `<system-reminder type="dynamic-agents-md" path="/repo/AGENTS.md">[truncated older content]</system-reminder>`,
-    ]);
+    expect(extractReminderMarkup(messageList)).toEqual([input]);
   });
 
   it('does not inject duplicate reminder when a legacy metadata reminder already exists for the same path', async () => {

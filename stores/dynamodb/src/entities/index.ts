@@ -4,6 +4,7 @@ import { backgroundTaskEntity } from './background-task';
 import { evalEntity } from './eval';
 import { messageEntity } from './message';
 import { resourceEntity } from './resource';
+import { memoryRunFenceEntity, workflowRunOwnerEntity } from './run-fencing';
 import { scoreEntity } from './score';
 import { threadEntity } from './thread';
 import { traceEntity } from './trace';
@@ -20,6 +21,8 @@ export function getElectroDbService(client: DynamoDBDocumentClient, tableName: s
       resource: resourceEntity,
       score: scoreEntity,
       background_task: backgroundTaskEntity,
+      workflow_run_owner: workflowRunOwnerEntity,
+      memory_run_fence: memoryRunFenceEntity,
     },
     {
       client,

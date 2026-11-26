@@ -44,4 +44,12 @@ describe('ValkeyStreamsClient connection config', () => {
       useTLS: true,
     });
   });
+
+  it('tags the client as mastra by default', async () => {
+    expect((await glideConfig({ url: 'valkey://host:6379' })).clientInfoTag).toBe('mastra');
+  });
+
+  it('lets an explicit clientInfoTag override the default', async () => {
+    expect((await glideConfig({ url: 'valkey://host:6379', clientInfoTag: 'my-app' })).clientInfoTag).toBe('my-app');
+  });
 });

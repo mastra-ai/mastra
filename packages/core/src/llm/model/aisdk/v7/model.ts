@@ -196,7 +196,7 @@ export class AISDKV7LanguageModel implements MastraLanguageModelV4 {
   /**
    * The language model must specify which language model interface version it implements.
    */
-  readonly specificationVersion: 'v4' = 'v4';
+  readonly specificationVersion = 'v4' as const;
   /**
    * Name of the provider for logging purposes.
    */

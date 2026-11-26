@@ -619,7 +619,7 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
           indexName: testIndexName,
           queryVector: [1, 0, 0],
           topK: 10,
-          filter: { category: 'electronics', price: { $gt: 700 }, inStock: true },
+          filter: { $and: [{ category: 'electronics' }, { price: { $gt: 700 } }, { inStock: true }] },
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {

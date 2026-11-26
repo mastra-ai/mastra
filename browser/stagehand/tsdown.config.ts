@@ -5,8 +5,7 @@ export default defineConfig({
   format: ['esm', 'cjs'],
   fixedExtension: false,
   nodeProtocol: 'strip',
-  dts: true,
-  sourcemap: true,
+  dts: { sourcemap: false },
   clean: true,
   treeshake: true,
 });

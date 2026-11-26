@@ -6,8 +6,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { AgentCMSRefBlock } from '../agent-cms-blocks/agent-cms-ref-block';
-import type { AgentCMSRefBlockProps } from '../agent-cms-blocks/agent-cms-ref-block';
+import { AgentCMSRefBlock } from '../agent-cms-blocks';
+import type { AgentCMSRefBlockProps } from '../agent-cms-blocks';
 import type { RefInstructionBlock } from '../agent-edit-page/utils/form-validation';
 import { emptyStoredAgents, promptBlock } from './fixtures/prompt-blocks';
 import { server } from '@/test/msw-server';
@@ -89,7 +89,7 @@ describe('AgentCMSRefBlock', () => {
       expect(await screen.findByText('Live Block')).not.toBeNull();
       expect(screen.queryByText('Draft')).toBeNull();
       expect(screen.queryByText('Unpublished edits')).toBeNull();
-      expect(screen.queryByText(/skips it at runtime/)).toBeNull();
+      expect(screen.queryByText(/skipped at runtime/)).toBeNull();
     });
   });
 

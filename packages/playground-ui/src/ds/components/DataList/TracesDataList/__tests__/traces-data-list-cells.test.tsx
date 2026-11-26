@@ -4,7 +4,7 @@ import { TraceStatus } from '@mastra/core/storage';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { TracesDataListStatusCell, TracesDataListTypeCell } from '../traces-data-list-cells';
+import { TracesDataListOutputCell, TracesDataListStatusCell, TracesDataListTypeCell } from '../traces-data-list-cells';
 
 afterEach(cleanup);
 
@@ -21,6 +21,7 @@ describe('TracesDataListTypeCell', () => {
       [EntityType.WORKFLOW_STEP, 'Step'],
       [EntityType.TOOL, 'Tool'],
       [EntityType.SCORER, 'Scorer'],
+      [EntityType.CLASSIFIER, 'Classifier'],
       [EntityType.MEMORY, 'Memory'],
       [EntityType.MCP_SERVER, 'MCP Server'],
       [EntityType.INPUT_PROCESSOR, 'Processor'],
@@ -66,5 +67,34 @@ describe('TracesDataListStatusCell', () => {
       render(<TracesDataListStatusCell status={TraceStatus.RUNNING} />);
       expect(screen.getByText('RUN')).toBeTruthy();
     });
+  });
+});
+
+describe('TracesDataListOutputCell', () => {
+  const ERROR_COLOR = '.text-destructive-foreground';
+
+  it('shows the output of a successful trace in the normal color', () => {
+    const { container } = render(<TracesDataListOutputCell status="success" output="Sunny" error="stray" />);
+    expect(screen.getByText('Sunny')).not.toBeNull();
+    expect(screen.queryByText('stray')).toBeNull();
+    expect(container.querySelector(ERROR_COLOR)).toBeNull();
+  });
+
+  it('shows the error of a failed trace in the error color', () => {
+    const { container } = render(<TracesDataListOutputCell status="error" output="partial" error="Rate limit" />);
+    expect(container.querySelector(ERROR_COLOR)?.textContent).toBe('Rate limit');
+    expect(screen.queryByText('partial')).toBeNull();
+  });
+
+  it('marks a failed trace with no error preview with a dash in the error color', () => {
+    const { container } = render(<TracesDataListOutputCell status="error" output="partial" />);
+    expect(container.querySelector(ERROR_COLOR)?.textContent).toBe('-');
+    expect(screen.queryByText('partial')).toBeNull();
+  });
+
+  it('shows a plain dash when a successful trace has no output preview', () => {
+    const { container } = render(<TracesDataListOutputCell status="success" />);
+    expect(screen.getByText('-')).not.toBeNull();
+    expect(container.querySelector(ERROR_COLOR)).toBeNull();
   });
 });

@@ -1,0 +1,7 @@
+/* Collapsed rather than unmounted: a live region inside still has to announce. */
+[data-slot='composer-status'][data-empty] {
+  height: 0;
+  min-height: 0;
+  overflow: hidden;
+  opacity: 0;
+}

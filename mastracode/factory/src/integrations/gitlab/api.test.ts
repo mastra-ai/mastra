@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { PlatformApiClient } from '../platform/api-client.js';
+import { createPlatformConnectClient } from '../platform/platform-connect.js';
 import { GitLabApiClient, GitLabApiError } from './api.js';
 
 function json(body: unknown, status = 200): Response {
@@ -59,6 +59,28 @@ describe('GitLabApiClient', () => {
     expect(requestOf(fetchMock).url).toBe('https://gitlab.example.com/gitlab/api/v4/user');
   });
 
+  it('posts commit statuses to the project statuses endpoint', async () => {
+    const fetchMock = vi.fn(async () => json({ id: 5, sha: 'abc', name: 'n', status: 'running', target_url: null }));
+    const api = new GitLabApiClient({ baseUrl: 'https://gitlab.com', accessToken: 'token', fetchImpl: fetchMock });
+
+    await api.setCommitStatus('acme/app', 'abc', {
+      state: 'running',
+      name: 'Factory Review / tests',
+      ref: 'feature',
+      description: 'd',
+    });
+
+    const { url, init } = requestOf(fetchMock);
+    expect(url).toBe('https://gitlab.com/api/v4/projects/acme%2Fapp/statuses/abc');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(String(init.body))).toEqual({
+      state: 'running',
+      name: 'Factory Review / tests',
+      ref: 'feature',
+      description: 'd',
+    });
+  });
+
   it('lists projects directly with a private token', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(json([]));
     const client = new GitLabApiClient({
@@ -98,7 +120,10 @@ describe('GitLabApiClient', () => {
       .mockResolvedValueOnce(json({ id: 7, iid: 42, state: 'closed' }));
     vi.stubGlobal('fetch', fetchMock);
     const client = new GitLabApiClient({
-      client: new PlatformApiClient({ baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' }),
+      client: createPlatformConnectClient({
+        baseUrl: 'https://integrations.example.com',
+        accessToken: 'platform-token',
+      }),
       connectionId: 'a1b_gitlab',
     });
 
@@ -251,7 +276,10 @@ describe('GitLabApiClient', () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(json({ iid: 17 }));
     vi.stubGlobal('fetch', fetchMock);
     const client = new GitLabApiClient({
-      client: new PlatformApiClient({ baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' }),
+      client: createPlatformConnectClient({
+        baseUrl: 'https://integrations.example.com',
+        accessToken: 'platform-token',
+      }),
       connectionId: 'a1b_gitlab',
     });
 
@@ -272,7 +300,10 @@ describe('GitLabApiClient', () => {
     const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => json({ iid: 17 }));
     vi.stubGlobal('fetch', fetchMock);
     const platformClient = new GitLabApiClient({
-      client: new PlatformApiClient({ baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' }),
+      client: createPlatformConnectClient({
+        baseUrl: 'https://integrations.example.com',
+        accessToken: 'platform-token',
+      }),
       connectionId: 'a1b_gitlab',
     });
     const directClient = new GitLabApiClient({
@@ -294,7 +325,10 @@ describe('GitLabApiClient', () => {
     const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => json({ id: 94, body: 'Reviewed' }));
     vi.stubGlobal('fetch', fetchMock);
     const client = new GitLabApiClient({
-      client: new PlatformApiClient({ baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' }),
+      client: createPlatformConnectClient({
+        baseUrl: 'https://integrations.example.com',
+        accessToken: 'platform-token',
+      }),
       connectionId: 'a1b_gitlab',
     });
 

@@ -171,6 +171,22 @@ describe('Factory route auth organization selection', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ orgId: 'org_cookie', userId: 'user_123' });
   });
+
+  it('refusing audience-bound bearers still lets logins without an audience in', async () => {
+    const provider = fakeProvider();
+    const app = new Hono();
+    const auth = createFactoryRouteAuth(provider, { refuseAudienceBoundTokens: () => true });
+    app.get('/web/projects', async c => c.json({ ok: Boolean(await auth.ensureUser(c)) }));
+    const jwt = (claims: object) =>
+      ['{"alg":"none"}', JSON.stringify({ sub: 'user_fake', ...claims }), 'sig']
+        .map(part => Buffer.from(part).toString('base64url'))
+        .join('.');
+    const ok = async (token: string) =>
+      (await (await app.request('/web/projects', { headers: { Authorization: `Bearer ${token}` } })).json()).ok;
+
+    expect(await ok(jwt({}))).toBe(true);
+    expect(await ok(jwt({ aud: 'https://other.example.com' }))).toBe(false);
+  });
 });
 
 describe('mountFactoryAuth with an explicit custom provider', () => {
@@ -333,6 +349,26 @@ describe('mountFactoryAuth with an explicit custom provider', () => {
       provider: 'fake',
       signUpDisabled: true,
     });
+  });
+
+  it('SSO callback also expires legacy session cookies (SP-5)', async () => {
+    const legacy = ['wos-session=; Path=/; Max-Age=0; Secure; Domain=.mastra.cloud'];
+    const provider = fakeProvider(ssoCapability({ getLegacySessionClearCookies: vi.fn(() => legacy) }));
+    const { app } = buildApp(provider);
+
+    const res = await app.request('/auth/callback?code=abc');
+
+    expect(res.headers.getSetCookie()).toEqual(expect.arrayContaining(['fake_session=abc', ...legacy]));
+  });
+
+  it('SSO logout also expires legacy session cookies (SP-5)', async () => {
+    const legacy = ['wos-session=; Path=/; Max-Age=0; Secure; Domain=.mastra.cloud'];
+    const provider = fakeProvider(ssoCapability({ getLegacySessionClearCookies: vi.fn(() => legacy) }));
+    const { app } = buildApp(provider);
+
+    const res = await app.request('/auth/logout');
+
+    expect(res.headers.getSetCookie()).toEqual(expect.arrayContaining(['fake_session=; Path=/; Max-Age=0', ...legacy]));
   });
 
   it('logout for a handler-shaped provider revokes the session and clears the cookie', async () => {

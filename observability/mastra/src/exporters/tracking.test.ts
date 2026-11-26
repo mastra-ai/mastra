@@ -13,6 +13,8 @@
 import type { TracingEvent, AnyExportedSpan, SpanErrorInfo } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { DefaultObservabilityInstance } from '../instances';
+import type { EndSpanOptionsWithTime } from '../spans/default';
 import { TrackingExporter } from './tracking';
 import type { TraceData, TrackingExporterConfig } from './tracking';
 
@@ -132,11 +134,10 @@ class TestTrackingExporter extends TrackingExporter<
         if (!parent && parentId !== this.rootSpanId) {
           return undefined;
         }
-      } else {
+      } else if (!args.traceData.hasRoot() && !args.traceData.isRootProcessed()) {
         // No parentId means direct child of root, check root exists
-        if (!args.traceData.hasRoot() && !args.traceData.isRootProcessed()) {
-          return undefined;
-        }
+
+        return undefined;
       }
     }
 
@@ -426,6 +427,38 @@ describe('TrackingExporter', () => {
       await exporter.shutdown();
     }
   });
+
+  it.each(['explicit', 'clock'])(
+    'finishes and cleans up live spans with reversed %s timestamps (OBS-935)',
+    async source => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(1000);
+      exporter = new TestTrackingExporter({ traceCleanupDelayMs: 1 });
+      const instance = new DefaultObservabilityInstance({
+        name: 'reversed-time',
+        serviceName: 'test',
+        exporters: [exporter],
+      });
+      try {
+        const span = instance.startSpan({ name: 'work', type: SpanType.AGENT_RUN });
+        await instance.flush();
+        expect(exporter.builtSpans.has(span.id)).toBe(true);
+        vi.setSystemTime(999);
+        span.end(
+          source === 'explicit'
+            ? ({ endTime: new Date(999) } as EndSpanOptionsWithTime<SpanType.AGENT_RUN>)
+            : undefined,
+        );
+        await instance.flush();
+        expect(exporter.calls.filter(call => call.method === '_finishSpan' && call.spanId === span.id)).toHaveLength(1);
+        await vi.waitFor(() => expect(exporter.getTraceMapSize()).toBe(0));
+        expect(exporter.abortedSpans.size).toBe(0);
+      } finally {
+        await instance.shutdown();
+        vi.useRealTimers();
+      }
+    },
+  );
 
   describe('Root span processing', () => {
     beforeEach(() => {
@@ -906,6 +939,130 @@ describe('TrackingExporter', () => {
 
       // Hard cap is 3, so oldest traces should be killed
       expect(exporter.getTraceMapSize()).toBeLessThanOrEqual(3);
+    });
+  });
+
+  describe('Hard cap enforcement during flush and shutdown', () => {
+    class GatedExporter extends TestTrackingExporter {
+      public flushCalls = 0;
+      public postShutdownCalls = 0;
+      /** Settled by the test to release the TRACE_CAP_EXCEEDED abort */
+      public gate: Promise<void> = Promise.resolve();
+
+      protected override async _abortSpan(args: {
+        span: TestSpanData;
+        traceData: TestTraceData;
+        reason: SpanErrorInfo;
+      }): Promise<void> {
+        if (args.reason.id === 'TRACE_CAP_EXCEEDED') await this.gate;
+        await super._abortSpan(args);
+      }
+
+      protected override async _flush(): Promise<void> {
+        this.flushCalls++;
+      }
+
+      protected override async _postShutdown(): Promise<void> {
+        this.postShutdownCalls++;
+      }
+    }
+
+    function rootStart(i: number): TracingEvent {
+      return {
+        type: 'span_started',
+        exportedSpan: {
+          id: `root-${i}`,
+          traceId: `trace-${i}`,
+          name: `root-${i}`,
+          type: SpanType.AGENT_RUN,
+          isRootSpan: true,
+          isEvent: false,
+          startTime: new Date(),
+        },
+      };
+    }
+
+    /** Starts two root traces under a cap of 1, so root-0 is being evicted while the gate is held. */
+    async function startEvictingTrace(): Promise<{
+      gated: GatedExporter;
+      release: () => void;
+      fail: (error: Error) => void;
+    }> {
+      const gated = new GatedExporter({ maxTotalTraces: 1, traceCleanupDelayMs: 60 * 60 * 1000 });
+      let release!: () => void;
+      let fail!: (error: Error) => void;
+      gated.gate = new Promise<void>((resolve, reject) => {
+        release = resolve;
+        fail = reject;
+      });
+      await gated.exportTracingEvent(rootStart(0));
+      await flushAsync();
+      await gated.exportTracingEvent(rootStart(1));
+      await flushAsync();
+      return { gated, release, fail };
+    }
+
+    function abortsOf(gated: GatedExporter, spanId: string): SpanErrorInfo[] {
+      return gated.calls
+        .filter(c => c.method === '_abortSpan' && c.spanId === spanId)
+        .map(c => c.args?.reason as SpanErrorInfo);
+    }
+
+    function settled(promise: Promise<void>): () => boolean {
+      let done = false;
+      promise.then(
+        () => (done = true),
+        () => (done = true),
+      );
+      return () => done;
+    }
+
+    it('flush waits for a held hard-cap abort before the vendor flush', async () => {
+      const { gated, release } = await startEvictingTrace();
+      exporter = gated;
+
+      const flush = gated.flush();
+      const isDone = settled(flush);
+      await flushAsync();
+      expect(isDone()).toBe(false);
+      expect(gated.flushCalls).toBe(0);
+
+      release();
+      await flush;
+      expect(gated.flushCalls).toBe(1);
+      expect(abortsOf(gated, 'root-0').map(r => r.id)).toEqual(['TRACE_CAP_EXCEEDED']);
+      expect(gated.getTraceMapSize()).toBe(1);
+    });
+
+    it('shutdown waits for a held hard-cap abort and does not abort the evicted span again', async () => {
+      const { gated, release } = await startEvictingTrace();
+      exporter = gated;
+
+      const shutdown = gated.shutdown();
+      const isDone = settled(shutdown);
+      await flushAsync();
+      expect(isDone()).toBe(false);
+      expect(gated.postShutdownCalls).toBe(0);
+
+      release();
+      await shutdown;
+      expect(gated.postShutdownCalls).toBe(1);
+      expect(abortsOf(gated, 'root-0').map(r => r.id)).toEqual(['TRACE_CAP_EXCEEDED']);
+      expect(abortsOf(gated, 'root-1').map(r => r.id)).toEqual(['SHUTDOWN']);
+    });
+
+    it('flush still completes when the held hard-cap abort throws', async () => {
+      const { gated, fail } = await startEvictingTrace();
+      exporter = gated;
+
+      const flush = gated.flush();
+      const isDone = settled(flush);
+      await flushAsync();
+      expect(isDone()).toBe(false);
+
+      fail(new Error('vendor rejected abort'));
+      await expect(flush).resolves.toBeUndefined();
+      expect(gated.flushCalls).toBe(1);
     });
   });
 

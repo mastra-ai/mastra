@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest';
 import {
   formatArgsSummary,
   formatResult,
+  formatTaskTitle,
   formatToolApproval,
   formatToolApproved,
   formatToolDenied,
@@ -30,28 +31,15 @@ import {
 // ---------------------------------------------------------------------------
 
 describe('stripToolPrefix', () => {
-  it('strips the mastra_workspace_ prefix', () => {
-    expect(stripToolPrefix('mastra_workspace_search')).toBe('search');
-  });
-
-  it('strips only the first matching prefix', () => {
-    expect(stripToolPrefix('mastra_workspace_mastra_workspace_nested')).toBe('mastra_workspace_nested');
-  });
-
-  it('returns the name unchanged when no prefix matches', () => {
-    expect(stripToolPrefix('my_custom_tool')).toBe('my_custom_tool');
-  });
-
-  it('returns an empty string unchanged', () => {
-    expect(stripToolPrefix('')).toBe('');
-  });
-
-  it('does not strip partial prefix matches', () => {
-    expect(stripToolPrefix('mastra_work')).toBe('mastra_work');
-  });
-
-  it('handles a name that is exactly the prefix', () => {
-    expect(stripToolPrefix('mastra_workspace_')).toBe('');
+  it.each([
+    ['strips the mastra_workspace_ prefix', 'mastra_workspace_search', 'search'],
+    ['strips only the first matching prefix', 'mastra_workspace_mastra_workspace_nested', 'mastra_workspace_nested'],
+    ['returns the name unchanged when no prefix matches', 'my_custom_tool', 'my_custom_tool'],
+    ['returns an empty string unchanged', '', ''],
+    ['does not strip partial prefix matches', 'mastra_work', 'mastra_work'],
+    ['handles a name that is exactly the prefix', 'mastra_workspace_', ''],
+  ] as const)('%s', (_title, input, expected) => {
+    expect(stripToolPrefix(input)).toBe(expected);
   });
 });
 
@@ -87,18 +75,12 @@ describe('formatArgsSummary', () => {
     expect(result).toBe('visible');
   });
 
-  it('skips null values', () => {
-    const result = formatArgsSummary({ a: null, b: 'shown' });
-    expect(result).toBe('shown');
-  });
-
-  it('skips false values', () => {
-    const result = formatArgsSummary({ a: false, b: 'shown' });
-    expect(result).toBe('shown');
-  });
-
-  it('skips empty string values', () => {
-    const result = formatArgsSummary({ a: '', b: 'shown' });
+  it.each([
+    ['skips null values', null],
+    ['skips false values', false],
+    ['skips empty string values', ''],
+  ] as const)('%s', (_title, a) => {
+    const result = formatArgsSummary({ a, b: 'shown' });
     expect(result).toBe('shown');
   });
 
@@ -130,12 +112,74 @@ describe('formatArgsSummary', () => {
 });
 
 // ---------------------------------------------------------------------------
+// formatTaskTitle
+// ---------------------------------------------------------------------------
+
+describe('formatTaskTitle', () => {
+  it('reads the description from JSON-string args too', () => {
+    // ToolTracker hands over whatever the model emitted, which can still be
+    // the raw JSON string; the description must not be lost on that path.
+    expect(
+      formatTaskTitle(
+        'execute_command',
+        'ls -la /workspace',
+        JSON.stringify({ command: 'ls -la /workspace', description: 'Listing files in /workspace' }),
+      ),
+    ).toBe('Listing files in /workspace');
+    expect(formatTaskTitle('execute_command', 'ls', '{not json')).toBe('execute_command ls');
+  });
+
+  it('uses the description alone when the tool provides one', () => {
+    expect(
+      formatTaskTitle('execute_command', 'ls -la /workspace', {
+        command: 'ls -la /workspace',
+        description: 'Listing files in /workspace',
+      }),
+    ).toBe('Listing files in /workspace');
+  });
+
+  it('truncates a long description at 80 characters', () => {
+    const result = formatTaskTitle('execute_command', '', { description: 'x'.repeat(100) });
+    expect(result).toHaveLength(81);
+    expect(result.endsWith('…')).toBe(true);
+  });
+
+  it('falls back to name and args without a description', () => {
+    expect(formatTaskTitle('view', 'src/index.ts', { path: 'src/index.ts' })).toBe('view src/index.ts');
+  });
+
+  it('falls back to the bare name when there are no args', () => {
+    expect(formatTaskTitle('list_threads', '', {})).toBe('list_threads');
+  });
+
+  it('ignores a blank or non-string description', () => {
+    expect(formatTaskTitle('view', 'a.ts', { description: '  ', path: 'a.ts' })).toBe('view a.ts');
+    expect(formatTaskTitle('view', 'a.ts', { description: '\n\n  \n', path: 'a.ts' })).toBe('view a.ts');
+    expect(formatTaskTitle('view', 'a.ts', { description: 42, path: 'a.ts' })).toBe('view a.ts');
+  });
+
+  it('keeps only the first line of a multi-line description and collapses whitespace', () => {
+    // Issue/PR creators and MCP tools take whole bodies under `description`.
+    const body = '\n  Fix the   flaky\tlogin test\n\nIt fails when the clock crosses midnight.\n- step one\n- step two';
+    expect(formatTaskTitle('github_create_issue', 'Fix login', { title: 'Fix login', description: body })).toBe(
+      'Fix the flaky login test',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // formatResult
 // ---------------------------------------------------------------------------
 
 describe('formatResult', () => {
-  it('returns the string value directly', () => {
-    expect(formatResult('hello')).toBe('hello');
+  it.each([
+    ['returns the string value directly', 'hello', 'hello'],
+    ['returns "(no output)" for null', null, '(no output)'],
+    ['returns "(no output)" for undefined', undefined, '(no output)'],
+    ['trims leading and trailing whitespace from the output', '  trimmed  ', 'trimmed'],
+    ['returns a number serialised as a string', 42, '42'],
+  ] as const)('%s', (_title, input, expected) => {
+    expect(formatResult(input)).toBe(expected);
   });
 
   it('serialises non-string values as formatted JSON', () => {
@@ -154,28 +198,12 @@ describe('formatResult', () => {
     expect(formatResult(exact)).toBe(exact);
   });
 
-  it('returns "(no output)" for null', () => {
-    expect(formatResult(null)).toBe('(no output)');
-  });
-
-  it('returns "(no output)" for undefined', () => {
-    expect(formatResult(undefined)).toBe('(no output)');
-  });
-
   it('prepends "Error: " when isError is true', () => {
     expect(formatResult('timeout', true)).toBe('Error: timeout');
   });
 
   it('prepends "Error: " to "(no output)" when isError is true and value is null', () => {
     expect(formatResult(null, true)).toBe('Error: (no output)');
-  });
-
-  it('trims leading and trailing whitespace from the output', () => {
-    expect(formatResult('  trimmed  ')).toBe('trimmed');
-  });
-
-  it('returns a number serialised as a string', () => {
-    expect(formatResult(42)).toBe('42');
   });
 });
 
@@ -281,6 +309,16 @@ describe('formatToolApproved (plain text)', () => {
     const result = formatToolApproved('run_code', '', false);
     expect(result).toContain('*run_code*');
     expect(result).toContain('✓ Approved');
+  });
+
+  it('includes the user who approved when provided', () => {
+    const result = formatToolApproved('run_code', 'print()', false, 'alice');
+    expect(result).toContain('✓ Approved by alice');
+  });
+
+  it('omits the "by …" suffix when byUser is undefined', () => {
+    const result = formatToolApproved('run_code', '', false);
+    expect(result).not.toContain('by');
   });
 });
 

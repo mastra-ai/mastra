@@ -90,7 +90,7 @@ export const apiKeyMultiProviderDeleteScenario = {
     }
     await runtime.waitForScreenText(firstProviderStatus, terminal, 8_000);
 
-    terminal.write('\x7f');
+    terminal.write('\x1b[3~');
     await runtime.waitForScreenText(/→\s+302ai\s+✗ \(not set\)/i, terminal, 8_000);
 
     for (let index = 0; index < navigationSteps; index += 1) {

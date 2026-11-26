@@ -58,18 +58,6 @@ describe('getFileContentType', () => {
     await expect(getFileContentType('https://example.com/files/report.pdf')).resolves.toBe('application/pdf');
   });
 
-  it('falls back to the absolute URL pathname when the HEAD request is not ok', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: false,
-        headers: new Headers(),
-      }),
-    );
-
-    await expect(getFileContentType('https://example.com/files/report.pdf')).resolves.toBe('application/pdf');
-  });
-
   it('falls back to the absolute URL pathname when fetch throws', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network error')));
 

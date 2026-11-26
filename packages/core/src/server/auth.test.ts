@@ -172,13 +172,6 @@ describe('Composite auth', () => {
         expect(compositeAuth).toBeInstanceOf(CompositeAuth);
       });
 
-      it('should accept multiple providers', () => {
-        const provider1 = new MockAuthProvider();
-        const provider2 = new MockAuthProvider();
-        const compositeAuth = new CompositeAuth([provider1, provider2]);
-        expect(compositeAuth).toBeInstanceOf(CompositeAuth);
-      });
-
       it('should combine public paths from multiple providers', () => {
         const provider1 = new MockAuthProvider();
         provider1.public = ['/api/public1', '/api/public2'];
@@ -399,5 +392,39 @@ describe('Composite auth', () => {
         expect(typeof (compositeAuth as any).getUser).toBe('function');
       });
     });
+  });
+});
+
+describe('MastraAuthProvider mapUserToResourceId', () => {
+  class MethodMappedAuth extends MastraAuthProvider<{ id: string }> {
+    async authenticateToken(token: string) {
+      return { id: token };
+    }
+    async authorizeUser() {
+      return true;
+    }
+    mapUserToResourceId(user: { id: string }) {
+      return `method:${user.id}`;
+    }
+  }
+
+  it('keeps a mapUserToResourceId method defined on a subclass', () => {
+    const auth = new MethodMappedAuth();
+    expect(auth.mapUserToResourceId({ id: 'user-1' })).toBe('method:user-1');
+  });
+
+  it('lets CompositeAuth map users through a subclass method', async () => {
+    const composite = new CompositeAuth([new MethodMappedAuth()]);
+    const user = await composite.authenticateToken('user-1', new Request('http://localhost'));
+    expect(composite.mapUserToResourceId?.(user)).toBe('method:user-1');
+  });
+
+  it('lets the constructor option override a subclass method', () => {
+    const auth = new (class extends MethodMappedAuth {
+      constructor() {
+        super({ mapUserToResourceId: user => `option:${user.id}` });
+      }
+    })();
+    expect(auth.mapUserToResourceId({ id: 'user-1' })).toBe('option:user-1');
   });
 });

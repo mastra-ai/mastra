@@ -4,9 +4,6 @@ description: "The speak() method is a core function available in all Mastra voic
 packages:
   - "@mastra/core"
   - "@mastra/node-speaker"
-  - "@mastra/voice-openai"
-  - "@mastra/voice-openai-realtime"
-  - "@mastra/voice-playai"
 ---
 
 # voice.speak()
@@ -98,18 +95,10 @@ Each voice provider may support additional options specific to their implementat
         type: 'Options',
         parameters: [
           {
-            name: 'stability',
-            type: 'number',
-            description: 'Voice stability. Higher values result in more stable, less expressive speech.',
+            name: 'outputFormat',
+            type: 'string',
+            description: "Audio output format passed to ElevenLabs, for example 'mp3_44100_128'.",
             isOptional: true,
-            defaultValue: '0.5',
-          },
-          {
-            name: 'similarity_boost',
-            type: 'number',
-            description: 'Voice clarity and similarity to the original voice.',
-            isOptional: true,
-            defaultValue: '0.75',
           },
         ],
       },
@@ -245,7 +234,7 @@ const voice = new CompositeVoice({
 const audioStream = await voice.speak('Hello, world!')
 ```
 
-### Using AI SDK Model Providers
+### Using AI SDK model providers
 
 You can also use AI SDK speech models directly with `CompositeVoice`:
 

@@ -10,7 +10,27 @@ export const MASTRA_RESOURCE_ID_KEY = 'mastra__resourceId';
 
 export const MASTRA_THREAD_ID_KEY = 'mastra__threadId';
 
+/**
+ * Agent scopes set by trusted middleware. Never accepted from a request body.
+ */
+export const MASTRA_SCOPES_KEY = 'mastra__scopes';
+
+/**
+ * The Knowledge principals the signed-in caller holds, for the Studio Knowledge routes: a `string[]` of
+ * principal addresses, or `'all'` for an admin who may read the whole instance. Set it in
+ * `auth.authorize` (after authentication). With auth configured, a caller without it is refused.
+ */
+export const MASTRA_KNOWLEDGE_PRINCIPALS_KEY = 'mastra__knowledgePrincipals';
+
 export const MASTRA_USER_KEY = 'mastra__user';
+
+/**
+ * Authenticated user normalized to the stable `MastraUser` shape via the auth
+ * provider's `toMastraUser()`. Surfaced to `DynamicArgument` callbacks as the
+ * optional `user` argument. The raw provider-specific user stays at
+ * {@link MASTRA_USER_KEY}.
+ */
+export const MASTRA_NORMALIZED_USER_KEY = 'mastra__normalizedUser';
 
 export const MASTRA_USER_PERMISSIONS_KEY = 'mastra__userPermissions';
 
@@ -51,10 +71,19 @@ export const MASTRA_PUBLIC_HOST_HEADER = 'x-mastra-public-host';
 
 export const MASTRA_STUDIO_CLIENT_TYPE = 'studio';
 
-const RESERVED_CONTEXT_KEYS = new Set([
+/**
+ * RequestContext keys only trusted server code may set. Request bodies and query
+ * params can never supply them.
+ */
+export const RESERVED_REQUEST_CONTEXT_KEYS = [
   MASTRA_RESOURCE_ID_KEY,
   MASTRA_THREAD_ID_KEY,
+  // Agent scopes decide memory identity and what the agent acts as; only
+  // server middleware may set them.
+  MASTRA_SCOPES_KEY,
+  MASTRA_KNOWLEDGE_PRINCIPALS_KEY,
   MASTRA_USER_KEY,
+  MASTRA_NORMALIZED_USER_KEY,
   MASTRA_USER_PERMISSIONS_KEY,
   MASTRA_USER_ROLES_KEY,
   MASTRA_AUTH_TOKEN_KEY,
@@ -66,11 +95,16 @@ const RESERVED_CONTEXT_KEYS = new Set([
   // Factory stores the authoritative per-caller OM settings result here before
   // model-driven memory processors run. Client input must not spoof that result.
   'mastra__factoryMemorySettings',
+  // A resumed or recovered durable run names the spans its steps end here. A
+  // body-supplied value would make a run end spans the client chose.
+  'mastra__durableSegments',
   // Tenant scope must be established server-side, never self-asserted by a
   // client. The trusted-actor FGA gate keys off `organizationId`, so a
   // body-supplied value must not be merged into the request context.
   'organizationId',
-]);
+] as const;
+
+const RESERVED_CONTEXT_KEYS: ReadonlySet<string> = new Set(RESERVED_REQUEST_CONTEXT_KEYS);
 
 export function isReservedRequestContextKey(key: string): boolean {
   return RESERVED_CONTEXT_KEYS.has(key);

@@ -326,6 +326,17 @@ describe('ModelSelectionProcessor', () => {
       expect(seen).toEqual([{ abstained: 'error' }]);
     });
 
+    it('reports abstention when the classifier refuses the routing question', async () => {
+      const seen: any[] = [];
+      const { classifier } = stubClassifier({ complexity: { type: 'refusal' } });
+      const processor = choicesFrom(classifier, {
+        onDecision: d => void seen.push(d),
+      });
+
+      expect(await route(processor, 'hi')).toEqual({});
+      expect(seen).toEqual([{ abstained: 'refused' }]);
+    });
+
     it('does not let a throwing callback fail the request', async () => {
       const { classifier } = stubClassifier({
         complexity: { choice: 'trivial', probabilities: { trivial: 1 } },

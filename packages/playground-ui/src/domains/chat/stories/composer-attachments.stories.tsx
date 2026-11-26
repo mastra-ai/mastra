@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ArrowUp, Paperclip } from 'lucide-react';
 import { useState } from 'react';
 import { fn } from 'storybook/test';
 import {
@@ -16,6 +15,8 @@ import { ComposerAttachmentList } from '../attachments/composer-attachment-list'
 import type { AttachmentPreviewProps } from '../attachments/use-attachment-preview';
 import { Button } from '@/ds/components/Button';
 import { Composer, ComposerActions, ComposerBox, ComposerInput } from '@/ds/components/Composer';
+import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
+import { IconPaperclip1 } from '@/ds/icons/central/IconPaperclip1';
 
 const meta = {
   title: 'AI/Composer Attachments',
@@ -89,10 +90,10 @@ function AttachmentComposer({
         {withActions && (
           <ComposerActions>
             <Button type="button" size="icon-md" aria-label="Attach file">
-              <Paperclip />
+              <IconPaperclip1 />
             </Button>
             <Button type="submit" size="icon-md" aria-label="Send message">
-              <ArrowUp />
+              <IconArrowUp />
             </Button>
           </ComposerActions>
         )}

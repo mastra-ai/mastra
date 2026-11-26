@@ -61,6 +61,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'agents/resumable-streams',
+              label: 'Resumable Streams',
+            },
+            {
+              type: 'doc',
               id: 'agents/guardrails',
               label: 'Guardrails',
             },
@@ -172,16 +177,6 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'harness/signals',
-              label: 'Signals',
-            },
-            {
-              type: 'doc',
-              id: 'harness/signal-providers',
-              label: 'Signal Providers',
-            },
-            {
-              type: 'doc',
               id: 'harness/agent-controller',
               label: 'Agent Controller',
             },
@@ -230,6 +225,60 @@ const sidebars = {
             },
           ],
         },
+        {
+          type: 'category',
+          label: 'Knowledge',
+          link: {
+            type: 'doc',
+            id: 'knowledge/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+            tags: ['alpha'],
+          },
+          items: [
+            {
+              type: 'doc',
+              id: 'knowledge/scopes-and-access',
+              label: 'Scopes and access',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/agents-and-tools',
+              label: 'Agents and tools',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/pinned-context',
+              label: 'Pinned context',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/search',
+              label: 'Search',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/load-your-content',
+              label: 'Load your content',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/importers',
+              label: 'Importers',
+            },
+            {
+              type: 'link',
+              label: 'Studio',
+              href: '/docs/studio/knowledge',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/patterns',
+              label: 'Patterns',
+            },
+          ],
+        },
       ],
     },
     {
@@ -253,6 +302,49 @@ const sidebars = {
           type: 'doc',
           id: 'channels',
           label: 'Channels',
+        },
+        {
+          type: 'category',
+          label: 'Signals',
+          link: {
+            type: 'doc',
+            id: 'signals/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
+          items: [
+            {
+              type: 'doc',
+              id: 'signals/thread-streams',
+              label: 'Thread streams',
+            },
+            {
+              type: 'doc',
+              id: 'signals/sending-signals',
+              label: 'Sending signals',
+            },
+            {
+              type: 'doc',
+              id: 'signals/state-signals',
+              label: 'State signals',
+            },
+            {
+              type: 'doc',
+              id: 'signals/notifications',
+              label: 'Notifications',
+            },
+            {
+              type: 'doc',
+              id: 'signals/signal-providers',
+              label: 'Signal providers',
+            },
+            {
+              type: 'doc',
+              id: 'signals/running-across-processes',
+              label: 'Running across processes',
+            },
+          ],
         },
         {
           type: 'category',
@@ -296,6 +388,11 @@ const sidebars = {
           type: 'doc',
           id: 'browser',
           label: 'Browser',
+        },
+        {
+          type: 'doc',
+          id: 'classifier',
+          label: 'Classifier',
         },
         {
           type: 'category',
@@ -377,6 +474,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'server/mcp',
+              label: 'Built-in MCP Server',
+            },
+            {
+              type: 'doc',
               id: 'server/pubsub',
               label: 'PubSub',
             },
@@ -412,6 +514,11 @@ const sidebars = {
               type: 'doc',
               id: 'studio/auth',
               label: 'Auth',
+            },
+            {
+              type: 'doc',
+              id: 'studio/knowledge',
+              label: 'Knowledge',
             },
             {
               type: 'doc',
@@ -662,9 +769,6 @@ const sidebars = {
               type: 'doc',
               id: 'guides/agent-lifecycle',
               label: 'Agent lifecycle',
-              customProps: {
-                tags: ['new'],
-              },
             },
             {
               type: 'doc',
@@ -685,9 +789,6 @@ const sidebars = {
               type: 'doc',
               id: 'guides/build-an-eval-loop',
               label: 'Build an eval loop',
-              customProps: {
-                tags: ['new'],
-              },
             },
           ],
         },
@@ -695,110 +796,155 @@ const sidebars = {
     },
   ],
   platformSidebar: [
-    {
-      type: 'doc',
-      id: 'mastra-platform/overview',
-      label: 'Overview',
-    },
-    {
-      type: 'doc',
-      id: 'mastra-platform/deploy',
-      label: 'Deploy',
-    },
-    {
-      type: 'doc',
-      id: 'mastra-platform/environments',
-      label: 'Environments',
-    },
-    {
-      type: 'doc',
-      id: 'mastra-platform/system-environment-variables',
-      label: 'System environment variables',
-    },
-    {
-      type: 'doc',
-      id: 'mastra-platform/regions',
-      label: 'Regions',
-    },
-    {
-      type: 'doc',
-      id: 'mastra-platform/observability',
-      label: 'Observability',
-    },
-    {
-      type: 'doc',
-      id: 'mastra-platform/alerts',
-      label: 'Alerts',
-      customProps: {
-        tags: ['new'],
-      },
-    },
-    {
-      type: 'doc',
-      id: 'mastra-platform/trace-intelligence',
-      label: 'Trace Intelligence',
-    },
-    {
-      type: 'doc',
-      id: 'mastra-platform/studio',
-      label: 'Studio',
-    },
-    {
-      type: 'doc',
-      id: 'mastra-platform/server',
-      label: 'Server',
-    },
-    {
-      type: 'doc',
-      id: 'mastra-platform/github',
-      label: 'GitHub integration',
-    },
-    {
-      type: 'doc',
-      id: 'mastra-platform/database',
-      label: 'Hosted databases',
-    },
-    {
-      type: 'doc',
-      id: 'mastra-platform/workspaces',
-      label: 'Workspaces',
-    },
+    { type: 'doc', id: 'mastra-platform/overview', label: 'Overview' },
     {
       type: 'category',
-      label: 'Connect',
+      label: 'Deploy',
+      link: { type: 'doc', id: 'mastra-platform/deploy/overview' },
       collapsed: true,
-      link: {
-        type: 'doc',
-        id: 'mastra-platform/connect/overview',
-      },
       customProps: {
         contextualSidebar: true,
-        tags: ['new'],
       },
       items: [
-        {
-          type: 'doc',
-          id: 'mastra-platform/connect/tools',
-          label: 'Tools',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/connect/channels',
-          label: 'Channels',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/connect/providers',
-          label: 'Providers',
-        },
+        { type: 'doc', id: 'mastra-platform/deploy/server', label: 'Server' },
+        { type: 'doc', id: 'mastra-platform/deploy/studio', label: 'Studio' },
+        { type: 'doc', id: 'mastra-platform/deploy/github', label: 'GitHub integration' },
+        { type: 'doc', id: 'mastra-platform/deploy/environments', label: 'Environments' },
+        { type: 'doc', id: 'mastra-platform/deploy/regions', label: 'Regions' },
       ],
     },
     {
-      type: 'doc',
-      id: 'mastra-platform/configuration',
-      label: 'Configuration',
+      type: 'category',
+      label: 'Gateway',
+      link: { type: 'doc', id: 'mastra-platform/gateway/overview' },
+      collapsed: true,
+      customProps: {
+        contextualSidebar: true,
+      },
+      items: [
+        { type: 'doc', id: 'mastra-platform/gateway/quickstart', label: 'Quickstart' },
+        { type: 'doc', id: 'mastra-platform/gateway/migrate', label: 'Migrate' },
+        {
+          type: 'category',
+          label: 'APIs',
+          items: [
+            { type: 'doc', id: 'mastra-platform/gateway/api/create-chat-completion', label: 'Chat Completions' },
+            {
+              type: 'category',
+              label: 'Responses',
+              link: { type: 'doc', id: 'mastra-platform/gateway/api/create-response' },
+              items: [
+                { type: 'doc', id: 'mastra-platform/gateway/api/get-response', label: 'Retrieve a response' },
+                { type: 'doc', id: 'mastra-platform/gateway/api/delete-response', label: 'Delete a response' },
+                { type: 'doc', id: 'mastra-platform/gateway/api/list-response-input-items', label: 'List input items' },
+              ],
+            },
+            {
+              type: 'category',
+              label: 'Anthropic Messages',
+              link: { type: 'doc', id: 'mastra-platform/gateway/api/create-message' },
+              items: [{ type: 'doc', id: 'mastra-platform/gateway/api/count-message-tokens', label: 'Count tokens' }],
+            },
+            { type: 'doc', id: 'mastra-platform/gateway/api/create-embeddings', label: 'Embeddings' },
+            { type: 'doc', id: 'mastra-platform/gateway/api/create-decision', label: 'Decisions' },
+            { type: 'doc', id: 'mastra-platform/gateway/api/create-rerank', label: 'Rerank' },
+            {
+              type: 'category',
+              label: 'Images',
+              link: { type: 'doc', id: 'mastra-platform/gateway/api/generate-image' },
+              items: [{ type: 'doc', id: 'mastra-platform/gateway/api/edit-image', label: 'Edit an image' }],
+            },
+            {
+              type: 'category',
+              label: 'Videos',
+              link: { type: 'doc', id: 'mastra-platform/gateway/api/create-video' },
+              items: [
+                { type: 'doc', id: 'mastra-platform/gateway/api/list-videos', label: 'List jobs' },
+                { type: 'doc', id: 'mastra-platform/gateway/api/get-video', label: 'Retrieve a job' },
+                { type: 'doc', id: 'mastra-platform/gateway/api/get-video-content', label: 'Download a video' },
+              ],
+            },
+            {
+              type: 'category',
+              label: 'Audio',
+              link: { type: 'doc', id: 'mastra-platform/gateway/api/create-speech' },
+              items: [{ type: 'doc', id: 'mastra-platform/gateway/api/create-transcription', label: 'Transcriptions' }],
+            },
+            {
+              type: 'category',
+              label: 'Models',
+              link: { type: 'doc', id: 'mastra-platform/gateway/api/list-models' },
+              items: [{ type: 'doc', id: 'mastra-platform/gateway/api/get-model', label: 'Retrieve a model' }],
+            },
+            {
+              type: 'category',
+              label: 'Files',
+              link: { type: 'doc', id: 'mastra-platform/gateway/api/list-anthropic-files' },
+              items: [
+                { type: 'doc', id: 'mastra-platform/gateway/api/upload-anthropic-file', label: 'Upload a file' },
+                { type: 'doc', id: 'mastra-platform/gateway/api/get-anthropic-file', label: 'Retrieve metadata' },
+                { type: 'doc', id: 'mastra-platform/gateway/api/delete-anthropic-file', label: 'Delete a file' },
+                { type: 'doc', id: 'mastra-platform/gateway/api/download-anthropic-file', label: 'Download a file' },
+              ],
+            },
+          ],
+        },
+        { type: 'doc', id: 'mastra-platform/gateway/models-and-routing', label: 'Models and routing' },
+        { type: 'doc', id: 'mastra-platform/gateway/keys-and-byok', label: 'Keys and BYOK' },
+        { type: 'doc', id: 'mastra-platform/gateway/web-search', label: 'Web search' },
+        { type: 'doc', id: 'mastra-platform/gateway/usage-and-limits', label: 'Usage, pricing, and limits' },
+        { type: 'doc', id: 'mastra-platform/gateway/integrations', label: 'Integrations' },
+      ],
     },
-    { type: 'doc', id: 'mastra-platform/api', label: 'API Reference' },
+    {
+      type: 'category',
+      label: 'Observability',
+      link: { type: 'doc', id: 'mastra-platform/observability/overview' },
+      collapsed: true,
+      customProps: {
+        contextualSidebar: true,
+      },
+      items: [
+        { type: 'doc', id: 'mastra-platform/observability/trace-intelligence', label: 'Trace Intelligence' },
+        { type: 'doc', id: 'mastra-platform/alerts', label: 'Alerts and notifications' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Services',
+      collapsed: false,
+      collapsible: false,
+      className: 'sidebar-group-name',
+      items: [
+        { type: 'doc', id: 'mastra-platform/database', label: 'Databases' },
+        { type: 'doc', id: 'mastra-platform/connect', label: 'Connect' },
+        { type: 'doc', id: 'mastra-platform/workspaces', label: 'Workspaces' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Project settings',
+      collapsed: false,
+      collapsible: false,
+      className: 'sidebar-group-name',
+      items: [
+        { type: 'doc', id: 'mastra-platform/configuration', label: 'Configuration' },
+        { type: 'doc', id: 'mastra-platform/system-environment-variables', label: 'System environment variables' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Organization',
+      collapsed: false,
+      collapsible: false,
+      className: 'sidebar-group-name',
+      items: [
+        { type: 'doc', id: 'mastra-platform/mcp', label: 'MCP server', customProps: { tags: ['new'] } },
+        { type: 'doc', id: 'mastra-platform/team-members', label: 'Team members' },
+        { type: 'doc', id: 'mastra-platform/access-tokens', label: 'Access tokens' },
+      ],
+    },
+    { type: 'doc', id: 'mastra-platform/api', label: 'API reference' },
   ],
 }
 

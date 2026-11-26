@@ -1,14 +1,17 @@
 import {
   isAppendOnlySince,
   isBufferedChunkCoveredByCursor,
+  isBufferedReflectionUnchangedSince,
   maxObservationCursor,
-  type UpdateBufferedObservationsResult,
+  withBufferedReflectionVerified,
 } from '@internal/core/memory';
+import type { UpdateBufferedObservationsResult } from '@internal/core/memory';
 import { ErrorCategory, MastraError } from '@mastra/core/error';
 import { TABLE_OBSERVATIONAL_MEMORY } from '@mastra/core/storage';
 import type {
   BufferedObservationChunk,
   ObservationalMemoryRecord,
+  RunFence,
   SwapBufferedReflectionToActiveInput,
   SwapBufferedToActiveInput,
   SwapBufferedToActiveResult,
@@ -33,6 +36,7 @@ import {
   OM_UPDATED_AT,
 } from './schema';
 import {
+  assertMemoryFence,
   assertRowsAffected,
   numberOrZero,
   parseBufferedChunks,
@@ -50,9 +54,11 @@ import type { MemoryContext } from './utils';
 export async function updateBufferedObservations(
   ctx: MemoryContext,
   input: UpdateBufferedObservationsInput,
+  fence?: RunFence,
 ): Promise<UpdateBufferedObservationsResult> {
   try {
-    return await ctx.db.tx(async (_client, connection) => {
+    return await ctx.db.tx(async (client, connection) => {
+      await assertMemoryFence(ctx, client, fence, 'appendBufferedObservations');
       // A retired id is redirected to the head.
       const row = await resolveLiveOMRow(
         ctx,
@@ -111,9 +117,11 @@ export async function updateBufferedObservations(
 export async function swapBufferedToActive(
   ctx: MemoryContext,
   input: SwapBufferedToActiveInput,
+  fence?: RunFence,
 ): Promise<SwapBufferedToActiveResult> {
   try {
-    return await ctx.db.tx(async (_client, connection) => {
+    return await ctx.db.tx(async (client, connection) => {
+      await assertMemoryFence(ctx, client, fence, 'swapBufferedToActive');
       const row = await lockOMRow(ctx, connection, input.id, 'SWAP_BUFFERED_TO_ACTIVE');
       // A retired record is frozen: activation reports it and writes nothing.
       if (row.supersededBy) return { ...emptySwapResult(), retired: true };
@@ -180,9 +188,11 @@ export async function swapBufferedToActive(
 export async function updateBufferedReflection(
   ctx: MemoryContext,
   input: UpdateBufferedReflectionInput,
+  fence?: RunFence,
 ): Promise<void> {
   try {
-    await ctx.db.tx(async (_client, connection) => {
+    await ctx.db.tx(async (client, connection) => {
+      await assertMemoryFence(ctx, client, fence, 'updateBufferedReflection');
       const result = await connection.execute(
         `UPDATE ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)}
            SET ${OM_BUFFERED_REFLECTION} = CASE
@@ -215,10 +225,12 @@ export async function updateBufferedReflection(
 export async function swapBufferedReflectionToActive(
   ctx: MemoryContext,
   input: SwapBufferedReflectionToActiveInput,
+  fence?: RunFence,
 ): Promise<ObservationalMemoryRecord> {
   const { currentRecord } = input;
   try {
-    return await ctx.db.tx(async (_client, connection) => {
+    return await ctx.db.tx(async (client, connection) => {
+      await assertMemoryFence(ctx, client, fence, 'swapBufferedReflectionToActive');
       const row = await findOMRowForUpdate(ctx, connection, currentRecord.id);
       // Missing target: create nothing.
       if (!row) return currentRecord;
@@ -241,6 +253,11 @@ export async function swapBufferedReflectionToActive(
       // Only appends may have happened since the caller's snapshot; a rewrite invalidates the
       // reflected line count.
       if (!isAppendOnlySince(stored.activeObservations, currentRecord.activeObservations)) {
+        return stored;
+      }
+      // The swap must consume the buffer and reflected line count the caller read; another
+      // writer may have extended both since, which the activated text alone cannot reveal.
+      if (!isBufferedReflectionUnchangedSince(stored, currentRecord)) {
         return stored;
       }
 
@@ -266,7 +283,7 @@ export async function swapBufferedReflectionToActive(
         { id: stored.id },
       );
       assertRowsAffected(updateResult.rowsAffected, 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', stored.id);
-      return newRecord;
+      return withBufferedReflectionVerified(newRecord, currentRecord);
     });
   } catch (error) {
     if (error instanceof MastraError) throw error;

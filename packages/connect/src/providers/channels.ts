@@ -1,6 +1,8 @@
 // Hand-maintained registry of channel-capable providers. The launch ships
 // with three (Slack, Telegram, Discord); when a fourth lands the provider
 // generator can grow support.
+import { hkdfSync } from 'node:crypto';
+
 import type { ChannelProvider } from '@mastra/core/channels';
 
 import type { ConnectionCredential } from '../client.js';
@@ -34,10 +36,9 @@ function credentialToken(credential: ConnectionCredential): string {
  *   so webhook URLs match the actually-bound host. Overriding it from user code
  *   is a foot-gun (mismatched OAuth redirect URIs, dropped webhook deliveries).
  *   `encryptionKey` is a process-wide at-rest secret sourced from
- *   `MASTRA_ENCRYPTION_KEY`; letting `providerOptions` override it per
- *   integration would fragment the encryption boundary. Teams enforces the
- *   env var at wrapper time so its persistent install store can never
- *   silently fall back to plaintext.
+ *   `MASTRA_ENCRYPTION_KEY` (with a derived fallback for Teams); letting
+ *   `providerOptions` override it per integration would fragment the
+ *   encryption boundary.
  *
  * Anything on this list is stripped with a warning; the rest of
  * `providerOptions` (handlers, streaming, commands, handlers, threadContext,
@@ -313,21 +314,6 @@ const teamsChannel: ChannelProviderRegistration = {
       TeamsProvider: new (config: Record<string, unknown>) => ChannelProvider;
       TEAMS_DEV_PORTAL_SCOPE: string;
     };
-    // Defense-in-depth around Teams' persistent install store: it holds the
-    // per-agent bot `appPassword` at rest, so a missing encryption key would
-    // silently downgrade delegated provisioning to plaintext persistence.
-    // `encryptionKey` is stripped from `providerOptions` (reserved) so the
-    // key can only come from `MASTRA_ENCRYPTION_KEY`. Fail fast at wrapper
-    // time if it is not set — clearer than watching a provisioning call
-    // throw deep inside `@mastra/teams`.
-    if (!process.env.MASTRA_ENCRYPTION_KEY) {
-      throw new MastraConnectError(
-        'invalid_options',
-        'Microsoft Teams channel: MASTRA_ENCRYPTION_KEY is not set. ' +
-          'The Teams install store persists per-agent bot secrets and requires an at-rest ' +
-          'encryption key (a 32-byte value, base64-encoded).',
-      );
-    }
     const safeOptions = stripReservedOptions('microsoft-teams', options);
     // Mirrors the Slack/Telegram pattern: fetch the current credential on
     // every call, let the platform's vendor own rotation, extract the token
@@ -353,7 +339,39 @@ const teamsChannel: ChannelProviderRegistration = {
       }
       return token;
     };
-    return { provider: new mod.TeamsProvider({ tokenResolver, ...(safeOptions ?? {}) }) };
+    // Teams' persistent install store holds the per-agent bot `appPassword`
+    // at rest, so it must never fall back to plaintext persistence.
+    // `encryptionKey` is stripped from `providerOptions` (reserved), so the
+    // key comes from `MASTRA_ENCRYPTION_KEY` — or, when that's unset, from a
+    // key derived (HKDF-SHA256) from the platform access token, which
+    // `channels()` already requires. The derived key is real per-project
+    // secret material (never a constant baked into the package), but rotating
+    // the platform access token orphans previously stored bot credentials;
+    // disconnecting and reconnecting the channel re-provisions the bot. The
+    // fallback warns once, only while a Teams connection is active, so
+    // projects that don't use the Teams channel never see it.
+    const config: Record<string, unknown> = { tokenResolver, ...(safeOptions ?? {}) };
+    const usingDerivedKey = !process.env.MASTRA_ENCRYPTION_KEY;
+    if (usingDerivedKey) {
+      config.encryptionKey = Buffer.from(
+        hkdfSync('sha256', runtime.client.accessToken, 'mastra-connect', 'microsoft-teams-install-store', 32),
+      ).toString('base64');
+    }
+    let warnedDerivedKey = false;
+    return {
+      provider: new mod.TeamsProvider(config),
+      async sync() {
+        if (usingDerivedKey && !warnedDerivedKey) {
+          warnedDerivedKey = true;
+          console.warn(
+            '[@mastra/connect] MASTRA_ENCRYPTION_KEY is not set: encrypting the Microsoft Teams install ' +
+              'store with a key derived from the platform access token. Set MASTRA_ENCRYPTION_KEY to use a ' +
+              'dedicated key — otherwise rotating the platform access token makes stored bot credentials ' +
+              'unreadable (disconnect and reconnect the channel to re-provision).',
+          );
+        }
+      },
+    };
   },
 };
 

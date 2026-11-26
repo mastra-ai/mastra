@@ -1,35 +1,37 @@
-import { isThinkingLevelSetting } from '@mastra/code-sdk/thinking';
-import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import type { ModelSelectionRequest } from '@mastra/factory/model-packs';
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { useSendAgentControllerMessageMutation } from '../../../../hooks/useAgentControllerRunMutations';
-import {
-  useSwitchAgentControllerModeMutation,
-  useSwitchAgentControllerModelMutation,
-} from '../../../../hooks/useAgentControllerStateMutations';
-import { useChatSessionContext } from '../context/useChatSessionContext';
+import { useSetSessionModelMutation } from '../../../../hooks/useSessionModel';
 import { useChatCommands } from '../context/ChatCommandsProvider';
+import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
+import { useComposerImagesState } from '../context/useComposerImagesState';
+import type { PendingImage } from '../context/ComposerImagesContext';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { peekHandoffFiles, takeHandoffFiles } from '../services/handoffFiles';
+import { readHandoffPrompt } from '../services/promptHandoff';
+import type { PromptHandoff } from '../services/promptHandoff';
 
-interface PromptHandoff {
-  handoffPrompt: string;
-  handoffModeId?: string;
-  handoffModelId?: string;
-  handoffThinkingLevel?: ThinkingLevelSetting;
-}
+// History keeps a thread's route state, so only the tab that opened it may send its first prompt, once.
+const unsentHandoffs = new Map<string, ModelSelectionRequest>();
 
-export function promptHandoffState(
+export function startPromptHandoff(
+  sessionId: string,
   prompt: string,
-  config: { modeId: string; modelId?: string; thinkingLevel?: ThinkingLevelSetting },
+  {
+    shownMessageId,
+    modelSelection,
+  }: {
+    modelSelection: ModelSelectionRequest;
+    /** The draft's bubble for this prompt, which a thread that keeps the draft's transcript shows already. */
+    shownMessageId?: string;
+  },
 ): PromptHandoff {
-  return {
-    handoffPrompt: prompt,
-    handoffModeId: config.modeId,
-    handoffModelId: config.modelId,
-    handoffThinkingLevel: config.thinkingLevel,
-  };
+  unsentHandoffs.set(sessionId, modelSelection);
+  storePendingHandoff(sessionId, prompt);
+  return { handoffPrompt: prompt, handoffShownMessageId: shownMessageId };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -42,27 +44,31 @@ function readHandoffField(state: unknown, key: keyof PromptHandoff): string | un
   return typeof value === 'string' && value ? value : undefined;
 }
 
-const pendingHandoffKey = (resourceId: string) => `factory-pending-handoff:${resourceId}`;
+function toOutgoing(files: PendingImage[]) {
+  return files.map(f => ({ data: f.data, mediaType: f.mediaType, filename: f.filename }));
+}
 
-function storePendingHandoff(resourceId: string, prompt: string): void {
+const pendingHandoffKey = (sessionId: string) => `factory-pending-handoff:${sessionId}`;
+
+function storePendingHandoff(sessionId: string, prompt: string): void {
   try {
-    sessionStorage.setItem(pendingHandoffKey(resourceId), prompt);
+    sessionStorage.setItem(pendingHandoffKey(sessionId), prompt);
   } catch {
     // Browser storage can be unavailable; the current tab can still send.
   }
 }
 
-function readPendingHandoff(resourceId: string): string | null {
+function readPendingHandoff(sessionId: string): string | null {
   try {
-    return sessionStorage.getItem(pendingHandoffKey(resourceId));
+    return sessionStorage.getItem(pendingHandoffKey(sessionId));
   } catch {
     return null;
   }
 }
 
-export function clearPendingHandoff(resourceId: string): void {
+export function clearPendingHandoff(sessionId: string): void {
   try {
-    sessionStorage.removeItem(pendingHandoffKey(resourceId));
+    sessionStorage.removeItem(pendingHandoffKey(sessionId));
   } catch {
     // Storage can be unavailable; the message is already sent.
   }
@@ -71,81 +77,110 @@ export function clearPendingHandoff(resourceId: string): void {
 export function useHandoffPrompt(): void {
   const location = useLocation();
   const navigate = useNavigate();
-  const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
-  const { localUser, clearPending, pushNotice } = useChatTranscript();
-  const { prefillComposer } = useChatCommands();
-  const mutationArgs = {
+  const { sessionId, resourceId, sessionThreadId, baseUrl, sessionEnabled } = useChatSessionContext();
+  const { transcript, localUser, clearPending, pushNotice } = useChatTranscript();
+  const { restoreComposerDraft } = useChatCommands();
+  const { setImages } = useComposerImagesState();
+  const { mutateAsync: sendMessage } = useSendAgentControllerMessageMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
+    sessionId,
     baseUrl,
     enabled: sessionEnabled,
-  };
-  const { mutateAsync: sendMessage } = useSendAgentControllerMessageMutation(mutationArgs);
-  const { mutateAsync: switchMode } = useSwitchAgentControllerModeMutation(mutationArgs);
-  const { mutateAsync: switchModel } = useSwitchAgentControllerModelMutation(mutationArgs);
+  });
+  const { mutateAsync: setSessionModel } = useSetSessionModelMutation({
+    resourceId,
+    threadId: sessionThreadId ?? sessionId,
+    sessionId,
+  });
   const handedOff = useRef(false);
   const recovered = useRef(false);
-  const prompt = readHandoffField(location.state, 'handoffPrompt');
-  const modeId = readHandoffField(location.state, 'handoffModeId');
-  const modelId = readHandoffField(location.state, 'handoffModelId');
-  const handoffThinkingLevel = readHandoffField(location.state, 'handoffThinkingLevel');
-  const thinkingLevel = isThinkingLevelSetting(handoffThinkingLevel) ? handoffThinkingLevel : undefined;
+  const shown = useRef(false);
+  const prompt = readHandoffPrompt(location.state);
+  const shownMessageId = readHandoffField(location.state, 'handoffShownMessageId');
+  const promptShown = shownMessageId !== undefined && transcript.entries.some(entry => entry.id === shownMessageId);
 
   useEffect(() => {
-    if (!sessionEnabled) return;
     if (handedOff.current) return;
-    if (!prompt) {
+    const startOn = async (selection: ModelSelectionRequest) => {
+      if (selection.kind === 'default') return;
+      await setSessionModel(selection).catch((error: unknown) =>
+        pushNotice(error instanceof Error ? error.message : 'Could not start on the picked model.', 'error'),
+      );
+    };
+    // The prompt shows as soon as the thread opens, while its session may still
+    // be being created; it sends once the session exists.
+    if (prompt !== undefined && !shown.current) {
+      if (!unsentHandoffs.has(sessionId)) {
+        void navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null });
+        return;
+      }
+      shown.current = true;
+      const files = peekHandoffFiles(sessionId);
+      if (!promptShown && (prompt || files.length > 0)) localUser(prompt, false, toOutgoing(files));
+    }
+    if (!sessionEnabled) return;
+    if (prompt === undefined) {
       if (recovered.current) return;
       recovered.current = true;
-      const interruptedPrompt = readPendingHandoff(resourceId);
-      if (interruptedPrompt) {
-        prefillComposer(interruptedPrompt);
-        pushNotice('The previous message may not have been sent. Check the transcript before retrying.', 'error');
+      const leftSelection = unsentHandoffs.get(sessionId);
+      unsentHandoffs.delete(sessionId);
+      const interruptedPrompt = readPendingHandoff(sessionId);
+      const interruptedFiles = takeHandoffFiles(sessionId);
+      if (interruptedPrompt || interruptedFiles.length > 0) {
+        void (leftSelection ? startOn(leftSelection) : Promise.resolve()).then(() => {
+          if (interruptedPrompt) restoreComposerDraft(interruptedPrompt);
+          if (interruptedFiles.length > 0) setImages(current => [...interruptedFiles, ...current]);
+          pushNotice('The previous message may not have been sent. Check the transcript before retrying.', 'error');
+        });
       }
       return;
     }
     handedOff.current = true;
-    // Keep a recoverable draft before dropping history state. Never auto-resend
-    // after an interruption: the server may already have accepted the message.
-    storePendingHandoff(resourceId, prompt);
+    const selection = unsentHandoffs.get(sessionId);
+    unsentHandoffs.delete(sessionId);
+    const files = takeHandoffFiles(sessionId);
+    // Never auto-resend after an interruption: the server may already have accepted the message.
     void navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null });
-    localUser(prompt);
+    if (!prompt && files.length === 0) return;
+    const outgoing = toOutgoing(files);
     void (async () => {
-      // mode first — switching it resets the model; a failed bind must not lose the prompt
-      if (modeId) {
-        await switchMode(modeId).catch((error: unknown) =>
-          pushNotice(error instanceof Error ? error.message : `Could not start in ${modeId} mode.`, 'error'),
-        );
-      }
-      if (modelId) {
-        await switchModel({ modelId, thinkingLevel }).catch((error: unknown) =>
-          pushNotice(error instanceof Error ? error.message : `Could not start on ${modelId}.`, 'error'),
-        );
-      }
-      await sendMessage(prompt);
-      clearPendingHandoff(resourceId);
+      if (selection) await startOn(selection);
+      await sendMessage(outgoing.length ? { text: prompt, files: outgoing } : prompt);
+      clearPendingHandoff(sessionId);
     })().catch(error => {
-      prefillComposer(prompt);
+      restoreComposerDraft(prompt);
+      setImages(current => [...files, ...current]);
       clearPending();
-      pushNotice(error instanceof Error ? error.message : 'The message could not be sent.', 'error');
+      const reason = error instanceof Error ? error.message : 'The message could not be sent.';
+      // A 4xx means the server refused the message. Anything else (network
+      // failure, 5xx) can come after the server accepted it, so warn before a
+      // retry posts it twice.
+      pushNotice(
+        isRejectedRequest(error)
+          ? reason
+          : `${reason} The message may have been sent. Check the transcript before retrying.`,
+        'error',
+      );
     });
   }, [
     clearPending,
     localUser,
     location.pathname,
     location.search,
-    modeId,
-    modelId,
     navigate,
-    prefillComposer,
     prompt,
+    promptShown,
     pushNotice,
-    resourceId,
+    restoreComposerDraft,
+    sessionId,
     sendMessage,
+    setSessionModel,
     sessionEnabled,
-    switchMode,
-    switchModel,
-    thinkingLevel,
+    setImages,
   ]);
+}
+
+function isRejectedRequest(error: unknown): boolean {
+  const status = typeof error === 'object' && error !== null ? (error as { status?: unknown }).status : undefined;
+  return typeof status === 'number' && status >= 400 && status < 500;
 }

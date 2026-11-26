@@ -17,6 +17,8 @@
 import { getKeybindings, truncateToWidth, visibleWidth, wrapTextWithAnsi } from '@earendil-works/pi-tui';
 import type { Component, SelectItem, SelectListTheme } from '@earendil-works/pi-tui';
 
+import { ListWindow } from './list-window.js';
+
 const DEFAULT_PRIMARY_COLUMN_WIDTH = 32;
 const PRIMARY_COLUMN_GAP = 2;
 const MIN_DESCRIPTION_WIDTH = 10;
@@ -33,9 +35,13 @@ const clamp = (value: number, min: number, max: number): number => Math.max(min,
 export class WrappingAutocompleteList implements Component {
   private filteredItems: SelectItem[];
   private selectedIndex = 0;
+  private readonly window = new ListWindow();
   private maxVisible: number;
   private theme: SelectListTheme;
   private layout: WrappingAutocompleteListLayout;
+  // Item index for each row of the last render (-1 for non-item rows), so a
+  // click on any wrapped row of an item resolves to that item.
+  private rowItems: number[] = [];
 
   onSelect?: (item: SelectItem) => void;
   onCancel?: () => void;
@@ -65,18 +71,16 @@ export class WrappingAutocompleteList implements Component {
 
   render(width: number): string[] {
     const lines: string[] = [];
+    this.rowItems = [];
 
     if (this.filteredItems.length === 0) {
       lines.push(this.theme.noMatch('  No matching commands'));
+      this.rowItems.push(-1);
       return lines;
     }
 
     const primaryColumnWidth = this.getPrimaryColumnWidth();
-    const startIndex = Math.max(
-      0,
-      Math.min(this.selectedIndex - Math.floor(this.maxVisible / 2), this.filteredItems.length - this.maxVisible),
-    );
-    const endIndex = Math.min(startIndex + this.maxVisible, this.filteredItems.length);
+    const { startIndex, endIndex } = this.window.range(this.selectedIndex, this.filteredItems.length, this.maxVisible);
 
     for (let i = startIndex; i < endIndex; i++) {
       const item = this.filteredItems[i];
@@ -85,15 +89,35 @@ export class WrappingAutocompleteList implements Component {
       const description = item.description ? normalizeToSingleLine(item.description) : undefined;
       for (const row of this.renderItem(item, isSelected, width, description, primaryColumnWidth)) {
         lines.push(row);
+        this.rowItems.push(i);
       }
     }
 
     if (startIndex > 0 || endIndex < this.filteredItems.length) {
       const scrollText = `  (${this.selectedIndex + 1}/${this.filteredItems.length})`;
       lines.push(this.theme.scrollInfo(truncateToWidth(scrollText, width - 2, '')));
+      this.rowItems.push(-1);
     }
 
     return lines;
+  }
+
+  /** Item index rendered at `row` of the last render, if that row belongs to an item. */
+  itemIndexAtRow(row: number): number | undefined {
+    const index = this.rowItems[row];
+    return index === undefined || index < 0 ? undefined : index;
+  }
+
+  /** First row and row count of `index` in the last render (the highlighted item can wrap). */
+  rowsOfItem(index: number): { first: number; count: number } | undefined {
+    const first = this.rowItems.indexOf(index);
+    if (first < 0) return undefined;
+    return { first, count: this.rowItems.lastIndexOf(index) - first + 1 };
+  }
+
+  /** Number of rows produced by the last render. */
+  get renderedRowCount(): number {
+    return this.rowItems.length;
   }
 
   handleInput(keyData: string): void {

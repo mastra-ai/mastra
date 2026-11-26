@@ -1,8 +1,49 @@
+import { isThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { FactoryStorageDomain } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
-export const FACTORY_MODEL_SCOPES = ['factory', 'user'] as const;
+import { DEFAULT_THINKING_LEVEL } from '../../../default-thinking-level.js';
+import { defaultModelPack, legacyModelPackSet, withDefaultModel } from '../../../model-packs.js';
+import type { ModelPack, ModelPackSet } from '../../../model-packs.js';
+import { stampNewProjectIntake } from '../boards/base.js';
+import { FACTORY_INTAKE_ROUTE_LOCKS_SCHEMA } from '../boards/schemas.js';
+
+export const DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES = 30;
+export const FACTORY_MODEL_SCOPES = ['factory', 'user', 'hybrid'] as const;
 export type FactoryModelScope = (typeof FACTORY_MODEL_SCOPES)[number];
+/** The single credential scope one session or run resolves from; `hybrid` is never effective. */
+export type EffectiveModelScope = Exclude<FactoryModelScope, 'hybrid'>;
+
+/**
+ * Resolve the scope one context runs under. `hybrid` splits by context: work-item runs use the
+ * Factory's model and credentials, interactive sessions use the session owner's.
+ */
+export function effectiveModelScope(scope: FactoryModelScope, context: 'run' | 'session'): EffectiveModelScope {
+  if (scope === 'hybrid') return context === 'run' ? 'factory' : 'user';
+  return scope;
+}
+
+/**
+ * Sentinel `user_id` for a Factory's own settings rows (memory, voice) in the
+ * per-`(org, user)` settings tables. Real user ids are WorkOS ids (`user_…`) or
+ * the `local` sentinel, so the prefix cannot collide.
+ */
+export function factoryProjectSettingsUserId(factoryProjectId: string): string {
+  return `factory-project:${factoryProjectId}`;
+}
+
+/**
+ * The Factory as the owner of work nobody started: the `user_id` of a phase session a
+ * webhook, an automatic phase or a rule opened, and the user its runs authenticate as.
+ * It is the settings sentinel, so such a run reads the Factory's own settings rows and,
+ * having no personal rows, only ever resolves the organization's model keys.
+ */
+export const factoryPrincipalId = factoryProjectSettingsUserId;
+
+export function isFactoryPrincipalId(userId: string | null | undefined): boolean {
+  return userId?.startsWith('factory-project:') === true;
+}
 
 export interface FactoryProject {
   id: string;
@@ -12,32 +53,83 @@ export interface FactoryProject {
   description: string | null;
   /** Default model for sessions/runs started under this Factory (null = harness default). */
   defaultModelId: string | null;
-  /** Whether sessions use the Factory's model and credentials or the current user's. */
+  /**
+   * Whose model and credentials sessions and runs use: the Factory's, the session owner's, or
+   * `hybrid` (owner's for interactive sessions, the Factory's for work-item runs).
+   */
   modelScope: FactoryModelScope;
-  /** Whether new Slack sessions create Work-board items for this Factory. */
-  slackWorkItemsEnabled: boolean;
-  /** Whether rules may start agent runs on their own; off, a run waits for approval on its card. */
-  autoRunEnabled: boolean;
-  /** Whether the Factory answers a run's plan itself instead of waiting for a person. */
-  autoApprovePlans: boolean;
+  /** Thinking level for this Factory's sessions and runs that have not picked their own. */
+  defaultThinkingLevel: ThinkingLevelSetting;
+  modelPacks: ModelPack[];
+  defaultModelPackId: string | null;
+  /** Workspace root in the sandbox; linked repositories are checked out beneath it. */
+  sandboxWorkingDirectory: string | null;
+  /** Provider settings document validated by the configured FactorySandbox. Only keys the user set. */
+  sandboxSettings: Record<string, unknown> | null;
+  /** Command run once in the workspace root after every repository's own setup. */
+  workspaceSetupCommand: string | null;
+  /** Template id of the environment's current build, written by the build path. */
+  activeTemplateId: string | null;
+  /** Repository slug → commit the active template was built at. */
+  activeTemplateHeads: Record<string, string> | null;
+  /** Provider build id of the most recent build attempt; its status is read live from the provider. */
+  lastBuildId: string | null;
+  /** Repository slug → commit the most recent build attempt pinned, so its status can be read back. */
+  lastBuildHeads: Record<string, string> | null;
+  /** Fingerprint of the settings, repositories and setup commands the most recent build attempt used. */
+  lastBuildInputs: string | null;
+  /** When the most recent build attempt started, whatever triggered it. */
+  lastBuildAttemptedAt: Date | null;
+  /** When a push last started a build: the leading edge of the push debounce window. */
+  lastPushBuildAt: Date | null;
+  /**
+   * A run's build-start lease lapsed, so a build it may have started is not
+   * on record. Cleared once a run reconciles it with a provider that lists
+   * builds, or gives up on it after `UNRESOLVED_BUILD_START_TIMEOUT_MS`.
+   */
+  buildStartUncertain: boolean;
+  /** The latest moment the unrecorded build behind `buildStartUncertain` may have started. */
+  buildStartUncertainSince: Date | null;
+  /** Whether a push to an environment repository's default branch starts a build. */
+  buildOnPushEnabled: boolean;
+  /** Minutes after a push-triggered attempt during which further pushes do not build. */
+  buildPushDebounceMinutes: number;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/** Project switches the board replaced, as last stored. */
+export interface RetiredAutomationSettings {
+  /** Runs started without a person on every phase. */
+  autoRunEnabled: boolean;
+  /** Cards on a board with a self-review phase went through it. */
+  selfReviewEnabled: boolean;
 }
 
 export interface CreateFactoryProjectInput {
   name: string;
   description?: string | null;
   defaultModelId?: string | null;
+  modelScope?: FactoryModelScope;
 }
 
 export interface UpdateFactoryProjectInput {
   name?: string;
   description?: string | null;
-  defaultModelId?: string | null;
+  defaultModelId?: string;
   modelScope?: FactoryModelScope;
-  slackWorkItemsEnabled?: boolean;
-  autoRunEnabled?: boolean;
-  autoApprovePlans?: boolean;
+  modelPackSet?: ModelPackSet;
+  sandboxWorkingDirectory?: string | null;
+  sandboxSettings?: Record<string, unknown> | null;
+  workspaceSetupCommand?: string | null;
+  activeTemplateId?: string | null;
+  activeTemplateHeads?: Record<string, string> | null;
+  lastBuildId?: string | null;
+  lastBuildHeads?: Record<string, string> | null;
+  lastBuildInputs?: string | null;
+  lastBuildAttemptedAt?: Date | null;
+  buildOnPushEnabled?: boolean;
+  buildPushDebounceMinutes?: number;
 }
 
 export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
@@ -49,10 +141,34 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     name: { type: 'text' },
     description: { type: 'text', nullable: true },
     default_model_id: { type: 'text', nullable: true },
-    model_scope: { type: 'text', default: 'factory' },
-    slack_work_items_enabled: { type: 'boolean', default: false },
+    model_scope: { type: 'text', default: 'hybrid' },
+    default_thinking_level: { type: 'text', default: DEFAULT_THINKING_LEVEL },
+    model_packs: { type: 'json', nullable: true },
+    default_model_pack_id: { type: 'text', nullable: true },
+    // Retired project switch: no longer written. A phase starts on its own with `autoStart`; the
+    // `auto-run-switch-v1` board migration reads it once to carry it into the project's boards.
     auto_run_enabled: { type: 'boolean', default: false },
-    auto_approve_plans: { type: 'boolean', default: false },
+    sandbox_working_directory: { type: 'text', nullable: true },
+    sandbox_settings: { type: 'json', nullable: true },
+    workspace_setup_command: { type: 'text', nullable: true },
+    active_template_id: { type: 'text', nullable: true },
+    active_template_heads: { type: 'json', nullable: true },
+    last_build_id: { type: 'text', nullable: true },
+    last_build_heads: { type: 'json', nullable: true },
+    last_build_inputs: { type: 'text', nullable: true },
+    last_build_attempted_at: { type: 'timestamp', nullable: true },
+    last_push_build_at: { type: 'timestamp', nullable: true },
+    build_start_uncertain: { type: 'boolean', default: false },
+    build_start_uncertain_since: { type: 'timestamp', nullable: true },
+    build_start_claim: { type: 'text', nullable: true },
+    build_start_claim_expires_at: { type: 'timestamp', nullable: true },
+    build_on_push_enabled: { type: 'boolean', default: false },
+    build_push_debounce_minutes: { type: 'integer', default: DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES },
+    // Retired project switch: no longer written. A board self-reviews when it has a self-review
+    // phase; the `self-review-switch-v1` board migration reads it once to carry it into its boards.
+    self_review_enabled: { type: 'boolean', default: false },
+    /** Set once the source-control domain has backfilled repository positions and environment membership. */
+    environment_backfilled_at: { type: 'timestamp', nullable: true },
     created_at: { type: 'timestamp' },
     updated_at: { type: 'timestamp' },
   },
@@ -67,37 +183,104 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   description: string | null;
   default_model_id: string | null;
   model_scope: string;
-  slack_work_items_enabled: boolean;
+  default_thinking_level: string | null;
+  model_packs: ModelPack[] | null;
+  default_model_pack_id: string | null;
   auto_run_enabled: boolean;
-  auto_approve_plans: boolean;
+  sandbox_working_directory: string | null;
+  sandbox_settings: Record<string, unknown> | null;
+  workspace_setup_command: string | null;
+  active_template_id: string | null;
+  active_template_heads: Record<string, string> | null;
+  last_build_id: string | null;
+  last_build_heads: Record<string, string> | null;
+  last_build_inputs: string | null;
+  last_build_attempted_at: Date | null;
+  last_push_build_at: Date | null;
+  build_start_uncertain: boolean | null;
+  build_start_uncertain_since: Date | null;
+  build_start_claim: string | null;
+  build_start_claim_expires_at: Date | null;
+  build_on_push_enabled: boolean | null;
+  build_push_debounce_minutes: number | null;
+  self_review_enabled: boolean | null;
+  environment_backfilled_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
 
+function nextModelPackColumns(current: FactoryProject, changes: UpdateFactoryProjectInput) {
+  const packs = changes.modelPackSet ?? {
+    modelPacks: current.modelPacks,
+    defaultModelPackId: current.defaultModelPackId,
+  };
+  const set =
+    changes.defaultModelId === undefined
+      ? packs
+      : withDefaultModel(packs, changes.defaultModelId, current.defaultThinkingLevel);
+  const first = defaultModelPack(set)?.models[0];
+  return {
+    model_packs: set.modelPacks,
+    default_model_pack_id: set.defaultModelPackId,
+    default_model_id: first?.modelId ?? null,
+    default_thinking_level: first?.thinkingLevel ?? current.defaultThinkingLevel,
+  };
+}
+
 function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
+  const columnThinkingLevel = isThinkingLevelSetting(row.default_thinking_level)
+    ? row.default_thinking_level
+    : DEFAULT_THINKING_LEVEL;
+  const modelPackSet = row.model_packs
+    ? { modelPacks: row.model_packs, defaultModelPackId: row.default_model_pack_id ?? null }
+    : legacyModelPackSet(row.default_model_id, columnThinkingLevel);
+  const first = defaultModelPack(modelPackSet)?.models[0];
   return {
     id: row.id,
     orgId: row.org_id,
     createdBy: row.created_by,
     name: row.name,
     description: row.description,
-    defaultModelId: row.default_model_id,
-    modelScope: row.model_scope === 'user' ? 'user' : 'factory',
-    slackWorkItemsEnabled: row.slack_work_items_enabled,
-    autoRunEnabled: row.auto_run_enabled,
-    autoApprovePlans: row.auto_approve_plans ?? false,
+    defaultModelId: first?.modelId ?? null,
+    modelScope: row.model_scope === 'factory' || row.model_scope === 'user' ? row.model_scope : 'hybrid',
+    defaultThinkingLevel: first?.thinkingLevel ?? columnThinkingLevel,
+    modelPacks: modelPackSet.modelPacks,
+    defaultModelPackId: modelPackSet.defaultModelPackId,
+    sandboxWorkingDirectory: row.sandbox_working_directory ?? null,
+    sandboxSettings: row.sandbox_settings ?? null,
+    workspaceSetupCommand: row.workspace_setup_command ?? null,
+    activeTemplateId: row.active_template_id ?? null,
+    activeTemplateHeads: row.active_template_heads ?? null,
+    lastBuildId: row.last_build_id ?? null,
+    lastBuildHeads: row.last_build_heads ?? null,
+    lastBuildInputs: row.last_build_inputs ?? null,
+    lastBuildAttemptedAt: row.last_build_attempted_at ?? null,
+    lastPushBuildAt: row.last_push_build_at ?? null,
+    buildStartUncertain: row.build_start_uncertain ?? false,
+    buildStartUncertainSince: row.build_start_uncertain_since ?? null,
+    buildOnPushEnabled: row.build_on_push_enabled ?? false,
+    buildPushDebounceMinutes: row.build_push_debounce_minutes ?? DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
 export class FactoryProjectsStorage extends FactoryStorageDomain {
+  readonly #deletedListeners = new Set<(project: FactoryProject) => void>();
+
   constructor() {
     super('projects');
   }
 
+  /** Fires after a project's deletion committed. Returns a function that removes the listener. */
+  onDeleted(listener: (project: FactoryProject) => void): () => void {
+    this.#deletedListeners.add(listener);
+    return () => this.#deletedListeners.delete(listener);
+  }
+
   async init(): Promise<void> {
-    await this.ensureCollections([FACTORY_PROJECTS_SCHEMA]);
+    // The project's intake setting is written with it, so its table is this domain's too.
+    await this.ensureCollections([FACTORY_PROJECTS_SCHEMA, FACTORY_INTAKE_ROUTE_LOCKS_SCHEMA]);
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -118,18 +301,22 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
     input: CreateFactoryProjectInput;
   }): Promise<FactoryProject> {
     const now = new Date();
-    const row = await this.#db.insertOne<FactoryProjectDbRow>('factory_projects', {
-      org_id: orgId,
-      created_by: userId,
-      name: input.name,
-      description: input.description ?? null,
-      default_model_id: input.defaultModelId ?? null,
-      model_scope: 'factory',
-      slack_work_items_enabled: false,
-      auto_run_enabled: false,
-      auto_approve_plans: false,
-      created_at: now,
-      updated_at: now,
+    // A new project places its items by intake order; one created before that keeps the route list.
+    const row = await this.storage.withTransaction(async ops => {
+      const inserted = await ops.insertOne<FactoryProjectDbRow>('factory_projects', {
+        org_id: orgId,
+        created_by: userId,
+        name: input.name,
+        description: input.description ?? null,
+        default_model_id: input.defaultModelId ?? null,
+        model_scope: input.modelScope ?? 'hybrid',
+        // Written here because a database created earlier keeps its old column default.
+        build_push_debounce_minutes: DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES,
+        created_at: now,
+        updated_at: now,
+      });
+      await stampNewProjectIntake(ops, { orgId, factoryProjectId: inserted.id });
+      return inserted;
     });
     return toFactoryProject(row);
   }
@@ -157,6 +344,20 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
     return row ? toFactoryProject(row) : null;
   }
 
+  /**
+   * The retired automation switches as the project last stored them, read only by the one-time
+   * board migrations that carry them into its boards. Null when the project doesn't exist.
+   */
+  async retiredAutomationSettings(
+    { orgId, id }: { orgId: string; id: string },
+    /** A transaction's ops, to read it inside that transaction. */
+    ops: FactoryStorageOps = this.#db,
+  ): Promise<RetiredAutomationSettings | null> {
+    const row = await ops.findOne<FactoryProjectDbRow>('factory_projects', { org_id: orgId, id });
+    if (!row) return null;
+    return { autoRunEnabled: Boolean(row.auto_run_enabled), selfReviewEnabled: Boolean(row.self_review_enabled) };
+  }
+
   async getById({ id }: { id: string }): Promise<FactoryProject | null> {
     const row = await this.#db.findOne<FactoryProjectDbRow>('factory_projects', { id });
     return row ? toFactoryProject(row) : null;
@@ -169,25 +370,256 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
   }: {
     orgId: string;
     id: string;
-    input: UpdateFactoryProjectInput;
+    /** A function input runs in a transaction; writes through its `ops` commit or roll back with the project. */
+    input:
+      | UpdateFactoryProjectInput
+      | ((current: FactoryProject, ops: FactoryStorageOps) => Promise<UpdateFactoryProjectInput | null>);
   }): Promise<FactoryProject | null> {
-    const row = await this.#db.updateAtomic<FactoryProjectDbRow>('factory_projects', { org_id: orgId, id }, () => ({
-      ...(input.name !== undefined ? { name: input.name } : {}),
-      ...(input.description !== undefined ? { description: input.description } : {}),
-      ...(input.defaultModelId !== undefined ? { default_model_id: input.defaultModelId } : {}),
-      ...(input.modelScope !== undefined ? { model_scope: input.modelScope } : {}),
-      ...(input.slackWorkItemsEnabled !== undefined ? { slack_work_items_enabled: input.slackWorkItemsEnabled } : {}),
-      ...(input.autoRunEnabled !== undefined ? { auto_run_enabled: input.autoRunEnabled } : {}),
-      ...(input.autoApprovePlans !== undefined ? { auto_approve_plans: input.autoApprovePlans } : {}),
-      updated_at: new Date(),
-    }));
+    const update = (ops: FactoryStorageOps) =>
+      ops.updateAtomic<FactoryProjectDbRow>('factory_projects', { org_id: orgId, id }, async current => {
+        const project = toFactoryProject(current);
+        const changes = typeof input === 'function' ? await input(project, ops) : input;
+        if (changes === null) return null;
+        const touchesModelPacks = changes.modelPackSet !== undefined || changes.defaultModelId !== undefined;
+        return {
+          ...(changes.name !== undefined ? { name: changes.name } : {}),
+          ...(changes.description !== undefined ? { description: changes.description } : {}),
+          ...(changes.modelScope !== undefined ? { model_scope: changes.modelScope } : {}),
+          ...(touchesModelPacks ? nextModelPackColumns(project, changes) : {}),
+          ...(changes.sandboxWorkingDirectory !== undefined
+            ? { sandbox_working_directory: changes.sandboxWorkingDirectory }
+            : {}),
+          ...(changes.sandboxSettings !== undefined ? { sandbox_settings: changes.sandboxSettings } : {}),
+          ...(changes.workspaceSetupCommand !== undefined
+            ? { workspace_setup_command: changes.workspaceSetupCommand }
+            : {}),
+          ...(changes.activeTemplateId !== undefined ? { active_template_id: changes.activeTemplateId } : {}),
+          ...(changes.activeTemplateHeads !== undefined ? { active_template_heads: changes.activeTemplateHeads } : {}),
+          ...(changes.lastBuildId !== undefined ? { last_build_id: changes.lastBuildId } : {}),
+          ...(changes.lastBuildHeads !== undefined ? { last_build_heads: changes.lastBuildHeads } : {}),
+          ...(changes.lastBuildInputs !== undefined ? { last_build_inputs: changes.lastBuildInputs } : {}),
+          ...(changes.lastBuildAttemptedAt !== undefined
+            ? { last_build_attempted_at: changes.lastBuildAttemptedAt }
+            : {}),
+          ...(changes.buildOnPushEnabled !== undefined ? { build_on_push_enabled: changes.buildOnPushEnabled } : {}),
+          ...(changes.buildPushDebounceMinutes !== undefined
+            ? { build_push_debounce_minutes: changes.buildPushDebounceMinutes }
+            : {}),
+          updated_at: new Date(),
+        };
+      });
+    // LibSQL's standalone updateAtomic only serializes one client; a transaction
+    // also protects a read-dependent update against other database connections.
+    const row = typeof input === 'function' ? await this.storage.withTransaction(update) : await update(this.#db);
     return row ? toFactoryProject(row) : null;
   }
 
-  async delete({ orgId, id }: { orgId: string; id: string }): Promise<FactoryProject | null> {
-    const project = await this.get({ orgId, id });
-    if (!project) return null;
-    const deleted = await this.#db.deleteMany('factory_projects', { org_id: orgId, id });
-    return deleted > 0 ? project : null;
+  /**
+   * Leading-edge debounce for push-triggered builds: stamps
+   * `last_push_build_at = now` and resolves true when no push started a build
+   * within the last `debounceMinutes`, else writes nothing and resolves
+   * false. Taken right before the provider start, so a push that skips
+   * (another run starting, a build in progress) never closes the window. The read and the write run in one transaction, so two concurrent
+   * webhooks never both win, even on different database connections.
+   */
+  async claimBuildAttempt({
+    id,
+    debounceMinutes,
+    now = new Date(),
+  }: {
+    id: string;
+    debounceMinutes: number;
+    now?: Date;
+  }): Promise<boolean> {
+    let claimed = false;
+    await this.storage.withTransaction(ops =>
+      ops.updateAtomic<FactoryProjectDbRow>('factory_projects', { id }, current => {
+        const last = current.last_push_build_at;
+        if (last && now.getTime() - last.getTime() < debounceMinutes * 60_000) return null;
+        claimed = true;
+        return { last_push_build_at: now, updated_at: now };
+      }),
+    );
+    return claimed;
+  }
+
+  /**
+   * Takes the project's build-start lease for `token`. Every trigger (manual,
+   * schedule, push) takes it before reading build state and holds it through
+   * `builds.start` and recording the result, so two runs never both start a
+   * build. `claimed` is false while another run holds an unexpired lease. The
+   * holder renews the lease while it works (`renewBuildStart`), so a lease
+   * only expires when its run died or stalled. Taking over an expired lease
+   * marks the start uncertain (that run's build may have reached the provider
+   * unrecorded), and the mark stays until a release resolves it; `uncertain`
+   * reports it. The mark's `build_start_uncertain_since` is the lapsed lease's
+   * expiry, the latest that run could have started a build; a mark written
+   * before that column existed is dated by the first claim that reads it.
+   * Only the claim is transactional; provider calls run outside it.
+   */
+  async claimBuildStart({
+    id,
+    token,
+    leaseMs,
+    now = new Date(),
+  }: {
+    id: string;
+    token: string;
+    leaseMs: number;
+    now?: Date;
+  }): Promise<{ claimed: boolean; uncertain: boolean }> {
+    const result = { claimed: false, uncertain: false };
+    await this.storage.withTransaction(ops =>
+      ops.updateAtomic<FactoryProjectDbRow>('factory_projects', { id }, current => {
+        const expiresAt = current.build_start_claim_expires_at;
+        if (current.build_start_claim && expiresAt && expiresAt.getTime() > now.getTime()) return null;
+        result.claimed = true;
+        const lapsedAt = current.build_start_claim ? (expiresAt ?? now) : null;
+        const markedAt = current.build_start_uncertain === true ? (current.build_start_uncertain_since ?? now) : null;
+        result.uncertain = lapsedAt !== null || markedAt !== null;
+        const since =
+          lapsedAt && markedAt
+            ? lapsedAt.getTime() > markedAt.getTime()
+              ? lapsedAt
+              : markedAt
+            : (lapsedAt ?? markedAt);
+        return {
+          build_start_claim: token,
+          build_start_claim_expires_at: new Date(now.getTime() + leaseMs),
+          ...(since ? { build_start_uncertain: true, build_start_uncertain_since: since } : {}),
+          updated_at: now,
+        };
+      }),
+    );
+    return result;
+  }
+
+  /**
+   * Extends the build-start lease held by `token` to `now + leaseMs`. Resolves
+   * false, writing nothing, when `token` no longer holds it.
+   */
+  async renewBuildStart({
+    id,
+    token,
+    leaseMs,
+    now = new Date(),
+  }: {
+    id: string;
+    token: string;
+    leaseMs: number;
+    now?: Date;
+  }): Promise<boolean> {
+    let renewed = false;
+    await this.storage.withTransaction(ops =>
+      ops.updateAtomic<FactoryProjectDbRow>('factory_projects', { id }, current => {
+        if (current.build_start_claim !== token) return null;
+        renewed = true;
+        return { build_start_claim_expires_at: new Date(now.getTime() + leaseMs), updated_at: now };
+      }),
+    );
+    return renewed;
+  }
+
+  /**
+   * Releases the build-start lease taken with `token` and writes `changes` in
+   * the same transaction, but only while `token` still holds the lease. A run
+   * whose lease expired and was taken by a newer run writes nothing, so it
+   * never clears or overwrites that run's build. `resolved` clears an
+   * uncertain start. Resolves false when skipped.
+   */
+  async releaseBuildStart({
+    id,
+    token,
+    changes = {},
+    resolved = false,
+    now = new Date(),
+  }: {
+    id: string;
+    token: string;
+    resolved?: boolean;
+    changes?: Pick<
+      UpdateFactoryProjectInput,
+      'lastBuildId' | 'lastBuildHeads' | 'lastBuildInputs' | 'lastBuildAttemptedAt'
+    >;
+    now?: Date;
+  }): Promise<boolean> {
+    let released = false;
+    await this.storage.withTransaction(ops =>
+      ops.updateAtomic<FactoryProjectDbRow>('factory_projects', { id }, current => {
+        if (current.build_start_claim !== token) return null;
+        released = true;
+        return {
+          ...(changes.lastBuildId !== undefined ? { last_build_id: changes.lastBuildId } : {}),
+          ...(changes.lastBuildHeads !== undefined ? { last_build_heads: changes.lastBuildHeads } : {}),
+          ...(changes.lastBuildInputs !== undefined ? { last_build_inputs: changes.lastBuildInputs } : {}),
+          ...(changes.lastBuildAttemptedAt !== undefined
+            ? { last_build_attempted_at: changes.lastBuildAttemptedAt }
+            : {}),
+          ...(resolved ? { build_start_uncertain: false, build_start_uncertain_since: null } : {}),
+          build_start_claim: null,
+          build_start_claim_expires_at: null,
+          updated_at: now,
+        };
+      }),
+    );
+    return released;
+  }
+
+  /**
+   * Pins the active template to a finished build, but only while that build is
+   * still the project's last one. Overlapping runs (Build now during a push
+   * build) can finish out of order; the write and the `last_build_id` check
+   * run in one transaction so a stale run never overwrites a newer build's
+   * pin. Resolves false when the pin was skipped.
+   */
+  async pinActiveTemplate({
+    id,
+    buildId,
+    templateId,
+    heads,
+    now = new Date(),
+  }: {
+    id: string;
+    buildId: string;
+    templateId: string;
+    heads: Record<string, string>;
+    now?: Date;
+  }): Promise<boolean> {
+    let pinned = false;
+    await this.storage.withTransaction(ops =>
+      ops.updateAtomic<FactoryProjectDbRow>('factory_projects', { id }, current => {
+        if (current.last_build_id !== buildId) return null;
+        pinned = true;
+        return { active_template_id: templateId, active_template_heads: heads, updated_at: now };
+      }),
+    );
+    return pinned;
+  }
+
+  /** `release` runs in the deleting transaction, so nothing can be routed to the project between the two. */
+  async delete(
+    { orgId, id }: { orgId: string; id: string },
+    release?: (ops: FactoryStorageOps) => Promise<void>,
+  ): Promise<FactoryProject | null> {
+    const deleted = await this.storage.withTransaction(
+      async ops => {
+        const row = await ops.findOne<FactoryProjectDbRow>('factory_projects', { org_id: orgId, id });
+        if (!row) return null;
+        await release?.(ops);
+        await ops.deleteMany('factory_projects', { org_id: orgId, id });
+        return toFactoryProject(row);
+      },
+      { isolationLevel: 'serializable' },
+    );
+    if (deleted) {
+      for (const listener of this.#deletedListeners) {
+        try {
+          listener(deleted);
+        } catch (error) {
+          console.error('[factory] project deletion listener failed', error instanceof Error ? error.message : error);
+        }
+      }
+    }
+    return deleted;
   }
 }
