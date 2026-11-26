@@ -1635,8 +1635,7 @@ export class MastraFactory {
           // `this.#dispatcher` is created with the runtime below; before it, no run can be in flight.
           runs: {
             inFlight: async card => (await this.#dispatcher?.hasRunInFlightOnCard(card)) ?? false,
-            stop: async card => this.#dispatcher?.stopRunsOnCard(card),
-            abandon: async card => this.#dispatcher?.abandonRunsOnCard(card),
+            stop: async card => (await this.#dispatcher?.stopRunsOnCard(card)) ?? false,
           },
         })
       : undefined;

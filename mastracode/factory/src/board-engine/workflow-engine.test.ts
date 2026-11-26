@@ -106,7 +106,7 @@ function personMove(storage: WorkItemsStorage, id: string, stage: string, identi
 
 describe('the workflow board engine', () => {
   /** A card whose planning run is going until it is stopped, or forever when `ends` is false. */
-  function goingRun(ends: boolean) {
+  function goingRun(ends: boolean, reached = true) {
     const calls: string[] = [];
     let inFlight = true;
     const runs: FactoryCardRuns = {
@@ -114,8 +114,8 @@ describe('the workflow board engine', () => {
       stop: async () => {
         calls.push('stop');
         if (ends) setTimeout(() => (inFlight = false), 20);
+        return reached;
       },
-      abandon: async () => void calls.push('abandon'),
     };
     return { calls, runs };
   }
@@ -207,16 +207,29 @@ describe('the workflow board engine', () => {
     expect(await workflow.getWorkflowRunById(boardRunId(item.id))).toBeNull();
   });
 
-  it("commits a person's move anyway, giving up on the run, when the stopped run doesn't end in time", async () => {
+  it("refuses a person's move as busy, leaving the run be, when the stopped run doesn't end in time", async () => {
     const { storage, runsUrl, item } = await setup();
     const { calls, runs } = goingRun(false);
     const { engine } = replica(storage, runsUrl, undefined, runs, 120);
 
     const result = await engine.requestMove(await personMove(storage, item.id, 'execute', 'drag-1')());
 
-    expect(result).toMatchObject({ status: 'accepted', stage: 'execute' });
-    expect(calls).toEqual(['stop', 'abandon']);
-    expect((await storage.get({ orgId: ORG, id: item.id }))!.stages).toEqual(['execute']);
+    expect(result).toMatchObject({ status: 'rejected', code: 'card_busy' });
+    expect(calls).toEqual(['stop']);
+    expect((await storage.get({ orgId: ORG, id: item.id }))!.stages).toEqual(['planning']);
+  });
+
+  it("refuses a person's move as busy at once when the run isn't this process's to stop", async () => {
+    const { storage, runsUrl, item } = await setup();
+    const { calls, runs } = goingRun(false, false);
+    // A wait no test would sit through: the refusal must not take it.
+    const { engine } = replica(storage, runsUrl, undefined, runs, 600_000);
+
+    const result = await engine.requestMove(await personMove(storage, item.id, 'execute', 'drag-1')());
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'card_busy' });
+    expect(calls).toEqual(['stop']);
+    expect((await storage.get({ orgId: ORG, id: item.id }))!.stages).toEqual(['planning']);
   });
 
   it('stops nothing for a move the board would refuse, a move no person made, or a move to a phase that runs nothing', async () => {
