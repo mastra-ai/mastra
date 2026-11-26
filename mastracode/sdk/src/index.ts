@@ -1605,6 +1605,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // `continue` nudge and spend the one retry this handler allows.
       new CyberRefusalHandler(),
       new RouteAwareStreamErrorRetryProcessor({
+        credentialStore: authStorage,
         matchers: [
           // Account rotation owns a stream the provider cut after accepting the
           // request, with its own per-step budget. The matcher walk stops at the

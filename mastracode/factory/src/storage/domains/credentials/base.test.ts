@@ -5,12 +5,14 @@
  * TTL cleanup on read.
  */
 
+import { randomUUID } from 'node:crypto';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { LibSQLFactoryStorage } from '@mastra/libsql';
-import { describe, expect, it, onTestFinished, vi } from 'vitest';
+import { PgFactoryStorage } from '@mastra/pg';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { createFactorySecretEncryption } from '../../../secret-encryption.js';
 import type { FactorySecretEncryption } from '../../../secret-encryption.js';
@@ -23,7 +25,7 @@ const oauth = (tag: string, expires: number) => ({
   expires,
 });
 
-async function makeStore(encryption?: FactorySecretEncryption): Promise<ModelCredentialsStorage> {
+async function makeLibsqlStore(encryption?: FactorySecretEncryption): Promise<ModelCredentialsStorage> {
   const backend = new LibSQLFactoryStorage({ id: 'credentials-test', url: ':memory:' });
   const domain = backend.registerDomain(new ModelCredentialsStorage(encryption));
   await backend.init();
@@ -33,7 +35,7 @@ async function makeStore(encryption?: FactorySecretEncryption): Promise<ModelCre
 
 describe('ModelCredentialsStorage', () => {
   it('isolates user rows per user and per org', async () => {
-    const store = await makeStore();
+    const store = await makeLibsqlStore();
     await store.setCredential({ orgId: 'org1', userId: 'alice' }, 'anthropic', oauth('a', Date.now() + 60_000));
 
     expect(await store.getCredential({ orgId: 'org1', userId: 'alice' }, 'anthropic')).toMatchObject({
@@ -45,7 +47,7 @@ describe('ModelCredentialsStorage', () => {
   });
 
   it('stores org-scoped OAuth credentials (org-wide sign-in)', async () => {
-    const store = await makeStore();
+    const store = await makeLibsqlStore();
 
     await store.setCredential({ orgId: 'org1' }, 'anthropic', oauth('org', Date.now() + 60_000));
     expect(await store.getCredential({ orgId: 'org1' }, 'anthropic')).toMatchObject({ type: 'oauth' });
@@ -54,7 +56,7 @@ describe('ModelCredentialsStorage', () => {
   });
 
   it('resolves exactly one scope and lists both scopes for management', async () => {
-    const store = await makeStore();
+    const store = await makeLibsqlStore();
     await store.setCredential({ orgId: 'org1' }, 'openai', { type: 'api_key', key: 'sk-org' });
     await store.setCredential({ orgId: 'org1', userId: 'alice' }, 'openai', { type: 'api_key', key: 'sk-alice' });
     await store.setCredential({ orgId: 'org1', userId: 'alice' }, 'google', { type: 'api_key', key: 'sk-alice-g' });
@@ -78,7 +80,7 @@ describe('ModelCredentialsStorage', () => {
   });
 
   it('removes only the addressed scope', async () => {
-    const store = await makeStore();
+    const store = await makeLibsqlStore();
     await store.setCredential({ orgId: 'org1' }, 'openai', { type: 'api_key', key: 'sk-org' });
     await store.setCredential({ orgId: 'org1', userId: 'alice' }, 'openai', { type: 'api_key', key: 'sk-alice' });
 
@@ -88,7 +90,7 @@ describe('ModelCredentialsStorage', () => {
   });
 
   it('refreshOAuth returns undefined without an OAuth row', async () => {
-    const store = await makeStore();
+    const store = await makeLibsqlStore();
     expect(await store.refreshOAuth({ orgId: 'org1', userId: 'alice' }, 'anthropic', async c => c)).toBeUndefined();
 
     await store.setCredential({ orgId: 'org1', userId: 'alice' }, 'openai', { type: 'api_key', key: 'sk' });
@@ -96,7 +98,7 @@ describe('ModelCredentialsStorage', () => {
   });
 
   it('serializes concurrent refreshes: the loser sees the winner result and skips its own refresh', async () => {
-    const store = await makeStore();
+    const store = await makeLibsqlStore();
     const tenant = { orgId: 'org1', userId: 'alice' };
     await store.setCredential(tenant, 'anthropic', oauth('old', Date.now() - 1000));
 
@@ -120,7 +122,7 @@ describe('ModelCredentialsStorage', () => {
   });
 
   it('expires login sessions on read and honors touch updates', async () => {
-    const store = await makeStore();
+    const store = await makeLibsqlStore();
     await store.createLoginSession({
       sessionId: 's-1',
       orgId: 'org1',
@@ -159,7 +161,7 @@ describe('ModelCredentialsStorage', () => {
       value: { type: 'api_key' as const, key: 'sk-secret' },
       needsReencryption: false,
     }));
-    const store = await makeStore({ encrypt, decrypt });
+    const store = await makeLibsqlStore({ encrypt, decrypt });
 
     await store.setCredential({ orgId: 'org1', userId: 'alice' }, 'openai', {
       type: 'api_key',
@@ -174,6 +176,202 @@ describe('ModelCredentialsStorage', () => {
     expect(decrypt).toHaveBeenCalledWith(envelope);
   });
 });
+
+// Set FACTORY_TEST_POSTGRES_URL to a disposable database to also run on PostgreSQL.
+const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
+
+describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
+  'ModelCredentialsStorage with several subscriptions of one provider on %s',
+  backend => {
+    // The Postgres database is shared across runs, so every test gets its own org.
+    let org = '';
+    let alice = { orgId: org, userId: 'alice' };
+    beforeEach(() => {
+      org = `org-${randomUUID()}`;
+      alice = { orgId: org, userId: 'alice' };
+    });
+    const makeStore = async () => {
+      if (backend !== 'postgres') return makeLibsqlStore();
+      const storage = new PgFactoryStorage({ id: 'credentials-test', connectionString: postgresUrl! });
+      const domain = storage.registerDomain(new ModelCredentialsStorage());
+      await storage.init();
+      onTestFinished(() => storage.close());
+      return domain;
+    };
+    const fresh = () => Date.now() + 60_000;
+    const codex = (tag: string, accountId: string) => ({ ...oauth(tag, fresh()), accountId });
+
+    it('keeps a second Claude subscription beside the first, in the order they were added', async () => {
+      const store = await makeStore();
+      await store.addAccount(alice, 'anthropic', oauth('first', fresh()));
+      await store.addAccount(alice, 'anthropic', oauth('second', fresh()), { label: 'Work' });
+
+      const accounts = await store.listAccounts(org, 'alice');
+      expect(accounts.map(a => [a.provider, a.scope, a.credential.access, a.label])).toEqual([
+        ['anthropic', 'user', 'at-first', undefined],
+        ['anthropic', 'user', 'at-second', 'Work'],
+      ]);
+      expect(await store.resolveCredential(org, 'alice', 'anthropic', 'user')).toMatchObject({
+        credential: { access: 'at-first' },
+      });
+      expect(await store.resolveCredential(org, 'alice', 'anthropic', 'user', accounts[1]!.id)).toMatchObject({
+        credential: { access: 'at-second' },
+      });
+    });
+
+    it('updates a subscription it already holds instead of adding it twice', async () => {
+      const store = await makeStore();
+      await store.addAccount(alice, 'openai-codex', codex('first', 'acct-1'));
+      await store.addAccount(alice, 'openai-codex', codex('second', 'acct-2'));
+      await store.addAccount(alice, 'openai-codex', codex('second-again', 'acct-2'));
+
+      const accounts = await store.listAccounts(org, 'alice');
+      expect(accounts.map(a => a.credential.access)).toEqual(['at-first', 'at-second-again']);
+    });
+
+    it('replaces the first sign-in when the provider only had an API key at that scope', async () => {
+      const store = await makeStore();
+      await store.setCredential(alice, 'anthropic', { type: 'api_key', key: 'sk-alice' });
+      await store.addAccount(alice, 'anthropic', oauth('plan', fresh()));
+
+      expect(await store.getCredential(alice, 'anthropic')).toMatchObject({ type: 'oauth', access: 'at-plan' });
+      expect(await store.listAccounts(org, 'alice')).toHaveLength(1);
+    });
+
+    it('signing in again to one account replaces only that account', async () => {
+      const store = await makeStore();
+      await store.addAccount(alice, 'anthropic', oauth('first', fresh()));
+      await store.addAccount(alice, 'anthropic', oauth('second', Date.now() - 1000));
+      const [first, second] = await store.listAccounts(org, 'alice');
+
+      await store.addAccount(alice, 'anthropic', oauth('second-renewed', fresh()), { replaceAccountId: second!.id });
+
+      const accounts = await store.listAccounts(org, 'alice');
+      expect(accounts.map(a => [a.id, a.credential.access])).toEqual([
+        [first!.id, 'at-first'],
+        [second!.id, 'at-second-renewed'],
+      ]);
+    });
+
+    it('removing the first account keeps the provider connected on the next one', async () => {
+      const store = await makeStore();
+      await store.addAccount(alice, 'anthropic', oauth('first', fresh()));
+      await store.addAccount(alice, 'anthropic', oauth('second', fresh()), { label: 'Work' });
+      const [first, second] = await store.listAccounts(org, 'alice');
+
+      expect(await store.removeAccount(alice, 'anthropic', first!.id)).toBe(true);
+
+      expect((await store.listAccounts(org, 'alice')).map(a => [a.id, a.credential.access, a.label])).toEqual([
+        [second!.id, 'at-second', 'Work'],
+      ]);
+      expect(await store.getCredential(alice, 'anthropic')).toMatchObject({ access: 'at-second' });
+      expect(await store.resolveCredential(org, 'alice', 'anthropic', 'user', second!.id)).toMatchObject({
+        accountId: second!.id,
+      });
+    });
+
+    it('removing the only account disconnects the provider', async () => {
+      const store = await makeStore();
+      await store.addAccount(alice, 'anthropic', oauth('only', fresh()));
+      const [only] = await store.listAccounts(org, 'alice');
+
+      expect(await store.removeAccount(alice, 'anthropic', only!.id)).toBe(true);
+
+      expect(await store.listAccounts(org, 'alice')).toEqual([]);
+      expect(await store.getCredential(alice, 'anthropic')).toBeUndefined();
+    });
+
+    it('signing out of the provider removes every account at that scope only', async () => {
+      const store = await makeStore();
+      await store.addAccount(alice, 'anthropic', oauth('first', fresh()));
+      await store.addAccount(alice, 'anthropic', oauth('second', fresh()));
+      await store.addAccount({ orgId: org }, 'anthropic', oauth('org', fresh()));
+      await store.addAccount({ orgId: org }, 'anthropic', oauth('org-2', fresh()));
+
+      expect(await store.removeCredential(alice, 'anthropic')).toBe(true);
+
+      expect((await store.listAccounts(org, 'alice')).map(a => [a.scope, a.credential.access])).toEqual([
+        ['org', 'at-org'],
+        ['org', 'at-org-2'],
+      ]);
+    });
+
+    it("never shows one member's extra subscriptions to another member", async () => {
+      const store = await makeStore();
+      await store.addAccount(alice, 'anthropic', oauth('first', fresh()));
+      await store.addAccount(alice, 'anthropic', oauth('second', fresh()));
+      const [, second] = await store.listAccounts(org, 'alice');
+
+      expect(await store.listAccounts(org, 'bob')).toEqual([]);
+      expect(await store.resolveCredential(org, 'bob', 'anthropic', 'user', second!.id)).toBeUndefined();
+      expect(await store.removeAccount({ orgId: org, userId: 'bob' }, 'anthropic', second!.id)).toBe(false);
+      expect(await store.listAccounts(org, 'alice')).toHaveLength(2);
+    });
+
+    it('refreshes the expired account without touching the others', async () => {
+      const store = await makeStore();
+      await store.addAccount(alice, 'anthropic', oauth('first', fresh()));
+      await store.addAccount(alice, 'anthropic', oauth('second', Date.now() - 1000));
+      const [, second] = await store.listAccounts(org, 'alice');
+
+      const refreshed = await store.refreshOAuth(
+        alice,
+        'anthropic',
+        async () => oauth('second-refreshed', fresh()),
+        undefined,
+        second!.id,
+      );
+
+      expect(refreshed).toMatchObject({ access: 'at-second-refreshed' });
+      expect((await store.listAccounts(org, 'alice')).map(a => a.credential.access)).toEqual([
+        'at-first',
+        'at-second-refreshed',
+      ]);
+    });
+
+    it('records a failed refresh on that account only', async () => {
+      const store = await makeStore();
+      await store.addAccount(alice, 'anthropic', oauth('first', fresh()));
+      await store.addAccount(alice, 'anthropic', oauth('second', Date.now() - 1000));
+      const [, second] = await store.listAccounts(org, 'alice');
+
+      await expect(
+        store.refreshOAuth(
+          alice,
+          'anthropic',
+          async () => {
+            throw new Error('invalid_grant');
+          },
+          undefined,
+          second!.id,
+        ),
+      ).rejects.toThrow('invalid_grant');
+
+      const accounts = await store.listAccounts(org, 'alice');
+      expect(accounts.map(a => a.refreshFailedAt instanceof Date)).toEqual([false, true]);
+    });
+
+    it('keeps every account when sign-ins and a refresh land at the same time', async () => {
+      const store = await makeStore();
+      await store.addAccount(alice, 'anthropic', oauth('first', fresh()));
+      await store.addAccount(alice, 'anthropic', oauth('second', Date.now() - 1000));
+      const [, second] = await store.listAccounts(org, 'alice');
+
+      await Promise.all([
+        store.addAccount(alice, 'anthropic', oauth('third', fresh())),
+        store.addAccount(alice, 'anthropic', oauth('fourth', fresh())),
+        store.refreshOAuth(alice, 'anthropic', async () => oauth('second-refreshed', fresh()), undefined, second!.id),
+      ]);
+
+      expect((await store.listAccounts(org, 'alice')).map(a => a.credential.access).sort()).toEqual([
+        'at-first',
+        'at-fourth',
+        'at-second-refreshed',
+        'at-third',
+      ]);
+    });
+  },
+);
 
 describe('ModelCredentialsStorage enabling secretEncryption', () => {
   it('encrypts credentials written without encryption and reads back the original object', async () => {
@@ -201,6 +399,37 @@ describe('ModelCredentialsStorage enabling secretEncryption', () => {
       expect(row!.data).toMatch(/^mastra:factory-secret:v1:/);
       await backend.close();
     }
+  });
+
+  it('encrypts a second subscription written before encryption was enabled', async () => {
+    const url = `file:${join(mkdtempSync(join(tmpdir(), 'factory-creds-')), 'enable-encryption-accounts.db')}`;
+    const tenant = { orgId: 'org-1', userId: 'user-1' };
+    const boot = async (encryption?: FactorySecretEncryption) => {
+      const backend = new LibSQLFactoryStorage({ id: 'credentials-accounts-migration-test', url });
+      const store = backend.registerDomain(new ModelCredentialsStorage(encryption));
+      await backend.init();
+      return { backend, store };
+    };
+
+    {
+      const { backend, store } = await boot();
+      await store.addAccount(tenant, 'anthropic', oauth('first', Date.now() + 60_000));
+      await store.addAccount(tenant, 'anthropic', oauth('second', Date.now() + 60_000));
+      await backend.close();
+    }
+
+    const encryption = createFactorySecretEncryption({ primary: { id: 'v1', key: new Uint8Array(32).fill(7) } });
+    const { backend, store } = await boot(encryption);
+    expect((await store.listAccounts('org-1', 'user-1')).map(a => a.credential.access)).toEqual([
+      'at-first',
+      'at-second',
+    ]);
+    const row = await backend.ops.findOne<{ extra_accounts: string }>('model_provider_credentials', {
+      provider: 'anthropic',
+    });
+    expect(row!.extra_accounts).toMatch(/^mastra:factory-secret:v1:/);
+    expect(row!.extra_accounts).not.toContain('at-second');
+    await backend.close();
   });
 
   it('refuses to read encrypted credentials on an instance booted without the key', async () => {

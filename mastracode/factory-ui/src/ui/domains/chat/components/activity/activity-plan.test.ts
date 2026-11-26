@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { MessageEntry, NoticeEntry, SuspensionPrompt } from '../../services/transcript';
 import type { MessagePart } from '../transcript-parts';
-import { drawsModelFallback } from '../ModelFallbackActivity';
+import { drawsRoutingSwitch } from '../RoutingSwitchActivity';
 import { planTurnActivity, sameEntryActivity } from './activity-plan';
 import type { EntryActivity } from './activity-plan';
 
@@ -75,7 +75,7 @@ describe('planTurnActivity', () => {
       [assistant('s1', [tool('a'), hop, tool('b')])],
       NO_SUSPENSIONS,
       false,
-      drawsModelFallback,
+      drawsRoutingSwitch,
     );
     expect(stretches(plan)).toEqual([['a'], ['b']]);
   });

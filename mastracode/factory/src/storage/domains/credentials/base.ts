@@ -4,25 +4,28 @@
  * xAI, plus plain API-key providers).
  *
  * Tenancy is two-level:
- * - **user-scoped** rows (`userId` present): personal plan OAuth tokens and
- *   personal API keys. OAuth plan tokens are ONLY ever user-scoped — they are
- *   personal subscriptions, and sharing one would bill/rate-limit a single
- *   account for the whole org.
- * - **org-scoped** rows (`userId` absent): shared API keys set by an org
- *   admin, inherited by every member.
+ * - **user-scoped** rows (`userId` present): personal sign-ins and API keys.
+ * - **org-scoped** rows (`userId` absent): sign-ins and API keys an org admin
+ *   shares with every member.
  *
  * Model calls resolve exactly one scope: user or org. Deployed tenant stores
  * never fall back to the other scope or implicitly borrow server environment keys.
  *
+ * A provider can hold several OAuth subscriptions at one scope, so a model call
+ * rate-limited on one subscription can retry on the next. They all live in the
+ * provider's one row.
+ *
  * Secrets posture: credentials are stored server-side only and never returned
- * to the client (same as `linear_connections.access_token`). Encryption at
- * rest is out of scope, matching the existing posture.
+ * to the client (same as `linear_connections.access_token`).
  *
  * The domain also owns `oauth_login_sessions`: pending web login flows
  * (paste-code PKCE verifiers, device-code poll state) persisted server-side so
  * any replica can complete or poll a flow started on another.
  */
 
+import { randomUUID } from 'node:crypto';
+
+import { getOAuthProvider } from '@mastra/code-sdk/auth/storage';
 import type { AuthCredential, OAuthCredential } from '@mastra/code-sdk/auth/types';
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
@@ -48,8 +51,28 @@ export interface CredentialRecord {
   refreshFailedAt?: Date;
 }
 
+/** One OAuth subscription of a provider, in sign-in order among that provider's accounts at its scope. */
+export interface CredentialAccount {
+  id: string;
+  provider: string;
+  scope: CredentialScope;
+  /** Who the subscription belongs to (an email), when the provider tells us. */
+  label?: string;
+  credential: OAuthCredential;
+  addedAt: Date;
+  refreshFailedAt?: Date;
+}
+
+export interface AddAccountOptions {
+  label?: string;
+  /** Sign in again to this account: its tokens are replaced and its place in the order kept. */
+  replaceAccountId?: string;
+}
+
 /** Result of per-caller resolution: the winning credential and its scope. */
 export interface ResolvedCredential {
+  /** The account's id; for an API key, its row's id. */
+  accountId: string;
   provider: string;
   scope: CredentialScope;
   credential: AuthCredential;
@@ -61,6 +84,9 @@ export type LoginSessionKind = 'paste-code' | 'device-code';
 /** Scope the completed credential should be written to. */
 export type LoginCredentialScope = 'user' | 'org';
 
+/** Which subscription a sign-in lands on: a new one beside the others, or one to sign in again to. */
+export type LoginAccountTarget = { add: true } | { accountId: string };
+
 /** One pending OAuth login flow, persisted so any replica can continue it. */
 export interface LoginSessionRow {
   sessionId: string;
@@ -70,6 +96,8 @@ export interface LoginSessionRow {
   kind: LoginSessionKind;
   /** Where the completed credential lands; absent rows default to `'user'`. */
   credentialScope?: LoginCredentialScope;
+  /** Absent: the sign-in replaces the provider's first subscription. */
+  accountTarget?: LoginAccountTarget;
   /** Serialized flow state (PKCE verifier, device-code pending state, ...). */
   pending: Record<string, unknown>;
   expiresAt: Date;
@@ -85,6 +113,7 @@ export interface CreateLoginSessionInput {
   provider: string;
   kind: LoginSessionKind;
   credentialScope?: LoginCredentialScope;
+  accountTarget?: LoginAccountTarget;
   pending: Record<string, unknown>;
   expiresAt: Date;
   nextPollAt?: Date | null;
@@ -95,6 +124,12 @@ export function isOAuthCredentialExpired(credential: OAuthCredential, now = Date
   return now >= credential.expires;
 }
 
+/**
+ * One row per tenant scope and provider. `data` holds the API key or the first
+ * OAuth subscription, so every reader that knows a single credential per
+ * provider keeps working; `extra_accounts` holds the encrypted list of later
+ * subscriptions, so every change to a provider's accounts is one row write.
+ */
 export const MODEL_CREDENTIALS_SCHEMA: CollectionSchema = {
   name: 'model_provider_credentials',
   columns: {
@@ -104,6 +139,10 @@ export const MODEL_CREDENTIALS_SCHEMA: CollectionSchema = {
     provider: { type: 'text' },
     type: { type: 'text' },
     data: { type: 'json' },
+    label: { type: 'text', nullable: true },
+    /** The first subscription's id once it was promoted from `extra_accounts`; absent, the row id. */
+    account_id: { type: 'text', nullable: true },
+    extra_accounts: { type: 'json', nullable: true },
     created_at: { type: 'timestamp' },
     updated_at: { type: 'timestamp' },
     refresh_failed_at: { type: 'timestamp', nullable: true },
@@ -129,6 +168,7 @@ export const OAUTH_LOGIN_SESSIONS_SCHEMA: CollectionSchema = {
     provider: { type: 'text' },
     kind: { type: 'text' },
     credential_scope: { type: 'text', nullable: true },
+    account_target: { type: 'json', nullable: true },
     pending: { type: 'json' },
     expires_at: { type: 'timestamp' },
     next_poll_at: { type: 'timestamp', nullable: true },
@@ -141,7 +181,12 @@ interface CredentialDbRow extends Record<string, unknown> {
   id: string;
   provider: string;
   user_id: string | null;
+  type: string;
   data: unknown;
+  label: string | null;
+  account_id: string | null;
+  extra_accounts: unknown;
+  created_at: Date;
   updated_at: Date;
   refresh_failed_at: Date | null;
 }
@@ -154,6 +199,7 @@ interface LoginSessionDbRow extends Record<string, unknown> {
   provider: string;
   kind: LoginSessionKind;
   credential_scope: LoginCredentialScope | null;
+  account_target: LoginAccountTarget | null;
   pending: Record<string, unknown>;
   expires_at: Date;
   next_poll_at: Date | null;
@@ -168,6 +214,7 @@ function toSessionRow(db: LoginSessionDbRow): LoginSessionRow {
     provider: db.provider,
     kind: db.kind,
     ...(db.credential_scope ? { credentialScope: db.credential_scope } : {}),
+    ...(db.account_target ? { accountTarget: db.account_target } : {}),
     pending: db.pending,
     expiresAt: db.expires_at,
     nextPollAt: db.next_poll_at,
@@ -175,16 +222,39 @@ function toSessionRow(db: LoginSessionDbRow): LoginSessionRow {
   };
 }
 
-/** Filter selecting exactly the tenant's row for a provider (`null` = org row). */
+/** Filter selecting exactly the tenant's rows for a provider (`null` = org rows). */
 function tenantWhere(tenant: CredentialTenant, provider: string): CollectionWhere {
   return { org_id: tenant.orgId, provider, user_id: tenant.userId ?? null };
 }
 
 /**
+ * Whether two sign-ins are the same subscription: the provider's stable
+ * account identity when it exposes one, else identical refresh tokens (all an
+ * identity-less provider such as Anthropic gives us).
+ */
+function sameSubscription(provider: string, a: OAuthCredential, b: OAuthCredential): boolean {
+  const identityOf = getOAuthProvider(provider)?.getAccountIdentity;
+  const identities = identityOf ? [identityOf(a), identityOf(b)] : [];
+  if (identities[0] !== undefined && identities[1] !== undefined) return identities[0] === identities[1];
+  return a.refresh === b.refresh;
+}
+
+/** A second or later subscription, as stored in the row's encrypted `extra_accounts` list. */
+interface StoredAccount {
+  id: string;
+  label?: string;
+  credential: OAuthCredential;
+  addedAt: string;
+  refreshFailedAt?: string;
+}
+
+const firstAccountId = (row: CredentialDbRow) => row.account_id ?? row.id;
+
+/**
  * Model-credentials storage, written once against the generic
- * `FactoryStorageOps` surface. `refreshOAuth()` and `claimLoginSession()`
- * ride `updateAtomic` so concurrent replicas serialize instead of
- * invalidating each other's rotating tokens / double-claiming a flow.
+ * `FactoryStorageOps` surface. Every change to a provider's accounts, and
+ * `claimLoginSession()`, rides `updateAtomic` so concurrent replicas serialize
+ * instead of invalidating each other's rotating tokens / double-claiming a flow.
  */
 export class ModelCredentialsStorage extends FactoryStorageDomain {
   constructor(private readonly encryption: FactorySecretEncryption = createPlaintextFactorySecretEncryption()) {
@@ -210,6 +280,15 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
     return (await this.encryption.decrypt<AuthCredential>(value)).value;
   }
 
+  async #extras(row: CredentialDbRow): Promise<StoredAccount[]> {
+    if (row.extra_accounts == null) return [];
+    return (await this.encryption.decrypt<StoredAccount[]>(row.extra_accounts)).value;
+  }
+
+  async #encryptExtras(extras: StoredAccount[]): Promise<string | null> {
+    return extras.length > 0 ? this.encryption.encrypt(extras) : null;
+  }
+
   async #toRecord(row: CredentialDbRow, scope: CredentialScope): Promise<CredentialRecord> {
     return {
       provider: row.provider,
@@ -222,10 +301,27 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
 
   async #migrateCredential(id: string): Promise<void> {
     await this.#db.updateAtomic<CredentialDbRow>('model_provider_credentials', { id }, async row => {
-      const decrypted = await this.encryption.decrypt<AuthCredential>(row.data);
-      if (!decrypted.needsReencryption) return null;
-      return { data: await this.encryption.encrypt(decrypted.value) };
+      const data = await this.encryption.decrypt<AuthCredential>(row.data);
+      const extras =
+        row.extra_accounts == null ? undefined : await this.encryption.decrypt<StoredAccount[]>(row.extra_accounts);
+      if (!data.needsReencryption && !extras?.needsReencryption) return null;
+      return {
+        data: await this.encryption.encrypt(data.value),
+        ...(extras ? { extra_accounts: await this.encryption.encrypt(extras.value) } : {}),
+      };
     });
+  }
+
+  /** The user's own rows plus the org's shared rows. SQL `IN` never matches NULL, so the org rows need their own query. */
+  async #visibleRows(orgId: string, userId: string) {
+    const [userRows, orgRows] = await Promise.all([
+      this.#db.findMany<CredentialDbRow>('model_provider_credentials', { org_id: orgId, user_id: userId }),
+      this.#db.findMany<CredentialDbRow>('model_provider_credentials', { org_id: orgId, user_id: null }),
+    ]);
+    return [
+      ...userRows.map(row => ({ row, scope: 'user' as const })),
+      ...orgRows.map(row => ({ row, scope: 'org' as const })),
+    ];
   }
 
   /** Read the tenant's credential for a provider at exactly that scope. */
@@ -234,14 +330,28 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
     return row ? this.#decryptCredential(row.data) : undefined;
   }
 
-  /** Upsert the tenant's credential (`created_at` is preserved on update). */
+  /**
+   * Upsert the tenant's credential (`created_at` is preserved on update).
+   * Saving an API key replaces every OAuth subscription at that scope.
+   */
   async setCredential(tenant: CredentialTenant, provider: string, credential: AuthCredential): Promise<void> {
+    await this.#upsertFirst(tenant, provider, credential, null);
+  }
+
+  async #upsertFirst(
+    tenant: CredentialTenant,
+    provider: string,
+    credential: AuthCredential,
+    label: string | null,
+  ): Promise<void> {
     const where = tenantWhere(tenant, provider);
     const encrypted = await this.encryption.encrypt(credential);
     const update = async () =>
       this.#db.updateMany('model_provider_credentials', where, {
         type: credential.type,
         data: encrypted,
+        label,
+        ...(credential.type === 'api_key' ? { account_id: null, extra_accounts: null } : {}),
         updated_at: new Date(),
         refresh_failed_at: null,
       });
@@ -258,6 +368,7 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
           provider,
           type: credential.type,
           data: encrypted,
+          label,
           created_at: now,
           updated_at: now,
         });
@@ -270,7 +381,132 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
     throw lastError;
   }
 
-  /** Delete the tenant's credential at exactly that scope. True when a row was removed. */
+  /**
+   * Store an OAuth sign-in as one of the provider's subscriptions at that
+   * scope. A sign-in to a subscription already held updates it in place; a
+   * new one is added after the others; the first replaces any API key.
+   */
+  async addAccount(
+    tenant: CredentialTenant,
+    provider: string,
+    credential: OAuthCredential,
+    options: AddAccountOptions = {},
+  ): Promise<void> {
+    const encrypted = await this.encryption.encrypt(credential);
+    const now = new Date();
+    const updated = await this.#db.updateAtomic<CredentialDbRow>(
+      'model_provider_credentials',
+      tenantWhere(tenant, provider),
+      async row => {
+        const first = await this.#decryptCredential(row.data);
+        const fresh = { data: encrypted, updated_at: now, refresh_failed_at: null };
+        if (first.type !== 'oauth') {
+          return { ...fresh, type: 'oauth', label: options.label ?? null, account_id: null, extra_accounts: null };
+        }
+        const isTarget = (id: string, held: OAuthCredential) =>
+          options.replaceAccountId ? options.replaceAccountId === id : sameSubscription(provider, held, credential);
+        if (isTarget(firstAccountId(row), first)) {
+          return { ...fresh, ...(options.label !== undefined ? { label: options.label } : {}) };
+        }
+
+        const extras = await this.#extras(row);
+        const index = extras.findIndex(account => isTarget(account.id, account.credential));
+        if (index >= 0) {
+          const { refreshFailedAt: _cleared, ...held } = extras[index]!;
+          extras[index] = { ...held, credential, ...(options.label !== undefined ? { label: options.label } : {}) };
+        } else {
+          extras.push({
+            id: randomUUID(),
+            ...(options.label !== undefined ? { label: options.label } : {}),
+            credential,
+            addedAt: now.toISOString(),
+          });
+        }
+        return { extra_accounts: await this.#encryptExtras(extras), updated_at: now };
+      },
+    );
+    if (!updated) await this.#upsertFirst(tenant, provider, credential, options.label ?? null);
+  }
+
+  async #accountsOf(row: CredentialDbRow, scope: CredentialScope): Promise<CredentialAccount[]> {
+    const first = await this.#decryptCredential(row.data);
+    const extras = await this.#extras(row);
+    return [
+      ...(first.type === 'oauth'
+        ? [
+            {
+              id: firstAccountId(row),
+              provider: row.provider,
+              scope,
+              ...(row.label ? { label: row.label } : {}),
+              credential: first,
+              addedAt: row.created_at,
+              ...(row.refresh_failed_at ? { refreshFailedAt: row.refresh_failed_at } : {}),
+            },
+          ]
+        : []),
+      ...extras.map(account => ({
+        id: account.id,
+        provider: row.provider,
+        scope,
+        ...(account.label ? { label: account.label } : {}),
+        credential: account.credential,
+        addedAt: new Date(account.addedAt),
+        ...(account.refreshFailedAt ? { refreshFailedAt: new Date(account.refreshFailedAt) } : {}),
+      })),
+    ];
+  }
+
+  /**
+   * Every OAuth subscription visible to a user — their own, then the org's —
+   * each provider's accounts in sign-in order.
+   */
+  async listAccounts(orgId: string, userId: string): Promise<CredentialAccount[]> {
+    const rows = await this.#visibleRows(orgId, userId);
+    return (await Promise.all(rows.map(({ row, scope }) => this.#accountsOf(row, scope)))).flat();
+  }
+
+  /**
+   * Remove one subscription. Removing the first promotes the next one into its
+   * place so the provider stays connected. True when an account was removed.
+   */
+  async removeAccount(tenant: CredentialTenant, provider: string, accountId: string): Promise<boolean> {
+    let removed = false;
+    let lastAccount: Pick<CredentialDbRow, 'id' | 'updated_at'> | undefined;
+    await this.#db.updateAtomic<CredentialDbRow>(
+      'model_provider_credentials',
+      tenantWhere(tenant, provider),
+      async row => {
+        const extras = await this.#extras(row);
+        const index = extras.findIndex(account => account.id === accountId);
+        if (index >= 0) {
+          removed = true;
+          extras.splice(index, 1);
+          return { extra_accounts: await this.#encryptExtras(extras), updated_at: new Date() };
+        }
+        if (firstAccountId(row) !== accountId) return null;
+        removed = true;
+        const [next, ...rest] = extras;
+        if (!next) {
+          lastAccount = { id: row.id, updated_at: row.updated_at };
+          return null;
+        }
+        return {
+          data: await this.encryption.encrypt(next.credential),
+          label: next.label ?? null,
+          account_id: next.id,
+          extra_accounts: await this.#encryptExtras(rest),
+          updated_at: new Date(),
+          refresh_failed_at: next.refreshFailedAt ? new Date(next.refreshFailedAt) : null,
+        };
+      },
+    );
+    // `updateAtomic` can't delete: skip the delete if a sign-in or refresh wrote the row since.
+    if (lastAccount) return (await this.#db.deleteMany('model_provider_credentials', lastAccount)) > 0;
+    return removed;
+  }
+
+  /** Delete the tenant's credential and every subscription at exactly that scope. True when a row was removed. */
   async removeCredential(tenant: CredentialTenant, provider: string): Promise<boolean> {
     const deleted = await this.#db.deleteMany('model_provider_credentials', tenantWhere(tenant, provider));
     return deleted > 0;
@@ -278,37 +514,36 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
 
   /** All credentials visible to a user: their own rows plus the org's shared rows. */
   async listCredentials(orgId: string, userId: string): Promise<CredentialRecord[]> {
-    // SQL `IN` never matches NULL, so the org rows need their own query.
-    const [userRows, orgRows] = await Promise.all([
-      this.#db.findMany<CredentialDbRow>('model_provider_credentials', { org_id: orgId, user_id: userId }),
-      this.#db.findMany<CredentialDbRow>('model_provider_credentials', { org_id: orgId, user_id: null }),
-    ]);
-    return Promise.all([
-      ...userRows.map(row => this.#toRecord(row, 'user')),
-      ...orgRows.map(row => this.#toRecord(row, 'org')),
-    ]);
+    const rows = await this.#visibleRows(orgId, userId);
+    return Promise.all(rows.map(({ row, scope }) => this.#toRecord(row, scope)));
   }
 
-  /** Resolve a provider credential from exactly one tenancy scope. */
+  /** Resolve a provider credential from exactly one tenancy scope: the first account, or `accountId`. */
   async resolveCredential(
     orgId: string,
     userId: string,
     provider: string,
     scope: CredentialScope,
+    accountId?: string,
   ): Promise<ResolvedCredential | undefined> {
     const tenant = scope === 'org' ? { orgId } : { orgId, userId };
     const row = await this.#db.findOne<CredentialDbRow>('model_provider_credentials', tenantWhere(tenant, provider));
-    return row ? { provider: row.provider, scope, credential: await this.#decryptCredential(row.data) } : undefined;
+    if (!row) return undefined;
+    if (accountId === undefined || accountId === firstAccountId(row)) {
+      return { accountId: firstAccountId(row), provider, scope, credential: await this.#decryptCredential(row.data) };
+    }
+    const extra = (await this.#extras(row)).find(account => account.id === accountId);
+    return extra ? { accountId, provider, scope, credential: extra.credential } : undefined;
   }
 
   /**
-   * Refresh the tenant's OAuth credential under the backend's atomic
-   * read-modify-write so concurrent replicas don't invalidate each other's
-   * rotating refresh tokens. The expiry is re-checked under the lock —
+   * Refresh one OAuth account (the first, or `accountId`) under the backend's
+   * atomic read-modify-write so concurrent replicas don't invalidate each
+   * other's rotating refresh tokens. The expiry is re-checked under the lock —
    * another replica may have refreshed already, in which case `refreshFn` is
    * skipped and the fresh credential is returned. Returns `undefined` when no
-   * OAuth row exists for the tenant. A failed `refreshFn` is recorded on the
-   * row (surfaced as `CredentialRecord.refreshFailedAt`) and rethrown.
+   * such OAuth account exists. A failed `refreshFn` is recorded on that account
+   * (surfaced as `refreshFailedAt`) and rethrown.
    *
    * `needsRefresh` replaces the expiry check, e.g. to replace an access token
    * the provider rejected before its recorded expiry.
@@ -318,6 +553,7 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
     provider: string,
     refreshFn: (current: OAuthCredential) => Promise<OAuthCredential>,
     needsRefresh: (current: OAuthCredential) => boolean = current => isOAuthCredentialExpired(current),
+    accountId?: string,
   ): Promise<OAuthCredential | undefined> {
     let result: OAuthCredential | undefined;
     let failure: { error: unknown } | undefined;
@@ -325,21 +561,41 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
       'model_provider_credentials',
       tenantWhere(tenant, provider),
       async row => {
-        const decrypted = await this.encryption.decrypt<AuthCredential>(row.data);
-        if (decrypted.value.type !== 'oauth') return null;
-        const current = decrypted.value;
-        // Re-check under the lock: another replica may have refreshed while we waited.
-        if (!needsRefresh(current)) {
-          result = current;
-          return decrypted.needsReencryption ? { data: await this.encryption.encrypt(current) } : null;
+        if (accountId === undefined || accountId === firstAccountId(row)) {
+          const decrypted = await this.encryption.decrypt<AuthCredential>(row.data);
+          if (decrypted.value.type !== 'oauth') return null;
+          const current = decrypted.value;
+          // Re-check under the lock: another replica may have refreshed while we waited.
+          if (!needsRefresh(current)) {
+            result = current;
+            return decrypted.needsReencryption ? { data: await this.encryption.encrypt(current) } : null;
+          }
+          try {
+            result = await refreshFn(current);
+          } catch (error) {
+            failure = { error };
+            return { refresh_failed_at: new Date() };
+          }
+          return { data: await this.encryption.encrypt(result), updated_at: new Date(), refresh_failed_at: null };
+        }
+
+        const extras = await this.#extras(row);
+        const index = extras.findIndex(account => account.id === accountId);
+        const account = extras[index];
+        if (!account) return null;
+        if (!needsRefresh(account.credential)) {
+          result = account.credential;
+          return null;
         }
         try {
-          result = await refreshFn(current);
+          result = await refreshFn(account.credential);
+          const { refreshFailedAt: _cleared, ...held } = account;
+          extras[index] = { ...held, credential: result };
         } catch (error) {
           failure = { error };
-          return { refresh_failed_at: new Date() };
+          extras[index] = { ...account, refreshFailedAt: new Date().toISOString() };
         }
-        return { data: await this.encryption.encrypt(result), updated_at: new Date(), refresh_failed_at: null };
+        return { extra_accounts: await this.#encryptExtras(extras), updated_at: new Date() };
       },
     );
     if (failure) throw failure.error;
@@ -355,6 +611,7 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
       provider: input.provider,
       kind: input.kind,
       credential_scope: input.credentialScope ?? null,
+      account_target: input.accountTarget ?? null,
       pending: input.pending,
       expires_at: input.expiresAt,
       next_poll_at: input.nextPollAt ?? null,

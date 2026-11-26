@@ -1,4 +1,8 @@
-import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -63,6 +67,7 @@ function buildApp(
     noCredentials?: boolean;
     enabled?: boolean;
     isOrganizationAdmin?: (organizationId: string, userId: string) => Promise<boolean>;
+    authStorage?: AuthStorage;
   },
 ) {
   const app = new Hono();
@@ -74,7 +79,7 @@ function buildApp(
     app as any,
     new OAuthRoutes({
       auth: fakeRouteAuth({ enabled: opts?.enabled, isOrganizationAdmin: opts?.isOrganizationAdmin }),
-      authStorage,
+      authStorage: opts?.authStorage ?? authStorage,
       modelCredentials: opts?.noCredentials ? undefined : seed.credentials,
     }).routes(),
   );
@@ -519,5 +524,143 @@ describe('local mode', () => {
     });
     expect(res.status).toBe(200);
     expect(authStorage.logout).toHaveBeenCalledWith('openai-codex');
+  });
+});
+
+// ── Several subscriptions of one provider ────────────────────────────────
+
+describe('several subscriptions of one provider', () => {
+  const del = (app: Hono, path: string) => app.request(path, { method: 'DELETE' });
+
+  async function signInClaude(app: Hono, creds: typeof ANTHROPIC_CREDS, body?: Record<string, unknown>) {
+    completeAnthropicLogin.mockResolvedValueOnce(creds);
+    const { sessionId } = await (await post(app, '/web/config/providers/anthropic/oauth/start', body)).json();
+    return post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
+  }
+
+  const claudeAccounts = async (tenant: { orgId: string; userId: string } = TENANT_A) =>
+    (await seed.credentials.listAccounts(tenant.orgId, tenant.userId)).filter(a => a.provider === 'anthropic');
+
+  const WORK = { refresh: 'r-work', access: 'a-work', expires: Date.now() + 3_600_000 };
+  const HOME = { refresh: 'r-home', access: 'a-home', expires: Date.now() + 3_600_000 };
+
+  it('adds a second Claude subscription after the first', async () => {
+    const app = buildApp(userA);
+    await signInClaude(app, WORK);
+    expect((await signInClaude(app, HOME, { addAccount: true })).status).toBe(200);
+
+    expect((await claudeAccounts()).map(a => a.credential.access)).toEqual(['a-work', 'a-home']);
+  });
+
+  it('keeps one subscription when an older client signs in again without saying which', async () => {
+    const app = buildApp(userA);
+    await signInClaude(app, WORK);
+    await signInClaude(app, HOME);
+
+    expect((await claudeAccounts()).map(a => a.credential.access)).toEqual(['a-home']);
+  });
+
+  it('signs in again to the chosen subscription and leaves the other one alone', async () => {
+    const app = buildApp(userA);
+    await signInClaude(app, WORK);
+    await signInClaude(app, HOME, { addAccount: true });
+    const [, home] = await claudeAccounts();
+
+    await signInClaude(app, { ...HOME, refresh: 'r-home-2', access: 'a-home-2' }, { accountId: home!.id });
+
+    expect((await claudeAccounts()).map(a => a.credential.access)).toEqual(['a-work', 'a-home-2']);
+  });
+
+  it('adds a second ChatGPT subscription through the device flow, labelled with its email', async () => {
+    const app = buildApp(userA);
+    for (const [creds, body] of [
+      [{ ...CODEX_CREDS, accountId: 'acct-work', email: 'work@example.com' }, undefined],
+      [{ ...CODEX_CREDS, refresh: 'r-3', accountId: 'acct-home', email: 'home@example.com' }, { addAccount: true }],
+    ] as const) {
+      const { sessionId } = await (await post(app, '/web/config/providers/openai/oauth/start', body)).json();
+      pollCodexDeviceLogin.mockResolvedValueOnce({ status: 'complete', credentials: creds });
+      await makePollable(sessionId);
+      expect(await (await post(app, '/web/config/providers/openai/oauth/poll', { sessionId })).json()).toMatchObject({
+        status: 'complete',
+      });
+    }
+
+    const accounts = await seed.credentials.listAccounts('org1', 'user-a');
+    expect(accounts.map(a => a.label)).toEqual(['work@example.com', 'home@example.com']);
+  });
+
+  it('removes one subscription and keeps the provider connected on the other', async () => {
+    const app = buildApp(userA);
+    await signInClaude(app, WORK);
+    await signInClaude(app, HOME, { addAccount: true });
+    const [work] = await claudeAccounts();
+
+    expect((await del(app, `/web/config/providers/anthropic/oauth/accounts/${work!.id}`)).status).toBe(200);
+
+    expect((await claudeAccounts()).map(a => a.credential.access)).toEqual(['a-home']);
+  });
+
+  it("never removes another member's subscription", async () => {
+    await signInClaude(buildApp(userA), WORK);
+    const [work] = await claudeAccounts();
+
+    expect((await del(buildApp(userB), `/web/config/providers/anthropic/oauth/accounts/${work!.id}`)).status).toBe(404);
+    expect(await claudeAccounts()).toHaveLength(1);
+  });
+
+  it('lets only org admins remove a shared subscription', async () => {
+    await signInClaude(buildApp(userA), WORK, { scope: 'org' });
+    const [work] = await claudeAccounts();
+    const path = `/web/config/providers/anthropic/oauth/accounts/${work!.id}?scope=org`;
+
+    expect((await del(buildApp(userB, { isOrganizationAdmin: async () => false }), path)).status).toBe(403);
+    expect((await del(buildApp(userA), path)).status).toBe(200);
+    expect(await claudeAccounts()).toEqual([]);
+  });
+
+  describe('in local mode', () => {
+    let dir: string;
+    let fileStorage: AuthStorage;
+    const localApp = () => buildApp(null, { enabled: false, authStorage: fileStorage });
+
+    beforeEach(async () => {
+      dir = await mkdtemp(join(tmpdir(), 'factory-oauth-'));
+      fileStorage = new AuthStorage(join(dir, 'auth.json'));
+    });
+    afterEach(async () => {
+      await rm(dir, { recursive: true, force: true });
+    });
+
+    it('adds a second subscription without switching away from the one in use', async () => {
+      await signInClaude(localApp(), WORK);
+      await signInClaude(localApp(), HOME, { addAccount: true });
+
+      const accounts = fileStorage.listAccounts('anthropic');
+      expect(accounts.map(a => a.access)).toEqual(['a-work', 'a-home']);
+      expect(fileStorage.getActiveAccount('anthropic')?.access).toBe('a-work');
+    });
+
+    it('removes one subscription', async () => {
+      await signInClaude(localApp(), WORK);
+      await signInClaude(localApp(), HOME, { addAccount: true });
+      const [work] = fileStorage.listAccounts('anthropic');
+
+      expect((await del(localApp(), `/web/config/providers/anthropic/oauth/accounts/${work!.id}`)).status).toBe(200);
+      expect(fileStorage.listAccounts('anthropic').map(a => a.access)).toEqual(['a-home']);
+    });
+
+    it('keeps a sign-in to a subscription that was removed while it was in progress', async () => {
+      await signInClaude(localApp(), WORK);
+      const [work] = fileStorage.listAccounts('anthropic');
+      completeAnthropicLogin.mockResolvedValueOnce(HOME);
+      const start = await post(localApp(), '/web/config/providers/anthropic/oauth/start', { accountId: work!.id });
+      const { sessionId } = await start.json();
+      fileStorage.removeAccount('anthropic', work!.id);
+
+      const done = await post(localApp(), '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
+
+      expect(done.status).toBe(200);
+      expect(fileStorage.listAccounts('anthropic').map(a => a.access)).toEqual(['a-home']);
+    });
   });
 });

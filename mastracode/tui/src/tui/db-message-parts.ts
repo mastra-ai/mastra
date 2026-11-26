@@ -1,4 +1,4 @@
-import { ACCOUNT_SWITCH_PART_TYPE, isAccountSwitchReason } from '@mastra/code-sdk/auth/account-rotation-processor';
+import { ACCOUNT_SWITCH_PART_TYPE, parseAccountSwitchPart } from '@mastra/code-sdk/auth/account-rotation-processor';
 import type { AccountSwitchPartData } from '@mastra/code-sdk/auth/account-rotation-processor';
 import { MODEL_FALLBACK_PART_TYPE, parseModelFallbackPart } from '@mastra/code-sdk/model-fallback';
 import type { ModelFallbackPartData } from '@mastra/code-sdk/model-fallback';
@@ -86,37 +86,6 @@ const OM_EVENT_BY_TYPE: Record<string, OmRenderPart['event']> = {
   'data-om-observation-failed': 'failed',
   'data-om-thread-update': 'thread-title',
 };
-
-function accountSwitchRenderPart(data: unknown): AccountSwitchRenderPart | null {
-  if (!data || typeof data !== 'object') return null;
-  const record = data as Record<string, unknown>;
-  if (typeof record.provider !== 'string' || !isAccountSwitchReason(record.reason)) return null;
-  const endpoint = (value: unknown): { id: string; label: string } | null => {
-    if (!value || typeof value !== 'object') return null;
-    const entry = value as Record<string, unknown>;
-    if (typeof entry.id !== 'string' || typeof entry.label !== 'string') return null;
-    return { id: entry.id, label: entry.label };
-  };
-  // `null` is the explicit persisted marker for "no usable account" (pool
-  // exhaustion). Anything else that doesn't parse is schema drift and must not
-  // collapse to `null` either — that renders as "All accounts unavailable",
-  // misreporting a rotation as exhaustion. Unknown endpoint instead.
-  const toEndpoint = (value: unknown): { id: string; label: string } | null => {
-    if (value === null || value === undefined) return null;
-    return endpoint(value) ?? { id: 'unknown', label: 'unknown' };
-  };
-  return {
-    kind: 'account-switch',
-    provider: record.provider,
-    from: endpoint(record.from),
-    to: toEndpoint(record.to),
-    reason: record.reason,
-    at: typeof record.at === 'string' ? record.at : '',
-    // A12 exclusivity flag: without it a pinned route's exhaustion would
-    // re-render from history as "all accounts unavailable".
-    ...(record.exclusive === true ? { exclusive: true } : {}),
-  };
-}
 
 /**
  * Walk a message's `content.parts` and project them into flat render items in
@@ -246,8 +215,8 @@ export function getAssistantRenderParts(message: MastraDBMessage): AssistantRend
       }
       default: {
         if (partType === ACCOUNT_SWITCH_PART_TYPE) {
-          const switchPart = accountSwitchRenderPart((part as { data?: unknown }).data);
-          if (switchPart) out.push(switchPart);
+          const switchPart = parseAccountSwitchPart((part as { data?: unknown }).data);
+          if (switchPart) out.push({ kind: 'account-switch', ...switchPart });
           break;
         }
         if (partType === MODEL_FALLBACK_PART_TYPE) {
