@@ -13,6 +13,7 @@ import type {
   SetProjectRepositoryBuildStatusInput,
   SourceControlInstallation,
   SourceControlRepository,
+  SessionSetupInProgress,
   SourceControlSession,
   SourceControlSessionVisibility,
   SourceControlSessionRepository,
@@ -562,6 +563,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         materializedAt: null,
         firstMessageAt: null,
         firstMeaningfulExecAt: null,
+        setupInProgress: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -623,6 +625,14 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       if (row && row.firstMeaningfulExecAt === null) {
         Object.assign(row, { firstMeaningfulExecAt: new Date(), updatedAt: new Date() });
       }
+    },
+    setSetupInProgress: async ({ sessionId, setup }: { sessionId: string; setup: SessionSetupInProgress }) => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (row) row.setupInProgress = setup;
+    },
+    clearSetupInProgress: async ({ sessionId, startedAt }: { sessionId: string; startedAt: Date }) => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (row?.setupInProgress?.startedAt.getTime() === startedAt.getTime()) row.setupInProgress = null;
     },
     delete: async (id: string) => {
       const row = this.sessionsRows.find(candidate => candidate.id === id);

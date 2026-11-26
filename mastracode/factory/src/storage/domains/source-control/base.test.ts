@@ -744,6 +744,38 @@ describe('SourceControlStorage', () => {
     await expect(github.sessions.markFirstMeaningfulExec({ sessionId: 'missing-session' })).resolves.toBeUndefined();
   });
 
+  it('stores the setup command a session is running until it is cleared', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const session = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000009',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000009',
+      baseBranch: 'main',
+    });
+    expect(session.setupInProgress).toBeNull();
+
+    const setup = {
+      target: 'octocat/hello',
+      startedAt: new Date('2026-11-23T17:00:00Z'),
+      deadline: new Date('2026-11-23T17:15:00Z'),
+    };
+    await github.sessions.setSetupInProgress({ sessionId: session.sessionId, setup });
+    expect((await github.sessions.getBySessionId(session.sessionId))?.setupInProgress).toEqual(setup);
+
+    // A clear for an earlier setup leaves this one's mark alone.
+    await github.sessions.clearSetupInProgress({
+      sessionId: session.sessionId,
+      startedAt: new Date('2026-11-23T16:00:00Z'),
+    });
+    expect((await github.sessions.getBySessionId(session.sessionId))?.setupInProgress).toEqual(setup);
+
+    await github.sessions.clearSetupInProgress({ sessionId: session.sessionId, startedAt: setup.startedAt });
+    expect((await github.sessions.getBySessionId(session.sessionId))?.setupInProgress).toBeNull();
+  });
+
   it('records materialized_at write-once via sessions.markMaterialized', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });

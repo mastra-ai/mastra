@@ -1,7 +1,7 @@
 import type { MastraBrowser } from '@mastra/core/browser';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
-import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import { createFactorySandboxTools } from './sandbox-tools.js';
 import type { FactoryToolScope } from './scope.js';
 
@@ -16,7 +16,10 @@ const scope: FactoryToolScope = {
   interactive: false,
 };
 
-const sourceControl = {} as SourceControlStorageHandle;
+let setupInProgress: SourceControlSession['setupInProgress'] = null;
+const sourceControl = {
+  sessions: { getBySessionId: async () => ({ setupInProgress }) },
+} as unknown as SourceControlStorageHandle;
 
 function recreateTool(outcome: 'reset' | 'not-found' | 'not-here', found = true) {
   const resetSandbox = vi.fn(async () => outcome);
@@ -43,6 +46,22 @@ describe('factory_recreate_sandbox', () => {
 
     expect(getSourceControlBySessionId).toHaveBeenCalledWith('session-1');
     expect(resetSandbox).toHaveBeenCalledWith({ sourceControl, orgId: 'org-1', sessionId: 'session-1' });
+  });
+
+  it('refuses while a setup command is running, and recreates once its deadline passed', async () => {
+    const { run, resetSandbox } = recreateTool('reset');
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const startedAt = new Date(Date.now() - 60_000);
+    setupInProgress = { target: 'acme/web', startedAt, deadline: new Date(startedAt.getTime() + 15 * 60_000) };
+    onTestFinished(() => {
+      setupInProgress = null;
+    });
+
+    await expect(run()).rejects.toThrow('Recreating now would throw that setup away');
+    expect(resetSandbox).not.toHaveBeenCalled();
+
+    setupInProgress = { ...setupInProgress, deadline: new Date(Date.now() - 1) };
+    await expect(run()).resolves.toMatchObject({ recreated: true });
   });
 
   it('warns the agent that uncommitted and unpushed work is lost', () => {

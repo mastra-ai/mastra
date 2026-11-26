@@ -158,6 +158,7 @@ import {
   peekSessionEnvironmentTeardown,
 } from './session/environment-state-processor.js';
 import type { SkillOverridesStorage } from './storage/domains/skill-overrides/base.js';
+import type { SessionSetupInProgress } from './storage/domains/source-control/base.js';
 import { createFactoryStorageForTests } from './storage/test-utils.js';
 import {
   createWorkspaceFactory,
@@ -350,6 +351,14 @@ function fakeGithubIntegration() {
         getBySessionId: vi.fn(async (id: string) => mocks.sessions.find(session => session.sessionId === id) ?? null),
         setSandbox,
         markMaterialized: vi.fn(async () => {}),
+        setSetupInProgress: vi.fn(async ({ sessionId, setup }) => {
+          const session = mocks.sessions.find(row => row.sessionId === sessionId);
+          if (session) Object.assign(session, { setupInProgress: setup });
+        }),
+        clearSetupInProgress: vi.fn(async ({ sessionId }) => {
+          const session = mocks.sessions.find(row => row.sessionId === sessionId);
+          if (session) Object.assign(session, { setupInProgress: null });
+        }),
       },
       projectRepositories: {
         get: vi.fn(async ({ orgId, id }) => {
@@ -1315,6 +1324,52 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.runSetupCommand).toHaveBeenCalledTimes(2);
     expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxWorkdir).toBe(workdirA);
     expect(mocks.sessions.find(session => session.id === 'session-b')?.sandboxWorkdir).toBe(workdirB);
+  });
+
+  it('tells the agent a setup command is running while it runs, and stops once it ends', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a', branch: 'feature-a' });
+    let finishSetup!: () => void;
+    mocks.runSetupCommand.mockImplementationOnce(() => new Promise<void>(resolve => (finishSetup = resolve)));
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    const processor = new FactoryEnvironmentStateProcessor({
+      getSession: async id => {
+        const row = mocks.sessions.find(candidate => candidate.sessionId === id);
+        return row
+          ? { setupInProgress: (row.setupInProgress as SessionSetupInProgress | null | undefined) ?? null }
+          : null;
+      },
+    });
+    const signal = () =>
+      processor.computeStateSignal({
+        requestContext,
+        threadId: 'session-a',
+        resourceId: 'project-1',
+        activeStateSignals: [],
+        contextWindow: { hasSnapshot: false },
+        deltasSinceSnapshot: [],
+      } as never);
+
+    const created = workspace({ requestContext });
+    await vi.waitFor(() => expect(mocks.runSetupCommand).toHaveBeenCalledTimes(1));
+
+    expect((await signal())?.contents).toContain('running the setup command for octocat/hello');
+    // The command is bounded by the mark, so it never outlives what the agent was told.
+    const [, , , , , options] = mocks.runSetupCommand.mock.calls[0] as unknown as [
+      unknown,
+      unknown,
+      unknown,
+      unknown,
+      unknown,
+      { timeoutMs: number },
+    ];
+    expect(options.timeoutMs).toBeGreaterThan(14 * 60_000);
+    expect(options.timeoutMs).toBeLessThanOrEqual(15 * 60_000);
+    finishSetup();
+    await created;
+    expect(mocks.sessions.find(row => row.sessionId === 'session-a')?.setupInProgress).toBeNull();
+    expect(await signal()).toBeUndefined();
   });
 
   it('materializes a GitLab-backed session through its provider storage and clone URL', async () => {
@@ -2916,6 +2971,44 @@ describe('GitHub session workspace preparation', () => {
       const before = minted;
       await Promise.all([sandbox.executeCommand('gh', ['pr', 'list']), sandbox.executeCommand('git', ['push'])]);
       expect(minted).toBe(before + 1);
+    });
+
+    it('counts a slow re-mint against the command timeout, and never starts a command whose time ran out', async () => {
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      const sandbox = (resolved as any).sandbox;
+      const inner = mocks.createSandbox.mock.results[0]!.value.exec as ReturnType<typeof vi.fn>;
+      const slowMint = (delayMs: number) =>
+        mocks.getRepositoryAccess.mockImplementationOnce(async () => {
+          vi.advanceTimersByTime(delayMs);
+          return {
+            cloneUrl: 'https://github.com/octocat/hello.git',
+            authorization: { scheme: 'bearer' as const, token: `minted-${++minted}` },
+          };
+        });
+
+      vi.advanceTimersByTime(46 * 60_000);
+      slowMint(2 * 60_000);
+      inner.mockClear();
+      await expect(sandbox.executeCommand('pnpm', ['build'], { timeout: 60_000 })).rejects.toThrow(
+        'it was not started',
+      );
+      expect(inner).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(46 * 60_000);
+      slowMint(2 * 60_000);
+      await sandbox.executeCommand('pnpm', ['build'], { timeout: 15 * 60_000 });
+      expect(inner).toHaveBeenCalledWith('pnpm', ['build'], { timeout: 13 * 60_000 });
+
+      // timeout: 0 is unbounded: a slow re-mint never stops it, and it reaches the provider unchanged.
+      vi.advanceTimersByTime(46 * 60_000);
+      slowMint(2 * 60_000);
+      await sandbox.executeCommand('pnpm', ['dev'], { timeout: 0 });
+      expect(inner).toHaveBeenLastCalledWith('pnpm', ['dev'], { timeout: 0 });
+      await sandbox.executeCommand('pnpm', ['dev'], { timeout: 0 });
+      expect(inner).toHaveBeenLastCalledWith('pnpm', ['dev'], { timeout: 0 });
     });
 
     it('does not overwrite a PAT installed while a command re-mint is in flight', async () => {

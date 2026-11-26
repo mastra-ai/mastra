@@ -2,6 +2,9 @@ import { createHash } from 'node:crypto';
 import type { ComputeStateSignalArgs, ComputeStateSignalResult, Processor } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 
+import { describeSetupInProgress, runningSetup } from '../sandbox/setup-progress.js';
+import type { SourceControlSession } from '../storage/domains/source-control/base.js';
+
 const STATE_ID = 'factory-environment';
 
 export type EnvironmentRepositorySetupStatus = 'ok' | 'failed' | 'skipped';
@@ -131,20 +134,61 @@ function environmentCacheKey(state: SessionEnvironmentState): string {
  * repository is a directory beneath it. Snapshot mode only; a new snapshot
  * is emitted when the booted set changes (a start after an environment edit).
  */
+export interface FactoryEnvironmentStateProcessorOptions {
+  /** Reads the session row, which marks a setup command while the sandbox runs it. */
+  getSession?: (sessionId: string) => Promise<Pick<SourceControlSession, 'setupInProgress'> | null>;
+}
+
 export class FactoryEnvironmentStateProcessor implements Processor<'factory-environment'> {
   readonly id = STATE_ID;
   readonly stateId = STATE_ID;
+
+  constructor(private readonly options: FactoryEnvironmentStateProcessorOptions = {}) {}
 
   async computeStateSignal(args: ComputeStateSignalArgs): Promise<ComputeStateSignalResult> {
     const sessionId = sessionIdFromContext(args.requestContext);
     if (!sessionId) return;
     const state = environments.get(sessionId)?.state;
-    if (!state) return;
-    const untrusted = isUntrustedCheckout(args.requestContext);
-    const cacheKey = environmentCacheKey(state) + (untrusted ? ':untrusted' : '');
-    const hasBase = Boolean(args.lastSnapshot) && args.contextWindow.hasSnapshot;
-    if (hasBase && (args.tracking?.currentCacheKey ?? args.lastSnapshot?.metadata?.state?.cacheKey) === cacheKey)
+    let session: Pick<SourceControlSession, 'setupInProgress'> | null | undefined;
+    try {
+      session = await this.options.getSession?.(sessionId);
+    } catch (error) {
+      // The signal is optional: a failed read keeps the snapshot already in
+      // the window rather than failing the step or declaring setup ended.
+      console.warn('[Mastra Factory] Could not read the session for its environment signal', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
       return;
+    }
+    const setup = runningSetup(session);
+    const untrusted = isUntrustedCheckout(args.requestContext);
+    const cacheKey =
+      (state ? environmentCacheKey(state) : 'environment:none') +
+      (setup ? `:setup:${setup.target}:${setup.startedAt.getTime()}` : '') +
+      (untrusted ? ':untrusted' : '');
+    const hasBase = Boolean(args.lastSnapshot) && args.contextWindow.hasSnapshot;
+    const previousKey = hasBase
+      ? (args.tracking?.currentCacheKey ?? args.lastSnapshot?.metadata?.state?.cacheKey)
+      : undefined;
+    if (previousKey === cacheKey) return;
+    // Nothing to describe, unless the snapshot in the window still says setup
+    // is running: a setup that failed before the boot recorded anything must
+    // not leave the agent waiting on it.
+    if (!state && !setup && !(typeof previousKey === 'string' && previousKey.includes(':setup:'))) return;
+    const setupLine = setup ? escapeText(describeSetupInProgress(setup)) : '';
+    if (!state) {
+      return {
+        id: STATE_ID,
+        cacheKey,
+        mode: 'snapshot',
+        tagName: 'factory-environment',
+        contents: setupLine || 'No setup command is running in the sandbox now.',
+        value: { environment: null },
+        attributes: {},
+        metadata: { value: { environment: null } },
+      };
+    }
     const lines = state.repositories.map(
       (repo, index) =>
         `${index + 1}. ${escapeText(repo.slug)} at ${escapeText(repo.dir)} on ${escapeText(repo.branch ?? '(detached)')} (default ${escapeText(repo.defaultBranch)}, setup ${repo.setupStatus})` +
@@ -160,7 +204,8 @@ export class FactoryEnvironmentStateProcessor implements Processor<'factory-envi
       (untrusted
         ? ''
         : "\nA directory's AGENTS.md loads after you open a file there with view or an edit tool, not through execute_command. Before your first change in a directory, read any AGENTS.md in it or its parent directories you have not seen yet.") +
-      (state.note ? `\n${escapeText(state.note)}` : '');
+      (state.note ? `\n${escapeText(state.note)}` : '') +
+      (setupLine ? `\n${setupLine}` : '');
     return {
       id: STATE_ID,
       cacheKey,

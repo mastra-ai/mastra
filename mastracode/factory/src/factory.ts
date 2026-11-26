@@ -2101,7 +2101,11 @@ export class MastraFactory {
         // sandbox holds and where; the phase and work-item signals, when work
         // items are on, come after it.
         inputProcessors: async ({ requestContext }: { requestContext: RequestContext }) => {
-          const environmentProcessor = new FactoryEnvironmentStateProcessor();
+          const environmentProcessor = new FactoryEnvironmentStateProcessor(
+            storage.isDomainReady('source-control')
+              ? { getSession: sessionId => sourceControlSessions.getBySessionId(sessionId) }
+              : {},
+          );
           const sessionsProcessor =
             workItemsStorage && storage.isDomainReady('source-control')
               ? [

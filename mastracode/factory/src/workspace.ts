@@ -64,6 +64,7 @@ import {
   resolveSessionWorkdir,
 } from './sandbox/session-sandbox.js';
 import type { FactorySandboxContext, SessionEnvironmentGate, SessionSetupGate } from './sandbox/session-sandbox.js';
+import { trackSetup, WORKSPACE_SETUP_TARGET } from './sandbox/setup-progress.js';
 import { repositoryDirectoryName } from './sandbox/workdir.js';
 import {
   clearSessionEnvironment,
@@ -1071,7 +1072,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           // A turn can outlive the token installed when the workspace was
           // resolved, so check its age before every command and background
           // spawn. Best-effort: a failed re-mint leaves the current token in
-          // place. Concurrent callers share one refresh.
+          // place. Concurrent callers share one refresh. A
+          // command's timeout counts the wait: one whose caller already gave up
+          // (a setup whose mark lapsed) is never dispatched.
           let commandRefresh: Promise<unknown> | undefined;
           const refreshBeforeCommand = () =>
             (commandRefresh ??= refreshStaleGithubToken()
@@ -1081,9 +1084,18 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               }));
           const executeCommand = sandbox.executeCommand?.bind(sandbox);
           if (executeCommand) {
-            sandbox.executeCommand = async (...args) => {
+            sandbox.executeCommand = async (command, args, options) => {
+              const waitStarted = Date.now();
               await refreshBeforeCommand();
-              return executeCommand(...args);
+              // No timeout (unset or 0, which providers read as unbounded) has nothing to spend.
+              if (!options?.timeout || options.timeout < 0) return executeCommand(command, args, options);
+              const timeout = options.timeout - (Date.now() - waitStarted);
+              if (timeout <= 0) {
+                throw new Error(
+                  `Sandbox command timed out after ${Math.round(options.timeout / 1000)}s while refreshing its GitHub token; it was not started.`,
+                );
+              }
+              return executeCommand(command, args, { ...options, timeout });
             };
           }
           const processes = sandbox.processes;
@@ -1617,9 +1629,18 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           return;
         }
         try {
-          await timedPhase('workspace.setup', async () =>
-            runSetupCommand(target, workdir, projectRepository.setupCommand!, ...(await setupEnv())),
-          );
+          await timedPhase('workspace.setup', async () => {
+            // Resolve the environment first, so the command gets the whole time the mark allows.
+            const env = await setupEnv();
+            return trackSetup(
+              storage.sessions,
+              session.sessionId,
+              repoFullName,
+              DEFAULT_COMMAND_TIMEOUT_MS,
+              timeoutMs =>
+                runSetupCommand(target, workdir, projectRepository.setupCommand!, env[0], env[1], { timeoutMs }),
+            );
+          });
           await gate.markSetupDone();
         } catch (setupError) {
           if (projectRepository.teardownCommand) {
@@ -1785,9 +1806,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           }
           inFlight = repo.slug;
           try {
-            await timedPhase(`workspace.setup(${repo.slug})`, async () =>
-              runSetupCommand(target, entry.dir, repo.setupCommand!, ...(await setupEnv())),
-            );
+            await timedPhase(`workspace.setup(${repo.slug})`, async () => {
+              const env = await setupEnv();
+              return trackSetup(storage.sessions, session.sessionId, repo.slug, DEFAULT_COMMAND_TIMEOUT_MS, timeoutMs =>
+                runSetupCommand(target, entry.dir, repo.setupCommand!, env[0], env[1], { timeoutMs }),
+              );
+            });
             await entry.gate.markSetupDone();
           } catch (error) {
             if (!(error instanceof SetupCommandError)) throw error;
@@ -1816,9 +1840,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             });
           } else {
             try {
-              await timedPhase('workspace.setup(workspace)', async () =>
-                runSetupCommand(target, gate.root, workspaceCommand, ...(await setupEnv())),
-              );
+              await timedPhase('workspace.setup(workspace)', async () => {
+                const env = await setupEnv();
+                return trackSetup(
+                  storage.sessions,
+                  session.sessionId,
+                  WORKSPACE_SETUP_TARGET,
+                  DEFAULT_COMMAND_TIMEOUT_MS,
+                  timeoutMs => runSetupCommand(target, gate.root, workspaceCommand, env[0], env[1], { timeoutMs }),
+                );
+              });
               await gate.workspace.markSetupDone();
             } catch (error) {
               if (!(error instanceof SetupCommandError)) throw error;
