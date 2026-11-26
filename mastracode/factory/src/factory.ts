@@ -1679,7 +1679,24 @@ export class MastraFactory {
               : undefined,
             logger: { info: (msg, meta) => console.info(`[Mastra Factory] ${msg}`, meta ?? {}) },
           },
-          { getMastra: () => this.#prepared?.base.controller.getMastra() },
+          {
+            getMastra: () => this.#prepared?.base.controller.getMastra(),
+            // Only sessions whose command was refused for the build hear how it ended.
+            notifySession: async (waiter, message) => {
+              const reporting = await factoryReporting();
+              if (!reporting || !waiter.threadId) return;
+              await reporting.deliver(
+                { sessionId: waiter.sessionId, threadId: waiter.threadId },
+                {
+                  kind: 'environment-build',
+                  priority: 'medium',
+                  summary: message,
+                  payload: { message },
+                  sourceId: waiter.sessionId,
+                },
+              );
+            },
+          },
         )
       : undefined;
     const environmentBuilds = this.#environmentBuilds;
@@ -1986,7 +2003,12 @@ export class MastraFactory {
               : [],
           ),
           ...(factoryProjectsStorage ? { projects: factoryProjectsStorage } : {}),
-          ...(this.#environmentBuilds ? { onSandboxCreated: this.#environmentBuilds.onSandboxCreated } : {}),
+          ...(this.#environmentBuilds
+            ? {
+                onSandboxCreated: this.#environmentBuilds.onSandboxCreated,
+                awaitEnvironmentBuild: this.#environmentBuilds.awaitEnvironmentBuild,
+              }
+            : {}),
           sandboxEnvs: sandboxEnvsStorage,
           ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
           workspaceRegistry,

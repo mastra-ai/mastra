@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { getBranchHead } from '../integrations/github/commits.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { EnvironmentBuildRunner } from './build-runner.js';
+import { ENVIRONMENT_BUILT_MESSAGE, EnvironmentBuildRunner } from './build-runner.js';
 import {
   ensureSchedule,
   invalidCronMessage,
@@ -211,6 +211,76 @@ describe('factory-environment-build workflow', () => {
       reason: 'boom',
     });
     expect((await seed.projects.getById({ id: project.id }))?.activeTemplateId).toBeNull();
+  });
+
+  describe('sessions waiting for a first build', () => {
+    async function waitingRunner(statuses: FactorySandboxBuild['status'][]) {
+      const project = await seedProject(seed);
+      const sandbox = new BuildingSandbox();
+      sandbox.statuses = statuses;
+      const starts = vi.spyOn(sandbox.builds, 'start');
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      const notifySession = vi.fn(async () => {});
+      let mastra: Mastra | undefined;
+      const runner = new EnvironmentBuildRunner(depsFor(seed, sandbox), {
+        getMastra: () => mastra,
+        sleep: () => gate,
+        notifySession,
+      });
+      mastra = bootMastra(runner);
+      return { project, runner, starts, release, notifySession };
+    }
+
+    it('starts one build for every waiting session and tells only those sessions once it is ready', async () => {
+      const { project, runner, starts, release, notifySession } = await waitingRunner([
+        'building',
+        'building',
+        'building',
+        'ready',
+      ]);
+
+      const first = await runner.awaitEnvironmentBuild(project, { sessionId: 's-1', threadId: 't-1' });
+      const second = await runner.awaitEnvironmentBuild(project, { sessionId: 's-2', threadId: 't-2' });
+      await runner.awaitEnvironmentBuild(project, { sessionId: 's-1', threadId: 't-1' });
+
+      expect(first).toMatch(/the environment is being built/);
+      expect(second).toBe(first);
+      expect(starts).toHaveBeenCalledTimes(1);
+      expect(notifySession).not.toHaveBeenCalled();
+
+      release();
+      await vi.waitFor(() => expect(notifySession).toHaveBeenCalledTimes(2));
+      expect(notifySession.mock.calls).toEqual([
+        [{ sessionId: 's-1', threadId: 't-1' }, ENVIRONMENT_BUILT_MESSAGE],
+        [{ sessionId: 's-2', threadId: 't-2' }, ENVIRONMENT_BUILT_MESSAGE],
+      ]);
+
+      // A build that ends with nobody waiting tells nobody.
+      notifySession.mockClear();
+      await runner.start(project.id, 'manual');
+      await vi.waitFor(async () =>
+        expect((await seed.projects.getById({ id: project.id }))?.lastBuildId).toBe('build-1'),
+      );
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(notifySession).not.toHaveBeenCalled();
+    });
+
+    it('tells waiting sessions a build failed, and does not start the same failing build again for the next one', async () => {
+      const { project, runner, starts, release, notifySession } = await waitingRunner(['building', 'failed']);
+
+      await runner.awaitEnvironmentBuild(project, { sessionId: 's-1', threadId: 't-1' });
+      release();
+      await vi.waitFor(() => expect(notifySession).toHaveBeenCalledTimes(1));
+      expect(notifySession).toHaveBeenCalledWith(
+        { sessionId: 's-1', threadId: 't-1' },
+        'The environment build failed: boom. See the environment settings page.',
+      );
+
+      const next = await runner.awaitEnvironmentBuild(project, { sessionId: 's-2', threadId: 't-2' });
+      expect(next).toMatch(/^The environment build failed: boom\. Fix it on the environment settings page/);
+      expect(starts).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('starts no run for a session that starts inside the debounce window', async () => {

@@ -556,6 +556,16 @@ export interface CreateWorkspaceFactoryOptions {
    * template that fell behind. Must not throw.
    */
   onSandboxCreated?: (project: FactoryProject) => void;
+  /**
+   * Called before a command when the session's environment has no finished
+   * build: starts one if needed, remembers the session so it hears when the
+   * build ends, and returns what the command should fail with. Without it,
+   * sessions boot and run setup commands as before.
+   */
+  awaitEnvironmentBuild?: (
+    project: FactoryProject,
+    target: { sessionId: string; threadId?: string },
+  ) => Promise<string | undefined>;
   /** The Factory's sandbox environment variables, applied to each session sandbox. */
   sandboxEnvs?: Pick<SandboxEnvStore, 'resolve' | 'revisions'>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
@@ -673,6 +683,11 @@ async function resolveSessionEnvironment(
     templateHeads: project.activeTemplateHeads ?? undefined,
     project,
   };
+}
+
+/** A command refused because the session's environment has no finished build yet. */
+export class EnvironmentNotBuiltError extends Error {
+  override name = 'EnvironmentNotBuiltError';
 }
 
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
@@ -808,6 +823,28 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const environment = resolvedEnvironment?.repos.some(repo => repo.projectRepositoryId === projectRepository.id)
       ? resolvedEnvironment
       : undefined;
+    // A Factory whose environment is built as a template runs setup commands
+    // only in that build, and a session never boots without one: with no
+    // finished build its commands fail fast with what the build is doing.
+    const setupOnlyInBuild = Boolean(environment && factorySandbox.builds && options.awaitEnvironmentBuild);
+    // The commits of the build the sandbox boots from; read again before a
+    // command while there is none, so a build that finishes is picked up.
+    let builtHeads = templateHeads;
+    const awaitBuiltEnvironment = async (): Promise<void> => {
+      if (builtHeads || !setupOnlyInBuild || !sessionEnvironment) return;
+      const project =
+        (await projects?.get({ orgId: session.orgId, id: sessionEnvironment.project.id })) ??
+        sessionEnvironment.project;
+      if (project.activeTemplateHeads) {
+        builtHeads = project.activeTemplateHeads;
+        return;
+      }
+      const message = await options.awaitEnvironmentBuild!(project, {
+        sessionId: session.sessionId,
+        ...(ctx?.threadId ? { threadId: ctx.threadId } : {}),
+      });
+      if (message) throw new EnvironmentNotBuiltError(message);
+    };
     // `GH_TOKEN` should reach every environment repository, the session's own
     // first; the refresh tool re-mints for the same set.
     const tokenRepositoryIds = environment
@@ -872,13 +909,19 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const runEnvironmentSetupOn = (target: unknown, gate: SessionEnvironmentGate) =>
       runSessionEnvironmentSetup(requireExec(target as WorkspaceSandbox), gate);
     const guardedSetup = environment
-      ? createEnvironmentSetupHook(runEnvironmentSetupOn, session.id, repoFullName, {
-          repos: environment.repos.map(repo => ({
-            slug: repo.slug,
-            ...(repo.setupCommand ? { setupCommand: repo.setupCommand } : {}),
-          })),
-          ...(environment.workspaceSetupCommand ? { workspaceSetupCommand: environment.workspaceSetupCommand } : {}),
-        })
+      ? createEnvironmentSetupHook(
+          runEnvironmentSetupOn,
+          session.id,
+          repoFullName,
+          {
+            repos: environment.repos.map(repo => ({
+              slug: repo.slug,
+              ...(repo.setupCommand ? { setupCommand: repo.setupCommand } : {}),
+            })),
+            ...(environment.workspaceSetupCommand ? { workspaceSetupCommand: environment.workspaceSetupCommand } : {}),
+          },
+          { setupOnlyInBuild },
+        )
       : createSessionSetupHook(runSetupOn, session.id, repoFullName, projectRepository.setupCommand ?? undefined);
     // Replaces the installed minted token once it is stale, so `gh` and the
     // `gh auth git-credential` helper never run with an expired GH_TOKEN. An
@@ -1044,7 +1087,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
                   ? environmentSandboxContext(environment, {
                       orgId: session.orgId,
                       getRepositoryAccess: args => repositoryAccess(args.repositoryId),
-                      ...(templateHeads ? { resolveHead: recordedHeadResolver(templateHeads) } : {}),
+                      ...(templateHeads || setupOnlyInBuild
+                        ? {
+                            resolveHead: async (cloneUrl: string) =>
+                              builtHeads ? recordedHeadResolver(builtHeads)(cloneUrl) : undefined,
+                          }
+                        : {}),
                     })
                   : {
                       // Stored nullable; the context speaks `undefined` for absent.
@@ -1073,7 +1121,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           // spawn. Best-effort: a failed re-mint leaves the current token in
           // place. Concurrent callers share one refresh.
           let commandRefresh: Promise<unknown> | undefined;
-          const refreshBeforeCommand = () =>
+          const refreshBeforeCommand = async () => {
+            await awaitBuiltEnvironment();
+            await refreshToken();
+          };
+          const refreshToken = () =>
             (commandRefresh ??= refreshStaleGithubToken()
               .catch(() => {})
               .finally(() => {
@@ -1100,7 +1152,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           // callback installed itself expects a prepared workspace.
           sandbox.setOnStart(previous => async args => {
             recordSandboxAcquired(args.sandbox, args.outcome);
-            if (args.outcome === 'created' && templateHeads && sessionEnvironment) {
+            if (args.outcome === 'created' && builtHeads && sessionEnvironment) {
               options.onSandboxCreated?.(sessionEnvironment.project);
             }
             try {
@@ -1129,11 +1181,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       if (!startEagerly) return;
       startEagerly = false;
       Promise.resolve()
+        // No sandbox boots before the environment is built; the first
+        // command reports the build instead.
+        .then(() => awaitBuiltEnvironment())
         .then(() => {
           markEagerSandboxStart(sessionEntry.sandbox);
           return sessionEntry.sandbox.start?.();
         })
         .catch(error => {
+          if (error instanceof EnvironmentNotBuiltError) return;
           console.warn(`[factory] Eager sandbox start for session ${session.id} failed:`, error);
         });
     };
@@ -1608,6 +1664,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           });
           return;
         }
+        // Setup runs only in the environment build; the next build runs it.
+        if (gate.notBuilt) return;
         if (hasFailedSetupCommand(session.id, projectRepository.setupCommand)) {
           console.warn('[Mastra Factory] Skipping setup command that already failed this session', {
             orgId: session.orgId,
@@ -1711,7 +1769,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           try {
             await runSessionSetup(target, primaryDir, entry.gate);
             state.branch = session.branch;
-            if (
+            if (repo.setupCommand && entry.gate.notBuilt) {
+              state.setupStatus = 'not built';
+            } else if (
               repo.setupCommand &&
               (entry.gate.failedInBuild || hasFailedSetupCommand(session.id, repo.setupCommand))
             ) {
@@ -1778,6 +1838,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         });
         for (const { repo, entry, state, synced } of secondaries) {
           if (!synced || !repo.setupCommand || entry.gate.setupDone) continue;
+          if (entry.gate.notBuilt) {
+            state.setupStatus = 'not built';
+            continue;
+          }
           if (entry.gate.failedInBuild || hasFailedSetupCommand(session.id, `${repo.slug}:${repo.setupCommand}`)) {
             state.setupStatus = 'failed';
             repeated.add(repo.slug);
@@ -1805,7 +1869,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         }
         inFlight = undefined;
         const workspaceCommand = environment!.workspaceSetupCommand;
-        if (workspaceCommand && !gate.workspace.setupDone) {
+        if (workspaceCommand && !gate.workspace.setupDone && !gate.workspace.notBuilt) {
           // Fatal on its first failure, skipped afterwards: like the per-repo
           // commands, a workspace command that keeps failing must not wedge
           // every start of the session.
@@ -1832,7 +1896,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         }
       } finally {
         record();
-        await recordSetupResults(repos, states, failures, inFlight, repeated);
+        await recordSetupResults(repos, states, failures, inFlight, repeated, gate.repos);
       }
       if (primaryError) throw primaryError;
     };
@@ -1840,17 +1904,33 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // boot. A repository whose setup ran is `configured`; one whose setup or
     // sync failed is `failed` with the redacted message; one with no setup
     // command, whose setup was interrupted, or whose already-failed command
-    // was skipped is left as it was.
+    // was skipped is left as it was. When setup runs only in the environment
+    // build, the status reports that build: `configured` when its setup
+    // succeeded, `failed` when it failed there, and nothing about this
+    // session's own sync failures or a setup the build doesn't have yet.
     const recordSetupResults = async (
       repos: SessionEnvironmentRepo[],
       states: SessionEnvironmentRepositoryState[],
       failures: Map<string, string>,
       inFlight: string | undefined,
       repeated: Set<string>,
+      gates: SessionEnvironmentGate['repos'],
     ) => {
       try {
         for (const state of states) {
-          if (state.setupStatus === 'skipped') continue;
+          if (state.setupStatus === 'skipped' || state.setupStatus === 'not built') continue;
+          if (setupOnlyInBuild) {
+            const repo = repos.find(candidate => candidate.slug === state.slug);
+            const gate = gates.find(candidate => candidate.slug === state.slug)?.gate;
+            if (!repo || !gate || !(gate.setupDone || gate.failedInBuild)) continue;
+            await storage.projectRepositories.setBuildStatus({
+              orgId: session.orgId,
+              id: repo.projectRepositoryId,
+              status: gate.failedInBuild ? 'failed' : 'configured',
+              error: gate.failedInBuild ? 'The setup command failed in the environment build.' : null,
+            });
+            continue;
+          }
           if (state.slug === inFlight && state.setupStatus !== 'failed') continue;
           if (repeated.has(state.slug)) continue;
           const repo = repos.find(candidate => candidate.slug === state.slug);

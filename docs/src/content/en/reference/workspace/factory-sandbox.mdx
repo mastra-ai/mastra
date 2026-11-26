@@ -287,6 +287,8 @@ When the sandbox declares `builds`, factory builds the environment template ahea
 
 A save that leaves every template input unchanged doesn't start a build. Scheduled, push and session builds skip when the last build is ready, no repository head moved and no template input changed (settings, repositories and their order, setup commands, the working directory or the factory's Build variables). Factory stores only the last build id and the active template. Status and history come from the provider through `GET …/environment/builds/:buildId` and `GET …/environment/builds` (404 `no_history` when the provider keeps none).
 
+Setup commands run only in environment builds. A session boots from the last finished build and never runs a setup command itself. A repository whose setup command isn't in that build yet reports setup `not built` until the next build. Before the first build finishes, a session's sandbox commands fail with a message saying the environment is being built (or why its build failed), and Factory starts a build if none is running. Each session refused this way gets a notification when the build ends. The repositories page shows the setup result of the build sessions boot from, not errors from a session's own boot.
+
 When a build start was never recorded and the provider can't list its builds, Factory can't tell whether that build is still running. Triggers skip with reason `unresolved` for 30 minutes after the start's lease lapsed, then Factory treats the start as failed and the next trigger builds.
 
 ## Environment variables

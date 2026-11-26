@@ -4,7 +4,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 
 const STATE_ID = 'factory-environment';
 
-export type EnvironmentRepositorySetupStatus = 'ok' | 'failed' | 'skipped';
+export type EnvironmentRepositorySetupStatus = 'ok' | 'failed' | 'skipped' | 'not built';
 
 /** One repository of the booted environment as the agent is told about it: never a token or a clone URL. */
 export interface SessionEnvironmentRepositoryState {
@@ -14,7 +14,10 @@ export interface SessionEnvironmentRepositoryState {
   /** The branch the checkout ended on after boot; `null` when it stays detached. */
   branch: string | null;
   defaultBranch: string;
-  /** `ok` ran or was already set up, `failed` exited non-zero, `skipped` has no setup command. */
+  /**
+   * `ok` ran or was already set up, `failed` exited non-zero, `skipped` has no
+   * setup command, `not built` is waiting for the next environment build.
+   */
   setupStatus: EnvironmentRepositorySetupStatus;
   /** The change request this session opened in the repository, once it has. */
   changeRequestUrl?: string;
