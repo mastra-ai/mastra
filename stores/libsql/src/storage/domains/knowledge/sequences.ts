@@ -192,6 +192,13 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
         ).rows[0];
         return row?.position == null ? null : String(row.position);
       },
+      taken: async position =>
+        (
+          await tx.execute({
+            sql: `SELECT 1 FROM "${T.items}" WHERE ${others} AND position = ? LIMIT 1`,
+            args: [input.sequenceId, input.externalId, position],
+          })
+        ).rows.length > 0,
     });
   }
 
@@ -449,7 +456,7 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
     }
     const matched = words.map(() => `(CASE WHEN ${has} THEN 1 ELSE 0 END)`).join(' + ');
     const { rows } = await this.#read.execute({
-      sql: `SELECT e.* FROM "${T.items}" e JOIN "${T.sequences}" t ON t.pageId = e.sequenceId JOIN "${PAGES}" p ON p.id = e.sequenceId WHERE ${where.join(' AND ')} ORDER BY (${matched}) DESC, e.occurredAt DESC, e.id ASC LIMIT ?`,
+      sql: `SELECT e.* FROM "${T.items}" e JOIN "${T.sequences}" t ON t.pageId = e.sequenceId JOIN "${PAGES}" p ON p.id = e.sequenceId WHERE ${where.join(' AND ')} ORDER BY (${matched}) DESC, e.occurredAt DESC, e.position IS NULL, e.position ASC, e.id ASC LIMIT ?`,
       args: [...args, ...likes, input.limit],
     });
     return rows.map(toItem);

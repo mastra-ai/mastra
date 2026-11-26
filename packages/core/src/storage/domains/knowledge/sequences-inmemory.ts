@@ -51,6 +51,10 @@ type OrderKey = Pick<KnowledgeSequenceItemRecord, 'occurredAt' | 'position' | 'i
 
 const byCode = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
+/** Position keys ascending, items without one last. */
+const byPosition = (a: string | null, b: string | null) =>
+  a === b ? 0 : a === null ? 1 : b === null ? -1 : byCode(a, b);
+
 /** Along the sequence's order: `(position, id)` when positioned, else `(occurredAt, id)`. */
 function compare(a: OrderKey, b: OrderKey): number {
   const key =
@@ -66,6 +70,14 @@ function compare(a: OrderKey, b: OrderKey): number {
  */
 export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage {
   #s: State = { sequences: new Map(), items: new Map() };
+  /** Item writes run one at a time, as a row lock makes them on SQL stores, so placements don't race. */
+  #writes: Promise<unknown> = Promise.resolve();
+
+  #serialized<R>(write: () => Promise<R>): Promise<R> {
+    const run = this.#writes.then(write, write);
+    this.#writes = run.catch(() => undefined);
+    return run;
+  }
 
   constructor(private readonly lookup: PageLookup) {
     super();
@@ -122,6 +134,8 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
         return { position: items[at]!.position!, next: items[side === 'after' ? at + 1 : at - 1]?.position ?? null };
       },
       last: async () => this.#positioned(input.sequenceId, input.externalId).at(-1)?.position ?? null,
+      taken: async position =>
+        this.#positioned(input.sequenceId, input.externalId).some(item => item.position === position),
     });
   }
 
@@ -142,7 +156,11 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
     }
   }
 
-  async upsertItem(input: UpsertKnowledgeSequenceItemInput): Promise<KnowledgeSequenceItemUpsertResult> {
+  upsertItem(input: UpsertKnowledgeSequenceItemInput): Promise<KnowledgeSequenceItemUpsertResult> {
+    return this.#serialized(() => this.#upsertItem(input));
+  }
+
+  async #upsertItem(input: UpsertKnowledgeSequenceItemInput): Promise<KnowledgeSequenceItemUpsertResult> {
     const orderBy = this.#liveSequence(input.sequenceId);
     checkKnowledgeSequenceItemInput(input, orderBy);
     const key = keyOf(input.sequenceId, input.externalId);
@@ -182,12 +200,21 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
     return { status: 'updated', item: copy(item) };
   }
 
-  async removeItem(input: {
+  removeItem(input: {
     sequenceId: string;
     externalId: string;
     writtenBy: string;
     deletedAt?: Date;
   }): Promise<KnowledgeSequenceItemRemoveResult> {
+    return this.#serialized(async () => this.#removeItem(input));
+  }
+
+  #removeItem(input: {
+    sequenceId: string;
+    externalId: string;
+    writtenBy: string;
+    deletedAt?: Date;
+  }): KnowledgeSequenceItemRemoveResult {
     this.#liveSequence(input.sequenceId);
     const key = keyOf(input.sequenceId, input.externalId);
     const stored = this.#s.items.get(key);
@@ -293,6 +320,7 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
         (a, b) =>
           b.matched - a.matched ||
           (b.item.occurredAt?.getTime() ?? -Infinity) - (a.item.occurredAt?.getTime() ?? -Infinity) ||
+          byPosition(a.item.position, b.item.position) ||
           (a.item.id < b.item.id ? -1 : 1),
       )
       .slice(0, input.limit)

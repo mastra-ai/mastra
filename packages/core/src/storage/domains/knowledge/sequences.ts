@@ -537,9 +537,17 @@ export async function knowledgeSequenceItemPosition(
   find: {
     neighbour(externalId: string, side: 'after' | 'before'): Promise<{ position: string; next: string | null } | null>;
     last(): Promise<string | null>;
+    /** Whether another item of the sequence holds `position`. */
+    taken(position: string): Promise<boolean>;
   },
 ): Promise<string> {
-  if (input.position !== undefined) return input.position;
+  if (input.position !== undefined) {
+    // Keys stay unique, so an anchor's neighbour never shares its key and there's always room beside it.
+    if (input.position !== stored?.position && (await find.taken(input.position))) {
+      invalid('position', `${JSON.stringify(input.position)} is held by another item.`);
+    }
+    return input.position;
+  }
   for (const side of ['after', 'before'] as const) {
     const anchor = input[side];
     if (anchor === undefined) continue;

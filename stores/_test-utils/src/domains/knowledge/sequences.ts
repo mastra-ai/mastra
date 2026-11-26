@@ -710,6 +710,34 @@ export function createKnowledgeSequenceTests(createStore: () => Promise<Knowledg
         expect(await ids()).toEqual(['y', 'x']);
       });
 
+      it('refuses an explicit key another item holds, so every anchor has room on both sides', async () => {
+        const { put, ids } = await positioned();
+        await put('a', { position: 'm' });
+        await expect(put('b', { position: 'm' })).rejects.toBeInstanceOf(KnowledgeSequenceItemInvalidError);
+        expect((await put('a', { position: 'm', body: 'edited' })).status).toBe('updated');
+        await put('b', { position: 'n' });
+        await put('c', { after: 'a' });
+        await put('d', { before: 'b' });
+        await put('e', { before: 'a' });
+        expect(await ids()).toEqual(['e', 'a', 'c', 'd', 'b']);
+      });
+
+      it('gives concurrent appends distinct keys in call order', async () => {
+        const { put, ids, sequences, list } = await positioned();
+        await Promise.all(['w', 'x', 'y', 'z'].map(id => put(id)));
+        const { items } = await sequences.listItems({ sequenceId: list.id, read: 'all', limit: 100 });
+        expect(new Set(items.map(item => item.position)).size).toBe(4);
+        expect((await ids()).sort()).toEqual(['w', 'x', 'y', 'z']);
+      });
+
+      it('breaks equal search scores between undated items by position, not id', async () => {
+        const { put, sequences, list } = await positioned();
+        await put('old', { position: 'z', body: 'release notes' });
+        await put('first', { position: 'b', body: 'release notes' });
+        const hits = await sequences.searchItems({ query: 'release', read: 'all', sequenceIds: [list.id], limit: 10 });
+        expect(hits.map(hit => hit.externalId)).toEqual(['first', 'old']);
+      });
+
       it('pages by position cursor both ways with no item skipped, and refuses a time cursor', async () => {
         const { put, sequences, list } = await positioned();
         const all: string[] = [];
