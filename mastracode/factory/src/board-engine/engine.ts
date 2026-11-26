@@ -104,10 +104,11 @@ type CardAddress = Pick<FactoryTransitionRequest, 'orgId' | 'factoryProjectId' |
 export interface FactoryCardRuns {
   /** Whether a run is in flight on any of the card's sessions. */
   inFlight(card: CardAddress): Promise<boolean>;
-  /** Stops the runs in flight on the card's sessions, as a person's Stop does; they end on their own time. */
-  stop(card: CardAddress): Promise<void>;
-  /** Gives up on runs that did not end after a stop: their records close as aborted. */
-  abandon(card: CardAddress): Promise<void>;
+  /**
+   * Stops the runs in flight on the card's sessions, as a person's Stop does; they end on their own
+   * time. Answers whether it stopped any: a run another process holds is out of its reach.
+   */
+  stop(card: CardAddress): Promise<boolean>;
 }
 
 export type FactoryBoardEngineFactory = (context: FactoryBoardEngineContext) => FactoryBoardEngine;
