@@ -1354,10 +1354,14 @@ describe('Agent Handlers', () => {
       const generateSpy = vi.spyOn(Agent.prototype, 'generate').mockResolvedValue(mockEnhancedResult as any);
       onTestFinished(() => generateSpy.mockRestore());
 
-      // `mockAgent` is `makeMockAgent()`: a single explicit `openai('gpt-4o')` model.
+      // Use a v2+ SDK instance (`@ai-sdk/openai-v5`) so the chosen model is one
+      // generate() actually accepts; the default 1.x fixture is a v1 model that
+      // generate() rejects, which would make this success path depend on the spy.
+      const explicitAgent = makeMockAgent({ name: 'test-explicit-model-agent', model: openaiV5('gpt-4o') });
+      const explicitMastra = makeMastraMock({ agents: { 'test-explicit-model-agent': explicitAgent } });
       const result = await ENHANCE_INSTRUCTIONS_ROUTE.handler({
-        ...createTestServerContext({ mastra: mockMastra }),
-        agentId: 'test-agent',
+        ...createTestServerContext({ mastra: explicitMastra }),
+        agentId: 'test-explicit-model-agent',
         instructions: 'You are a helpful assistant.',
       });
 
