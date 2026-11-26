@@ -289,6 +289,13 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     digest: '0'.repeat(64),
     ops: [],
   });
+  /**
+   * The envelope at the shortest `seq` the next request can have. A request's `seq` is only known
+   * when it is sent, so splitting plans for the longest; refusing what can never fit uses the
+   * shortest, and the request as sent is measured again before it goes.
+   */
+  const shortestEnvelopeBytes = () =>
+    envelopeBytes - String(Number.MAX_SAFE_INTEGER).length + String(lastSeq + 1).length;
   /** Bytes of a request holding the buffer plus `extra` more ops' bytes over `more` ops, and a state. */
   const requestBytes = (extra: number, more: number, stateBytes?: number) => {
     const count = buffer.length + more;
@@ -326,7 +333,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     let op = handed;
     let sending: Promise<void> | undefined;
     if (maxFlushBytes !== Infinity) {
-      const { bytes, copy } = measure(handed, opBytes => envelopeBytes + opBytes);
+      const { bytes, copy } = measure(handed, opBytes => shortestEnvelopeBytes() + opBytes);
       op = copy;
       // Taken now, with the op added after, so ops pushed meanwhile keep their order.
       if (buffer.length > 0 && requestBytes(bytes, 1) > maxFlushBytes) sending = flush();
@@ -411,7 +418,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
         const staged = { [key]: value };
         if (maxFlushBytes !== Infinity) {
           // State values are strings, so the state needs no copy.
-          const { bytes } = measure(staged, stateBytes => envelopeBytes + 9 + stateBytes);
+          const { bytes } = measure(staged, stateBytes => shortestEnvelopeBytes() + 9 + stateBytes);
           // The ops go first on their own; the state follows in the next flush, so it still lands
           // only once they have.
           if (requestBytes(0, 0, bytes) > maxFlushBytes) void flush().catch(() => {});

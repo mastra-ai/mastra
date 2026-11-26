@@ -364,6 +364,61 @@ describe('runKnowledgeImport', () => {
       expect(receipt).toMatchObject({ outcome: 'failed', error: { code: 'flush_too_large' } });
     });
 
+    it('sends an op whose request fits the bound exactly, and refuses it one byte under', async () => {
+      const body = { ops: [{ op: 'remove' as const, sourceId: 'e1' }] };
+      const exact = bytes({
+        runId: 'run-1',
+        generation: 1,
+        seq: 1,
+        digest: await knowledgeImporterFlushDigest(body),
+        ...body,
+      });
+      const run = (maxFlushBytes: number) => {
+        const host = new RecordingHost();
+        return runKnowledgeImport({
+          importers: [importer(async ctx => await ctx.items.remove('e1').catch(() => {}))],
+          host,
+          bindingId: 'b1',
+          maxFlushBytes,
+        }).then(receipt => ({ host, receipt }));
+      };
+      const fits = await run(exact);
+      expect(fits.receipt).toMatchObject({ outcome: 'succeeded' });
+      expect(fits.host.flushes.map(f => f.ops)).toEqual([body.ops]);
+      expect(bytes(fits.host.flushes[0]!)).toBe(exact);
+      const over = await run(exact - 1);
+      expect(over.host.attempts).toEqual([]);
+      expect(over.receipt).toMatchObject({ outcome: 'failed', error: { code: 'flush_too_large' } });
+    });
+
+    it('saves a state whose request fits the bound exactly, and refuses it one byte under', async () => {
+      const body = { ops: [], state: { cursor: 'c1' } };
+      const exact = bytes({
+        runId: 'run-1',
+        generation: 1,
+        seq: 1,
+        digest: await knowledgeImporterFlushDigest(body),
+        ...body,
+      });
+      const run = (maxFlushBytes: number) => {
+        const host = new RecordingHost();
+        return runKnowledgeImport({
+          importers: [importer(async ctx => await ctx.state.set('cursor', 'c1').catch(() => {}))],
+          host,
+          bindingId: 'b1',
+          maxFlushBytes,
+        }).then(receipt => ({ host, receipt }));
+      };
+      const fits = await run(exact);
+      expect(fits.receipt).toMatchObject({ outcome: 'succeeded' });
+      expect(fits.host.state).toEqual({ cursor: 'c1' });
+      expect(bytes(fits.host.flushes[0]!)).toBe(exact);
+      const over = await run(exact - 1);
+      expect(over.host.attempts).toEqual([]);
+      expect(over.host.state).toEqual({});
+      expect(over.receipt).toMatchObject({ outcome: 'failed', error: { code: 'flush_too_large' } });
+    });
+
     it('fails the run flush_too_large rather than send an empty settle flush over the bound', async () => {
       const host = new RecordingHost();
       const receipt = await runKnowledgeImport({
