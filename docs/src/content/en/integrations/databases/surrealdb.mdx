@@ -19,10 +19,12 @@ SurrealDB builds and maintains this adapter, not the Mastra team. Report issues 
 ## Installation
 
 ```bash npm2yarn
-npm install @surrealdb/mastra-ai@latest
+npm install @surrealdb/mastra-ai@beta
 ```
 
-The adapter needs SurrealDB v3, Node.js 22 or later (or Bun 1.0 or later), and a 1.x release of `@mastra/core` from 1.31.0. To run SurrealDB locally:
+SurrealDB v3 support is in the adapter's 1.0 beta, so install the `beta` tag. The `latest` tag (0.1.0) targets SurrealDB v2 and fails to initialize on v3.
+
+The beta needs SurrealDB v3, Node.js 22.13 or later (or Bun 1.0 or later), and a 1.x release of `@mastra/core` from 1.31.0. To run SurrealDB locally:
 
 ```bash
 surreal start --user root --pass root memory
@@ -168,7 +170,7 @@ The adapter doesn't include a Mastra vector store. SurrealDB v3 has native HNSW 
 await storage.init()
 
 const results = await storage.client.queryAll(
-  'SELECT content, vector::distance::cosine(embedding, $query) AS dist FROM documents WHERE embedding <|5,40|> $query ORDER BY dist',
+  'SELECT content, vector::distance::knn() AS dist FROM documents WHERE embedding <|5,40|> $query ORDER BY dist',
   { query: queryEmbedding },
 )
 ```
