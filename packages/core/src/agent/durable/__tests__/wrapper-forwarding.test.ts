@@ -10,6 +10,7 @@ const RUNS_ON_WRAPPER = new Set([
   '__abortLocalRun',
   '__abortRunAcknowledged',
   '__abortThreadStreamAcrossProcesses',
+  '__closeParkedRunSignals',
   '__getDrainPendingSignals',
   '__getEnqueuePendingSignal',
   '__getExecutionEnginePolicy',
