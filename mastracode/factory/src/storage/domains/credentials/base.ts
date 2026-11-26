@@ -472,7 +472,7 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
    */
   async removeAccount(tenant: CredentialTenant, provider: string, accountId: string): Promise<boolean> {
     let removed = false;
-    let lastAccount: string | undefined;
+    let lastAccount: Pick<CredentialDbRow, 'id' | 'updated_at'> | undefined;
     await this.#db.updateAtomic<CredentialDbRow>(
       'model_provider_credentials',
       tenantWhere(tenant, provider),
@@ -488,11 +488,10 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
         removed = true;
         const [next, ...rest] = extras;
         if (!next) {
-          lastAccount = row.id;
+          lastAccount = { id: row.id, updated_at: row.updated_at };
           return null;
         }
         return {
-          type: 'oauth',
           data: await this.encryption.encrypt(next.credential),
           label: next.label ?? null,
           account_id: next.id,
@@ -502,13 +501,15 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
         };
       },
     );
-    if (lastAccount) await this.#db.deleteMany('model_provider_credentials', { id: lastAccount, extra_accounts: null });
+    // `updateAtomic` can't delete: skip the delete if a sign-in or refresh wrote the row since.
+    if (lastAccount) return (await this.#db.deleteMany('model_provider_credentials', lastAccount)) > 0;
     return removed;
   }
 
   /** Delete the tenant's credential and every subscription at exactly that scope. True when a row was removed. */
   async removeCredential(tenant: CredentialTenant, provider: string): Promise<boolean> {
-    return (await this.#db.deleteMany('model_provider_credentials', tenantWhere(tenant, provider))) > 0;
+    const deleted = await this.#db.deleteMany('model_provider_credentials', tenantWhere(tenant, provider));
+    return deleted > 0;
   }
 
   /** All credentials visible to a user: their own rows plus the org's shared rows. */

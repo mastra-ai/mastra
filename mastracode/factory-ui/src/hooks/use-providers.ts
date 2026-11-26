@@ -125,7 +125,6 @@ export interface StartProviderOAuthArgs extends ProviderOAuthArgs {
   mode?: string;
   /** `'org'` shares the completed sign-in with the whole org (admin-only). */
   scope?: 'user' | 'org';
-  /** Sign in one more subscription beside the provider's others. */
   addAccount?: true;
   /** Sign in again to this subscription. */
   accountId?: string;

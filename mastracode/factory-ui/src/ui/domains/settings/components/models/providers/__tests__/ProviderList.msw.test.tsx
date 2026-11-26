@@ -744,14 +744,15 @@ describe('ProviderList with several subscriptions of one provider', () => {
     renderWithProviders(<ProviderList credentialScope="user" />);
 
     await screen.findByText('Anthropic');
-    expect(within(rowFor('anthropic')).getByText('work@example.com')).toBeInTheDocument();
+    expect(within(rowFor('anthropic')).queryByText('work@example.com')).not.toBeInTheDocument();
     await pickRowAction(user, 'anthropic', 'Add another account');
     await user.type(await screen.findByLabelText('Authorization code'), 'code#state');
     await user.click(screen.getByRole('button', { name: 'Complete sign in' }));
 
     expect(startBody).toEqual({ mode: 'paste-code', addAccount: true });
-    expect(within(await accountRow('Account 2')).getByText('Signed in')).toBeInTheDocument();
-    expect(within(await accountRow('work@example.com')).getByText('Signed in')).toBeInTheDocument();
+    expect(await accountRow('Account 2')).toBeInTheDocument();
+    expect(within(await accountRow('work@example.com')).queryByText('Signed in')).not.toBeInTheDocument();
+    expect(within(rowFor('anthropic')).getByText('Signed in')).toBeInTheDocument();
   });
 
   it('removes one account and keeps the provider on the other', async () => {
@@ -773,7 +774,7 @@ describe('ProviderList with several subscriptions of one provider', () => {
 
     await waitFor(() => expect(removed).toBe('acc-home'));
     await waitFor(() => expect(screen.queryByText('Account 2')).not.toBeInTheDocument());
-    expect(within(rowFor('anthropic')).getByText('work@example.com')).toBeInTheDocument();
+    expect(within(rowFor('anthropic')).getByText('Signed in')).toBeInTheDocument();
   });
 
   it('signs in again to the one account whose sign-in expired', async () => {
@@ -790,7 +791,7 @@ describe('ProviderList with several subscriptions of one provider', () => {
 
     const expired = await accountRow('Account 2');
     expect(within(expired).getByText('Sign-in expired')).toBeInTheDocument();
-    expect(within(await accountRow('work@example.com')).getByText('Signed in')).toBeInTheDocument();
+    expect(within(await accountRow('work@example.com')).queryByText('Signed in')).not.toBeInTheDocument();
     await user.click(within(expired).getByRole('button', { name: 'Account 2 actions' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Sign in again' }));
 

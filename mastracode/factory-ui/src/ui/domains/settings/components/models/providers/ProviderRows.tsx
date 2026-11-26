@@ -63,7 +63,7 @@ export function ConnectedRow({
   icon: ReactNode;
   title: string;
   detail?: ReactNode;
-  status: StatusPresentation;
+  status?: StatusPresentation;
   /** The row's actions. A row without any keeps the column so statuses line up. */
   children?: ReactNode;
 }) {
@@ -72,7 +72,7 @@ export function ConnectedRow({
       {icon}
       <RowTitle title={title} detail={detail} />
       <Txt as="span" variant="meta" tone="muted" className="shrink-0">
-        <Status presentation={status} />
+        {status && <Status presentation={status} />}
       </Txt>
       {children ?? <span aria-hidden="true" className="size-control-sm shrink-0" />}
     </li>

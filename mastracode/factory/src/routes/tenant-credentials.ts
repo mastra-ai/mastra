@@ -59,8 +59,9 @@ export class TenantCredentialStore implements CredentialStore {
   #accounts = new Map<string, CredentialAccount[]>();
   /**
    * The subscription each provider's model calls start on. Rotation moves it
-   * when one runs out; it lives in memory per replica, so a restart starts
-   * over on the first account and spends at most one rate-limited request.
+   * when one runs out. It lives in memory on this store, so a restart, another
+   * replica, a credential change or cache eviction starts over on the first
+   * account and spends at most one rate-limited request.
    */
   #activeAccountIds = new Map<string, string>();
   #fetchedAt = 0;
@@ -150,16 +151,8 @@ export class TenantCredentialStore implements CredentialStore {
     return this.listAccounts(provider).find(account => account.active);
   }
 
-  /** Move the provider's model calls to `accountId`, or to the next subscription after the active one. */
-  activateAccount(provider: string, accountId?: string): OAuthAccountRecord | undefined {
-    const accounts = this.listAccounts(provider);
-    const activeIndex = accounts.findIndex(account => account.active);
-    const next =
-      accountId === undefined
-        ? accounts.length > 1
-          ? accounts[(activeIndex + 1) % accounts.length]
-          : undefined
-        : accounts.find(account => account.id === accountId);
+  activateAccount(provider: string, accountId: string): OAuthAccountRecord | undefined {
+    const next = this.listAccounts(provider).find(account => account.id === accountId);
     if (!next) return undefined;
     this.#activeAccountIds.set(provider, next.id);
     return { ...next, active: true };

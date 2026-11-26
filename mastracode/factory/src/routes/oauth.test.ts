@@ -648,5 +648,19 @@ describe('several subscriptions of one provider', () => {
       expect((await del(localApp(), `/web/config/providers/anthropic/oauth/accounts/${work!.id}`)).status).toBe(200);
       expect(fileStorage.listAccounts('anthropic').map(a => a.access)).toEqual(['a-home']);
     });
+
+    it('keeps a sign-in to a subscription that was removed while it was in progress', async () => {
+      await signInClaude(localApp(), WORK);
+      const [work] = fileStorage.listAccounts('anthropic');
+      completeAnthropicLogin.mockResolvedValueOnce(HOME);
+      const start = await post(localApp(), '/web/config/providers/anthropic/oauth/start', { accountId: work!.id });
+      const { sessionId } = await start.json();
+      fileStorage.removeAccount('anthropic', work!.id);
+
+      const done = await post(localApp(), '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
+
+      expect(done.status).toBe(200);
+      expect(fileStorage.listAccounts('anthropic').map(a => a.access)).toEqual(['a-home']);
+    });
   });
 });

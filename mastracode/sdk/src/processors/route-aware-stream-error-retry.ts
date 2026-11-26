@@ -26,14 +26,11 @@ export class RouteAwareStreamErrorRetryProcessor extends StreamErrorRetryProcess
   }
 
   override async processAPIError(args: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
-    if (classifyProviderError(args.error) === 'rate_limited' && (this.#canSwitchAccount(args) || routeCanHop(args))) {
-      return;
+    if (classifyProviderError(args.error) === 'rate_limited') {
+      const store = resolveCredentialStore(args.requestContext) ?? this.#credentialStore;
+      if (requestHasUntriedAccount(args, store) || routeCanHop(args)) return;
     }
     return super.processAPIError(args);
-  }
-
-  #canSwitchAccount(args: ProcessAPIErrorArgs): boolean {
-    return requestHasUntriedAccount(args, resolveCredentialStore(args.requestContext) ?? this.#credentialStore);
   }
 }
 

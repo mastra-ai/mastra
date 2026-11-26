@@ -118,8 +118,6 @@ export function ConnectedProviderRow({
   };
 
   const canSignIn = provider.oauth?.supported === true && onOAuthStarted !== undefined;
-  // Each subscription at this scope gets its own row once there are several,
-  // so the provider row then speaks for all of them.
   const accounts = credential === 'oauth' ? accountsAt(provider, requestScope ?? 'user') : [];
   const several = accounts.length > 1;
   const rowStatus = several && !accounts.every(account => account.expired) ? CREDENTIAL_STATUS.oauth : status;
@@ -161,7 +159,6 @@ export function ConnectedProviderRow({
       <ConnectedRow
         icon={<ProviderIcon provider={provider.provider} />}
         title={displayName}
-        detail={accounts.length === 1 ? accounts[0]?.label : undefined}
         status={pending ?? rowStatus}
       >
         {menu}
@@ -205,13 +202,12 @@ function AccountRow({
       { onError: error => toast.error(error.message || 'Failed to remove account') },
     );
   };
-  const status = account.expired ? SIGN_IN_EXPIRED_STATUS : CREDENTIAL_STATUS.oauth;
 
   return (
     <ConnectedRow
       icon={<span aria-hidden="true" className="size-icon-md shrink-0" />}
       title={label}
-      status={removeMutation.isPending ? REMOVING_ACCOUNT_STATUS : status}
+      status={removeMutation.isPending ? REMOVING_ACCOUNT_STATUS : account.expired ? SIGN_IN_EXPIRED_STATUS : undefined}
     >
       <DropdownMenu>
         <DropdownMenu.Trigger

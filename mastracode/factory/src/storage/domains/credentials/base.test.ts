@@ -257,14 +257,28 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       const store = await makeStore();
       await store.addAccount(alice, 'anthropic', oauth('first', fresh()));
       await store.addAccount(alice, 'anthropic', oauth('second', fresh()), { label: 'Work' });
-      const [first] = await store.listAccounts(org, 'alice');
+      const [first, second] = await store.listAccounts(org, 'alice');
 
       expect(await store.removeAccount(alice, 'anthropic', first!.id)).toBe(true);
 
-      expect((await store.listAccounts(org, 'alice')).map(a => [a.credential.access, a.label])).toEqual([
-        ['at-second', 'Work'],
+      expect((await store.listAccounts(org, 'alice')).map(a => [a.id, a.credential.access, a.label])).toEqual([
+        [second!.id, 'at-second', 'Work'],
       ]);
       expect(await store.getCredential(alice, 'anthropic')).toMatchObject({ access: 'at-second' });
+      expect(await store.resolveCredential(org, 'alice', 'anthropic', 'user', second!.id)).toMatchObject({
+        accountId: second!.id,
+      });
+    });
+
+    it('removing the only account disconnects the provider', async () => {
+      const store = await makeStore();
+      await store.addAccount(alice, 'anthropic', oauth('only', fresh()));
+      const [only] = await store.listAccounts(org, 'alice');
+
+      expect(await store.removeAccount(alice, 'anthropic', only!.id)).toBe(true);
+
+      expect(await store.listAccounts(org, 'alice')).toEqual([]);
+      expect(await store.getCredential(alice, 'anthropic')).toBeUndefined();
     });
 
     it('signing out of the provider removes every account at that scope only', async () => {
@@ -355,21 +369,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         'at-second-refreshed',
         'at-third',
       ]);
-    });
-
-    it('keeps the account id of a subscription promoted to first', async () => {
-      const store = await makeStore();
-      await store.addAccount(alice, 'anthropic', oauth('first', fresh()));
-      await store.addAccount(alice, 'anthropic', oauth('second', fresh()));
-      const [first, second] = await store.listAccounts(org, 'alice');
-
-      await store.removeAccount(alice, 'anthropic', first!.id);
-
-      expect((await store.listAccounts(org, 'alice')).map(a => a.id)).toEqual([second!.id]);
-      expect(await store.resolveCredential(org, 'alice', 'anthropic', 'user', second!.id)).toMatchObject({
-        accountId: second!.id,
-        credential: { access: 'at-second' },
-      });
     });
   },
 );

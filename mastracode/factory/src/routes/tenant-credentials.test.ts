@@ -257,19 +257,11 @@ describe('TenantCredentialStore with two Claude subscriptions', () => {
     expect(store.listAccounts('openai')).toEqual([]);
   });
 
-  it('keeps the next model call on the subscription rotation switched to', async () => {
-    const { store, secondId } = await signInTwice();
-
-    expect(store.activateAccount('anthropic')?.id).toBe(secondId);
-    expect(store.getActiveAccount('anthropic')?.id).toBe(secondId);
-    await expect(store.getApiKey('anthropic', secondId)).resolves.toBe('a-second');
-    expect(store.activateAccount('anthropic')?.label).toBe('work@example.com');
-  });
-
   it('serves later model calls from the subscription rotation switched to', async () => {
     const { store, secondId } = await signInTwice();
-    store.activateAccount('anthropic', secondId);
+    expect(store.activateAccount('anthropic', secondId)?.id).toBe(secondId);
 
+    expect(store.getActiveAccount('anthropic')?.id).toBe(secondId);
     expect(store.get('anthropic')).toMatchObject({ access: 'a-second' });
     await expect(store.getApiKey('anthropic')).resolves.toBe('a-second');
   });
@@ -281,14 +273,6 @@ describe('TenantCredentialStore with two Claude subscriptions', () => {
 
     await expect(store.getApiKey('anthropic')).resolves.toBe('a-first');
     expect(store.getActiveAccount('anthropic')?.label).toBe('work@example.com');
-  });
-
-  it('does not rotate a provider with a single subscription', async () => {
-    await seed.credentials.addAccount(USER_TENANT, 'anthropic', FIRST);
-    const store = new TenantCredentialStore(ORG, USER, seed.credentials, 'user');
-    await store.ensureFresh();
-
-    expect(store.activateAccount('anthropic')).toBeUndefined();
   });
 
   it('refreshes an expired second subscription without spending the first one', async () => {

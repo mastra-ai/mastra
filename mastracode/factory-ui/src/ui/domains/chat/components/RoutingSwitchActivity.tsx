@@ -44,7 +44,7 @@ export function RoutingSwitchPart({ part }: { part: DataPart }) {
       icon={<IconArrowsRepeatRightLeft aria-hidden />}
       label={notice.label}
       aria-label={notice.label}
-      title={notice.title ?? notice.label}
+      title={notice.title}
     />
   );
 }

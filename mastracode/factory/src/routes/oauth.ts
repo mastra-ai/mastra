@@ -12,7 +12,7 @@
  *
  * A provider can hold several subscriptions (two Claude Max plans, say):
  * `{ addAccount: true }` signs in one more, `{ accountId }` signs in again to
- * that one, and a start without either replaces the first, as before.
+ * that one, and a start without either behaves as it did before.
  *
  * Tokens never leave the server; responses only carry flow metadata (URLs,
  * user codes, poll delays).
@@ -261,13 +261,14 @@ async function persistOAuthCredential({
     return;
   }
   if (!authStorage) throw new Error('Credential storage is not available');
-  if (!target) await authStorage.addAccount(authProviderId, credentials);
-  else
-    await authStorage.addAccount(
-      authProviderId,
-      credentials,
-      'add' in target ? { activate: false } : { replaceAccountId: target.accountId },
-    );
+  if (!target) {
+    await authStorage.addAccount(authProviderId, credentials);
+    return;
+  }
+  const replaceAccountId = 'accountId' in target ? target.accountId : undefined;
+  const stillHeld = authStorage.listAccounts(authProviderId).some(account => account.id === replaceAccountId);
+  // A subscription removed while the flow ran becomes a new one, as in tenant mode.
+  await authStorage.addAccount(authProviderId, credentials, stillHeld ? { replaceAccountId } : { activate: false });
 }
 
 async function readJsonBody(c: Context): Promise<Record<string, unknown>> {
