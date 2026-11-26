@@ -11298,6 +11298,11 @@ export class Agent<
     return this.#resolveExecutionEngine()?.closeParkedRunSignals(runId);
   }
 
+  /** @internal Close the stored signals of a parked run that an abort requested by another process releases here. */
+  __closeParkedRunSignals(runId: string): Promise<void> | undefined {
+    return this.#closeParkedRunSignals(runId);
+  }
+
   async #cancelAndCloseParkedRun(runId: string): Promise<boolean> {
     if (!(await this.executionEngine.cancelParkedRun(runId))) return false;
     const closing = this.#closeParkedRunSignals(runId);
