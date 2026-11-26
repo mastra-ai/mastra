@@ -4,6 +4,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { connectPromptResumeSchema } from '../connect-prompt-tool.js';
 import { __clearSharedToolsStateForTests, tools as connect } from '../tools.js';
 
 const RESOURCE_ID = 'end-user-42';
@@ -22,12 +23,12 @@ function linearConnection(resourceId: string | null) {
 }
 
 /** Mastra Platform with a Linear catalog entry and a mutable connection list. */
-function platform(connections: () => Array<Record<string, unknown>>) {
+function platform(connections: () => Array<Record<string, unknown>>, catalog: () => string[] = () => ['linear']) {
   const fetchMock = vi.fn().mockImplementation(async (input: string | URL | Request) => {
     const url = new URL(String(input));
     if (url.pathname === '/v2/integrations') {
       return Response.json({
-        integrations: [{ id: 'linear', capabilities: {}, displayName: 'Linear', authType: 'OAUTH2' }],
+        integrations: catalog().map(id => ({ id, capabilities: {}, displayName: 'Linear', authType: 'OAUTH2' })),
       });
     }
     if (url.pathname === '/v2/projects/proj_1/integration-settings') {
@@ -90,6 +91,7 @@ function connectionRequestingModel(input: string) {
 async function agentWithConnectTools(
   connections: () => Array<Record<string, unknown>>,
   requestInput = '{"provider":"linear"}',
+  catalog?: () => string[],
 ) {
   const { model, prompts } = connectionRequestingModel(requestInput);
   const agent = new Agent({
@@ -97,7 +99,7 @@ async function agentWithConnectTools(
     name: 'Connect Agent',
     instructions: 'Use Linear.',
     model,
-    tools: await connect(platform(connections))(),
+    tools: await connect(platform(connections, catalog))(),
   });
   new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
   return { agent, prompts };
@@ -264,4 +266,121 @@ describe('request_connection under an agent', () => {
       expect(types).toContain('tool-result');
     });
   });
+
+  describe('when resumed with a card action outside a channel thread', () => {
+    async function resumeWith(action: 'connect' | 'check' | 'cancel', rows: Array<Record<string, unknown>> = []) {
+      const { agent } = await agentWithConnectTools(() => rows);
+      const stream = await agent.stream('List my Linear issues');
+      const firstPause: unknown[] = [];
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'tool-call-suspended') firstPause.push(chunk.payload.suspendPayload);
+      }
+      const resumed = await agent.resumeStream({ action }, { runId: stream.runId, toolCallId: 'call-1' });
+      const types: string[] = [];
+      let result: unknown;
+      for await (const chunk of resumed.fullStream) {
+        types.push(chunk.type);
+        if (chunk.type === 'tool-result') result = chunk.payload.result;
+      }
+      return { firstPause, types, result };
+    }
+
+    it('shows no channel card on the first pause', async () => {
+      const { firstPause } = await resumeWith('cancel');
+      expect(firstPause).toEqual([expect.not.objectContaining({ channelCard: expect.anything() })]);
+    });
+
+    it('finishes as cancelled on cancel', async () => {
+      const { result } = await resumeWith('cancel');
+      expect(result).toEqual(
+        expect.objectContaining({
+          message: 'Linear could not be connected: The user cancelled connecting.',
+          error: 'The user cancelled connecting.',
+        }),
+      );
+    });
+
+    it('reports a connection the user made elsewhere on cancel', async () => {
+      const rows: Array<Record<string, unknown>> = [];
+      const { agent } = await agentWithConnectTools(() => rows);
+      const stream = await agent.stream('List my Linear issues');
+      for await (const _chunk of stream.fullStream) {
+        // drain until the run suspends
+      }
+      rows.push(linearConnection(RESOURCE_ID));
+      const resumed = await agent.resumeStream({ action: 'cancel' }, { runId: stream.runId, toolCallId: 'call-1' });
+      let result: unknown;
+      for await (const chunk of resumed.fullStream) {
+        if (chunk.type === 'tool-result') result = chunk.payload.result;
+      }
+      expect(result).toEqual(expect.objectContaining({ message: 'Linear connected successfully.' }));
+      expect(result).not.toHaveProperty('error');
+    });
+
+    it.each([
+      ['check', []],
+      ['connect', []],
+      // The message names the requested provider, not whichever is left.
+      ['check', ['github']],
+    ] as const)(
+      'finishes as failed on %s when the provider left the catalog while paused (left: %j)',
+      async (action, left) => {
+        let catalog = ['linear'];
+        const { agent } = await agentWithConnectTools(
+          () => [],
+          undefined,
+          () => catalog,
+        );
+        const stream = await agent.stream('List my Linear issues');
+        for await (const _chunk of stream.fullStream) {
+          // drain until the run suspends
+        }
+        catalog = [...left];
+        const resumed = await agent.resumeStream({ action }, { runId: stream.runId, toolCallId: 'call-1' });
+        let result: unknown;
+        for await (const chunk of resumed.fullStream) {
+          if (chunk.type === 'tool-result') result = chunk.payload.result;
+        }
+        expect(result).toEqual(
+          expect.objectContaining({
+            message: 'linear could not be connected: It is no longer available to connect.',
+            error: 'It is no longer available to connect.',
+          }),
+        );
+      },
+    );
+
+    it('keeps waiting on check before any sign-in started', async () => {
+      const { types } = await resumeWith('check');
+      expect(types).toContain('tool-call-suspended');
+      expect(types).not.toContain('tool-result');
+    });
+
+    it('starts no sign-in on connect, since nobody can be sent the link', async () => {
+      const { types } = await resumeWith('connect');
+      expect(types).toContain('tool-call-suspended');
+      // This fake platform has no session route, so starting one would fail the call.
+      expect(types).not.toContain('tool-error');
+      expect(types).not.toContain('tool-result');
+    });
+  });
+});
+
+describe('connectPromptResumeSchema', () => {
+  it.each([
+    { provider: 'linear', status: 'active' },
+    { provider: 'linear', status: 'failed', error: 'The authorization window was closed.' },
+    { action: 'connect' },
+    { action: 'check' },
+    { action: 'cancel' },
+  ])('accepts %j', resume => {
+    expect(connectPromptResumeSchema.parse(resume)).toEqual(resume);
+  });
+
+  it.each([{ provider: 'linear', status: 'failed' }, { provider: '', status: 'active' }, { action: 'open' }, {}])(
+    'rejects %j',
+    resume => {
+      expect(connectPromptResumeSchema.safeParse(resume).success).toBe(false);
+    },
+  );
 });

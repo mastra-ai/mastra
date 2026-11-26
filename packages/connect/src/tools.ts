@@ -3,6 +3,8 @@ import { MCPClient } from '@mastra/mcp';
 
 import type { ConnectClientOptions, IntegrationCatalogEntry, ProjectConnection, ResolvedClient } from './client.js';
 import {
+  createProjectConnectSession,
+  getConnectUrl,
   getProjectIntegrationSettings,
   listIntegrations,
   listProjectConnections,
@@ -643,6 +645,16 @@ function refreshScope(state: SharedToolsState, scope: SnapshotScope): Promise<Re
           record[CONNECT_PROMPT_TOOL_KEY] = buildConnectPromptTool({
             loadInputs: () => loadConnectPromptInputs(state, client),
             resourceId: scope.resourceId,
+            createSession: provider => createProjectConnectSession(client, state.projectId, provider),
+            getConnectUrl: connectionId => getConnectUrl(client, connectionId),
+            invalidate: connection =>
+              invalidateConnection({
+                projectId: state.projectId,
+                // A global connection serves every user, so its change reaches every scope.
+                ...(connection.resourceId ? { resourceId: scope.resourceId } : {}),
+                connectionId: connection.id,
+                active: connection.status === 'active',
+              }),
           }) as ResolvedToolsRecord[string];
         }
         scope.cache = {
