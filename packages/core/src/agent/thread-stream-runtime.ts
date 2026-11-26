@@ -3531,6 +3531,8 @@ export class AgentThreadStreamRuntime {
           state.signalQueues.discardPreRunQueue(key);
         }
         state.threadKeysByRunId.delete(runId);
+        // Senders that joined this attempt answer from its admission; no run registers to remove their waiters.
+        this.#settlePreRunWaiters(state, runId);
         throw error;
       }
       const ownerActive = isOwnerActive();
@@ -3548,6 +3550,7 @@ export class AgentThreadStreamRuntime {
           state.signalQueues.discardPreRunQueue(key);
         }
         state.threadKeysByRunId.delete(runId);
+        this.#settlePreRunWaiters(state, runId);
         if (!ownerActive || expired) {
           settleThreadAdmission({ action: 'blocked', runId });
           const error = !ownerActive
@@ -6401,6 +6404,8 @@ export class AgentThreadStreamRuntime {
             state.activeThreadRunIds.delete(key);
           }
           state.threadKeysByRunId.delete(nextRunId);
+          // Senders that joined this follow-up answer from its admission; no run registers to remove their waiters.
+          this.#settlePreRunWaiters(state, nextRunId);
           // Early follow-ups were already published as retained signal-enqueued
           // events, so only discard this runtime's local pre-run copies.
           state.signalQueues.discardPreRunQueue(key);
@@ -9658,6 +9663,8 @@ export class AgentThreadStreamRuntime {
           state.signalQueues.discardPreRunQueue(reservedKey);
         }
         state.threadKeysByRunId.delete(reservedRunId);
+        // Senders that joined this reservation answer from its outcome; no run registers to remove their waiters.
+        this.#settlePreRunWaiters(state, reservedRunId);
 
         const winnerRunId = lease.owner ? threadLeaseRunId(lease.owner) : undefined;
         if (isRetakeLeaseOwner(lease.owner)) {
