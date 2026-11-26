@@ -131,6 +131,10 @@ describe('SentenceTransformer boundaries', () => {
     it('keeps titles and initials together', () => {
       expect(split('Dr. Smith arrived. Next.')).toEqual(['Dr. Smith arrived.', 'Next.']);
       expect(split('Dr. José arrived. Next.')).toEqual(['Dr. José arrived.', 'Next.']);
+      // Non-ASCII initials must be treated like ASCII ones and stay with the name.
+      expect(split('И. Иванов пришёл. Затем ушёл.')).toEqual(['И. Иванов пришёл.', 'Затем ушёл.']);
+      expect(split('É. Dupont est arrivé. Ensuite.')).toEqual(['É. Dupont est arrivé.', 'Ensuite.']);
+      expect(split('И. И. Иванов пришёл. Затем ушёл.')).toEqual(['И. И. Иванов пришёл.', 'Затем ушёл.']);
     });
 
     it('keeps multi-character abbreviations, initials and times together', () => {
@@ -144,6 +148,11 @@ describe('SentenceTransformer boundaries', () => {
     it('keeps inline and multiline numbered lists intact', () => {
       expect(split('1. First item 2. Second item')).toEqual(['1. First item 2. Second item']);
       expect(split('1. First item\n2. Second item')).toEqual(['1. First item\n2. Second item']);
+    });
+
+    it('keeps a colon-introduced inline numbered list intact', () => {
+      expect(split('Steps: 1. Open the file 2. Save it.')).toEqual(['Steps: 1. Open the file 2. Save it.']);
+      expect(split('Steps: 1. Open 2. Edit 3. Save the file.')).toEqual(['Steps: 1. Open 2. Edit 3. Save the file.']);
     });
 
     it('still requires whitespace after ASCII enders', () => {

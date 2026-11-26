@@ -90,13 +90,14 @@ export class SentenceTransformer extends TextTransformer {
     const prefix = lastWord ? trimmed.slice(0, trimmed.length - lastWord.length) : trimmed;
 
     // A bare integer ending in a period is a numbered-list marker, not a sentence-final
-    // number, when it opens the sentence, follows a configured ender, starts a line, or
-    // has an earlier bare-number marker in the same sentence (e.g. `1. First 2. Second`).
+    // number, when it opens the sentence, follows a configured ender, starts a line or a
+    // colon-labelled prefix (e.g. `Steps: 1. ... 2. ...`), or has an earlier bare-number
+    // marker in the same sentence (e.g. `1. First 2. Second`).
     const isListMarker =
       /^\d+$/.test(baseWord) &&
       (!previous ||
         this.sentenceEnders.includes(previous.slice(-1)) ||
-        /(^|\n)\s*$/.test(prefix) ||
+        /(^|\n|:)\s*$/.test(prefix) ||
         /(?:^|\s)\d+\.\s/.test(prefix));
 
     return !this.isCommonAbbreviation(baseWord, isListMarker);
@@ -113,13 +114,15 @@ export class SentenceTransformer extends TextTransformer {
       return true;
     }
 
-    // Multi-character abbreviations with periods (U.S.A., a.m., p.m., etc.)
-    if (/^[A-Z](\.[A-Z])*$/.test(word) || /^[a-z](\.[a-z])*$/.test(word)) {
+    // Multi-character abbreviations with periods (U.S.A., a.m., p.m., etc.), including
+    // non-ASCII letters so initials like `И.И.` are recognized too.
+    if (/^\p{Lu}(\.\p{Lu})*$/u.test(word) || /^\p{Ll}(\.\p{Ll})*$/u.test(word)) {
       return true;
     }
 
-    // Single capital letters (initials)
-    if (/^[A-Z]$/.test(word)) {
+    // Single uppercase letters (initials), Unicode-aware so `И.` or `É.` are kept with
+    // the following name just like `J.`.
+    if (/^\p{Lu}$/u.test(word)) {
       return true;
     }
 
