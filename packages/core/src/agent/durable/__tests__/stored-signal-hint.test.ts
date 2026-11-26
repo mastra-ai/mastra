@@ -288,16 +288,15 @@ function heldStream(
       controller.enqueue({ type: 'stream-start', warnings: [] });
       for (const part of head) controller.enqueue(part);
       let settled = false;
-      abortSignal?.addEventListener(
-        'abort',
-        () => {
-          if (settled) return;
-          settled = true;
-          onAbort();
-          controller.error(abortSignal.reason);
-        },
-        { once: true },
-      );
+      const cut = () => {
+        if (settled) return;
+        settled = true;
+        onAbort();
+        controller.error(abortSignal?.reason);
+      };
+      // A signal aborted before the stream started never fires its listener.
+      if (abortSignal?.aborted) cut();
+      else abortSignal?.addEventListener('abort', cut, { once: true });
       void release.then(() => {
         if (settled) return;
         settled = true;

@@ -111,16 +111,15 @@ export function createStepAgent({
               controller.enqueue({ type: 'reasoning-start', id: 'thinking' });
               controller.enqueue({ type: 'reasoning-delta', id: 'thinking', delta: 'thinking' });
               let settled = false;
-              abortSignal?.addEventListener(
-                'abort',
-                () => {
-                  if (settled) return;
-                  settled = true;
-                  onReasoning?.({ call, state: 'cut-short' });
-                  controller.error(abortSignal.reason);
-                },
-                { once: true },
-              );
+              const cut = () => {
+                if (settled) return;
+                settled = true;
+                onReasoning?.({ call, state: 'cut-short' });
+                controller.error(abortSignal?.reason);
+              };
+              // A signal aborted before the stream started never fires its listener.
+              if (abortSignal?.aborted) cut();
+              else abortSignal?.addEventListener('abort', cut, { once: true });
               void releaseReasoning?.then(() => {
                 if (settled) return;
                 settled = true;
