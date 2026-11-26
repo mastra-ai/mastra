@@ -464,6 +464,14 @@ Deleting a card ends its run. Factory tells the engine through the optional `car
 
 A custom engine reaches the card's runs through `context.runs` (`inFlight`, and `stop(card, { userId })` for the person who moves the card), which Factory fills in.
 
+A board move can be answered before it settles. An engine that has the optional `submitMove(request)` takes the move on after its first checks and settles it later. The workflow engine checks that the mover is a person, the card's revision matches and the board allows the move; a move that fails one of these is answered at once, with the same `409` or `422` as before. For a move it takes on, `POST /work-items/:id/transition` answers `202` with an `inputId`:
+
+```json
+{ "inputId": "0c0f6c3e-6f0b-4b5e-9a0f-3d0e3f3b0a51" }
+```
+
+The move's answer follows on the project's feed stream (`GET /feed-events`) as a `move` event that names the same `inputId`, either `{ "inputId", "status": "accepted" }` or `{ "inputId", "status": "rejected", "code", "reason" }`. The board shows the card as moving until that event arrives, and shows the reason when the move was refused. The default engine has no `submitMove`, so the route still answers `200` with the result.
+
 A custom engine that runs on workflows of its own lists them under `workflows`, and `MastraFactory` registers them the same way.
 
 ### Board tool-result rules
