@@ -164,7 +164,7 @@ export function createStoredRunSignals<T>(maxEndedRuns = 1000) {
 
     /**
      * Runs an end-of-run check of the thread after its earlier ones in this
-     * process. A rejection goes to `onError`; the returned promise never rejects.
+     * process. A rejection goes to `onError`; the returned promise rejects only when `onError` throws.
      */
     runEndOfRunCheck(key: string, check: () => Promise<void>, onError: (error: unknown) => void): Promise<void> {
       const result = (endOfRunChecks.get(key) ?? Promise.resolve()).then(check);
