@@ -105,33 +105,7 @@ export function TriggerOrder({
               className={cn('flex h-7.5 items-center gap-2 rounded-[10px] px-2', current && 'bg-fill-active')}
             >
               {current ? (
-                <>
-                  {content}
-                  {canEdit && lines.length > 1 && (
-                    <span className="flex shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        tooltip="Check earlier"
-                        aria-label="Check earlier"
-                        disabled={pending || index === 0}
-                        onClick={() => onMove(index, index - 1)}
-                      >
-                        <IconArrowUp />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        tooltip="Check later"
-                        aria-label="Check later"
-                        disabled={pending || index === lines.length - 1}
-                        onClick={() => onMove(index, index + 1)}
-                      >
-                        <IconArrowDown />
-                      </Button>
-                    </span>
-                  )}
-                </>
+                content
               ) : (
                 <button
                   type="button"
@@ -140,6 +114,30 @@ export function TriggerOrder({
                 >
                   {content}
                 </button>
+              )}
+              {canEdit && lines.length > 1 && (
+                <span className="flex shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    tooltip="Check earlier"
+                    aria-label="Check earlier"
+                    disabled={pending || index === 0}
+                    onClick={() => onMove(index, index - 1)}
+                  >
+                    <IconArrowUp />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    tooltip="Check later"
+                    aria-label="Check later"
+                    disabled={pending || index === lines.length - 1}
+                    onClick={() => onMove(index, index + 1)}
+                  >
+                    <IconArrowDown />
+                  </Button>
+                </span>
               )}
             </li>
           );

@@ -39,6 +39,10 @@ export function IntakeTestPanel({
             {close}
           </div>
           <TestStatus blank={subject.trim() === ''} error={error} />
+          <Txt as="p" variant="caption" tone="muted">
+            Links from GitHub and GitLab repositories linked to this project are read once and never filed. For Linear,
+            Jira and incident.io, paste a link to an item Factory already has, or use Why? on a Not routed item.
+          </Txt>
         </>
       )}
     </SidePanel>

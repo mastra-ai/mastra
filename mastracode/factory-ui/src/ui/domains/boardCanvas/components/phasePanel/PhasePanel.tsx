@@ -3,11 +3,12 @@ import { PhaseSettingsPanel } from '@mastra/playground-ui/domains/factory';
 import type { FactorySkillInfo, StoredPhaseInfo } from '../../../../../api/types';
 import { useSourceSuggestions } from '../../../../../hooks/useSourceSuggestions';
 import { HrefLink } from '../../../../ui/HrefLink';
-import { boardSkillPath } from '../../../boardConfig/boardConfigPaths';
+import { boardSkillPath, boardSkillsPath, newSkillPath } from '../../../boardConfig/boardConfigPaths';
 import {
   DEFAULT_SESSION,
   MAX_OUTCOMES,
   PHASE_TOOLS,
+  cardRuleProblem,
   defaultOutcomes,
   exitToolOutcome,
   newOutcome,
@@ -39,6 +40,7 @@ export function PhasePanel({
   boardId,
   disabled,
   total,
+  unfinished,
   onChange,
   onUnfinished,
   onRemove,
@@ -59,6 +61,8 @@ export function PhasePanel({
   disabled: boolean;
   /** Cards in the phase now; undefined while loading. */
   total: number | undefined;
+  /** The rule fields with a half-filled condition row, whose last whole rule isn't judged yet. */
+  unfinished: readonly RuleField[];
   onChange: (phase: StoredPhaseInfo) => void;
   /** A rule editor has a half-filled condition row, which holds the save. */
   onUnfinished: (field: RuleField, unfinished: boolean) => void;
@@ -90,6 +94,8 @@ export function PhasePanel({
       skills={skills}
       skillsEditable={skillsEditable}
       skillHref={skillName ? boardSkillPath(factoryId, boardId, skillName) : undefined}
+      skillsHref={boardSkillsPath(factoryId, boardId)}
+      newSkillHref={newSkillPath(factoryId, boardId)}
       skillBadges={skill ? skillBadges(skill) : []}
       outcomes={{
         defaults,
@@ -118,6 +124,7 @@ export function PhasePanel({
           }}
         />
       }
+      autoStartProblem={unfinished.includes('autoStartWhen') ? undefined : cardRuleProblem(phase.autoStartWhen)}
       autoApproveConditions={
         <ConditionCells
           label="Only when"
@@ -137,6 +144,9 @@ export function PhasePanel({
             }
           }}
         />
+      }
+      autoApproveProblem={
+        unfinished.includes('autoApproveWhen') ? undefined : cardRuleProblem(phase.exitTool?.autoApproveWhen)
       }
       LinkComponent={HrefLink}
       onName={name => onChange({ ...phase, name })}

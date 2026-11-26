@@ -14,11 +14,22 @@ interface BoardHeaderProps {
   /** The write in flight holds the board still. */
   locked: boolean;
   writes: BoardActionWrites;
+  /** The project's rules didn't load, so the canvas shows none. */
+  rulesFailed: boolean;
   onChange: (patch: Pick<BoardDraft, 'name'> | Pick<BoardDraft, 'description'>) => void;
 }
 
 /** The board's header, its reset and delete sent with the revision the board was read at. */
-export function BoardHeader({ board, draft, readOnly, manageable, locked, writes, onChange }: BoardHeaderProps) {
+export function BoardHeader({
+  board,
+  draft,
+  readOnly,
+  manageable,
+  locked,
+  writes,
+  rulesFailed,
+  onChange,
+}: BoardHeaderProps) {
   const { reset, remove } = writes;
   return (
     <SharedBoardHeader
@@ -28,6 +39,7 @@ export function BoardHeader({ board, draft, readOnly, manageable, locked, writes
       manageable={manageable}
       editable={board.editable}
       problems={board.problems}
+      rulesFailed={rulesFailed}
       actions={{
         boardName: board.name,
         resettable: board.source !== 'stored',

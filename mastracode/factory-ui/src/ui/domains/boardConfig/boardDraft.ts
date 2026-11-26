@@ -48,6 +48,11 @@ export function nextPhasesOf(phase: StoredPhaseInfo, phases: readonly StoredPhas
   return phase.kind === 'terminal' ? [] : phases.filter(other => other.key !== phase.key).map(other => other.key);
 }
 
+/** Why the server would refuse a phase's "only when" rule, if it would. */
+export function cardRuleProblem(rule: CardRule | null | undefined): string | undefined {
+  return ruleProblem(cardRuleGroupSchema, rule);
+}
+
 /**
  * Whether the server would refuse this phase as drafted: a rule it can't read, text over its limit, a goal run count
  * out of range, or an outcome without a usable key or label.
@@ -56,7 +61,7 @@ export function phaseHasProblem(phase: StoredPhaseInfo): boolean {
   const goal = phase.runner?.goal;
   // A rule only counts while its switch is on.
   const ruleRefused = (active: boolean, rule: CardRule | null | undefined) =>
-    active && ruleProblem(cardRuleGroupSchema, rule) !== undefined;
+    active && cardRuleProblem(rule) !== undefined;
   return (
     phase.name.trim() === '' ||
     !phaseRunFieldsValid(phase.runner?.instructions ?? '', goal) ||

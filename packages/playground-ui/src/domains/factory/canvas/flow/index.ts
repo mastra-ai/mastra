@@ -1,6 +1,7 @@
 export * from './board-actions';
 export * from './board-header';
 export * from './canvas-skeleton';
+export * from './incoming-chip';
 export * from './intake-entry';
 export * from './new-phase-card';
 export * from './other-boards';

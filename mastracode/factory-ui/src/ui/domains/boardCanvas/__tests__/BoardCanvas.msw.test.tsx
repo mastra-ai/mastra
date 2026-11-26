@@ -18,6 +18,7 @@ import {
   serveSaves,
 } from '../../boardConfig/__tests__/fixtures/canvas';
 import {
+  BUILT_IN_SKILLS,
   FACTORY_ID,
   PROJECT_URL,
   renderAt,
@@ -148,7 +149,7 @@ describe('Leaving board settings with unsaved changes', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Keep editing' }));
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
     expect(router.state.location.pathname).toBe(`${CONFIG}/planning`);
-    expect(screen.getByRole('textbox', { name: 'Planning instructions' })).toHaveValue('Keep plans short.');
+    expect(screen.getByRole('textbox', { name: 'Planning instructions' })).toHaveTextContent('Keep plans short.');
 
     await user.click(boardViews().getByRole('link', { name: 'Cards' }));
     await user.click(
@@ -308,7 +309,10 @@ describe('Who may change a board', () => {
     const drafting = await openPhase('Drafting', user);
     expect(drafting.queryByRole('textbox', { name: 'Phase name' })).not.toBeInTheDocument();
     await user.click(drafting.getByRole('button', { name: 'Instructions, goal, session, tools' }));
-    expect(await screen.findByRole('textbox', { name: 'Drafting instructions' })).toBeDisabled();
+    expect(await screen.findByRole('textbox', { name: 'Drafting instructions' })).toHaveAttribute(
+      'aria-readonly',
+      'true',
+    );
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
 });
@@ -388,7 +392,7 @@ describe('The board canvas', () => {
     expect(screen.queryByText('No rule or move leads here')).not.toBeInTheDocument();
   });
 
-  it("doesn't claim no rule leads to a phase when the rules didn't load", async () => {
+  it("says the rules didn't load, and doesn't claim no rule leads to a phase", async () => {
     stubFactory();
     serveBoard(workWithParked());
     serveRules({ rules: [everything, parking] });
@@ -397,7 +401,35 @@ describe('The board canvas', () => {
 
     expect(await screen.findByRole('article', { name: 'Parked' })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Board name' })).toBeInTheDocument());
+    expect(await screen.findByText('Rules didn’t load, so the map doesn’t show them.')).toBeInTheDocument();
     expect(screen.queryByText('No rule or move leads here')).not.toBeInTheDocument();
+  });
+
+  it("marks another board's switched-off rule as off, and lists one into a phase this board lost", async () => {
+    const offFromRelease = rule({
+      name: 'Paused releases land in Done',
+      enabled: false,
+      on: ['pull_request.merged'],
+      target: { boardKey: 'release', phaseKey: 'done', joinClosedIssue: false, moveToBoardKey: 'work' },
+    });
+    const intoGone = rule({
+      name: 'Releases go back to review',
+      on: ['pull_request.closed'],
+      target: { boardKey: 'release', phaseKey: 'review', joinClosedIssue: false, moveToBoardKey: 'work' },
+    });
+    stubFactory();
+    serveBoard(storedWorkBoard());
+    serveRules({ rules: [everything, offFromRelease, intoGone] });
+    renderAt(CONFIG);
+
+    const off = await screen.findByRole('link', { name: 'Release Preview, off' });
+    expect(phaseRow('Done').getByRole('link', { name: 'Release Preview, off' })).toBe(off);
+    expect(off).toHaveAttribute('href', `/factories/${FACTORY_ID}/boards/release/config?rule=${offFromRelease.id}`);
+    const removed = within(screen.getByRole('region', { name: 'Into a removed phase' }));
+    expect(removed.getByRole('link', { name: 'Release Preview' })).toHaveAttribute(
+      'href',
+      `/factories/${FACTORY_ID}/boards/release/config?rule=${intoGone.id}`,
+    );
   });
 
   it('opens a new rule into a phase from its row, and a rule from its chip, in the side panel', async () => {
@@ -445,7 +477,7 @@ describe('The board canvas', () => {
     expect(await screen.findByRole('complementary', { name: 'Where would this go?' })).toBeInTheDocument();
   });
 
-  it('shows who works each phase, how it ends and where its cards go next', async () => {
+  it('shows who works each phase, how it ends, where its cards start and where they go next', async () => {
     const small = {
       operator: 'AND' as const,
       conditions: [{ field: 'item.labels', operator: 'contains' as const, value: 'small' }],
@@ -462,6 +494,8 @@ describe('The board canvas', () => {
     renderAt(CONFIG);
 
     const planning = within(await screen.findByRole('article', { name: 'Planning' }));
+    expect(phaseNode('Intake').getByText('New cards start here')).toBeInTheDocument();
+    expect(screen.getAllByText('New cards start here')).toHaveLength(1);
     expect(planning.getByText('factory-plan')).toBeInTheDocument();
     expect(planning.getByText('By hand')).toBeInTheDocument();
     expect(planning.getByText('submit_plan')).toBeInTheDocument();
@@ -473,5 +507,30 @@ describe('The board canvas', () => {
       expect(phaseNode('Triage').getAllByText(other.name).length).toBeGreaterThan(0);
     }
     expect(phaseNode('Done').queryByText('By hand')).not.toBeInTheDocument();
+  });
+
+  it("flags a phase whose skill the project doesn't have or can't load", async () => {
+    const phases = storedWorkBoard().board.phases.map(phase =>
+      phase.key === 'triage' ? { ...phase, runner: { ...phase.runner, skill: 'factory-triage' } } : phase,
+    );
+    stubFactory();
+    serveBoard(storedWorkBoard({ phases }));
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/skills`, () =>
+        HttpResponse.json({
+          skills: [
+            ...BUILT_IN_SKILLS.filter(skill => skill.name !== 'factory-plan' && skill.name !== 'factory-triage'),
+            { name: 'factory-triage', description: '', content: '', builtIn: true, error: 'Bad frontmatter' },
+          ],
+          canEdit: true,
+        } satisfies FactorySkillsResponse),
+      ),
+    );
+    renderAt(CONFIG);
+
+    const planning = within(await screen.findByRole('article', { name: 'Planning' }));
+    expect(await planning.findByText('Skill not found')).toBeInTheDocument();
+    expect(phaseNode('Triage').getByText('Skill failed to load')).toBeInTheDocument();
+    expect(phaseNode('Building').queryByText(/^Skill /)).not.toBeInTheDocument();
   });
 });

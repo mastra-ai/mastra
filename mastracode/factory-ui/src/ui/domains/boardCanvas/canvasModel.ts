@@ -56,6 +56,8 @@ export interface PhaseRow {
   incoming: IntakeRouteInfo[];
   /** Not the first phase, and no rule, move or Factory flow brings a card here. */
   unreached: boolean;
+  /** New cards start here: the board's first phase. */
+  start: boolean;
 }
 
 export interface CanvasModel {
@@ -64,6 +66,8 @@ export interface CanvasModel {
   leaving: RuleLine[];
   /** Rules into a phase the board no longer has. */
   stray: RuleLine[];
+  /** Other boards' rules that move their cards into a phase this board no longer has. */
+  strayIncoming: IntakeRouteInfo[];
   /** Every line of the board's rules, trigger by trigger in the order Factory checks them. */
   lines: RuleLine[];
 }
@@ -123,26 +127,25 @@ export function canvasModel({ boardKey, phases, rules: loaded, flow, filed, skip
   const keys = new Set(phases.map(phase => phase.key));
   const destination = (line: RuleLine) => line.rule.target.moveToBoardKey ?? line.rule.target.boardKey;
   const staysHere = lines.filter(line => destination(line) === boardKey);
+  const incoming = rules.filter(rule => rule.target.boardKey !== boardKey && rule.target.moveToBoardKey === boardKey);
+  const into = (rule: IntakeRouteInfo) => rule.target.phaseKey ?? initialPhase;
 
   return {
     rows: phases.map((phase, index) => ({
       phase,
-      lines: staysHere.filter(line => (line.rule.target.phaseKey ?? initialPhase) === phase.key),
-      incoming: rules.filter(
-        rule =>
-          rule.target.boardKey !== boardKey &&
-          rule.target.moveToBoardKey === boardKey &&
-          (rule.target.phaseKey ?? initialPhase) === phase.key,
-      ),
+      lines: staysHere.filter(line => into(line.rule) === phase.key),
+      incoming: incoming.filter(rule => into(rule) === phase.key),
       unreached:
         loaded !== undefined &&
         index > 0 &&
         !reaching.has(phase.key) &&
         !movedInto.has(phase.key) &&
         !byFactory.has(phase.key),
+      start: phase.key === initialPhase,
     })),
     leaving: lines.filter(line => destination(line) !== boardKey),
-    stray: staysHere.filter(line => !keys.has(line.rule.target.phaseKey ?? initialPhase)),
+    stray: staysHere.filter(line => !keys.has(into(line.rule))),
+    strayIncoming: incoming.filter(rule => !keys.has(into(rule))),
     lines,
   };
 }

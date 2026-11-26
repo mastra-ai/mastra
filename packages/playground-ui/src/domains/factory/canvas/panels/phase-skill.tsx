@@ -7,17 +7,23 @@ import type { ComboboxOption } from '@/ds/components/Combobox';
 import { Txt } from '@/ds/components/Txt';
 import { IconFileText } from '@/ds/icons/central/IconFileText';
 import { IconPencil } from '@/ds/icons/central/IconPencil';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import type { LinkComponent } from '@/ds/types/link-component';
 
 const NO_SKILL = '__none__';
 
-/** The skill a phase's agent loads: every skill in the factory, searchable, with a link to open the picked one. */
+/**
+ * The skill a phase's agent loads: every skill in the factory, searchable, with a link to open the picked one, to list
+ * them all, and to write a new one when the user may edit skills.
+ */
 export function PhaseSkill({
   phaseName,
   skillName,
   skills,
   skillsEditable,
   skillHref,
+  skillsHref,
+  newSkillHref,
   badges,
   disabled,
   LinkComponent,
@@ -30,6 +36,10 @@ export function PhaseSkill({
   skillsEditable: boolean;
   /** Where the picked skill opens. */
   skillHref: string | undefined;
+  /** Where the factory's skills are listed. */
+  skillsHref: string;
+  /** Where a new skill is written; offered only when `skillsEditable`. */
+  newSkillHref: string;
   /** Where the picked skill comes from and whether someone changed it: "Custom", "Edited". */
   badges: readonly string[];
   disabled: boolean;
@@ -92,6 +102,16 @@ export function PhaseSkill({
         </div>
       )}
       <SkillNote skill={skill} missing={missing} skillName={skillName} phaseName={phaseName} />
+      <div className="flex flex-wrap items-center gap-1">
+        <Button size="sm" variant="ghost" render={<LinkComponent href={skillsHref} />}>
+          All skills
+        </Button>
+        {skillsEditable && (
+          <Button size="sm" variant="ghost" icon={<IconPlusMedium />} render={<LinkComponent href={newSkillHref} />}>
+            New skill
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

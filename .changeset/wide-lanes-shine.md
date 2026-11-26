@@ -6,24 +6,29 @@ Redesigned board settings in the Factory UI as one canvas. Before, phases, rules
 
 **Rules**
 
-- A rule's panel shows its trigger, its conditions and where it sends items as editable cells, plus the order it's checked in with the other rules on that trigger.
-- The canvas dims a rule that a rule above it always beats, and marks a phase no rule leads to.
-- Pointing at a numbered rule lights the other rules on its trigger, and its tooltip names the rules checked before it.
+- A rule's panel shows its trigger, its conditions and where it sends items as editable cells, plus the order it's checked in with the other rules on that trigger. Arrows beside each rule in that order move it earlier or later.
+- Each condition offers "+ And" and "+ Or", and the word between two conditions switches its group between all must match and any can match.
+- The canvas dims a rule that a rule above it always beats, and marks a phase no rule leads to. If the rules don't load, it says so.
+- Pointing at a rule lists its conditions. On a numbered rule, it also lights the other rules on its trigger and names the rules checked before it.
+- A rule from another board that moves cards here shows Off when it's switched off. One that names a phase this board no longer has is listed under "Into a removed phase".
 - A new rule waits for you to pick a phase instead of defaulting to the board's first one.
 - Add a rule from the "+ Rule" that shows beside a phase when you point at it. The rule starts out filing items into that phase.
-- The Routing tab orders the boards and their rules for new items and lists what wasn't routed. Each board there links to all its rules.
+- The Routing tab orders the boards for new items and lists what wasn't routed. Each board there links to all its rules. A Not routed item says when no board's rules match it, and Route again says to change a board's rules first.
 - At the top of the canvas, a "New issues and pull requests" card says where the board stands in the intake order. A line runs from it to every trigger new items arrive on, so you see which rules they reach and in which phases they land. Triggers wear the same icons on the canvas and in the Routing tab.
 
 **Phases**
 
 - Phase edits share one draft with a save bar. Leaving with unsaved changes asks first. The phase panel shows its sections as steps joined by a line, in the order a card goes through them.
-- A phase's "Only when" conditions for starting and approving use the same condition cells as rules. The JSON editor for them is gone.
+- A phase's "Only when" conditions for starting and approving use the same condition cells as rules, and say why a condition can't be saved. The JSON editor for them is gone.
+- Instructions and goal are written in a markdown editor.
+- A phase card flags a skill the project doesn't have or can't load, and the first phase says new cards start there. The phase panel links to all skills and, when you can edit them, to a new one.
+- Screen readers hear that Alt+Up and Alt+Down move a phase, and where it landed.
 - Dragging a phase, or a board in the Routing tab, moves the others aside as you drag, so you see the new order before you drop.
 - Add a phase from the "+ Phase" button that shows halfway along the link between two phases when you point at it, or below the last one. You name it in a card right where it will stand, in place of the old dialog.
 
 **Testing**
 
-- Paste an issue or pull request URL into the bar at the bottom. The canvas lights the rules and phases it went through, and the side panel explains each step.
+- Paste an issue or pull request URL into the bar at the bottom. The canvas lights the rules and phases it went through, and the side panel explains each step. Until there's a result, the panel says which links it can read.
 
 **On a phone**
 
@@ -32,4 +37,4 @@ Redesigned board settings in the Factory UI as one canvas. Before, phases, rules
 - "+ Rule" and "+ Phase" always show, since there's no pointer to bring them up.
 - The Routing tab stacks its sources above the intake order.
 
-Links to the old rules and card-move pages now open the canvas.
+Links to the old rules and card-move pages now open the canvas. The Cards tab goes back to the board view you last used.

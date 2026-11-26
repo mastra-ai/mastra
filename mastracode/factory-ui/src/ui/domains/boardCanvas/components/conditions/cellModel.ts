@@ -45,31 +45,45 @@ export function replaceRow(group: Group, key: string, next: Item | undefined): G
   return { ...group, items };
 }
 
-/** A new condition the card must also meet, at the end; alternatives so far become one group of them. */
+/** A new condition at the end of the top level, joined the way the top level already is; a lone one gets an "and". */
 export function addCondition(root: Group): { root: Group; added: Row } {
   const added = emptyRow();
-  if (root.logic === 'AND' || root.items.length <= 1) {
-    return { root: { ...root, logic: 'AND', items: [...root.items, added] }, added };
-  }
-  return {
-    root: { key: root.key, logic: 'AND', items: [{ key: newKey(), logic: 'OR', items: root.items }, added] },
-    added,
-  };
+  const logic = root.items.length > 1 ? root.logic : 'AND';
+  return { root: { ...root, logic, items: [...root.items, added] }, added };
 }
 
-/** An alternative to the row with `key`: next to it in its "or" group, or the row and it as a new one. */
-export function addAlternative(root: Group, key: string): { root: Group; added: Row } {
+/** Whether a new condition can join a row of `group`, `depth` levels down, by `logic` without nesting too deep. */
+export function canJoin(group: Group, depth: number, logic: Group['logic']): boolean {
+  return group.logic === logic || group.items.length === 1 || canNest(depth);
+}
+
+/**
+ * A new condition joined to the row with `key` by `logic`: next to it when its group joins that way or holds only it,
+ * otherwise the row and it as a new group; where the rule can't nest deeper, next to it in its group as it is.
+ */
+export function joinRow(root: Group, key: string, logic: Group['logic']): { root: Group; added: Row } {
   const added = emptyRow();
-  const visit = (group: Group, depth: number): Group => ({
-    ...group,
-    items: group.items.flatMap((item): Item[] => {
-      if (isGroup(item)) return [visit(item, depth + 1)];
-      if (item.key !== key) return [item];
-      if (group.logic === 'OR' || !canNest(depth)) return [item, added];
-      return [{ key: newKey(), logic: 'OR', items: [item, added] }];
-    }),
-  });
+  const visit = (group: Group, depth: number): Group => {
+    if (!group.items.some(item => item.key === key)) {
+      return { ...group, items: group.items.map(item => (isGroup(item) ? visit(item, depth + 1) : item)) };
+    }
+    if (group.items.length === 1) return { ...group, logic, items: [...group.items, added] };
+    const nest = group.logic !== logic && canNest(depth);
+    return {
+      ...group,
+      items: group.items.flatMap((item): Item[] => {
+        if (item.key !== key) return [item];
+        return nest ? [{ key: newKey(), logic, items: [item, added] }] : [item, added];
+      }),
+    };
+  };
   return { root: visit(root, 0), added };
+}
+
+/** The tree with the group with `key`, the top level included, joining its conditions by `logic`. */
+export function setLogic(group: Group, key: string, logic: Group['logic']): Group {
+  if (group.key === key) return { ...group, logic };
+  return { ...group, items: group.items.map(item => (isGroup(item) ? setLogic(item, key, logic) : item)) };
 }
 
 /** The group without rows no field was ever picked for. */

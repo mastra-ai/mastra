@@ -30,6 +30,8 @@ export interface FlowPhase {
 /** Who works a working phase's cards and how they leave, as its card lists it. */
 export interface FlowPhaseWork {
   skill: string | undefined;
+  /** Why its skill can't run, such as "Skill not found"; unset while the project's skills load. */
+  skillProblem: string | undefined;
   autoStart: boolean;
   /** The exit tool, and who approves it. */
   exit: { id: string; approval: string } | undefined;
@@ -55,6 +57,10 @@ interface PhaseNodeProps {
   emphasis: FlowEmphasis;
   problem: boolean;
   unreached: boolean;
+  /** New cards start in this phase. */
+  start: boolean;
+  /** It moves up and down the board with Alt+Up and Alt+Down. */
+  movable: boolean;
   /** Absent when the board can't be changed here. */
   moves?: { required: ReadonlySet<string>; onChange: (nextPhases: string[]) => void };
   LinkComponent: LinkComponent;
@@ -76,6 +82,8 @@ export function PhaseNode({
   emphasis,
   problem,
   unreached,
+  start,
+  movable,
   moves,
   LinkComponent: Link,
 }: PhaseNodeProps) {
@@ -110,6 +118,7 @@ export function PhaseNode({
         <Link
           href={href}
           aria-current={emphasis === 'selected' ? 'true' : undefined}
+          aria-description={movable ? 'Alt+Up or Alt+Down moves this phase.' : undefined}
           className={cn(
             'truncate rounded-sm text-card-title-strong text-foreground',
             'after:absolute after:inset-0 after:rounded-2xl',
@@ -131,6 +140,7 @@ export function PhaseNode({
       {terminal && count !== undefined && (
         <span className="text-caption text-muted-foreground tabular-nums">{count}</span>
       )}
+      {start && <span className="text-caption text-muted-foreground">New cards start here</span>}
       <PhaseWork kind={phase.kind} work={work} />
       {unreached && (
         <span className="flex items-center gap-1.5 text-caption text-muted-foreground">
@@ -181,9 +191,16 @@ function PhaseWork({ kind, work }: { kind: BoardPhaseKind; work: FlowPhaseWork |
       <WorkRow
         icon={IconRobot}
         label={work.skill ?? 'No skill'}
+        broken={work.skillProblem !== undefined}
         detailIcon={work.autoStart ? IconZap : IconHand5Finger}
         detail={work.autoStart ? 'On its own' : 'By hand'}
       />
+      {work.skillProblem && (
+        <span className="flex items-center gap-1.5 text-caption text-destructive-foreground">
+          <TriangleAlert className="size-icon-xs shrink-0" aria-hidden />
+          {work.skillProblem}
+        </span>
+      )}
       {work.exit && <WorkRow icon={IconFlag2} label={work.exit.id} detail={work.exit.approval} />}
       {goal && (
         <WorkRow
@@ -204,11 +221,14 @@ function PhaseWork({ kind, work }: { kind: BoardPhaseKind; work: FlowPhaseWork |
 function WorkRow({
   icon: Icon,
   label,
+  broken = false,
   detail,
   detailIcon: DetailIcon,
 }: {
   icon: ComponentType<{ className?: string }>;
   label: string;
+  /** The label names something that can't run. */
+  broken?: boolean;
   detail?: string;
   detailIcon?: ComponentType<{ className?: string }>;
 }) {
@@ -217,7 +237,11 @@ function WorkRow({
       <Icon className="mt-0.75 size-icon-xs shrink-0 text-muted-foreground" />
       {/* Spread apart while both fit on a line; the detail alone on the next line starts under the label. */}
       <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-3">
-        <span className="min-w-0 truncate text-body-sm text-foreground">{label}</span>
+        <span
+          className={cn('min-w-0 truncate text-body-sm', broken ? 'text-destructive-foreground' : 'text-foreground')}
+        >
+          {label}
+        </span>
         {detail && (
           <span className="flex max-w-full min-w-0 items-center gap-1 text-caption text-muted-foreground">
             {DetailIcon && <DetailIcon className="size-icon-xs shrink-0" />}

@@ -41,6 +41,8 @@ export interface FlowRuleLine {
   /** How many of this board's rules listen on the trigger. */
   of: number;
   label: string;
+  /** What it takes, one line per condition, each after the first led by its group's "and" or "or". */
+  conditions: readonly string[];
   /** Items it filed in the last 30 days; only rules that file new items count them. */
   filed: number | undefined;
   skipsOutsiders: boolean;
@@ -90,7 +92,7 @@ export function RuleChip({ line, LinkComponent: Link }: { line: FlowRuleLine; Li
   return (
     <ChipTooltip
       title={line.label === line.name ? undefined : line.name}
-      lines={[...(line.place ? [line.place] : []), ...notes.map(note => note.text)]}
+      lines={[...line.conditions, ...(line.place ? [line.place] : []), ...notes.map(note => note.text)]}
     >
       <Link
         data-join=""

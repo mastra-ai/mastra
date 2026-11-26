@@ -3,7 +3,7 @@ import { CanvasViewTabs } from '@mastra/playground-ui/domains/factory';
 import { HrefLink } from '../../../ui/HrefLink';
 import { ChatHeaderSidebarTrigger } from '../../chat/components/ChatHeaderSidebarTrigger';
 import { boardConfigPath, boardIntakePath } from '../../boardConfig/boardConfigPaths';
-import { boardPath } from '../../factory/boardCatalog';
+import { rememberedBoardPath } from '../../factory/services/boardViews';
 
 /** The board's view tabs, pointed at this app's routes, after the sidebar toggle. */
 export function BoardSettingsTabs({
@@ -18,7 +18,7 @@ export function BoardSettingsTabs({
   return (
     <CanvasViewTabs
       leading={<ChatHeaderSidebarTrigger />}
-      cardsHref={boardPath(factoryId, boardId)}
+      cardsHref={rememberedBoardPath(factoryId, boardId)}
       settingsHref={boardConfigPath(factoryId, boardId)}
       routingHref={boardIntakePath(factoryId, boardId)}
       active={active}

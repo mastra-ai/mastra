@@ -1,5 +1,5 @@
 import type { FACTORY_ROUTE_CONTRACTS } from '@mastra/factory/routes/contracts';
-import { queryOptions, skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { z } from 'zod';
 
 import { useApiConfig } from '../api/config';
@@ -49,22 +49,6 @@ export function intakeRoutesQueryOptions(baseUrl: string, factoryProjectId: stri
   return queryOptions({
     queryKey: queryKeys.intakeRoutes(factoryProjectId),
     queryFn: () => sendRouteRequest<IntakeRouteListResponse>(baseUrl, routesPath(factoryProjectId)),
-  });
-}
-
-/** One board's rules, in the order its lanes check them. */
-export function useBoardRulesQuery(factoryProjectId: string | undefined, boardKey: string | undefined) {
-  const { baseUrl } = useApiConfig();
-  return useQuery({
-    queryKey: [...queryKeys.intakeRoutes(factoryProjectId), 'board', boardKey ?? null],
-    queryFn:
-      factoryProjectId && boardKey
-        ? () =>
-            sendRouteRequest<IntakeRouteListResponse>(
-              baseUrl,
-              routesPath(factoryProjectId, `?${new URLSearchParams({ boardKey })}`),
-            )
-        : skipToken,
   });
 }
 

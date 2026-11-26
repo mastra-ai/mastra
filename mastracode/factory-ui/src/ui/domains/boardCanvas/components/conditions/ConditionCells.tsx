@@ -20,13 +20,15 @@ import { MANY, VALUELESS, fromRule, isGroup, toRule, valueFor } from '../../../s
 import type { Group, Item, Row } from '../../../settings/components/conditionTree';
 import { andLimits, repositoryHint } from '../../../settings/services/rules';
 import {
-  addAlternative,
   addCondition,
+  canJoin,
   dropBlank,
+  joinRow,
   operatorLabel,
   replaceRow,
   rowFields,
   rowText,
+  setLogic,
   summarize,
 } from './cellModel';
 
@@ -47,8 +49,8 @@ export interface ConditionCellsProps {
   onChange: (rule: RuleGroup | null, unfinished: boolean) => void;
 }
 
-/** What every row needs to show itself and change the conditions. */
-interface RowControls {
+/** What every cell needs to show itself and change the conditions. */
+interface CellControls {
   fields: FilterBarField[];
   disabled: boolean;
   /** The row being edited. */
@@ -56,7 +58,10 @@ interface RowControls {
   onSelect: (key: string) => void;
   onChange: (key: string, next: Row) => void;
   onRemove: (key: string) => void;
-  onAlternative: (key: string) => void;
+  /** Adds a condition joined to the row with `key` by `logic`. */
+  onJoin: (key: string, logic: Group['logic']) => void;
+  /** Switches how the group with `key` joins its conditions. */
+  onLogicChange: (key: string, logic: Group['logic']) => void;
 }
 
 /** The conditions of the same group a row must hold with, which narrow its suggestions. */
@@ -69,7 +74,7 @@ function limitsOf(group: Group, parentLimits: Row[]): Row[] {
 }
 
 /**
- * A rule's conditions as a flow of cells: each top-level condition, or "or" group of them, is one cell; clicking a
+ * A rule's conditions as a flow of cells: each top-level condition, or group of them, is one cell; clicking a
  * cell edits it in place, Escape or a click elsewhere in the panel closes it, and "+ Condition" adds one.
  */
 export function ConditionCells({
@@ -108,7 +113,7 @@ export function ConditionCells({
     setEntering(row.key);
   };
 
-  const controls: RowControls = {
+  const controls: CellControls = {
     fields,
     disabled,
     selected,
@@ -118,7 +123,8 @@ export function ConditionCells({
       setSelected(undefined);
       update(replaceRow(root, key, undefined));
     },
-    onAlternative: key => added(addAlternative(root, key)),
+    onJoin: (key, logic) => added(joinRow(root, key, logic)),
+    onLogicChange: (key, logic) => update(setLogic(root, key, logic)),
   };
   const topLimits = limitsOf(root, []);
 
@@ -126,7 +132,8 @@ export function ConditionCells({
     <ConditionCellList
       label={label}
       logic={root.logic}
-      nodes={root.items.map(item => cellNode(item, topLimits, controls))}
+      onLogicChange={disabled ? undefined : logic => controls.onLogicChange(root.key, logic)}
+      nodes={root.items.map(item => cellNode(item, root, 0, topLimits, controls))}
       selected={selected}
       entering={entering}
       disabled={disabled}
@@ -140,21 +147,36 @@ export function ConditionCells({
   );
 }
 
-/** A row's cell, or a group's rows; `limits` are the conditions of its own group. */
-function cellNode(item: Item, limits: Row[], controls: RowControls): ConditionCellNode {
+/** A row's cell, or a group's rows; `group` holds it, `depth` levels down, and `limits` are that group's conditions. */
+function cellNode(item: Item, group: Group, depth: number, limits: Row[], controls: CellControls): ConditionCellNode {
   if (!isGroup(item)) {
     return {
       key: item.key,
-      row: <ConditionRowCell row={item} limits={limits.filter(limit => limit !== item)} {...controls} />,
+      row: (
+        <ConditionRowCell
+          row={item}
+          group={group}
+          depth={depth}
+          limits={limits.filter(limit => limit !== item)}
+          {...controls}
+        />
+      ),
     };
   }
   const inner = limitsOf(item, limits);
-  return { key: item.key, logic: item.logic, items: item.items.map(child => cellNode(child, inner, controls)) };
+  return {
+    key: item.key,
+    logic: item.logic,
+    items: item.items.map(child => cellNode(child, item, depth + 1, inner, controls)),
+    onLogicChange: controls.disabled ? undefined : logic => controls.onLogicChange(item.key, logic),
+  };
 }
 
 /** One row: its editor while selected, otherwise its summary, a button that selects it. */
 function ConditionRowCell({
   row,
+  group,
+  depth,
   limits,
   fields,
   disabled,
@@ -162,8 +184,8 @@ function ConditionRowCell({
   onSelect,
   onChange,
   onRemove,
-  onAlternative,
-}: RowControls & { row: Row; limits: Row[] }) {
+  onJoin,
+}: CellControls & { row: Row; group: Group; depth: number; limits: Row[] }) {
   if (disabled) return <RowSummary row={row} fields={fields} />;
   if (selected === row.key) {
     return (
@@ -173,7 +195,8 @@ function ConditionRowCell({
         limits={limits}
         onChange={next => onChange(row.key, next)}
         onRemove={() => onRemove(row.key)}
-        onAlternative={() => onAlternative(row.key)}
+        onAnd={canJoin(group, depth, 'AND') ? () => onJoin(row.key, 'AND') : undefined}
+        onOr={canJoin(group, depth, 'OR') ? () => onJoin(row.key, 'OR') : undefined}
       />
     );
   }
@@ -191,14 +214,15 @@ function RowSummary({ row, fields }: { row: Row; fields: FilterBarField[] }) {
   return <ConditionRowSummary row={row} field={field} operator={operator} values={values} />;
 }
 
-/** A condition being changed in its cell: field, test and value, with a way to remove it or add an alternative. */
+/** A condition being changed in its cell: field, test and value, with a way to remove it or join another to it. */
 function RowEditor({
   row,
   fields,
   limits,
   onChange,
   onRemove,
-  onAlternative,
+  onAnd,
+  onOr,
 }: {
   row: Row;
   fields: FilterBarField[];
@@ -206,7 +230,8 @@ function RowEditor({
   limits: Row[];
   onChange: (row: Row) => void;
   onRemove: () => void;
-  onAlternative: () => void;
+  onAnd: (() => void) | undefined;
+  onOr: (() => void) | undefined;
 }) {
   const { shown, field } = rowFields(row, fields, limits);
   // A stored comparison on a presence field (say, a pull request number) keeps its regular controls.
@@ -235,7 +260,8 @@ function RowEditor({
       }}
       onChange={onChange}
       onRemove={onRemove}
-      onAlternative={onAlternative}
+      onAnd={onAnd}
+      onOr={onOr}
     />
   );
 }

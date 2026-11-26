@@ -406,7 +406,7 @@ describe('Rule panel', () => {
     const { client } = renderPanel({ rule: ruleId('merged') });
 
     await screen.findByRole('switch', { name: 'Merged go to Done on' });
-    await user.click(screen.getByRole('button', { name: 'Check earlier' }));
+    await user.click(within(order('Pull request gets new commits')[1]).getByRole('button', { name: 'Check earlier' }));
     await waitForMutationsIdle(client);
 
     expect(sent.find(request => request.path === '/reorder')?.body).toEqual({
@@ -416,6 +416,27 @@ describe('Rule panel', () => {
     await waitFor(() => expect(order('Pull request gets new commits')[0]).toHaveAttribute('aria-current', 'true'));
   });
 
+  it('moves another rule on the trigger from its own row, keeping the open rule in the panel', async () => {
+    const merged = pushes({ id: ruleId('merged'), name: 'Merged go to Done' });
+    const { state, sent } = serveRules({ rules: [pushes(), everythingElse(), merged] });
+    serveDryRun(() => state.rules);
+    const user = userEvent.setup();
+    const { client } = renderPanel({ rule: ruleId('merged') });
+
+    await screen.findByRole('switch', { name: 'Merged go to Done on' });
+    const first = order('Pull request gets new commits')[0];
+    expect(within(first).getByRole('button', { name: 'Check earlier' })).toBeDisabled();
+    await user.click(within(first).getByRole('button', { name: 'Check later' }));
+    await waitForMutationsIdle(client);
+
+    expect(sent.find(request => request.path === '/reorder')?.body).toEqual({
+      boardKey: 'work',
+      ids: [ruleId('merged'), ruleId('everything'), ruleId('pushes')],
+    });
+    await waitFor(() => expect(order('Pull request gets new commits')[0]).toHaveAttribute('aria-current', 'true'));
+    expect(screen.getByRole('switch', { name: 'Merged go to Done on' })).toBeVisible();
+  });
+
   it('opens another rule from the trigger’s list, and starts a new rule on that trigger', async () => {
     const { state } = serveRules({ rules: [bugs(), everythingElse()] });
     serveDryRun(() => state.rules);
@@ -423,7 +444,7 @@ describe('Rule panel', () => {
     renderPanel({ rule: ruleId('bugs') });
 
     await screen.findByRole('switch', { name: 'Bugs go to Triage on' });
-    await user.click(within(order('Issue opened')[1]).getByRole('button'));
+    await user.click(within(order('Issue opened')[1]).getByRole('button', { name: /^2/ }));
     expect(await screen.findByRole('switch', { name: 'Everything else goes to Intake on' })).toBeVisible();
 
     await user.click(screen.getByRole('button', { name: 'Add rule on Issue opened' }));

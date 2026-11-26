@@ -2,7 +2,7 @@ import { Button } from '@/ds/components/Button';
 import { IconArrowDown } from '@/ds/icons/central/IconArrowDown';
 import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
 
-/** Moves the open board one place up or down the intake order. */
+/** Moves a board one place up or down the intake order. */
 export function IntakeReorderButtons({
   earlier,
   later,

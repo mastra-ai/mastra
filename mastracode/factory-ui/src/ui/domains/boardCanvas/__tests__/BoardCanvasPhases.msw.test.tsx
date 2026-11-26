@@ -155,8 +155,9 @@ describe("Editing a board's phases", () => {
     await screen.findByRole('complementary', { name: 'Building' });
     const building = await openRuns('Building', user);
     const goal = building.getByRole('textbox', { name: 'Building goal' });
-    expect(goal).not.toHaveValue('');
-    await user.clear(goal);
+    expect(goal).toHaveTextContent(/\S/);
+    await user.click(goal);
+    await user.keyboard('{Control>}a{/Control}{Backspace}');
     await user.type(goal, 'Every test passes.');
     const runs = building.getByRole('textbox', { name: 'Pause goal after' });
     await user.clear(runs);

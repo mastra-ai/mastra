@@ -160,6 +160,7 @@ export function BoardCanvas({
             manageable={!readOnly}
             locked={locked}
             writes={writes}
+            rulesFailed={data.rulesFailed}
             onChange={patch => setDraft(current => ({ ...current, ...patch }))}
           />
         }
@@ -182,6 +183,7 @@ export function BoardCanvas({
                     onFocus={next => open(undefined, next)}
                     onClose={() => open()}
                     onChange={updatePhase}
+                    unfinished={unfinished.fields}
                     onUnfinished={unfinished.mark}
                     onRemove={key => {
                       setDraft(current => ({ ...current, phases: removePhase(current.phases, key) }));
@@ -233,6 +235,7 @@ export function BoardCanvas({
             problems={new Set(toFix.map(candidate => candidate.key))}
             rulesEditable={data.rulesEditable}
             order={data.order}
+            skills={skills.data?.skills}
             edit={
               frozen
                 ? undefined
@@ -267,7 +270,9 @@ export function BoardCanvas({
             boards={data.boards}
             leaving={model.leaving}
             stray={model.stray}
+            strayIncoming={model.strayIncoming}
             emphasis={line => emphasis.line(line)}
+            outside={emphasis.outside}
             lanes={lanes}
           />
         </div>

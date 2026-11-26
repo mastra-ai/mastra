@@ -1,15 +1,14 @@
 import { PhaseFlow as SharedPhaseFlow } from '@mastra/playground-ui/domains/factory';
 import type { PhaseFlowModel } from '@mastra/playground-ui/domains/factory';
 
-import type { InstalledBoardInfo, IntakeOrderResponse } from '../../../../api/types';
+import type { FactorySkillInfo, InstalledBoardInfo, IntakeOrderResponse } from '../../../../api/types';
 import { HrefLink } from '../../../ui/HrefLink';
 import { boardConfigPath, boardIntakePath, INTAKE_ORDER_ANCHOR } from '../../boardConfig/boardConfigPaths';
 import { keyFromName, keyProblem, nextPhasesOf } from '../../boardConfig/boardDraft';
 import { approvalText, toolLabel } from '../../boardConfig/phaseSummary';
-import { boardName } from '../../boardRules/ruleTargets';
 import { intakeSentence, movesOnItsOwn, sessionSpans } from '../canvasModel';
 import type { CanvasEmphasis, CanvasModel } from '../canvasModel';
-import { flowRuleLine } from '../flowLines';
+import { flowIncomingRule, flowRuleLine } from '../flowLines';
 import type { LaneOrder } from '../flowLines';
 
 interface PhaseFlowProps {
@@ -38,6 +37,16 @@ interface PhaseFlowProps {
   };
   /** Where the board stands in the intake order; unset until it loads. */
   order: IntakeOrderResponse | undefined;
+  /** The project's skills; undefined until they load, so no skill is called missing early. */
+  skills: readonly FactorySkillInfo[] | undefined;
+}
+
+/** Why a phase's skill can't run: the project has no such skill, or agents can't load it. */
+function skillProblem(name: string | undefined, skills: readonly FactorySkillInfo[] | undefined) {
+  if (!name || skills === undefined) return undefined;
+  const skill = skills.find(candidate => candidate.name === name);
+  if (!skill) return 'Skill not found';
+  return skill.error === undefined ? undefined : 'Skill failed to load';
 }
 
 /** The board's phases top to bottom, with the rules, moves and sessions the canvas model works out for each. */
@@ -55,8 +64,10 @@ export function PhaseFlow({
   rulesEditable,
   edit,
   order,
+  skills,
 }: PhaseFlowProps) {
   const phases = model.rows.map(row => row.phase);
+  const board = boards.find(candidate => candidate.id === boardId);
   const flow: PhaseFlowModel = {
     rows: model.rows.map(row => {
       const { phase } = row;
@@ -68,19 +79,19 @@ export function PhaseFlow({
             boardConfigPath(factoryId, boardId, undefined, { rule: line.rule.id }),
             emphasis.line(line, phase.key),
             lanes,
+            board,
           ),
         ),
-        incoming: row.incoming.map(rule => {
-          const from = boards.find(board => board.id === rule.target.boardKey);
-          return {
-            ruleId: rule.id,
-            name: rule.name,
-            boardName: from ? boardName(from) : rule.target.boardKey,
-            href: boardConfigPath(factoryId, rule.target.boardKey, undefined, { rule: rule.id }),
-            emphasis: emphasis.outside(rule.id),
-          };
-        }),
+        incoming: row.incoming.map(rule =>
+          flowIncomingRule(
+            rule,
+            boards,
+            boardConfigPath(factoryId, rule.target.boardKey, undefined, { rule: rule.id }),
+            emphasis.outside(rule.id),
+          ),
+        ),
         unreached: row.unreached,
+        start: row.start,
         emphasis: emphasis.node(phase.key),
         next: nextPhasesOf(phase, phases).filter(key => key !== phase.key),
         automatic: movesOnItsOwn(phase, phases),
@@ -88,6 +99,7 @@ export function PhaseFlow({
           phase.kind === 'working'
             ? {
                 skill: phase.runner?.skill,
+                skillProblem: skillProblem(phase.runner?.skill, skills),
                 autoStart: Boolean(phase.autoStart),
                 exit: phase.exitTool ? { id: phase.exitTool.id, approval: approvalText(phase.exitTool) } : undefined,
                 goal: phase.runner?.goal,

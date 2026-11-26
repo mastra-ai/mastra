@@ -91,11 +91,14 @@ describe('TestPanel', () => {
     expect(bodies).toEqual([{ itemId: ITEM_ID }]);
   });
 
-  it('given the server refuses, then it shows its message', async () => {
-    serveTest({ status: 400, message: 'GitHub is not connected to this project.' });
-    renderPanel(URL);
+  it('given the server refuses, then it shows its message and which links it can test', async () => {
+    serveTest({ status: 422, message: 'Paste a GitHub or GitLab issue or pull request URL, or pick a recent item.' });
+    renderPanel('https://linear.app/acme/issue/ENG-1');
 
-    expect(await screen.findByText('GitHub is not connected to this project.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Paste a GitHub or GitLab issue or pull request URL, or pick a recent item.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Links from GitHub and GitLab repositories linked to this project/)).toBeInTheDocument();
   });
 
   it('when the pencil on the matched rule is pressed, then it opens that rule', async () => {

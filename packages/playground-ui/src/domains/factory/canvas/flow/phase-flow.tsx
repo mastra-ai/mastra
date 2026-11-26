@@ -2,28 +2,18 @@ import { useRef, useState } from 'react';
 import { CARD_PORT, LINK_LINE, PhaseInlet, Port } from '../flow-links';
 import { usePhoneLayout } from '../use-phone-layout';
 import { useRowDrag } from '../use-row-drag';
+import { IncomingChip } from './incoming-chip';
+import type { FlowIncomingRule } from './incoming-chip';
 import { IntakeBranch, IntakeBus, IntakeEntry } from './intake-entry';
 import { NewPhaseCard } from './new-phase-card';
 import { PhaseNode } from './phase-node';
 import type { FlowPhase, FlowPhaseWork } from './phase-node';
-import { CANVAS_SELECTED_RING, ChipTooltip, RULE_CHIP, RuleChip, TriggerLabel } from './rule-chip';
+import { RuleChip, TriggerLabel } from './rule-chip';
 import type { FlowEmphasis, FlowRuleLine } from './rule-chip';
-import { IconArrowDownRight } from '@/ds/icons/central/IconArrowDownRight';
 import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { focusRing } from '@/ds/primitives/transitions';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/utils/cn';
-
-/** Another board's rule that moves its cards into a phase here. */
-export interface FlowIncomingRule {
-  ruleId: string;
-  name: string;
-  /** The board the rule is on, by name. */
-  boardName: string;
-  /** Opens the rule on its board. */
-  href: string;
-  emphasis: FlowEmphasis;
-}
 
 /** One phase of the flow with what its row shows. */
 export interface PhaseFlowRow {
@@ -34,6 +24,8 @@ export interface PhaseFlowRow {
   incoming: readonly FlowIncomingRule[];
   /** Not the first phase, and no rule, move or Factory flow brings a card here. */
   unreached: boolean;
+  /** New cards start in this phase. */
+  start: boolean;
   /** How the phase's card reads beside the selection. */
   emphasis: FlowEmphasis;
   /** The phases its cards can move to, itself left out. */
@@ -140,7 +132,15 @@ export function PhaseFlow({
   const phone = usePhoneLayout();
   const [adding, setAdding] = useState<number>();
   const spanOf = (index: number) => model.sessions.find(span => index >= span.from && index <= span.to);
-  const drag = useRowDrag({ min: 1, max: phases.length - 1, onDrop: (from, to) => edit?.onReorder(from, to) });
+  const [moved, setMoved] = useState('');
+  const drag = useRowDrag({
+    min: 1,
+    max: phases.length - 1,
+    onDrop: (from, to) => {
+      edit?.onReorder(from, to);
+      setMoved(`${phases[from]?.name} moved to position ${to + 1} of ${phases.length}.`);
+    },
+  });
   const flow = useRef<HTMLDivElement>(null);
   const { asked } = intake;
   const linked = asked && model.rows.some(row => row.lines.some(line => line.opened && !line.movesCardsOnly));
@@ -213,6 +213,8 @@ export function PhaseFlow({
                       emphasis={row.emphasis}
                       problem={problems.has(phase.key)}
                       unreached={row.unreached}
+                      start={row.start}
+                      movable={movable}
                       moves={
                         edit && {
                           required: edit.required(phase.key),
@@ -288,6 +290,9 @@ export function PhaseFlow({
           </span>
         </div>
       )}
+      <span role="status" className="sr-only">
+        {moved}
+      </span>
     </div>
   );
 }
@@ -393,31 +398,9 @@ function RowIn({
           +{folded.length} more
         </button>
       )}
-      {row.incoming.map(rule => {
-        const outside = rule.emphasis;
-        return (
-          <ChipTooltip
-            key={rule.ruleId}
-            title={undefined}
-            lines={[`“${rule.name}” on ${rule.boardName} moves cards here.`]}
-          >
-            <Link
-              data-join=""
-              data-dimmed={outside === 'dimmed' || undefined}
-              href={rule.href}
-              className={cn(
-                RULE_CHIP,
-                'border border-border bg-transparent text-body-sm text-foreground transition-opacity',
-                outside === 'dimmed' && 'opacity-35',
-                outside === 'selected' && CANVAS_SELECTED_RING,
-              )}
-            >
-              <IconArrowDownRight className="size-icon-xs shrink-0" aria-hidden />
-              <span className="truncate">{rule.boardName}</span>
-            </Link>
-          </ChipTooltip>
-        );
-      })}
+      {row.incoming.map(rule => (
+        <IncomingChip key={rule.ruleId} rule={rule} LinkComponent={Link} />
+      ))}
       {rulesEditable && (
         <Link
           href={row.newRuleHref}

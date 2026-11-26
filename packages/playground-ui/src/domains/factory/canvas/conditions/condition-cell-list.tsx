@@ -3,16 +3,22 @@ import type { KeyboardEvent, ReactNode } from 'react';
 
 import { GrowIn } from '../canvas-frame';
 import { AddConditionButton, FLOW_CELL, FLOW_CELL_SELECTED, ValueChip, Wire } from '../flow-parts';
+import { ConditionLogic } from './condition-logic';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/utils/cn';
 
 /**
  * A rule's conditions as the cells lay them out: a row, already rendered, or a group of them joined by "or" or
- * "and". A row's `key` is the one `selected` and `entering` name.
+ * "and", switchable while `onLogicChange` is given. A row's `key` is the one `selected` and `entering` name.
  */
 export type ConditionCellNode =
   | { key: string; row: ReactNode }
-  | { key: string; logic: 'AND' | 'OR'; items: ConditionCellNode[] };
+  | {
+      key: string;
+      logic: 'AND' | 'OR';
+      items: ConditionCellNode[];
+      onLogicChange?: (logic: 'AND' | 'OR') => void;
+    };
 
 const isCellGroup = (node: ConditionCellNode): node is Extract<ConditionCellNode, { items: unknown }> =>
   'items' in node;
@@ -29,6 +35,8 @@ export interface ConditionCellListProps {
   label: string;
   /** How the top-level cells join: "or" between alternatives, a plain line otherwise. */
   logic: 'AND' | 'OR';
+  /** Switches how the top-level cells join; without it the logic only shows. */
+  onLogicChange?: (logic: 'AND' | 'OR') => void;
   nodes: ConditionCellNode[];
   /** The row being edited. */
   selected: string | undefined;
@@ -50,12 +58,13 @@ export interface ConditionCellListProps {
 }
 
 /**
- * A rule's conditions as a flow of cells: each top-level condition, or "or" group of them, is one cell; clicking a
+ * A rule's conditions as a flow of cells: each top-level condition, or group of them, is one cell; clicking a
  * cell edits it in place, Escape or a click elsewhere in the panel closes it, and "+ Condition" adds one.
  */
 export function ConditionCellList({
   label,
   logic,
+  onLogicChange,
   nodes,
   selected,
   entering,
@@ -105,7 +114,7 @@ export function ConditionCellList({
       {nodes.map((node, index) => (
         <GrowIn key={node.key} enter={node.key === entering}>
           <div className="flex flex-col">
-            {index > 0 && <Wire word={logic === 'OR' ? 'or' : undefined} />}
+            {index > 0 && <JoinWire index={index} logic={logic} onLogicChange={onLogicChange} />}
             <div
               data-editing={holds(node, selected) || undefined}
               onKeyDown={holds(node, selected) ? onKeyDown : undefined}
@@ -151,11 +160,29 @@ function ConditionCellItem({ node, entering }: { node: ConditionCellNode; enteri
   return node.items.map((child, index) => (
     <GrowIn key={child.key} enter={child.key === entering}>
       <div className="flex flex-col gap-1">
-        {index > 0 && <Wire word={node.logic === 'OR' ? 'or' : 'and'} />}
+        {index > 0 && <JoinWire index={index} logic={node.logic} nested onLogicChange={node.onLogicChange} />}
         <ConditionCellGroupChild node={child} entering={entering} />
       </div>
     </GrowIn>
   ));
+}
+
+/** The wire before a group's `index`th condition; the first one switches the group's logic when it can change. */
+function JoinWire({
+  index,
+  logic,
+  nested,
+  onLogicChange,
+}: {
+  index: number;
+  logic: 'AND' | 'OR';
+  /** Inside a cell, where "and" is spelled out; between cells it is a plain line. */
+  nested?: boolean;
+  onLogicChange: ((logic: 'AND' | 'OR') => void) | undefined;
+}) {
+  if (index === 1 && onLogicChange) return <ConditionLogic logic={logic} onChange={onLogicChange} />;
+  if (logic === 'OR') return <Wire word="or" />;
+  return <Wire word={nested ? 'and' : undefined} />;
 }
 
 /** A group inside a group is indented. */

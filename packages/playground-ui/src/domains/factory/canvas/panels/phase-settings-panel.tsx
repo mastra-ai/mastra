@@ -48,6 +48,10 @@ export interface PhaseSettingsPanelProps<Tool extends string> {
   skillsEditable: boolean;
   /** Where the phase's skill opens. */
   skillHref: string | undefined;
+  /** Where the factory's skills are listed. */
+  skillsHref: string;
+  /** Where a new skill is written; offered only when the user may edit skills. */
+  newSkillHref: string;
   /** Where the phase's skill comes from and whether someone changed it. */
   skillBadges: readonly string[];
   /** What the board's rules work out about the phase's outcomes. */
@@ -62,8 +66,12 @@ export interface PhaseSettingsPanelProps<Tool extends string> {
   total: number | undefined;
   /** The condition cells limiting which cards the phase starts on its own. */
   autoStartConditions: ReactNode;
+  /** Why Factory would refuse the auto-start conditions; unset while they're fine or a row is half filled. */
+  autoStartProblem: string | undefined;
   /** The condition cells limiting which cards the exit tool is approved for. */
   autoApproveConditions: ReactNode;
+  /** Why Factory would refuse the auto-approve conditions; unset while they're fine or a row is half filled. */
+  autoApproveProblem: string | undefined;
   LinkComponent: LinkComponent;
   onName: (name: string) => void;
   onDescription: (description: string | null) => void;
@@ -97,6 +105,8 @@ export function PhaseSettingsPanel<Tool extends string>({
   skills,
   skillsEditable,
   skillHref,
+  skillsHref,
+  newSkillHref,
   skillBadges,
   outcomes,
   defaultSession,
@@ -105,7 +115,9 @@ export function PhaseSettingsPanel<Tool extends string>({
   disabled,
   total,
   autoStartConditions,
+  autoStartProblem,
   autoApproveConditions,
+  autoApproveProblem,
   LinkComponent,
   onName,
   onDescription,
@@ -199,7 +211,12 @@ export function PhaseSettingsPanel<Tool extends string>({
               />
             </PanelRow>
             {phase.autoStart && (
-              <OnlyWhen key={`${phase.key}.autoStartWhen`} rule={phase.autoStartWhen} disabled={disabled}>
+              <OnlyWhen
+                key={`${phase.key}.autoStartWhen`}
+                rule={phase.autoStartWhen}
+                problem={autoStartProblem}
+                disabled={disabled}
+              >
                 {autoStartConditions}
               </OnlyWhen>
             )}
@@ -212,6 +229,8 @@ export function PhaseSettingsPanel<Tool extends string>({
               skills={skills}
               skillsEditable={skillsEditable}
               skillHref={skillHref}
+              skillsHref={skillsHref}
+              newSkillHref={newSkillHref}
               badges={skillBadges}
               disabled={disabled}
               LinkComponent={LinkComponent}
@@ -269,6 +288,7 @@ export function PhaseSettingsPanel<Tool extends string>({
                   <OnlyWhen
                     key={`${phase.key}.autoApproveWhen`}
                     rule={phase.exitTool.autoApproveWhen}
+                    problem={autoApproveProblem}
                     disabled={disabled}
                   >
                     {autoApproveConditions}
@@ -316,13 +336,18 @@ export function PhaseSettingsPanel<Tool extends string>({
   );
 }
 
-/** "Only when" and a rule's condition cells; view-only it shows only a rule that has conditions. */
+/**
+ * "Only when", a rule's condition cells and why Factory would refuse them. View-only it shows only a rule that has
+ * conditions.
+ */
 function OnlyWhen({
   rule,
+  problem,
   disabled,
   children,
 }: {
   rule: PanelRuleGroup | null | undefined;
+  problem: string | undefined;
   disabled: boolean;
   /** The rule's condition cells. */
   children: ReactNode;
@@ -334,6 +359,11 @@ function OnlyWhen({
         Only when
       </Txt>
       {children}
+      {problem && (
+        <Txt as="p" variant="caption" role="alert" className="text-destructive-foreground">
+          {problem}
+        </Txt>
+      )}
     </div>
   );
 }

@@ -155,7 +155,7 @@ export function RoutingPage({
                         rulesHref={boardConfigPath(factoryId, boardKey)}
                         LinkComponent={HrefLink}
                       >
-                        {current && draft.sortable && (
+                        {draft.sortable && (
                           <IntakeReorderButtons
                             earlier={draft.movable && index > 0}
                             later={draft.movable && index < draft.shown.length - 1}

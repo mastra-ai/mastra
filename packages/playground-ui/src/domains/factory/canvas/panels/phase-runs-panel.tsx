@@ -9,6 +9,7 @@ import {
 import { LimitCount, PanelRow } from '../panel-parts';
 import type { PanelPhase, PanelPhaseRunner } from './types';
 import { Button } from '@/ds/components/Button';
+import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
 import { Input } from '@/ds/components/Input';
 import { InputGroupAddon, InputGroupText } from '@/ds/components/InputGroup';
@@ -20,10 +21,11 @@ import {
   InputNumberInput,
 } from '@/ds/components/InputNumber';
 import { Switch } from '@/ds/components/Switch';
-import { Textarea } from '@/ds/components/Textarea';
 import { Txt } from '@/ds/components/Txt';
 import { IconChainLink3 } from '@/ds/icons/central/IconChainLink3';
 import { IconChevronLeftMedium } from '@/ds/icons/central/IconChevronLeftMedium';
+import { fieldErrorRimWithin, inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
+import { cn } from '@/lib/utils';
 
 /** A Factory tool a phase can grant the session working a card there. */
 export interface PhaseToolOption<Tool extends string = string> {
@@ -186,7 +188,7 @@ export function PhaseRunsPanel<Tool extends string>({
   );
 }
 
-/** A text field with its limit counted beside its label, refused once it runs over. */
+/** A Markdown field with its limit counted beside its label, refused once it runs over. */
 function LimitedText({
   title,
   label,
@@ -214,14 +216,24 @@ function LimitedText({
           <FieldLabel size="smaller">{title}</FieldLabel>
           <LimitCount length={value.length} max={max} />
         </div>
-        <Textarea
-          size="sm"
-          rows={3}
+        <CodeEditor
           aria-label={label}
           value={value}
           placeholder={placeholder}
-          disabled={disabled}
-          onChange={event => onChange(event.target.value)}
+          editable={!disabled}
+          onChange={onChange}
+          language="markdown"
+          font="body"
+          variant="inline"
+          lineNumbers={false}
+          showCopyButton={false}
+          className={cn(
+            inputSurfaceAndFocusWithinStyle,
+            fieldErrorRimWithin,
+            'rounded-xl px-2 py-1.5',
+            disabled && 'bg-field-disabled',
+          )}
+          data-base-ui-swipe-ignore=""
         />
         {over && <FieldError>Too long to save.</FieldError>}
       </Field>

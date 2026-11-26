@@ -79,10 +79,13 @@ export interface ConditionRowEditorProps {
   onOperatorChange: (operator: string) => void;
   onChange: (row: ConditionRowData) => void;
   onRemove: () => void;
-  onAlternative: () => void;
+  /** Adds a condition that must also hold; left out where one can't join this row that way. */
+  onAnd?: () => void;
+  /** Adds an alternative to this condition; left out where one can't join this row that way. */
+  onOr?: () => void;
 }
 
-/** A condition being changed in its cell: field, test and value, with a way to remove it or add an alternative. */
+/** A condition being changed in its cell: field, test and value, with a way to remove it or join another to it. */
 export function ConditionRowEditor({
   row,
   fields,
@@ -97,7 +100,8 @@ export function ConditionRowEditor({
   onOperatorChange,
   onChange,
   onRemove,
-  onAlternative,
+  onAnd,
+  onOr,
 }: ConditionRowEditorProps) {
   return (
     <div className="flex min-w-0 flex-col gap-2">
@@ -179,10 +183,19 @@ export function ConditionRowEditor({
         </div>
       )}
 
-      {row.field && (
-        <Button variant="ghost" size="sm" className="self-start" icon={<IconPlusMedium />} onClick={onAlternative}>
-          Or
-        </Button>
+      {row.field && (onAnd || onOr) && (
+        <div className="flex items-center gap-1">
+          {onAnd && (
+            <Button variant="ghost" size="sm" icon={<IconPlusMedium />} onClick={onAnd}>
+              And
+            </Button>
+          )}
+          {onOr && (
+            <Button variant="ghost" size="sm" icon={<IconPlusMedium />} onClick={onOr}>
+              Or
+            </Button>
+          )}
+        </div>
       )}
     </div>
   );

@@ -16,6 +16,8 @@ interface BoardHeaderProps {
   /** The board can be changed here; a board defined in code can't. */
   editable: boolean;
   problems: readonly string[];
+  /** The project's rules didn't load, so the canvas shows none. */
+  rulesFailed: boolean;
   /** The reset and delete beside the name, shown when the board is manageable. */
   actions: BoardActionsProps;
   errors: BoardActionErrorsProps;
@@ -33,6 +35,7 @@ export function BoardHeader({
   manageable,
   editable,
   problems,
+  rulesFailed,
   actions,
   errors,
   onChange,
@@ -68,7 +71,11 @@ export function BoardHeader({
           />
         </Txt>
       )}
-      {(!manageable || problems.length > 0 || errors.resetError !== undefined || errors.deleteError !== undefined) && (
+      {(!manageable ||
+        problems.length > 0 ||
+        rulesFailed ||
+        errors.resetError !== undefined ||
+        errors.deleteError !== undefined) && (
         <div className="mt-3 flex flex-col gap-2">
           {!manageable && (
             <Notice variant="note" icon={<IconLock />}>
@@ -82,6 +89,11 @@ export function BoardHeader({
           {problems.length > 0 && (
             <Notice variant="warning" title="This board has problems">
               <Notice.Message>{problems.join(' ')}</Notice.Message>
+            </Notice>
+          )}
+          {rulesFailed && (
+            <Notice variant="warning">
+              <Notice.Message>Rules didn’t load, so the map doesn’t show them.</Notice.Message>
             </Notice>
           )}
           <BoardActionErrors {...errors} />

@@ -27,6 +27,8 @@ interface CanvasPanelProps {
   onFocus: (focus: CanvasFocus) => void;
   onClose: () => void;
   onChange: (phase: StoredPhaseInfo) => void;
+  /** The rule fields with a half-filled condition row on the open phase. */
+  unfinished: readonly RuleField[];
   onUnfinished: (field: RuleField, unfinished: boolean) => void;
   onRemove: (phaseKey: string) => void;
 }
@@ -47,6 +49,7 @@ export function CanvasPanel({
   onFocus,
   onClose,
   onChange,
+  unfinished,
   onUnfinished,
   onRemove,
 }: CanvasPanelProps) {
@@ -104,6 +107,7 @@ export function CanvasPanel({
         boardId={boardId}
         disabled={disabled}
         total={totals.get(phase.key)}
+        unfinished={unfinished}
         onChange={onChange}
         onUnfinished={onUnfinished}
         onRemove={removable ? () => onRemove(phase.key) : undefined}

@@ -19,6 +19,7 @@ import type {
 import { createAppRoutes } from '../../../router';
 import { stubFactory } from '../../boardConfig/__tests__/fixtures/factory-app';
 import { PROJECT_URL, rule, serveRules } from '../../boardRules/__tests__/fixtures/rulesServer';
+import { saveBoardView } from '../../factory/services/boardViews';
 
 const ROUTING = '/factories/fp-1/work/intake';
 const REROUTE_URL = `${PROJECT_URL}/intake-routes/reroute`;
@@ -239,6 +240,20 @@ describe('Routing page: the intake order', () => {
     expect(card('Work').getByRole('button', { name: 'Check earlier' })).toBeDisabled();
   });
 
+  it('given another board last, when it is asked earlier by its arrow, then it moves as an unsaved order', async () => {
+    serveRules({ rules: [] });
+    serveOrder(order());
+    const user = userEvent.setup();
+    renderRouting();
+
+    await waitFor(() => expect(boardNames()).toEqual(['Work', 'Release Preview']));
+    expect(card('Release Preview').getByRole('button', { name: 'Check later' })).toBeDisabled();
+    await user.click(card('Release Preview').getByRole('button', { name: 'Check earlier' }));
+
+    expect(boardNames()).toEqual(['Release Preview', 'Work']);
+    expect(screen.getByText('Order not saved')).toBeVisible();
+  });
+
   describe('when the open board moves later', () => {
     async function moveWorkLater() {
       serveRules({ rules: [] });
@@ -429,6 +444,18 @@ describe('Routing page: the intake order', () => {
     expect(new URLSearchParams(router.state.location.search).get('rule')).toBe('new');
     expect(new URLSearchParams(router.state.location.search).get('board')).toBe('work');
   });
+
+  it('given filters last used on the board, then the Cards tab brings them back', async () => {
+    saveBoardView('fp-1', 'work', new URLSearchParams('label=bug&sort=created-newest'));
+    onTestFinished(() => localStorage.clear());
+    serveRules({ rules: [] });
+    renderRouting();
+
+    expect(await screen.findByRole('link', { name: 'Cards' })).toHaveAttribute(
+      'href',
+      '/factories/fp-1/work?label=bug&sort=created-newest',
+    );
+  });
 });
 
 describe('Routing page: cards rules changed', () => {
@@ -507,6 +534,12 @@ describe('Routing page: Not routed', () => {
         'https://github.com/acme/app/issues/1',
       );
       expect(list.getByText(/acme\/app#1/)).toBeVisible();
+    });
+
+    it('then one with no recorded reason says no board’s rules match it', async () => {
+      const { list } = await listNotRouted();
+
+      expect(within(list.getAllByRole('listitem')[0]).getByText('No board’s rules match it.')).toBeVisible();
     });
 
     it('then Load more pages in the older ones until none are left', async () => {

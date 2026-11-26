@@ -1,5 +1,7 @@
 import { BoardStageIcon, phaseIconKind } from '../../board/board-icons';
 import type { BoardPhaseKind } from '../../board/board-icons';
+import { IncomingChip } from './incoming-chip';
+import type { FlowIncomingRule } from './incoming-chip';
 import { RuleChip, TriggerLabel } from './rule-chip';
 import type { FlowRuleLine } from './rule-chip';
 import { Txt } from '@/ds/components/Txt';
@@ -24,11 +26,13 @@ export interface OtherBoardMove {
 interface OtherBoardsProps {
   leaving: readonly OtherBoardMove[];
   stray: readonly FlowRuleLine[];
+  /** Other boards' rules that move their cards into a phase this board no longer has. */
+  strayIncoming: readonly FlowIncomingRule[];
   LinkComponent: LinkComponent;
 }
 
 /** Rules that send this board's cards to another board, and rules into a phase the board no longer has. */
-export function OtherBoards({ leaving, stray, LinkComponent: Link }: OtherBoardsProps) {
+export function OtherBoards({ leaving, stray, strayIncoming, LinkComponent: Link }: OtherBoardsProps) {
   return (
     <>
       {leaving.length > 0 && (
@@ -71,7 +75,7 @@ export function OtherBoards({ leaving, stray, LinkComponent: Link }: OtherBoards
           </ul>
         </section>
       )}
-      {stray.length > 0 && (
+      {stray.length + strayIncoming.length > 0 && (
         <section aria-labelledby="canvas-stray" className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
             <Txt as="h2" id="canvas-stray" variant="body-sm" tone="muted">
@@ -87,6 +91,11 @@ export function OtherBoards({ leaving, stray, LinkComponent: Link }: OtherBoards
               <li key={`${line.event}:${line.ruleId}`} className="flex flex-wrap items-center gap-2.5">
                 <TriggerLabel trigger={line.trigger} dimmed={line.emphasis === 'dimmed'} />
                 <RuleChip line={line} LinkComponent={Link} />
+              </li>
+            ))}
+            {strayIncoming.map(rule => (
+              <li key={rule.ruleId}>
+                <IncomingChip rule={rule} stray LinkComponent={Link} />
               </li>
             ))}
           </ul>

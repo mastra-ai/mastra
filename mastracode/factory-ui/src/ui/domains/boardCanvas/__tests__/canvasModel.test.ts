@@ -92,7 +92,7 @@ describe('canvasModel', () => {
     expect(model.rows.flatMap(row => row.lines)).toEqual([]);
   });
 
-  it("shows another board's rule on the phase it moves cards into", () => {
+  it("shows another board's rule on the phase it moves cards into, or apart when this board lost that phase", () => {
     const model = canvasModel({
       boardKey: 'work',
       phases,
@@ -101,12 +101,18 @@ describe('canvasModel', () => {
           on: ['pull_request.closed'],
           target: into('planning', { boardKey: 'release', moveToBoardKey: 'work' }),
         }),
+        route('Back to review', {
+          on: ['pull_request.closed'],
+          target: into('review', { boardKey: 'release', moveToBoardKey: 'work' }),
+        }),
       ],
     });
 
     expect(model.rows.find(row => row.phase.key === 'planning')?.incoming.map(rule => rule.name)).toEqual([
       'Back to planning',
     ]);
+    expect(model.rows.flatMap(row => row.incoming).map(rule => rule.name)).toEqual(['Back to planning']);
+    expect(model.strayIncoming.map(rule => rule.name)).toEqual(['Back to review']);
   });
 
   it('flags a phase that no rule, move or Factory flow brings cards to, but never the first', () => {

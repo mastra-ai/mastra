@@ -46,6 +46,7 @@ export function useCanvasData(factoryId: string, boardId: string) {
     installed: catalog.data?.find(board => board.id === boardId),
     /** Undefined until the rules load, so nothing claims a phase is unreached on a failed load. */
     rules: routes.data?.intakeRoutes,
+    rulesFailed: routes.isError,
     rulesEditable: routes.data?.canEdit ?? false,
     order: order.data,
     filed,

@@ -9,7 +9,7 @@ import { listedRepository } from '../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../e2e/ui/render';
 import type { FactorySkillInfo, StoredPhaseInfo } from '../../../../api/types';
-import { boardSkillPath } from '../../boardConfig/boardConfigPaths';
+import { boardSkillPath, boardSkillsPath, newSkillPath } from '../../boardConfig/boardConfigPaths';
 import type { RuleField } from '../../boardConfig/boardDraft';
 import { PhasePanel } from '../components/phasePanel/PhasePanel';
 
@@ -50,11 +50,13 @@ function Board({
   disabled = false,
   kindLocked = false,
   removable = false,
+  skillsEditable = true,
 }: {
   phaseKey: string;
   disabled?: boolean;
   kindLocked?: boolean;
   removable?: boolean;
+  skillsEditable?: boolean;
 }) {
   const [phases, setPhases] = useState(BOARD);
   draft.phases = phases;
@@ -70,11 +72,12 @@ function Board({
       requiredNextPhases={phaseKey === 'plan' ? ['build'] : []}
       kindLocked={kindLocked}
       skills={SKILLS}
-      skillsEditable
+      skillsEditable={skillsEditable}
       factoryId={FACTORY_ID}
       boardId="work"
       disabled={disabled}
       total={111}
+      unfinished={RULE_FIELDS.filter(field => unfinished[field])}
       onChange={next => setPhases(current => current.map(other => (other.key === next.key ? next : other)))}
       onUnfinished={(field, value) => setUnfinished(current => ({ ...current, [field]: value }))}
       onRemove={
@@ -97,6 +100,7 @@ function renderPanel(props: Parameters<typeof Board>[0]) {
   );
 }
 
+const RULE_FIELDS: readonly RuleField[] = ['autoStartWhen', 'autoApproveWhen'];
 const phaseOf = (key: string) => draft.phases.find(phase => phase.key === key);
 const panel = (name: string) => within(screen.getByRole('complementary', { name }));
 
@@ -196,6 +200,41 @@ describe('Given a working phase selected on the canvas', () => {
     expect(starts.getByText('Finish or remove unfinished conditions to save.')).toBeInTheDocument();
   });
 
+  it('when its finished conditions would be refused, then the panel says why until a row is half filled again', async () => {
+    const user = userEvent.setup();
+    renderPanel({ phaseKey: 'plan' });
+
+    const starts = within(screen.getByRole('region', { name: 'Starts' }));
+    await user.click(starts.getByRole('switch', { name: 'Planning: start on its own' }));
+    await user.click(starts.getByRole('button', { name: 'Add condition' }));
+    await user.click(starts.getByRole('combobox', { name: 'Field' }));
+    await user.click(await screen.findByRole('option', { name: 'Title' }));
+    await user.click(starts.getByRole('textbox', { name: 'Value' }));
+    await user.paste('x'.repeat(501));
+
+    expect(starts.getByRole('alert')).toHaveTextContent(/conditions\.0\.value: .*500/);
+
+    await user.click(starts.getByRole('button', { name: 'Add condition' }));
+    expect(starts.queryByRole('alert')).not.toBeInTheDocument();
+    expect(starts.getByText('Finish or remove unfinished conditions to save.')).toBeInTheDocument();
+  });
+
+  it('when its auto-approve conditions would be refused, then the panel says why under them', async () => {
+    const user = userEvent.setup();
+    renderPanel({ phaseKey: 'plan' });
+
+    const ends = within(screen.getByRole('region', { name: 'Ends' }));
+    await user.click(ends.getByRole('switch', { name: 'Planning: approve submit_plan on its own' }));
+    expect(ends.queryByRole('alert')).not.toBeInTheDocument();
+    await user.click(ends.getByRole('button', { name: 'Add condition' }));
+    await user.click(ends.getByRole('combobox', { name: 'Field' }));
+    await user.click(await screen.findByRole('option', { name: 'Title' }));
+    await user.click(ends.getByRole('textbox', { name: 'Value' }));
+    await user.paste('x'.repeat(501));
+
+    expect(ends.getByRole('alert')).toHaveTextContent(/conditions\.0\.value: .*500/);
+  });
+
   it('when its instructions run over 1000 characters, then the count and the panel say it cannot save', async () => {
     const user = userEvent.setup();
     renderPanel({ phaseKey: 'build' });
@@ -255,6 +294,29 @@ describe('Given a working phase selected on the canvas', () => {
       'href',
       boardSkillPath(FACTORY_ID, 'work', 'factory-build'),
     );
+  });
+
+  it('when no phase picks a skill, then the panel still links to every skill and to writing a new one', () => {
+    renderPanel({ phaseKey: 'build' });
+
+    const building = panel('Building');
+    expect(building.getByRole('link', { name: 'All skills' })).toHaveAttribute(
+      'href',
+      boardSkillsPath(FACTORY_ID, 'work'),
+    );
+    expect(building.getByRole('link', { name: 'New skill' })).toHaveAttribute('href', newSkillPath(FACTORY_ID, 'work'));
+  });
+
+  it('when the user may not edit skills, then the panel links to every skill but offers no new one', () => {
+    renderPanel({ phaseKey: 'plan', disabled: true, skillsEditable: false });
+
+    const planning = panel('Planning');
+    expect(planning.getByRole('link', { name: 'All skills' })).toHaveAttribute(
+      'href',
+      boardSkillsPath(FACTORY_ID, 'work'),
+    );
+    expect(planning.queryByRole('link', { name: 'New skill' })).not.toBeInTheDocument();
+    expect(planning.getByRole('link', { name: 'View factory-plan' })).toBeInTheDocument();
   });
 });
 
@@ -338,7 +400,8 @@ describe('Given who may change the phase', () => {
     expect(draft.removed).toBe(true);
   });
 
-  it('shows a view-only phase without anything to change', () => {
+  it('shows a view-only phase without anything to change', async () => {
+    const user = userEvent.setup();
     renderPanel({ phaseKey: 'plan', disabled: true, removable: false });
 
     const planning = panel('Planning');
@@ -351,5 +414,10 @@ describe('Given who may change the phase', () => {
     expect(planning.queryByRole('button', { name: 'Add condition' })).not.toBeInTheDocument();
     expect(planning.queryByRole('button', { name: 'Change moves from Planning' })).not.toBeInTheDocument();
     expect(planning.queryByRole('button', { name: 'Customize outcomes' })).not.toBeInTheDocument();
+
+    await user.click(planning.getByRole('button', { name: 'Instructions, goal, session, tools' }));
+    const runs = panel('Planning agent runs');
+    expect(runs.getByRole('textbox', { name: 'Planning instructions' })).toHaveAttribute('aria-readonly', 'true');
+    expect(runs.getByRole('textbox', { name: 'Planning goal' })).toHaveAttribute('aria-readonly', 'true');
   });
 });

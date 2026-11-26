@@ -136,11 +136,15 @@ describe('Editing a board on the canvas', () => {
     expect(phaseNode('Plan').getByText('Review')).toBeInTheDocument();
 
     // The first phase stays first; any other moves a row at a time.
+    expect(screen.getByRole('link', { name: 'Intake' })).not.toHaveAttribute('aria-description');
     screen.getByRole('link', { name: 'Intake' }).focus();
     await user.keyboard('{Alt>}{ArrowDown}{/Alt}');
-    screen.getByRole('link', { name: 'Review' }).focus();
+    const reviewPhase = screen.getByRole('link', { name: 'Review' });
+    expect(reviewPhase).toHaveAttribute('aria-description', 'Alt+Up or Alt+Down moves this phase.');
+    reviewPhase.focus();
     await user.keyboard('{Alt>}{ArrowUp}{/Alt}');
     expect(phaseOrder()).toEqual(['Intake', 'Triage', 'Plan', 'Review', 'Building', 'Done', 'Canceled']);
+    expect(screen.getByText('Review moved to position 4 of 7.')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(saved).toHaveBeenCalledTimes(1));

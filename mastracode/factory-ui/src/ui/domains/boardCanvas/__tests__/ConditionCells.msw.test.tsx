@@ -1,4 +1,4 @@
-import type { RuleGroup } from '@mastra/factory/rules/rule-group';
+import type { RuleCondition, RuleGroup } from '@mastra/factory/rules/rule-group';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -154,15 +154,60 @@ describe('Given a condition on whether a card has a pull request', () => {
   });
 });
 
+describe('Given conditions that match any of two', () => {
+  const bug: RuleCondition = { field: 'item.labels', operator: 'contains', value: 'bug' };
+  const renovate: RuleCondition = { field: 'item.author', operator: 'equals', value: 'renovate' };
+  const rule: RuleGroup = { operator: 'OR', conditions: [bug, renovate] };
+
+  it('when switched to all, then a card must match both', async () => {
+    const onChange = renderCells({ rule });
+
+    await pick('Match all or any', /^and/);
+
+    expect(onChange).toHaveBeenLastCalledWith({ operator: 'AND', conditions: [bug, renovate] }, false);
+  });
+
+  it('when "And" is added to the first, then that pair must hold together and the other stays an alternative', async () => {
+    const user = userEvent.setup();
+    const onChange = renderCells({ rule });
+
+    await user.click(screen.getByRole('button', { name: /^Edit condition: Labels/ }));
+    await user.click(screen.getByRole('button', { name: 'And' }));
+    await pick('Field', 'Repository, team or project');
+    await pick('Value', 'acme/app');
+
+    expect(onChange).toHaveBeenLastCalledWith(
+      {
+        operator: 'OR',
+        conditions: [
+          {
+            operator: 'AND',
+            conditions: [bug, expect.objectContaining({ field: 'source.repository', value: 'acme/app' })],
+          },
+          renovate,
+        ],
+      },
+      false,
+    );
+  });
+});
+
 describe('Given a view-only rule', () => {
-  it('shows its conditions without anything to change them', () => {
+  it('shows its conditions and how they join without anything to change them', () => {
     renderCells({
-      rule: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'bug' }] },
+      rule: {
+        operator: 'OR',
+        conditions: [
+          { field: 'item.labels', operator: 'contains', value: 'bug' },
+          { field: 'item.author', operator: 'equals', value: 'renovate' },
+        ],
+      },
       disabled: true,
     });
 
-    expect(screen.getByRole('group', { name: 'Only when' })).toHaveTextContent(/Labels.*bug/);
+    expect(screen.getByRole('group', { name: 'Only when' })).toHaveTextContent(/Labels.*bug.*or.*Author.*renovate/);
     expect(screen.queryByRole('button', { name: /Edit condition/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add condition' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Match all or any' })).not.toBeInTheDocument();
   });
 });
