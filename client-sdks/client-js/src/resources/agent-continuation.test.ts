@@ -88,7 +88,9 @@ it('rejects a subscribed client-tool continuation with the original error withou
 
     // Both the failed run's options and the thread's latest options are cleared.
     expect(agent['getSignalRuntimeOptions']({ runId })).toBeUndefined();
-    expect(agent['getSignalRuntimeOptions']({ resourceId: scope.resourceId, threadId: scope.threadId })).toBeUndefined();
+    expect(
+      agent['getSignalRuntimeOptions']({ resourceId: scope.resourceId, threadId: scope.threadId }),
+    ).toBeUndefined();
   } finally {
     server.closeAllConnections();
     server.close();
