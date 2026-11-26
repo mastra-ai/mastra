@@ -1,4 +1,5 @@
 import { AgentChannels, AgentControllerChannels } from '@mastra/core/channels';
+import { RequestContext } from '@mastra/core/request-context';
 import { createSlackAdapter } from '@mastra/slack';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -343,21 +344,23 @@ describe('SlackIntegration.channels', () => {
   });
 });
 
-describe('SlackIntegration.postToolObserver', () => {
-  const prTool = {
-    toolName: 'execute_command',
-    input: { command: 'gh pr create --draft --title "Fix"' },
-    output: { stdout: 'https://github.com/mastra-ai/mastra/pull/123\n' },
-    context: {},
+describe('SlackIntegration pull request announcements', () => {
+  const prResult = {
+    type: 'tool-result',
+    runId: 'r',
+    from: 'AGENT',
+    payload: {
+      toolCallId: 'c1',
+      toolName: 'execute_command',
+      args: { command: 'gh pr create --draft --title "Fix"' },
+      result: { stdout: 'https://github.com/mastra-ai/mastra/pull/123\n' },
+    },
   };
 
   function setup(platform: string | null) {
     const post = vi.fn(async () => ({ id: 'reply-ts' }));
     const addReaction = vi.fn(async () => {});
     const channels = {
-      buildChannelContextForThread: vi.fn(async () =>
-        platform ? { channel: { platform }, render: { chatThread: { id: `${platform}:C1:171.1` } } } : null,
-      ),
       buildRenderContextForThread: vi.fn(async () =>
         platform
           ? { platform, chatThread: { id: 'slack:C123:1792771853.363419', post }, adapter: { addReaction } }
@@ -366,23 +369,21 @@ describe('SlackIntegration.postToolObserver', () => {
     };
     const integration = new SlackIntegration({ signingSecret: 'secret' });
     integration.initialize({ channels: () => channels as any });
-    integration.channels({
-      storage: { projects: {} },
-      runtime: { workItems: {} },
-    } as any);
-    const requestContext = new Map<string, unknown>([
-      ['controller', { threadId: 'thread-1', sessionId: 'session-1' }],
-      ['user', { id: 'user-1', organizationId: 'org-1' }],
-    ]);
-    return { integration, requestContext: requestContext as any, post, addReaction };
+    const requestContext = new RequestContext();
+    requestContext.set('controller', { threadId: 'thread-1', sessionId: 'session-1' });
+    const announcer = integration.processors.output!.find(p => p.id === 'channel-tool-announcement')!;
+    const emit = async (part: unknown) => {
+      await announcer.processOutputStream!({ part, requestContext, state: {} } as any);
+      await new Promise(resolve => setTimeout(resolve, 0));
+    };
+    return { emit, post, addReaction };
   }
 
   it('posts the pull request link into the linked Slack thread', async () => {
-    const { integration, requestContext, post, addReaction } = setup('slack');
+    const { emit, post, addReaction } = setup('slack');
 
-    await integration.postToolObserver({ toolContext: prTool, requestContext });
+    await emit(prResult);
 
-    await vi.waitFor(() => expect(post).toHaveBeenCalled());
     expect(post).toHaveBeenCalledWith({
       markdown: 'Pull request opened: https://github.com/mastra-ai/mastra/pull/123',
     });
@@ -392,14 +393,11 @@ describe('SlackIntegration.postToolObserver', () => {
 
   it('stays silent for sessions not linked to Slack and for tools that open no pull request', async () => {
     const unlinked = setup(null);
-    await unlinked.integration.postToolObserver({ toolContext: prTool, requestContext: unlinked.requestContext });
+    await unlinked.emit(prResult);
     expect(unlinked.post).not.toHaveBeenCalled();
 
     const linked = setup('slack');
-    await linked.integration.postToolObserver({
-      toolContext: { ...prTool, input: { command: 'gh pr view 123' } },
-      requestContext: linked.requestContext,
-    });
+    await linked.emit({ ...prResult, payload: { ...prResult.payload, args: { command: 'gh pr view 123' } } });
     expect(linked.post).not.toHaveBeenCalled();
   });
 });

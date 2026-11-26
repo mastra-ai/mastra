@@ -18,20 +18,21 @@
  * capabilities by implementing `FactoryIntegration` from outside the package.
  */
 
+import { ChannelToolAnnouncementProcessor, createChannelAttachFileTool } from '@mastra/core/channels';
 import type { AgentChannels } from '@mastra/core/channels';
+import type { OutputProcessor } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import type { SlackAdapterChannelConfig } from '@mastra/slack';
 
 import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
-import { announcePullRequest } from '../channel-thread-announcements.js';
 import { parseCreatedPullRequest } from '../github/session-subscriptions.js';
 import { factoryReplyInstructions, SESSION_LINK_LABEL } from './channel-reply-processor.js';
 import { sessionLinkFromRequest } from './channel-session-link-processor.js';
 import { createSlackChatTools } from './chat-tools.js';
 import { createSlackConnectRoutes } from './connect-route.js';
-import { createShareFileTool, isSlackThread, slackThreadOf } from './share-file-tool.js';
-import type { ShareFileToolDeps } from './share-file-tool.js';
+import { slackThreadOf } from './slack-thread.js';
+import type { SlackThreadDeps } from './slack-thread.js';
 import { createSlackChannelsConfig } from './slack.js';
 import { DEFAULT_SLACK_TOOL_SETTINGS, slackToolSettingsSchema } from './tool-settings.js';
 import type { SlackToolSettings } from './tool-settings.js';
@@ -126,9 +127,11 @@ export class SlackIntegration implements FactoryIntegration {
   readonly #config: SlackIntegrationConfig;
   readonly #toolSettings: SlackToolSettings;
   readonly #adapterOptions: SlackAdapterChannelConfig;
+  /** Posts pull requests the agent opens to the session's Slack thread. */
+  readonly processors: { output: OutputProcessor[] };
   /** Bound in `initialize()`; the controller mounts after integrations are built. */
-  #channels: ShareFileToolDeps['channels'];
-  readonly #deps: ShareFileToolDeps = { channels: () => this.#channels?.() };
+  #channels: SlackThreadDeps['channels'];
+  readonly #deps: SlackThreadDeps = { channels: () => this.#channels?.() };
   /**
    * Whether `channels()` found a source-control owner on the context and wired
    * repo-backed sessions. Set at the channels() attach path, which runs once at
@@ -157,6 +160,17 @@ export class SlackIntegration implements FactoryIntegration {
     this.#toolSettings = slackToolSettingsSchema.parse({ ...DEFAULT_SLACK_TOOL_SETTINGS, ...granted });
     const overrides = adapterOverrides(config.adapterOptions);
     this.#adapterOptions = { ...FACTORY_REPLY_OPTIONS, ...overrides };
+    this.processors = {
+      output: [
+        new ChannelToolAnnouncementProcessor({
+          channels: this.#deps.channels,
+          announce: ({ toolName, args, result }) => {
+            const url = parseCreatedPullRequest({ toolName, input: args, output: result });
+            return url ? `Pull request opened: ${url}` : undefined;
+          },
+        }),
+      ],
+    };
   }
 
   initialize(args: { channels?: () => AgentChannels | null | undefined }): void {
@@ -175,28 +189,11 @@ export class SlackIntegration implements FactoryIntegration {
     const chat = this.#channels?.()?.sdk;
     const sessionThreadId = slackThread.threadId;
     return {
-      ...createShareFileTool(requestContext, this.#deps),
+      ...createChannelAttachFileTool(requestContext, this.#deps),
       ...(chat && sessionThreadId
         ? await createSlackChatTools({ chat, sessionThreadId, settings: this.#toolSettings })
         : {}),
     };
-  }
-
-  /**
-   * When a run opens a pull request, post its link into the session's Slack
-   * thread.
-   */
-  async postToolObserver({
-    toolContext,
-    requestContext,
-  }: Parameters<NonNullable<FactoryIntegration['postToolObserver']>>[0]): Promise<void> {
-    const url = parseCreatedPullRequest(toolContext);
-    const threadId = (requestContext?.get('controller') as { threadId?: string } | undefined)?.threadId;
-    if (!url || !requestContext || !threadId || !(await isSlackThread(requestContext, this.#deps))) return;
-    // Not awaited: the tool call must not wait on Slack.
-    void announcePullRequest(this.#channels?.(), threadId, 'opened', url).catch(error =>
-      console.warn('[slack] pull request opened announcement failed', error),
-    );
   }
 
   channels(ctx: IntegrationContext): FactoryChannelsConfig {
