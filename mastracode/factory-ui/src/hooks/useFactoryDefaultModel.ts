@@ -1,3 +1,4 @@
+import type { ModelPackSet } from '@mastra/factory/model-packs';
 import {
   queryOptions,
   skipToken,
@@ -6,16 +7,12 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import {
-  applyFactoryDefaultModelToSessions,
-  fetchFactoryProject,
-  updateFactoryDefaultModel,
-  updateFactoryModelScope,
-} from '../ui/domains/workspaces/services/github';
-import type { FactoryModelScope } from '../ui/domains/workspaces/services/github';
+import { fetchFactoryProject, updateFactoryProject } from '../ui/domains/workspaces/services/github';
+import type { FactoryModelScope, FactoryProjectPayload } from '../ui/domains/workspaces/services/github';
 
 /**
  * The Factory's org-wide default model. Factory runs (issue triage, board
@@ -35,15 +32,31 @@ export function useFactoryProjectQuery(factoryProjectId: string | undefined) {
   return useQuery(factoryProjectQueryOptions(baseUrl, factoryProjectId));
 }
 
-export function useSetFactoryDefaultModelMutation(factoryProjectId: string | undefined) {
+function mergeSavedFields(
+  queryClient: QueryClient,
+  baseUrl: string,
+  factoryProjectId: string | undefined,
+  saved: Partial<FactoryProjectPayload>,
+) {
+  queryClient.setQueryData(
+    factoryProjectQueryOptions(baseUrl, factoryProjectId).queryKey,
+    project => project && { ...project, ...saved },
+  );
+}
+
+export function useSetFactoryModelPacksMutation(factoryProjectId: string) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (defaultModelId: string | null) =>
-      updateFactoryDefaultModel(baseUrl, factoryProjectId!, defaultModelId),
-    onSuccess: project => {
-      queryClient.setQueryData(queryKeys.factoryProject(factoryProjectId), project);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.availableModels({ factoryProjectId }) });
+    mutationFn: (set: ModelPackSet) => updateFactoryProject(baseUrl, factoryProjectId, set),
+    onSuccess: ({ modelPacks, defaultModelPackId, defaultModelId, defaultThinkingLevel }) => {
+      mergeSavedFields(queryClient, baseUrl, factoryProjectId, {
+        modelPacks,
+        defaultModelPackId,
+        defaultModelId,
+        defaultThinkingLevel,
+      });
+      return queryClient.invalidateQueries({ queryKey: queryKeys.availableModels({ factoryProjectId }) });
     },
   });
 }
@@ -56,9 +69,9 @@ export function useSetFactoryModelScopeMutation(factoryProjectId: string | undef
   const queryClient = useQueryClient();
   return useMutation({
     mutationKey: modelScopeMutationKey(factoryProjectId),
-    mutationFn: (modelScope: FactoryModelScope) => updateFactoryModelScope(baseUrl, factoryProjectId!, modelScope),
-    onSuccess: project => {
-      queryClient.setQueryData(queryKeys.factoryProject(factoryProjectId), project);
+    mutationFn: (modelScope: FactoryModelScope) => updateFactoryProject(baseUrl, factoryProjectId!, { modelScope }),
+    onSuccess: ({ modelScope }) => {
+      mergeSavedFields(queryClient, baseUrl, factoryProjectId, { modelScope });
       // The scope picks which credentials serve this Factory's models, voice input included.
       void queryClient.invalidateQueries({ queryKey: queryKeys.availableModels({ factoryProjectId }) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.voiceSettingsAll() });
@@ -72,11 +85,4 @@ export function usePendingFactoryModelScope(factoryProjectId: string | undefined
     filters: { mutationKey: modelScopeMutationKey(factoryProjectId), status: 'pending' },
     select: mutation => mutation.state.variables as FactoryModelScope,
   }).at(-1);
-}
-
-export function useApplyFactoryDefaultModelMutation(factoryProjectId: string) {
-  const { baseUrl } = useApiConfig();
-  return useMutation({
-    mutationFn: () => applyFactoryDefaultModelToSessions(baseUrl, factoryProjectId),
-  });
 }

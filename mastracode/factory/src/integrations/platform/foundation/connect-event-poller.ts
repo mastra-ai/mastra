@@ -303,7 +303,7 @@ export class PlatformConnectEventPoller extends MastraWorker {
       id: entry.id,
       timestamp: entry.timestamp,
       connectionId,
-      integrationId: entry.integrationId,
+      provider: entry.integrationId,
       eventType: entry.eventType,
       sourceEventId,
       payload: entry.payload,

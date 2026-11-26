@@ -1,3 +1,4 @@
+import { MastraError } from '../../error/index.js';
 import { ScorerRunError } from '../../evals/base';
 import type { MastraScorer, ScorerStepName } from '../../evals/base';
 import { flushBeforeTraceRead } from '../../evals/flush-before-trace-read';
@@ -16,7 +17,7 @@ import type { CorrelationContext } from '../../observability';
 import type { MastraCompositeStore } from '../../storage/base';
 import type { TargetType } from '../../storage/types';
 import type { StepResult } from '../../workflows';
-import type { ScorerResult } from './types';
+import type { ExperimentConfig, ScorerResult } from './types';
 
 function toScorerTargetEntityType(targetType?: TargetType): EntityType | undefined {
   switch (targetType) {
@@ -65,19 +66,29 @@ export function resolveScorers(
 }
 
 export const EXPERIMENT_ITEM_SCORER_NOT_FOUND = 'EXPERIMENT_ITEM_SCORER_NOT_FOUND';
+export const EXPERIMENT_SCORER_NOT_FOUND = 'EXPERIMENT_SCORER_NOT_FOUND';
 
 type ResolvedScorer = MastraScorer<any, any, any, any>;
 
-export interface ItemScorerResolution {
+export interface ScorerResolution {
+  /** Resolved scorers in input order, deduplicated by id. */
   scorers: ResolvedScorer[];
   missingIds: string[];
 }
 
+export type ScorerResolver = (scorers: (ResolvedScorer | string)[]) => Promise<ScorerResolution>;
+
 /**
- * Create a run-scoped resolver for item scorer IDs. Resolutions, including misses,
- * are cached so concurrent items hydrate a stored scorer at most once per run.
+ * Create a run-scoped scorer resolver. Instances pass through; string ids are
+ * looked up in Mastra's registry, then loaded as stored scorers through the
+ * editor (which registers them). Resolutions, including misses, are cached so
+ * concurrent items hydrate a stored scorer at most once per run.
+ *
+ * Only a scorer that doesn't exist is reported in `missingIds`. A failed lookup
+ * (for example, storage being unavailable) rejects with its own error and isn't
+ * cached, so it isn't mistaken for a bad scorer ID.
  */
-export function createItemScorerResolver(mastra: Mastra): (scorerIds: string[]) => Promise<ItemScorerResolution> {
+export function createScorerResolver(mastra: Mastra): ScorerResolver {
   const resolutionCache = new Map<string, Promise<ResolvedScorer | null>>();
 
   const resolveById = (scorerId: string): Promise<ResolvedScorer | null> => {
@@ -90,11 +101,7 @@ export function createItemScorerResolver(mastra: Mastra): (scorerIds: string[]) 
 
       const editor = mastra.getEditor?.();
       if (editor) {
-        try {
-          await editor.scorer.getById(scorerId);
-        } catch {
-          // A missing or unavailable stored scorer is handled as an unresolved item reference below.
-        }
+        await editor.scorer.getById(scorerId);
         scorer = getItemScorerById(mastra, scorerId);
       }
 
@@ -102,18 +109,87 @@ export function createItemScorerResolver(mastra: Mastra): (scorerIds: string[]) 
     })();
 
     resolutionCache.set(scorerId, resolution);
+    resolution.catch(() => resolutionCache.delete(scorerId));
     return resolution;
   };
 
-  return async scorerIds => {
-    const uniqueIds = [...new Set(scorerIds)];
-    const resolved = await Promise.all(uniqueIds.map(async id => ({ id, scorer: await resolveById(id) })));
+  return async entries => {
+    const seen = new Set<string>();
+    const unique = entries.filter(entry => {
+      if (typeof entry !== 'string') return true;
+      if (seen.has(entry)) return false;
+      seen.add(entry);
+      return true;
+    });
+    const resolved = await Promise.all(
+      unique.map(async entry =>
+        typeof entry === 'string' ? { id: entry, scorer: await resolveById(entry) } : { id: entry.id, scorer: entry },
+      ),
+    );
 
     return {
       scorers: resolved.flatMap(({ scorer }) => (scorer ? [scorer] : [])),
       missingIds: resolved.flatMap(({ id, scorer }) => (scorer ? [] : [id])),
     };
   };
+}
+
+/**
+ * The item error for scorer ids that can't be resolved during a run (e.g. a
+ * stored scorer deleted after the experiment started). `null` when none are missing.
+ */
+export function itemScorerNotFoundError(
+  source: 'Experiment' | 'Item' | 'Dataset',
+  missingIds: string[],
+): { code: string; message: string } | null {
+  if (missingIds.length === 0) return null;
+  return {
+    code: EXPERIMENT_ITEM_SCORER_NOT_FOUND,
+    message: `${source} scorer configuration references unregistered scorer IDs: ${missingIds.join(', ')}`,
+  };
+}
+
+export function experimentScorerNotFoundError(missingIds: string[]): MastraError {
+  return new MastraError({
+    id: EXPERIMENT_SCORER_NOT_FOUND,
+    text: `Experiment scorers not found: ${missingIds.join(', ')}`,
+    domain: 'STORAGE',
+    category: 'USER',
+  });
+}
+
+/** Split a run-level scorer config (flat array or categorized) into flat scorers and step scorers. */
+export function flattenScorerConfig(scorers: ExperimentConfig['scorers']): {
+  flat: (ResolvedScorer | string)[];
+  steps?: Record<string, (ResolvedScorer | string)[]>;
+} {
+  if (scorers === undefined) return { flat: [] };
+  if (Array.isArray(scorers)) return { flat: scorers };
+  return {
+    flat: [
+      ...(('agent' in scorers && scorers.agent) || []),
+      ...(('workflow' in scorers && scorers.workflow) || []),
+      ...(('trajectory' in scorers && scorers.trajectory) || []),
+    ],
+    steps: ('steps' in scorers && scorers.steps) || undefined,
+  };
+}
+
+/**
+ * Throw {@link EXPERIMENT_SCORER_NOT_FOUND} when any run-level scorer id can't
+ * be resolved, so a typo or deleted stored scorer fails before an experiment is created.
+ */
+export async function assertExperimentScorersExist(
+  mastra: Mastra,
+  scorers: ExperimentConfig['scorers'],
+): Promise<void> {
+  const { flat, steps } = flattenScorerConfig(scorers);
+  const ids = [...flat, ...Object.values(steps ?? {}).flat()].filter(
+    (scorer): scorer is string => typeof scorer === 'string',
+  );
+  if (ids.length === 0) return;
+  const { missingIds } = await createScorerResolver(mastra)(ids);
+  if (missingIds.length > 0) throw experimentScorerNotFoundError(missingIds);
 }
 
 /**
@@ -471,24 +547,6 @@ async function runScorerSafe(
       promptMetadata: {},
     };
   }
-}
-
-/**
- * Resolve step-scoped scorers from a `Record<stepId, (MastraScorer | string)[]>`.
- * String IDs are looked up from Mastra's scorer registry; missing IDs are skipped
- * with a warning (matching `resolveScorers`).
- */
-export function resolveStepScorers(
-  mastra: Mastra,
-  stepsConfig?: Record<string, (MastraScorer<any, any, any, any> | string)[]>,
-): Record<string, MastraScorer<any, any, any, any>[]> {
-  if (!stepsConfig) return {};
-  const resolved: Record<string, MastraScorer<any, any, any, any>[]> = {};
-  for (const [stepId, scorers] of Object.entries(stepsConfig)) {
-    const stepScorers = resolveScorers(mastra, scorers);
-    if (stepScorers.length > 0) resolved[stepId] = stepScorers;
-  }
-  return resolved;
 }
 
 /**

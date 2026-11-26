@@ -42,7 +42,8 @@ Unlike the other prebuilt LLM judges, which read a single assistant message, thi
       {
         name: 'scale',
         type: 'number',
-        description: 'Scale factor applied to the score (default: 1), so the scorer returns 1 or 0.',
+        description:
+          'Scale factor applied to the score (default: 1). The scorer returns `scale` when the criterion is satisfied and 0 otherwise.',
         required: false,
       },
     ],

@@ -65,6 +65,8 @@ const BUILTIN_ERROR_TYPES = [TypeError, RangeError, ReferenceError, SyntaxError,
 export class InngestExecutionEngine extends DefaultExecutionEngine {
   private inngestStep: BaseContext<Inngest>['step'];
   private inngestAttempts: number;
+  /** A suspension in the failed nested run already ended the spans of the durable agent's segment. */
+  segmentEnded = false;
 
   constructor(
     mastra: Mastra,
@@ -790,7 +792,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       // Try to extract runId from error cause or generate new one
       if (errorCause && typeof errorCause === 'object' && 'status' in errorCause && errorCause.status === 'failed') {
         nestedErrorOrigin = coreObservability.getSpanErrorOrigin?.(errorCause);
-        const { __mastraSpanErrorOrigin: _transportOrigin, ...publicResult } = errorCause as Record<string, unknown>;
+        const {
+          __mastraSpanErrorOrigin: _transportOrigin,
+          __mastraSegmentEnded: segmentEnded,
+          ...publicResult
+        } = errorCause as Record<string, unknown>;
+        this.segmentEnded ||= !!segmentEnded;
         result = publicResult as Extract<NestedWorkflowResult, { status: 'failed' }>;
         runId =
           'runId' in errorCause && typeof errorCause.runId === 'string'

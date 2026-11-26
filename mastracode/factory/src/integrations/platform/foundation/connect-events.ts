@@ -1,10 +1,10 @@
-import type { ConnectEvent } from '@mastra/connect';
+import type { UntypedConnectEvent } from '@mastra/connect';
 
 import type { IntegrationContext } from '../../base.js';
 import type { PlatformConnectBinding } from './connect-binding.js';
 
 /** A provider event for one of an integration's connections. */
-export interface PlatformConnectEventDelivery extends ConnectEvent {
+export interface PlatformConnectEventDelivery extends UntypedConnectEvent {
   /** `sourceEventId ?? id`: the provider's delivery id when known, else the event id. Prefix it per integration. */
   dedupeKey: string;
 }

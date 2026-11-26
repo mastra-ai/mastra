@@ -19,8 +19,9 @@ export function ViewTabs({ labels, index, onChoose }: ViewTabsProps) {
       value={String(index)}
       defaultTab={String(index)}
       onValueChange={value => onChoose(Number(value))}
-      // Grows into the toolbar's free space, so folding measures the room beside a legend.
-      className="min-w-0 grow overflow-visible"
+      // Grows into the toolbar's free space, so folding measures the room beside a legend; no taller
+      // than its tabs, so a card stacking them in a column leaves its spare height under the body.
+      className="max-h-fit min-w-0 grow overflow-visible"
     >
       <TabList variant="pill" size="sm" overflow="menu" className="[&_[data-slot=tabs-indicator]]:transition-none">
         {shortViewLabels(labels).map((label, i) => (

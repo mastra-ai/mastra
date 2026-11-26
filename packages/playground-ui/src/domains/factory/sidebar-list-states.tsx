@@ -2,20 +2,36 @@ import type { ReactNode } from 'react';
 import { SkeletonRows } from './board/skeleton-rows';
 import { Button } from '@/ds/components/Button';
 import { Sidebar } from '@/ds/components/Sidebar';
-import { Skeleton } from '@/ds/components/Skeleton';
+import { Skeleton, SkeletonText } from '@/ds/components/Skeleton';
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowRotateCounterClockwise } from '@/ds/icons/central/IconArrowRotateCounterClockwise';
 
-export function SidebarNavigationSkeleton({ label, rows = 3 }: { label: string; rows?: number }) {
+export function SidebarNavigationSkeleton({
+  label,
+  rows = 3,
+  description = false,
+}: {
+  label: string;
+  rows?: number;
+  description?: boolean;
+}) {
   return (
-    <SkeletonRows label={label} rows={rows} className="gap-0.5">
+    <SkeletonRows label={label} rows={rows} className="gap-px">
       <Sidebar.NavList aria-hidden className="pointer-events-none">
         <Sidebar.NavLink
           render={
             <div>
-              <Skeleton className="size-4 shrink-0 motion-reduce:before:animate-none" />
-              <Sidebar.NavLabel>
-                <Skeleton className="h-3 w-3/4 max-w-40 motion-reduce:before:animate-none" />
+              <span className="flex h-lh shrink-0 items-center">
+                <Skeleton className="size-4 shrink-0 motion-reduce:before:animate-none" />
+              </span>
+              <Sidebar.NavLabel
+                description={
+                  description && (
+                    <SkeletonText line="text-meta" className="h-2.5 w-20 motion-reduce:before:animate-none" />
+                  )
+                }
+              >
+                <SkeletonText line="text-label" className="h-3 w-3/4 max-w-40 motion-reduce:before:animate-none" />
               </Sidebar.NavLabel>
             </div>
           }

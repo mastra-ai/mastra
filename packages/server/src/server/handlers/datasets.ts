@@ -177,6 +177,7 @@ function getHttpStatusForMastraError(errorId: string): number {
     case 'EXPERIMENT_HAS_NO_TARGET':
     case 'EXPERIMENT_INVALID_TARGET':
     case 'EXPERIMENT_NOT_DURABLE':
+    case 'EXPERIMENT_SCORER_NOT_FOUND':
       return 400;
     case 'EXPERIMENT_TARGET_NOT_FOUND':
       return 404;

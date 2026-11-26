@@ -50,12 +50,21 @@ export const apiKeyDeleteEnvScenario = {
     await runtime.waitForScreenText(/API Keys/i, terminal, 8_000);
     await runtime.waitForScreenText(/302ai\s+✓ \(stored\)/i, terminal, 8_000);
     await runtime.waitForScreenText(
-      /Key stored locally\. Press Enter to update or Delete to remove\./i,
+      /Key stored locally\. Press Enter to update or (Fn\+)?Delete to remove\./i,
       terminal,
       8_000,
     );
 
-    terminal.write('\x7f');
+    // Backspace past the start of a search goes back and leaves the key alone.
+    terminal.write('302');
+    await runtime.waitForScreenText(/› 302/, terminal, 8_000);
+    for (let i = 0; i < 4; i++) terminal.write('\x7f');
+    await runtime.waitForScreenTextAbsent(/API Keys/i, terminal, 8_000);
+    terminal.submit('/api-keys');
+    await runtime.waitForScreenText(/302ai\s+✓ \(stored\)/i, terminal, 8_000);
+
+    // Delete removes it.
+    terminal.write('\x1b[3~');
     await runtime.waitForScreenText(/302ai\s+✓ \(env\)/i, terminal, 8_000);
     await runtime.waitForScreenText(/Key set via environment variable/i, terminal, 8_000);
 

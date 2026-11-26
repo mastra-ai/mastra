@@ -86,6 +86,8 @@ Executes background tool calls dispatched by agents.
 - **Consumer group**: `background-task-workers`
 - **Supports multiple replicas**: Instances share the consumer group
 
+An agent's background tool call is bound to the run that made it, so only the process running that agent loop can execute it. A dedicated worker can't take it over. On a process that doesn't run this worker (`workers: false`, or `MASTRA_WORKERS` without `backgroundTasks`), a durable agent runs the tool inline and a regular agent returns a dispatch error as the tool result. To run background tools from a regular agent there, start the `backgroundTasks` worker on that process, or pass [`disableBackgroundTasks: true`](/reference/streaming/agents/stream) to `stream()` or `generate()` so the tools run inline.
+
 ## Supported storage backends
 
 A deployment running all worker types requires a storage backend that implements the `workflows`, `backgroundTasks`, and `schedules` domains. The `schedules` domain is specifically required by the SchedulerWorker. If you don't use scheduled workflows, backends without it can still support orchestration and background tasks. The following backends support all three:

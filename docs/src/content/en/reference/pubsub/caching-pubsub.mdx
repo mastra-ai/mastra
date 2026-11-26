@@ -7,7 +7,7 @@ packages:
 
 # CachingPubSub
 
-`CachingPubSub` wraps any [`PubSub`](/reference/pubsub/base) implementation and adds event caching and replay. It records every published event per topic in a cache, so a subscriber that connects late or reconnects after a disconnect can replay the events it missed before continuing with live events.
+`CachingPubSub` wraps any [`PubSub`](/reference/pubsub/base) implementation and adds event caching and replay. It records published events per topic in a cache, so a subscriber that connects late or reconnects after a disconnect can replay the events it missed before continuing with live events.
 
 Use it to build resumable streams on top of a transport that doesn't keep history, such as [`EventEmitterPubSub`](/reference/pubsub/event-emitter). Transports that already persist events, such as [`RedisStreamsPubSub`](/reference/pubsub/redis-streams), don't need this wrapper.
 
@@ -121,6 +121,8 @@ const pubsub = withCaching(new EventEmitterPubSub(), new InMemoryServerCache())
 ### `publish(topic, event)`
 
 Caches the event with the topic's next index, then publishes it to the inner pub/sub. Consecutive publishes get consecutive indexes. A topic whose log expired or was cleared normally restarts above every index it issued before, so a reconnecting subscriber doesn't mistake new events for already-seen ones. That depends on the cache: `ConvexServerCache` numbers densely instead, and a clock-seeded cache can repeat an index when a log is recreated within the clock's resolution or after the clock moves backwards.
+
+A publish with `{ localOnly: true }` skips the cache and goes straight to the inner pub/sub, so live subscribers receive it but it can't be replayed.
 
 ```typescript
 await pubsub.publish('my-topic', {

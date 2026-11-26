@@ -71,7 +71,7 @@ Use this scorer when an agent condenses text:
             name: 'sourceExtractor',
             type: '(input, output) => string',
             description:
-              'Function to derive the source text from the run input and output. Takes precedence over source',
+              'Function to derive the source text from the run input and output. Used only when the run input and output are agent-shaped, and then takes precedence over source',
             isOptional: true,
           },
           {

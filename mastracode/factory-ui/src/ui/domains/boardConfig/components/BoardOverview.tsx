@@ -1,5 +1,5 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { BoardMap } from '@mastra/playground-ui/domains/factory';
 import type { ReactNode } from 'react';
 
@@ -81,7 +81,7 @@ export function BoardOverview({
           arrivals: (
             <>
               {loading ? (
-                <Skeleton className="h-4 w-20" />
+                <SkeletonText line="text-caption" className="w-20 motion-reduce:before:animate-none" />
               ) : flow ? (
                 arriving.length > 0 ? (
                   <RuleCountCard

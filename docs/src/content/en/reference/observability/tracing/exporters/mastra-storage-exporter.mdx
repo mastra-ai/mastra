@@ -126,7 +126,7 @@ The deprecated `DefaultExporter` class continues to use `'mastra-default-observa
 ### init
 
 ```typescript oxfmt:false
-init(options: InitExporterOptions): void
+init(options: InitExporterOptions): Promise<void>
 ```
 
 Initializes the exporter after dependencies are ready. Resolves tracing strategy based on storage capabilities.

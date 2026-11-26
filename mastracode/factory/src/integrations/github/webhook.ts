@@ -546,9 +546,13 @@ export async function dispatchGithubWebhook(
       continue;
     }
     try {
+      let pendingRunContext: ReturnType<typeof subscriptionRunContext> | undefined;
+      const runContextOnce = () =>
+        (pendingRunContext ??= subscriptionRunContext(subscription, dependencies.github?.sourceControlStorage));
       const session = await resolveSubscriptionSession(dependencies.controller, subscription, {
         label: 'GitHub',
         sourceControl: dependencies.github?.sourceControlStorage,
+        runContext: runContextOnce,
       });
       // No session means this deployment does not hold the subscribed thread.
       // That is not a delivery failure, so it must not be retried or counted as
@@ -560,7 +564,7 @@ export async function dispatchGithubWebhook(
         continue;
       }
       const overrides = managedInlineReviewOverrides(notification, subscription);
-      const runContext = await subscriptionRunContext(subscription, dependencies.github?.sourceControlStorage);
+      const runContext = await runContextOnce();
       // Without a tenant identity the run fails closed on credential resolution
       // after routing has accepted the signal, and a terminal notification would
       // already have retired the subscription. Fail before sending so the target

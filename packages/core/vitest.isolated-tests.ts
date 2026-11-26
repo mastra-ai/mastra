@@ -146,6 +146,7 @@ export const isolatedTestFiles = [
   'src/telemetry/model-usage-telemetry.test.ts', // vi.mock,env
   'src/telemetry/posthog.test.ts', // vi.mock,env
   'src/telemetry/usage-telemetry.test.ts', // vi.mock,env
+  'src/tools/builtin/web-fetch.server.test.ts', // global (node:dns, node:http spies)
   'src/tools/builtin/web-fetch.test.ts', // vi.mock
   'src/utils.test.ts', // vi.mock,env,global
   'src/utils/fetchWithRetry.test.ts', // vi.mock,global

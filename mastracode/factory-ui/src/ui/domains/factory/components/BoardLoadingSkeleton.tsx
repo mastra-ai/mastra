@@ -2,7 +2,12 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useSearchParams } from 'react-router';
 
-import { BOARD_SCROLL_SURFACE_CLASS, boardLayoutFromParams } from '../boardLayout';
+import {
+  BOARD_LIST_GROUP_HEADER_LAYOUT_CLASS,
+  BOARD_LIST_GROUP_HEADER_SURFACE_CLASS,
+  BOARD_SCROLL_SURFACE_CLASS,
+  boardLayoutFromParams,
+} from '../boardLayout';
 import { BoardItemsSkeleton } from './BoardItemsSkeleton';
 import { BoardViewControlsLayout } from './BoardViewControlsLayout';
 
@@ -22,14 +27,20 @@ export function BoardLoadingSkeleton() {
             <BoardViewControlsLayout
               views={
                 <>
-                  <Skeleton className="h-control-md w-24 rounded-full motion-reduce:before:animate-none" />
-                  <Skeleton className="h-control-md w-20 rounded-full motion-reduce:before:animate-none" />
+                  <div className="flex items-center gap-1.5">
+                    <Skeleton className="h-control-sm w-20 rounded-full motion-reduce:before:animate-none" />
+                    <Skeleton className="size-control-sm rounded-full motion-reduce:before:animate-none" />
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Skeleton className="h-control-sm w-13.5 rounded-full motion-reduce:before:animate-none" />
+                    <Skeleton className="size-control-sm rounded-full motion-reduce:before:animate-none" />
+                  </div>
                 </>
               }
               search={
-                <Skeleton className="h-control-md w-48 max-w-full rounded-full motion-reduce:before:animate-none" />
+                <Skeleton className="h-control-sm w-48 max-w-full flex-1 rounded-full motion-reduce:before:animate-none max-sm:min-w-0" />
               }
-              aside={<Skeleton className="size-control-md rounded-full motion-reduce:before:animate-none" />}
+              aside={<Skeleton className="size-control-sm rounded-full motion-reduce:before:animate-none" />}
             />
           </div>
           {layout === 'board' && (
@@ -48,11 +59,12 @@ export function BoardLoadingSkeleton() {
           {Array.from({ length: 3 }, (_, index) => (
             <div key={index} className={cn('flex flex-col', layout === 'board' && 'w-80 shrink-0')}>
               {layout === 'list' && (
-                <div className="mb-1 flex min-h-9 items-center gap-2 px-3 py-1">
+                <div className={cn(BOARD_LIST_GROUP_HEADER_LAYOUT_CLASS, BOARD_LIST_GROUP_HEADER_SURFACE_CLASS)}>
                   <Skeleton className="size-3.5 shrink-0 motion-reduce:before:animate-none" />
                   <Skeleton className="size-4 shrink-0 motion-reduce:before:animate-none" />
                   <Skeleton className="h-3.5 w-24 motion-reduce:before:animate-none" />
                   <Skeleton className="h-4 w-5 motion-reduce:before:animate-none" />
+                  <Skeleton className="size-control-sm ml-auto shrink-0 rounded-full motion-reduce:before:animate-none" />
                 </div>
               )}
               <BoardItemsSkeleton label="Loading board items" layout={layout} />

@@ -32,7 +32,7 @@ export const factory = new MastraFactory({
 
 | Class | Package | Settings | Builds |
 | - | - | - | - |
-| `PlatformFactorySandbox` | `@mastra/platform-workspace` | `cpuCount`, `memoryMb`, `idleTimeoutMinutes`, `publicPorts` | `start`, `get` |
+| `PlatformFactorySandbox` | `@mastra/platform-workspace` | `cpuCount`, `memoryMb`, `docker`, `idleTimeoutMinutes`, `publicPorts` | `start`, `get` |
 | `E2BFactorySandbox` | `@mastra/e2b` | `cpuCount`, `memoryMb`, `idleTimeoutMinutes` | `start`, `get`, `list` |
 | `DockerFactorySandbox` | `@mastra/docker` | `baseImage`, `owner` | `start`, `get` |
 | `LocalFactorySandbox` | `@mastra/factory` | None | No |
@@ -282,9 +282,10 @@ When the sandbox declares `builds`, factory builds the environment template ahea
 - on `POST /web/factory/projects/:id/environment/build` (the Environment page's Build now, or `mastra api factory project environment build <project-id>`)
 - on a cron schedule kept in core `Schedules`, enabled through `PATCH { buildTriggers: { schedule: { enabled: true, cron, timezone } } }`; needs a storage adapter with the schedules domain, otherwise the route reports `scheduleAvailable: false`
 - after a push to a linked repository's default branch when `buildTriggers.push.enabled` is set, at most once per `debounceMinutes`
+- when a session creates a new sandbox from the built template and a repository head moved since that build, sharing the push trigger's `debounceMinutes` window (reattaching to an existing sandbox doesn't count)
 - after saving a change to a template input, once the project has a template; a change saved while a build runs is built when that build ends
 
-A save that leaves every template input unchanged doesn't start a build. Scheduled and push builds skip when the last build is ready, no repository head moved and no template input changed (settings, repositories and their order, setup commands, the working directory or the factory's Build variables). Factory stores only the last build id and the active template. Status and history come from the provider through `GET …/environment/builds/:buildId` and `GET …/environment/builds` (404 `no_history` when the provider keeps none).
+A save that leaves every template input unchanged doesn't start a build. Scheduled, push and session builds skip when the last build is ready, no repository head moved and no template input changed (settings, repositories and their order, setup commands, the working directory or the factory's Build variables). Factory stores only the last build id and the active template. Status and history come from the provider through `GET …/environment/builds/:buildId` and `GET …/environment/builds` (404 `no_history` when the provider keeps none).
 
 When a build start was never recorded and the provider can't list its builds, Factory can't tell whether that build is still running. Triggers skip with reason `unresolved` for 30 minutes after the start's lease lapsed, then Factory treats the start as failed and the next trigger builds.
 

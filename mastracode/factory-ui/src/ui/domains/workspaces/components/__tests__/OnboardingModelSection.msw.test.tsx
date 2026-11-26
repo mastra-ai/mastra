@@ -125,7 +125,7 @@ describe('Model provider onboarding', () => {
             }),
           ),
           http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-            HttpResponse.json({ modelId: null, thinkingLevel: null }),
+            HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
           ),
           http.post(`${TEST_BASE_URL}/web/config/providers/mastra/connect`, () => {
             connect();
@@ -446,8 +446,11 @@ describe('Model provider onboarding', () => {
             name: 'my-llm',
             url: 'https://api.example.com/v1',
             apiKey: 'sk-test',
+            authScheme: 'bearer',
+            headers: [],
             models: ['model-a'],
             scope,
+            check: true,
           });
           created = true;
           return HttpResponse.json({ ok: true, provider });
@@ -458,7 +461,7 @@ describe('Model provider onboarding', () => {
     function registerNoPersonalDefault() {
       server.use(
         http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-          HttpResponse.json({ modelId: null, thinkingLevel: null }),
+          HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
         ),
       );
     }
@@ -470,8 +473,8 @@ describe('Model provider onboarding', () => {
       await user.type(screen.getByPlaceholderText('e.g. my-llm'), 'my-llm');
       await user.type(screen.getByPlaceholderText('https://api.example.com/v1'), 'https://api.example.com/v1');
       await user.type(screen.getByPlaceholderText('Paste API key'), 'sk-test');
-      await user.type(screen.getByPlaceholderText('model-a, model-b'), 'model-a');
-      await user.click(screen.getByRole('button', { name: 'Add' }));
+      await user.type(screen.getByRole('combobox', { name: 'Models' }), 'model-a{Enter}');
+      await user.click(screen.getByRole('button', { name: 'Test & save' }));
       return user;
     }
 
@@ -485,7 +488,7 @@ describe('Model provider onboarding', () => {
       await user.click(screen.getByRole('button', { name: 'Add a custom provider' }));
       await user.type(screen.getByPlaceholderText('e.g. my-llm'), 'my-llm');
       await user.type(screen.getByPlaceholderText('https://api.example.com/v1'), 'https://api.example.com/v1');
-      await user.click(screen.getByRole('button', { name: 'Add' }));
+      await user.click(screen.getByRole('button', { name: 'Test & save' }));
 
       expect(await screen.findByText('At least one model is required.')).toBeVisible();
     });
