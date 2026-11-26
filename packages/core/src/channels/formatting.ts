@@ -1,3 +1,5 @@
+import type { ButtonElement, ButtonStyle } from 'chat';
+
 import { chatModule } from './chat-lazy';
 import type { PostableMessage } from './types';
 
@@ -150,6 +152,61 @@ export const CONTINUE_RUN_ACTION_ID = 'run_continue';
 
 /** What a click on a {@link CONTINUE_RUN_ACTION_ID} button says to the agent. */
 export const CONTINUE_RUN_MESSAGE = 'Continue.';
+
+/**
+ * Prefix of the action id of a {@link toolResumeButton}. The full id is
+ * `tool_resume:<toolCallId>:<action>`.
+ */
+export const TOOL_RESUME_ACTION_PREFIX = 'tool_resume:';
+
+const TOOL_RESUME_ACTION_PATTERN = /^[a-z][a-z0-9_-]{0,15}$/;
+
+/** Telegram's limit on a button's `callback_data`, the tightest of the supported platforms. */
+const MAX_ACTION_ID_BYTES = 64;
+
+/**
+ * Build a button for a paused tool's `channelCard` (see {@link ChannelSuspendPayload}).
+ * A click resumes the paused tool call with `{ action }`.
+ *
+ * @throws when `action` does not match `/^[a-z][a-z0-9_-]{0,15}$/`, or when the
+ * button's id is longer than 64 bytes, which Telegram does not accept.
+ */
+export function toolResumeButton({
+  toolCallId,
+  action,
+  label,
+  style,
+}: {
+  /** The paused tool call's id, from the tool's `execute` context. */
+  toolCallId: string;
+  /** What the tool is resumed with, as `{ action }`. */
+  action: string;
+  label: string;
+  style?: ButtonStyle;
+}): ButtonElement {
+  if (!TOOL_RESUME_ACTION_PATTERN.test(action)) {
+    throw new Error(`toolResumeButton: action "${action}" must match ${TOOL_RESUME_ACTION_PATTERN}`);
+  }
+  const id = `${TOOL_RESUME_ACTION_PREFIX}${toolCallId}:${action}`;
+  const bytes = new TextEncoder().encode(id).length;
+  if (bytes > MAX_ACTION_ID_BYTES) {
+    throw new Error(
+      `toolResumeButton: the button id "${id}" is ${bytes} bytes; channels accept at most ${MAX_ACTION_ID_BYTES}`,
+    );
+  }
+  return { type: 'button', id, label, ...(style ? { style } : {}) };
+}
+
+/** Split a {@link toolResumeButton} action id into its tool call id and action. */
+export function parseToolResumeActionId(actionId: string): { toolCallId: string; action: string } | undefined {
+  if (!actionId.startsWith(TOOL_RESUME_ACTION_PREFIX)) return undefined;
+  const rest = actionId.slice(TOOL_RESUME_ACTION_PREFIX.length);
+  const separator = rest.lastIndexOf(':');
+  const toolCallId = rest.slice(0, separator);
+  const action = rest.slice(separator + 1);
+  if (separator <= 0 || !TOOL_RESUME_ACTION_PATTERN.test(action)) return undefined;
+  return { toolCallId, action };
+}
 
 /** Format a tool approval request message */
 export function formatToolApproval(

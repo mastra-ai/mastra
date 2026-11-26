@@ -35,7 +35,13 @@ export { defaultTypingStatus } from './typing-status';
 export type { TypingStatusContext, TypingStatusFn, TypingStatusReturn } from './typing-status';
 export { resolveWaitUntil } from './wait-until';
 export type { WaitUntilFn, WaitUntilResolver } from './wait-until';
-export { CONTINUE_RUN_ACTION_ID, CONTINUE_RUN_MESSAGE, formatToolApproval } from './formatting';
+export {
+  CONTINUE_RUN_ACTION_ID,
+  CONTINUE_RUN_MESSAGE,
+  formatToolApproval,
+  TOOL_RESUME_ACTION_PREFIX,
+  toolResumeButton,
+} from './formatting';
 export { renderBuiltInToolEvent } from './stream-helpers';
 export type {
   ActionChannelHandler,
@@ -60,6 +66,7 @@ export type {
   ChannelPlatformInfo,
   ChannelProvider,
   ChannelsResolver,
+  ChannelSuspendPayload,
   ChannelsResolverContext,
   InlineLinkEntry,
   PostableMessage,

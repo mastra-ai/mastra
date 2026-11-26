@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { InMemoryStore } from '../../storage/mock';
 import { AgentChannels } from '../agent-channels';
 import { getChatModule } from '../chat-lazy';
+import { toolResumeButton } from '../formatting';
 import { ChatChannelOutputProcessor, CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '../output-processor';
 
 // ---------------------------------------------------------------------------
@@ -2904,4 +2905,117 @@ describe('ChatChannelOutputProcessor fallback render context', () => {
     const posts = calls.filter(c => c.kind === 'post');
     expect(posts).toEqual([{ kind: 'post', arg: { markdown: 'inbound message' } }]);
   });
+});
+
+describe('paused tool channel cards', () => {
+  beforeAll(async () => {
+    await getChatModule();
+  });
+
+  const card = (text: string) => ({
+    type: 'card',
+    children: [
+      { type: 'text', content: text },
+      { type: 'actions', children: [toolResumeButton({ toolCallId: 't1', action: 'next', label: 'Next' })] },
+    ],
+  });
+  const call = { toolCallId: 't1', toolName: 'pick', args: { topic: 'colours' } };
+  const suspended = (suspendPayload: unknown) => ({
+    type: 'tool-call-suspended',
+    runId: 'run-1',
+    payload: { ...call, suspendPayload },
+  });
+  const result = { type: 'tool-result', payload: { ...call, result: 'red' } };
+  const nonPlanPosts = async (calls: Call[]) => {
+    const { StreamingPlan } = await getChatModule();
+    return calls.filter(c => c.kind === 'post' && !(c.arg instanceof StreamingPlan)) as Extract<
+      Call,
+      { kind: 'post' }
+    >[];
+  };
+  const edits = (calls: Call[]) =>
+    calls.filter(c => c.kind === 'editMessage') as Extract<Call, { kind: 'editMessage' }>[];
+
+  for (const streaming of [false, true]) {
+    describe(streaming ? 'streaming driver' : 'static driver', () => {
+      it('shows the card in place of the running tool card and records it for the click handler', async () => {
+        const { channels, calls, chatThread } = makeChannels({ streaming, toolDisplay: 'cards' });
+        await drive(
+          channels,
+          [{ type: 'tool-call', payload: call }, suspended({ channelCard: card('Pick one') })],
+          chatThread,
+        );
+
+        expect(await nonPlanPosts(calls)).toHaveLength(1);
+        expect(edits(calls)).toEqual([
+          { kind: 'editMessage', threadId: chatThread.id, messageId: 'm1', content: card('Pick one') },
+        ]);
+        expect((channels as any).pendingApprovalCards.get('t1')).toMatchObject({
+          messageId: 'm1',
+          runId: 'run-1',
+          toolName: 'pick',
+          args: { topic: 'colours' },
+        });
+      });
+
+      it('posts the card when no running card was shown', async () => {
+        const { channels, calls, chatThread } = makeChannels({ streaming, toolDisplay: 'hidden' });
+        await drive(
+          channels,
+          [{ type: 'tool-call', payload: call }, suspended({ channelCard: card('Pick one') })],
+          chatThread,
+        );
+
+        expect((await nonPlanPosts(calls)).map(p => p.arg)).toEqual([card('Pick one')]);
+        expect((channels as any).pendingApprovalCards.get('t1')).toMatchObject({ messageId: 'm1', runId: 'run-1' });
+      });
+
+      it('posts nothing for a paused tool without a card, or with something that is not a card', async () => {
+        const { channels, calls, chatThread } = makeChannels({ streaming, toolDisplay: 'hidden' });
+        await drive(
+          channels,
+          [
+            { type: 'tool-call', payload: call },
+            suspended({ question: 'Pick one' }),
+            suspended(undefined),
+            suspended({ channelCard: 'Pick one' }),
+            suspended({ channelCard: { children: [] } }),
+          ],
+          chatThread,
+        );
+
+        expect(await nonPlanPosts(calls)).toEqual([]);
+        expect(edits(calls)).toEqual([]);
+        expect((channels as any).pendingApprovalCards.has('t1')).toBe(false);
+      });
+
+      it("posts nothing in 'text' mode, which has no buttons", async () => {
+        const { channels, calls, chatThread } = makeChannels({ streaming, toolDisplay: 'text' });
+        await drive(
+          channels,
+          [{ type: 'tool-call', payload: call }, suspended({ channelCard: card('Pick one') })],
+          chatThread,
+        );
+
+        expect(await nonPlanPosts(calls)).toHaveLength(1);
+        expect(edits(calls)).toEqual([]);
+        expect((channels as any).pendingApprovalCards.has('t1')).toBe(false);
+      });
+
+      it('edits the clicked card when a resumed run suspends again, then shows the result there', async () => {
+        const { channels, calls, chatThread } = makeChannels({ streaming, toolDisplay: 'cards' });
+        await drive(channels, [suspended({ channelCard: card('Pick again') }), result], chatThread, {
+          toolCallId: 't1',
+          messageId: 'm9',
+        });
+
+        expect(await nonPlanPosts(calls)).toEqual([]);
+        const edited = edits(calls);
+        expect(edited.map(e => e.messageId)).toEqual(['m9', 'm9']);
+        expect(edited[0]!.content).toEqual(card('Pick again'));
+        // The result replaced the card and cleared the record.
+        expect((channels as any).pendingApprovalCards.has('t1')).toBe(false);
+      });
+    });
+  }
 });

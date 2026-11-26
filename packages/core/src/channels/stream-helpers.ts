@@ -1,4 +1,4 @@
-import type { Adapter, StreamChunk, Thread } from 'chat';
+import type { Adapter, CardElement, StreamChunk, Thread } from 'chat';
 import type { IMastraLogger } from '../logger/logger';
 import { describeProviderError, readProviderErrorDetails } from '../loop/shared/provider-error-details';
 import type { AgentChunkType } from '../stream/types';
@@ -10,7 +10,7 @@ import {
   formatToolRunning,
   stripToolPrefix,
 } from './formatting';
-import type { PostableMessage, ToolDisplayEvent } from './types';
+import type { ChannelSuspendPayload, PostableMessage, ToolDisplayEvent } from './types';
 
 /**
  * Approval card metadata stashed when a driver posts an approval card. The
@@ -403,4 +403,58 @@ export function chunkToFallbackMessage(chunk: StreamChunk): string | null {
     return chunk.title && chunk.title.length > 0 ? chunk.title : null;
   }
   return null;
+}
+
+/** The `channelCard` a paused tool put in its suspend payload, if it is a Chat SDK card. */
+export function channelCardOf(suspendPayload: unknown): CardElement | undefined {
+  const card = (suspendPayload as ChannelSuspendPayload | undefined)?.channelCard;
+  return card && typeof card === 'object' && card.type === 'card' && Array.isArray(card.children) ? card : undefined;
+}
+
+/**
+ * Post the `channelCard` of a paused tool (see `ChannelSuspendPayload`). Both
+ * drivers call this for `tool-call-suspended` chunks. The card replaces the
+ * tool's running card, or the card it suspended with before (a resumed run
+ * seeds that one through the approval stash), so a re-suspension edits the
+ * same message; otherwise it is posted. The card is recorded like an approval
+ * card so the click handler can resume the run and the tool's result edits it.
+ *
+ */
+export async function postSuspendedToolCard(args: {
+  chunk: Extract<AgentChunkType<any>, { type: 'tool-call-suspended' }>;
+  card: CardElement;
+  tracker: ToolTracker;
+  adapter: Pick<Adapter<any, any>, 'editMessage'>;
+  chatThread: Pick<Thread, 'id' | 'post'>;
+  toolMessageIds: Map<string, string | undefined>;
+  getPendingApproval: (toolCallId: string) => PendingApprovalRecord | undefined;
+  onApprovalPosted: (toolCallId: string, record: PendingApprovalRecord) => void;
+  logger?: IMastraLogger;
+}): Promise<void> {
+  const { chunk, card, tracker, adapter, chatThread, toolMessageIds, getPendingApproval, onApprovalPosted, logger } =
+    args;
+  const enr = tracker.enrichApproval({
+    toolCallId: chunk.payload.toolCallId,
+    toolName: chunk.payload.toolName,
+    args: chunk.payload.args,
+  });
+  const existing = getPendingApproval(enr.toolCallId);
+  const messageId = await editOrPostMessage({
+    adapter,
+    chatThread,
+    messageId: toolMessageIds.get(enr.toolCallId) ?? existing?.messageId,
+    message: card,
+    logger,
+  });
+  if (messageId) toolMessageIds.set(enr.toolCallId, messageId);
+  onApprovalPosted(enr.toolCallId, {
+    messageId,
+    displayName: enr.displayName,
+    argsSummary: enr.argsSummary,
+    startedAt: existing?.startedAt ?? Date.now(),
+    runId: chunk.runId ?? existing?.runId,
+    toolName: enr.toolName,
+    args: (enr.args ?? {}) as Record<string, unknown>,
+    requesterId: existing?.requesterId,
+  });
 }

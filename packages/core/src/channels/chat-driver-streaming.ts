@@ -8,9 +8,11 @@ import { asOmChunk, formatTokens, renderOmTaskUpdate } from './om';
 import type { PendingApprovalRecord } from './stream-helpers';
 import {
   ToolTracker,
+  channelCardOf,
   editOrPostMessage,
   postFileAttachment,
   postStreamError,
+  postSuspendedToolCard,
   postTripwire,
   renderBuiltInToolEvent,
 } from './stream-helpers';
@@ -807,6 +809,28 @@ export async function runStreamingDriver({
         runId: (chunk as { runId?: string }).runId,
         toolName: enr.toolName,
         args: (enr.args ?? {}) as Record<string, unknown>,
+      });
+      continue;
+    }
+
+    if (chunk.type === 'tool-call-suspended') {
+      // A paused tool can bring its own card (`suspendPayload.channelCard`);
+      // without one, or in `'text'` mode, which has no buttons, nothing is posted.
+      if (channelToolNames.has(chunk.payload.toolName)) continue;
+      if (toolDisplay === 'text' && !toolDisplayFn) continue;
+      const card = channelCardOf(chunk.payload.suspendPayload);
+      if (!card) continue;
+      await closeSession();
+      await postSuspendedToolCard({
+        chunk,
+        card,
+        tracker,
+        adapter,
+        chatThread,
+        toolMessageIds,
+        getPendingApproval,
+        onApprovalPosted,
+        logger,
       });
       continue;
     }

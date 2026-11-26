@@ -36,6 +36,36 @@ export type { InlineLinkEntry } from './inline-media';
  */
 export type PostableMessage = string | CardElement | { markdown: string };
 
+/**
+ * Fields a tool can add to its suspend payload for channel runs.
+ *
+ * When a tool suspends with a `channelCard` on a Slack, Telegram or Teams
+ * thread, the card is posted in place of the tool's running card. Buttons
+ * built with `toolResumeButton()` resume the paused call with `{ action }`.
+ * Suspending again with a new `channelCard` replaces the card in place, and
+ * the tool's result replaces it once the call finishes.
+ *
+ * @example
+ * ```ts
+ * execute: async (input, { agent }) => {
+ *   if (agent?.resumeData?.action === 'go') return 'done';
+ *   const toolCallId = agent!.toolCallId;
+ *   await agent!.suspend({
+ *     channelCard: Card({
+ *       children: [
+ *         CardText('Ready?'),
+ *         Actions([toolResumeButton({ toolCallId, action: 'go', label: 'Go', style: 'primary' })]),
+ *       ],
+ *     }),
+ *   } satisfies ChannelSuspendPayload);
+ * }
+ * ```
+ */
+export interface ChannelSuspendPayload {
+  /** The card to show in the channel thread while the tool is paused. */
+  channelCard?: CardElement;
+}
+
 /** What `formatError` knows about the failure beyond the error itself. */
 export interface ChannelErrorContext {
   requestContext?: RequestContext;

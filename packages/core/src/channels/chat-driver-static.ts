@@ -5,10 +5,12 @@ import type { AgentChunkType } from '../stream/types';
 import type { PendingApprovalRecord } from './stream-helpers';
 import {
   ToolTracker,
+  channelCardOf,
   chunkToFallbackMessage,
   editOrPostMessage,
   postFileAttachment,
   postStreamError,
+  postSuspendedToolCard,
   postTripwire,
   renderBuiltInToolEvent,
 } from './stream-helpers';
@@ -342,6 +344,28 @@ export async function runStaticDriver({
         runId: chunk.runId,
         toolName: enr.toolName,
         args: (enr.args ?? {}) as Record<string, unknown>,
+      });
+      continue;
+    }
+
+    if (chunk.type === 'tool-call-suspended') {
+      // A paused tool can bring its own card (`suspendPayload.channelCard`);
+      // without one, or in `'text'` mode, which has no buttons, nothing is posted.
+      if (channelToolNames.has(chunk.payload.toolName)) continue;
+      if (toolDisplay === 'text' && !toolDisplayFn) continue;
+      const card = channelCardOf(chunk.payload.suspendPayload);
+      if (!card) continue;
+      await flushText();
+      await postSuspendedToolCard({
+        chunk,
+        card,
+        tracker,
+        adapter,
+        chatThread,
+        toolMessageIds,
+        getPendingApproval,
+        onApprovalPosted,
+        logger,
       });
       continue;
     }

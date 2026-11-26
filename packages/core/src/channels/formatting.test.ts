@@ -23,7 +23,9 @@ import {
   formatToolHeader,
   formatToolResult,
   formatToolRunning,
+  parseToolResumeActionId,
   stripToolPrefix,
+  toolResumeButton,
 } from './formatting';
 
 // ---------------------------------------------------------------------------
@@ -372,4 +374,61 @@ describe('formatToolDenied (plain text)', () => {
     const result = formatToolDenied('run_code', '', undefined, false);
     expect(result).not.toContain('by');
   });
+});
+
+// ---------------------------------------------------------------------------
+// toolResumeButton
+// ---------------------------------------------------------------------------
+
+describe('toolResumeButton', () => {
+  it('builds a button whose id names the tool call and the action', () => {
+    expect(toolResumeButton({ toolCallId: 'call_abc', action: 'connect', label: 'Connect', style: 'primary' })).toEqual(
+      {
+        type: 'button',
+        id: 'tool_resume:call_abc:connect',
+        label: 'Connect',
+        style: 'primary',
+      },
+    );
+    expect(toolResumeButton({ toolCallId: 'call_abc', action: 'cancel', label: 'Cancel' })).toEqual({
+      type: 'button',
+      id: 'tool_resume:call_abc:cancel',
+      label: 'Cancel',
+    });
+  });
+
+  it('round-trips through the click parser, even when the tool call id has colons', () => {
+    const { id } = toolResumeButton({ toolCallId: 'a:b:c', action: 'done', label: 'Done' });
+    expect(parseToolResumeActionId(id)).toEqual({ toolCallId: 'a:b:c', action: 'done' });
+  });
+
+  it.each(['', 'Connect', '1go', 'go now', 'go:on', 'a'.repeat(17)])('rejects the action name %j', action => {
+    expect(() => toolResumeButton({ toolCallId: 'call_abc', action, label: 'Go' })).toThrow(/must match/);
+  });
+
+  it('accepts the longest action name and an id of exactly 64 bytes', () => {
+    const action = 'a'.repeat(16);
+    // `tool_resume:` (12) + id + `:` (1) + action (16) = 64
+    const toolCallId = 'x'.repeat(35);
+    expect(toolResumeButton({ toolCallId, action, label: 'Go' }).id).toHaveLength(64);
+  });
+
+  it('rejects ids over the 64 bytes Telegram accepts, counting bytes rather than characters', () => {
+    expect(() => toolResumeButton({ toolCallId: 'x'.repeat(36), action: 'a'.repeat(16), label: 'Go' })).toThrow(
+      /65 bytes/,
+    );
+    // 35 characters, 36 bytes: the id is 64 characters but 65 bytes.
+    expect(() => toolResumeButton({ toolCallId: `${'x'.repeat(34)}é`, action: 'a'.repeat(16), label: 'Go' })).toThrow(
+      /65 bytes/,
+    );
+  });
+});
+
+describe('parseToolResumeActionId', () => {
+  it.each(['tool_approve:call_abc', 'tool_resume:call_abc', 'tool_resume::go', 'tool_resume:call_abc:Go'])(
+    'ignores %j',
+    actionId => {
+      expect(parseToolResumeActionId(actionId)).toBeUndefined();
+    },
+  );
 });
