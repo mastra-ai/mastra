@@ -333,6 +333,35 @@ describe('LibSQL pending signals', () => {
       }
     });
 
+    it('saves a thread whose table has columns added under names that are not plain identifiers', async () => {
+      const url = tempDbUrl();
+      await (await openMemory(url)).store.close();
+      const client = createClient({ url });
+      try {
+        await client.execute(`ALTER TABLE mastra_threads ADD COLUMN "display-color" TEXT`);
+        // The column name `a"b`, with a double quote in it.
+        await client.execute(`ALTER TABLE mastra_threads ADD COLUMN "a""b" TEXT`);
+      } finally {
+        client.close();
+      }
+
+      const { store, memory } = await openMemory(url);
+      try {
+        const thread = createSampleThread() as StorageThreadType;
+        await expect(memory.saveThread({ thread })).resolves.toMatchObject({ id: thread.id });
+        const runId = `run-${randomUUID()}`;
+        await memory.setSignalRun({ threadId: thread.id, runId });
+
+        await expect(memory.saveThread({ thread: { ...thread, title: 'renamed' } })).resolves.toMatchObject({
+          title: 'renamed',
+        });
+        expect(await memory.getThreadById({ threadId: thread.id })).toMatchObject({ title: 'renamed' });
+        expect(await memory.getSignalRun({ threadId: thread.id })).toBe(runId);
+      } finally {
+        await store.close();
+      }
+    });
+
     it('applies the save transition per row in one multi-row saveMessages', async () => {
       const url = tempDbUrl();
       const { store, memory } = await openMemory(url);
