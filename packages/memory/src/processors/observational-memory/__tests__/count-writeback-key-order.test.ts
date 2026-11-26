@@ -54,7 +54,9 @@ describe('writing token counts back onto stored history', () => {
     const { storage, om } = await setup();
     await storage.saveMessages({ messages: [message([{ type: 'text', text: 'edited in storage' }])] });
 
-    const counted = message([{ type: 'text', text: 'what OM counted', providerMetadata: { mastra: { tokenEstimate: estimate } } }]);
+    const counted = message([
+      { type: 'text', text: 'what OM counted', providerMetadata: { mastra: { tokenEstimate: estimate } } },
+    ]);
     await om.persistMessages([counted], 't', 'r', new Set(['assistant-1']));
 
     expect(await storedEstimate(storage)).toBeUndefined();

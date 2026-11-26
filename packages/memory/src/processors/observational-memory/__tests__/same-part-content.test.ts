@@ -268,11 +268,19 @@ describe('samePartExceptTokenEstimate', () => {
       { type: 'text', text: 'x', providerMetadata: { openai: { itemId: 'a' }, mastra: { tokenEstimate: estimate } } },
       { type: 'text', text: 'x', providerMetadata: { openai: { itemId: 'b' } } },
     ],
-    ['empty providerMetadata against none', { type: 'text', text: 'x', providerMetadata: {} }, { type: 'text', text: 'x' }],
-    ['tool part against its stored copy', { ...toolPart, providerMetadata: { mastra: { tokenEstimate: estimate } } }, stored(toolPart)],
+    [
+      'empty providerMetadata against none',
+      { type: 'text', text: 'x', providerMetadata: {} },
+      { type: 'text', text: 'x' },
+    ],
+    [
+      'tool part against its stored copy',
+      { ...toolPart, providerMetadata: { mastra: { tokenEstimate: estimate } } },
+      stored(toolPart),
+    ],
   ];
 
-  it.each(cases)('agrees with main\'s JSON comparison: %s', (_name, a, b) => {
+  it.each(cases)("agrees with main's JSON comparison: %s", (_name, a, b) => {
     expect(samePartExceptTokenEstimate(a, b)).toBe(mainContentOf(a) === mainContentOf(b));
   });
 
