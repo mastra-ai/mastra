@@ -1,5 +1,5 @@
 export { MastraPlatform } from './mastra-platform';
-export type { MastraPlatformOptions, ManagedAgentsSetupStatus } from './mastra-platform';
+export type { MastraPlatformOptions, ManagedAgentsSetupStatus, PlatformStorageOptions } from './mastra-platform';
 export {
   MastraPlatformError,
   PlatformProjects,
@@ -24,7 +24,7 @@ export type {
   PlatformDatabaseKind,
   CreatePlatformDatabaseInput,
   PlatformDatabaseConnection,
-  PlatformFilesystem,
+  PlatformFilesystemRecord,
   CreatePlatformFilesystemInput,
   PlatformSandboxRecord,
 } from './provisioning/index';
@@ -34,15 +34,9 @@ export type {
   UpdatePlatformAgentInput,
   PlatformAgentRecord,
   PlatformAgentRunOptions,
-  PlatformAgentMessages,
+  PlatformAgentConfig,
 } from './agents/platform-agent';
-export { PlatformConnect, PlatformConnectError } from './connect/platform-connect';
-export type {
-  PlatformConnectOptions,
-  PlatformConnection,
-  PlatformConnectSession,
-  PlatformIntegration,
-} from './connect/platform-connect';
+export { ConnectClient, MastraConnectError } from '@mastra/connect';
 export * from './memory/index';
 export { PlatformBrowser } from './browser/index';
 export type { PlatformBrowserOptions } from './browser/index';

@@ -45,12 +45,12 @@ const agent = await platform.createAgent({
 const response = await agent.stream('Where is my invoice?', {
   memory: { thread: 'thread-1', resource: 'user-1' },
 });
-await response.processDataStream({ onChunk: async chunk => console.log(chunk) });
+for await (const text of response.textStream) process.stdout.write(text);
 
 const { messages } = await agent.listMessages('thread-1', { resourceId: 'user-1' });
 ```
 
-Every run acts for an end user, whose memory, threads, and connected accounts it uses. Pass `memory.resource`, or `resourceId` for a run without memory. Use `platform.getAgent(id)` for an existing agent; agents also have `generate`, `details`, `update`, `delete`, and `listThreads`.
+A managed agent is a Mastra `Agent` that runs on the Platform: `stream` and `generate` return the same output a local agent does, and you can register it in `new Mastra({ agents })`, hand it to another agent as a sub-agent, or run it as a workflow step. Every run acts for an end user, whose memory, threads, and connected accounts it uses. Pass `memory.resource` or `resourceId`; in a workflow step or a server route, the request context's end user is used. Use `await platform.getAgent(id)` for an existing agent; agents also have `details`, `update`, `delete`, and `listThreads`.
 
 ### Memory, knowledge, connected accounts, and sandboxes
 
@@ -63,8 +63,10 @@ const { threads } = await memory.client.listThreads({ resourceId: 'user-1' });
 const knowledge = platform.getKnowledge({ instanceId: 'kn_123' });
 
 // Connect an end user's GitHub account: send them to connectUrl to sign in
-const { connectUrl } = await platform.connect.createConnectSession('github', { resourceId: 'user-1' });
-const connections = await platform.connect.listConnections({ resourceId: 'user-1' });
+const user = platform.connect.withResource('user-1');
+const { connectionId } = await user.createConnectSession('github');
+const { connectUrl } = await user.getConnectUrl(connectionId);
+const connections = await user.listConnections();
 
 // Start a sandbox and run a command in it
 const sandbox = await platform.createSandbox({ environmentId: 'env_123' });
@@ -73,9 +75,15 @@ const { stdout } = await sandbox.executeCommand('ls', ['-la']);
 // Later, reconnect to it by ID (fails if it no longer exists)
 const again = await platform.getSandbox(sandbox.sandboxId!);
 const sandboxes = await platform.sandboxes.list('env_123');
+
+// A provisioned file system, for a Workspace
+const workspace = new Workspace({ filesystem: await platform.getFilesystem('bucket_123') });
+
+// A provisioned database as Mastra storage
+const mastra = new Mastra({ storage: await platform.getStorage('db_123') });
 ```
 
-`getMemory` and `getKnowledge` return the same `PlatformMemory` and `PlatformKnowledge` you can pass to an agent. An end user's connections are visible to, and removable by, only that end user. `getSandbox` reconnects through the provider that runs the sandbox; `createSandbox` with a `sandboxId` reattaches if it can and otherwise starts a new one.
+Each of these is the framework type it stands in for: `getMemory` returns a `MastraMemory`, `getKnowledge` a `Knowledge`, `getFilesystem` a `MastraFilesystem`, `createSandbox` and `getSandbox` a `MastraSandbox`, and `getStorage` a `MastraStorage`. `connect` is the `ConnectClient` from `@mastra/connect`; an end user's connections are visible to, and removable by, only that end user. `getStorage` loads the store for the database's kind, so install it alongside: `@mastra/libsql` for Turso, `@mastra/pg` for Neon and Postgres, `@mastra/redis` for Redis. `getSandbox` reconnects through the provider that runs the sandbox; `createSandbox` with a `sandboxId` reattaches if it can and otherwise starts a new one.
 
 ### Provisioning projects
 
