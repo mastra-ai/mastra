@@ -1,5 +1,5 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
-import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '@mastra/core/channels';
+import { resolveChannelRenderContext } from '@mastra/core/channels';
 import type { AgentChannels, ChatChannelRenderContext } from '@mastra/core/channels';
 import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
@@ -37,30 +37,6 @@ function missingScopeError(error: unknown, platform: string): Error | undefined 
 }
 
 /**
- * The chat thread this run replies into, if any.
- *
- * Inbound platform messages stash the render context on `requestContext`.
- * A run woken by a signal (a subagent finishing, a scheduled fire) has no
- * such entry even though its thread is still channel-backed — and that is
- * exactly the run that ends a long job with a file to hand back. Rebuild the
- * context from the thread's persisted channel coordinates the same way
- * `ChatChannelOutputProcessor` does, so the tools post on both kinds of run.
- * A forked subagent's thread carries no channel metadata, so forks get
- * nothing here and never post to the platform.
- */
-export async function resolveRenderContext(
-  requestContext: RequestContext,
-  deps: ShareFileToolDeps,
-): Promise<ChatChannelRenderContext | undefined> {
-  const stashed = requestContext.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
-  if (stashed) return stashed;
-  const controller = requestContext.get('controller') as AgentControllerRequestContext | undefined;
-  const threadId = controller?.threadId;
-  if (!threadId) return undefined;
-  return (await deps.channels?.()?.buildRenderContextForThread(threadId)) ?? undefined;
-}
-
-/**
  * Whether this run's thread is a Slack thread, so the channel tools have
  * somewhere to post. A run started from Slack says so on `requestContext`; a
  * web prompt or a woken run on a Slack-linked session costs one thread read.
@@ -93,7 +69,7 @@ export async function postTarget(
   requestContext: RequestContext,
   deps: ShareFileToolDeps,
 ): Promise<ChatChannelRenderContext> {
-  const render = await resolveRenderContext(requestContext, deps);
+  const render = await resolveChannelRenderContext(requestContext, deps.channels);
   if (!render) throw new Error('This session is no longer linked to a chat thread.');
   return render;
 }

@@ -86,3 +86,5 @@ export type { ChannelReplyMode, ChannelReplyModeConfig, ChannelThreadLink } from
 export { REPLY_TOOL_NAME } from './reply-tool';
 export { ChannelThreadLinkProcessor, markNewChannelThread, NEW_CHANNEL_THREAD_KEY } from './thread-link-processor';
 export type { ChannelThreadLinkProcessorOptions, ChannelThreadLinkTarget } from './thread-link-processor';
+export { resolveChannelRenderContext } from './thread-lookup';
+export type { ChannelsSource } from './thread-lookup';
