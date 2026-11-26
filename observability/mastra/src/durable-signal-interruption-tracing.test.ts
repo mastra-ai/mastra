@@ -22,6 +22,7 @@ function reasoningThenAnswerModel() {
           stream: new ReadableStream({
             start(controller) {
               controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'response-metadata', id: 'resp-stale', modelId: 'mock-model-id' });
               controller.enqueue({ type: 'reasoning-start', id: 'stale' });
               controller.enqueue({ type: 'reasoning-delta', id: 'stale', delta: 'STALE_REASONING' });
               abortSignal?.addEventListener('abort', () => controller.error(abortSignal.reason), { once: true });
@@ -34,6 +35,7 @@ function reasoningThenAnswerModel() {
         warnings: [],
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'resp-answer', modelId: 'mock-model-id' },
           { type: 'text-start', id: 'text-1' },
           { type: 'text-delta', id: 'text-1', delta: 'replacement answer' },
           { type: 'text-end', id: 'text-1' },
@@ -45,7 +47,7 @@ function reasoningThenAnswerModel() {
 }
 
 describe.each(['durable', 'evented'] as const)('%s signal interruption tracing', variant => {
-  it('ends the cancelled attempt’s step and inference spans as interrupted', async () => {
+  it('ends the cancelled attempt’s step and inference spans as interrupted, each with its provider response id', async () => {
     const exporter = new TestExporter();
     const agent = new Agent({
       id: `signal-interruption-${variant}`,
@@ -93,8 +95,10 @@ describe.each(['durable', 'evented'] as const)('%s signal interruption tracing',
     expect(interruptedStep).toBeDefined();
     expect(answeredStep).toBeDefined();
     const inferenceUnder = (stepId: string) => inferences.filter(span => span.parentSpanId === stepId);
-    expect(inferenceUnder(interruptedStep!.id).map(span => span.attributes?.finishReason)).toEqual(['interrupted']);
-    expect(inferenceUnder(answeredStep!.id).map(span => span.attributes?.finishReason)).toEqual(['stop']);
+    const finishAndId = (stepId: string) =>
+      inferenceUnder(stepId).map(span => [span.attributes?.finishReason, span.attributes?.responseId]);
+    expect(finishAndId(interruptedStep!.id)).toEqual([['interrupted', 'resp-stale']]);
+    expect(finishAndId(answeredStep!.id)).toEqual([['stop', 'resp-answer']]);
     expect(exporter.getIncompleteSpans()).toEqual([]);
   }, 30_000);
 
