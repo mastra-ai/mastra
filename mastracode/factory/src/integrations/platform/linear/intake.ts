@@ -248,7 +248,24 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
   }
 
   async listSources(_input?: ListIntakeSourcesInput): Promise<IntakeSource[]> {
-    const [projectSources, teamSources] = await Promise.all([this.#listProjectSources(), this.#listTeamSources()]);
+    const [projectsResult, teamsResult] = await Promise.allSettled([
+      this.#listProjectSources(),
+      this.#listTeamSources(),
+    ]);
+    // One kind failing still lists the other; both failing is an error.
+    if (projectsResult.status === 'rejected' && teamsResult.status === 'rejected') throw projectsResult.reason;
+    for (const [kind, result] of [
+      ['project', projectsResult],
+      ['team', teamsResult],
+    ] as const) {
+      if (result.status === 'rejected') {
+        logPlatformWarn(`Platform Linear ${kind} sources could not be listed; the other kind is listed alone.`, {
+          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+        });
+      }
+    }
+    const projectSources = projectsResult.status === 'fulfilled' ? projectsResult.value : [];
+    const teamSources = teamsResult.status === 'fulfilled' ? teamsResult.value : [];
     const projects = projectSources.map(({ workspace, project }) => ({
       id: encodeSourceId(workspace.linearWorkspaceId, project.id),
       name: project.name,
@@ -505,11 +522,14 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
     const teamWorkspaceIds = new Set(
       parsedSources.flatMap(source => (source.kind === 'team' ? [source.workspaceId] : [])),
     );
+    const listingErrors: LinearWorkspaceListingError[] = [];
     const [projectsResult, teamsResult] = await Promise.allSettled([
       projectWorkspaceIds.size > 0
-        ? this.#listProjectSources(projectWorkspaceIds)
+        ? this.#listProjectSources(projectWorkspaceIds, listingErrors)
         : Promise.resolve([] as ProjectSource[]),
-      teamWorkspaceIds.size > 0 ? this.#listTeamSources(teamWorkspaceIds) : Promise.resolve([] as TeamSource[]),
+      teamWorkspaceIds.size > 0
+        ? this.#listTeamSources(teamWorkspaceIds, listingErrors)
+        : Promise.resolve([] as TeamSource[]),
     ]);
     if (projectsResult.status === 'rejected' && (teamWorkspaceIds.size === 0 || teamsResult.status === 'rejected')) {
       throw projectsResult.reason;
@@ -565,6 +585,16 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
       }
     }
 
+    // No selected source read is an empty listing only when nothing was out of reach.
+    if (descriptors.length === 0) {
+      const reason =
+        this.#lastUnidentified.length > 0
+          ? `${this.#lastUnidentified.length} Linear connection(s) didn't answer`
+          : listingErrors.length > 0
+            ? `the sources of ${listingErrors.length} Linear workspace(s) could not be listed`
+            : null;
+      if (reason) throw new Error(`No selected Linear intake source could be read: ${reason}.`);
+    }
     const cursors = await decodeCursor(cursor, sourceIds, attributionSourceIds);
     const unfinished = descriptors.filter(({ sourceId }) => cursors[sourceId] !== null);
     const normalizedLabels = normalizeLabels(labels);
@@ -597,9 +627,16 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
           .map(issue => ({ issue, sourceId, workspace }));
       }),
     );
+    // A failed source keeps its place: its cursor, or '' (not started) when its first page failed.
+    // Only a page that says so ends a source.
+    for (const [index, page] of pages.entries()) {
+      if (page.status === 'fulfilled') continue;
+      const { sourceId } = unfinished[index]!;
+      nextState[sourceId] = cursors[sourceId] ?? '';
+      hasNextPage = true;
+    }
     return {
-      // A failed workspace is retried from the start on the next intake poll;
-      // successful workspaces can finish their own pagination in this cycle.
+      // When every remaining source fails, the page fails and the poll retries.
       issues: dedupeIssuesBySource(
         collectWorkspaceListings(
           unfinished.map(source => source.workspace),
@@ -621,6 +658,7 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
     const scopedSources = scopedSourceIds?.map(sourceKey => ({ sourceKey, source: parseSourceId(sourceKey) }));
     const routedSourceSet = routedSourceIds ? new Set(routedSourceIds) : undefined;
     // An unscoped "gone" is judged against the snapshot that was searched, not a later one.
+    const unreachable = this.#unreachableWorkspaces();
     const inventory = await this.inventory();
     const workspaces = inventory.workspaces;
     const workspaceIds = routedSourceIds
@@ -645,7 +683,7 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
       }
       return { workspace, issue };
     }
-    if (!scopedSources) this.#assertEveryWorkspaceReachable(issueId, inventory);
+    if (!scopedSources) this.#assertEveryWorkspaceReachable(issueId, inventory, unreachable);
     return null;
   }
 
@@ -654,13 +692,19 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
    * issue means it is gone only if no workspace is out of reach; otherwise the
    * issue may live in one Factory can't see yet, and callers close cards on `null`.
    */
-  #assertEveryWorkspaceReachable(issueId: string, inventory: LinearConnectionInventory): void {
+  #assertEveryWorkspaceReachable(
+    issueId: string,
+    inventory: LinearConnectionInventory,
+    /** The reason read before `inventory` was taken: a workspace out of reach then may be missing from it. */
+    unreachableBefore: string | null,
+  ): void {
     const served = new Set(inventory.workspaces.map(workspace => workspace.linearWorkspaceId));
     // A connection needing a fresh connect hides nothing once another connection serves its workspace.
     const unusable = inventory.unusable.filter(
       connection => connection.linearWorkspaceId === null || !served.has(connection.linearWorkspaceId),
     ).length;
     const reason =
+      unreachableBefore ??
       this.#unreachableWorkspaces() ??
       (inventory.unidentified.length > 0
         ? `${inventory.unidentified.length} Linear connection(s) didn't answer`
@@ -678,6 +722,7 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
     sourceId: string | undefined,
     issueId: string,
   ): Promise<{ workspace: LinearWorkspace; issueId: string } | null> {
+    const unreachable = this.#unreachableWorkspaces();
     const inventory = await this.inventory();
     const workspaces = inventory.workspaces;
     let candidates = workspaces;
@@ -691,7 +736,7 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
       const resolved = await resolveIssueId(this.#transport(workspace), issueId);
       if (resolved) return { workspace, issueId: resolved };
     }
-    if (!sourceId) this.#assertEveryWorkspaceReachable(issueId, inventory);
+    if (!sourceId) this.#assertEveryWorkspaceReachable(issueId, inventory, unreachable);
     return null;
   }
 

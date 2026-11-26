@@ -118,13 +118,19 @@ export class LinearGraphqlError extends Error {
   /** `errors[0].extensions.code`, e.g. `RATELIMITED` or `ENTITY_NOT_FOUND`. */
   readonly code?: string;
   readonly retryAfterSeconds?: number;
+  /** `errors[0].path`: the field that failed, e.g. `['issue']` or `['issue', 'comments']`. */
+  readonly path?: readonly (string | number)[];
 
-  constructor(message: string, details: { status?: number; code?: string; retryAfterSeconds?: number } = {}) {
+  constructor(
+    message: string,
+    details: { status?: number; code?: string; retryAfterSeconds?: number; path?: readonly (string | number)[] } = {},
+  ) {
     super(message);
     this.name = 'LinearGraphqlError';
     if (details.status !== undefined) this.status = details.status;
     if (details.code !== undefined) this.code = details.code;
     if (details.retryAfterSeconds !== undefined) this.retryAfterSeconds = details.retryAfterSeconds;
+    if (details.path !== undefined) this.path = details.path;
   }
 }
 
@@ -132,6 +138,17 @@ export class LinearGraphqlError extends Error {
 export function isLinearNotFound(error: unknown): boolean {
   if (error instanceof LinearGraphqlError && error.code === 'ENTITY_NOT_FOUND') return true;
   return error instanceof Error && /entity not found/i.test(error.message);
+}
+
+/**
+ * Whether `error` says the query's root `field` doesn't exist. A not-found
+ * from a nested field (an issue's comments, say) means the root was found, so
+ * it isn't one; an error with no path is taken to be about the root.
+ */
+function isRootNotFound(error: unknown, field: string): boolean {
+  if (!isLinearNotFound(error)) return false;
+  const path = error instanceof LinearGraphqlError ? error.path : undefined;
+  return !path || (path.length === 1 && path[0] === field);
 }
 
 export function isLinearRateLimited(error: unknown): boolean {
@@ -142,11 +159,18 @@ export function invalidLinearCursor(): Error {
   return Object.assign(new Error('Linear cursor is invalid or stale.'), { code: 'invalid_cursor' as const });
 }
 
-type GraphqlErrorEntry = { message?: string; extensions?: { code?: unknown } };
+type GraphqlErrorEntry = { message?: string; path?: unknown; extensions?: { code?: unknown } };
 
 function errorCode(errors: GraphqlErrorEntry[] | undefined): string | undefined {
   const code = errors?.[0]?.extensions?.code;
   return typeof code === 'string' ? code : undefined;
+}
+
+function errorPath(errors: GraphqlErrorEntry[] | undefined): (string | number)[] | undefined {
+  const path = errors?.[0]?.path;
+  return Array.isArray(path) && path.every(part => typeof part === 'string' || typeof part === 'number')
+    ? path
+    : undefined;
 }
 
 /** A transport that POSTs straight to Linear with an OAuth access token. */
@@ -197,6 +221,7 @@ async function run<T>(transport: LinearGraphqlTransport, query: string, variable
   if (body?.errors?.length) {
     throw new LinearGraphqlError(`Linear API error: ${body.errors[0]?.message ?? 'unknown error'}`, {
       code: errorCode(body.errors),
+      path: errorPath(body.errors),
     });
   }
   if (!body?.data) throw new Error('Linear API returned no data.');
@@ -233,9 +258,9 @@ async function collectPages<T>(
   for (let page = 0; page < maxPages; page += 1) {
     const result = await fetchPage(after);
     nodes.push(...result.nodes);
-    if (!result.pageInfo.hasNextPage || !result.pageInfo.endCursor) break;
-    // A page that hands back the cursor it was asked for would replay forever.
-    if (result.pageInfo.endCursor === after) throw invalidLinearCursor();
+    if (!result.pageInfo.hasNextPage) break;
+    // A page with more to come but no new cursor would replay forever, or end early.
+    if (!result.pageInfo.endCursor || result.pageInfo.endCursor === after) throw invalidLinearCursor();
     after = result.pageInfo.endCursor;
   }
   return nodes;
@@ -357,7 +382,7 @@ export async function listIssues(
     },
   );
   const { nodes, pageInfo } = data.issues;
-  if (pageInfo.hasNextPage && input.after && pageInfo.endCursor === input.after) throw invalidLinearCursor();
+  if (pageInfo.hasNextPage && (!pageInfo.endCursor || pageInfo.endCursor === input.after)) throw invalidLinearCursor();
   return { nodes: nodes.map(toIssue), pageInfo };
 }
 
@@ -384,7 +409,7 @@ export async function getIssue(
       { id: idOrIdentifier, commentsFirst: input.commentsFirst },
     );
   } catch (error) {
-    if (isLinearNotFound(error)) return null;
+    if (isRootNotFound(error, 'issue')) return null;
     throw error;
   }
   if (!data.issue) return null;
@@ -397,15 +422,21 @@ export async function listIssueComments(
   idOrIdentifier: string,
   input: { first: number; after: string },
 ): Promise<LinearPage<LinearGraphqlComment> | null> {
-  const data = await run<{ issue: { comments: LinearPage<LinearGraphqlComment> } | null }>(
-    transport,
-    `query IssueComments($id: String!, $first: Int!, $after: String!) {
-      issue(id: $id) {
-        comments(first: $first, after: $after) { nodes { ${COMMENT_FIELDS} } ${PAGE_INFO} }
-      }
-    }`,
-    { id: idOrIdentifier, first: input.first, after: input.after },
-  );
+  let data: { issue: { comments: LinearPage<LinearGraphqlComment> } | null };
+  try {
+    data = await run(
+      transport,
+      `query IssueComments($id: String!, $first: Int!, $after: String!) {
+        issue(id: $id) {
+          comments(first: $first, after: $after) { nodes { ${COMMENT_FIELDS} } ${PAGE_INFO} }
+        }
+      }`,
+      { id: idOrIdentifier, first: input.first, after: input.after },
+    );
+  } catch (error) {
+    if (isRootNotFound(error, 'issue')) return null;
+    throw error;
+  }
   return data.issue ? toCommentPage(data.issue.comments) : null;
 }
 
@@ -418,11 +449,14 @@ export async function collectIssueComments(
 ): Promise<LinearGraphqlComment[]> {
   const nodes = [...firstPage.nodes];
   let { hasNextPage, endCursor } = firstPage.pageInfo;
+  if (hasNextPage && !endCursor) throw invalidLinearCursor();
   for (let page = 1; hasNextPage && endCursor && page < input.maxPages; page++) {
     const comments = await listIssueComments(transport, idOrIdentifier, { first: input.pageSize, after: endCursor });
     if (!comments) break;
     nodes.push(...comments.nodes);
-    if (comments.pageInfo.hasNextPage && comments.pageInfo.endCursor === endCursor) throw invalidLinearCursor();
+    if (comments.pageInfo.hasNextPage && (!comments.pageInfo.endCursor || comments.pageInfo.endCursor === endCursor)) {
+      throw invalidLinearCursor();
+    }
     ({ hasNextPage, endCursor } = comments.pageInfo);
   }
   return nodes;
@@ -441,7 +475,7 @@ export async function resolveIssueId(
     );
     return data.issue?.id ?? null;
   } catch (error) {
-    if (isLinearNotFound(error)) return null;
+    if (isRootNotFound(error, 'issue')) return null;
     throw error;
   }
 }

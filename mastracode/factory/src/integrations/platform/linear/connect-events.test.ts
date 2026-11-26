@@ -83,7 +83,12 @@ function stubDeps(
       listShared: vi.fn(async ({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }) =>
         (tracked[`${orgId}:${factoryProjectId}`] ?? []).map(externalId => ({
           id: `card-${externalId}`,
-          externalSource: { integrationId: 'linear', type: 'issue', externalId },
+          externalSource: {
+            integrationId: 'linear',
+            type: 'issue',
+            externalId,
+            url: `https://linear.app/acme/issue/${externalId.replace(/^linear:/, '')}`,
+          },
           workItem: { metadata: {} },
         })),
       ),
@@ -186,6 +191,31 @@ describe('handleLinearConnectEvent', () => {
     await handleLinearConnectEvent(delivery(issueWebhook()), deps);
 
     expect(ingested.map(input => `${input.orgId}:${input.factoryProjectId}`)).toEqual(['org-a:project-a']);
+  });
+
+  it("never updates an identifier-only card filed from another of the org's workspaces", async () => {
+    const { deps, ingested } = stubDeps({}, { resourceId: null });
+    deps.projects.listAll.mockResolvedValue([projectA]);
+    const card = (url?: string) => ({
+      id: 'card-a',
+      externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42', ...(url ? { url } : {}) },
+      workItem: { metadata: {} },
+    });
+
+    for (const url of ['https://linear.app/other/issue/ENG-42', undefined, 'not a url']) {
+      deps.workItems.listShared.mockResolvedValueOnce([card(url)]);
+      await handleLinearConnectEvent(delivery(issueWebhook(), { dedupeKey: `delivery-${url}` }), deps);
+    }
+    // Neither URL names a workspace.
+    deps.workItems.listShared.mockResolvedValueOnce([card()]);
+    await handleLinearConnectEvent(
+      delivery(issueWebhook({ url: 'not a url' }, { url: 'not a url' }), { dedupeKey: 'delivery-no-urls' }),
+      deps,
+    );
+    deps.workItems.listShared.mockResolvedValueOnce([card('https://linear.app/acme/issue/ENG-42')]);
+    await handleLinearConnectEvent(delivery(issueWebhook(), { dedupeKey: 'delivery-same' }), deps);
+
+    expect(ingested.map(input => input.factoryProjectId)).toEqual(['project-a']);
   });
 
   it('updates only cards that know the issue id when an org-level connection serves several orgs', async () => {
@@ -293,7 +323,27 @@ describe('handleLinearConnectEvent', () => {
     await handleLinearConnectEvent(delivery(issueWebhook(), { dedupeKey: 'delivery-2' }), deps);
 
     expect(ingested).toHaveLength(2);
-    expect([...deps.recentKeys]).toEqual(['linear:delivery-1', 'linear:delivery-2']);
+    expect([...deps.recentKeys]).toEqual(['linear:conn-workspace-1:delivery-1', 'linear:conn-workspace-1:delivery-2']);
+  });
+
+  it("handles equal stream ids on two connections' logs as two events", async () => {
+    const { deps, ingested } = stubDeps({ 'org-a:project-a': ['linear:ENG-42'] });
+    deps.connectionWorkspace.mockImplementation(async (connectionId: string) =>
+      connectionId.startsWith('conn-workspace-') ? { linearWorkspaceId: 'workspace-1', resourceId: 'project-a' } : null,
+    );
+    const withoutSourceId = { sourceEventId: undefined, dedupeKey: '1763035200000-0' };
+
+    await handleLinearConnectEvent(delivery(issueWebhook(), withoutSourceId), deps);
+    await expect(
+      handleLinearConnectEvent(
+        delivery(issueWebhook(), { ...withoutSourceId, connectionId: 'conn-workspace-2' }),
+        deps,
+      ),
+    ).resolves.toBe('dispatched');
+    // The same entry on the same connection is still a replay.
+    await expect(handleLinearConnectEvent(delivery(issueWebhook(), withoutSourceId), deps)).resolves.toBe('duplicate');
+
+    expect(ingested).toHaveLength(2);
   });
 
   it('drops an unverified event without reading its payload', async () => {

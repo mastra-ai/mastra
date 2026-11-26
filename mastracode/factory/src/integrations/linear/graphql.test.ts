@@ -129,6 +129,43 @@ describe('Linear GraphQL operations', () => {
     });
   });
 
+  it('rejects a page that says more follow but gives no cursor to read them', async () => {
+    const noCursor = (endCursor: string | null) => ({ hasNextPage: true, endCursor });
+    for (const endCursor of [null, '']) {
+      await expect(
+        listIssues(fakeTransport({ data: { issues: { nodes: [], pageInfo: noCursor(endCursor) } } }), { first: 30 }),
+      ).rejects.toMatchObject({ code: 'invalid_cursor' });
+      await expect(
+        listAllTeams(fakeTransport({ data: { teams: { nodes: [], pageInfo: noCursor(endCursor) } } }), {
+          pageSize: 50,
+          maxPages: 5,
+        }),
+      ).rejects.toMatchObject({ code: 'invalid_cursor' });
+      await expect(
+        collectIssueComments(
+          fakeTransport(),
+          'issue-1',
+          { nodes: [], pageInfo: noCursor(endCursor) },
+          {
+            pageSize: 50,
+            maxPages: 5,
+          },
+        ),
+      ).rejects.toMatchObject({ code: 'invalid_cursor' });
+      await expect(
+        collectIssueComments(
+          fakeTransport({ data: { issue: { comments: { nodes: [], pageInfo: noCursor(endCursor) } } } }),
+          'issue-1',
+          { nodes: [], pageInfo: { hasNextPage: true, endCursor: 'p1' } },
+          { pageSize: 50, maxPages: 5 },
+        ),
+      ).rejects.toMatchObject({ code: 'invalid_cursor' });
+    }
+    await expect(
+      listIssues(fakeTransport({ data: { issues: { nodes: [], pageInfo: lastPage } } }), { first: 30 }),
+    ).resolves.toEqual({ nodes: [], pageInfo: lastPage });
+  });
+
   it('reads an issue with its first comment page by id or identifier', async () => {
     const transport = fakeTransport({
       data: {
@@ -158,6 +195,55 @@ describe('Linear GraphQL operations', () => {
     await expect(
       resolveIssueId(fakeTransport({ errors: [{ message: 'Entity not found' }] }), 'ENG-404'),
     ).resolves.toBeNull();
+  });
+
+  it('reads an issue as found when only a nested field is not found', async () => {
+    const nestedNotFound = () =>
+      fakeTransport({
+        errors: [
+          { message: 'Entity not found: User', path: ['issue', 'comments'], extensions: { code: 'ENTITY_NOT_FOUND' } },
+        ],
+      });
+    await expect(getIssue(nestedNotFound(), 'ENG-42', { commentsFirst: 50 })).rejects.toMatchObject({
+      code: 'ENTITY_NOT_FOUND',
+      path: ['issue', 'comments'],
+    });
+    await expect(
+      collectIssueComments(
+        nestedNotFound(),
+        'issue-1',
+        { nodes: [], pageInfo: { hasNextPage: true, endCursor: 'p1' } },
+        {
+          pageSize: 50,
+          maxPages: 5,
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'ENTITY_NOT_FOUND' });
+    await expect(
+      getIssue(
+        fakeTransport({
+          errors: [{ message: 'Entity not found: Issue', path: ['issue'], extensions: { code: 'ENTITY_NOT_FOUND' } }],
+        }),
+        'ENG-404',
+        { commentsFirst: 50 },
+      ),
+    ).resolves.toBeNull();
+  });
+
+  it('stops following comment pages once the issue is gone', async () => {
+    const transport = fakeTransport({
+      errors: [{ message: 'Entity not found: Issue', path: ['issue'], extensions: { code: 'ENTITY_NOT_FOUND' } }],
+    });
+
+    const comments = await collectIssueComments(
+      transport,
+      'issue-1',
+      { nodes: [comment('c1')], pageInfo: { hasNextPage: true, endCursor: 'p1' } },
+      { pageSize: 50, maxPages: 5 },
+    );
+
+    expect(comments.map(c => c.id)).toEqual(['c1']);
+    expect(transport.calls).toHaveLength(1);
   });
 
   it('follows comment pages until the last one, from the page the issue read returned', async () => {

@@ -2,6 +2,7 @@ import { MastraConnectError } from '@mastra/connect';
 import type { ConnectClient } from '@mastra/connect';
 
 import type { IssueReconcileSummary } from '../../issue-reconciler.js';
+import type { LinkOrgConnectionsResult } from '../foundation/connect-binding.js';
 import { logPlatformInfo, logPlatformWarn } from '../logging.js';
 
 /** `GET /v2/integrations/linear/migration-status`. */
@@ -66,8 +67,8 @@ const RETRY_MAX_MS = 60 * 60_000;
  */
 export class PlatformLinearMigration {
   readonly #connect: () => ConnectClient;
-  readonly #coveredWorkspaceIds: () => Promise<ReadonlySet<string>>;
-  readonly #linkMigrated: (connectionIds: ReadonlySet<string>) => Promise<{ linked: string[] }>;
+  readonly #coveredWorkspaceIds: () => Promise<{ workspaceIds: ReadonlySet<string>; unidentified: number }>;
+  readonly #linkMigrated: (connectionIds: ReadonlySet<string>) => Promise<LinkOrgConnectionsResult>;
   readonly #onMigrated: () => void;
   #state: LinearMigrationState = {
     required: false,
@@ -79,20 +80,32 @@ export class PlatformLinearMigration {
   };
   #failures = 0;
   #statusKnown = false;
+  /** Migrated connections no project-linked connection serves, from the latest status read. */
+  #notLinkedConnections: string[] = [];
+  /**
+   * Org connections the latest link run left neither linked nor detached, or
+   * `unknown` before one ran. A deleted connection is not among them.
+   */
+  #unlinkable: ReadonlySet<string> | 'unknown' = 'unknown';
   /** Migrated connections, by id, as the platform last reported them. */
   #migratedConnections = new Map<string, string>();
   #retryTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Bumped by {@link stop}: a sweep started before then must not schedule a retry. */
+  #sweepGeneration = 0;
   #inFlight: Promise<LinearMigrationRunResult> | undefined;
 
   constructor(options: {
     connect: () => ConnectClient;
-    /** Workspaces a project-linked Connect connection already serves; never migrated again. */
-    coveredWorkspaceIds: () => Promise<ReadonlySet<string>>;
+    /**
+     * Workspaces a project-linked Connect connection already serves; never migrated
+     * again. `unidentified` counts active connections whose workspace isn't known yet.
+     */
+    coveredWorkspaceIds: () => Promise<{ workspaceIds: ReadonlySet<string>; unidentified: number }>;
     /**
      * Links these migrated connections unless the project has had them before,
      * and remembers the ones it has; returns those it linked now.
      */
-    linkMigrated: (connectionIds: ReadonlySet<string>) => Promise<{ linked: string[] }>;
+    linkMigrated: (connectionIds: ReadonlySet<string>) => Promise<LinkOrgConnectionsResult>;
     /** Called after a run that linked at least one connection to the project. */
     onMigrated: () => void;
   }) {
@@ -108,7 +121,10 @@ export class PlatformLinearMigration {
 
   /** True once the platform has confirmed no workspace is left on legacy tokens or unlinked. */
   get settled(): boolean {
-    return this.#statusKnown && !this.#state.required;
+    const unlinkable = this.#unlinkable;
+    // A workspace whose connection should be linked and isn't may hold live issues Factory can't see.
+    const unresolved = this.#notLinkedConnections.some(id => unlinkable === 'unknown' || unlinkable.has(id));
+    return this.#statusKnown && !this.#state.required && !unresolved;
   }
 
   /** The workspace a migrated connection serves, or null when it isn't one. */
@@ -139,6 +155,7 @@ export class PlatformLinearMigration {
    */
   sweep(retry: () => void): () => Promise<IssueReconcileSummary> {
     return async () => {
+      const generation = this.#sweepGeneration;
       const summary: IssueReconcileSummary = {
         projects: 0,
         checked: 0,
@@ -156,13 +173,19 @@ export class PlatformLinearMigration {
       } catch (error) {
         summary.failed = 1;
         summary.errors.push({ projectId: 'linear-migration', error: errorMessage(error) });
-        this.#scheduleRetry(retry);
+        if (generation === this.#sweepGeneration) this.#scheduleRetry(retry);
       }
       return summary;
     };
   }
 
+  /** Cancels a pending retry, and keeps sweeps still in flight from scheduling another. */
   stop(): void {
+    this.#sweepGeneration += 1;
+    this.#cancelRetry();
+  }
+
+  #cancelRetry(): void {
     if (this.#retryTimer) clearTimeout(this.#retryTimer);
     this.#retryTimer = undefined;
   }
@@ -173,14 +196,19 @@ export class PlatformLinearMigration {
       let needed = await this.#needed();
       const { pending } = needed;
       let response: LinearMigrateResponse & { alreadyMigrated?: true } = { connections: [], skipped: [] };
-      if (pending.length > 0) {
+      // A connection that didn't say which workspace it serves may already serve a pending one;
+      // migrating that workspace would connect it twice, so the move waits.
+      const held = pending.length > 0 && needed.unidentified > 0;
+      if (pending.length > 0 && !held) {
         logPlatformInfo('Migrating Platform Linear workspaces to Mastra Connect', { trigger, workspaces: pending });
         response = await this.#migrate(pending);
         if (response.connections.length > 0 || response.alreadyMigrated) this.#onMigrated();
         // Read back what is left rather than trusting the response alone.
         needed = await this.#needed();
       }
-      const { linked } = await this.#linkMigrated(needed.linkable);
+      const linking = await this.#linkMigrated(needed.linkable);
+      const { linked } = linking;
+      this.#unlinkable = new Set(linking.unresolved);
       if (linked.length > 0) {
         logPlatformInfo('Linked migrated Linear connections to the Factory project', { trigger, linked });
         this.#onMigrated();
@@ -194,6 +222,12 @@ export class PlatformLinearMigration {
         skipped: response.skipped,
         lastRunAt: at,
       };
+      if (held) {
+        this.#state = { ...state, lastError: this.#state.lastError };
+        throw new Error(
+          `Linear workspaces ${pending.join(', ')} wait to be migrated until ${needed.unidentified} Linear connection(s) that didn't answer say which workspace they serve`,
+        );
+      }
       const failed = response.failed ?? [];
       if (failed.length > 0) {
         // The others moved; these are retried with backoff, like a failed call.
@@ -224,8 +258,13 @@ export class PlatformLinearMigration {
    * and the migrated connections linking may consider: those already linked (so
    * they are remembered) and those whose workspace nothing else linked serves.
    */
-  async #needed(): Promise<{ pending: string[]; notLinked: string[]; linkable: ReadonlySet<string> }> {
-    const [status, covered] = await Promise.all([
+  async #needed(): Promise<{
+    pending: string[];
+    notLinked: string[];
+    linkable: ReadonlySet<string>;
+    unidentified: number;
+  }> {
+    const [status, { workspaceIds: covered, unidentified }] = await Promise.all([
       this.#connect().request<LinearMigrationStatusResponse>('GET', '/v2/integrations/linear/migration-status'),
       this.#coveredWorkspaceIds(),
     ]);
@@ -238,16 +277,19 @@ export class PlatformLinearMigration {
       status.migrated.map(workspace => [workspace.connectionId, workspace.linearWorkspaceId]),
     );
     const notLinked = new Set<string>();
+    const notLinkedConnections: string[] = [];
     const linkable = new Set<string>();
     for (const workspace of status.migrated) {
       if (workspace.linkedToProject) {
         linkable.add(workspace.connectionId);
       } else if (!covered.has(workspace.linearWorkspaceId)) {
         notLinked.add(workspace.linearWorkspaceId);
+        notLinkedConnections.push(workspace.connectionId);
         linkable.add(workspace.connectionId);
       }
     }
-    return { pending: [...pending].sort(), notLinked: [...notLinked].sort(), linkable };
+    this.#notLinkedConnections = notLinkedConnections;
+    return { pending: [...pending].sort(), notLinked: [...notLinked].sort(), linkable, unidentified };
   }
 
   async #migrate(linearWorkspaceIds: string[]): Promise<LinearMigrateResponse & { alreadyMigrated?: true }> {
@@ -271,7 +313,7 @@ export class PlatformLinearMigration {
   #succeeded(state: Omit<LinearMigrationState, 'lastError'>): void {
     this.#failures = 0;
     this.#statusKnown = true;
-    this.stop();
+    this.#cancelRetry();
     this.#state = { ...state, lastError: null };
   }
 

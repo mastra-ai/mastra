@@ -70,7 +70,8 @@ export async function handleLinearConnectEvent(
     });
     return 'unverified';
   }
-  const key = `linear:${event.dedupeKey}`;
+  // Stream entry ids repeat across connections' logs, so the key names the connection too.
+  const key = `linear:${event.connectionId}:${event.dedupeKey}`;
   if (deps.recentKeys.has(key)) return 'duplicate';
 
   const body = webhookBody(event);
@@ -134,7 +135,13 @@ export async function handleLinearConnectEvent(
         // Identifiers like ENG-42 repeat across workspaces: a card that knows its issue's id must match it.
         const issueId = item.workItem.metadata?.linearIssueId;
         if (typeof issueId === 'string' && issueId.length > 0) return issueId === issue.id;
-        return ownedByConnection && item.externalSource.externalId === sourceKey;
+        // An org may connect several workspaces, so an identifier-only card must also be filed under this workspace.
+        return (
+          ownedByConnection &&
+          item.externalSource.externalId === sourceKey &&
+          workspaceUrlKey(item.externalSource.url) !== undefined &&
+          workspaceUrlKey(item.externalSource.url) === workspaceUrlKey(issue.url)
+        );
       });
       if (!tracked) continue;
       await deps.ingest({
@@ -234,6 +241,18 @@ function parseIssue(body: LinearWebhookBody): LinearIssueIngress | undefined {
     createdAt,
     updatedAt,
   };
+}
+
+/** The workspace segment of a Linear issue URL (`https://linear.app/<workspace>/issue/ENG-42`). */
+function workspaceUrlKey(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const parsed = new URL(url);
+    const [workspace, kind] = parsed.pathname.split('/').filter(Boolean);
+    return parsed.hostname === 'linear.app' && workspace && kind === 'issue' ? workspace : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function optionalObject(value: unknown): Record<string, unknown> | undefined {

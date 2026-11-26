@@ -11,6 +11,7 @@ import { EXTERNAL_SOURCE_MISSING_KEY } from '../../issue-reconciler.js';
 import { attachLinearIssueReconciler } from '../../linear/issue-reconciler.js';
 import { buildPlatformConnectRoutes } from '../connect/routes.js';
 import { createPlatformStorageForTests, mountApiRoutes } from '../test-utils.js';
+import { PlatformLinearIntake } from './intake.js';
 import { encodeSourceId, encodeTeamSourceId, PlatformLinearIntegration } from './integration.js';
 import type { PlatformLinearIntegrationConfig } from './integration.js';
 import { linearComment, linearIssue, linearWorkspace, startFakeLinear } from './test-utils.js';
@@ -196,6 +197,114 @@ describe('PlatformLinearIntegration', () => {
       const response = await app.request('/web/linear/projects');
       expect(response.status).toBe(502);
       await expect(response.json()).resolves.toMatchObject({ error: 'linear_fetch_failed' });
+    });
+
+    it.each([
+      { failing: 'its first page', pages: [null, null, 'p3-2'] },
+      { failing: 'a later page', pages: [null, 'p3-2', 'p3-2'] },
+    ])('lists a source again from where it was when $failing failed', async ({ failing, pages }) => {
+      const workspace = linearWorkspace();
+      workspace.projects.push({ ...workspace.projects[0]!, id: 'project-3' });
+      fake.connect(workspace);
+      const project3Pages: Array<string | null> = [];
+      fake.override('workspace-1', 'Intake', variables => {
+        const after = (variables.after as string | null | undefined) ?? null;
+        if (!(variables.projectIds as string[]).includes('project-3')) {
+          // project-1 pages on so the listing goes on.
+          return issuePage(after ? [] : [linearIssue()], {
+            hasNextPage: after !== 'p1-3',
+            endCursor: after ? 'p1-3' : 'p1-2',
+          });
+        }
+        project3Pages.push(after);
+        const call = project3Pages.length;
+        if ((failing === 'its first page' && call === 1) || (failing === 'a later page' && call === 2)) {
+          return { status: 503 };
+        }
+        return after
+          ? issuePage([linearIssue({ id: 'issue-3', identifier: 'ENG-43', project: { id: 'project-3' } })], {
+              hasNextPage: false,
+              endCursor: null,
+            })
+          : issuePage([], { hasNextPage: true, endCursor: 'p3-2' });
+      });
+      const { integration } = await setup();
+      const sourceIds = [project1SourceId, encodeSourceId('workspace-1', 'project-3')];
+
+      const seen: string[] = [];
+      let cursor: string | undefined;
+      for (let page = 0; page < 3; page += 1) {
+        const result = await integration.intake.listIssues({ connection: oauth, sourceIds, cursor });
+        seen.push(...result.issues.map(item => item.identifier));
+        cursor = result.nextCursor ?? undefined;
+      }
+
+      expect(project3Pages).toEqual(pages);
+      expect(seen).toContain('ENG-43');
+    });
+
+    it('lists one kind of source when the other kind fails, and fails only when both do', async () => {
+      fake.connect(linearWorkspace());
+      fake.override('workspace-1', 'Teams', () => ({ status: 503 }));
+      const integration = createIntegration();
+      await expect(integration.intake.listSources({ orgId: 'org-1', userId: 'user-1' })).resolves.toEqual([
+        expect.objectContaining({ id: project1SourceId, type: 'project' }),
+      ]);
+
+      fake.overrides.delete('workspace-1:Teams');
+      fake.override('workspace-1', 'Projects', () => ({ status: 503 }));
+      await expect(integration.intake.listSources({ orgId: 'org-1', userId: 'user-1' })).resolves.toEqual([
+        expect.objectContaining({ id: team1SourceId, type: 'team' }),
+      ]);
+
+      fake.override('workspace-1', 'Teams', () => ({ status: 503 }));
+      await expect(integration.intake.listSources({ orgId: 'org-1', userId: 'user-1' })).rejects.toMatchObject({
+        status: 503,
+      });
+    });
+
+    it("fails the listing instead of returning nothing when the selected source's workspace didn't answer", async () => {
+      fake.connect(linearWorkspace());
+      fake.connect(
+        linearWorkspace('workspace-2', { projects: [{ id: 'project-2', name: 'Ops', state: 'started', teams: [] }] }),
+      );
+      fake.override('workspace-2', 'Viewer', () => ({ status: 503 }));
+      const integration = createIntegration();
+
+      await expect(integration.intake.listIssues({ connection: oauth, sourceIds: [project2SourceId] })).rejects.toThrow(
+        "didn't answer",
+      );
+      // A selected source that can be read is still listed.
+      await expect(
+        integration.intake.listIssues({ connection: oauth, sourceIds: [project1SourceId, project2SourceId] }),
+      ).resolves.toMatchObject({ issues: [expect.objectContaining({ identifier: 'ENG-42' })] });
+
+      fake.overrides.delete('workspace-2:Viewer');
+      await expect(
+        integration.intake.listIssues({ connection: oauth, sourceIds: [project2SourceId] }),
+      ).resolves.toMatchObject({ issues: [] });
+    });
+
+    it("fails the listing when the selected source's workspace could not list its projects", async () => {
+      fake.connect(linearWorkspace());
+      fake.connect(
+        linearWorkspace('workspace-2', { projects: [{ id: 'project-2', name: 'Ops', state: 'started', teams: [] }] }),
+      );
+      fake.override('workspace-2', 'Projects', () => ({ status: 503 }));
+      const integration = createIntegration();
+
+      await expect(
+        integration.intake.listIssues({ connection: oauth, sourceIds: [project1SourceId, project2SourceId] }),
+      ).resolves.toMatchObject({ issues: [expect.objectContaining({ identifier: 'ENG-42' })] });
+      // workspace-1 lists, but its selected project is gone; workspace-2's could not be checked.
+      const goneSourceId = encodeSourceId('workspace-1', 'project-gone');
+      await expect(
+        integration.intake.listIssues({ connection: oauth, sourceIds: [goneSourceId, project2SourceId] }),
+      ).rejects.toThrow('could not be listed');
+      fake.overrides.delete('workspace-2:Projects');
+      await expect(
+        integration.intake.listIssues({ connection: oauth, sourceIds: [goneSourceId] }),
+      ).resolves.toMatchObject({ issues: [] });
     });
 
     it('fails a later issue page instead of ending the list when every remaining source fails', async () => {
@@ -515,6 +624,30 @@ describe('PlatformLinearIntegration', () => {
       expect(clearTimeouts).toHaveBeenCalledWith(retry!.value);
     });
 
+    it('schedules no retry for a sweep that fails after its worker stopped, and retries for the next run', async () => {
+      fake.addLegacy(linearWorkspace());
+      const { integration, ctx } = await setup();
+      let fail: (error: Error) => void = () => {};
+      const run = vi
+        .spyOn(integration.migration, 'run')
+        .mockImplementationOnce(() => new Promise((_resolve, reject) => (fail = reject)));
+      const setTimeouts = vi.spyOn(globalThis, 'setTimeout');
+      const retries = () => setTimeouts.mock.calls.filter(([, delay]) => delay === 60_000).length;
+      const worker = await startMigrationWorker(integration, ctx);
+      await vi.waitFor(() => expect(run).toHaveBeenCalledOnce());
+
+      const stopping = worker.stop();
+      fail(new Error('boom'));
+      await stopping;
+      await new Promise(resolve => setImmediate(resolve));
+      expect(retries()).toBe(0);
+
+      // A new run's failures still retry.
+      run.mockRejectedValueOnce(new Error('boom again'));
+      await worker.start();
+      await vi.waitFor(() => expect(retries()).toBe(1));
+    });
+
     it('lets org admins retry migration, and counts a workspace another deployment migrated as success', async () => {
       fake.addLegacy(linearWorkspace());
       const { app, integration } = await setup();
@@ -752,6 +885,24 @@ describe('PlatformLinearIntegration', () => {
     });
   });
 
+  it.each([
+    { change: 'a move finishes', before: 'moving workspaces', after: null },
+    { change: 'a move starts', before: null, after: 'moving workspaces' },
+  ])('refuses to report an unscoped issue as gone when $change during the search', async ({ before, after }) => {
+    fake.connect(linearWorkspace());
+    let reason: string | null = before;
+    const intake = new PlatformLinearIntake(createIntegration(), { unreachableWorkspaces: () => reason });
+    fake.override('workspace-1', 'IssueDetail', () => {
+      reason = after;
+      return undefined;
+    });
+
+    await expect(intake.getIssue({ connection: oauth, issueId: 'issue-missing' })).rejects.toMatchObject({
+      status: 401,
+      message: expect.stringContaining('moving workspaces'),
+    });
+  });
+
   it('refuses to report an unscoped issue as gone when a connection fails to identify itself just once', async () => {
     fake.connect(linearWorkspace());
     fake.connect(linearWorkspace('workspace-2', { issues: [linearIssue({ id: 'issue-2', identifier: 'OPS-1' })] }));
@@ -812,6 +963,50 @@ describe('PlatformLinearIntegration', () => {
     await integration.migration.run('schedule');
     await integration.migration.run('admin');
     expect(fake.migrateRequests).toHaveLength(1);
+  });
+
+  it.each([
+    { why: 'linking it failed', history: true },
+    { why: 'no link history is stored yet', history: false },
+  ])(
+    "doesn't settle, so issues aren't read as gone, while a migrated workspace isn't linked because $why",
+    async ({ history }) => {
+      fake.addLegacy(linearWorkspace());
+      await setup().then(other => other.integration.migration.run('admin'));
+      // Migrated, but this project has never had the connection.
+      fake.detach('conn-migrated-workspace-1');
+      const { integration, ctx } = await setup();
+      if (history) {
+        integration.workers(ctx);
+        fake.platform.linkReplies.set('conn-migrated-workspace-1', { status: 503 });
+      }
+
+      await integration.migration.run('schedule');
+
+      expect(integration.migration.state.notLinked).toEqual(['workspace-1']);
+      expect(integration.migration.settled).toBe(false);
+      await expect(integration.intake.getIssue({ connection: oauth, issueId: 'ENG-42' })).rejects.toMatchObject({
+        status: 401,
+      });
+    },
+  );
+
+  it("waits to migrate while a connection that may already serve the workspace doesn't answer", async () => {
+    fake.addLegacy(linearWorkspace());
+    // Connected through Connect directly, but its workspace lookup fails for now.
+    fake.connect(linearWorkspace(), { connectionId: 'conn-direct' });
+    fake.override('workspace-1', 'Viewer', () => ({ status: 503 }));
+    const integration = createIntegration();
+
+    await expect(integration.migration.run('schedule')).rejects.toThrow("didn't answer");
+    expect(fake.migrateRequests).toEqual([]);
+    expect(integration.migration.state).toMatchObject({ required: true, pending: ['workspace-1'] });
+
+    fake.overrides.delete('workspace-1:Viewer');
+    integration.intake.clearCaches();
+    await expect(integration.migration.run('schedule')).resolves.toMatchObject({ requested: [] });
+    // It did serve the workspace: migrating would have connected it twice.
+    expect(fake.migrateRequests).toEqual([]);
   });
 
   it('never migrates a workspace again once migrated, nor relinks it after a detach, on a schedule or after a restart', async () => {

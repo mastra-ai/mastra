@@ -399,8 +399,10 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
         }
         try {
           // An admin's explicit request also links connections someone detached.
-          const result = await provider.binding.linkOrgConnections({ relinkDetached: true });
-          return c.json(result);
+          const { linked, needsLinking, detached } = await provider.binding.linkOrgConnections({
+            relinkDetached: true,
+          });
+          return c.json({ linked, needsLinking, detached });
         } catch (err) {
           return platformError(c, err);
         }

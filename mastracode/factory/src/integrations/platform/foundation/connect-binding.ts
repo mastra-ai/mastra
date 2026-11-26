@@ -34,6 +34,11 @@ export interface LinkOrgConnectionsResult {
   needsLinking: NeedsLinkingEntry[];
   /** Org connections the project had and no longer lists: removed on purpose, so left unlinked. */
   detached: string[];
+  /**
+   * Org connections considered that are still neither linked nor detached: links
+   * that failed, or, when `requireHistory` found no history, every unlinked one.
+   */
+  unresolved: string[];
 }
 
 /**
@@ -130,6 +135,11 @@ export class PlatformConnectBinding {
   #needsLinking = new Map<string, NeedsLinkingEntry>();
   #detached: string[] = [];
   #linkStore: PlatformConnectLinkStore | undefined;
+  /** Connections known to be in the stored link history. */
+  #savedLinks = new Set<string>();
+  /** Connections to add to the stored link history; kept until a save succeeds. */
+  #unsavedLinks = new Set<string>();
+  #historyWrites: Promise<void> = Promise.resolve();
 
   constructor(options: PlatformConnectBindingOptions) {
     this.integrationId = options.integrationId;
@@ -296,7 +306,11 @@ export class PlatformConnectBinding {
    */
   async linkOrgConnections(options: LinkOrgConnectionsOptions = {}): Promise<LinkOrgConnectionsResult> {
     if (options.requireHistory && !this.#linkStore) {
-      return { linked: [], needsLinking: this.needsLinking, detached: this.detached };
+      const linkedNow = new Set((await this.connect.listConnections()).map(connection => connection.id));
+      const unresolved = (await this.#orgCandidates())
+        .map(connection => connection.id)
+        .filter(id => (!options.only || options.only.has(id)) && !linkedNow.has(id));
+      return { linked: [], needsLinking: this.needsLinking, detached: this.detached, unresolved };
     }
     const candidates = (await this.#orgCandidates()).filter(
       connection => !options.only || options.only.has(connection.id),
@@ -348,9 +362,13 @@ export class PlatformConnectBinding {
       this.invalidateConnections();
       for (const listener of this.#linkedListeners) listener();
     }
+    for (const id of remembered) this.#savedLinks.add(id);
     const seen = candidates.map(connection => connection.id).filter(id => linkedBefore.has(id) || linked.includes(id));
-    await this.#rememberLinks(remembered, seen);
-    return { linked, needsLinking: this.needsLinking, detached: this.detached };
+    await this.#rememberLinks(seen);
+    const unresolved = candidates
+      .map(connection => connection.id)
+      .filter(id => !linkedBefore.has(id) && !linked.includes(id) && !detached.includes(id));
+    return { linked, needsLinking: this.needsLinking, detached: this.detached, unresolved };
   }
 
   /**
@@ -385,11 +403,36 @@ export class PlatformConnectBinding {
     return new Set(saved?.version === 1 && Array.isArray(saved.connectionIds) ? saved.connectionIds : []);
   }
 
-  async #rememberLinks(remembered: Set<string>, connectionIds: readonly string[]): Promise<void> {
-    if (!this.#linkStore || connectionIds.every(id => remembered.has(id))) return;
-    const next: RememberedLinks = { version: 1, connectionIds: [...new Set([...remembered, ...connectionIds])].sort() };
+  /**
+   * Adds `connectionIds` to the stored link history. Writes run one at a time
+   * and merge into the latest stored record, so concurrent calls don't drop
+   * each other's ids. Ids a failed write didn't save are kept and saved with
+   * the next write; a connection still linked is also recorded again by the
+   * next project listing.
+   */
+  #rememberLinks(connectionIds: readonly string[]): Promise<void> {
+    if (!this.#linkStore) return Promise.resolve();
+    for (const id of connectionIds) if (!this.#savedLinks.has(id)) this.#unsavedLinks.add(id);
+    if (this.#unsavedLinks.size === 0) return this.#historyWrites;
+    this.#historyWrites = this.#historyWrites.then(() => this.#saveLinks());
+    return this.#historyWrites;
+  }
+
+  async #saveLinks(): Promise<void> {
+    const store = this.#linkStore;
+    const pending = [...this.#unsavedLinks];
+    if (!store || pending.length === 0) return;
     try {
-      await this.#linkStore.settings.save(LINKS_ORG_ID, this.#linkStoreKey(), next);
+      const latest = await this.#rememberedLinks();
+      if (pending.some(id => !latest.has(id))) {
+        const connectionIds = [...new Set([...latest, ...pending])].sort();
+        await store.settings.save(LINKS_ORG_ID, this.#linkStoreKey(), {
+          version: 1,
+          connectionIds,
+        } satisfies RememberedLinks);
+      }
+      for (const id of [...latest, ...pending]) this.#savedLinks.add(id);
+      for (const id of pending) this.#unsavedLinks.delete(id);
     } catch (error) {
       logPlatformWarn('Could not remember which connections are linked to the Factory project', {
         integrationId: this.integrationId,
@@ -417,6 +460,8 @@ export class PlatformConnectBinding {
 
   async #readProjectConnections(): Promise<PlatformConnection[]> {
     const connections = await this.connect.listConnections({ providerKeys: this.providerKeys });
+    // Org connections the project lists are linked to it, however they got there.
+    void this.#rememberLinks(connections.filter(connection => !connection.resourceId).map(connection => connection.id));
     return connections.flatMap(connection => {
       if (connection.status !== 'active' && connection.status !== 'needs_reauth') return [];
       const mapped = toPlatformConnection(connection);

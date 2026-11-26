@@ -89,8 +89,13 @@ export class PlatformLinearIntegration extends PlatformConnectIntegration {
     this.#endpointHost = new URL(this.connect.baseUrl).host;
     this.#migration = new PlatformLinearMigration({
       connect: () => this.connect,
-      coveredWorkspaceIds: async () =>
-        new Set((await this.intake.listWorkspaces()).map(workspace => workspace.linearWorkspaceId)),
+      coveredWorkspaceIds: async () => {
+        const inventory = await this.intake.inventory();
+        return {
+          workspaceIds: new Set(inventory.workspaces.map(workspace => workspace.linearWorkspaceId)),
+          unidentified: inventory.unidentified.length,
+        };
+      },
       linkMigrated: connectionIds => this.linkOrgConnections({ only: connectionIds, requireHistory: true }),
       onMigrated: () => this.#connectionsChanged(),
     });
