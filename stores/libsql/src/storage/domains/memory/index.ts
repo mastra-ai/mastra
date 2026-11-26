@@ -700,7 +700,8 @@ export class MemoryLibSQL extends MemoryStorage {
       const total = await this.#countVisibleMessages(whereClause, queryParams);
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
-      const limitValue = perPageInput === false ? total : perPage;
+      // Not limited by `total`: a row can become visible between the count and this read.
+      const limitValue = perPageInput === false ? -1 : perPage;
       const dataResult = await this.#client.execute({
         sql: `SELECT id, content, role, type, "createdAt", "resourceId", "thread_id" FROM ${TABLE_MESSAGES} ${whereClause} AND ${VISIBLE_MESSAGE_CONDITION} ${orderByStatement} LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, offset],
@@ -871,7 +872,8 @@ export class MemoryLibSQL extends MemoryStorage {
       const total = await this.#countVisibleMessages(whereClause, queryParams);
 
       // Step 1: Get paginated messages
-      const limitValue = perPageInput === false ? total : perPage;
+      // Not limited by `total`: a row can become visible between the count and this read.
+      const limitValue = perPageInput === false ? -1 : perPage;
       const dataResult = await this.#client.execute({
         sql: `SELECT id, content, role, type, "createdAt", "resourceId", "thread_id" FROM ${TABLE_MESSAGES} ${whereClause} AND ${VISIBLE_MESSAGE_CONDITION} ${orderByStatement} LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, offset],

@@ -502,6 +502,48 @@ describe('LibSQL pending signals', () => {
       }
     });
 
+    it('returns every message with perPage false when a signal is saved with an older createdAt between the count and the read', async () => {
+      const url = tempDbUrl();
+      const peer = await openMemory(url);
+      let toSave: MastraDBMessage | undefined;
+      // Right after the count statement, another connection saves the claimed signal as a message.
+      const { client } = recordingClient(url, async ({ sql }) => {
+        if (!toSave || !sql.includes('SELECT (SELECT COUNT(*)')) return;
+        const message = toSave;
+        toSave = undefined;
+        await peer.memory.saveMessages({ messages: [message] });
+      });
+      const store = new LibSQLStore({ id: 'list-all-during-save', client });
+      await store.init();
+      const memory = (await store.getStore('memory'))!;
+      try {
+        for (const byResource of [false, true]) {
+          const thread = await newThread(memory);
+          const runId = `run-${randomUUID()}`;
+          await memory.setSignalRun({ threadId: thread.id, runId });
+          const message = createSampleMessageV2({ threadId: thread.id, resourceId: thread.resourceId });
+          await memory.saveMessages({ messages: [message] });
+          const signal = signalFor(thread);
+          await memory.enqueuePendingSignal({ message: signal, toRunId: runId });
+          await memory.claimPendingSignals({ threadId: thread.id, runId, consumedIds: [] });
+          toSave = { ...signal, createdAt: new Date(message.createdAt.getTime() - 60_000) };
+
+          const listed = byResource
+            ? await memory.listMessagesByResourceId({ resourceId: thread.resourceId, perPage: false })
+            : await memory.listMessages({ threadId: thread.id, perPage: false });
+          expect(toSave).toBeUndefined();
+          expect({ byResource, ids: listed.messages.map(row => row.id), hasMore: listed.hasMore }).toEqual({
+            byResource,
+            ids: [signal.id, message.id],
+            hasMore: false,
+          });
+        }
+      } finally {
+        await store.close();
+        await peer.store.close();
+      }
+    });
+
     it('deletes a thread and its rows in one write, so a run send either lands before and is deleted or finds no thread', async () => {
       const url = tempDbUrl();
       const peer = await openMemory(url);
