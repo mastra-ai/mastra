@@ -2226,13 +2226,6 @@ export class AgentThreadStreamRuntime {
     void outcome.then(clearPendingAdmission, clearPendingAdmission);
   }
 
-  /** The run holding the thread after a lost lease, when signals may be handed to it. */
-  #leaseWinnerRunId(state: AgentThreadRuntimeState, owner: string | undefined): string | undefined {
-    if (!owner || isRetakeLeaseOwner(owner)) return undefined;
-    const runId = threadLeaseRunId(owner);
-    return this.#isSweptLeaseOwner(state, runId) ? undefined : runId;
-  }
-
   #threadAdmissionOutcome(runId: string, lease: { acquired: boolean; owner?: string }): ThreadAdmissionOutcome {
     if (lease.acquired) return { action: 'local', runId };
     if (lease.owner && !isRetakeLeaseOwner(lease.owner))
@@ -5307,52 +5300,6 @@ export class AgentThreadStreamRuntime {
     return store?.store.pendingSignalsSharedAcrossProcesses ? store : undefined;
   }
 
-  /**
-   * Whether the run `runId` holding the thread reads `store`, as far as this
-   * process can tell without resolving a memory given as a function.
-   *
-   * `'same'`: a run held here whose store is `store`, or a run of this agent
-   * held elsewhere that announced it keeps its signals in storage, when the
-   * agent's memory is a fixed instance whose store is `store` and is shared.
-   *
-   * `'other'`:
-   * - a run held here that keeps its signals in memory;
-   * - a run only reserved here, which has no record yet;
-   * - a run held here whose store is another one;
-   * - a run held elsewhere that this process has not seen announce itself as storage-backed;
-   * - a run held elsewhere when `store` is not shared across processes;
-   * - a storage-backed run of this agent held elsewhere whose store is another one and shared.
-   *
-   * `'unknown'`: a storage-backed run whose store can't be resolved here, such
-   * as one held elsewhere of another agent or of a memory given as a function,
-   * or whose store, resolved here, is not shared across processes.
-   *
-   * A memory resolution for a run held elsewhere that throws rejects this
-   * call; one for a run held here that fails answers `'unknown'`.
-   */
-  async #winnerReadsStore(
-    state: AgentThreadRuntimeState,
-    agent: Agent<any, any, any, any>,
-    runId: string,
-    key: string,
-    store: ThreadSignalsStore,
-  ): Promise<'same' | 'other' | 'unknown'> {
-    if (state.threadRunsById.has(runId) || state.threadKeysByRunId.has(runId)) {
-      const record = state.threadRunsById.get(runId);
-      if (!record || !this.#isStorageBacked(record)) return 'other';
-      const resolved = await this.#signalsStoreOf(record);
-      if (!resolved) return 'unknown';
-      return resolved.store === store.store ? 'same' : 'other';
-    }
-    if (!state.storedSignals.isRemoteRunStored(runId) || !store.store.pendingSignalsSharedAcrossProcesses)
-      return 'other';
-    // Another agent's run, or a memory given as a function, can't be compared without the run's request context.
-    if (!this.#mayStoreForRunHeldElsewhere(state, agent, runId)) return 'unknown';
-    const resolved = await this.#runSignalsStore(state, agent, runId, key);
-    if (!resolved) return 'unknown';
-    return resolved.store === store.store ? 'same' : 'other';
-  }
-
   /** Whether `run` keeps its signals in storage, resolved or not. */
   #isStorageBacked(run: Pick<EndedThreadRun, 'signalsStore' | 'resolveSignalsStore'>): boolean {
     return !!(run.signalsStore || run.resolveSignalsStore);
@@ -6627,7 +6574,7 @@ export class AgentThreadStreamRuntime {
         }),
       );
       const signal = state.storedSignals.takeFollowUpInput(key, leftovers, rows);
-      if (!signal || !store) return { leftovers };
+      if (!signal || !store) return { next: undefined };
       const next = {
         runId: globalThis.crypto.randomUUID(),
         draining: { signal, cancelled: false, handedOff: false },
@@ -6636,10 +6583,10 @@ export class AgentThreadStreamRuntime {
       state.activeThreadRunIds.set(key, next.runId);
       state.threadKeysByRunId.set(next.runId, key);
       state.drainingPendingSignalsByThread.set(key, next.draining);
-      return { leftovers, next };
+      return { next };
     });
     if (!chosen) return;
-    const { leftovers, next } = chosen;
+    const { next } = chosen;
     // The run id holding the lease this check hands on, if any.
     let leaseRunId: string | undefined = freshLease ? undefined : previousRun.runId;
     if (next) {
@@ -6672,16 +6619,11 @@ export class AgentThreadStreamRuntime {
         if (draining.cancelled || !owns.acquired) {
           if (state.activeThreadRunIds.get(key) === nextRunId) state.activeThreadRunIds.delete(key);
           state.threadKeysByRunId.delete(nextRunId);
-          const leaseWinner = owns.acquired ? undefined : this.#leaseWinnerRunId(state, owns.owner);
-          // The ended run never wins its own thread: its lease is a release that has not landed.
-          const winnerRunId = leaseWinner === previousRun.runId ? undefined : leaseWinner;
           this.#cleanupPreparedRun(state, nextRunId);
           if (!owns.acquired) {
-            // Another run holds the thread; it takes the rows at its next claim, or its own end-of-run check does.
-            // This follow-up never started, so a later check may start one with the same input.
+            // The rows stay pending: a claim takes every pending row of the thread, so the run holding it claims them
+            // if it reads this store, else the thread's next run that does. This follow-up never started.
             state.storedSignals.returnFollowUpInput(key, signal.id);
-            if (!winnerRunId) return;
-            await this.#handLeftoversToWinner(state, pubsub, key, previousRun, store, leftovers, winnerRunId);
             return;
           }
           return this.#drainStoredLeftovers(
@@ -6748,98 +6690,6 @@ export class AgentThreadStreamRuntime {
     if (await this.#drainPendingIdleSignals(state, pubsub, key, leaseRunId)) return;
     if (leaseRunId === previousRun.runId) this.#releaseEndedStoredRun(state, pubsub, key, previousRun);
     else this.#releaseThreadLease(pubsub, key, leaseRunId);
-  }
-
-  /**
-   * The rows an ended run left, once `winnerRunId` won the thread's lease
-   * over this check's follow-up. A winner that reads this store claims them
-   * itself. One whose store can't be compared here leaves them pending too:
-   * it is the signal run of its own store, normally this one. A winner known
-   * not to read this store gets them through its holder, one row at a time,
-   * in order, until one can't be handed over. Never rejects: whatever fails
-   * leaves the rows pending.
-   */
-  async #handLeftoversToWinner(
-    state: AgentThreadRuntimeState,
-    pubsub: PubSub | undefined,
-    key: string,
-    previousRun: EndedThreadRun,
-    store: ThreadSignalsStore,
-    leftovers: CreatedAgentSignal[],
-    winnerRunId: string,
-  ): Promise<void> {
-    const logger = previousRun.agent.__getLogger?.();
-    const context = { runId: previousRun.runId, winnerRunId };
-    try {
-      const reads = await this.#winnerReadsStore(state, previousRun.agent, winnerRunId, key, store);
-      if (reads === 'unknown') {
-        logger?.debug?.(
-          "Left the signals an ended run left pending: the run holding the thread may read another store, and this process can't tell",
-          context,
-        );
-      }
-      if (reads !== 'other') return;
-      await state.storedSignals.runWrite(key, async () => {
-        const rows = new Map(
-          (await store.store.listPendingSignals({ threadId: store.threadId })).map(row => [row.id, row]),
-        );
-        const ids = state.locallyQueuedSignalIdsByThread.get(key);
-        for (const leftover of leftovers) {
-          const row = rows.get(leftover.id);
-          if (!row) continue;
-          // Put back as it was, with its id and `createdAt`, directly: this write already holds the chain. Writes
-          // nothing when the row is still there.
-          const keepPending = async (error: unknown) => {
-            try {
-              await store.store.enqueuePendingSignal({ message: row });
-            } catch (restoreError) {
-              logger?.error?.(
-                'Could not hand a signal an ended run left to the run holding the thread, nor keep it pending; it is lost',
-                { ...context, signalId: leftover.id, error, restoreError },
-              );
-              return;
-            }
-            logger?.warn?.(
-              'Could not hand the signals an ended run left to the run holding the thread; they stay pending',
-              { ...context, signalId: leftover.id, error },
-            );
-          };
-          // Deleted before the forward is published: when the winner's holder stores the forward in this store,
-          // a row still there makes its insert write nothing, and a delete after it would remove the signal.
-          let deleted: string[];
-          try {
-            deleted = await store.store.cancelPendingSignals({ threadId: store.threadId, ids: [leftover.id] });
-          } catch (error) {
-            // A delete whose write landed and whose answer was lost left no row.
-            await keepPending(error);
-            return;
-          }
-          // A run claimed it, or it was cancelled, since the list.
-          if (!deleted.includes(leftover.id)) continue;
-          // Echoes of the original send stay suppressed, but this forward must be taken if this runtime later
-          // holds that run.
-          if (ids?.has(leftover.id)) ids.set(leftover.id, winnerRunId);
-          try {
-            await this.#publishAndWait(pubsub, key, {
-              type: 'signal-enqueued',
-              runId: winnerRunId,
-              signal: this.#serializeSignal(leftover),
-              sourceId: this.#getSourceId(),
-            });
-          } catch (error) {
-            await keepPending(error);
-            return;
-          }
-        }
-      });
-    } catch (error) {
-      // The follow-up never started and the winner holds the thread: this is the end of the losing path, not a
-      // failed start.
-      logger?.warn?.('Could not hand the signals an ended run left to the run holding the thread; they stay pending', {
-        ...context,
-        error,
-      });
-    }
   }
 
   async #drainPendingContinuations(
