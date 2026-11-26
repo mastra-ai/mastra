@@ -64,19 +64,12 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
   readonly workflow: FactoryBoardWorkflow;
   /** Inputs for one card in this process wait their turn, so a resume never finds the run busy with our own. */
   readonly #queues = new Map<string, Promise<unknown>>();
+  readonly #context: FactoryBoardEngineContext;
 
   constructor(context: FactoryBoardEngineContext) {
+    this.#context = context;
     this.workflow = createFactoryBoardWorkflow({
       requestMove: request => context.transitionService.transition(request),
-      runEnded: binding =>
-        applyPhaseOutcome(
-          {
-            storage: context.workItems,
-            boards: context.boards,
-            boardEngine: { requestMove: request => context.transitionService.transition(request) },
-          },
-          binding,
-        ),
     });
   }
 
@@ -88,7 +81,6 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
   async requestMove(request: FactoryTransitionRequest): Promise<FactoryTransitionResult> {
     const answer = await this.#ask(request, { type: 'move', inputId: crypto.randomUUID(), request });
     if ('error' in answer) rethrow(answer.error);
-    if (answer.type !== 'move') throw new Error(`The card's run answered a move with ${answer.type}.`);
     return answer.result;
   }
 
@@ -97,21 +89,15 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     return moveCardToBoard(placement);
   }
 
-  async runEnded(binding: FactoryRunEndedBinding): Promise<boolean> {
-    const answer = await this.#ask(binding, {
-      type: 'run_ended',
-      inputId: crypto.randomUUID(),
-      binding: {
-        id: binding.id,
-        role: binding.role,
-        orgId: binding.orgId,
-        factoryProjectId: binding.factoryProjectId,
-        workItemId: binding.workItemId,
-      },
-    });
-    if ('error' in answer) rethrow(answer.error);
-    if (answer.type !== 'run_ended') throw new Error(`The card's run answered a run end with ${answer.type}.`);
-    return answer.moved;
+  /**
+   * Moves the card by its phase's outcome, requested through the engine Factory holds, so the move
+   * reaches this card's run as one more input (and a wrapping engine sees it).
+   */
+  runEnded(binding: FactoryRunEndedBinding, engine: Pick<FactoryBoardEngine, 'requestMove'>): Promise<boolean> {
+    return applyPhaseOutcome(
+      { storage: this.#context.workItems, boards: this.#context.boards, boardEngine: engine },
+      binding,
+    );
   }
 
   #ask(card: CardRef, input: FactoryCardInput): Promise<FactoryCardAnswer> {

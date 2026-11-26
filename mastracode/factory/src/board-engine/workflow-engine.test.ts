@@ -15,6 +15,7 @@ import type { FactoryTransitionRequest } from '../rules/transition-service.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { boardRunId } from './board-workflow.js';
+import type { FactoryBoardEngine } from './engine.js';
 import { WorkflowBoardEngine } from './workflow-engine.js';
 
 const ORG = 'org-1';
@@ -134,12 +135,44 @@ describe('the workflow board engine', () => {
       },
     });
 
-    const told = await Promise.all([engine.runEnded(binding), engine.runEnded(binding)]);
+    const told = await Promise.all([engine.runEnded(binding, engine), engine.runEnded(binding, engine)]);
 
-    expect(told).toEqual([true, false]);
+    // Both ask for the same move under one identity; the second gets the first's verdict, and the card moves once.
+    expect(told).toEqual([true, true]);
     const moved = (await storage.get({ orgId: ORG, id: item.id }))!;
     expect(moved.stages).toEqual(['execute']);
     expect(moved.stageHistory?.filter(entry => entry.stage === 'execute')).toHaveLength(1);
+  });
+
+  it("moves the card by a run's outcome through the engine Factory holds, so a wrapping engine sees it", async () => {
+    const { storage, engine, mastra, item, binding } = await setup();
+    await storage.update({
+      orgId: ORG,
+      id: item.id,
+      userId: 'agent:binding',
+      patch: {
+        metadata: {
+          [PHASE_EXIT_METADATA_KEY]: { phase: 'planning', tool: 'submit_plan', at: new Date().toISOString() },
+        },
+      },
+    });
+    const seen: string[] = [];
+    const wrapper: FactoryBoardEngine = {
+      requestMove: request => {
+        seen.push(request.stage);
+        return engine.requestMove(request);
+      },
+      requestPlacement: placement => engine.requestPlacement(placement),
+      runEnded: (ended, held) => engine.runEnded(ended, held),
+    };
+
+    await expect(wrapper.runEnded(binding, wrapper)).resolves.toBe(true);
+
+    expect(seen).toEqual(['execute']);
+    expect((await storage.get({ orgId: ORG, id: item.id }))!.stages).toEqual(['execute']);
+    // The move still went through the card's run, which waits for the next input.
+    const run = await mastra.getWorkflow('factory-board').getWorkflowRunById(boardRunId(item.id));
+    expect(run?.status).toBe('suspended');
   });
 
   it("throws the board's refusal of a reported outcome as the rule rejection the dispatcher settles", async () => {
@@ -164,7 +197,7 @@ describe('the workflow board engine', () => {
       },
     });
 
-    const refusal = await engine.runEnded(binding).catch((error: unknown) => error);
+    const refusal = await engine.runEnded(binding, engine).catch((error: unknown) => error);
 
     // Work's Review holds only cards with a pull request, and this card has none.
     expect(refusal).toBeInstanceOf(FactoryRuleRejectedError);
@@ -176,7 +209,7 @@ describe('the workflow board engine', () => {
   it('answers false for a run end with no outcome reported, leaving the card where it is', async () => {
     const { storage, engine, item, binding } = await setup();
 
-    await expect(engine.runEnded(binding)).resolves.toBe(false);
+    await expect(engine.runEnded(binding, engine)).resolves.toBe(false);
     expect((await storage.get({ orgId: ORG, id: item.id }))!.stages).toEqual(['planning']);
   });
 
@@ -248,7 +281,7 @@ describe('the workflow board engine', () => {
   });
 
   it("claims the card's run afresh when asked from work that carries an older claim on it", async () => {
-    const { storage, engine, item, binding } = await setup();
+    const { storage, engine, item } = await setup();
     await engine.requestMove(await personMove(storage, item.id, 'intake', 'drag-1')());
     await engine.requestMove(await personMove(storage, item.id, 'planning', 'drag-2')());
     // What a session a step of this run started still carries: the claim that step held, since replaced.
@@ -260,7 +293,12 @@ describe('the workflow board engine', () => {
         runId ? { runId, generation: 1, ownerId: 'finished-step' } : undefined,
     };
 
-    await expect(context.run(staleClaim, () => engine.runEnded(binding))).resolves.toBe(false);
+    const move = await personMove(storage, item.id, 'intake', 'drag-3')();
+
+    await expect(context.run(staleClaim, () => engine.requestMove(move))).resolves.toMatchObject({
+      status: 'accepted',
+      stage: 'intake',
+    });
   });
 
   it('refuses inputs while its workflow is not registered with Mastra', async () => {
@@ -270,7 +308,17 @@ describe('the workflow board engine', () => {
     const engine = new WorkflowBoardEngine({ transitionService, workItems: storage, boards });
 
     await expect(
-      engine.runEnded({ id: 'b', role: 'work', orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: 'card' }),
+      engine.requestMove({
+        orgId: ORG,
+        factoryProjectId: PROJECT_ID,
+        workItemId: 'card',
+        board: 'work',
+        stage: 'intake',
+        expectedRevision: 1,
+        actor: { type: 'human', id: 'user-1' },
+        ingress: { type: 'human', identity: 'drag-1' },
+        cause: 'Dragged on the board.',
+      }),
     ).rejects.toThrow('not registered with Mastra');
   });
 });

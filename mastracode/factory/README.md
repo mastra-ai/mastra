@@ -424,7 +424,7 @@ const factory = new MastraFactory({
 });
 ```
 
-`createWorkflowBoardEngine` runs each card on a `factory-board` workflow run of its own, with run id `factory-board:<card id>`. The run starts on the first move or run end asked of the card, applies each one in turn, and suspends between them until the card's next input. Each move still commits through the transition service, so board checks, hooks and phase starts behave as with the default engine. `MastraFactory` registers the workflow with the host's Mastra, which stores the runs:
+`createWorkflowBoardEngine` runs each card on a `factory-board` workflow run of its own, with run id `factory-board:<card id>`. The run starts on the first move asked of the card, applies each one in turn, and suspends between them until the card's next input. A run end reaches it as the move its outcome makes, requested through the engine Factory holds. Each move still commits through the transition service, so board checks, hooks and phase starts behave as with the default engine. `MastraFactory` registers the workflow with the host's Mastra, which stores the runs:
 
 ```typescript
 import { MastraFactory, createWorkflowBoardEngine } from '@mastra/factory';
@@ -435,7 +435,7 @@ const factory = new MastraFactory({
 });
 ```
 
-A card's run stores the last move or run end it applied (the full request, with its actor) in its workflow snapshot, so whoever can read the host's workflow runs can read those. A move must not wait on another move of the same card, since that card's inputs are applied one at a time.
+A card's run stores the last move it applied (the full request, with its actor) in its workflow snapshot, so whoever can read the host's workflow runs can read those. A move must not wait on another move of the same card, since that card's inputs are applied one at a time.
 
 A custom engine that runs on workflows of its own lists them under `workflows`, and `MastraFactory` registers them the same way.
 

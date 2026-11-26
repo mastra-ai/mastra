@@ -3,7 +3,6 @@ import { z } from 'zod';
 
 import type { FactoryTransitionRequest } from '../rules/transition-service.js';
 import type { FactoryTransitionResult } from '../rules/types.js';
-import type { FactoryRunEndedBinding } from './engine.js';
 
 export const FACTORY_BOARD_WORKFLOW_ID = 'factory-board';
 
@@ -13,9 +12,7 @@ export function boardRunId(workItemId: string): string {
 }
 
 /** Something asked of a card's run. */
-export type FactoryCardInput =
-  | { type: 'move'; inputId: string; request: FactoryTransitionRequest }
-  | { type: 'run_ended'; inputId: string; binding: FactoryRunEndedBinding };
+export type FactoryCardInput = { type: 'move'; inputId: string; request: FactoryTransitionRequest };
 
 /** An error the step caught, carried back to the caller that asked for the input. */
 export interface FactoryCardInputError {
@@ -29,12 +26,10 @@ export interface FactoryCardInputError {
 /** The step's answer to the last input it took, keyed by that input's id. */
 export type FactoryCardAnswer =
   | { inputId: string; type: 'move'; result: FactoryTransitionResult }
-  | { inputId: string; type: 'run_ended'; moved: boolean }
   | { inputId: string; error: FactoryCardInputError };
 
 export interface FactoryBoardWorkflowDeps {
   requestMove(request: FactoryTransitionRequest): Promise<FactoryTransitionResult>;
-  runEnded(binding: FactoryRunEndedBinding): Promise<boolean>;
 }
 
 // The card's request and verdict are Factory's own records; the run carries them, it doesn't shape them.
@@ -78,10 +73,7 @@ export function createFactoryBoardWorkflow(deps: FactoryBoardWorkflowDeps) {
       if (!input) return suspend(inputData.answer ? { answer: inputData.answer } : {});
       let answer: FactoryCardAnswer;
       try {
-        answer =
-          input.type === 'move'
-            ? { inputId: input.inputId, type: 'move', result: await deps.requestMove(input.request) }
-            : { inputId: input.inputId, type: 'run_ended', moved: await deps.runEnded(input.binding) };
+        answer = { inputId: input.inputId, type: 'move', result: await deps.requestMove(input.request) };
       } catch (error) {
         // A failed input is the caller's to report; the card's run keeps waiting for the next one.
         answer = { inputId: input.inputId, error: inputError(error) };
