@@ -1152,9 +1152,11 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const deleted = await workItems.delete({ orgId: tenant.orgId, id });
           if (!deleted) return c.json({ error: 'Work item not found' }, 404);
           // The card is gone either way; what the engine kept for it is cleaned up on a best effort.
-          await boardEngine?.cardDeleted?.({ workItemId: deleted.id }).catch(error => {
+          try {
+            await boardEngine?.cardDeleted?.({ workItemId: deleted.id });
+          } catch (error) {
             console.warn("[Factory] Unable to end a deleted card's board run.", error);
-          });
+          }
           await audit.emit({
             context: loose(c),
             input: {
