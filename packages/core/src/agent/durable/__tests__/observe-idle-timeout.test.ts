@@ -11,7 +11,7 @@ import {
   emitSuspendedEvent,
   emitAbortEvent,
 } from '../stream-adapter';
-import type { DurableAgentStreamResult } from '../stream-adapter';
+import type { DurableStreamAdapterResult } from '../stream-adapter';
 
 /**
  * Idle / liveness timeout for `createDurableAgentStream` (and therefore
@@ -90,7 +90,7 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
       messageId: `msg-${runId}`,
       model: { modelId: 'test', provider: 'test', version: 'v3' },
       ...extra,
-    }) as DurableAgentStreamResult<any>;
+    }) as DurableStreamAdapterResult<any>;
 
   it.each(['finish', 'abort', 'error'] as const)(
     'still times out after rejecting a superseded %s terminal',
@@ -468,16 +468,19 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
     // run going quiet, and the idle countdown starts only once the read is done.
     const runId = 'idle-offset-replay';
     await emitChunkEvent(pubsub, runId, textChunk('before'));
+    const getHistory = pubsub.getHistory.bind(pubsub);
+    // Indices are opaque epoch-seeded cursors: the offset after 'before' is
+    // its real index + 1, not 1.
+    const [beforeEvent] = await getHistory(`agent.stream.${runId}`, 0);
     let releaseHistory!: () => void;
     const historyHeld = new Promise<void>(resolve => (releaseHistory = resolve));
-    const getHistory = pubsub.getHistory.bind(pubsub);
     vi.spyOn(pubsub, 'getHistory').mockImplementation(async (...args) => {
       await historyHeld;
       return getHistory(...args);
     });
 
     const { output, cleanup, ready } = makeStream(runId, {
-      offset: 1,
+      offset: beforeEvent!.index! + 1,
       replayResponseMessagesBeforeOffset: true,
       idleTimeoutMs: IDLE,
       isAlive: () => false,

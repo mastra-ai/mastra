@@ -13,7 +13,12 @@ import { ProcessorRunner } from '../../../processors/runner';
 import { RequestContext, withoutLiveRequestKeys } from '../../../request-context';
 import { toStandardSchema } from '../../../schema';
 import {
+  clearStepPartIndexes,
+  findIterationOffsetInParts,
+  findStepPartBoundaries,
   persistProcessorDataChunk,
+  reconcileBufferedStepTexts,
+  resolveMessageText,
   resolveOutputMessageSkippingCompletionChecks,
   resolveProcessorWriterMessageId,
 } from '../../../stream/base/output';
@@ -30,9 +35,9 @@ import type { StructuredOutputOptions } from '../../types';
 import { isDurableAgentLike } from '../../types';
 import { assertExecutionOwned, isExecutionFenceError } from '../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../memory-fga';
-import { getRunRegistryEntry } from '../run-registry';
+import { getLiveRunRequestContext, getRunRegistryEntry } from '../run-registry';
 import { toLiveStructuredOutputSchema } from '../structured-output-null-transform';
-import type { DurableAgenticWorkflowInput, RunRegistryEntry } from '../types';
+import type { AgentFinishEventData, DurableAgenticWorkflowInput, RunRegistryEntry } from '../types';
 import { resolveRuntimeDependencies } from '../utils/resolve-runtime';
 import { foldBackgroundResults } from './shared/background-results';
 import { hydrateMessageListState } from './shared/message-list-state';
@@ -58,6 +63,8 @@ export interface DurableFinishSideEffectsOptions {
 
 export interface DurableFinishSideEffectsResult {
   messageListState: SerializedMessageListState;
+  finishMessages?: AgentFinishEventData['messages'];
+  rewrittenStepTexts?: string[];
   outputText: string;
   /**
    * True when processOutputResult changed `outputText`, including emptying it. Only then should
@@ -74,6 +81,8 @@ export interface DurableFinishSideEffectsResult {
   titleForStream?: Promise<string | undefined>;
   /** Chunks from the `structuredOutput.model` structuring pass, to publish before FINISH. */
   structuredOutputChunks?: ChunkType[];
+  /** The validated `structuredOutput` object, when the run asked for one. */
+  object?: unknown;
   /**
    * Chunks output processors wrote with `writer.custom()` in processOutputResult. Publish them
    * marked output-processed, after `structuredOutputChunks` and before the tripwire or FINISH,
@@ -89,10 +98,12 @@ export interface DurableFinishSideEffectsResult {
   };
 }
 
-function restoreRequestContext(
+function mergeRequestContextForFinalization(
   entries: Record<string, unknown> | undefined,
   fallback: RequestContext | undefined,
+  liveRunContext: RequestContext | undefined,
 ): RequestContext {
+  if (liveRunContext) return liveRunContext;
   if (!entries) return fallback ?? new RequestContext();
 
   const restored = new RequestContext<unknown>(fallback?.entries());
@@ -175,7 +186,11 @@ export async function runDurableFinishSideEffects({
     }
   }
 
-  const effectiveRequestContext = restoreRequestContext(initData.requestContextEntries, requestContext);
+  const effectiveRequestContext = mergeRequestContextForFinalization(
+    initData.requestContextEntries,
+    requestContext,
+    getLiveRunRequestContext(registryEntry, runId, requestContext),
+  );
   // Snapshots drop MastraMemory (it holds a live instance), but memory processors read
   // memoryConfig (e.g. readOnly) from it. Restore it from durable state when it's missing.
   if (!effectiveRequestContext.has('MastraMemory') && durableState?.threadId) {
@@ -219,11 +234,13 @@ export async function runDurableFinishSideEffects({
       ? toLiveStructuredOutputSchema(structuredOutput.schema, structuredOutput.nullToUndefined)
       : undefined);
   let structuredOutputChunks: ChunkType[] | undefined;
+  let object: unknown;
   // The structuring model reads tool calls and results too, so a tool-only answer still qualifies.
   const structuringParts = structuredOutput?.hasStructuringModel ? responseStreamParts(messageList) : undefined;
   if (structuredOutputSchema && (structuredOutputText.trim() || structuringParts?.length)) {
     const finishReason = outputResult?.finishReason;
     const truncated = finishReason === 'length' || finishReason === 'content-filter';
+    const failed = finishReason === 'abort' || finishReason === 'error';
     const errorStrategy = liveStructuredOutput ? liveStructuredOutput.errorStrategy : structuredOutput?.errorStrategy;
     const fallbackValue = liveStructuredOutput ? liveStructuredOutput.fallbackValue : structuredOutput?.fallbackValue;
     let value: unknown;
@@ -232,7 +249,6 @@ export async function runDurableFinishSideEffects({
       // separate structuring model turns that answer into the object.
       const structuringModel = liveStructuredOutput?.model ?? structuredOutput.structuringModelConfig?.originalConfig;
       // Never structure partial text from an aborted or failed turn.
-      const failed = finishReason === 'abort' || finishReason === 'error';
       if (structuringModel && !truncated && !failed) {
         structuredOutputChunks = await runStructuringPass({
           options: {
@@ -265,6 +281,8 @@ export async function runDurableFinishSideEffects({
     const lastAssistantMessage = messageList.get.response
       .db()
       .findLast(message => message.role === 'assistant' && !message.content?.metadata?.completionResult);
+    // The caller of a failed or aborted run gets no object.
+    object = failed ? undefined : value;
     if (value !== undefined && lastAssistantMessage) {
       lastAssistantMessage.content.metadata = {
         ...lastAssistantMessage.content.metadata,
@@ -304,6 +322,7 @@ export async function runDurableFinishSideEffects({
 
   const outputTextBeforeProcessing = resolveOutputText(messageList);
 
+  let rewrittenStepTexts: string[] | undefined;
   // Keep this MessageList for every later phase. ProcessorRunner applies
   // returned message arrays back onto it, including removals and replacements.
   if (registryEntry?.outputProcessors?.length) {
@@ -327,14 +346,62 @@ export async function runDurableFinishSideEffects({
         agent,
         processorStates: registryEntry.processorStates,
       });
-      await runner.runOutputProcessors(
-        messageList,
-        createObservabilityContext(tracingContext),
-        effectiveRequestContext,
-        0,
-        outputResultWriter,
-        outputResult,
-      );
+      const steps = outputResult?.steps;
+      const lastStep = steps?.at(-1);
+      const responses = messageList.get.response.db();
+      const feedbackContinuation =
+        steps &&
+        steps.length > 1 &&
+        responses.some(msg => {
+          const result = msg.content.metadata?.completionResult;
+          return (
+            result && typeof result === 'object' && 'suppressFeedback' in result && result.suppressFeedback === true
+          );
+        });
+      const reply = feedbackContinuation ? resolveOutputMessageSkippingCompletionChecks(messageList) : undefined;
+      const parts = reply?.content.parts;
+      const offset = parts ? findIterationOffsetInParts(parts, lastStep?.text) : undefined;
+      const split =
+        reply && offset !== undefined ? messageList.splitResponseMessageAtPartOffset(reply.id, offset) : undefined;
+      const earlierSteps = split ? steps?.slice(0, -1).map(step => ({ ...step })) : undefined;
+      const earlierReply = split
+        ? messageList.get.response.db().find(msg => msg.id === split.earlierMessageId)
+        : undefined;
+      const earlierText = earlierReply ? resolveMessageText(earlierReply) : undefined;
+      const earlierBoundaries = earlierSteps ? findStepPartBoundaries(earlierReply, earlierSteps) : undefined;
+      try {
+        await runner.runOutputProcessors(
+          messageList,
+          createObservabilityContext(tracingContext),
+          effectiveRequestContext,
+          0,
+          outputResultWriter,
+          outputResult,
+        );
+        if (split && earlierSteps && lastStep) {
+          const processed = messageList.get.response.db();
+          const earlier = processed.find(msg => msg.id === split.earlierMessageId);
+          const resolved = resolveOutputMessageSkippingCompletionChecks(messageList);
+          const current =
+            resolved && resolved.id !== split.earlierMessageId
+              ? resolved
+              : processed.find(msg => msg.id === split.currentMessageId);
+          reconcileBufferedStepTexts(
+            earlierSteps,
+            earlier ? resolveMessageText(earlier) : '',
+            earlier,
+            earlierBoundaries,
+            earlierText,
+          );
+          const stepTexts = [...earlierSteps.map(step => step.text), current ? resolveMessageText(current) : ''];
+          if (stepTexts.some((text, index) => text !== steps?.[index]?.text)) rewrittenStepTexts = stepTexts;
+        }
+      } finally {
+        if (split) {
+          clearStepPartIndexes(messageList.get.response.db());
+          messageList.coalesceSplitResponseMessages(split.earlierMessageId, split.currentMessageId);
+        }
+      }
     } catch (error) {
       if (error instanceof TripWire) {
         // Match Agent: a tripwire rejects the answer, so skip persistence and title generation,
@@ -373,6 +440,11 @@ export async function runDurableFinishSideEffects({
   // memory, so resolve the final response text before persistence runs.
   const outputText = resolveOutputText(messageList);
   const outputTextChanged = outputText !== outputTextBeforeProcessing;
+  const finishMessages = {
+    all: messageList.get.all.aiV5.model(),
+    user: messageList.get.input.aiV5.model(),
+    nonUser: messageList.get.response.aiV5.model(),
+  };
 
   const saveQueueManager = registryEntry?.saveQueueManager ?? rebuiltSaveQueueManager;
   const memory = registryEntry?.memory ?? rebuiltMemory;
@@ -481,9 +553,12 @@ export async function runDurableFinishSideEffects({
     messageListState: messageList.serialize(),
     outputText,
     outputTextChanged,
+    finishMessages,
+    rewrittenStepTexts,
     titleGeneration,
     titleForStream,
     structuredOutputChunks,
+    object,
     outputResultChunks,
   };
 }
@@ -548,6 +623,7 @@ export async function runDurableDeadlineOutputPass({
   messageListState,
   cutOffText,
   entry,
+  executionId,
   mastra,
   tracingContext,
   logger,
@@ -560,13 +636,18 @@ export async function runDurableDeadlineOutputPass({
   messageListState: SerializedMessageListState;
   cutOffText?: string;
   entry: RunRegistryEntry;
+  executionId: string;
   mastra?: Mastra;
   /** The run's agent span, so the deadline pass shows in the run's trace as the finish pass does. */
   tracingContext?: TracingContext;
   logger: IMastraLogger;
 }): Promise<void> {
   const durableState = initData.state;
-  const requestContext = restoreRequestContext(initData.requestContextEntries, entry.requestContext);
+  const requestContext = mergeRequestContextForFinalization(
+    initData.requestContextEntries,
+    undefined,
+    getLiveRunRequestContext(entry, runId, undefined, executionId),
+  );
   if (!requestContext.has('MastraMemory') && durableState?.threadId) {
     requestContext.set('MastraMemory', {
       thread: { id: durableState.threadId },

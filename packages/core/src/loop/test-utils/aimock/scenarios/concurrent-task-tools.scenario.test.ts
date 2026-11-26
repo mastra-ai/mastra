@@ -11,7 +11,7 @@ import { InMemoryStore } from '../../../../storage/mock';
 import { TASK_STATE_TYPE, taskWriteTool } from '../../../../tools/builtin/task-tools';
 import type { TaskItemSnapshot } from '../../../../tools/builtin/task-tools';
 import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
-import { SCENARIO_MODEL_ID } from '../types';
+import { nativeExecutionEngine, SCENARIO_MODEL_ID } from '../types';
 
 // Hold the first database write while another thread makes progress. Without
 // serialization, the second tool reads the old list and its update is lost.
@@ -79,7 +79,10 @@ describeForAllEngines('concurrent task tools', engine => {
     storage.stores.threadState = store;
     // External engine workers resolve tools through their shared Mastra host.
     const external = engine === 'inngest' ? await createSharedAgent(llm, { engine }) : undefined;
-    const mastra: Mastra = external?.mastra ?? new Mastra({ storage, logger: false });
+    const executionEngine = nativeExecutionEngine(engine);
+    const mastra: Mastra =
+      external?.mastra ??
+      new Mastra({ storage, logger: false, ...(executionEngine ? { durable: { executionEngine } } : {}) });
     const originalStorage = mastra.getStorage();
     if (external) {
       storage.stores = { ...originalStorage.stores, threadState: store };

@@ -1,10 +1,19 @@
 import { getEntryId } from '../../step-entry';
 import type { RestartExecutionParams, StepResult, WorkflowRunState } from '../../types';
 import type { LeafEntry } from './routing';
+import { samePath } from './run-status';
 
 type StoredRecord = { status?: string; startedAt?: number; endedAt?: number; metadata?: Record<string, any> };
 
 const TERMINAL_STATUSES = new Set(['success', 'failed', 'canceled', 'tripwire']);
+
+/**
+ * The branch statuses `aggregateBranchResults` counts as accounted for. Once every branch of a
+ * parallel or conditional entry has one, a branch's completion aggregates the entry: it goes past
+ * the entry when all branches succeeded or were skipped, and suspends the run (not continues past
+ * the entry) when any branch is suspended.
+ */
+const BRANCH_SETTLED_STATUSES = new Set(['success', 'skipped', 'suspended']);
 
 /**
  * What a worker does with a delivery of a step occurrence: run the step, drop
@@ -12,11 +21,6 @@ const TERMINAL_STATUSES = new Set(['success', 'failed', 'canceled', 'tripwire'])
  * or continue the run from the result the occurrence saved.
  */
 export type FinishedOccurrence = 'run' | 'drop' | { continueFrom: StepResult<any, any, any, any> };
-
-/** Whether two execution paths name the same position in the step graph. */
-function samePath(a: number[] | undefined, b: number[]): boolean {
-  return !!a && a.length === b.length && a.every((index, depth) => index === b[depth]);
-}
 
 /** The record of one foreach item, kept in the foreach step's resume metadata. */
 function foreachItem(result: unknown, index: number | undefined): StoredRecord | undefined {
@@ -70,9 +74,12 @@ function isFinal(record: StoredRecord | undefined, step: LeafEntry, stepGuards: 
  * after the step saved its result and before the next step was published.
  * A top-level step shows that through the run's active path. A branch
  * continues only when a restart dispatched it, since the restart is then what
- * recovers the run, and only while the run's active path is still inside the
- * branch's parallel or conditional entry. Any other finished delivery is
- * dropped.
+ * recovers the run, only while the run's active path is still inside the
+ * branch's parallel or conditional entry, and, for a result the entry's
+ * aggregation counts, only when the restart read every sibling branch
+ * (`siblings`) as settled (see `BRANCH_SETTLED_STATUSES`). A failed branch
+ * skips the aggregation and fails the run, so it continues whatever its
+ * siblings' state. Any other finished delivery is dropped.
  *
  * `stepGuards` tells whether the store has workflow step guards. Records they
  * stamped are left to the guards on the deliveries the guards arbitrate
@@ -86,6 +93,7 @@ export function finishedOccurrence({
   snapshot,
   stepGuards,
   guarded,
+  siblings,
 }: {
   step: LeafEntry;
   executionPath: number[];
@@ -94,6 +102,8 @@ export function finishedOccurrence({
   snapshot: WorkflowRunState | null | undefined;
   stepGuards: boolean;
   guarded: boolean;
+  /** For a branch of a parallel or conditional entry, the ids of the entry's other branches. */
+  siblings?: string[];
 }): FinishedOccurrence {
   const leafId = getEntryId(step.type === 'loop' || step.type === 'foreach' ? step.step : step);
   const stored = snapshot?.context[leafId] as StoredRecord | undefined;
@@ -154,10 +164,16 @@ export function finishedOccurrence({
   // The next leaf records itself as the active path when it starts. Sibling branches overwrite
   // that path, so for a branch it only tells whether the run went past the branch's parallel or
   // conditional entry, and only a restart (the run's recovery) continues from a branch.
+  // A sibling the restart read as unsettled aggregates the entry itself when it settles, and it
+  // then sees this branch's saved result, so continuing here as well would aggregate it twice.
+  // A failure never reaches the aggregation, so a failed branch continues to fail the run.
   const notMovedOn =
     executionPath.length === 1
       ? samePath(snapshot.activePaths, executionPath)
-      : restartTarget && snapshot.activePaths?.[0] === executionPath[0];
+      : restartTarget &&
+        snapshot.activePaths?.[0] === executionPath[0] &&
+        (!BRANCH_SETTLED_STATUSES.has(stored.status!) ||
+          (siblings ?? []).every(id => BRANCH_SETTLED_STATUSES.has(restart?.stepResults?.[id]?.status as string)));
 
   return notMovedOn ? { continueFrom: stored as StepResult<any, any, any, any> } : 'drop';
 }

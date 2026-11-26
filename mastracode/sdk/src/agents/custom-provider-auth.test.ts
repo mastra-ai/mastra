@@ -10,6 +10,7 @@
 
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
+import type { IncomingHttpHeaders } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { RequestContext } from '@mastra/core/request-context';
@@ -49,6 +50,10 @@ interface Endpoint {
   origin: string;
   /** The `Authorization` header of every request received, in order. */
   authorizations: Array<string | undefined>;
+  /** All headers of every request received, in order. */
+  headers: IncomingHttpHeaders[];
+  /** The `model` field of every request body received, in order. */
+  models: unknown[];
   close(): Promise<void>;
 }
 
@@ -57,10 +62,15 @@ const endpoints: Endpoint[] = [];
 /** An endpoint answering every request with a chat completion, or with a redirect to `redirectTo`'s origin. */
 async function startEndpoint(redirectTo?: Endpoint): Promise<Endpoint> {
   const authorizations: Array<string | undefined> = [];
+  const headers: IncomingHttpHeaders[] = [];
+  const models: unknown[] = [];
   const server = createServer((req, res) => {
     authorizations.push(req.headers.authorization);
-    req.resume();
+    headers.push(req.headers);
+    let body = '';
+    req.on('data', chunk => (body += chunk));
     req.on('end', () => {
+      if (body) models.push(JSON.parse(body).model);
       if (redirectTo) {
         res.writeHead(307, { location: `${redirectTo.origin}${req.url}` });
         res.end();
@@ -76,6 +86,8 @@ async function startEndpoint(redirectTo?: Endpoint): Promise<Endpoint> {
     url: `${origin}/v1`,
     origin,
     authorizations,
+    headers,
+    models,
     close: () =>
       new Promise(resolve => {
         server.closeAllConnections();
@@ -191,6 +203,29 @@ describe('custom provider credentials', () => {
     });
   });
 
+  // `:fast` asks for Codex Fast only on the built-in OpenAI provider. On a
+  // custom endpoint that is also named OpenAI, it is part of the model name.
+  describe('a model name ending in :fast on an endpoint named OpenAI', () => {
+    it('reaches the endpoint with its full name', async () => {
+      const endpoint = await startEndpoint();
+      writeSettings({ customProviders: [{ name: 'OpenAI', url: endpoint.url, models: ['local:fast'] }] });
+
+      await sendPrompt('openai/local:fast');
+
+      expect(endpoint.models).toEqual(['local:fast']);
+    });
+
+    it('keeps its full name when the gateway resolves it', async () => {
+      const endpoint = await startEndpoint();
+      const gateway = createGateway([{ name: 'OpenAI', url: endpoint.url, models: ['gpt-6.2-sol:fast'] }]);
+
+      const model = gateway.resolveLanguageModel({ providerId: 'openai', modelId: 'gpt-6.2-sol:fast', apiKey: '' });
+      await model.doGenerate({ prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] } as never);
+
+      expect(endpoint.models).toEqual(['gpt-6.2-sol:fast']);
+    });
+  });
+
   describe('a model routed through the Mastra gateway', () => {
     // `mastra/acme/…` resolves to the Mastra gateway key. A custom provider
     // whose id matches the middle segment must not be sent that key.
@@ -278,6 +313,36 @@ describe('custom provider credentials', () => {
       await sendPrompt('openai/gpt-test');
 
       expect(endpoint.authorizations).toEqual(['Bearer proxy-secret']);
+    });
+  });
+
+  describe('an endpoint with the x-api-key scheme and custom headers', () => {
+    it('receives its key in x-api-key and its headers on a session call', async () => {
+      const endpoint = await startEndpoint();
+      writeSettings({
+        customProviders: [
+          {
+            name: 'Acme',
+            url: endpoint.url,
+            apiKey: 'acme-secret',
+            authScheme: 'x-api-key',
+            headers: [
+              { name: 'X-Org-Id', value: 'org-1', secret: false },
+              { name: 'X-Tenant-Token', value: 'tenant-secret', secret: true },
+            ],
+            models: ['model-x'],
+          },
+        ],
+      });
+
+      await sendPrompt('acme/model-x');
+
+      expect(endpoint.headers[0]).toMatchObject({
+        'x-api-key': 'acme-secret',
+        'x-org-id': 'org-1',
+        'x-tenant-token': 'tenant-secret',
+      });
+      expect(endpoint.authorizations).toEqual([undefined]);
     });
   });
 

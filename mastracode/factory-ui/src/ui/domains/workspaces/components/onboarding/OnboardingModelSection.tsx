@@ -1,11 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useId } from 'react';
 import type { ReactNode } from 'react';
 
-import { SkeletonRows } from '../../../../ui/SkeletonRows';
 import { useAccountSource } from '../../hooks/useAccountSource';
 import type { OnboardingModelSetup } from '../../hooks/useOnboardingModelSetup';
 import type { PreviewProvider, ProviderConnectionMethod } from '../../hooks/useProviderConnection';
@@ -14,7 +12,7 @@ import { createBlockedReason } from '../../services/createBlockedReason';
 import { modelSectionIndex } from '../../services/onboardingSteps';
 import { OnboardingAccountLanes } from './OnboardingAccountLanes';
 import { OnboardingCreateNotice } from './OnboardingCreateNotice';
-import { OnboardingInset } from './OnboardingInset';
+import { OnboardingLaneSkeleton, OnboardingScopeChoiceSkeleton } from './OnboardingModelSkeletons';
 import { OnboardingPageAction } from './OnboardingPageAction';
 import { OnboardingScopeChoice } from './OnboardingScopeChoice';
 import { OnboardingStepCard } from './OnboardingStepCard';
@@ -74,7 +72,7 @@ export function OnboardingModelSection({
           }
         >
           {loading ? (
-            <LoadingInset label="Loading account options" rows={3} />
+            <OnboardingScopeChoiceSkeleton />
           ) : (
             <OnboardingScopeChoice
               scope={setup.scope}
@@ -106,7 +104,7 @@ export function OnboardingModelSection({
         }
       >
         {loading ? (
-          <LoadingInset label="Loading model providers" rows={1} />
+          <OnboardingLaneSkeleton />
         ) : (
           <fieldset disabled={creating} className="m-0 min-w-0 border-0 p-0">
             {/* Each account is its own inset; in hybrid its heading sits on the card above it. */}
@@ -131,11 +129,12 @@ export function OnboardingModelSection({
       >
         <Button
           variant="primary"
-          disabled={!setup.canCreate || creating}
+          disabled={!setup.canCreate}
+          loading={creating}
           aria-describedby={!error && blockedReason ? blockedReasonId : undefined}
           onClick={onCreate}
         >
-          <CreateFactoryLabel creating={creating} />
+          Create factory
         </Button>
       </OnboardingPageAction>
     </>
@@ -151,27 +150,9 @@ function SectionDetail({ children }: { children: ReactNode }) {
   );
 }
 
-function LoadingInset({ label, rows }: { label: string; rows: number }) {
-  return (
-    <OnboardingInset>
-      <SkeletonRows label={label} rows={rows} rowClassName="h-14 w-full" />
-    </OnboardingInset>
-  );
-}
-
 /** What the Model card covers under each answer: whose account it is, or how the two split. */
 const ACCOUNT_DETAILS: Record<OnboardingModelScope, string> = {
   factory: 'Shared with your organization',
   hybrid: 'One for Factory work, one for your sessions',
   user: 'Only you',
 };
-
-function CreateFactoryLabel({ creating }: { creating: boolean }) {
-  if (!creating) return 'Create factory';
-  return (
-    <>
-      <Spinner size="sm" aria-hidden="true" />
-      Creating your factory…
-    </>
-  );
-}

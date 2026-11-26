@@ -1,11 +1,6 @@
 import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
-import {
-  createSharedAgent,
-  describeForAllEngines,
-  isDurableEngineVariant,
-  useLoopScenarioAimock,
-} from '../aimock-scenario';
+import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
 
 /**
  * Text and structured-output surfaces of a stream result (moved from
@@ -32,7 +27,7 @@ describeForAllEngines('AIMock loop scenario: stream result surfaces', engine => 
   async function stream(prompt: string, options: Record<string, unknown> = {}) {
     const { agent } = await createSharedAgent(getMock(), { engine, instructions: 'You are a helpful assistant.' });
     const result: any = await agent.stream(prompt, options);
-    return { result, output: isDurableEngineVariant(engine) ? result.output : result };
+    return { result, output: result.output ?? result };
   }
 
   it('text: fullStream, the text promise and getFullOutput report the same reply', async () => {

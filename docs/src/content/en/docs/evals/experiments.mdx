@@ -254,11 +254,21 @@ await dataset.updateItem({
 
 Omitting `scorerIds` from an update preserves its current value. Each item version stores its scorer ID list, including an empty list. Scorer definitions aren't copied into the item version and continue to use their existing registry or Editor behavior.
 
-Mastra resolves each item's scorer IDs before running its target. It checks registered scorers first, then asks the Editor to hydrate a stored scorer. A stale item-level ID produces the `EXPERIMENT_ITEM_SCORER_NOT_FOUND` code for that item. Mastra skips target execution without retrying that item, while the rest of the experiment continues.
+Mastra resolves scorer IDs the same way at every level by checking registered scorers first and then asking the Editor to load a stored scorer, so stored scorers work even in a durable run's worker that never loaded them. Mastra doesn't resolve IDs from lower-priority sources that the precedence rules ignore.
 
-A missing ID in the selected run-level or dataset-level source fails experiment setup. Mastra doesn't resolve IDs from lower-priority sources that the precedence rules ignore.
+An unknown ID in the experiment's `scorers` option rejects `startExperiment()`, `startExperimentAsync()`, or `createExperiment()` with the `EXPERIMENT_SCORER_NOT_FOUND` code before Mastra creates the experiment. The server returns a `400` response for this error.
 
-Workflow step scorers are available only through a run-level categorized `scorers` configuration. Item-level IDs apply to the flat agent, workflow, and trajectory scorer dispatch.
+If an item's scorer can't be found once the experiment is running, that item fails with the `EXPERIMENT_ITEM_SCORER_NOT_FOUND` code. This happens for a stale item-level or dataset-level ID, or for a scorer deleted after the experiment started. Mastra skips target execution without retrying that item, while the rest of the experiment continues.
+
+A scorer lookup that fails for another reason, such as unavailable storage, isn't reported as a missing ID. Mastra surfaces the original error instead. Where you see it depends on when the lookup runs:
+
+- `startExperiment()` and `createExperiment()` reject when the lookup for the experiment's `scorers` option fails. `startExperiment()` also rejects when the lookup for the dataset's scorers fails.
+- `startExperimentAsync()` rejects when the lookup for the experiment's `scorers` option fails. The other lookups run after the call returns. A failure in one of them marks the experiment `failed`.
+- If a lookup for an item's scorers fails while `startExperiment()` runs items, Mastra marks the experiment `failed`. `startExperiment()` returns a summary with `status: 'failed'` instead of rejecting, and the `experiment.run.finished` event carries the original error when an event observer is configured.
+- In a durable experiment, a failed lookup marks the experiment `failed`.
+- `runExperimentItem()` rejects with the original error and doesn't mark the experiment `failed`. The caller decides whether to retry the item.
+
+Workflow step scorers are available only through a run-level categorized `scorers` configuration, and their IDs follow the same lookup and start-time check as the other run-level IDs. Item-level IDs apply to the flat agent, workflow, and trajectory scorer dispatch.
 
 ## Control persistence per run
 
@@ -497,6 +507,34 @@ while (experiment.status === 'pending' || experiment.status === 'running') {
 console.log(experiment.status) // 'completed' | 'failed'
 ```
 
+### Durable experiments
+
+By default, `startExperimentAsync()` runs the experiment inside the process that started it. If that process stops or redeploys, the experiment stays `running`. Pass `durable: true` to run it as an [evented workflow](/docs/deployment/workers) instead, with one workflow step per item:
+
+```typescript title="src/mastra/experiments/durable.ts"
+const { experimentId } = await dataset.startExperimentAsync({
+  durable: true,
+  targetType: 'agent',
+  targetId: 'translation-agent',
+  scorers: ['accuracy'],
+  maxConcurrency: 5,
+})
+```
+
+The workflow's run ID is the experiment ID. Each item's result is upserted on `(experimentId, itemId, attempt)`, so an item that runs again after a crash still leaves one row. A target error is recorded on the item's row and doesn't fail the run. When every item is done, Mastra finalizes the experiment.
+
+Durable runs need [workers](/docs/deployment/workers) and a pubsub that redelivers unacknowledged events, such as Redis Streams, Valkey Streams, or Google Cloud Pub/Sub. A process that only handles pushed events through `mastra.handleWorkflowEvent()` can run the steps too, without starting workers. On the default in-memory pubsub, the run works but stays in one process, so it isn't durable.
+
+Everything in a durable run must be serializable, so `durable: true` accepts registered targets, scorer IDs, `version`, `maxConcurrency`, `itemTimeout`, `maxRetries`, `agentModel` as a `provider/modelId` string, `requestContext` with plain JSON values, `unmockedToolPolicy`, and `versions`. It throws a `MastraError` with the `id` `EXPERIMENT_NOT_DURABLE` before creating anything when the config uses an inline `task`, lifecycle hooks, `onEvent`, `signal`, scorer objects or step scorers, `persistence` set to `'none'`, or `requestContext` values that aren't plain JSON, such as functions or dates.
+
+A durable run doesn't keep the signed-in user from the request that started it. Mastra removes the auth token, user, roles, and permissions from `requestContext` before the run is published or stored, so targets in a durable run don't see them.
+
+Keep these limits in mind:
+
+- **Recovery waits for the broker.** With Redis or Valkey Streams, an item cut off by a crash runs again after `reclaimIdleMs` (60 seconds by default).
+- **A pull worker runs one step at a time.** Items run in parallel only across workers, so `maxConcurrency` above the worker count doesn't speed up the run.
+- **Workflow targets can run twice after a crash.** Workflow recovery can restart the cut-off target run while the item also runs again. The item still counts once.
+
 ## Caller-driven experiments
 
 `startExperiment()` puts Mastra in charge of the whole run. If a durable orchestrator (for example Temporal, Airflow, or a custom worker fleet) owns the loop instead, create the experiment first and drive it yourself in one of these shapes:
@@ -530,7 +568,7 @@ const { result, scores } = await dataset.runExperimentItem({
 })
 ```
 
-Retries and timeouts belong to your orchestrator: each `runExperimentItem` call executes the item exactly once. Scorers resolve with the same precedence as native runs: experiment `scorers` win over item `scorerIds`, which win over dataset `scorerIds`.
+By default each `runExperimentItem` call executes the item once. Pass `maxRetries` and `itemTimeout` to retry and time out inside the call, or leave both to your orchestrator. The item's tool mocks apply as in native runs. Scorers resolve with the same precedence as native runs: experiment `scorers` win over item `scorerIds`, which win over dataset `scorerIds`.
 
 ### Ingest external results
 

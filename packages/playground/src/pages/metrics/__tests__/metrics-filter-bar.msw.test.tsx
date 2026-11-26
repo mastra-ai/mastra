@@ -180,6 +180,19 @@ describe('Metrics page filter bar', () => {
     });
   });
 
+  describe('when the user adds a Primitive type filter', () => {
+    it('scopes metrics requests to MCP server traces', async () => {
+      const { aggregateRequests } = setupHandlers();
+      await renderSettledPage();
+
+      await pickFilter('Primitive type', 'MCP Server');
+
+      await waitFor(() =>
+        expect(aggregateRequests.some(request => request.filters?.rootEntityType === 'mcp_server')).toBe(true),
+      );
+    });
+  });
+
   describe('when the user removes a filter chip', () => {
     it('drops only that filter from the URL', async () => {
       setupHandlers();

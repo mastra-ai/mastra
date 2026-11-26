@@ -21,12 +21,13 @@ const RESOURCE_ID = 'full-restart-resource';
  */
 describe('durable agent run recovered after the API and worker die together (COR-1497)', () => {
   it.each([
-    { signal: 'SIGKILL', crashes: 1 },
-    { signal: 'SIGTERM', crashes: 1 },
-    { signal: 'SIGKILL', crashes: 2 },
+    { signal: 'SIGKILL', crashes: 1, native: false },
+    { signal: 'SIGKILL', crashes: 1, native: true },
+    { signal: 'SIGTERM', crashes: 1, native: false },
+    { signal: 'SIGKILL', crashes: 2, native: false },
   ] as const)(
-    '$signal both mid-tool x$crashes, restart both: the recovered run finishes and frees its thread',
-    async ({ signal, crashes }) => {
+    '$signal both mid-tool x$crashes (native: $native): the recovered run finishes and frees its thread',
+    async ({ signal, crashes, native }) => {
       const suffix = randomUUID().replaceAll('-', '');
       const schemaName = `full_restart_${suffix}`;
       const prefix = `full-restart-${suffix}`;
@@ -47,6 +48,7 @@ describe('durable agent run recovered after the API and worker die together (COR
           env: {
             NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import tsx`,
             RESTART_ROLE: role,
+            RESTART_NATIVE: native ? '1' : '0',
             RESTART_SCHEMA: schemaName,
             RESTART_PREFIX: prefix,
             RESTART_RUN_ID: runId,
@@ -96,6 +98,8 @@ describe('durable agent run recovered after the API and worker die together (COR
         const api = launch('api');
         await waitForLine(worker, 'tool-entered:sleep-1', 60_000);
         expect((await workflows.getRunOwnership({ runId }))?.live).toBe(true);
+        const checkpoint = await workflows.loadWorkflowSnapshot({ workflowName: 'durable-agentic-loop', runId });
+        expect(checkpoint?.status).toBe('running');
 
         // Both die together mid-tool, as on a stop-then-up redeploy. With
         // `crashes: 2` the recovered run is killed again mid-tool, so the second

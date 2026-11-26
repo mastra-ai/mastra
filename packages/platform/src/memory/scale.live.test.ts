@@ -80,7 +80,7 @@ function makeMemory(name: string): { memory: MastraMemory; observations: (t: str
     const { apiUrl, instanceId, token } = JSON.parse(readFileSync(envFile, 'utf8'));
     const client = new PlatformMemoryClient({ apiUrl, accessToken: token, instanceId });
     return {
-      memory: new PlatformMemory({ client, workingMemory: 'off' }),
+      memory: new PlatformMemory({ client }),
       observations: async (t, r) => (await client.getContext(t, r)).system ?? '',
     };
   }

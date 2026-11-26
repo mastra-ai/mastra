@@ -262,6 +262,8 @@ describe('ProviderList credential scopes', () => {
         name,
         url: `https://${name.toLowerCase()}.example.com/v1`,
         hasApiKey: false,
+        authScheme: 'bearer',
+        headers: [],
         models: ['m'],
         scope,
       });
@@ -294,11 +296,19 @@ describe('ProviderList credential scopes', () => {
 
         const form = await openCustomEndpointForm(user, await openAddProvider(user, lists[list]()));
         expect(within(form).getByText(new RegExp(audience.replace('.', '\\.')))).toBeInTheDocument();
-        await fillCustomEndpoint(user, form, { name: 'Team', url: 'https://team.example.com/v1', models: 'm' });
-        await user.click(within(form).getByRole('button', { name: 'Add' }));
+        await fillCustomEndpoint(user, form, { name: 'Team', url: 'https://team.example.com/v1', models: ['m'] });
+        await user.click(within(form).getByRole('button', { name: 'Test & save' }));
 
         await waitFor(() =>
-          expect(postBody).toEqual({ name: 'Team', url: 'https://team.example.com/v1', models: ['m'], scope }),
+          expect(postBody).toEqual({
+            name: 'Team',
+            url: 'https://team.example.com/v1',
+            authScheme: 'bearer',
+            headers: [],
+            models: ['m'],
+            scope,
+            check: true,
+          }),
         );
       });
 

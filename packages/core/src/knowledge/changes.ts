@@ -80,21 +80,74 @@ const MOVED_PAGE: Record<string, (input: any) => string> = {
 };
 
 /**
- * Wraps `storage` so each page-store write in {@link WRITES} calls `emit` after it resolves. Every
- * other member passes through, bound to the real store so adapters' private fields keep working.
- * Nothing extra happens while `listening()` is false. Describing or emitting an event never fails a
- * write that committed: errors go to `onError`.
+ * A view {@link emitKnowledgeChanges} returned answers this key with the store it wraps, so helpers
+ * that find a view by identity (`pgKnowledgeTransactionClient`) can look through it. `Symbol.for`, so
+ * a store package reads it without importing a newer core.
+ */
+const UNWRAP = Symbol.for('mastra.knowledge.unwrap');
+
+/** The adapter's own store or transaction view under one {@link emitKnowledgeChanges} returned. Writes through it emit nothing. */
+export function unwrapKnowledgeStorage(storage: KnowledgeStorage): KnowledgeStorage {
+  return (storage as KnowledgeStorage & { [UNWRAP]?: KnowledgeStorage })[UNWRAP] ?? storage;
+}
+
+/**
+ * Wraps `storage` so each page-store write in {@link WRITES} calls `emit` after it resolves. Writes
+ * on a `transaction` view are held until that transaction commits and dropped if it rolls back; a
+ * nested `transaction` hands its writes to the outer one when it succeeds. While a nested
+ * transaction is open, writes through any view of that transaction chain belong to the innermost
+ * one (they run inside its savepoint), so they are kept or dropped with it. A chain tracks one
+ * innermost transaction, so concurrent nested transactions opened in the same chain are not
+ * supported: their events would cross. Every other member passes
+ * through, bound to the real store so adapters' private fields keep working. Nothing extra happens
+ * while `listening()` is false. Describing or emitting an event never fails a write that committed:
+ * errors go to `onError`.
  */
 export function emitKnowledgeChanges(
   storage: KnowledgeStorage,
   emit: (change: Change) => void,
   listening: () => boolean,
   onError: (error: unknown) => void,
+  /** Shared by every view of one top-level transaction: where their writes report now. */
+  chain?: { report: (change: Change) => void },
 ): KnowledgeStorage {
+  const report = (change: Change) => (chain ? chain.report : emit)(change);
   return new Proxy(storage, {
     get(target, property) {
+      if (property === UNWRAP) return target;
       const value = Reflect.get(target, property, target);
       if (typeof value !== 'function') return value;
+      if (property === 'transaction') {
+        return async (operation: (tx: KnowledgeStorage) => Promise<unknown>, ...rest: unknown[]) => {
+          let held: Change[] = [];
+          const hold = (change: Change) => void held.push(change);
+          const shared = chain ?? { report: hold };
+          const outer = shared.report;
+          let result: unknown;
+          try {
+            result = await value.call(
+              target,
+              (tx: KnowledgeStorage) => {
+                // A store may retry the operation (LibSQL does on a lock error); only the attempt that commits counts.
+                held = [];
+                shared.report = hold;
+                return operation(emitKnowledgeChanges(tx, hold, listening, onError, shared));
+              },
+              ...rest,
+            );
+          } finally {
+            shared.report = outer;
+          }
+          for (const change of held) {
+            try {
+              report(change);
+            } catch (error) {
+              onError(error);
+            }
+          }
+          return result;
+        };
+      }
       const describe = typeof property === 'string' ? WRITES[property] : undefined;
       if (!describe) return value.bind(target);
       const moved = typeof property === 'string' ? MOVED_PAGE[property] : undefined;
@@ -111,7 +164,7 @@ export function emitKnowledgeChanges(
         if (!listening()) return result;
         try {
           const change = describe(result, input, fromScopeId);
-          if (change) emit(change);
+          if (change) report(change);
         } catch (error) {
           onError(error);
         }

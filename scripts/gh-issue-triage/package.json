@@ -12,7 +12,7 @@
   "description": "",
   "dependencies": {
     "@mastra/client-js": "^1.35.0",
-    "@mastra/mcp": "^1.15.0",
+    "@mastra/mcp": "^2.10.0",
     "hono": "4.13.18",
     "octokit": "^5.0.5"
   },

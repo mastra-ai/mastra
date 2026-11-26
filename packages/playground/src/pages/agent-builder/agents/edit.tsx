@@ -1,5 +1,6 @@
+import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { AgentBuilderEditLayout } from '@mastra/playground-ui/domains/agents/components/agent-builder-edit-layout';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
 import { useAuthCapabilities } from '@mastra/react/hooks/auth';
@@ -37,7 +38,6 @@ import { useWizard, WizardProvider } from '@/domains/agent-builder/contexts/wiza
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
 import { useChannelConnectToast } from '@/domains/agent-builder/hooks/use-channel-connect-toast';
-import { AgentBuilderEditLayout } from '@/domains/agent-builder/layouts/agent-builder-edit-layout';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import { storedAgentToFormValues } from '@/domains/agent-builder/services/stored-agent-to-form-values';
 import { startViewTransition } from '@/lib/routing';
@@ -328,8 +328,4 @@ const ProfileSlot = () => {
   );
 };
 
-const AgentBuilderAgentEditSkeleton = () => (
-  <div className="flex h-screen w-screen items-center justify-center">
-    <Spinner />
-  </div>
-);
+const AgentBuilderAgentEditSkeleton = () => <BrandLoader fill />;

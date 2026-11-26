@@ -30,12 +30,6 @@
         "type": "toggle"
       }
     ],
-    "deepseek-v4-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
     "qwen3.5-397b": [
       {
         "type": "toggle"
@@ -50,6 +44,12 @@
     "gemma-4-31b-it": [
       {
         "type": "toggle"
+      }
+    ],
+    "deepseek-v4-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "glm-5.2": [

@@ -131,8 +131,12 @@ function CardRepositoryNotice({
       <Notice
         variant="warning"
         action={
-          <Notice.Button onClick={() => void lookup.refetch()} disabled={lookup.isFetching}>
-            Retry <IconArrowRotateClockwise />
+          <Notice.Button
+            icon={<IconArrowRotateClockwise />}
+            onClick={() => void lookup.refetch()}
+            loading={lookup.isFetching}
+          >
+            Retry
           </Notice.Button>
         }
       >

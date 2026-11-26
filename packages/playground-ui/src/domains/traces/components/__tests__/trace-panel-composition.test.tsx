@@ -203,6 +203,30 @@ describe('TracePanel, fully composed — header actions', () => {
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
   });
+
+  it('waits for the trace to load before saving it as a dataset item', () => {
+    const onSaveAsDatasetItem = vi.fn();
+    const { rerender } = render(
+      <FullTracePanel {...baseProps} spans={[]} isLoading onSaveAsDatasetItem={onSaveAsDatasetItem} />,
+    );
+
+    const addToDataset = screen.getByRole('button', { name: 'Add to dataset' });
+    expect(addToDataset).toHaveProperty('disabled', true);
+    fireEvent.click(addToDataset);
+    expect(onSaveAsDatasetItem).not.toHaveBeenCalled();
+
+    rerender(
+      <FullTracePanel
+        {...baseProps}
+        spans={rootSpanFixture}
+        isLoading={false}
+        onSaveAsDatasetItem={onSaveAsDatasetItem}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add to dataset' }));
+    expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
+  });
 });
 
 describe('TracePanel, fully composed — trace summary description', () => {
@@ -643,9 +667,12 @@ describe('TracePanel, fully composed — downloading the trace', () => {
 
   describe('when the host is still downloading', () => {
     it('refuses a second download', () => {
-      render(<FullTracePanel {...baseProps} isDownloadingTrace />);
+      const onDownloadTrace = vi.fn<(traceId: string) => void>();
+      render(<FullTracePanel {...baseProps} onDownloadTrace={onDownloadTrace} isDownloadingTrace />);
 
-      expect(screen.getByRole('button', { name: 'Download trace JSON' }).hasAttribute('data-disabled')).toBe(true);
+      fireEvent.click(screen.getByRole('button', { name: 'Download trace JSON', busy: true }));
+
+      expect(onDownloadTrace).not.toHaveBeenCalled();
     });
   });
 });
@@ -702,7 +729,7 @@ describe('TracePanel, fully composed — an anchor the trace does not have', () 
     expect(screen.getByText('agent run')).toBeTruthy();
   });
 
-  it('saves a dataset item with no root span rather than failing', () => {
+  it('offers no dataset save without a root span, like Score trace', () => {
     const onSaveAsDatasetItem = vi.fn();
     render(
       <FullTracePanel
@@ -713,9 +740,11 @@ describe('TracePanel, fully composed — an anchor the trace does not have', () 
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add to dataset' }));
+    const addToDataset = screen.getByRole('button', { name: 'Add to dataset' });
+    expect(addToDataset).toHaveProperty('disabled', true);
+    fireEvent.click(addToDataset);
 
-    expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: undefined });
+    expect(onSaveAsDatasetItem).not.toHaveBeenCalled();
   });
 
   it('copes with an anchor while the spans have not arrived', () => {

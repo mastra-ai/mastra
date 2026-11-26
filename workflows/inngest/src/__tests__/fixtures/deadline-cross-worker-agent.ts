@@ -13,6 +13,7 @@ import { appendFileSync, mkdirSync } from 'node:fs';
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
+import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { DefaultStorage } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
@@ -23,6 +24,11 @@ import { createInngestAgent } from '../../durable-agent';
 import { createInngestDurableAgenticWorkflow } from '../../durable-agent/create-inngest-agentic-workflow';
 
 export const DEADLINE_TOOL_MS = 8_000;
+
+function userId(requestContext: RequestContext | undefined) {
+  const user = requestContext?.get('mastra__user');
+  return user && typeof user === 'object' && 'id' in user ? user.id : undefined;
+}
 
 export function buildDeadlineCrossWorkerAgent({
   dbUrl,
@@ -73,7 +79,43 @@ export function buildDeadlineCrossWorkerAgent({
     name: 'Deadline Cross Worker Agent',
     instructions: 'Call slow, then reply.',
     model: provider.chat('deadline-cross-worker-model'),
-    tools: { slow },
+    tools: {
+      slow,
+      approve: createTool({
+        id: 'approve',
+        description: 'Approval probe',
+        inputSchema: z.object({}),
+        requireApproval: true,
+        execute: async () => ({ approved: true }),
+      }),
+    },
+    inputProcessors: [
+      {
+        id: 'resume-context-probe',
+        processLLMRequest: ({ requestContext }) => {
+          log({
+            event: 'llm-request-context',
+            marker: requestContext?.get('probe-marker'),
+            user: userId(requestContext),
+          });
+        },
+        processInputStep: ({ requestContext }) => {
+          const controller = requestContext?.get('probe-controller');
+          log({
+            event: 'resume-context',
+            marker: requestContext?.get('probe-marker'),
+            ...(requestContext?.has('mastra__user') ? { user: userId(requestContext) } : {}),
+            value:
+              controller &&
+              typeof controller === 'object' &&
+              'getState' in controller &&
+              typeof controller.getState === 'function'
+                ? controller.getState()
+                : undefined,
+          });
+        },
+      },
+    ],
     memory,
     outputProcessors: [
       {

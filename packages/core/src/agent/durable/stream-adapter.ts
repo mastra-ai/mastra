@@ -25,7 +25,7 @@ import type {
 import type { Agent } from '../agent';
 import type { AgentExecutionOptionsBase } from '../agent.types';
 import { MessageList } from '../message-list';
-import { replayResponseMessages, withRebuiltResponseMessages } from '../streams/response-messages';
+import { rebuildResponseMessages, replayResponseMessages } from '../streams/response-messages';
 import type { ResponseMessagesReplay } from '../streams/response-messages';
 import type { AgentStreamStepFinishPayload } from '../streams/wire';
 import type { StructuredOutputOptions } from '../types';
@@ -62,14 +62,14 @@ const LOGGED_EVENT_DELIVERY_TIMEOUT_MS = 10_000;
  * untagged events, from runs fenced by a pubsub lease, are always kept.
  *
  * `minGeneration` and `rereadMinGeneration` work as on
- * {@link DurableAgentStreamOptions}. The result is a boolean, so event order is
+ * {@link DurableStreamAdapterOptions}. The result is a boolean, so event order is
  * kept, except while a failed claim read must be retried before a stream-ending
  * event, which is the only time it is a promise.
  */
 export function createRunGenerationFilter({
   minGeneration,
   rereadMinGeneration,
-}: Pick<DurableAgentStreamOptions, 'minGeneration' | 'rereadMinGeneration'>): (
+}: Pick<DurableStreamAdapterOptions, 'minGeneration' | 'rereadMinGeneration'>): (
   event: AgentStreamEvent,
 ) => boolean | Promise<boolean> {
   let newestGeneration = minGeneration;
@@ -205,7 +205,7 @@ function pickDefined(source: Record<string, unknown>, keys: string[]): Record<st
 async function withBufferedStepResponses(
   runSteps: unknown[] | undefined,
   output: { steps: Promise<unknown[]> },
-  toolContext?: Pick<DurableAgentStreamOptions, 'runId' | 'initialToolCalls' | 'offset'>,
+  toolContext?: Pick<DurableStreamAdapterOptions, 'runId' | 'initialToolCalls' | 'offset'>,
 ): Promise<unknown[]> {
   const { runId, initialToolCalls = [], offset: streamOffset } = toolContext ?? {};
   const buffered = ((await output.steps.catch(() => undefined)) ?? []) as Record<string, unknown>[];
@@ -300,7 +300,7 @@ function normalizeUsage(raw?: Record<string, unknown>): LanguageModelUsage {
 /**
  * Options for creating a durable agent stream
  */
-export interface DurableAgentStreamOptions<OUTPUT = undefined> {
+export interface DurableStreamAdapterOptions<OUTPUT = undefined> {
   /** Signal chunks to hide from this caller's stream. */
   hideSignals?: AgentExecutionOptionsBase<OUTPUT>['hideSignals'];
   /** Pubsub instance to subscribe to */
@@ -439,12 +439,19 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
    * resolve step content from messages added during the workflow execution.
    */
   messageList?: MessageList;
+  /**
+   * Whether no execution in this process keeps `messageList` in sync with the run, e.g. a
+   * cold `observe()` or a caller whose steps run on workers in another process. Then each
+   * step-finish replaces the list's response messages with the run's list from the stream.
+   * Checked at every step-finish, since local workers may start after the stream is created.
+   */
+  messageListFollowsStream?: () => boolean;
 }
 
 /**
  * Result from creating a durable agent stream
  */
-export interface DurableAgentStreamResult<OUTPUT = undefined> {
+export interface DurableStreamAdapterResult<OUTPUT = undefined> {
   /** The MastraModelOutput that streams from pubsub events */
   output: MastraModelOutput<OUTPUT>;
   /** Cleanup function to unsubscribe from pubsub */
@@ -479,8 +486,8 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
  * Callbacks are invoked as events arrive.
  */
 export function createDurableAgentStream<OUTPUT = undefined>(
-  options: DurableAgentStreamOptions<OUTPUT>,
-): DurableAgentStreamResult<OUTPUT> {
+  options: DurableStreamAdapterOptions<OUTPUT>,
+): DurableStreamAdapterResult<OUTPUT> {
   const {
     pubsub,
     runId,
@@ -519,6 +526,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     experimentalTransform,
     hideSignals,
     messageList: externalMessageList,
+    messageListFollowsStream,
     replayResponseMessagesBeforeOffset,
   } = options;
 
@@ -541,6 +549,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       threadId,
       resourceId,
     });
+  // Nothing else writes to a list created here.
+  const listFollowsStream = externalMessageList ? messageListFollowsStream : () => true;
 
   // Match the plain Agent (model.loop.ts), which stamps the run id onto every step payload.
   const onStepFinishWithRunId = onStepFinish
@@ -805,6 +815,10 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
     if (streamEvent.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED) return;
     if (typeof streamEvent.index === 'number') {
+      // An index decrease only happens on legacy 0-based logs. An epoch-seeded
+      // log (see MastraServerCache.listPushIndexed) restarts *above* every
+      // earlier index, which `isPastSuspension` already answers correctly
+      // without this flag: a new segment's index can't sit below `attachedAt`.
       if (previousLogIndex !== undefined && streamEvent.index < previousLogIndex) logRestarted = true;
       previousLogIndex = streamEvent.index;
     }
@@ -849,10 +863,21 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           }
           if (chunk.type === 'step-finish' && chunk.payload) {
             // The event is shared with other readers and the replay cache: rewrite a copy.
-            const payload = withRebuiltResponseMessages(
+            const {
+              payload,
+              messages: responseMessages,
+              current,
+            } = rebuildResponseMessages(
               responseMessagesReplay,
               chunk.payload as unknown as AgentStreamStepFinishPayload,
             );
+            // Without a rebuilt list (a missed diff) the list keeps what it has until a later
+            // step-finish brings one; a guess could drop or duplicate messages. A late event of
+            // an execution that lost the run reports its own step, never the run's list.
+            if (responseMessages && current && listFollowsStream?.()) {
+              messageList.clear.response.db();
+              messageList.add(responseMessages, 'response');
+            }
             const metadata = payload.metadata;
             // A JSON-serializing pubsub delivers the response timestamp as an ISO string.
             if (typeof metadata?.timestamp === 'string') {
@@ -897,6 +922,11 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             terminalRequest = readLocalRequest?.();
           }
           readLocalRequest = undefined;
+          // FINISH carries the run's whole response list, so a reader that missed a diff still ends with it.
+          if (data.messages?.nonUser && listFollowsStream?.()) {
+            messageList.clear.response.db();
+            messageList.add(data.messages.nonUser, 'response');
+          }
 
           if (finishReason === 'abort') {
             safeEnqueue(controller, {
@@ -916,6 +946,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
               stepResult: data.stepResult,
               ...(data.messages ? { messages: data.messages } : {}),
               ...(data.textRewritten ? { textRewritten: true } : {}),
+              ...(data.stopCause ? { stopCause: data.stopCause } : {}),
             },
           } as ChunkType<OUTPUT>);
           safeClose(controller);

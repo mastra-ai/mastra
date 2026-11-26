@@ -209,11 +209,13 @@ export const FACTORY_API_ROUTE_METADATA = {
       "label",
       "limit",
       "linearProject",
+      "pullRequest",
       "q",
       "reviewer",
       "sort",
       "source",
       "teammate",
+      "trust",
       "window",
       "worked"
     ],
@@ -634,8 +636,9 @@ export const FACTORY_API_ROUTE_METADATA = {
       "autoApprovePlans",
       "autoRunEnabled",
       "defaultModelId",
-      "defaultThinkingLevel",
+      "defaultModelPackId",
       "description",
+      "modelPacks",
       "modelScope",
       "name",
       "reviewTestChecksEnabled",
@@ -763,32 +766,17 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "projectCreate",
     "method": "POST",
     "path": "/web/factory/projects",
-    "description": "Create a Factory project",
+    "description": "Create a Factory project. Creating a second project in an organization is deprecated: each organization will have one Factory project.",
     "pathParams": [],
     "queryParams": [],
     "bodyParams": [
+      "defaultModelId",
       "description",
       "modelScope",
       "name"
     ],
     "hasQuery": false,
     "hasBody": true,
-    "responseShape": {
-      "kind": "single"
-    }
-  },
-  "POST /web/factory/projects/:id/apply-default-model": {
-    "contractKey": "projectApplyDefaultModel",
-    "method": "POST",
-    "path": "/web/factory/projects/:id/apply-default-model",
-    "description": "Start applying the Factory default model to running work and review threads in the background",
-    "pathParams": [
-      "id"
-    ],
-    "queryParams": [],
-    "bodyParams": [],
-    "hasQuery": false,
-    "hasBody": false,
     "responseShape": {
       "kind": "single"
     }
@@ -1898,6 +1886,28 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         "type": "string"
                       }
                     },
+                    "outcomes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "to": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "label",
+                          "to"
+                        ]
+                      }
+                    },
                     "transitions": {
                       "type": "array",
                       "items": {
@@ -2292,6 +2302,36 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         "type": "null"
                       }
                     ]
+                  },
+                  "outcomes": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string"
+                            },
+                            "label": {
+                              "type": "string"
+                            },
+                            "to": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "label",
+                            "to"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2599,6 +2639,12 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "$ref": "#/$defs/__schema0"
         },
         "label": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "pullRequest": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "trust": {
           "$ref": "#/$defs/__schema0"
         },
         "teammate": {
@@ -5965,22 +6011,25 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "$ref": "#/$defs/__schema2"
         },
         "modelScope": {
-          "$ref": "#/$defs/__schema3"
-        },
-        "defaultThinkingLevel": {
           "$ref": "#/$defs/__schema4"
         },
-        "autoRunEnabled": {
+        "modelPacks": {
           "$ref": "#/$defs/__schema5"
         },
+        "defaultModelPackId": {
+          "$ref": "#/$defs/__schema11"
+        },
+        "autoRunEnabled": {
+          "$ref": "#/$defs/__schema12"
+        },
         "autoApprovePlans": {
-          "$ref": "#/$defs/__schema6"
+          "$ref": "#/$defs/__schema13"
         },
         "reviewTestChecksEnabled": {
-          "$ref": "#/$defs/__schema7"
+          "$ref": "#/$defs/__schema14"
         },
         "selfReviewEnabled": {
-          "$ref": "#/$defs/__schema8"
+          "$ref": "#/$defs/__schema15"
         }
       },
       "$defs": {
@@ -6001,17 +6050,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ]
         },
         "__schema2": {
-          "anyOf": [
-            {
-              "type": "string",
-              "maxLength": 200
-            },
-            {
-              "type": "null"
-            }
-          ]
+          "$ref": "#/$defs/__schema3"
         },
         "__schema3": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^[^\\s/]+\\/\\S(?:.*\\S)?$"
+        },
+        "__schema4": {
           "type": "string",
           "enum": [
             "factory",
@@ -6019,27 +6065,88 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "hybrid"
           ]
         },
-        "__schema4": {
-          "type": "string",
-          "enum": [
-            "off",
-            "low",
-            "medium",
-            "high",
-            "xhigh",
-            "max"
-          ]
-        },
         "__schema5": {
-          "type": "boolean"
+          "maxItems": 8,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema6"
+          }
         },
         "__schema6": {
-          "type": "boolean"
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/__schema7"
+            },
+            "name": {
+              "$ref": "#/$defs/__schema8"
+            },
+            "models": {
+              "$ref": "#/$defs/__schema9"
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "models"
+          ]
         },
         "__schema7": {
-          "type": "boolean"
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$"
         },
         "__schema8": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "__schema9": {
+          "minItems": 1,
+          "maxItems": 4,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema10"
+          }
+        },
+        "__schema10": {
+          "type": "object",
+          "properties": {
+            "modelId": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "thinkingLevel": {
+              "type": "string",
+              "enum": [
+                "off",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
+            }
+          },
+          "required": [
+            "modelId",
+            "thinkingLevel"
+          ]
+        },
+        "__schema11": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "__schema12": {
+          "type": "boolean"
+        },
+        "__schema13": {
+          "type": "boolean"
+        },
+        "__schema14": {
+          "type": "boolean"
+        },
+        "__schema15": {
           "type": "boolean"
         }
       }
@@ -6235,6 +6342,36 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                       "factory_record_review_verdict",
                       "factory_review_source"
                     ]
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "outcomes": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "to": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "label",
+                      "to"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 {
@@ -6567,6 +6704,36 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                             "factory_record_review_verdict",
                             "factory_review_source"
                           ]
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "outcomes": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string"
+                            },
+                            "label": {
+                              "type": "string"
+                            },
+                            "to": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "label",
+                            "to"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       {
@@ -8215,6 +8382,11 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             }
           ]
         },
+        "defaultModelId": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^[^\\s/]+\\/\\S(?:.*\\S)?$"
+        },
         "modelScope": {
           "type": "string",
           "enum": [
@@ -8242,38 +8414,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       },
       "required": [
         "project"
-      ]
-    }
-  },
-  "POST /web/factory/projects/:id/apply-default-model": {
-    "path": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
-        }
-      },
-      "required": [
-        "id"
-      ]
-    },
-    "response": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "type": "object",
-      "properties": {
-        "modelId": {
-          "type": "string"
-        },
-        "status": {
-          "type": "string",
-          "const": "started"
-        }
-      },
-      "required": [
-        "modelId",
-        "status"
       ]
     }
   },
@@ -8700,6 +8840,36 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "type": "null"
                 }
               ]
+            },
+            "outcomes": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "to": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "label",
+                      "to"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "required": [
@@ -9026,6 +9196,36 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                             "factory_record_review_verdict",
                             "factory_review_source"
                           ]
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "outcomes": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string"
+                            },
+                            "label": {
+                              "type": "string"
+                            },
+                            "to": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "label",
+                            "to"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       {
@@ -9470,6 +9670,36 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                             "factory_record_review_verdict",
                             "factory_review_source"
                           ]
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "outcomes": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string"
+                            },
+                            "label": {
+                              "type": "string"
+                            },
+                            "to": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "label",
+                            "to"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       {
@@ -13475,7 +13705,6 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "projectSandboxEnvUpdate": "PATCH /web/factory/projects/:id/sandbox-envs/:name",
   "workItemUpdate": "PATCH /web/factory/work-items/:id",
   "projectCreate": "POST /web/factory/projects",
-  "projectApplyDefaultModel": "POST /web/factory/projects/:id/apply-default-model",
   "attentionArchive": "POST /web/factory/projects/:id/attention/:kind/:sourceId/:occurrence/archive",
   "attentionRead": "POST /web/factory/projects/:id/attention/:kind/:sourceId/:occurrence/read",
   "attentionRestore": "POST /web/factory/projects/:id/attention/:kind/:sourceId/:occurrence/restore",

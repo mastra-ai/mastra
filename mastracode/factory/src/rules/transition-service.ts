@@ -295,7 +295,7 @@ function startsRun(decision: FactoryCommitDecision): decision is RunStartDecisio
 }
 
 // Answering a recorded run start, or the role's own mid-run agent, with a run would start a second one.
-// A run that starts after its own agent's move is queued onto that agent's run instead.
+// A run that starts after its own agent's move waits for that agent's run to end instead.
 function runAlreadyUnderway(request: FactoryTransitionRequest, decision: RunStartDecision): boolean {
   // A run-start cause marks an agent landing the card where its run already is — on its own
   // board. A cross-board request is never that, and its destination runner still queues.
@@ -728,7 +728,7 @@ export class FactoryTransitionService {
               code: 'approval_required',
               reason:
                 exitTool.id === 'submit_plan'
-                  ? `${fromPhase!.name} ends when submit_plan comes back with an approved plan; until then the card stays here. Call submit_plan and wait for a person to approve the plan (or for it to be approved automatically), then move the card into ${board.phases[request.stage]?.name ?? request.stage} with factory_transition_work_item.`
+                  ? `${fromPhase!.name} ends when submit_plan comes back with an approved plan; until then the card stays here. Call submit_plan and wait for a person to approve the plan (or for it to be approved automatically); its approval is the outcome that moves the card into ${board.phases[request.stage]?.name ?? request.stage}.`
                   : `${fromPhase!.name} ends when ${exitTool.id} succeeds; until then the card stays here. A person can also move it from the Factory board or a chat they are signed in to.`,
             };
           }

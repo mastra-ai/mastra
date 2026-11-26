@@ -1,11 +1,14 @@
 import { createKnowledgePagesCoreLoader, KNOWLEDGE_PAGES_SCHEMA_VERSION } from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
 import { KnowledgeStorage } from '@mastra/core/storage';
-import type { KnowledgePageStore } from '@mastra/core/storage';
+import type { KnowledgePageStore, KnowledgeTransactionOptions } from '@mastra/core/storage';
 import { defaults as pgDefaults } from 'pg';
 
+import { TransactionClient, TransactionDeadlineError } from '../../client';
+import type { TxClient } from '../../client';
 import type { DbClient, PgDomainConfig } from '../../db';
 import { resolvePgConfig } from '../../db';
+import { PgKnowledgeImporters, pgKnowledgeImportersDDL } from './importers';
 import { PgKnowledgePages, pgKnowledgePagesDDL } from './pages';
 import { inspectPgKnowledgePagesSchema, initPgKnowledgePagesSchema, resetPgKnowledgePagesSchema } from './pages-schema';
 
@@ -77,6 +80,65 @@ export function getPgKnowledgeIsolationKey(config: PgKnowledgeIsolationConfig): 
   return `pg:unidentified:schema:${schema}`;
 }
 
+/**
+ * A `DbClient` over one open transaction, for a {@link KnowledgePG} transaction view. Every query runs
+ * on the transaction; `tx` opens a savepoint, so a store method that fails undoes only its own
+ * statements and leaves the transaction usable. Savepoints nest, so calls on a view are awaited one
+ * at a time, as on a single connection.
+ */
+class TransactionDbClient implements DbClient {
+  readonly #tx: TxClient;
+  #savepoints = 0;
+
+  constructor(tx: TxClient) {
+    this.#tx = tx;
+  }
+
+  get $pool(): never {
+    throw new Error('A Knowledge transaction view has no pool of its own.');
+  }
+
+  connect(): never {
+    throw new Error('A Knowledge transaction view has no pool of its own.');
+  }
+
+  none: DbClient['none'] = (query, values) => this.#tx.none(query, values);
+  one: DbClient['one'] = (query, values) => this.#tx.one(query, values);
+  oneOrNone: DbClient['oneOrNone'] = (query, values) => this.#tx.oneOrNone(query, values);
+  any: DbClient['any'] = (query, values) => this.#tx.any(query, values);
+  manyOrNone: DbClient['manyOrNone'] = (query, values) => this.#tx.manyOrNone(query, values);
+  many: DbClient['many'] = (query, values) => this.#tx.many(query, values);
+  query: DbClient['query'] = (query, values) => this.#tx.query(query, values);
+
+  tx<T>(callback: (t: TxClient) => Promise<T>): Promise<T> {
+    const tx = this.#tx;
+    if (!(tx instanceof TransactionClient)) {
+      return Promise.reject(
+        new Error('Knowledge transactions need a client from @mastra/pg (a pool, connection string or PoolAdapter).'),
+      );
+    }
+    return tx.savepoint(`knowledge_sp_${++this.#savepoints}`, () => callback(tx));
+  }
+}
+
+const transactionClients = new WeakMap<KnowledgeStorage, TxClient>();
+const UNWRAP = Symbol.for('mastra.knowledge.unwrap');
+
+/**
+ * The transaction behind a {@link KnowledgePG} transaction view, for tables that must commit with
+ * the page writes: this package's own, and a host's (an importer host's `admit(tx)` records its
+ * claim through it, in the run's start transaction).
+ * @experimental
+ */
+export function pgKnowledgeTransactionClient(view: KnowledgeStorage): TxClient {
+  // A `getStorage()` view wraps the adapter's; it answers this key with the view it wraps.
+  const tx =
+    transactionClients.get(view) ??
+    transactionClients.get((view as { [UNWRAP]?: KnowledgeStorage })[UNWRAP] as KnowledgeStorage);
+  if (!tx) throw new Error('Not a KnowledgePG transaction view.');
+  return tx;
+}
+
 type PageStoreMethod = {
   [K in keyof KnowledgePageStore]: KnowledgePageStore[K] extends (...args: never[]) => unknown ? K : never;
 }[keyof KnowledgePageStore];
@@ -90,12 +152,19 @@ export class KnowledgePG extends KnowledgeStorage {
   readonly #client: DbClient;
   readonly #schemaName?: string;
   readonly #pages: PgKnowledgePages;
+  readonly #importers?: PgKnowledgeImporters;
+
+  /** The importer tables' DDL, for provisioning them ahead of time when storage init is disabled. */
+  static getImportersExportDDL(schemaName?: string): string[] {
+    return pgKnowledgeImportersDDL(schemaName).map(statement => `${statement};`);
+  }
 
   constructor(config: PgDomainConfig) {
     super({ storageIsolationKey: config.storageIsolationKey ?? getPgKnowledgeIsolationKey(config) });
     const { client, schemaName } = resolvePgConfig(config);
     this.#client = client;
     this.#schemaName = schemaName;
+    if (coreFeatures.has('knowledge-importers')) this.#importers = new PgKnowledgeImporters({ client, schemaName });
     this.#pages = new PgKnowledgePages({
       client,
       schemaName,
@@ -116,23 +185,80 @@ export class KnowledgePG extends KnowledgeStorage {
       supportsSchemaInspection: true,
       supportsExplicitReset: true,
       supportsPinKinds: true,
+      supportsTransactions: true,
+      enforcesTransactionDeadline: true,
+      supportsActivityDateRange: true,
+      supportsActivityAscending: true,
     } as const;
+  }
+
+  /** Same client and schema as the pages: on a transaction view, the view's transaction. */
+  override get importers(): PgKnowledgeImporters | undefined {
+    return this.#importers;
   }
 
   async init(): Promise<void> {
     await initPgKnowledgePagesSchema(this.#client, this.#schemaName);
   }
 
+  override async transaction<T>(
+    operation: (tx: KnowledgeStorage) => Promise<T>,
+    options?: KnowledgeTransactionOptions,
+  ): Promise<T> {
+    // A view joins its own transaction through a savepoint, under the outer deadline.
+    if (transactionClients.has(this)) return this.#client.tx(() => operation(this));
+    try {
+      return await this.#client.tx(
+        tx => {
+          const view = new KnowledgePG({
+            client: new TransactionDbClient(tx),
+            schemaName: this.#schemaName,
+            storageIsolationKey: this.getStorageIsolationKey(),
+          });
+          transactionClients.set(view, tx);
+          return operation(view);
+        },
+        { deadlineAt: options?.deadlineAt },
+      );
+    } catch (error) {
+      if (!(error instanceof TransactionDeadlineError)) throw error;
+      // Cores from before transaction deadlines have no class for it; they get the pg error.
+      const core = (await import('@mastra/core/storage')) as {
+        KnowledgeTransactionDeadlineError?: new (o: object) => Error;
+      };
+      throw core.KnowledgeTransactionDeadlineError
+        ? new core.KnowledgeTransactionDeadlineError({ cause: error })
+        : error;
+    }
+  }
+
   override async inspectSchema() {
     return inspectPgKnowledgePagesSchema(this.#client, this.#schemaName);
   }
 
+  /** Pages and importer rows go together, in one transaction: no node map outlives its pages. */
   override async dangerouslyReset(): Promise<void> {
-    await resetPgKnowledgePagesSchema(this.#client, this.#schemaName);
+    await this.#client.tx(async tx => {
+      const client = new TransactionDbClient(tx);
+      if (this.#importers) await new PgKnowledgeImporters({ client, schemaName: this.#schemaName }).clearOnReset();
+      await resetPgKnowledgePagesSchema(client, this.#schemaName);
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#pages.clearAll();
+  }
+
+  /**
+   * Run once after any restore that doesn't replay to the end: a logical dump (`pg_dump`/`pg_restore`),
+   * a point-in-time recovery, or an older base backup, and after a failover to an asynchronous standby
+   * that hadn't received every transaction (the store can't detect that one). Until it runs, logically restored activity
+   * stays hidden from oldest-first reads; afterwards, positions handed out before are refused and
+   * readers restart from `since`. Not needed after `pg_upgrade` or a physical restore that replays
+   * all of the WAL.
+   */
+  rebaseActivityFeed(): Promise<void> {
+    return this.#pages.rebaseActivityFeed();
   }
 
   override materializeScope(
@@ -171,6 +297,14 @@ export class KnowledgePG extends KnowledgeStorage {
 
   override getPages(input: Parameters<KnowledgePageStore['getPages']>[0]): ReturnType<KnowledgePageStore['getPages']> {
     return this.#pages.getPages(input);
+  }
+
+  override lockPages(ids: string[]): Promise<void> {
+    return this.#pages.lockPages(ids);
+  }
+
+  override lockSubtree(rootId: string): Promise<string[]> {
+    return this.#pages.lockSubtree(rootId);
   }
 
   override getPage(input: Parameters<KnowledgePageStore['getPage']>[0]): ReturnType<KnowledgePageStore['getPage']> {

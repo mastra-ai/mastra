@@ -1,19 +1,23 @@
 import { MastraError } from '../../error/index.js';
 import type { MastraScorer } from '../../evals/base';
 import type { TrajectoryExpectation } from '../../evals/types';
+import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { Mastra } from '../../mastra';
+import type { VersionOverrides } from '../../mastra/types';
 import type { Experiment, ExperimentResult } from '../../storage/types';
 import { executeTarget } from './executor';
 import type { ExecutionResult } from './executor';
 import { resolveTarget } from './resolve-target';
+import { executeWithRetries } from './retries';
 import {
-  createItemScorerResolver,
+  createScorerResolver,
   EXPERIMENT_ITEM_SCORER_NOT_FOUND,
   experimentScoreKey,
   flushForTrajectoryScorers,
-  resolveScorers,
+  itemScorerNotFoundError,
   runScorersForItem,
 } from './scorer';
+import type { ItemToolMock, UnmockedToolPolicy } from './tool-mocks';
 import type { ScorerResult } from './types';
 
 /** Item shape consumed by {@link executeExperimentItem}. */
@@ -28,9 +32,29 @@ export interface ExperimentItemInput {
   metadata?: Record<string, unknown>;
   /** Item-level scorer IDs. An empty array explicitly disables scoring. */
   scorerIds?: string[];
+  /** Item-level static tool mocks (agent targets only). */
+  toolMocks?: ItemToolMock[];
+  /** Item-level override for undeclared agent tool calls. */
+  unmockedToolPolicy?: UnmockedToolPolicy;
 }
 
-export interface ExecuteExperimentItemArgs {
+/**
+ * Per-item run options. They match the `runExperiment` options of the same name, so an item behaves the same whichever loop runs it.
+ */
+export interface ExperimentItemRunOptions {
+  /** Model override for agent targets, passed per call to `agent.generate()`. */
+  agentModel?: MastraModelConfig;
+  /** Default handling for agent tool calls not declared in the item's `toolMocks` (default: `allow`). */
+  unmockedToolPolicy?: UnmockedToolPolicy;
+  /** Item execution timeout in milliseconds, covering all retries. */
+  itemTimeout?: number;
+  /** Retries on failure (default: 0). Abort/timeout and tool-mock errors are never retried. */
+  maxRetries?: number;
+  /** Version overrides for sub-agent delegation. */
+  versions?: VersionOverrides;
+}
+
+export interface ExecuteExperimentItemArgs extends ExperimentItemRunOptions {
   mastra: Mastra;
   /** The experiment record. Must carry a non-null target. */
   experiment: Experiment;
@@ -58,14 +82,15 @@ export interface ExecuteExperimentItemOutput {
  * Temporal activity) converges on a single row.
  *
  * Scorer precedence mirrors the in-process runner: experiment `scorerIds` →
- * item `scorerIds` → dataset `scorerIds` → none. An item scorer reference to
- * an unregistered scorer is a deterministic preflight failure
+ * item `scorerIds` → dataset `scorerIds` → none. Stored scorers are loaded on
+ * demand at every level. A scorer that can't be resolved (e.g. a stored scorer
+ * deleted after the experiment started) is a deterministic preflight failure
  * ({@link EXPERIMENT_ITEM_SCORER_NOT_FOUND}): the target is not executed and
- * the error is recorded on the row.
+ * the error is recorded on the row; other items are unaffected.
  *
- * Deliberately excludes the runner's loop-level concerns: hooks, event
- * dispatch, tool mocks, and internal retries — retries/timeouts belong to the
- * caller's orchestrator.
+ * Applies the same per-item run options as the in-process runner (model
+ * override, tool mocks, timeout, retries) but excludes its loop-level concerns:
+ * hooks, event dispatch, and step scorers.
  */
 export async function executeExperimentItem(args: ExecuteExperimentItemArgs): Promise<ExecuteExperimentItemOutput> {
   const { mastra, experiment, item } = args;
@@ -96,21 +121,20 @@ export async function executeExperimentItem(args: ExecuteExperimentItemArgs): Pr
   }
 
   // Scorer precedence: experiment scorerIds → item scorerIds → dataset scorerIds → none.
-  let scorers: MastraScorer<any, any, any, any>[] = [];
+  // Every level loads stored scorers on demand: this may run in a process that never hydrated them.
+  // A scorer that can't be resolved fails only this item.
+  const resolveScorerEntries = createScorerResolver(mastra);
+  let scorers: MastraScorer<any, any, any, any>[];
   let scorerConfigError: ExecutionResult['error'] = null;
-  if (experiment.scorerIds != null) {
-    scorers = resolveScorers(mastra, [...new Set(experiment.scorerIds)]);
-  } else if (item.scorerIds !== undefined) {
-    const resolution = await createItemScorerResolver(mastra)(item.scorerIds);
+  if (item.scorerIds !== undefined && experiment.scorerIds == null) {
+    const resolution = await resolveScorerEntries(item.scorerIds);
     scorers = resolution.scorers;
-    if (resolution.missingIds.length > 0) {
-      scorerConfigError = {
-        code: EXPERIMENT_ITEM_SCORER_NOT_FOUND,
-        message: `Item scorer configuration references unregistered scorer IDs: ${resolution.missingIds.join(', ')}`,
-      };
-    }
+    scorerConfigError = itemScorerNotFoundError('Item', resolution.missingIds);
   } else {
-    scorers = resolveScorers(mastra, [...new Set(args.datasetScorerIds ?? [])]);
+    const source = experiment.scorerIds != null ? 'Experiment' : 'Dataset';
+    const resolution = await resolveScorerEntries(experiment.scorerIds ?? args.datasetScorerIds ?? []);
+    scorers = resolution.scorers;
+    scorerConfigError = itemScorerNotFoundError(source, resolution.missingIds);
   }
 
   // Resolve the experiments store before executing the target so a
@@ -132,12 +156,24 @@ export async function executeExperimentItem(args: ExecuteExperimentItemArgs): Pr
   const mergedRequestContext =
     args.requestContext || item.requestContext ? { ...args.requestContext, ...item.requestContext } : undefined;
 
-  const execResult: ExecutionResult = scorerConfigError
-    ? { output: null, error: scorerConfigError, traceId: null }
-    : await executeTarget(resolved.target, experiment.targetType, item, {
-        requestContext: mergedRequestContext,
-        experimentId: experiment.id,
-      });
+  const targetType = experiment.targetType;
+  const isAgent = targetType === 'agent';
+  const signal = args.itemTimeout ? AbortSignal.timeout(args.itemTimeout) : undefined;
+  const { execResult, retryCount } = scorerConfigError
+    ? { execResult: { output: null, error: scorerConfigError, traceId: null }, retryCount: 0 }
+    : await executeWithRetries(
+        () =>
+          executeTarget(resolved.target, targetType, item, {
+            signal,
+            requestContext: mergedRequestContext,
+            experimentId: experiment.id,
+            versions: args.versions,
+            agentModel: args.agentModel,
+            toolMocks: isAgent ? item.toolMocks : undefined,
+            unmockedToolPolicy: isAgent ? (item.unmockedToolPolicy ?? args.unmockedToolPolicy ?? 'allow') : undefined,
+          }),
+        { maxRetries: args.maxRetries ?? 0, timeoutSignal: signal },
+      );
 
   const completedAt = new Date();
 
@@ -181,11 +217,13 @@ export async function executeExperimentItem(args: ExecuteExperimentItemArgs): Pr
     input: item.input,
     output: execResult.output,
     groundTruth: item.groundTruth ?? null,
+    metadata: item.metadata ?? null,
     error: execResult.error,
     startedAt,
     completedAt,
-    retryCount: 0,
+    retryCount,
     traceId: execResult.traceId,
+    toolMockReport: execResult.toolMockReport ?? null,
     organizationId: args.organizationId ?? null,
     projectId: args.projectId ?? null,
   });

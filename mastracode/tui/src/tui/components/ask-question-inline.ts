@@ -21,7 +21,15 @@ import {
   wrapTextWithAnsi,
 } from '@earendil-works/pi-tui';
 import type { Focusable, SelectItem, TUI } from '@earendil-works/pi-tui';
-import { BOX_INDENT_STR, theme, getSelectListTheme, getEditorTheme, getThemeGeneration } from '../theme.js';
+import {
+  BOX_INDENT_STR,
+  theme,
+  getSelectListTheme,
+  getEditorTheme,
+  getThemeGeneration,
+  menuCursor,
+  menuSelected,
+} from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 import { MultilineInput } from './multiline-input.js';
 import { card } from './surface.js';
@@ -36,7 +44,7 @@ export type AskQuestionSelectionMode = 'single_select' | 'multi_select';
 
 export interface AskQuestionInlineOptions {
   question: string;
-  options?: Array<{ label: string; description?: string }>;
+  options?: Array<{ label: string; description?: string; recommended?: boolean }>;
   /** Controls whether options are single- or multi-select. Defaults to single_select. */
   selectionMode?: AskQuestionSelectionMode;
   /** Format the text shown after an answer is selected. Defaults to `question → answer`. */
@@ -74,7 +82,7 @@ export class AskQuestionBorderedBox {
   private selectList?: WrappingSelectList;
   private input?: Input | MultilineInput;
   private hintText: string;
-  items: Array<{ label: string; description?: string }>;
+  items: Array<{ label: string; description?: string; recommended?: boolean }>;
   private answered = false;
   private cancelled = false;
   private selectedValue?: string;
@@ -89,7 +97,7 @@ export class AskQuestionBorderedBox {
   constructor(
     questionLines: string[],
     hintText: string,
-    items: Array<{ label: string; description?: string }>,
+    items: Array<{ label: string; description?: string; recommended?: boolean }>,
     selectList?: WrappingSelectList,
     input?: Input | MultilineInput,
     streaming?: boolean,
@@ -177,7 +185,7 @@ export class AskQuestionBorderedBox {
 
   /**
    * Borderless card with a colored left bar (▎):
-   * - waiting for an answer: accent bar, bold question, ❯ options, hint
+   * - waiting for an answer: accent bar, bold question, → options, hint
    * - answered: muted question with the options frozen (✓ on the chosen ones), or "✓ answer" for
    *   free text; a card answered live keeps the height it had while waiting (see render)
    */
@@ -243,10 +251,10 @@ export class AskQuestionBorderedBox {
   }
 }
 
-/** Option list styling shared by inline prompts: accent ❯ cursor, bold selected label, ●/○ toggles. */
+/** Option list styling shared by inline prompts: the menus' accent → cursor and bold label, ●/○ toggles. */
 export const INLINE_CARD_LIST_STYLE = {
   get cursor() {
-    return theme.fg('accent', '❯ ');
+    return menuCursor();
   },
   get checked() {
     return theme.fg('accent', '●') + '   ';
@@ -254,7 +262,7 @@ export const INLINE_CARD_LIST_STYLE = {
   get unchecked() {
     return theme.fg('dim', '○') + '   ';
   },
-  selectedLabel: (label: string) => theme.bold(label),
+  selectedLabel: (label: string) => menuSelected(label),
 };
 
 export class AskQuestionInlineComponent extends Container implements Focusable {
@@ -278,7 +286,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
    */
   static fromHistory(
     question: string,
-    options: Array<{ label: string; description?: string }> | undefined,
+    options: Array<{ label: string; description?: string; recommended?: boolean }> | undefined,
     answer: string,
     cancelled: boolean,
   ): AskQuestionInlineComponent {
@@ -387,7 +395,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     }
     if (Array.isArray(a.options)) {
       this.borderedBox.items = a.options.filter(
-        (o: unknown): o is { label: string; description?: string } =>
+        (o: unknown): o is { label: string; description?: string; recommended?: boolean } =>
           typeof o === 'object' && o !== null && typeof (o as any).label === 'string',
       );
     }
@@ -399,7 +407,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
    */
   activate(options: {
     question: string;
-    options?: Array<{ label: string; description?: string }>;
+    options?: Array<{ label: string; description?: string; recommended?: boolean }>;
     selectionMode?: AskQuestionSelectionMode;
     isNegativeAnswer?: (answer: string) => boolean;
     allowEmptyInput?: boolean;
@@ -450,11 +458,14 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
       : '↑↓ to navigate · Enter to select · Esc to skip';
   }
 
-  private buildSelectMode(opts: Array<{ label: string; description?: string }>): void {
-    const items: SelectItem[] = opts.map(opt => ({
-      value: opt.label,
-      label: opt.description ? `${opt.label}  ${theme.fg('dim', opt.description)}` : opt.label,
-    }));
+  private buildSelectMode(opts: Array<{ label: string; description?: string; recommended?: boolean }>): void {
+    const items: SelectItem[] = opts.map(opt => {
+      const label = opt.recommended ? `${opt.label}  ${theme.fg('accent', '(recommended)')}` : opt.label;
+      return {
+        value: opt.label,
+        label: opt.description ? `${label}  ${theme.fg('dim', opt.description)}` : label,
+      };
+    });
 
     // "Custom response..." only applies to single-select: it switches to free-text.
     // Multi-select toggles a fixed option set, so the escape hatch doesn't apply.

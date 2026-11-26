@@ -1,8 +1,9 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
+import { CONTINUE_RUN_ACTION_ID } from '@mastra/core/channels';
 import type { ChannelErrorContext } from '@mastra/core/channels';
 import { providerRequestId } from '@mastra/core/error';
 import type { RequestContext } from '@mastra/core/request-context';
-import { Actions, Card, CardText, LinkButton } from 'chat';
+import { Actions, Button, Card, CardText, LinkButton } from 'chat';
 
 import { readFactorySessionScope } from '../../rules/binding-context.js';
 import type { RunErrorRecovery } from '../../run-error.js';
@@ -11,19 +12,42 @@ import { runCredential } from '../../session/reply-credential-processor.js';
 import { memorySettingsLink, modelSettingsLink } from './channel-reply-processor.js';
 import { sessionLinkFromRequest } from './channel-session-link-processor.js';
 
+/** Where a run error card's buttons point: the session's project settings and the session itself. */
+export interface RunErrorLinkTarget {
+  factoryProjectId?: string;
+  sessionUrl?: string;
+}
+
 export function slackRunErrorCard(error: Error, { requestContext }: ChannelErrorContext) {
+  const target = requestContext && {
+    factoryProjectId: readFactorySessionScope(requestContext)?.factoryProjectId,
+    sessionUrl: sessionLinkFromRequest(requestContext),
+  };
+  return runErrorCard(error, { requestContext, target });
+}
+
+/** The run error card, for a run's own error or, with `target` from its session, for one posted after it ended. */
+export function runErrorCard(
+  error: Error,
+  { requestContext, target }: { requestContext?: RequestContext; target?: RunErrorLinkTarget },
+) {
   const { title, message, recoveries, model } = describeRunError(error);
   const requestId = providerRequestId(error);
   const facts = [model && `Model: ${model}`, requestId && `Request id: ${requestId}`].filter(Boolean).join(' · ');
   const credential = model && recoveries.includes('credentials') ? credentialLine(requestContext, model) : undefined;
-  const links = requestContext ? recoveryLinks(requestContext, recoveries) : [];
+  const links = target ? recoveryLinks(target, recoveries) : [];
+  // A click continues the run as if the clicker had replied in the thread.
+  const retry = recoveries.includes('continue')
+    ? [Button({ id: CONTINUE_RUN_ACTION_ID, label: 'Continue', style: 'primary' })]
+    : [];
+  const buttons = [...retry, ...links.map(link => LinkButton(link))];
   return Card({
     title: `❌ ${title}`,
     children: [
       CardText(message),
       ...(credential ? [CardText(credential, { style: 'muted' })] : []),
       ...(facts ? [CardText(facts, { style: 'muted' })] : []),
-      ...(links.length ? [Actions(links.map(link => LinkButton(link)))] : []),
+      ...(buttons.length ? [Actions(buttons)] : []),
     ],
   });
 }
@@ -41,11 +65,9 @@ function credentialLine(requestContext: RequestContext | undefined, failedModel:
   return `Runs on ${credential.label} · ${credential.ownerId ? 'Personal credential' : 'Shared by the organization'}`;
 }
 
-function recoveryLinks(requestContext: RequestContext, recoveries: RunErrorRecovery[]) {
-  const factoryProjectId = readFactorySessionScope(requestContext)?.factoryProjectId;
+function recoveryLinks({ factoryProjectId, sessionUrl }: RunErrorLinkTarget, recoveries: RunErrorRecovery[]) {
   const settingsUrl = factoryProjectId && modelSettingsLink(factoryProjectId);
   const memoryUrl = factoryProjectId && memorySettingsLink(factoryProjectId);
-  const sessionUrl = sessionLinkFromRequest(requestContext);
   const links = recoveries.flatMap(recovery => {
     switch (recovery) {
       case 'credentials':

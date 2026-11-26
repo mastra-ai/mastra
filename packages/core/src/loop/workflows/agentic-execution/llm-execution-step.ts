@@ -37,7 +37,7 @@ import type {
   OutputProcessorOrWorkflow,
   ProcessorStreamWriter,
 } from '../../../processors/index';
-import { isProcessorWorkflow } from '../../../processors/index';
+import { isProcessorWorkflow } from '../../../processors/is-processor-workflow';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { resolveMaxProcessorRetries } from '../../../processors/retry-budget';
 import type { ProcessorState } from '../../../processors/runner';
@@ -61,7 +61,7 @@ import type {
   StreamTransport,
   StreamTransportRef,
 } from '../../../stream/types';
-import { ChunkFrom, readModelStreamTransport } from '../../../stream/types';
+import { ChunkFrom, isDataChunk, readModelStreamTransport } from '../../../stream/types';
 import {
   transformToolPayloadForTargets,
   withToolPayloadTransformMetadata,
@@ -72,6 +72,7 @@ import type { ToolToConvert } from '../../../tools/tool-builder/builder';
 import { withToolTitle } from '../../../tools/tool-title';
 import { getNeedsApprovalFn, getProviderToolName, isMastraTool, isProviderTool } from '../../../tools/toolchecks';
 import { createMastraProxy, makeProcessorCoreTool } from '../../../utils';
+import { deepEqual } from '../../../utils/deep-equal';
 import { createStep } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
 import type { RunScopeContext } from '../../run-scope-access';
@@ -1355,6 +1356,19 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   // signal can rotate the response message mid-run, so counting step-start markers
   // would read the wrong parts.
   const transcriptSteps: (TranscriptStep | undefined)[] = [];
+  const apiErrorRows: Array<{ messageId: string; part: { type: `data-${string}`; data: unknown } }> = [];
+  const restoreApiErrorRows = (messageId: string) => {
+    const parts = messageList.get.all.db().find(message => message.id === messageId)?.content.parts ?? [];
+    const missing = apiErrorRows
+      .filter(row => row.messageId === messageId)
+      .filter(row => !parts.some(part => part.type === row.part.type && deepEqual(part.data, row.part.data)))
+      .map(row => row.part);
+    if (missing.length === 0) return;
+    messageList.add(
+      { id: messageId, role: 'assistant', content: { format: 2, parts: missing }, createdAt: new Date() },
+      'response',
+    );
+  };
   const pendingProviderToolCallsByToolCallId = new Map<string, PendingProviderToolCall>();
 
   const cleanupProviderToolSpans = (terminal: boolean) => {
@@ -1646,6 +1660,19 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         start: messageList.get.response.aiV5.ui().find(message => message.id === currentMessageId)?.parts.length ?? 0,
         end: 0,
       };
+      const apiErrorWriter: ProcessorStreamWriter | undefined = outputWriter
+        ? {
+            custom: async (
+              data: { type: string; data?: unknown; transient?: boolean },
+              options?: { messageId?: string },
+            ) => {
+              if (isDataChunk(data) && !data.transient) {
+                apiErrorRows.push({ messageId: currentMessageId, part: { type: data.type, data: data.data } });
+              }
+              return outputWriter(data as ChunkType, { ...options, messageId: currentMessageId });
+            },
+          }
+        : undefined;
 
       // Start the MODEL_STEP span at the beginning of LLM execution
       modelSpanTracker?.startStep();
@@ -2797,12 +2824,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             const currentRetryCount = inputData.processorRetryCount || 0;
             const canRetryError =
               maxErrorProcessorRetries !== undefined && currentRetryCount < maxErrorProcessorRetries;
-            const apiErrorWriter: ProcessorStreamWriter | undefined = outputWriter
-              ? {
-                  custom: async (data: { type: string }, options?: { messageId?: string }) =>
-                    outputWriter(data as ChunkType, { ...options, messageId: currentMessageId }),
-                }
-              : undefined;
 
             const errorResult = await processorRunner.runProcessAPIError({
               error,
@@ -3082,13 +3103,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           processorStates,
         });
 
-        const apiErrorWriter2: ProcessorStreamWriter | undefined = outputWriter
-          ? {
-              custom: async (data: { type: string }, options?: { messageId?: string }) =>
-                outputWriter(data as ChunkType, { ...options, messageId: currentMessageId }),
-            }
-          : undefined;
-
         const errorResult = await processorRunner.runProcessAPIError({
           error: runState.state.apiError,
           messages: messageList.get.all.db(),
@@ -3098,7 +3112,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           retryCount: currentRetryCount,
           requestContext,
           tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
-          writer: apiErrorWriter2,
+          writer: apiErrorWriter,
           abortSignal: options?.abortSignal,
           messageId: currentMessageId,
           rotateResponseMessageId: () => {
@@ -3184,6 +3198,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         // written again by the discard below.
         eagerCoordinator?.recarryCommittedWork(transcriptStep.messageId);
         messageList.rollbackToStepBoundary(transcriptStep.messageId, iterationBoundary);
+        restoreApiErrorRows(transcriptStep.messageId);
         // Same discard as the thrown-error path: this attempt's tool calls are dropped
         // (the step returns `toolCalls: []`), so its eager work must not survive either.
         await discardAttemptEagerWork();

@@ -1,14 +1,17 @@
 import { TTLCache } from '@isaacs/ttlcache';
 import type { MastraScorer } from '../../evals/base';
-import { EventEmitterPubSub } from '../../events/event-emitter';
+import { reachesOtherProcesses } from '../../events/reach';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import { executionFailureTermination } from '../../loop/shared/execution-outcome';
 import type { Mastra } from '../../mastra';
 import { unwrapMastraTracingProxy } from '../../observability/context';
+import type { RequestContext } from '../../request-context';
 import type { CoreTool } from '../../tools/types';
 import type { MessageList } from '../message-list';
 import type { SaveQueueManager } from '../save-queue';
 import { stopDurableExecutionParticipants } from './evented-execution';
+import { getExecutionClaim } from './execution-fence';
+import { stepFailure } from './segment-spans';
 import type { RunRegistryEntry } from './types';
 
 /**
@@ -65,6 +68,34 @@ export function getRunRegistryEntry(runId: string, mastra: Mastra | undefined): 
     return entry;
   }
   return unwrapMastraTracingProxy(entry.mastra) === unwrapMastraTracingProxy(mastra) ? entry : undefined;
+}
+
+/**
+ * Request-context key that identifies a run segment on engines whose steps carry no Core execution
+ * claim (Inngest). The engine stores the same value on the registry entry it seeds for the segment.
+ */
+export const DURABLE_CONTEXT_SEGMENT_KEY = '__mastra_durableContextSegment';
+
+/**
+ * The registry's live request context, when it belongs to the execution running this step. Once
+ * another process claims the run (for example an approval from another host), the context cached
+ * here still belongs to the previous caller and must not be reused for the new execution.
+ */
+export function getLiveRunRequestContext(
+  entry: RunRegistryEntry | undefined,
+  runId: string | undefined,
+  stepContext: RequestContext | undefined,
+  executionId?: string,
+) {
+  const live = entry?.requestContext;
+  if (!live || entry.requestContextRebuilt) return undefined;
+  const expectedExecutionId = executionId ?? (runId ? getExecutionClaim(stepContext, runId)?.executionId : undefined);
+  if (!expectedExecutionId) {
+    const stepSegment = stepContext?.get(DURABLE_CONTEXT_SEGMENT_KEY);
+    if (stepSegment === undefined) return live;
+    return stepSegment === entry.requestContextSegment ? live : undefined;
+  }
+  return runId && getExecutionClaim(live, runId)?.executionId === expectedExecutionId ? live : undefined;
 }
 
 /**
@@ -243,7 +274,7 @@ export function getActiveDurableAgentWorkflowExecutions(mastra: Mastra): Promise
  * execution behind a broker, which another process may be executing.
  */
 function detachesOnShutdown(mastra: Mastra, entry: RunRegistryEntry): boolean {
-  return !!entry.eventedExecution && !(mastra.pubsub.__rawBus() instanceof EventEmitterPubSub);
+  return !!entry.eventedExecution && reachesOtherProcesses(mastra.pubsub);
 }
 
 export function isDurableAgentExecutionDetached(mastra: Mastra, runId: string): boolean {
@@ -274,9 +305,16 @@ export async function abandonDurableAgentExecutions(mastra: Mastra): Promise<voi
  * spans are the active root, so prefer them. Ending an already-ended span is a no-op,
  * so the duplicate error paths (workflow failure + emitError) are safe. Never throws.
  */
-export function endRunSpansWithError(runId: string, error: Error, options: { endSpan?: boolean } = {}): void {
+export function endRunSpansWithError(
+  runId: string,
+  error: Error,
+  options: { endSpan?: boolean; endStep?: boolean } = {},
+): void {
   try {
     const entry = globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined;
+    if (options.endStep ?? options.endSpan ?? true) {
+      entry?.openStepSpan?.error(stepFailure({ error, ...executionFailureTermination(error), endSpan: true }));
+    }
     (entry?.resumeModelSpan ?? entry?.modelSpan)?.error({
       error,
       ...executionFailureTermination(error),

@@ -20,7 +20,7 @@ export function TakeOwnershipDialog({ factoryId, session }: { factoryId: string;
             variant="ghost"
             size="sm"
             className="ml-auto shrink-0"
-            disabled={takeOwnership.isPending}
+            loading={takeOwnership.isPending}
           >
             Take ownership
           </Button>

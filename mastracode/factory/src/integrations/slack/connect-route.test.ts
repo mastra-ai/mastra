@@ -285,8 +285,15 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     uiOrigin: 'http://localhost:5173',
   };
 
-  function oidcRoutes(overrides?: Partial<Parameters<typeof createSlackConnectRoutes>[0]>) {
-    const { store, saveAccountLink } = fakeStore();
+  function oidcRoutes(overrides?: Partial<Parameters<typeof createSlackConnectRoutes>[0]>, storedDefault?: string) {
+    const { store, saveAccountLink, setDefaultFactory } = fakeStore();
+    if (storedDefault) {
+      saveAccountLink.mockResolvedValue({
+        userId: 'user-9',
+        defaultFactoryProjectId: storedDefault,
+        linkedAt: new Date(),
+      });
+    }
     const routes = createSlackConnectRoutes({
       auth: fakeAuth({ orgId: 'org-9', userId: 'user-9' }),
       accountLinks: store,
@@ -294,7 +301,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
       oidc,
       ...overrides,
     });
-    return { routes, saveAccountLink };
+    return { routes, saveAccountLink, setDefaultFactory };
   }
 
   /** Unsigned JWT with the given payload — claims validation only, no signature. */
@@ -560,5 +567,72 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
 
     expect(saveAccountLink).not.toHaveBeenCalled();
     expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/settings/connections');
+  });
+
+  describe('callback default factory', () => {
+    async function connect(
+      factories: Array<{ id: string }> | null,
+      opts: { storedDefault?: string; orgId?: string; projects?: any } = {},
+    ) {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, id_token: makeIdToken(validClaims) }) }),
+      );
+      const projects = opts.projects ?? (factories ? fakeProjects(factories) : undefined);
+      const { routes, setDefaultFactory } = oidcRoutes({ projects }, opts.storedDefault);
+      const c = fakeCtx(tenantSigner.sign(opts.orgId ?? 'org-9', 'user-9'), undefined, { code: 'code-1' });
+      await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
+      return { c, setDefaultFactory, projects };
+    }
+
+    it('defaults a new link to the org only factory', async () => {
+      const { c, setDefaultFactory } = await connect([{ id: 'fp-1' }]);
+      expect(setDefaultFactory).toHaveBeenCalledWith({
+        platform: 'slack',
+        externalTeamId: 'T-77',
+        externalUserId: 'U-77',
+        userId: 'user-9',
+        factoryProjectId: 'fp-1',
+      });
+      expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/settings/connections?slack=connected');
+    });
+
+    it('sets nothing when the org has no factory', async () => {
+      const { setDefaultFactory } = await connect([]);
+      expect(setDefaultFactory).not.toHaveBeenCalled();
+    });
+
+    it('leaves the choice to the user when the org has several factories', async () => {
+      const { setDefaultFactory } = await connect([{ id: 'fp-1' }, { id: 'fp-2' }]);
+      expect(setDefaultFactory).not.toHaveBeenCalled();
+    });
+
+    it('keeps an existing default that still exists', async () => {
+      const projects = {
+        get: vi.fn(async ({ id }: { id: string }) => (id === 'fp-2' ? { id: 'fp-2' } : null)),
+        list: vi.fn(async () => [{ id: 'fp-1' }]),
+      };
+      const { setDefaultFactory } = await connect(null, { storedDefault: 'fp-2', projects });
+      expect(setDefaultFactory).not.toHaveBeenCalled();
+      expect(projects.list).not.toHaveBeenCalled();
+    });
+
+    it('replaces a stale default with the only factory', async () => {
+      const { setDefaultFactory } = await connect([{ id: 'fp-1' }], { storedDefault: 'fp-gone' });
+      expect(setDefaultFactory).toHaveBeenCalledWith(expect.objectContaining({ factoryProjectId: 'fp-1' }));
+    });
+
+    it('sets nothing for a personal account with no org', async () => {
+      const { setDefaultFactory, projects } = await connect([{ id: 'fp-1' }], { orgId: '' });
+      expect(setDefaultFactory).not.toHaveBeenCalled();
+      expect(projects.list).not.toHaveBeenCalled();
+    });
+
+    it('still reports a successful connect when the factory lookup fails', async () => {
+      const projects = { get: vi.fn(), list: vi.fn().mockRejectedValue(new Error('db down')) };
+      const { c, setDefaultFactory } = await connect(null, { projects });
+      expect(setDefaultFactory).not.toHaveBeenCalled();
+      expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/settings/connections?slack=connected');
+    });
   });
 });

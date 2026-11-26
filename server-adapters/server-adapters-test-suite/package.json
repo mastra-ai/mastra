@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server-adapters-test-suite",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Reusable conformance test suite for Mastra server adapters",
   "type": "module",
   "main": "dist/index.js",
@@ -52,6 +52,7 @@
   },
   "files": [
     "dist",
+    "!dist/**/*.d.*ts.map",
     "CHANGELOG.md"
   ],
   "homepage": "https://mastra.ai",

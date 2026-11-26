@@ -2,8 +2,8 @@ import { useClock } from '@mastra/playground-ui/hooks/use-clock';
 
 import type { InstalledBoardInfo } from '../../../../api/types';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 import type { WorkspaceSlot } from '../../workspace-viewer/context/WorkspacePanelContext';
+import { WorkspaceSectionSkeleton } from '../../workspace-viewer/components/WorkspaceSection';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { boardOf } from '../boardFlow';
 import { repositoryProvider } from '../hooks/useSessionRepository';
@@ -15,8 +15,10 @@ import { relatedWorkItemIndex } from '../services/relationships';
 import { genericExternalWorkItemUrl } from '../services/workItemPresentation';
 import type { WorkItem } from '../services/workItems';
 import { toMinute } from '../stageStays';
+import { SourceDescriptionLines } from './BoardCardDetails';
 import { CardDescription } from './CardDescription';
 import { CardSourceRow } from './CardSourceRow';
+import { ChangeRequestBadge } from './ChangeRequestBadge';
 import { ChangeRequestLink } from './ChangeRequestLink';
 import { ChangeRequestList } from './ChangeRequestList';
 import { MovesGraph } from './MovesGraph';
@@ -25,8 +27,15 @@ import { SectionLoadError } from './SectionLoadError';
 
 export const overviewSectionClass = 'flex flex-col gap-3 p-1.5 pb-3';
 
-export function OverviewSkeleton() {
-  return <SkeletonRows label="Loading overview" rows={4} className="p-3" />;
+export function OverviewSkeleton({ workspace = false }: { workspace?: boolean }) {
+  return (
+    <>
+      <section role="status" aria-label="Loading overview" className={overviewSectionClass}>
+        <SourceDescriptionLines />
+      </section>
+      {workspace ? <WorkspaceSectionSkeleton /> : null}
+    </>
+  );
 }
 
 export function CardOverview({
@@ -57,9 +66,6 @@ export function CardOverview({
   const provider = repositoryProvider(repository);
   const related = relatedWorkItemIndex(sessionItems)(item);
   const ownRequest = ownChangeRequest(item, repository?.slug, subscriptions);
-  const ownRequestLink = ownRequest ? (
-    <ChangeRequestLink request={ownRequest} sessionRepository={repository?.slug} label="reference" />
-  ) : undefined;
   const sourceUrl = genericExternalWorkItemUrl(item);
   const requests = sessionChangeRequests({
     item,
@@ -74,7 +80,9 @@ export function CardOverview({
   return (
     <>
       <section aria-label="Card" className={`${overviewSectionClass} empty:hidden`}>
-        {workspace ? null : ownRequestLink}
+        {!workspace && ownRequest ? (
+          <ChangeRequestLink request={ownRequest} sessionRepository={repository?.slug} label="reference" />
+        ) : null}
         <CardSourceRow item={item} url={sourceUrl} repository={repository?.slug} />
         <CardDescription
           item={item}
@@ -89,7 +97,10 @@ export function CardOverview({
       </section>
       {workspace?.({
         repository: repository && { slug: repository.slug, provider },
-        changeRequest: ownRequestLink,
+        changeRequest: ownRequest && {
+          badge: <ChangeRequestBadge request={ownRequest} sessionRepository={repository?.slug} />,
+          status: ownRequest.status,
+        },
       })}
       {pullRequestsFailed || requests.length > 0 || showsPhases ? (
         <section aria-label="Card activity" className={overviewSectionClass}>

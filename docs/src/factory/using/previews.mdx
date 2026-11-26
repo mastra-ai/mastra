@@ -1,0 +1,50 @@
+---
+title: App previews | Core concepts
+description: Open a dev server, preview, or API running in a session's sandbox from your browser, and share the link with teammates.
+---
+
+# App previews
+
+An app preview is a browser link to a server running in the sandbox for a [session](/using/sessions). Use it to try a change before you review the pull request, or to share a running build with a teammate.
+
+## Open a preview
+
+Ask the agent to start the app and give you a preview link. For example:
+
+```text
+Start the docs site dev server and send me a preview link.
+```
+
+The agent starts the server in the background, then asks the sandbox for a link to the server's port. Open the link in your browser. In a [Slack](/configure/slack) thread, the agent posts the link in the thread.
+
+The server keeps running while the sandbox is active. A sandbox pauses after its [idle timeout](/configure/sandboxes#resources-and-docker), and the server stops with it. Ask the agent to restart the server if the link stops responding.
+
+Previews need a sandbox provider with networking, such as Mastra platform, E2B, Daytona, or Vercel. With [local execution](/configure/sandboxes#local-execution), open the port on your own machine instead.
+
+## Share a preview
+
+A preview link doesn't expire, so you can share it with teammates.
+
+By default, Mastra platform sandboxes keep ports private. Opening the link requires signing in to your organization. To let anyone with the link open it without signing in, turn on **Public preview links** in **Settings → Manage Factory**. The setting applies to sandboxes created after the change, not to existing ones.
+
+Keep **Public preview links** off when previews can show private data or unreleased work.
+
+## Troubleshoot a preview
+
+Some dev servers check the request's `Host` header and reject hosts they don't recognize. The preview link uses a different host than `localhost`, so allow all hosts in the dev server's configuration. For Vite:
+
+```typescript title="vite.config.ts"
+import { defineConfig } from 'vite'
+
+export default defineConfig({
+  server: {
+    allowedHosts: true,
+  },
+})
+```
+
+Check that the server listens on the port you want to open. If the agent reports that the port can't be opened, the server isn't running or the sandbox can't expose that port.
+
+## Let the agent check its own work
+
+When the agent has a browser tool and gets a preview link, the browser can also open that port for the next hour without signing in. The agent can check the page and fix problems before you look. If its browser later shows a sign-in page, the agent requests the link again.

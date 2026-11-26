@@ -15,6 +15,7 @@ import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatu
 import type { SessionSource } from '../services/sessionPresentation';
 import type { SessionExternalLink } from '../services/sessionRows';
 import { ActivityBelt } from '@mastra/playground-ui/components/Activity';
+import { sessionBeltLabel } from '@mastra/playground-ui/domains/factory';
 import { SessionActionsMenu } from './SessionActionsMenu';
 import { SessionMenuItems } from './SessionMenuItems';
 import { SessionPreviewCard } from './SessionPreviewCard';
@@ -184,7 +185,7 @@ export function SessionNavRow({
         {runByFactory ? <span className="text-muted-foreground ml-1.5">run by Factory</span> : null}
       </Sidebar.NavLabel>
       {pinned && !loading ? (
-        <IconPin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-icon-xs shrink-0 rotate-45" />
+        <IconPin aria-label={`${name} pinned`} className="text-subtle-foreground size-icon-xs shrink-0 rotate-45" />
       ) : null}
       {statusLabel ? (
         <span id={statusId} hidden>
@@ -214,7 +215,7 @@ export function SessionNavRow({
   const action = (
     <>
       <span ref={anchor} aria-hidden className="pointer-events-none absolute inset-0" />
-      {belt ? <ActivityBelt status={belt} label={beltLabel(belt, name)} /> : null}
+      {belt ? <ActivityBelt status={belt} label={sessionBeltLabel(belt, name)} /> : null}
       {visibility === 'private' ? (
         <SessionSharingPopover
           name={name}
@@ -369,12 +370,6 @@ const trailingSlot = 'size-6 shrink-0 grid-rows-1 place-items-center *:col-start
 // An empty slot claims no width, so the label runs the full row until there is something to show.
 const revealedSlot =
   'grid pointer-fine:hidden group-focus-within/nav-row:grid group-hover/nav-row:grid group-has-[[data-popup-open]]/nav-row:grid';
-
-function beltLabel(status: SessionRowStatus, name: string) {
-  if (status === 'initializing') return `Initializing ${name}`;
-  if (status === 'working') return `Agent working in ${name}`;
-  return `${name} waiting on you`;
-}
 
 // The actions menu owns the slot as soon as the row is hovered, focused, or its menu is open.
 const yieldsToActions =

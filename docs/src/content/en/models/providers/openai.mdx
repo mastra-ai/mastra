@@ -7,7 +7,7 @@ description: "Browse OpenAI model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/openai.svg" alt="OpenAI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenAI
 
-Access 53 OpenAI models through Mastra's model router. Authentication is handled automatically using the `OPENAI_API_KEY` environment variable.
+Access 46 OpenAI models through Mastra's model router. Authentication is handled automatically using the `OPENAI_API_KEY` environment variable.
 
 Learn more in the [OpenAI documentation](https://platform.openai.com/docs/models).
 
@@ -40,138 +40,6 @@ for await (const chunk of stream) {
 <ProviderModelsTable
   models={[
   {
-    "model": "openai/gpt-4.1",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 1047576,
-    "maxOutput": 32768,
-    "inputCost": 2,
-    "outputCost": 8
-  },
-  {
-    "model": "openai/gpt-4.1-mini",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 1047576,
-    "maxOutput": 32768,
-    "inputCost": 0.4,
-    "outputCost": 1.6
-  },
-  {
-    "model": "openai/gpt-4o",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": 2.5,
-    "outputCost": 10
-  },
-  {
-    "model": "openai/gpt-4o-2024-08-06",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": 2.5,
-    "outputCost": 10
-  },
-  {
-    "model": "openai/gpt-4o-2024-11-20",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": 2.5,
-    "outputCost": 10
-  },
-  {
-    "model": "openai/gpt-4o-mini",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": 0.15,
-    "outputCost": 0.6
-  },
-  {
-    "model": "openai/gpt-5",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 128000,
-    "inputCost": 1.25,
-    "outputCost": 10
-  },
-  {
-    "model": "openai/gpt-5-mini",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 128000,
-    "inputCost": 0.25,
-    "outputCost": 2
-  },
-  {
-    "model": "openai/gpt-5-nano",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 128000,
-    "inputCost": 0.05,
-    "outputCost": 0.4
-  },
-  {
-    "model": "openai/gpt-5-pro",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 272000,
-    "inputCost": 15,
-    "outputCost": 120
-  },
-  {
-    "model": "openai/gpt-5.1",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 128000,
-    "inputCost": 1.25,
-    "outputCost": 10
-  },
-  {
     "model": "openai/gpt-5.2",
     "imageInput": true,
     "audioInput": false,
@@ -196,30 +64,6 @@ for await (const chunk of stream) {
     "outputCost": 168
   },
   {
-    "model": "openai/gpt-5.3-codex",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 128000,
-    "inputCost": 1.75,
-    "outputCost": 14
-  },
-  {
-    "model": "openai/gpt-5.3-codex-spark",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 32000,
-    "inputCost": 1.75,
-    "outputCost": 14
-  },
-  {
     "model": "openai/gpt-5.4",
     "imageInput": true,
     "audioInput": false,
@@ -242,18 +86,6 @@ for await (const chunk of stream) {
     "maxOutput": 128000,
     "inputCost": 0.75,
     "outputCost": 4.5
-  },
-  {
-    "model": "openai/gpt-5.4-nano",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 128000,
-    "inputCost": 0.2,
-    "outputCost": 1.25
   },
   {
     "model": "openai/gpt-5.4-pro",
@@ -352,6 +184,18 @@ for await (const chunk of stream) {
     "outputCost": 50
   },
   {
+    "model": "openai/gpt-6-astra-healthcare",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 10,
+    "outputCost": 50
+  },
+  {
     "model": "openai/gpt-6-luna",
     "imageInput": true,
     "audioInput": false,
@@ -388,6 +232,18 @@ for await (const chunk of stream) {
     "outputCost": 10
   },
   {
+    "model": "openai/gpt-6.1-sol-healthcare",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
     "model": "openai/gpt-6.1-terra",
     "imageInput": true,
     "audioInput": false,
@@ -412,7 +268,31 @@ for await (const chunk of stream) {
     "outputCost": 40
   },
   {
+    "model": "openai/gpt-6.2-astra-healthcare",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 8,
+    "outputCost": 40
+  },
+  {
     "model": "openai/gpt-6.2-sol",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
+    "model": "openai/gpt-6.2-sol-healthcare",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -446,54 +326,6 @@ for await (const chunk of stream) {
     "maxOutput": 128000,
     "inputCost": 12.5,
     "outputCost": 75
-  },
-  {
-    "model": "openai/gpt-image-2",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": null,
-    "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "openai/gpt-realtime-2.1",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 32000,
-    "inputCost": 4,
-    "outputCost": 24
-  },
-  {
-    "model": "openai/o3",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 100000,
-    "inputCost": 2,
-    "outputCost": 8
-  },
-  {
-    "model": "openai/o3-pro",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 100000,
-    "inputCost": 20,
-    "outputCost": 80
   },
   {
     "model": "openai/text-embedding-3-large",

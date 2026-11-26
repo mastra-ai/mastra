@@ -7,5 +7,5 @@ import type { ComponentProps } from 'react';
  * card outside it. Lists keep the 4px rim; panels of fields pass their own padding.
  */
 export function OnboardingInset({ className, ...props }: ComponentProps<'div'>) {
-  return <div className={cn('bg-background flex min-w-0 flex-col gap-0.5 rounded-xl p-1', className)} {...props} />;
+  return <div className={cn('bg-nested flex min-w-0 flex-col gap-0.5 rounded-xl p-1', className)} {...props} />;
 }

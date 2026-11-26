@@ -1,12 +1,13 @@
 {
   "name": "@mastra/memory",
-  "version": "1.41.2",
+  "version": "1.41.3",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "exports": {
     ".": {

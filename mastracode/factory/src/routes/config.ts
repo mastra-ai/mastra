@@ -1,14 +1,31 @@
 import type { CredentialTenant } from '@mastra/code-sdk/agents/credential-resolver';
+import { listCustomProviderModels, testCustomProviderModel } from '@mastra/code-sdk/agents/custom-provider-check';
+import type {
+  CustomProviderCheckFailure,
+  CustomProviderCheckOptions,
+  CustomProviderConnection,
+  CustomProviderModelsResult,
+  CustomProviderModelTestResult,
+} from '@mastra/code-sdk/agents/custom-provider-check';
 import { MASTRACODE_GATEWAY_ID, MastraCodeGateway } from '@mastra/code-sdk/agents/mastracode-gateway';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { MIN_OBSERVATION_THRESHOLD } from '@mastra/code-sdk/constants';
+import {
+  customProviderHeaderProblem,
+  isCustomProviderAuthScheme,
+  MAX_CUSTOM_PROVIDER_HEADERS,
+} from '@mastra/code-sdk/onboarding/custom-provider-headers';
 import { resolveAutoOMModelId } from '@mastra/code-sdk/onboarding/packs';
 import type { ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
 import { getCustomProviderId, MASTRA_GATEWAY_PROVIDER } from '@mastra/code-sdk/onboarding/settings';
-import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings';
+import type { CustomProviderAuthScheme } from '@mastra/code-sdk/onboarding/settings';
 import { AMAZON_BEDROCK_GATEWAY_ID } from '@mastra/code-sdk/providers/amazon-bedrock-gateway';
 import { GOOGLE_VERTEX_GATEWAY_ID } from '@mastra/code-sdk/providers/google-vertex-gateway';
-import { MASTRA_GATEWAY_PREFIX, normalizeLegacyProviderId } from '@mastra/code-sdk/providers/model-ids';
+import {
+  MASTRA_GATEWAY_PREFIX,
+  normalizeLegacyProviderId,
+  withCodexFastModels,
+} from '@mastra/code-sdk/providers/model-ids';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { getModelReasoningOptions, MastraGateway, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { ModelReasoningOption } from '@mastra/core/llm';
@@ -18,6 +35,7 @@ import { registerApiRoute } from '@mastra/core/server';
 
 import type { Context } from 'hono';
 import { z } from 'zod';
+import type { ModelPackSet, ResolvedModelSelection } from '../model-packs.js';
 import { resolveFactoryModelPolicy, routedPersonalDefaults } from '../session/credential-policy.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
 import type {
@@ -26,10 +44,18 @@ import type {
   LoginSessionKind,
   ModelCredentialsStorage,
 } from '../storage/domains/credentials/base.js';
+import { resolveCustomProviderSettings } from '../storage/domains/custom-providers/base.js';
 import type {
+  CustomProviderCallSettings,
+  CustomProviderHeaderInput,
+  CustomProviderInput,
+  CustomProviderLastCheck,
   CustomProviderOwner,
   CustomProviderRecord,
+  CustomProviderSettingsDraft,
+  CustomProviderSettingsRefusal,
   CustomProvidersStorage,
+  CustomProviderWrite,
 } from '../storage/domains/custom-providers/base.js';
 import type {
   MemorySettingsPatch,
@@ -41,10 +67,16 @@ import { effectiveModelScope, factoryProjectSettingsUserId } from '../storage/do
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { THINKING_LEVELS } from './contracts.js';
-import { customEndpointUrlProblem } from './custom-endpoint-url.js';
+import { customEndpointUrlProblem, hostedOnPlatform } from './custom-endpoint-url.js';
 import { customProviderOwner } from './custom-provider-source.js';
 import { createGatewayKey, getGatewayCredits, MASTRA_SIGN_IN_REQUIRED, MastraGatewayError } from './mastra-gateway.js';
+import {
+  modelPackRoutes,
+  readSessionModelSelection,
+  resolveSessionModelPackSet,
+  sessionAddressSchema,
+} from './model-pack-routes.js';
+import type { SessionAddress } from './model-pack-routes.js';
 import {
   credentialLabel,
   getAuthProviderId,
@@ -133,8 +165,15 @@ export interface ProviderInfo {
 /** Minimal session surface the config routes touch. */
 export interface OMSession {
   /** `get()` returns '' when no model is selected, so callers fall back on falsy. */
-  model: { get: () => string; switch?: (modelId: string) => Promise<void> };
-  thread?: { getId: () => string | null };
+  model: {
+    get: () => string;
+    switch?: (modelId: string, options?: { thinkingLevel?: ThinkingLevelSetting }) => Promise<void>;
+  };
+  thread?: {
+    getId: () => string | null;
+    getById?: (input: { threadId: string }) => Promise<{ metadata?: Record<string, unknown> } | null>;
+    setSettingOn?: (input: { threadId: string; key: string; value: unknown }) => Promise<void>;
+  };
 }
 
 /** Minimal controller surface this module needs (model catalog + modes + sessions). */
@@ -343,17 +382,50 @@ export async function listProviders({
   return Array.from(seen.values()).sort((a, b) => a.provider.localeCompare(b.provider));
 }
 
+export type { CustomProviderCheckFailure, CustomProviderModelsResult, CustomProviderModelTestResult };
+export type { CustomProviderLastCheck };
+
+/** A saved custom header as the client sees it. */
+export interface CustomProviderHeaderInfo {
+  name: string;
+  secret: boolean;
+  /** Present only for headers that are not secret. */
+  value?: string;
+}
+
 /** A user-defined OpenAI-compatible provider, with key presence (never the key). */
 export interface CustomProviderInfo {
   id: string;
   name: string;
   url: string;
   hasApiKey: boolean;
+  authScheme: CustomProviderAuthScheme;
+  headers: CustomProviderHeaderInfo[];
   models: string[];
   /** Saved for the caller (`user`) or for their organization (`org`), like a provider key. */
   scope: StoredCredentialScope;
   /** Why this server refuses to call the endpoint. Its models are not offered until the URL is fixed. */
   urlProblem?: string;
+  /**
+   * The last connection test, cleared when the URL, key, auth scheme or headers
+   * change. It records the connection test only, never a test message.
+   */
+  lastCheck?: CustomProviderLastCheck;
+}
+
+/** The response of `POST /web/config/custom-providers/check`. A failing check is data here, not an HTTP error. */
+export interface CustomProviderCheckResponse {
+  ok: true;
+  check: { models: CustomProviderModelsResult; reply?: CustomProviderModelTestResult };
+  /** Present when a saved row was checked and its `lastCheck` was recorded. */
+  provider?: CustomProviderInfo;
+}
+
+/** The 422 body of a save with `check: true` whose connection test failed. Nothing is written. */
+export interface CustomProviderCheckFailedResponse {
+  error: 'custom_endpoint_check_failed';
+  message: string;
+  failure: CustomProviderCheckFailure;
 }
 
 /** A stored custom provider and the settings scope it is saved at. */
@@ -362,16 +434,23 @@ export interface ScopedCustomProvider {
   scope: StoredCredentialScope;
 }
 
-/** Redact a stored custom-provider row for the client (key presence only). */
+/** Redact a stored custom-provider row for the client: key presence only, and no secret header value. */
 function toCustomProviderInfo({ record, scope }: ScopedCustomProvider): CustomProviderInfo {
   return {
     id: record.providerId,
     name: record.name,
     url: record.url,
     hasApiKey: Boolean(record.apiKey),
+    authScheme: record.authScheme ?? 'bearer',
+    headers: record.headers.map(header =>
+      header.secret === false
+        ? { name: header.name, secret: false, value: header.value }
+        : { name: header.name, secret: true },
+    ),
     models: record.models,
     scope,
     urlProblem: customEndpointUrlProblem(record.url),
+    ...(record.lastCheck ? { lastCheck: record.lastCheck } : {}),
   };
 }
 
@@ -467,20 +546,25 @@ async function listCustomProvidersInEffect({
   return owner ? (await ctx.storage.list(owner)).filter(isCallable) : [];
 }
 
-/** A validated custom-provider save request. */
-interface CustomProviderSave extends CustomProviderSetting {
-  /** The id of the provider being edited. Absent when adding one. */
-  previousId?: string;
-  /** Where to save it. Anything but `org` means the caller's own list, like provider keys. */
-  scope: StoredCredentialScope;
+/** A request body field that failed validation, as a 400 response body. */
+interface CustomProviderBodyError {
+  error: string;
+  message?: string;
 }
 
-/** Validate + coerce a request body into a custom-provider save. */
-function parseCustomProviderBody(body: unknown): CustomProviderSave | { error: string } {
-  if (!body || typeof body !== 'object') return { error: 'Invalid JSON body' };
-  const b: Record<string, unknown> = { ...body };
-  const name = typeof b.name === 'string' ? b.name.trim() : '';
-  if (!name) return { error: 'Missing required field: name' };
+const QUERY_OR_FRAGMENT_REFUSED = 'url must not have a query string or fragment';
+
+/**
+ * Whether a base URL carries a query string or fragment. Request paths are
+ * appended to it as text, so `/models` and `/chat/completions` would land
+ * inside the query and call another path.
+ */
+function hasQueryOrFragment(url: string): boolean {
+  return url.includes('?') || url.includes('#');
+}
+
+/** Read `url`, `apiKey`, `authScheme` and `headers` from a save or check body. */
+function parseConnectionFields(b: Record<string, unknown>): CustomProviderSettingsDraft | CustomProviderBodyError {
   const url = typeof b.url === 'string' ? b.url.trim() : '';
   if (!url) return { error: 'Missing required field: url' };
   try {
@@ -491,12 +575,127 @@ function parseCustomProviderBody(body: unknown): CustomProviderSave | { error: s
   } catch {
     return { error: 'url must be a valid URL' };
   }
+  if (hasQueryOrFragment(url)) return { error: QUERY_OR_FRAGMENT_REFUSED };
   const apiKey = typeof b.apiKey === 'string' && b.apiKey.trim() ? b.apiKey.trim() : undefined;
+  if (b.authScheme !== undefined && !isCustomProviderAuthScheme(b.authScheme)) {
+    return { error: 'authScheme must be "bearer" or "x-api-key"' };
+  }
+  const authScheme = isCustomProviderAuthScheme(b.authScheme) ? b.authScheme : undefined;
+  if (b.headers === undefined) return { url, apiKey, authScheme };
+  if (!Array.isArray(b.headers)) return { error: 'header_refused', message: 'Custom headers must be a list.' };
+  // Counted before anything walks the list, so an oversized body is refused cheaply.
+  if (b.headers.length > MAX_CUSTOM_PROVIDER_HEADERS) {
+    return {
+      error: 'header_refused',
+      message: `A provider can send at most ${MAX_CUSTOM_PROVIDER_HEADERS} custom headers.`,
+    };
+  }
+  // Trimmed the way settings.json headers are, so both stores hold the same values.
+  const trimmed = b.headers.map((entry: unknown) => {
+    if (typeof entry !== 'object' || entry === null) return entry;
+    const { name, value } = entry as Record<string, unknown>;
+    return {
+      ...entry,
+      name: typeof name === 'string' ? name.trim() : name,
+      value: typeof value === 'string' ? value.trim() : value,
+    };
+  });
+  // Without a scheme an edit keeps the saved one, which is unknown here, so only
+  // a header both schemes refuse fails now. The storage and the draft check test
+  // the final list against the scheme it ends up with.
+  const entriesToCheck = trimmed as Array<{ name: unknown; value?: unknown }>;
+  const problem = authScheme
+    ? customProviderHeaderProblem(entriesToCheck, authScheme)
+    : customProviderHeaderProblem(entriesToCheck, 'bearer') && customProviderHeaderProblem(entriesToCheck, 'x-api-key');
+  if (problem) return { error: 'header_refused', message: problem };
+  const entries = trimmed as Array<{ name: string; value?: string; secret?: unknown }>;
+  // Reading a malformed flag as "omitted" would make the header secret or keep
+  // the saved flag, which is not what the client asked for.
+  const malformed = entries.find(({ secret }) => secret !== undefined && typeof secret !== 'boolean');
+  if (malformed) {
+    return {
+      error: 'header_refused',
+      message: `The secret flag of the ${malformed.name} header must be true or false.`,
+    };
+  }
+  const headers = entries.map(
+    ({ name, value, secret }): CustomProviderHeaderInput => ({
+      name,
+      ...(value === undefined ? {} : { value }),
+      ...(typeof secret === 'boolean' ? { secret } : {}),
+    }),
+  );
+  return { url, apiKey, authScheme, headers };
+}
+
+/** A validated custom-provider save request. */
+interface CustomProviderSave extends CustomProviderSettingsDraft {
+  name: string;
+  models: string[];
+  /** The id of the provider being edited. Absent when adding one. */
+  previousId?: string;
+  /** Where to save it. Anything but `org` means the caller's own list, like provider keys. */
+  scope: StoredCredentialScope;
+  /** Run the connection test first and save only when it passes. */
+  check: boolean;
+}
+
+/** Validate + coerce a request body into a custom-provider save. */
+function parseCustomProviderBody(body: unknown): CustomProviderSave | CustomProviderBodyError {
+  if (!body || typeof body !== 'object') return { error: 'Invalid JSON body' };
+  const b: Record<string, unknown> = { ...body };
+  const name = typeof b.name === 'string' ? b.name.trim() : '';
+  if (!name) return { error: 'Missing required field: name' };
+  const connection = parseConnectionFields(b);
+  if ('error' in connection) return connection;
   const models = Array.isArray(b.models)
     ? b.models.filter((m): m is string => typeof m === 'string' && m.trim().length > 0).map(m => m.trim())
     : [];
   const previousId = typeof b.previousId === 'string' && b.previousId ? b.previousId : undefined;
-  return { name, url, apiKey, models, previousId, scope: b.scope === 'org' ? 'org' : 'user' };
+  // Reading a malformed flag as false would save the provider untested.
+  if (b.check !== undefined && typeof b.check !== 'boolean') return { error: 'check must be true or false' };
+  return {
+    ...connection,
+    name,
+    models,
+    previousId,
+    scope: b.scope === 'org' ? 'org' : 'user',
+    check: b.check === true,
+  };
+}
+
+/**
+ * A validated `POST /web/config/custom-providers/check` request: a draft to
+ * check without saving it, which may reuse the secrets of the saved row named
+ * by `previousId`, or a saved row to check as stored.
+ */
+type CustomProviderCheckRequest = {
+  scope: StoredCredentialScope;
+  /** Also send the test message to this model. */
+  model?: string;
+} & (
+  | { kind: 'draft'; draft: CustomProviderSettingsDraft; previousId?: string }
+  | { kind: 'saved'; previousId: string }
+);
+
+/**
+ * Validate a check request. Without `url` the saved row named by `previousId`
+ * is checked as stored, and the other connection fields are ignored.
+ */
+function parseCustomProviderCheckBody(body: unknown): CustomProviderCheckRequest | CustomProviderBodyError {
+  if (!body || typeof body !== 'object') return { error: 'Invalid JSON body' };
+  const b: Record<string, unknown> = { ...body };
+  const previousId = typeof b.previousId === 'string' && b.previousId ? b.previousId : undefined;
+  if (b.model !== undefined && typeof b.model !== 'string') return { error: 'model must be a string' };
+  const model = b.model?.trim() || undefined;
+  const scope = b.scope === 'org' ? 'org' : 'user';
+  if (b.url === undefined) {
+    if (!previousId) return { error: 'Missing required field: url or previousId' };
+    return { kind: 'saved', previousId, scope, model };
+  }
+  const draft = parseConnectionFields(b);
+  if ('error' in draft) return draft;
+  return { kind: 'draft', previousId, scope, draft, model };
 }
 
 /** What each storage refusal tells the client. */
@@ -507,12 +706,57 @@ const CUSTOM_PROVIDER_REFUSALS = {
     message: 'A provider with this name already exists here. Choose another name.',
   },
   not_found: { status: 404, error: 'custom_provider_not_found', message: 'This provider no longer exists.' },
+  changed: {
+    status: 409,
+    error: 'custom_provider_changed',
+    message: 'This provider changed while it was being tested. Try again.',
+  },
   api_key_required: {
     status: 400,
     error: 'api_key_required',
     message: 'Enter the API key again: the saved key is only kept while the URL stays on the same host.',
   },
+  header_value_required: {
+    status: 400,
+    error: 'header_value_required',
+    message:
+      'Enter a value for each header: a saved value is only kept for a header of the same name, and a secret one only while it stays secret and the URL keeps the same scheme, host and port.',
+  },
+  header_refused: { status: 400, error: 'header_refused', message: 'These custom headers cannot be sent.' },
 } as const;
+
+/** The status and body for a refused write or check, with the header rule that failed when there is one. */
+function customProviderRefusal(refusal: Extract<CustomProviderWrite, { refused: string }>): {
+  status: 400 | 404 | 409;
+  body: { error: string; message: string };
+} {
+  const { status, error, message } = CUSTOM_PROVIDER_REFUSALS[refusal.refused];
+  return { status, body: { error, message: 'problem' in refusal ? refusal.problem : message } };
+}
+
+/**
+ * The connection a check calls: `draft` combined with the saved row it edits,
+ * under the same rules a save applies (see `resolveCustomProviderSettings`).
+ * The saved secrets it resolves are passed on, so the SDK redacts them too.
+ */
+function customProviderConnection(
+  saved: CustomProviderCallSettings | null,
+  draft: CustomProviderSettingsDraft,
+): { connection: CustomProviderConnection } | CustomProviderSettingsRefusal {
+  const settings = resolveCustomProviderSettings(saved, draft);
+  if ('refused' in settings) return settings;
+  const { url, apiKey, authScheme, headers } = settings.resolved;
+  return { connection: { url, apiKey: apiKey ?? undefined, authScheme: authScheme ?? undefined, headers } };
+}
+
+/**
+ * Options for both SDK checks. A hosted Factory keeps only an upstream error
+ * message or page title, because the server may have reached an address the
+ * caller could not, and its raw body text is not theirs to read.
+ */
+function customProviderCheckOptions(): CustomProviderCheckOptions {
+  return { summaryDetailOnly: hostedOnPlatform() };
+}
 
 /**
  * Providers whose credentials can only come from the server process. Amazon
@@ -672,7 +916,7 @@ export async function buildModelCatalog({
       deploymentProviders,
     }),
   ]);
-  const catalog: ModelCatalogEntry[] = models.flatMap(({ id, provider, modelName, releaseDate }) =>
+  const builtIn: ModelCatalogEntry[] = models.flatMap(({ id, provider, modelName, releaseDate }) =>
     typeof id === 'string' && canUseModelProvider(access, provider)
       ? [
           {
@@ -687,6 +931,7 @@ export async function buildModelCatalog({
         ]
       : [],
   );
+  const catalog = withCodexFastModels(builtIn, { codexOAuth: access.openai === 'oauth' });
   // The boot-time gateway catalog only carries the local custom providers, so
   // tenant callers get the rows in effect for them here. Dedupe against ids
   // already present.
@@ -734,47 +979,6 @@ export async function listSessionScopedCredentials({
 }): Promise<CredentialRecord[]> {
   const storedScope = storedScopeFor(modelScope);
   return (await credentials.listCredentials(orgId, userId)).filter(record => record.scope === storedScope);
-}
-
-/** Per-user default model context for the current request. */
-export interface ModelDefaultsContext {
-  storage: ModelDefaultsStorage;
-  orgId: string;
-  userId: string;
-}
-
-/** Resolve the default-model context for a request, or a ready-to-return error response. */
-async function resolveModelDefaultsContext({
-  c,
-  auth,
-  modelDefaults,
-}: {
-  c: Context;
-  auth: RouteAuth;
-  modelDefaults?: ModelDefaultsStorage;
-}): Promise<ModelDefaultsContext | { response: Response }> {
-  await auth.ensureUser(c);
-  const tenant = auth.tenant(c);
-  if (!tenant && auth.enabled()) return { response: c.json({ error: 'unauthorized' }, 401) };
-  if (modelDefaults) {
-    try {
-      await modelDefaults.ensureReady();
-      return tenant
-        ? { storage: modelDefaults, orgId: tenantOrgId(tenant), userId: tenant.userId }
-        : { storage: modelDefaults, orgId: 'local', userId: 'local' };
-    } catch {
-      // fall through to the unavailable response
-    }
-  }
-  return {
-    response: c.json(
-      {
-        error: 'model_defaults_unavailable',
-        message: 'Default model storage is unavailable — the app database is not configured or failed to start.',
-      },
-      503,
-    ),
-  };
 }
 
 // Mirrors the TUI `/om` command. Settings are persisted per organization and
@@ -928,6 +1132,36 @@ async function persistMemorySettings(context: MemorySettingsContext, patch: Memo
   await context.storage.patch({ orgId: context.orgId, userId: context.userId, patch });
 }
 
+export interface PersonalModelDefaultsResponse extends ModelPackSet {
+  modelId: string | null;
+  thinkingLevel: ThinkingLevelSetting | null;
+}
+
+interface SessionModelPackSelection extends ModelPackSet {
+  modelSelection: ResolvedModelSelection;
+}
+
+export interface SessionModelPolicy extends SessionModelPackSelection {
+  modelScope: 'factory' | 'user';
+  defaultModelId: string | null;
+  personalThinkingLevel: ThinkingLevelSetting | null;
+  models: ModelCatalogEntry[];
+}
+
+export interface SessionModelContext {
+  tenantCredentials: CredentialRecord[];
+  modelScope: 'factory' | 'user';
+  defaultModelId: string | null;
+  personalThinkingLevel: ThinkingLevelSetting | null;
+  credentialTenant: CredentialTenant;
+}
+
+export type SessionModelContextResolver = (
+  c: Context,
+  address: SessionAddress,
+  includeDefaultModel?: boolean,
+) => Promise<SessionModelContext | { response: Response } | undefined>;
+
 /** Dependencies injected into {@link ConfigRoutes}. */
 export interface ConfigRoutesDeps extends RouteDependencies {
   controller: ModelCatalog;
@@ -942,7 +1176,6 @@ export interface ConfigRoutesDeps extends RouteDependencies {
   modelDefaults?: ModelDefaultsStorage;
   /** Source-control sessions available to config route integrations. */
   sourceControlSessions?: Pick<SourceControlStorageHandle['sessions'], 'getBySessionId'>;
-  sourceControls?: Array<Pick<SourceControlStorageHandle, 'sessions'>>;
   /** Thread membership used to resolve the same model policy as an invocation. */
   workItems?: WorkItemsStorage;
   /** Tenant memory-settings domain handle; absent in local (no-DB) mode. */
@@ -970,8 +1203,12 @@ export interface ConfigRoutesDeps extends RouteDependencies {
  *   - `PUT    /web/config/providers/:provider/key` — set/update a provider's API key
  *   - `DELETE /web/config/providers/:provider/key` — remove a stored API key
  *   - `GET    /web/config/models`                  — list available models (credentialed providers)
+ *   - `GET    /web/config/default-model`           — read the caller's default model and model packs
+ *   - `PUT    /web/config/model-packs`             — replace the caller's model packs
+ *   - `PUT    /web/config/session-model`           — run a live session on a pack or an exact model
  *   - `GET    /web/config/custom-providers`        — list custom OpenAI-compatible providers
  *   - `POST   /web/config/custom-providers`        — create/update a custom provider
+ *   - `POST   /web/config/custom-providers/check`  - test a draft or a saved custom provider
  *   - `DELETE /web/config/custom-providers/:id`    — remove a custom provider
  *   - `GET    /web/config/om`                      — read OM models/thresholds/observe-attachments
  *   - `PUT    /web/config/om/:role/model`          — switch observer/reflector model
@@ -1019,11 +1256,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       return { owner: ctx.lists.org, scope: 'org' as const };
     };
 
-    const resolveSessionModelContext = async (
-      c: Context,
-      address: { resourceId: string; threadId: string; sessionId: string },
-      includeDefaultModel = true,
-    ) => {
+    const resolveSessionModelContext: SessionModelContextResolver = async (c, address, includeDefaultModel = true) => {
+      await auth.ensureUser(c);
       const tenant = auth.tenant(c);
       if (!tenant && auth.enabled()) return { response: c.json({ error: 'unauthorized' }, 401) };
       if (!tenant) return undefined;
@@ -1163,6 +1397,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
     };
 
     return [
+      ...modelPackRoutes(options, resolveSessionModelContext),
       registerApiRoute('/web/config/features', {
         method: 'GET',
         requiresAuth: false,
@@ -1398,16 +1633,18 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             return c.json({ error: 'Invalid JSON body' }, 400);
           }
           const parsed = parseCustomProviderBody(body);
-          if ('error' in parsed) return c.json({ error: parsed.error }, 400);
+          if ('error' in parsed) return c.json(parsed, 400);
           const urlProblem = customEndpointUrlProblem(parsed.url);
           if (urlProblem) return c.json({ error: 'custom_endpoint_url_refused', message: urlProblem }, 400);
           const target = await resolveCustomProviderWrite(loose(c), ctx, parsed.scope);
           if ('response' in target) return target.response;
-          const input = {
+          const input: CustomProviderInput = {
             providerId: getCustomProviderId(parsed.name),
             name: parsed.name,
             url: parsed.url,
             apiKey: parsed.apiKey,
+            authScheme: parsed.authScheme,
+            headers: parsed.headers,
             models: parsed.models,
           };
           try {
@@ -1423,12 +1660,51 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 409,
               );
             }
+            let checked: CustomProviderRecord | undefined;
+            if (parsed.check) {
+              // Refuse a name already in use before the test calls the endpoint.
+              // The unique index still settles a create or rename racing this one.
+              if (
+                input.providerId !== parsed.previousId &&
+                (await ctx.storage.get({ owner: target.owner, providerId: input.providerId }))
+              ) {
+                const { status, body: refusal } = customProviderRefusal({ refused: 'name_taken' });
+                return c.json(refusal, status);
+              }
+              const saved = parsed.previousId
+                ? await ctx.storage.get({ owner: target.owner, providerId: parsed.previousId })
+                : null;
+              if (parsed.previousId && !saved) {
+                const { status, body: refusal } = customProviderRefusal({ refused: 'not_found' });
+                return c.json(refusal, status);
+              }
+              // The test sends what the write would store, saved secrets included,
+              // and the origin rules refuse a draft before anything is sent.
+              const resolved = customProviderConnection(saved, input);
+              if ('refused' in resolved) {
+                const { status, body: refusal } = customProviderRefusal(resolved);
+                return c.json(refusal, status);
+              }
+              const result = await listCustomProviderModels(resolved.connection, customProviderCheckOptions());
+              if (!result.ok) {
+                return c.json(
+                  {
+                    error: 'custom_endpoint_check_failed',
+                    message: 'The connection test failed, so the provider was not saved.',
+                    failure: result.failure,
+                  } satisfies CustomProviderCheckFailedResponse,
+                  422,
+                );
+              }
+              input.lastCheck = { at: new Date().toISOString(), ok: true };
+              checked = saved ?? undefined;
+            }
             const write = parsed.previousId
-              ? await ctx.storage.update({ owner: target.owner, providerId: parsed.previousId, input })
+              ? await ctx.storage.update({ owner: target.owner, providerId: parsed.previousId, input, checked })
               : await ctx.storage.create({ owner: target.owner, createdBy: ctx.userId, input });
             if ('refused' in write) {
-              const { status, error, message } = CUSTOM_PROVIDER_REFUSALS[write.refused];
-              return c.json({ error, message }, status);
+              const { status, body: refusal } = customProviderRefusal(write);
+              return c.json(refusal, status);
             }
             customProvidersChanged(target.owner.orgId);
             return c.json({ ok: true, provider: toCustomProviderInfo({ record: write.saved, scope: target.scope }) });
@@ -1464,6 +1740,90 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         },
       }),
 
+      // Calls an endpoint the way a session would, without running one. Checks
+      // follow the write permission of the list they address, because a check
+      // sends that list's saved key and headers.
+      registerApiRoute('/web/config/custom-providers/check', {
+        method: 'POST',
+        requiresAuth: false,
+        handler: async c => {
+          const ctx = await resolveCustomProvidersContext({
+            c: loose(c),
+            auth,
+            customProviders: options.customProviders,
+          });
+          if ('response' in ctx) return ctx.response;
+          let body: unknown;
+          try {
+            body = await c.req.json();
+          } catch {
+            return c.json({ error: 'Invalid JSON body' }, 400);
+          }
+          const parsed = parseCustomProviderCheckBody(body);
+          if ('error' in parsed) return c.json(parsed, 400);
+          const target = await resolveCustomProviderWrite(loose(c), ctx, parsed.scope);
+          if ('response' in target) return target.response;
+          try {
+            const saved = parsed.previousId
+              ? await ctx.storage.get({ owner: target.owner, providerId: parsed.previousId })
+              : null;
+            if (parsed.previousId && !saved) {
+              const { status, body: refusal } = customProviderRefusal({ refused: 'not_found' });
+              return c.json(refusal, status);
+            }
+            // Without a draft the saved row is checked as stored: its own URL
+            // keeps every saved setting. Such a request always names a row,
+            // and a missing one was answered with a 404 above.
+            const draft = parsed.kind === 'draft' ? parsed.draft : { url: saved!.url };
+            // A row saved before this rule may still hold such a URL. It stays as
+            // saved, but is never called.
+            if (hasQueryOrFragment(draft.url)) return c.json({ error: QUERY_OR_FRAGMENT_REFUSED }, 400);
+            const urlProblem = customEndpointUrlProblem(draft.url);
+            if (urlProblem) return c.json({ error: 'custom_endpoint_url_refused', message: urlProblem }, 400);
+            const resolved = customProviderConnection(saved, draft);
+            if ('refused' in resolved) {
+              const { status, body: refusal } = customProviderRefusal(resolved);
+              return c.json(refusal, status);
+            }
+            const checkOptions = customProviderCheckOptions();
+            const [models, reply] = await Promise.all([
+              listCustomProviderModels(resolved.connection, checkOptions),
+              parsed.model
+                ? testCustomProviderModel(
+                    {
+                      providerId: saved?.providerId ?? 'custom-endpoint',
+                      connection: resolved.connection,
+                      modelId: parsed.model,
+                    },
+                    checkOptions,
+                  )
+                : undefined,
+            ]);
+            let provider: CustomProviderInfo | undefined;
+            if (parsed.kind === 'saved' && saved) {
+              const recorded = await ctx.storage.recordCheck({
+                owner: target.owner,
+                providerId: saved.providerId,
+                checked: saved,
+                lastCheck: {
+                  at: new Date().toISOString(),
+                  ok: models.ok,
+                  ...(models.ok ? {} : { message: models.failure.message }),
+                },
+              });
+              if (recorded) provider = toCustomProviderInfo({ record: recorded, scope: target.scope });
+            }
+            return c.json({
+              ok: true,
+              check: { models, ...(reply ? { reply } : {}) },
+              ...(provider ? { provider } : {}),
+            } satisfies CustomProviderCheckResponse);
+          } catch (error) {
+            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+          }
+        },
+      }),
+
       // Session-independent model catalog for settings pickers (Factory default
       // model, pack editors). Only models whose provider has a credential are
       // returned — the same filter the session-scoped hook applies client-side.
@@ -1481,13 +1841,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             const factoryProjectId = c.req.query('factoryId') || undefined;
             const tenant = auth.tenant(c);
             let tenantCredentials = allTenantCredentials;
-            let sessionPolicy:
-              | {
-                  modelScope: 'factory' | 'user';
-                  defaultModelId: string | null;
-                  personalThinkingLevel: ThinkingLevelSetting | null;
-                }
-              | undefined;
+            let sessionPolicy: Omit<SessionModelPolicy, 'models'> | SessionModelPackSelection | undefined;
             let credentialTenant: CredentialTenant | undefined;
             let sessionTenant: CredentialTenant | undefined;
             const resourceId = c.req.query('resourceId');
@@ -1496,21 +1850,22 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             if (resourceId !== undefined || threadId !== undefined || sessionId !== undefined) {
               // A caller that names no session addresses it by the resource, which is
               // the session id for sessions that run under their own resource.
-              const address = z
-                .object({
-                  resourceId: z.string().trim().min(1),
-                  threadId: z.string().trim().min(1),
-                  sessionId: z.string().trim().min(1).optional(),
-                })
-                .transform(data => ({ ...data, sessionId: data.sessionId ?? data.resourceId }))
-                .safeParse({ resourceId, threadId, sessionId });
+              const address = sessionAddressSchema.safeParse({ resourceId, threadId, sessionId });
               if (!address.success) return c.json({ error: 'invalid_session_context' }, 400);
               const context = await resolveSessionModelContext(c, address.data);
               if (context && 'response' in context) return context.response;
+              const modelPackSet = await resolveSessionModelPackSet(options, c, address.data);
+              const packSelection: SessionModelPackSelection = {
+                modelPacks: modelPackSet.modelPacks,
+                defaultModelPackId: modelPackSet.defaultModelPackId,
+                modelSelection: await readSessionModelSelection(controller, address.data, modelPackSet),
+              };
+              sessionPolicy = packSelection;
               if (context) {
                 tenantCredentials = context.tenantCredentials;
                 sessionTenant = context.credentialTenant;
                 sessionPolicy = {
+                  ...packSelection,
                   modelScope: context.modelScope,
                   defaultModelId: context.defaultModelId,
                   personalThinkingLevel: context.personalThinkingLevel,
@@ -1569,186 +1924,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               })) ?? modeModelId;
             const fallbackModelId = models.find(model => model.id === candidate)?.id ?? null;
             return c.json({ fallbackModelId, models });
-          } catch (error) {
-            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-          }
-        },
-      }),
-
-      registerApiRoute('/web/config/default-model', {
-        method: 'GET',
-        requiresAuth: false,
-        handler: async c => {
-          const context = await resolveModelDefaultsContext({
-            c: loose(c),
-            auth,
-            modelDefaults: options.modelDefaults,
-          });
-          if ('response' in context) return context.response;
-          try {
-            const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
-            return c.json({ modelId: record?.modelId ?? null, thinkingLevel: record?.thinkingLevel ?? null });
-          } catch (error) {
-            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-          }
-        },
-      }),
-
-      registerApiRoute('/web/config/default-model/apply', {
-        method: 'POST',
-        requiresAuth: false,
-        handler: async c => {
-          const context = await resolveModelDefaultsContext({
-            c: loose(c),
-            auth,
-            modelDefaults: options.modelDefaults,
-          });
-          if ('response' in context) return context.response;
-          if (
-            !options.factoryProjects ||
-            !options.sourceControls ||
-            !options.workItems ||
-            !options.controller.getSession
-          ) {
-            return c.json({ error: 'model_apply_unavailable' }, 503);
-          }
-          const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
-          if (!record?.modelId) return c.json({ error: 'default_model_not_set' }, 400);
-
-          const applied: string[] = [];
-          const skipped: Array<{
-            sessionId: string;
-            reason: 'not-running' | 'thread-missing' | 'factory-scope' | 'apply-failed';
-          }> = [];
-          const seen = new Set<string>();
-          try {
-            await options.factoryProjects.ensureReady();
-            const projects = await options.factoryProjects.list({ orgId: context.orgId });
-            for (const project of projects) {
-              // Factory-scoped sessions bill the org and use the Factory's model, never a personal default.
-              const personal = effectiveModelScope(project.modelScope, 'session') === 'user';
-              const workerSessions = new Set(
-                (await options.workItems.listRunBindings(context.orgId, project.id)).map(binding => binding.sessionId),
-              );
-              for (const sourceControl of options.sourceControls) {
-                const sessions = await sourceControl.sessions.listByProject({
-                  orgId: context.orgId,
-                  factoryProjectId: project.id,
-                  viewerUserId: context.userId,
-                });
-                for (const row of sessions) {
-                  if (
-                    row.userId !== context.userId ||
-                    row.originSessionId ||
-                    workerSessions.has(row.sessionId) ||
-                    seen.has(row.sessionId)
-                  )
-                    continue;
-                  seen.add(row.sessionId);
-                  if (!personal) {
-                    skipped.push({ sessionId: row.sessionId, reason: 'factory-scope' });
-                    continue;
-                  }
-                  const session = await options.controller.getSession(row.sessionId);
-                  if (!session?.thread || !session.model.switch) {
-                    skipped.push({ sessionId: row.sessionId, reason: 'not-running' });
-                    continue;
-                  }
-                  if (!session.thread.getId()) {
-                    skipped.push({ sessionId: row.sessionId, reason: 'thread-missing' });
-                    continue;
-                  }
-                  try {
-                    await session.model.switch(record.modelId);
-                    applied.push(row.sessionId);
-                  } catch (error) {
-                    console.warn('[factory] apply user default model failed for session', row.sessionId, error);
-                    skipped.push({ sessionId: row.sessionId, reason: 'apply-failed' });
-                  }
-                }
-              }
-            }
-          } catch (error) {
-            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-          }
-          return c.json({ modelId: record.modelId, applied, skipped });
-        },
-      }),
-
-      registerApiRoute('/web/config/default-model', {
-        method: 'PUT',
-        requiresAuth: false,
-        handler: async c => {
-          const context = await resolveModelDefaultsContext({
-            c: loose(c),
-            auth,
-            modelDefaults: options.modelDefaults,
-          });
-          if ('response' in context) return context.response;
-          let body: unknown;
-          try {
-            body = await c.req.json();
-          } catch {
-            return c.json({ error: 'Invalid JSON body' }, 400);
-          }
-          const parsed = z.object({ modelId: z.string().trim().min(1).max(256) }).safeParse(body);
-          if (!parsed.success) return c.json({ error: 'Missing required field: modelId' }, 400);
-          const { modelId } = parsed.data;
-          try {
-            await context.storage.set({ orgId: context.orgId, userId: context.userId, modelId });
-            return c.json({ ok: true, modelId });
-          } catch (error) {
-            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-          }
-        },
-      }),
-
-      registerApiRoute('/web/config/default-model/thinking', {
-        method: 'PUT',
-        requiresAuth: false,
-        handler: async c => {
-          const context = await resolveModelDefaultsContext({
-            c: loose(c),
-            auth,
-            modelDefaults: options.modelDefaults,
-          });
-          if ('response' in context) return context.response;
-          let body: unknown;
-          try {
-            body = await c.req.json();
-          } catch {
-            return c.json({ error: 'Invalid JSON body' }, 400);
-          }
-          const parsed = z.object({ thinkingLevel: z.enum(THINKING_LEVELS).nullable() }).safeParse(body);
-          if (!parsed.success) return c.json({ error: 'Invalid thinkingLevel' }, 400);
-          const { thinkingLevel } = parsed.data;
-          try {
-            const record = await context.storage.setThinkingLevel({
-              orgId: context.orgId,
-              userId: context.userId,
-              thinkingLevel,
-            });
-            if (!record) return c.json({ error: 'default_model_not_set' }, 400);
-            return c.json({ ok: true, thinkingLevel });
-          } catch (error) {
-            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-          }
-        },
-      }),
-
-      registerApiRoute('/web/config/default-model', {
-        method: 'DELETE',
-        requiresAuth: false,
-        handler: async c => {
-          const context = await resolveModelDefaultsContext({
-            c: loose(c),
-            auth,
-            modelDefaults: options.modelDefaults,
-          });
-          if ('response' in context) return context.response;
-          try {
-            await context.storage.clear({ orgId: context.orgId, userId: context.userId });
-            return c.json({ ok: true, modelId: null });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }

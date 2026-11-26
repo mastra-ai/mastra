@@ -1,91 +1,20 @@
-import { MessageList } from '@mastra/core/agent';
-import type { ProcessInputStepArgs } from '@mastra/core/processors';
-import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { FactoryChannelReplyProcessor, sessionLink } from './channel-reply-processor.js';
+import { factoryReplyInstructions, sessionLink } from './channel-reply-processor.js';
 
-function args(
-  requestContext: RequestContext,
-  messageList = new MessageList({}),
-  tools: Record<string, unknown> = {},
-): ProcessInputStepArgs {
-  return { messageList, requestContext, tools } as unknown as ProcessInputStepArgs;
-}
-
-function channelContext() {
-  const requestContext = new RequestContext();
-  requestContext.set('channel', { platform: 'slack', isDM: true });
-  return requestContext;
-}
-
-function instruction(requestContext: RequestContext, tools: Record<string, unknown> = {}): string {
-  const messageList = new MessageList({});
-  new FactoryChannelReplyProcessor().processInputStep(args(requestContext, messageList, tools));
-  const added = messageList.getSystemMessages('factory-channel-reply');
-  expect(added).toHaveLength(1);
-  return String(added[0]!.content);
-}
-
-describe('FactoryChannelReplyProcessor', () => {
-  it('stays out of runs that did not come in over a channel', () => {
-    const result = new FactoryChannelReplyProcessor().processInputStep(args(new RequestContext()));
-    expect(result).toBeUndefined();
+describe('factoryReplyInstructions', () => {
+  it('tells a run with the reply tool that pull request links are posted for it', () => {
+    expect(factoryReplyInstructions({ canReply: true }).join('\n')).toContain("so don't post the link yourself");
+    expect(factoryReplyInstructions({ canReply: false }).join('\n')).not.toContain("so don't post the link yourself");
   });
 
-  it('tells a channel run to open with a line naming the task, and leaves the session link to the link processor', () => {
-    const text = instruction(channelContext());
-    expect(text).toMatch(/reply first with one short line that says what you are about to do/);
-    expect(text).not.toContain('↗');
-    expect(text).not.toMatch(/session link|Open session/i);
-  });
-
-  it('points a run with the reply tool at the tool, and says staying quiet means not calling it', () => {
-    const text = instruction(channelContext(), { reply_in_thread: {} });
-    expect(text).toContain('Only messages you send with `reply_in_thread` reach this thread');
-    expect(text).toContain("When a message that doesn't mention you needs nothing from you, don't call it.");
-    expect(text).not.toMatch(/reply first with one short line/);
-  });
-
-  it('tells a Slack-linked run that did not start from Slack to post only the outcome there', () => {
-    // A web prompt or woken run: no `channel`, but the session's thread mounted the reply tool.
-    const text = instruction(new RequestContext(), { reply_in_thread: {} });
-    expect(text).toContain('Post to that thread with `reply_in_thread`.');
-    expect(text).toContain("don't post an opener or progress there");
-    expect(text).not.toContain('Only messages you send with');
-  });
-
-  it('tells every run with the reply tool that pull request links are posted for it', () => {
-    // A merge wakes the session without `channel`, so the woken run needs this too.
-    for (const requestContext of [new RequestContext(), channelContext()]) {
-      expect(instruction(requestContext, { reply_in_thread: {} })).toContain("so don't post the link yourself");
-    }
-  });
-
-  it('tells every channel run to link the references it mentions', () => {
-    const runs = [
-      instruction(channelContext()),
-      instruction(channelContext(), { reply_in_thread: {} }),
-      instruction(new RequestContext(), { reply_in_thread: {} }),
-    ];
-    for (const text of runs) {
-      expect(text).toContain('as a markdown link to its page');
-      expect(text).toContain('[#28467](https://github.com/<owner>/<repo>/pull/28467)');
-      expect(text).toContain("Don't guess a URL");
+  it('tells every channel run how to link GitHub, Linear and Factory references', () => {
+    for (const canReply of [true, false]) {
+      const text = factoryReplyInstructions({ canReply }).join('\n');
       expect(text).toContain('the repositories listed in your environment');
       expect(text).toContain('workspace URL pattern in the `linear_get_issue` tool description');
+      expect(text).toContain('the `url` the Factory tools return');
     }
-  });
-
-  it('adds the instruction once across steps', () => {
-    const requestContext = channelContext();
-    const messageList = new MessageList({});
-    const processor = new FactoryChannelReplyProcessor();
-
-    processor.processInputStep(args(requestContext, messageList));
-    processor.processInputStep(args(requestContext, messageList));
-
-    expect(messageList.getSystemMessages('factory-channel-reply')).toHaveLength(1);
   });
 });
 

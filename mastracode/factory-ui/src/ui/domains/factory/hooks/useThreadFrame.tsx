@@ -100,6 +100,7 @@ export function useThreadFrame(): SessionFrameSlots {
           <SessionContextMenu factoryId={factoryId} sessions={switchable.sessions} openSessionId={sessionId} />
           {switchable.workingSession ? (
             <Button
+              iconEnd={<IconArrowRight />}
               variant="ghost"
               size="sm"
               className="shrink-0"
@@ -107,7 +108,6 @@ export function useThreadFrame(): SessionFrameSlots {
               render={<Link to={threadPath(factoryId, switchable.workingSession.ref)} />}
             >
               {switchable.workingSession.label}
-              <IconArrowRight aria-hidden />
             </Button>
           ) : null}
         </>

@@ -114,18 +114,17 @@ export const opsAgent = new Agent({
 
 ## Choose tools and require approval
 
-Give an agent only the tools it needs. Use `providers` to select providers, `allowTools` to allow specific tool keys, and `requireApproval` to pause before selected tools run:
+Give an agent only the tools it needs. List the providers to load in `providers`, use `allowTools` to allow specific tool keys, and `requireApproval` to pause before selected tools run:
 
 ```typescript
 tools({
-  providers: {
-    linear: {
-      allowTools: ['linear_list_issues', 'linear_create_issue'],
-      requireApproval: ['linear_create_issue'],
-    },
-  },
+  providers: ['linear'],
+  allowTools: ['linear_list_issues', 'linear_create_issue'],
+  requireApproval: ['linear_create_issue'],
 })
 ```
+
+Providers you don't list aren't loaded. To set options for one provider while still loading the others, pass `providers` as an object instead. The [`tools()` reference](/reference/connect/tools#parameters) explains the difference.
 
 Tools run without approval by default. Pass `requireApproval: true` to require approval for every tool from a provider. Approval works for toolsets and MCP providers. Follow the [human-in-the-loop guide](/docs/agents/human-in-the-loop) to handle approval requests.
 
@@ -191,8 +190,9 @@ Each integration page shows the provider ID, what the provider offers, and its s
   ...getIntegrationItems('Databases', ['databases/neon']),
   ...getIntegrationItems('Deploy', ['deploy/render']),
   ...getIntegrationItems('File storage', ['file-storage/google-drive']),
-  ...getIntegrationItems('Observability', ['observability/posthog']),
-  ...getIntegrationItems('Voice', ['voice/openai']),
+  ...getIntegrationItems('Observability', ['observability/posthog', 'observability/sentry']),
+  ...getIntegrationItems('Tools', ['tools/anthropic', 'tools/exa', 'tools/gitlab']),
+  ...getIntegrationItems('Voice', ['voice/elevenlabs', 'voice/openai']),
 ]}
 />
 

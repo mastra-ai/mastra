@@ -13,15 +13,15 @@ Channels connect agents to messaging platforms. Configure them via the `channels
 
 ## Usage example
 
-```typescript title="src/mastra/agents/support-agent.ts"
+```typescript title="src/mastra/agents/channels-agent.ts"
 import { Agent } from '@mastra/core/agent'
 import { createSlackAdapter } from '@chat-adapter/slack'
 import { createDiscordAdapter } from '@chat-adapter/discord'
 
-export const supportAgent = new Agent({
-  id: 'support-agent',
-  name: 'Support Agent',
-  instructions: 'You are a helpful support assistant.',
+const agent = new Agent({
+  id: 'channels-agent',
+  name: 'Channels Agent',
+  instructions: 'You are a helpful assistant.',
   model: '__GATEWAY_OPENAI_MODEL__',
   channels: {
     adapters: {
@@ -80,7 +80,7 @@ The `channels` property accepts a `ChannelConfig` object with the following fiel
     isOptional: true,
     defaultValue: 'true',
     description:
-      'Whether `getTools()` returns the channel-specific tools (`add_reaction`, `remove_reaction`). Set to `false` for models that do not support function calling. Channel tools are never added to the agent automatically — pass them explicitly via `tools: { ...channels.getTools() }`. They work on any run in a channel-backed thread, including runs that did not start from a chat message, such as a schedule or a Studio prompt.',
+      'Whether `getTools()` returns the channel-specific tools (`add_reaction`, `remove_reaction`). Set to `false` for models that do not support function calling. Channel tools are never added to the agent automatically — pass them explicitly via `tools: { ...channels.getTools() }`. For tools that read and post messages, see [Channel tools](#channel-tools). They work on any run in a channel-backed thread, including runs that did not start from a chat message, such as a schedule or a Studio prompt.',
   },
   {
     name: 'state',
@@ -438,7 +438,7 @@ const agent = new Agent({
 `generativeUI` is experimental and may change in a minor release.
 :::
 
-Set `generativeUI: true` on the Slack adapter to let the agent post structured cards (status summaries, key/value fields, tables, charts, images, and link buttons) instead of long markdown replies. Install the optional peer first:
+Set `generativeUI: true` on Slack to let the agent post structured cards (status summaries, key/value fields, tables, charts, images, and link buttons) instead of long markdown replies. Install the optional peer first:
 
 ```bash npm2yarn
 npm install @json-render/chat
@@ -449,23 +449,45 @@ npm install @json-render/chat
 `@mastra/core` loads `@json-render/chat` at runtime, so `mastra build` and `mastra deploy` don't pick it up on their own. Add it to [`bundler.dynamicPackages`](/reference/core/mastra-class) so it's included in the build output:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import { supportAgent } from './agents/support-agent'
-
 export const mastra = new Mastra({
-  agents: { supportAgent },
+  // ...
   bundler: { dynamicPackages: ['@json-render/chat'] },
 })
 ```
 
-```typescript title="src/mastra/agents/support-agent.ts"
+Runs on Slack then get a `render_card` tool. The tool call itself isn't rendered as a tool card.
+
+### Enable with Mastra Connect
+
+When Slack chat runs through [Mastra Connect](/integrations/channels/slack#agent-chat), set `generativeUI` in the Slack provider options. `channels()` forwards `providerOptions` to [`SlackProvider`](/reference/channels/slack-provider):
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { channels } from '@mastra/connect'
+
+export const mastra = new Mastra({
+  // ...
+  channels: await channels({
+    providers: { slack: { providerOptions: { generativeUI: true } } },
+  }),
+  bundler: { dynamicPackages: ['@json-render/chat'] },
+})
+```
+
+The agent doesn't need `channels.adapters`. Connect the Slack channel to the agent in Studio.
+
+### Enable with `createSlackAdapter()`
+
+When you manage your own Slack app with the [self-managed setup](/integrations/channels/slack#self-managed-setup), set `generativeUI` on the agent's Slack adapter instead:
+
+```typescript title="src/mastra/agents/generative-ui.ts"
 import { Agent } from '@mastra/core/agent'
 import { createSlackAdapter } from '@chat-adapter/slack'
 
-export const supportAgent = new Agent({
-  id: 'support-agent',
-  name: 'Support Agent',
-  instructions: 'You are a helpful support assistant.',
+const agent = new Agent({
+  id: 'generative-ui-agent',
+  name: 'Generative UI Agent',
+  instructions: '...',
   model: '__GATEWAY_OPENAI_MODEL__',
   channels: {
     adapters: {
@@ -475,21 +497,54 @@ export const supportAgent = new Agent({
 })
 ```
 
-Runs on that adapter get a `render_card` tool whose description lists the available components. The agent passes a flat spec of `{ root, elements }`, where the root element is a `Card`:
+### Card spec
 
-```json
-{
-  "root": "card",
-  "elements": {
-    "card": { "type": "Card", "props": { "title": "Deploy status" }, "children": ["fields"] },
-    "fields": { "type": "Fields", "children": ["env", "version"] },
-    "env": { "type": "Field", "props": { "label": "Environment", "value": "beta" } },
-    "version": { "type": "Field", "props": { "label": "Version", "value": "1.8.1" } }
-  }
-}
+The agent passes `render_card` a [json-render](https://json-render.dev/docs) spec. See the json-render docs for the spec format and components. Image URLs, including a `Card` `imageUrl`, must be public HTTPS images that Slack can fetch.
+
+The tool returns `{ ok: true, messageId }` once the card is posted. When the spec is invalid or exceeds the [Slack limits](#slack-card-limits), it returns `{ ok: false, issues }` without posting, so the agent can fix the spec and call it again. When Slack rejects the post, it returns `{ ok: false, error }`.
+
+### Agent instructions
+
+A generic prompt usually produces only a basic table or chart. Name the components the agent should use and when to use them. When `render_card` returns issues, agents also tend to simplify the card by dropping images or fields instead of fixing the spec, so tell the agent to keep every component:
+
+```typescript title="src/mastra/agents/generative-ui.ts"
+import { Agent } from '@mastra/core/agent'
+
+const agent = new Agent({
+  id: 'generative-ui-agent',
+  name: 'Generative UI Agent',
+  instructions: `You are a support assistant for an internal deploy service.
+
+Use render_card for status updates and reports. Start each card with a Card that has a title.
+- Use Fields and Field for key facts such as environment, version, and owner.
+- Use a Table for lists of items and a Chart for trends over time.
+- Use an Image only when you have a public HTTPS image URL.
+- Put links to dashboards or logs in LinkButton elements inside Actions.
+
+If render_card returns issues, fix the spec and call it again. Keep every component you planned, including images and fields. Don't remove content to make the card pass.`,
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
 ```
 
-The tool returns `{ ok: true, messageId }` once the card is posted. When the spec is invalid or exceeds the platform's limits (on Slack, one table and 100 rows per card), it returns `{ ok: false, issues }` without posting, so the agent can fix the spec and call it again. The tool call itself isn't rendered as a tool card. Interactive buttons aren't available yet. Cards can link out with `LinkButton`.
+### How cards look in Slack
+
+`@chat-adapter/slack` renders a `Card` as a header block and a context block, followed by the blocks for its children. It doesn't use Slack's [card block](https://docs.slack.dev/reference/block-kit/blocks/card-block), so the card has no visible container or border around it.
+
+### Slack card limits
+
+`render_card` checks these limits before posting. The Slack adapter would otherwise turn an oversized chart or table into plain text.
+
+| Element | Limit per card |
+| - | - |
+| Table | 1 table, up to 100 rows, 20 columns, and 10,000 characters of cell text |
+| Fields | 10 `Field` elements per `Fields` group |
+| Chart | 2 charts, each with up to 20 points and 12 series. Titles and axis labels up to 50 characters. Category and series names up to 20 characters and unique |
+
+### Not supported yet
+
+- Interactive `Button` elements. Cards can only link out with `LinkButton`.
+- Streaming cards. A card is posted once, after the agent calls `render_card`.
+- Adapters other than Slack. `generativeUI` is ignored on them.
 
 ## Custom typing status
 
@@ -497,8 +552,10 @@ Pass a function to `typingStatus` to customize the status copy. The function is
 called once per stream chunk; return a string to set the status, or `false` /
 `null` / `undefined` to leave the current status unchanged. Return values are
 de-duplicated so the platform only sees a call when the status changes. When
-the run ends, any status it set is cleared automatically so runs that finish
-without posting a message don't leave a stale status on the thread.
+the run ends, the status is cleared automatically so runs that finish without
+posting a message don't leave a stale status on the thread. This also clears a
+status a channel handler set before the run started, even when your function
+returned nothing for every chunk of the run.
 
 `defaultTypingStatus` is exported from `@mastra/core/channels` so you can
 fall back to the built-in defaults for chunks you don't handle.
@@ -526,6 +583,23 @@ const agent = new Agent({
       },
     },
   },
+})
+```
+
+With [Mastra Connect](/integrations/channels/slack#agent-chat), pass the function in the Slack provider options:
+
+```typescript title="src/mastra/index.ts"
+import type { TypingStatusFn } from '@mastra/core/channels'
+
+const typingStatus: TypingStatusFn = (chunk, ctx) => {
+  // ...
+}
+
+export const mastra = new Mastra({
+  // ...
+  channels: await channels({
+    providers: { slack: { providerOptions: { typingStatus } } },
+  }),
 })
 ```
 
@@ -559,6 +633,23 @@ const agent = new Agent({
       onDirectMessage: false,
     },
   },
+})
+```
+
+With [Mastra Connect](/integrations/channels/slack#agent-chat), pass `handlers` in the Slack provider options instead. They apply to every agent connected to Slack:
+
+```typescript title="src/mastra/index.ts"
+import type { ChannelHandlers } from '@mastra/core/channels'
+
+const handlers: ChannelHandlers = {
+  // ...
+}
+
+export const mastra = new Mastra({
+  // ...
+  channels: await channels({
+    providers: { slack: { providerOptions: { handlers } } },
+  }),
 })
 ```
 
@@ -820,7 +911,7 @@ type InlineLinkEntry =
 
 Adapts a Mastra logger to the Chat SDK `Logger` interface. Pass the result to an adapter's `logger` option so its logs go to the same logger as the rest of your app. See [Logging](/docs/channels#logging) for when to use it.
 
-```typescript title="src/mastra/agents/support-agent.ts"
+```typescript title="src/mastra/agents/chat-logger.ts"
 import { toChatLogger } from '@mastra/core/channels'
 import { createDiscordAdapter } from '@chat-adapter/discord'
 import { PinoLogger } from '@mastra/loggers'
@@ -883,6 +974,73 @@ Extra log arguments become fields on the record:
 | Anything else | `args`, `component` |
 
 An `Error` passed directly or under an object's `error` key is normalized so it keeps its message and stack when serialized.
+
+## Channel tools
+
+`createChannelTools()` from `@mastra/core/channels` returns tools that read and post in the agent's chat platforms through the Chat SDK: `fetchMessages`, `fetchChannelMessages`, `fetchThread`, `listThreads`, `getThreadParticipants`, `getChannelInfo`, `postMessage` and `postChannelMessage`, plus `sendDirectMessage` when `directMessages` is `'anyone'`. Nothing is added to the agent for you. Spread the tools into `tools`:
+
+```typescript title="src/mastra/agents/channel-tools.ts"
+import { Agent } from '@mastra/core/agent'
+import { createChannelTools } from '@mastra/core/channels'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+const agent = new Agent({
+  id: 'channel-tools-agent',
+  name: 'Channel Tools Agent',
+  instructions: 'You are a helpful assistant.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: {
+    ...(await createChannelTools({ channels: 'selected', channelIds: ['slack:C0123ABC'] })),
+  },
+  channels: { adapters: { slack: createSlackAdapter() } },
+})
+```
+
+Each call works out the channel thread of the run that makes it, the same way `add_reaction` does, so the tools also work on schedules and Studio prompts in a channel-backed thread. A call outside a channel-backed run fails with an error. The tools post without asking for approval. The tools require zod 4.2 or newer.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'channels',
+    type: "'session' | 'selected' | 'all'",
+    isOptional: true,
+    defaultValue: "'session'",
+    description:
+      "Which channels the tools may read and post in: only the conversation's own channel, that channel plus `channelIds`, or any channel the bot is a member of.",
+  },
+  {
+    name: 'channelIds',
+    type: 'string[]',
+    isOptional: true,
+    defaultValue: '[]',
+    description:
+      "Full channel ids, such as `'slack:C0123ABC'`, the tools may use when `channels` is `'selected'`. `createChannelTools()` throws on ids without a platform prefix.",
+  },
+  {
+    name: 'access',
+    type: "'read' | 'post'",
+    isOptional: true,
+    defaultValue: "'post'",
+    description:
+      "With `'read'`, the tools read every allowed channel but post only in the conversation's own channel. `sendDirectMessage` is refused.",
+  },
+  {
+    name: 'directMessages',
+    type: "'none' | 'anyone'",
+    isOptional: true,
+    defaultValue: "'none'",
+    description:
+      "With `'anyone'`, adds `sendDirectMessage`. Other people's direct messages with the bot, including group DMs, can never be read, whatever the other options grant.",
+  },
+  {
+    name: 'scope',
+    type: 'ChannelToolScope',
+    isOptional: true,
+    description:
+      'A fixed conversation for every call, built with `createChannelToolScope()`. Its settings replace the options above. Use it when you build tools for one conversation yourself instead of resolving the run.',
+  },
+]}
+/>
 
 ## Related
 

@@ -62,6 +62,7 @@ export interface AskUserOptionItemProps {
   value: string;
   children: ReactNode;
   description?: string;
+  recommended?: boolean;
   disabled?: boolean;
   className?: string;
 }
@@ -70,6 +71,7 @@ export function AskUserOptionItem({
   value,
   children,
   description,
+  recommended,
   disabled = false,
   className,
 }: AskUserOptionItemProps) {
@@ -84,6 +86,7 @@ export function AskUserOptionItem({
     <AskUserOptionRow
       label={children}
       description={description}
+      recommended={recommended}
       disabled={isDisabled}
       className={className}
       control={

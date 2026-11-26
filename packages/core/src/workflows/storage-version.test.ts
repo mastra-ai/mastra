@@ -8,6 +8,8 @@ import { createWorkflow } from './create';
 import { DefaultExecutionEngine } from './default';
 import { createWorkflow as createEventedWorkflow } from './evented';
 import { withoutNestedRunStartState } from './nested-state';
+import { loadStepResults } from './run-journal';
+import type { Step } from './step';
 import { createStep } from './workflow';
 import type { AnyWorkflow } from './workflow';
 
@@ -51,17 +53,6 @@ function eventedGateWorkflow(storageVersion?: 1 | 2) {
 }
 
 describe('storageVersion guards', () => {
-  it('rejects storageVersion: 2 together with pruneSnapshot at construction', () => {
-    expect(() =>
-      createWorkflow({
-        id: 'pruned',
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        options: { storageVersion: 2, pruneSnapshot: ({ snapshot }) => snapshot },
-      }),
-    ).toThrow(/storageVersion: 2 and pruneSnapshot/);
-  });
-
   it('rejects storageVersion: 2 at registration on an engine without storage v2 support', () => {
     const workflow = gateWorkflow(2);
     workflow.engineType = 'other';
@@ -152,6 +143,193 @@ describe('storageVersion guards', () => {
     } finally {
       await mastra.stopWorkers();
     }
+  });
+});
+
+describe('storage v2 pruneSnapshot', () => {
+  const BIG = 'x'.repeat(1000);
+  type Engine = 'default' | 'evented';
+
+  /** `big` → `between` → `last`, pruned to a summary of `big`'s output. */
+  function prunedWorkflow(engine: Engine, last: Step<string, any, any, any, any, any, any>) {
+    const create = engine === 'default' ? createWorkflow : createEventedWorkflow;
+    const prune = vi.fn(({ snapshot }) => ({
+      ...snapshot,
+      context: { ...snapshot.context, big: { ...snapshot.context.big, output: { text: 'pruned' } } },
+    }));
+    const step = (id: string) =>
+      createStep({ id, inputSchema: z.any(), outputSchema: z.any(), execute: async () => ({ text: BIG }) });
+    const workflow = create({
+      id: 'pruned',
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+      options: { storageVersion: 2, pruneSnapshot: prune },
+    })
+      .then(step('big'))
+      .then(step('between'))
+      .then(last)
+      .commit();
+    return { workflow, prune };
+  }
+
+  async function host(
+    engine: Engine,
+    workflow: AnyWorkflow,
+    run: (storage: InstanceType<typeof MockStore>) => Promise<void>,
+  ) {
+    const storage = new MockStore();
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      pubsub: new EventEmitterPubSub(),
+      workflows: { pruned: workflow },
+    });
+    if (engine === 'evented') await mastra.startWorkers();
+    try {
+      await run(storage);
+    } finally {
+      if (engine === 'evented') await mastra.stopWorkers();
+    }
+  }
+
+  async function storedBig(storage: InstanceType<typeof MockStore>, runId: string) {
+    const snapshot = await storage.stores.workflows!.loadWorkflowSnapshot({
+      workflowName: 'pruned',
+      runId,
+      storageVersion: 2,
+    });
+    return snapshot?.context.big;
+  }
+
+  it.each(['default', 'evented'] as const)(
+    'prunes a %s run once it finishes, from every step result, and returns the unpruned results',
+    async engine => {
+      const { workflow, prune } = prunedWorkflow(engine, gateStep());
+      await host(engine, workflow, async storage => {
+        const run = await workflow.createRun();
+        expect((await run.start({ inputData: {} })).status).toBe('suspended');
+        expect(prune).not.toHaveBeenCalled();
+        expect(await storedBig(storage, run.runId)).toMatchObject({ output: { text: BIG } });
+
+        const resumed = await (
+          await workflow.createRun({ runId: run.runId })
+        ).resume({ step: 'gate', resumeData: true });
+
+        expect(resumed.status).toBe('success');
+        expect(prune).toHaveBeenCalledTimes(1);
+        expect(prune.mock.calls[0]![0]).toMatchObject({
+          workflowStatus: 'success',
+          snapshot: { context: { big: { output: { text: BIG } }, between: { output: { text: BIG } } } },
+        });
+        // The gate step finished in this drive, so the hook sees its result too.
+        expect(prune.mock.calls[0]![0].snapshot.context.gate).toMatchObject({
+          status: 'success',
+          output: { approved: true },
+        });
+        expect(await storedBig(storage, run.runId)).toMatchObject({ status: 'success', output: { text: 'pruned' } });
+        const steps = await loadStepResults(resumed.steps);
+        expect(steps.big).toMatchObject({ status: 'success', output: { text: BIG } });
+        expect(steps.gate).toMatchObject({ status: 'success', output: { approved: true } });
+      });
+    },
+  );
+
+  it('keeps showing shouldPersistSnapshot evicted results as stubs when the run prunes', async () => {
+    // Technical: the last write hydrates evicted results so the prune hook sees them in full. The
+    // predicate's documented view (successful steps without `output`) must not change with it:
+    // a predicate that skips large snapshots would otherwise skip the terminal write, leaving a
+    // finished run stored as `running`, which a boot restart sweep would re-drive.
+    const views: { workflowStatus: string; big?: Record<string, unknown> }[] = [];
+    const prune = vi.fn(({ snapshot }) => ({
+      ...snapshot,
+      context: { ...snapshot.context, big: { ...snapshot.context.big, output: { text: 'pruned' } } },
+    }));
+    const step = (id: string) =>
+      createStep({ id, inputSchema: z.any(), outputSchema: z.any(), execute: async () => ({ text: BIG }) });
+    const workflow = createWorkflow({
+      id: 'pruned',
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+      options: {
+        storageVersion: 2,
+        pruneSnapshot: prune,
+        shouldPersistSnapshot: ({ stepResults, workflowStatus }) => {
+          // The live object is mutated later, so record a copy of what this call saw.
+          views.push({ workflowStatus, big: stepResults.big && { ...stepResults.big } });
+          return true;
+        },
+      },
+    })
+      .then(step('big'))
+      .then(step('between'))
+      .then(gateStep())
+      .commit();
+    await host('default', workflow, async storage => {
+      const run = await workflow.createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+      const resumed = await (await workflow.createRun({ runId: run.runId })).resume({ step: 'gate', resumeData: true });
+      expect(resumed.status).toBe('success');
+
+      const terminal = views.findLast(view => view.workflowStatus === 'success')!;
+      expect(terminal.big).toMatchObject({ status: 'success' });
+      expect(terminal.big).not.toHaveProperty('output');
+      // The hook and the store still see and keep the full, then pruned, results.
+      expect(prune.mock.calls[0]![0].snapshot.context.big).toMatchObject({ output: { text: BIG } });
+      expect(await storedBig(storage, run.runId)).toMatchObject({ status: 'success', output: { text: 'pruned' } });
+    });
+  });
+
+  it.each(['default', 'evented'] as const)('prunes a failed %s run', async engine => {
+    const fail = createStep({
+      id: 'fail',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async () => {
+        throw new Error('boom');
+      },
+    });
+    const { workflow, prune } = prunedWorkflow(engine, fail);
+    await host(engine, workflow, async storage => {
+      const run = await workflow.createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('failed');
+
+      expect(prune).toHaveBeenCalledTimes(1);
+      expect(prune.mock.calls[0]![0]).toMatchObject({
+        workflowStatus: 'failed',
+        snapshot: { context: { big: { output: { text: BIG } } } },
+      });
+      expect(await storedBig(storage, run.runId)).toMatchObject({ status: 'success', output: { text: 'pruned' } });
+    });
+  });
+
+  it.each(['default', 'evented'] as const)('prunes a canceled %s run from every step result', async engine => {
+    let started!: () => void;
+    const running = new Promise<void>(resolve => (started = resolve));
+    const slow = createStep({
+      id: 'slow',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async ({ abortSignal }) => {
+        started();
+        await new Promise(resolve => abortSignal.addEventListener('abort', resolve));
+        return {};
+      },
+    });
+    const { workflow, prune } = prunedWorkflow(engine, slow);
+    await host(engine, workflow, async storage => {
+      const run = await workflow.createRun();
+      const result = run.start({ inputData: {} });
+      await running;
+      await run.cancel();
+
+      expect((await result).status).toBe('canceled');
+      expect(prune).toHaveBeenCalledTimes(1);
+      expect(prune.mock.calls[0]![0]).toMatchObject({
+        workflowStatus: 'canceled',
+        snapshot: { context: { big: { output: { text: BIG } } } },
+      });
+      expect(await storedBig(storage, run.runId)).toMatchObject({ status: 'success', output: { text: 'pruned' } });
+    });
   });
 });
 
@@ -521,12 +699,10 @@ describe('storageVersion per run', () => {
     expect(started).toEqual(['a', 'a', 'b']);
   });
 
-  it.each([
-    { endsFirst: 'hung', storedLast: { n: 22 } },
-    { endsFirst: 'restarted', storedLast: { n: 12 } },
-  ] as const)(
-    'stores the writes of a hung execution and the restart that replaced it as they come ($endsFirst ends first), as v1 does',
-    async ({ endsFirst, storedLast }) => {
+  // The restart claims the run, so storage refuses the hung execution's saves whichever ends first.
+  it.each(['hung', 'restarted'] as const)(
+    "keeps the restart's result over a hung execution it replaced (%s ends first), as v1 does",
+    async endsFirst => {
       async function restartWhileStepHangs(storageVersion: 1 | 2) {
         const gates: (() => void)[] = [];
         let calls = 0;
@@ -568,11 +744,16 @@ describe('storageVersion per run', () => {
           { gate: gates[1]!, done: restarted },
         ];
         if (endsFirst === 'restarted') executions.reverse();
-        const results = [];
+        const results: { status: string; steps: Record<string, any> }[] = [];
+        let hungError: unknown;
         for (const { gate, done } of executions) {
           gate();
           // Read this execution's steps before the other execution writes a newer result.
-          results.push(await withLoadedSteps(await done));
+          try {
+            results.push(await withLoadedSteps(await done));
+          } catch (error) {
+            hungError = error;
+          }
         }
 
         // The snapshot resume, restart and time travel continue from.
@@ -584,6 +765,7 @@ describe('storageVersion per run', () => {
         const outputs = (steps: Record<string, any>) =>
           Object.fromEntries(Object.entries(steps).map(([id, step]) => [id, step.output ?? step]));
         return {
+          hungError: (hungError as { id?: string } | undefined)?.id,
           returned: results.map(result => ({ status: result.status, steps: outputs(result.steps) })),
           stored: { status: stored.status, result: stored.result, steps: outputs(stored.context) },
           read: { status: read.status, result: read.result, steps: outputs(read.steps ?? {}) },
@@ -593,8 +775,10 @@ describe('storageVersion per run', () => {
 
       const v1 = await restartWhileStepHangs(1);
       expect(v1).toMatchObject({
-        stored: { status: 'success', result: storedLast },
-        read: { result: storedLast },
+        hungError: 'STORAGE_RUN_FENCE_CONFLICT',
+        returned: [{ status: 'success' }],
+        stored: { status: 'success', result: { n: 22 } },
+        read: { result: { n: 22 } },
         listed: 1,
       });
       expect(await restartWhileStepHangs(2)).toEqual(v1);
@@ -1076,9 +1260,9 @@ describe('storage v2 write volume', () => {
       { status: 'running', changes: { stepIds: ['s10'], state: true } },
     ]);
 
-    // One entry per step start and finish, plus the input, plus state at the checkpoint and after setState.
+    // A step's finish replaces its start, so one entry per step plus the input, plus state at the checkpoint and after setState.
     const stored = entries('sequential', run.runId);
-    expect(stored.filter(e => e.kind === 'step')).toHaveLength(2 * STEPS + 1);
+    expect(stored.filter(e => e.kind === 'step')).toHaveLength(STEPS + 1);
     expect(stored.filter(e => e.kind === 'state' || e.kind === 'state-patch')).toHaveLength(2);
   });
 
@@ -1101,9 +1285,9 @@ describe('storage v2 write volume', () => {
       Array.from({ length: STEPS + 1 }, () => ({ stepIds: ['count'], state: false })),
     );
 
-    // The checkpoint holds the input and the state; then one entry per append above. The state never changes.
+    // The checkpoint holds the input and the state; each append above replaces the step's previous entry. The state never changes.
     const stored = entries('loop', run.runId);
-    expect(stored.filter(e => e.kind === 'step')).toHaveLength(STEPS + 2);
+    expect(stored.filter(e => e.kind === 'step')).toHaveLength(2);
     expect(stored.filter(e => e.kind === 'state' || e.kind === 'state-patch')).toHaveLength(1);
   });
 

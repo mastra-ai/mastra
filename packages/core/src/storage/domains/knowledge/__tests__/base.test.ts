@@ -42,6 +42,9 @@ describe('Knowledge storage base', () => {
       supportsSchemaInspection: true,
       supportsExplicitReset: true,
       supportsPinKinds: true,
+      supportsTransactions: true,
+      supportsActivityDateRange: true,
+      supportsActivityAscending: true,
     });
     expect(KNOWLEDGE_STORAGE_SCHEMA_VERSION).toBe(4);
     expect(await store.inspectSchema()).toEqual({

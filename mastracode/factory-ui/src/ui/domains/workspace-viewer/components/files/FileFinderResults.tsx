@@ -1,4 +1,5 @@
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
@@ -43,10 +44,19 @@ interface FileFinderResultsProps {
   changes: ReadonlyMap<string, WorkspaceChangeStatus>;
 }
 
+const resultRowClass = 'flex h-7 w-full min-w-0 shrink-0 items-center gap-1.5 rounded-sm px-1';
+
 export function FileFinderResults({ workspacePath, finder, changes }: FileFinderResultsProps) {
   const { index, found, active, setActive } = finder;
   if (index.isLoading || (index.isFetching && found.total === 0)) {
-    return <SkeletonRows label="Indexing files" rows={8} className="gap-3 p-3" rowClassName="h-3 w-full" />;
+    return (
+      <SkeletonRows label="Indexing files" rows={8} className="gap-0 p-1.5">
+        <div aria-hidden className={resultRowClass}>
+          <Skeleton className="size-icon-sm shrink-0 rounded-sm motion-reduce:before:animate-none" />
+          <Skeleton className="h-3 w-1/2 motion-reduce:before:animate-none" />
+        </div>
+      </SkeletonRows>
+    );
   }
   if (index.error) {
     return (
@@ -103,7 +113,8 @@ export function FileFinderResults({ workspacePath, finder, changes }: FileFinder
                 aria-selected={at === active}
                 title={path}
                 className={cn(
-                  'text-caption flex h-7 w-full min-w-0 shrink-0 cursor-pointer items-center gap-1.5 rounded-sm px-1 text-left',
+                  resultRowClass,
+                  'text-caption cursor-pointer text-left',
                   at === active && 'bg-fill-hover',
                 )}
                 onMouseDown={event => event.preventDefault()}
@@ -118,7 +129,7 @@ export function FileFinderResults({ workspacePath, finder, changes }: FileFinder
                 <span className="text-muted-foreground max-w-full shrink-0 truncate">
                   <Marked text={path.slice(nameStart)} from={nameStart} matched={matched} />
                 </span>
-                <span className="text-placeholder min-w-0 flex-1 truncate">
+                <span className="text-subtle-foreground min-w-0 flex-1 truncate">
                   <Marked text={path.slice(0, Math.max(0, nameStart - 1))} from={0} matched={matched} />
                 </span>
                 {status ? <ChangeStatusLetter status={status} /> : null}

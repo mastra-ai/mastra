@@ -83,6 +83,13 @@ function answer(method: string, args: Record<string, string>): Record<string, un
       return { channel: args.channel, ts: '1800000000.000001', message: { text: args.text } };
     case 'conversations.open':
       return { channel: { id: `D-${args.users}` } };
+    case 'conversations.info': {
+      const id = args.channel!;
+      if (id.startsWith('D')) return { channel: { id, is_im: true } };
+      const channel = workspace.channels.find(c => c.id === id);
+      if (!channel || (channel.is_private && !channel.is_member)) return { ok: false, error: 'channel_not_found' };
+      return { channel: { ...channel, is_channel: true } };
+    }
     case 'conversations.list': {
       const { items, response_metadata } = page(workspace.channels, args.cursor);
       return { channels: items, response_metadata };
@@ -423,7 +430,7 @@ describe('Slack tools on a Factory session, by default', () => {
     const { run } = await slackSession();
 
     await expect(run('fetchChannelMessages', { channelId: 'slack:C2', limit: 5, direction: 'backward' })).rejects.toThrow(
-      'outside the channels this session can use: slack:C1',
+      'Channels this conversation can use: slack:C1',
     );
     await expect(run('fetchThread', { threadId: 'slack:C2:1700000200.000200' })).rejects.toThrow('outside the channels');
     await expect(run('postChannelMessage', { channelId: 'slack:C2', message: 'Hi' })).rejects.toThrow('outside the channels');
@@ -444,7 +451,7 @@ describe('Slack tools on a Factory session, by default', () => {
     expect(read.messages).toHaveLength(1);
     await expect(
       duringSlackEvent(chat, () => run('fetchChannelMessages', { channelId: 'slack:C2', limit: 5, direction: 'backward' })),
-    ).rejects.toThrow('outside the channels this session can use');
+    ).rejects.toThrow('outside the channels this conversation can use');
   });
 
   it("can't send DMs, but can still look people up to mention them", async () => {
@@ -467,7 +474,7 @@ describe('Slack tools on a Factory session, with access granted', () => {
     expect(sent('chat.postMessage')).toEqual([expect.objectContaining({ channel: 'C2', text: 'On it.' })]);
 
     await expect(run('fetchChannelMessages', { channelId: 'slack:C4', limit: 5, direction: 'backward' })).rejects.toThrow(
-      'outside the channels this session can use: slack:C1, slack:C2',
+      'Channels this conversation can use: slack:C1, slack:C2',
     );
   });
 
@@ -478,10 +485,10 @@ describe('Slack tools on a Factory session, with access granted', () => {
     expect(read.messages.map((m: { text: string }) => m.text)).toContain('Deploy is green again');
 
     await expect(run('postChannelMessage', { channelId: 'slack:C2', message: 'Hi' })).rejects.toThrow(
-      '"slack:C2" is read only for this session: it can only post in its own channel, slack:C1.',
+      '"slack:C2" is read only for this conversation: it can only post in its own channel, slack:C1.',
     );
     await expect(run('postMessage', { threadId: 'slack:C2:1700000200.000200', message: 'Hi' })).rejects.toThrow(
-      'is read only for this session',
+      'is read only for this conversation',
     );
     await run('postMessage', { threadId: 'slack:C1:171.1', message: 'Read #eng, all green.' });
     await run('postChannelMessage', { channelId: 'slack:C1', message: 'Summary of #eng: all green.' });
@@ -496,7 +503,7 @@ describe('Slack tools on a Factory session, with access granted', () => {
 
     expect(tool('sendDirectMessage')).toBeDefined();
     expect(String((tool('fetchChannelMessages') as { description?: unknown }).description)).toContain(
-      'Channels this session can use: slack:C1.',
+      'Channels this conversation can use: slack:C1.',
     );
   });
 
@@ -521,7 +528,7 @@ describe('Slack tools on a Factory session, with every channel and DMs granted',
     expect(read.messages.map((m: { text: string }) => m.text)).toContain('Deploy is green again');
 
     // A woken run has nobody around to approve, so posting must not wait for one.
-    expect((tool('postChannelMessage') as { needsApproval?: unknown }).needsApproval).toBe(false);
+    expect((tool('postChannelMessage') as { requireApproval?: unknown }).requireApproval).toBeFalsy();
     await run('postChannelMessage', { channelId: 'slack:C2', message: 'Thanks, closing this out.' });
     expect(sent('chat.postMessage')).toEqual([
       expect.objectContaining({ channel: 'C2', text: 'Thanks, closing this out.' }),
@@ -538,7 +545,7 @@ describe('Slack tools on a Factory session, with every channel and DMs granted',
       "someone else's direct message",
     );
     await expect(run('fetchChannelMessages', { channelId: 'D-USAM', limit: 5 })).rejects.toThrow(
-      "someone else's direct message",
+      "isn't a full chat id",
     );
     // Bare ids and thread ids must be checked as the channel actually read.
     const search = await run('searchMessages', {
@@ -571,12 +578,12 @@ describe('Slack tools on a Factory session, with every channel and DMs granted',
     expect(sent('chat.postMessage')).toEqual([]);
   });
 
-  it("can't read a channel the app isn't in: Slack refuses it", async () => {
+  it("can't read a private channel the app isn't in: Slack refuses it", async () => {
     const { run } = await slackSession(wide);
 
     await expect(
       run('fetchChannelMessages', { channelId: 'slack:C3', limit: 5, direction: 'backward' }),
-    ).rejects.toThrow(/not_in_channel/);
+    ).rejects.toThrow(/channel_not_found/);
   });
 
   it('finds channels and people by name across every page Slack returns', async () => {
@@ -645,13 +652,13 @@ describe('Slack tools on a Factory session, with every channel and DMs granted',
     const result = await run('searchMessages', { query: 'deploy', channelIds: ['slack:C3', 'slack:C1'] });
 
     expect(result.matches.map((m: { channelId: string }) => m.channelId)).toEqual(['slack:C1']);
-    expect(result.errors).toEqual([{ channelId: 'slack:C3', error: 'not_in_channel' }]);
+    expect(result.errors).toEqual([{ channelId: 'slack:C3', error: 'channel_not_found' }]);
   });
 
   it('DMs anyone in the workspace', async () => {
     const { run } = await slackSession(wide);
 
-    await run('sendDirectMessage', { userId: 'USAM', text: 'Your deploy is green.' });
+    await run('sendDirectMessage', { userId: 'USAM', message: { markdown: 'Your deploy is green.' } });
 
     expect(sent('conversations.open')).toEqual([expect.objectContaining({ users: 'USAM' })]);
     expect(sent('chat.postMessage')).toEqual([

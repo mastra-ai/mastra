@@ -11,9 +11,12 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { FGADeniedError } from '../../../auth/ee/fga-check';
+import type { IFGAProvider } from '../../../auth/ee/interfaces/fga';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
+import { RequestContext } from '../../../request-context';
 import { InMemoryStore } from '../../../storage';
 import type { UpdateWorkflowStateOptions } from '../../../storage/types';
 import { createTool } from '../../../tools';
@@ -97,6 +100,7 @@ describe('DurableAgent resume claim loser (#27365)', () => {
     execute: (input: { item: string }) => Promise<unknown>,
     defaultOptions?: AgentConfig['defaultOptions'],
     storageVersion?: 1 | 2,
+    authorizationProbe?: { fga: IFGAProvider; onProcessorContext: (context: RequestContext | undefined) => void },
   ) {
     const storage = new InMemoryStore();
     const model = toolCallThenTextModel('archive', 'archived');
@@ -114,12 +118,26 @@ describe('DurableAgent resume claim loser (#27365)', () => {
         instructions: 'You archive items.',
         model: model.model as LanguageModelV2,
         tools: { archive },
+        inputProcessors: authorizationProbe && [
+          {
+            id: 'observe-resume-context',
+            processInputStep: ({ requestContext }) => {
+              authorizationProbe.onProcessorContext(requestContext);
+            },
+          },
+        ],
         defaultOptions,
       }),
       pubsub,
       storageVersion,
     });
-    new Mastra({ agents: { 'loser-agent': durableAgent as any }, logger: false, storage, pubsub });
+    new Mastra({
+      agents: { 'loser-agent': durableAgent as any },
+      logger: false,
+      storage,
+      pubsub,
+      server: authorizationProbe && { fga: authorizationProbe.fga },
+    });
     return { storage, model, durableAgent };
   }
 
@@ -290,6 +308,63 @@ describe('DurableAgent resume claim loser (#27365)', () => {
     expect(chunks.some(chunk => chunk.type === 'error')).toBe(false);
     expect(chunks.some(chunk => chunk.type === 'finish')).toBe(true);
     expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the running approval context when another resume is denied', async () => {
+    const gate = Promise.withResolvers<void>();
+    const executing = Promise.withResolvers<void>();
+    const seen: unknown[] = [];
+    const fga: IFGAProvider = {
+      check: async () => true,
+      require: async (user, input) => {
+        if (user.id === 'denied') throw new FGADeniedError(user, input.resource, input.permission);
+      },
+      filterAccessible: async () => [],
+    };
+    const { durableAgent } = setup(
+      async () => {
+        executing.resolve();
+        await gate.promise;
+        return { ok: true };
+      },
+      { requestContext: new RequestContext([['user', { id: 'allowed' }]]) },
+      undefined,
+      {
+        fga,
+        onProcessorContext: context => seen.push(context?.get('resume-marker')),
+      },
+    );
+    const runId = await suspend(durableAgent);
+    const context = (id: string, marker: string) =>
+      new RequestContext<unknown>([
+        ['user', { id }],
+        ['resume-marker', marker],
+      ]);
+    const winner = await durableAgent.resume(
+      runId,
+      { approved: true },
+      {
+        toolCallId: 'call-1',
+        requestContext: context('allowed', 'winner'),
+      },
+    );
+    const chunks = drain(winner.fullStream);
+    try {
+      await executing.promise;
+      await expect(
+        durableAgent.resume(
+          runId,
+          { approved: true },
+          {
+            requestContext: context('denied', 'rejected'),
+          },
+        ),
+      ).rejects.toThrow(FGADeniedError);
+    } finally {
+      gate.resolve();
+      await chunks;
+    }
+    expect(seen).toEqual([undefined, 'winner']);
   });
 
   it('reports a lost resume race only on the losing stream', async () => {

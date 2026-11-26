@@ -24,8 +24,7 @@ function MetricsColumn({ title }: { title: string }) {
     <Column className="p-5">
       <Column.Toolbar>
         <h2 className="text-heading text-foreground">{title}</h2>
-        <Button size="sm" variant="ghost">
-          <IconSettingsSliderHor />
+        <Button icon={<IconSettingsSliderHor />} size="sm" variant="ghost">
           Configure
         </Button>
       </Column.Toolbar>

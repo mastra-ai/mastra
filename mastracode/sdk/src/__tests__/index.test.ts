@@ -347,7 +347,9 @@ vi.mock('../agents/model.js', () => ({
   createMastraCodeModelCatalogProvider: createMastraCodeModelCatalogProviderMock,
   getDynamicModel: vi.fn(),
   getGoalJudgeModel: vi.fn(),
+  requestModelRoute: vi.fn(() => ({ entries: [], host: false, modelId: undefined, thinkingLevel: undefined })),
   resolveModel: resolveModelMock,
+  setHostModelRoute: vi.fn(),
 }));
 
 vi.mock('../agents/tools.js', () => ({
@@ -472,6 +474,12 @@ vi.mock('../providers/xai.js', () => ({
 
 vi.mock('../tools/index.js', () => ({
   defaultTools: {},
+  // Keep the real host tool: it is a plain `createTool` object, and the controller config test
+  // asserts its registered identity rather than its behaviour.
+  createSubmitPlanTool: (options?: { plansDir?: string }) => ({
+    id: 'submit_plan',
+    createSubmitPlanOptions: options,
+  }),
 }));
 
 vi.mock('../schema.js', () => ({
@@ -1066,6 +1074,33 @@ describe('createMastraCode', () => {
     expect(controllerConstructorMock.mock.calls[0]![0].disableBuiltinTools).toEqual(['submit_plan']);
   });
 
+  it('registers the host submit_plan tool through the controller tools config', async () => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ plansDir: '.artifacts/plans' });
+
+    // The host tool replaces the filesystem-free builtin, which is disabled on the controller
+    // rather than left registered for the toolset merge to drop by name.
+    const controllerTools = controllerConstructorMock.mock.calls[0]![0].tools as Record<string, { id?: string }>;
+    expect(Object.keys(controllerTools)).toEqual(['submit_plan']);
+    expect(controllerTools.submit_plan?.id).toBe('submit_plan');
+    expect(controllerTools.submit_plan).toHaveProperty('createSubmitPlanOptions', { plansDir: '.artifacts/plans' });
+    expect(controllerConstructorMock.mock.calls[0]![0].disableBuiltinTools).toEqual(['submit_plan']);
+  }, 30_000);
+
+  it('keeps the configured disabled builtins beside the disabled submit_plan', async () => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ disableBuiltinTools: ['task_write'] });
+
+    expect(controllerConstructorMock.mock.calls[0]![0].disableBuiltinTools).toEqual(['task_write', 'submit_plan']);
+    expect(controllerConstructorMock.mock.calls[0]![0].tools).toBeDefined();
+  }, 30_000);
+
+  it('does not register the host submit_plan tool when the builtin is disabled', async () => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ disableBuiltinTools: ['submit_plan'] });
+    expect(controllerConstructorMock.mock.calls[0]![0].tools).toBeUndefined();
+  }, 30_000);
+
   it('removes disabled task tools from the task signal provider', async () => {
     const { TaskSignalProvider } = await import('@mastra/core/signals');
     const { createMastraCode } = await import('../index.js');
@@ -1086,10 +1121,12 @@ describe('createMastraCode', () => {
     expect(modes.find(mode => mode.id === 'plan')?.instructions).not.toContain('submit_plan');
   });
 
-  it('does not set disableBuiltinTools on the agent controller by default', async () => {
+  it('disables only the replaced builtin on the agent controller by default', async () => {
     const { createMastraCode } = await import('../index.js');
     await createMastraCode();
-    expect(controllerConstructorMock.mock.calls[0]![0]).not.toHaveProperty('disableBuiltinTools');
+    // The host submit_plan tool replaces the builtin, so the builtin is disabled on the
+    // controller. Nothing the host did not configure is disabled with it.
+    expect(controllerConstructorMock.mock.calls[0]![0].disableBuiltinTools).toEqual(['submit_plan']);
   });
 
   it('filters disabled workspace tools from native subagent allowlists', async () => {
@@ -2114,7 +2151,7 @@ describe('createMastraCode', () => {
       maxRetries?: number;
       delayMs?: (args: { error?: unknown; retryCount: number }) => number;
       onRetry?: (args: {
-        error: Error;
+        error: unknown;
         retryCount: number;
         requestContext?: { get: (key: string) => unknown };
         delayMs: number;
@@ -2172,6 +2209,22 @@ describe('createMastraCode', () => {
     expect(serverErrorPolicy.maxRetries).toBe(10);
     expect(serverErrorPolicy.delayMs!({ retryCount: 0 })).toBe(500);
     expect(typeof serverErrorPolicy.onRetry).toBe('function');
+
+    emitEvent.mockClear();
+    await serverErrorPolicy.onRetry!({
+      error: { type: 'error', error: { type: 'overloaded_error', message: 'Provider overloaded' }, statusCode: 503 },
+      retryCount: 0,
+      requestContext: { get: () => ({ emitEvent }) },
+      delayMs: 500,
+    });
+    expect(emitEvent).toHaveBeenCalledWith({
+      type: 'error',
+      error: expect.objectContaining({ message: expect.stringContaining('Provider overloaded'), statusCode: 503 }),
+      retryable: true,
+      retryDelay: 500,
+      retryAttempt: 1,
+      maxRetries: 10,
+    });
   });
 
   describe('default error lane', () => {

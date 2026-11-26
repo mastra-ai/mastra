@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as babel from '@babel/core';
 import { generateTypes } from '@internal/types-builder';
+import { assertLatin1Dist } from '@internal/types-builder/check-ascii-output';
 import { defineConfig } from 'tsdown';
 
 const pkg = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, 'package.json'), 'utf-8'));
@@ -138,10 +139,17 @@ export default defineConfig({
   inputOptions: {
     plugins: [treeshakeDecorators, dropBareBuiltinImports],
   },
+  // Escape non-ASCII in strings, templates, regex literals and identifiers (core's own code and
+  // the third-party code inlined via `alwaysBundle`, such as tokenx). V8 stores a script at one
+  // byte per character only when every character is Latin-1, so a single wider character doubles
+  // the memory a bundled Worker spends holding its own source. `assertLatin1Dist` enforces it in
+  // `onSuccess`.
+  outputOptions: {
+    charset: 'ascii',
+  },
   define: {
     __MASTRA_VERSION__: JSON.stringify(pkg.version),
   },
-  sourcemap: true,
   deps: {
     neverBundle: ['vite', 'vitest'],
     alwaysBundle: [
@@ -230,5 +238,7 @@ export default defineConfig({
       throw new Error(`Browser-safe entries load Node-only code:\n${unsafe.join('\n')}`);
     }
     console.info(`✓ Checked browser-safe entries: ${browserSafeEntries.join(', ')}`);
+
+    assertLatin1Dist(distDir);
   },
 });

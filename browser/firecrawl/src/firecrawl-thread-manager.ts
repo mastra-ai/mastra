@@ -1,8 +1,6 @@
-import type { AgentBrowserSession, AgentBrowserThreadManagerConfig } from '@mastra/agent-browser';
-import { AgentBrowserThreadManager } from '@mastra/agent-browser';
+import type { AgentBrowserSession, AgentBrowserThreadManagerConfig, BrowserLaunchOptions } from '@mastra/agent-browser';
+import { AgentBrowserThreadManager, BrowserManager } from '@mastra/agent-browser';
 import { resolveViewportSize, DEFAULT_BROWSER_VIEWPORT } from '@mastra/core/browser';
-import type { BrowserLaunchOptions } from 'agent-browser';
-import { BrowserManager } from 'agent-browser';
 import type { Firecrawl } from 'firecrawl';
 import type { FirecrawlBrowserSessionOptions } from './types';
 

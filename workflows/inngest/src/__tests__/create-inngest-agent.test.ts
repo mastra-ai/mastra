@@ -13,6 +13,7 @@ import {
   AGENT_STREAM_TOPIC,
   AgentControlEventTypes,
   AgentStreamEventTypes,
+  DURABLE_CONTEXT_SEGMENT_KEY,
   DURABLE_STOP_WHEN_ERROR_ID,
   agentThreadStreamRuntime,
   createDurableAgentStream,
@@ -103,6 +104,60 @@ describe('createInngestAgent factory function', () => {
     expect(typeof durableAgent.prepare).toBe('function');
     expect(typeof durableAgent.getDurableWorkflows).toBe('function');
   });
+
+  it.each(
+    (['default', 'evented'] as const).flatMap(executionEngine =>
+      [false, true].map(registerFirst => ({ executionEngine, registerFirst })),
+    ),
+  )(
+    'isolates inner policy at structural registration: $executionEngine / registered=$registerFirst',
+    async ({ executionEngine, registerFirst }) => {
+      const threadBus = new EventEmitterPubSub();
+      const workflowBus = new EventEmitterPubSub();
+      const agent = new Agent({
+        id: 'policy-inner',
+        name: 'Policy inner',
+        instructions: 'Help.',
+        model: 'openai/gpt-4o',
+      });
+      const host = new Mastra({ logger: false, durable: { executionEngine, cleanupTimeoutMs: 0 } });
+      if (registerFirst) host.addAgent(agent);
+      const wrapped = createInngestAgent({ agent, inngest, pubsub: workflowBus });
+      const registered = new Mastra({
+        logger: false,
+        storage: new InMemoryStore(),
+        pubsub: threadBus,
+        agents: { wrapped },
+        durable: { executionEngine },
+      });
+      expect(registered.getAgent('wrapped')).toBe(wrapped);
+      expect(wrapped.agent).toBe(agent);
+      expect(agent.__getExecutionEnginePolicy()).toBe(registerFirst ? executionEngine : false);
+      expect(agent.getPubSub()).toBe(registered.pubsub);
+      expect(wrapped.pubsub).toBeInstanceOf(CachingPubSub);
+      expect(wrapped.pubsub).not.toBe(registered.pubsub);
+      // Inngest's Proxy must remain on the legacy compatibility path.
+      expect(isDurableAgentLike(wrapped)).toBe(true);
+      host.addAgent(agent);
+      expect(agent.__getExecutionEnginePolicy()).toBe(executionEngine);
+      await expect(registered.recoverAllDurableAgents()).resolves.toEqual({
+        agents: 1,
+        recovered: 0,
+        succeeded: 0,
+        failed: 0,
+        skipped: 0,
+      });
+      const fork = wrapped.__fork();
+      expect(isInngestAgent(fork)).toBe(true);
+      const forkHost = new Mastra({ logger: false, agents: { fork }, durable: { executionEngine } });
+      expect(forkHost.getAgent('fork')).toBe(fork);
+      expect(fork.agent.__getExecutionEnginePolicy()).toBe(executionEngine);
+      expect(fork.agent.durable).toEqual(agent.durable);
+      forkHost.addAgent(fork.agent);
+      expect(fork.agent.__getExecutionEnginePolicy()).toBe(executionEngine);
+      expect(fork.durableLoopWorkflowName).toBe('inngest:durable-agentic-loop');
+    },
+  );
 
   it('should be detected by isInngestAgent type guard', () => {
     const agent = new Agent({
@@ -1172,7 +1227,14 @@ describe('InngestAgent parity surface', () => {
         await publishStepAndFinish(durableAgent, runId);
         await vi.waitFor(() => expect(fired).toEqual(['onFinish:anon:acme']));
         const resumeEvent = sendSpy.mock.calls.map(([event]) => event as any).find(event => event.data?.resume);
-        expect(resumeEvent.data.requestContext).toEqual({ tenant: 'acme' });
+        // No user, roles or permissions from the starting run. The other keys are the framework's
+        // segment-span carrier (#30812), null because this resume opened no spans, and the
+        // segment identity that keeps steps from reusing another caller's live context.
+        expect(resumeEvent.data.requestContext).toEqual({
+          tenant: 'acme',
+          mastra__durableSegments: { [runId]: null },
+          [DURABLE_CONTEXT_SEGMENT_KEY]: expect.any(String),
+        });
       } finally {
         result.cleanup();
         sendSpy.mockRestore();
@@ -1641,6 +1703,9 @@ describe('InngestAgent parity surface', () => {
               userId: 'user-1',
               organizationId: 'org-2',
               requestId: 'request-1',
+              // The segment-span carrier every resume adds (#30812); no spans opened here.
+              mastra__durableSegments: { [runId]: null },
+              [DURABLE_CONTEXT_SEGMENT_KEY]: expect.any(String),
             },
             tracingOptions: {
               traceId: 'trace-1',

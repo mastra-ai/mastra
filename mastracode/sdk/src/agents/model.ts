@@ -8,8 +8,11 @@ import type { RequestContextReader } from '../auth/account-routing-context.js';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import type { CredentialStore, OAuthAccountRecord } from '../auth/types.js';
 import { MODEL_ROUTE_MAX_ENTRIES } from '../constants.js';
+import { MODEL_FALLBACK_STATE_KEY, parsePendingModelFallback } from '../model-fallback.js';
+import type { ModelFallback } from '../model-fallback.js';
 import { toMemoryModelId } from '../onboarding/packs.js';
 import {
+  getCustomProviderId,
   loadSettings,
   MASTRA_GATEWAY_PROVIDER,
   resolveDefaultThinkingLevel,
@@ -18,7 +21,8 @@ import {
 import { AMAZON_BEDROCK_GATEWAY_ID, createAmazonBedrockGateway } from '../providers/amazon-bedrock-gateway.js';
 import type { AnthropicPromptCacheScope } from '../providers/anthropic-prompt-cache.js';
 import { GOOGLE_VERTEX_GATEWAY_ID, createGoogleVertexGateway } from '../providers/google-vertex-gateway.js';
-import { normalizeLegacyModelId } from '../providers/model-ids.js';
+import { findRouteModelIndex, normalizeLegacyModelId, parseCodexModelSelection } from '../providers/model-ids.js';
+import type { ModelRoute, ModelRouteEntry } from '../schema.js';
 import { isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
 import {
@@ -212,18 +216,32 @@ export function resolveModel(
   });
 }
 
+/** Whether a model id resolves to a custom provider. A `mastra/...` id never does. */
+function isCustomProviderModel(modelId: string, customProviders: Array<{ name: string }>): boolean {
+  const input = stripMastraCodeCustomProviderPrefix(normalizeLegacyModelId(modelId), customProviders);
+  if (input.startsWith(MASTRA_GATEWAY_PREFIX)) return false;
+  const providerId = input.split('/', 1)[0];
+  return customProviders.some(provider => getCustomProviderId(provider.name) === providerId);
+}
+
 function resolveModelForRequest(modelId: string, options?: Parameters<typeof resolveModel>[1]): GatewayLanguageModel {
   reloadAuthStorage();
   const headers = getAgentControllerHeaders(options?.requestContext);
   const settings = loadSettings();
-  // Older versions cataloged Bedrock, Copilot and Kimi under the MastraCode
-  // gateway namespace, and Kimi under its own `kimi-for-coding` provider. Map
-  // already-saved ids (packs, OM settings, thread metadata) to current ids.
-  const legacyNormalizedInput = normalizeLegacyModelId(modelId);
   // Deployed web registers a custom providers source (DB-backed, tenant
   // scoped); when registered it is authoritative and settings.json custom
   // providers are ignored. Undefined = local settings-based behavior.
   const customProviders = resolveCustomProviders(options?.requestContext) ?? settings.customProviders;
+  // `:fast` asks for Codex Fast only on the built-in OpenAI provider. A custom
+  // provider named "OpenAI" shares its id, and there the suffix is part of the
+  // model name, so look for a custom provider before reading it.
+  const { modelId: canonicalModelId, codexServiceTier } = isCustomProviderModel(modelId, customProviders)
+    ? { modelId }
+    : parseCodexModelSelection(modelId);
+  // Older versions cataloged Bedrock, Copilot and Kimi under the MastraCode
+  // gateway namespace, and Kimi under its own `kimi-for-coding` provider. Map
+  // already-saved ids (packs, OM settings, thread metadata) to current ids.
+  const legacyNormalizedInput = normalizeLegacyModelId(canonicalModelId);
   // Ids selected from the shared /models catalog were previously persisted in
   // the gateway-qualified `mastracode/<customProviderId>/<model>` form, which
   // parses the provider as `mastracode` and breaks provider config lookup.
@@ -344,6 +362,7 @@ function resolveModelForRequest(modelId: string, options?: Parameters<typeof res
     modelId: bareModelId,
     apiKey: auth?.apiKey ?? '',
     headers,
+    codexServiceTier,
   });
 }
 
@@ -474,6 +493,113 @@ export function resolveRequestThinkingLevel(
   return resolveDefaultThinkingLevel(loadSettings(settingsPath), modeId).level;
 }
 
+const HOST_MODEL_ROUTE_CONTEXT_KEY = 'mastracodeHostModelRoute';
+const HOST_MODEL_ROUTE_POSITION_CONTEXT_KEY = 'mastracodeHostModelRoutePosition';
+
+export function setHostModelRoute(requestContext: RequestContext, route: readonly ModelFallback[] | undefined): void {
+  requestContext.delete(HOST_MODEL_ROUTE_POSITION_CONTEXT_KEY);
+  if (!route) {
+    requestContext.delete(HOST_MODEL_ROUTE_CONTEXT_KEY);
+    return;
+  }
+  const [primary, ...fallbacks] = route;
+  const entries = primary ? [primary, ...modelFallbacksToTry(primary.modelId, fallbacks, requestContext)] : [];
+  requestContext.set(HOST_MODEL_ROUTE_CONTEXT_KEY, entries.map(hostRouteEntry));
+}
+
+export function advanceHostModelRoute(requestContext: RequestContext): void {
+  requestContext.set(HOST_MODEL_ROUTE_POSITION_CONTEXT_KEY, hostModelRoutePosition(requestContext) + 1);
+}
+
+function hostModelRoutePosition(requestContext: RequestContextReader | undefined): number {
+  const position = requestContext?.get(HOST_MODEL_ROUTE_POSITION_CONTEXT_KEY);
+  return typeof position === 'number' ? position : 0;
+}
+
+export function requestRouteHasNextModel(
+  requestContext: RequestContextReader | undefined,
+  controller: Parameters<typeof requestModelRoute>[1],
+): boolean {
+  const route = requestModelRoute(requestContext, controller);
+  const position = route.host ? hostModelRoutePosition(requestContext) : 0;
+  return route.entries.length - 1 > position;
+}
+
+function modelFallbacksToTry(
+  primaryModelId: string,
+  fallbacks: readonly ModelFallback[],
+  requestContext: RequestContext,
+): ModelFallback[] {
+  const usable: ModelFallback[] = [];
+  const seen = new Set([primaryModelId]);
+  for (const fallback of fallbacks) {
+    if (seen.has(fallback.modelId)) continue;
+    seen.add(fallback.modelId);
+    if (canAuthenticateModel(fallback.modelId, requestContext)) usable.push(fallback);
+  }
+  return usable;
+}
+
+function hostRouteEntry({ modelId, thinkingLevel }: ModelFallback): ModelRouteEntry {
+  return { id: modelId, label: modelId, modelId, ...(thinkingLevel ? { thinkingLevel } : {}) };
+}
+
+interface RequestModelRoute {
+  entries: ModelRouteEntry[];
+  host: boolean;
+  modelId: string | undefined;
+  thinkingLevel: ThinkingLevelSetting | undefined;
+}
+
+export function requestModelRoute(
+  requestContext: RequestContextReader | undefined,
+  controller:
+    | { getState?: () => Record<string, unknown> | undefined; threadId?: unknown; session?: { modelId?: unknown } }
+    | undefined,
+): RequestModelRoute {
+  const sessionModelId = typeof controller?.session?.modelId === 'string' ? controller.session.modelId : undefined;
+  const hostRoute = requestContext?.get(HOST_MODEL_ROUTE_CONTEXT_KEY) as ModelRouteEntry[] | undefined;
+  if (hostRoute) {
+    return {
+      entries: hostRoute,
+      host: true,
+      modelId: hostRoute[0]?.modelId ?? sessionModelId,
+      thinkingLevel: hostRoute[0]?.thinkingLevel,
+    };
+  }
+  const { entries, pending, pendingIndex } = sessionModelRoute(controller?.getState?.(), controller?.threadId);
+  const modelId = pending?.toModelId ?? sessionModelId;
+  const startIndex = pending ? pendingIndex : findRouteModelIndex(entries, modelId);
+  const active = startIndex < 0 ? [] : entries.slice(startIndex);
+  return {
+    entries: findRouteModelIndex(active, modelId) === 0 ? active : [],
+    host: false,
+    modelId,
+    thinkingLevel: undefined,
+  };
+}
+
+function sessionModelRoute(
+  state: { modelRoute?: unknown; [MODEL_FALLBACK_STATE_KEY]?: unknown } | undefined,
+  threadId: unknown,
+) {
+  const route = (state?.modelRoute as ModelRoute | undefined)?.entries;
+  const entries = Array.isArray(route) ? route.slice(0, MODEL_ROUTE_MAX_ENTRIES) : [];
+  const pending = parsePendingModelFallback(state?.[MODEL_FALLBACK_STATE_KEY]);
+  const threadPending = pending && (pending.threadId === undefined || pending.threadId === threadId) ? pending : null;
+  const pendingIndex = threadPending ? entries.findIndex(entry => entry.id === threadPending.toEntryId) : -1;
+  return { entries, pending: threadPending, pendingIndex };
+}
+
+function canAuthenticateModel(modelId: string, requestContext: RequestContext): boolean {
+  try {
+    resolveModelForRequest(modelId, { requestContext });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Dynamic model function that reads the current model and optional ordered
  * fallback route from controller state. Route entry ids are opaque host-owned
@@ -486,26 +612,11 @@ export function getDynamicModel(
   { modeless = false, defaultThinkingLevel }: { modeless?: boolean; defaultThinkingLevel?: ThinkingLevelSetting } = {},
 ): IdentifiedModelConfig | ModelWithRetries[] {
   const controller = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
-  const state = controller?.getState?.() as
-    | {
-        modelRoute?: {
-          entries?: Array<{ id?: unknown; modelId?: unknown }>;
-        };
-        mastracodePendingModelFallback?: { toEntryId?: unknown; toModelId?: unknown; threadId?: unknown } | null;
-      }
-    | undefined;
-  const pendingState = state?.mastracodePendingModelFallback;
-  const pendingFallback =
-    pendingState &&
-    (pendingState.threadId === undefined ||
-      (typeof pendingState.threadId === 'string' && pendingState.threadId === controller?.threadId))
-      ? pendingState
-      : undefined;
-  const pendingModelId =
-    pendingFallback && typeof pendingFallback.toModelId === 'string' && pendingFallback.toModelId.length > 0
-      ? pendingFallback.toModelId
-      : undefined;
-  const modelId = pendingModelId ?? controller?.session?.modelId;
+  const {
+    entries: activeRoute,
+    modelId,
+    thinkingLevel: primaryThinkingLevel,
+  } = requestModelRoute(requestContext, controller);
   if (!modelId) {
     if (!controller) {
       throw new Error(
@@ -523,13 +634,11 @@ export function getDynamicModel(
   const resolveOptions = { thinkingLevel, remapForCodexOAuth: true, requestContext } as const;
   // Label each resolved model with its full ID: the resolved gateway model only
   // knows its bare provider model, and Memory's `'auto'` reads this label.
-  const primary = identifyModel(modelId, resolveModel(modelId, resolveOptions));
-  const route = state?.modelRoute?.entries?.slice(0, MODEL_ROUTE_MAX_ENTRIES);
-  const pendingEntryId =
-    pendingFallback && typeof pendingFallback.toEntryId === 'string' ? pendingFallback.toEntryId : undefined;
-  const startIndex = pendingEntryId ? route?.findIndex(entry => entry.id === pendingEntryId) : 0;
-  const activeRoute = route && startIndex !== undefined && startIndex >= 0 ? route.slice(startIndex) : undefined;
-  if (!activeRoute || activeRoute.length < 2 || activeRoute[0]?.modelId !== modelId) return primary;
+  const primary = identifyModel(
+    modelId,
+    resolveModel(modelId, { ...resolveOptions, thinkingLevel: primaryThinkingLevel ?? thinkingLevel }),
+  );
+  if (activeRoute.length < 2) return primary;
 
   const firstId =
     typeof activeRoute[0]?.id === 'string' && activeRoute[0].id.length > 0 ? activeRoute[0].id : undefined;
@@ -548,7 +657,10 @@ export function getDynamicModel(
     }
     let entryModel: ResolvedModel;
     try {
-      entryModel = resolveModel(routeEntry.modelId, resolveOptions);
+      entryModel = resolveModel(routeEntry.modelId, {
+        ...resolveOptions,
+        thinkingLevel: routeEntry.thinkingLevel ?? thinkingLevel,
+      });
     } catch {
       break;
     }
@@ -564,35 +676,19 @@ export function getDynamicModel(
 }
 
 function identifyModel(modelId: string, model: ResolvedModel): IdentifiedModelConfig {
-  return { model, id: toMemoryModelId(modelId) };
+  return { model, id: toMemoryModelId(parseCodexModelSelection(modelId).modelId) };
 }
-
-type MemoryRouteState = {
-  modelRoute?: { entries?: Array<{ id?: unknown; memoryModelId?: unknown }> };
-  mastracodePendingModelFallback?: { toEntryId?: unknown; threadId?: unknown } | null;
-};
 
 /**
  * The active model route for memory: the session route, starting at a pending
  * fallback hop captured for this thread.
  */
-export function getActiveMemoryRoute<TEntry extends { id?: unknown; memoryModelId?: unknown }>(
-  state:
-    | {
-        modelRoute?: { entries?: TEntry[] };
-        mastracodePendingModelFallback?: MemoryRouteState['mastracodePendingModelFallback'];
-      }
-    | undefined,
+export function getActiveMemoryRoute(
+  state: { modelRoute?: unknown; [MODEL_FALLBACK_STATE_KEY]?: unknown } | undefined,
   threadId?: string | null,
-): TEntry[] {
-  const pending = state?.mastracodePendingModelFallback;
-  const sameThreadPending =
-    pending && (pending.threadId === undefined || pending.threadId === threadId) ? pending : undefined;
-  const routeEntries = state?.modelRoute?.entries?.slice(0, MODEL_ROUTE_MAX_ENTRIES) ?? [];
-  const pendingIndex = sameThreadPending
-    ? routeEntries.findIndex(entry => entry.id === sameThreadPending.toEntryId)
-    : -1;
-  return pendingIndex >= 0 ? routeEntries.slice(pendingIndex) : routeEntries;
+): ModelRouteEntry[] {
+  const { entries, pendingIndex } = sessionModelRoute(state, threadId);
+  return pendingIndex >= 0 ? entries.slice(pendingIndex) : entries;
 }
 
 /**
@@ -604,13 +700,12 @@ export function getActiveRouteMemoryModelId(
   state: Readonly<Record<string, unknown>> | undefined,
   threadId?: string | null,
 ): string | undefined {
-  const route = getActiveMemoryRoute(state as MemoryRouteState | undefined, threadId);
+  const route = getActiveMemoryRoute(state, threadId);
   if (route[0]?.memoryModelId === 'auto') return 'auto';
-  const entry = route.find(
+  return route.find(
     candidate =>
       typeof candidate.memoryModelId === 'string' && candidate.memoryModelId && candidate.memoryModelId !== 'auto',
-  );
-  return entry?.memoryModelId as string | undefined;
+  )?.memoryModelId;
 }
 
 /**

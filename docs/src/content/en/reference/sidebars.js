@@ -138,6 +138,7 @@ const sidebars = {
         { type: 'doc', id: 'channels/slack-provider', label: 'SlackProvider' },
         { type: 'doc', id: 'channels/teams-provider', label: 'TeamsProvider' },
         { type: 'doc', id: 'channels/telegram-provider', label: 'TelegramProvider' },
+        { type: 'doc', id: 'channels/thread-link', label: 'threadLink' },
       ],
     },
     {
@@ -185,6 +186,11 @@ const sidebars = {
           type: 'doc',
           id: 'code-sdk/mount-agent-controller',
           label: 'mountAgentControllerOnMastra()',
+        },
+        {
+          type: 'doc',
+          id: 'code-sdk/mount-restricted-agent-controller',
+          label: 'mountRestrictedAgentControllerOnMastra()',
         },
       ],
     },
@@ -506,6 +512,7 @@ const sidebars = {
               label: 'Automatic Metrics',
             },
             { type: 'doc', id: 'observability/metrics/queries', label: 'Metric queries' },
+            { type: 'doc', id: 'observability/metrics/metrics-context', label: 'MetricsContext' },
           ],
         },
         {

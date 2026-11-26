@@ -1,11 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState, EmptyStateIllustration } from '@mastra/playground-ui/components/EmptyState';
 import type { EmptyStateIllustrationName } from '@mastra/playground-ui/components/EmptyState';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowBoxRight } from '@mastra/playground-ui/icons/central/IconArrowBoxRight';
 import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
-import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
+
+export { SidebarEmptyNote, SidebarLoadError } from '@mastra/playground-ui/domains/factory';
 
 interface LoadFailure {
   art: EmptyStateIllustrationName;
@@ -73,56 +73,11 @@ export function LoadErrorState({ title, error, onRetry, retrying }: RetryProps &
             Sign in
           </Button>
         ) : (
-          <Button icon={<IconArrowRotateCounterClockwise />} disabled={retrying} onClick={onRetry}>
-            {retrying ? 'Trying again…' : 'Try again'}
+          <Button icon={<IconArrowRotateCounterClockwise />} onClick={onRetry} loading={retrying}>
+            Try again
           </Button>
         )
       }
     />
-  );
-}
-
-// Sidebar notes stand in for nav rows, so they take the rows' type role and inset and line up with the section header.
-
-/**
- * A sidebar list that failed to load. Retry is an icon, like the section header's actions above it, so the message
- * keeps the narrow sidebar's width.
- */
-export function SidebarLoadError({
-  children,
-  onRetry,
-  retrying,
-  announce = true,
-}: RetryProps & {
-  children: ReactNode;
-  /** Read the failure out as an alert. Off for a list that has always failed quietly. */
-  announce?: boolean;
-}) {
-  return (
-    <div role={announce ? 'alert' : undefined} className="flex min-w-0 items-center justify-between gap-2 py-0.5 pl-3">
-      <Txt as="p" variant="label" className="text-destructive-foreground m-0 min-w-0 truncate">
-        {children}
-      </Txt>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label="Retry"
-        tooltip="Retry"
-        className="shrink-0"
-        disabled={retrying}
-        onClick={onRetry}
-      >
-        <IconArrowRotateCounterClockwise aria-hidden />
-      </Button>
-    </div>
-  );
-}
-
-/** A sidebar list that loaded with nothing in it. */
-export function SidebarEmptyNote({ children }: { children: ReactNode }) {
-  return (
-    <Txt as="p" variant="label" tone="muted" role="status" className="m-0 px-3 py-1.5">
-      {children}
-    </Txt>
   );
 }

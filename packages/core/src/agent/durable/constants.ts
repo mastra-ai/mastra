@@ -65,6 +65,9 @@ export const DurableStepIds = {
   IS_TASK_COMPLETE: 'durable-is-task-complete',
 } as const;
 
+/** The loop's last step, which ends the run's spans when it succeeds. */
+export const MAP_FINAL_OUTPUT_STEP_ID = 'map-final-output';
+
 export const RECOVER_ALREADY_IN_PROGRESS_ERROR_ID = 'DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS';
 
 export const RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID = 'DURABLE_AGENT_RECOVER_SNAPSHOT_NOT_FOUND';
@@ -74,3 +77,5 @@ export const RECOVER_CHECKPOINT_NOT_AVAILABLE_ERROR_ID = 'DURABLE_AGENT_RECOVER_
 export const RECOVER_RUN_SUSPENDED_ERROR_ID = 'DURABLE_AGENT_RECOVER_RUN_SUSPENDED';
 
 export const RECOVER_RUN_NOT_ACTIVE_ERROR_ID = 'DURABLE_AGENT_RECOVER_RUN_NOT_ACTIVE';
+
+export const RECOVER_SHUTDOWN_ERROR_ID = 'DURABLE_AGENT_RECOVER_SHUTDOWN';

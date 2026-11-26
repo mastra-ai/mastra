@@ -1,4 +1,7 @@
 import { promises as fs } from 'node:fs';
+import { createServer } from 'node:http';
+import type { IncomingHttpHeaders, ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -1146,6 +1149,59 @@ describe('GET /web/config/models', () => {
     expect((await app.request('/web/config/models?factoryId=missing')).status).toBe(404);
   });
 
+  it('offers Fast entries for supported OpenAI models only to a Codex sign-in', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'openai-codex', {
+      type: 'oauth',
+      refresh: 'refresh',
+      access: 'access',
+      expires: Date.now() + 60_000,
+    });
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'openai-codex', { type: 'api_key', key: 'sk-org' });
+    const orgProject = await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Org' } });
+    const controller = {
+      listAvailableModels: async () => [
+        { id: 'openai/gpt-6.2-sol', modelName: 'gpt-6.2-sol', provider: 'openai', hasApiKey: false },
+        { id: 'openai/gpt-5.3', modelName: 'gpt-5.3', provider: 'openai', hasApiKey: false },
+      ],
+    };
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: 'org1' } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({
+        auth: fakeRouteAuth(),
+        controller,
+        modelCredentials: seed.credentials,
+        factoryProjects: seed.projects,
+      }).routes(),
+    );
+    const models = async (query: string) => {
+      const res = await app.request(`/web/config/models${query}`);
+      expect(res.status).toBe(200);
+      return ((await res.json()) as { models: ModelCatalogEntry[] }).models;
+    };
+
+    const personal = await models('');
+    expect(personal.map(model => model.id)).toEqual([
+      'openai/gpt-5.3',
+      'openai/gpt-6.2-sol',
+      'openai/gpt-6.2-sol:fast',
+    ]);
+    expect(personal.find(model => model.id === 'openai/gpt-6.2-sol:fast')).toMatchObject({
+      provider: 'openai',
+      modelName: 'gpt-6.2-sol:fast',
+      credentialHolder: 'personal',
+    });
+    expect((await models(`?factoryId=${orgProject.id}`)).map(model => model.id)).toEqual([
+      'openai/gpt-5.3',
+      'openai/gpt-6.2-sol',
+    ]);
+  });
+
   it('names the credential and its holder from the scope a reply will use, not a personal login that shadows it', async () => {
     const seed = await createFactoryStorageForTests();
     await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic', {
@@ -1436,6 +1492,13 @@ describe('default model routes with a tenant', () => {
   const controller = makeAgentController([]);
   const userA = { workosId: 'user-a', organizationId: 'org1' };
   const userB = { workosId: 'user-b', organizationId: 'org1' };
+  const unset = { modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null };
+  const singleModelDefaults = (modelId: string, thinkingLevel: string) => ({
+    modelId,
+    thinkingLevel,
+    modelPacks: [{ id: 'default', name: 'Default', models: [{ modelId, thinkingLevel }] }],
+    defaultModelPackId: 'default',
+  });
 
   function buildApp(user: { workosId: string; organizationId?: string } | null, includeStorage = true) {
     const app = new Hono();
@@ -1483,7 +1546,7 @@ describe('default model routes with a tenant', () => {
   it('returns null when the user has no default model', async () => {
     const res = await buildApp(userA).request('/web/config/default-model');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ modelId: null, thinkingLevel: null });
+    expect(await res.json()).toEqual(unset);
   });
 
   it('validates and persists a default model per user', async () => {
@@ -1492,11 +1555,14 @@ describe('default model routes with a tenant', () => {
 
     const nullBody = await putDefault(buildApp(userA), null);
     expect(nullBody.status).toBe(400);
-    expect(await nullBody.json()).toEqual({ error: 'Missing required field: modelId' });
+    expect(await nullBody.json()).toEqual({ error: 'Invalid modelId' });
 
-    const oversized = await putDefault(buildApp(userA), { modelId: 'm'.repeat(257) });
+    const oversized = await putDefault(buildApp(userA), { modelId: `openai/${'m'.repeat(250)}` });
     expect(oversized.status).toBe(400);
-    expect(await oversized.json()).toEqual({ error: 'Missing required field: modelId' });
+    expect(await oversized.json()).toEqual({ error: 'Invalid modelId' });
+
+    const searchText = await putDefault(buildApp(userA), { modelId: 'sonnet 5.5' });
+    expect(searchText.status).toBe(400);
 
     const saved = await putDefault(buildApp(userA), { modelId: ' openai/gpt-5.6 ' });
     expect(saved.status).toBe(200);
@@ -1507,97 +1573,64 @@ describe('default model routes with a tenant', () => {
 
     const userAResponse = await buildApp(userA).request('/web/config/default-model');
     const userBResponse = await buildApp(userB).request('/web/config/default-model');
-    expect(await userAResponse.json()).toEqual({ modelId: 'openai/gpt-5.6', thinkingLevel: null });
-    expect(await userBResponse.json()).toEqual({ modelId: null, thinkingLevel: null });
+    expect(await userAResponse.json()).toEqual(singleModelDefaults('openai/gpt-5.6', 'medium'));
+    expect(await userBResponse.json()).toEqual(unset);
   });
 
-  it('saves a personal thinking level only next to a personal default model', async () => {
-    const putThinking = (body: unknown) =>
-      buildApp(userA).request('/web/config/default-model/thinking', {
+  it('replaces the caller’s model packs and keeps the default model on the default pack', async () => {
+    const putPacks = (body: unknown) =>
+      buildApp(userA).request('/web/config/model-packs', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
       });
     const getDefaults = async (user: typeof userA) =>
       (await buildApp(user).request('/web/config/default-model')).json();
+    const build = {
+      id: 'build',
+      name: 'Build',
+      models: [
+        { modelId: 'anthropic/claude-opus-5.5', thinkingLevel: 'high' },
+        { modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'medium' },
+      ],
+    };
+    const quick = { id: 'quick', name: 'Quick', models: [{ modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'low' }] };
 
-    const withoutModel = await putThinking({ thinkingLevel: 'high' });
-    expect(withoutModel.status).toBe(400);
-    expect(await withoutModel.json()).toEqual({ error: 'default_model_not_set' });
+    for (const invalid of [
+      { modelPacks: [build] },
+      { modelPacks: [build], defaultModelPackId: 'missing' },
+      { modelPacks: [build, { ...quick, name: 'build' }], defaultModelPackId: 'build' },
+      { modelPacks: [{ ...build, models: [...build.models, build.models[0]] }], defaultModelPackId: 'build' },
+    ]) {
+      const rejected = await putPacks(invalid);
+      expect(rejected.status).toBe(400);
+      expect(await rejected.json()).toMatchObject({ error: 'invalid_model_packs' });
+    }
+    expect(await getDefaults(userA)).toEqual(unset);
 
-    await putDefault(buildApp(userA), { modelId: 'openai/gpt-5.6' });
-    const saved = await putThinking({ thinkingLevel: 'high' });
+    const saved = await putPacks({ modelPacks: [build, quick], defaultModelPackId: 'quick' });
     expect(saved.status).toBe(200);
-    expect(await saved.json()).toEqual({ ok: true, thinkingLevel: 'high' });
-    expect(await getDefaults(userA)).toEqual({ modelId: 'openai/gpt-5.6', thinkingLevel: 'high' });
-    expect(await getDefaults(userB)).toEqual({ modelId: null, thinkingLevel: null });
+    const quickDefaults = {
+      modelId: 'openai/gpt-5.6-sol',
+      thinkingLevel: 'low',
+      modelPacks: [build, quick],
+      defaultModelPackId: 'quick',
+    };
+    expect(await saved.json()).toEqual(quickDefaults);
+    expect(await getDefaults(userA)).toEqual(quickDefaults);
+    expect(await getDefaults(userB)).toEqual(unset);
 
-    const invalid = await putThinking({ thinkingLevel: 'enormous' });
-    expect(invalid.status).toBe(400);
-    expect(await invalid.json()).toEqual({ error: 'Invalid thinkingLevel' });
-    expect(await getDefaults(userA)).toEqual({ modelId: 'openai/gpt-5.6', thinkingLevel: 'high' });
-
-    const reset = await putThinking({ thinkingLevel: null });
-    expect(reset.status).toBe(200);
-    expect(await reset.json()).toEqual({ ok: true, thinkingLevel: null });
-    expect(await getDefaults(userA)).toEqual({ modelId: 'openai/gpt-5.6', thinkingLevel: null });
-  });
-
-  it('clears a personal default model', async () => {
-    await putDefault(buildApp(userA), { modelId: 'openai/gpt-5.6' });
-    const cleared = await buildApp(userA).request('/web/config/default-model', { method: 'DELETE' });
-    expect(cleared.status).toBe(200);
-    expect(await cleared.json()).toEqual({ ok: true, modelId: null });
-    expect(await seed.modelDefaults.get({ orgId: 'org1', userId: 'user-a' })).toBeNull();
-  });
-
-  it('switches only the caller’s live user sessions without starting dormant sessions', async () => {
-    await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Team' } });
-    await putDefault(buildApp(userA), { modelId: 'openai/gpt-5.6' });
-    const settings = new Map<string, string>();
-    const rows = [
-      { sessionId: 'live', userId: 'user-a', originSessionId: null },
-      { sessionId: 'dormant', userId: 'user-a', originSessionId: null },
-      { sessionId: 'other-user', userId: 'user-b', originSessionId: null },
-      { sessionId: 'side-session', userId: 'user-a', originSessionId: 'live' },
-    ];
-    const app = new Hono();
-    app.use('*', async (c, next) => {
-      c.set('factoryAuthUser' as never, userA as never);
-      await next();
+    await putDefault(buildApp(userA), { modelId: 'google/gemini-3.8-flash' });
+    expect(await getDefaults(userA)).toEqual({
+      ...quickDefaults,
+      modelId: 'google/gemini-3.8-flash',
+      modelPacks: [build, { ...quick, models: [{ modelId: 'google/gemini-3.8-flash', thinkingLevel: 'low' }] }],
     });
-    mountApiRoutes(
-      app as never,
-      new ConfigRoutes({
-        auth: fakeRouteAuth(),
-        modelDefaults: seed.modelDefaults,
-        factoryProjects: seed.projects,
-        workItems: seed.workItems,
-        sourceControls: [{ sessions: { listByProject: async () => rows } }] as never,
-        controller: {
-          ...controller,
-          getSession: async (id: string) =>
-            id === 'live'
-              ? {
-                  model: {
-                    get: () => settings.get('currentModelId') ?? '',
-                    switch: async (modelId: string) => void settings.set('currentModelId', modelId),
-                  },
-                  thread: { getId: () => 'thread-live' },
-                }
-              : undefined,
-        },
-      }).routes(),
-    );
 
-    const response = await app.request('/web/config/default-model/apply', { method: 'POST' });
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      modelId: 'openai/gpt-5.6',
-      applied: ['live'],
-      skipped: [{ sessionId: 'dormant', reason: 'not-running' }],
-    });
-    expect(settings.get('currentModelId')).toBe('openai/gpt-5.6');
+    const emptied = await putPacks({ modelPacks: [], defaultModelPackId: null });
+    expect(emptied.status).toBe(200);
+    expect(await emptied.json()).toEqual(unset);
+    expect(await getDefaults(userA)).toEqual(unset);
   });
 
   it('uses the local sentinel org and user when auth is disabled', async () => {
@@ -2340,8 +2373,14 @@ describe('custom provider routes', () => {
     seed.customProviders.list({ orgId: user.organizationId ?? `user:${user.workosId}`, userId: user.workosId });
 
   beforeEach(async () => {
+    // A deployment id in the developer's shell would refuse the local test endpoints.
+    vi.stubEnv('MASTRA_DEPLOYMENT_ID', '');
     seed = await createFactoryStorageForTests();
     onCustomProvidersChanged.mockClear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('rejects unauthenticated access when web auth is enabled', async () => {
@@ -2673,5 +2712,212 @@ describe('custom provider routes', () => {
   it('validates the payload', async () => {
     expect((await postProvider(buildApp(userA), { url: 'https://x.example' })).status).toBe(400);
     expect((await postProvider(buildApp(userA), { name: 'x', url: 'ftp://bad' })).status).toBe(400);
+    // `/models` is appended as text, so it would land inside the query string.
+    const withQuery = await postProvider(buildApp(userA), { ...providerBody, url: 'https://llm.example.com/v1?a=1' });
+    expect(withQuery.status).toBe(400);
+  });
+
+  // Without a scheme the edit keeps x-api-key, under which Authorization is an ordinary header.
+  it('accepts an Authorization header on an edit that keeps a saved x-api-key scheme', async () => {
+    const app = buildApp(userA);
+    const headers = [{ name: 'Authorization', value: 'Basic gateway-user' }];
+    const { provider } = await (await postProvider(app, { ...providerBody, authScheme: 'x-api-key', headers })).json();
+
+    const edited = await postProvider(app, { ...providerBody, headers, previousId: provider.id });
+
+    expect(edited.status).toBe(200);
+  });
+
+  describe('checks against a real endpoint', () => {
+    type Respond = (path: string, res: ServerResponse) => void;
+    const closers: Array<() => Promise<void>> = [];
+
+    afterEach(async () => {
+      vi.unstubAllEnvs();
+      await Promise.all(closers.splice(0).map(close => close()));
+    });
+
+    /** A local endpoint that records the headers of every request it answers. */
+    async function startEndpoint(respond: Respond) {
+      const requests: Array<{ path: string; headers: IncomingHttpHeaders }> = [];
+      const server = createServer((req, res) => {
+        req.resume();
+        req.on('end', () => {
+          requests.push({ path: req.url ?? '', headers: req.headers });
+          respond(req.url ?? '', res);
+        });
+      });
+      await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+      closers.push(() => {
+        server.closeAllConnections();
+        return new Promise(resolve => server.close(() => resolve()));
+      });
+      return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`, requests };
+    }
+
+    /** Lists `m1` and answers "yes" to a streamed chat completion. */
+    const openAiCompatible: Respond = (path, res) => {
+      if (path.endsWith('/models')) {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ data: [{ id: 'm1' }] }));
+        return;
+      }
+      const chunk = (delta: unknown, finish: string | null) => {
+        const choices = [{ index: 0, delta, finish_reason: finish }];
+        return `data: ${JSON.stringify({ id: 'c', object: 'chat.completion.chunk', created: 0, model: 'm1', choices })}\n\n`;
+      };
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.end(`${chunk({ role: 'assistant', content: 'yes' }, null)}${chunk({}, 'stop')}data: [DONE]\n\n`);
+    };
+
+    /** Refuses every call with an error that echoes the request headers, as some gateways do. */
+    const echoingRefusal: Respond = (_path, res) => {
+      res.writeHead(401, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: `Invalid credentials: ${JSON.stringify(res.req.headers)}` } }));
+    };
+
+    const postCheck = (app: Hono, body: unknown) =>
+      app.request('/web/config/custom-providers/check', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    const connection = (url: string) => ({
+      name: 'My LLM',
+      url,
+      apiKey: 'sk-saved-key',
+      authScheme: 'x-api-key',
+      headers: [
+        { name: 'X-Tenant', value: 'tenant-secret-value' },
+        { name: 'X-Region', value: 'eu-west', secret: false },
+      ],
+      models: ['m1'],
+    });
+
+    it('lists the models of a draft and sends it the test message, storing nothing', async () => {
+      const endpoint = await startEndpoint(openAiCompatible);
+
+      const res = await postCheck(buildApp(userA), { ...connection(endpoint.url), model: 'm1' });
+
+      expect((await res.json()).check).toEqual({
+        models: { ok: true, models: ['m1'], latencyMs: expect.any(Number) },
+        reply: { ok: true, reply: 'yes', finishReason: 'stop', latencyMs: expect.any(Number) },
+      });
+      expect(endpoint.requests.map(request => request.path).sort()).toEqual(['/v1/chat/completions', '/v1/models']);
+      expect(await ownList(userA)).toEqual([]);
+    });
+
+    it('records the result of checking a saved provider', async () => {
+      const endpoint = await startEndpoint(openAiCompatible);
+      const app = buildApp(userA);
+      const { provider } = await (await postProvider(app, connection(endpoint.url))).json();
+
+      const body = await (await postCheck(app, { previousId: provider.id })).json();
+
+      expect(body.provider.lastCheck).toEqual({ at: expect.any(String), ok: true });
+      expect((await ownList(userA))[0]!.lastCheck).toEqual(body.provider.lastCheck);
+
+      // A row saved before query strings were refused is never called.
+      const calls = endpoint.requests.length;
+      await seed.storage.ops.updateMany(
+        'user_custom_providers',
+        { provider_id: provider.id },
+        { url: `${endpoint.url}?a=1` },
+      );
+      expect((await postCheck(app, { previousId: provider.id })).status).toBe(400);
+      expect(endpoint.requests).toHaveLength(calls);
+    });
+
+    it('reuses the saved key and secret headers for a draft on the same origin', async () => {
+      const endpoint = await startEndpoint(openAiCompatible);
+      const app = buildApp(userA);
+      const { provider } = await (await postProvider(app, connection(endpoint.url))).json();
+
+      await postCheck(app, { previousId: provider.id, url: `${endpoint.url}/`, headers: [{ name: 'X-Tenant' }] });
+
+      expect(endpoint.requests[0]!.headers).toMatchObject({
+        'x-api-key': 'sk-saved-key',
+        'x-tenant': 'tenant-secret-value',
+      });
+    });
+
+    // Reusing a saved secret elsewhere would let whoever edits the provider send it to their own server.
+    it('refuses a draft on another origin that would reuse the saved key, before calling it', async () => {
+      const saved = await startEndpoint(openAiCompatible);
+      const other = await startEndpoint(openAiCompatible);
+      const app = buildApp(userA);
+      const { provider } = await (await postProvider(app, connection(saved.url))).json();
+
+      const res = await postCheck(app, { previousId: provider.id, url: other.url });
+
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe('api_key_required');
+      expect(other.requests).toEqual([]);
+    });
+
+    it("refuses a member's check of an organization provider", async () => {
+      const endpoint = await startEndpoint(openAiCompatible);
+      const { provider } = await (
+        await postProvider(buildApp(admin), { ...connection(endpoint.url), scope: 'org' })
+      ).json();
+
+      const res = await postCheck(buildApp(userA), { previousId: provider.id, scope: 'org' });
+
+      expect(res.status).toBe(403);
+      expect(endpoint.requests).toEqual([]);
+    });
+
+    it('refuses a private address on a hosted Factory before calling it', async () => {
+      const endpoint = await startEndpoint(openAiCompatible);
+      vi.stubEnv('MASTRA_DEPLOYMENT_ID', 'deploy-1');
+
+      const res = await postCheck(buildApp(userA), { url: endpoint.url });
+
+      expect((await res.json()).error).toBe('custom_endpoint_url_refused');
+      expect(endpoint.requests).toEqual([]);
+    });
+
+    it('saves with check: true only when the connection test passes', async () => {
+      const passing = await startEndpoint(openAiCompatible);
+      const failing = await startEndpoint(echoingRefusal);
+      const app = buildApp(userA);
+
+      const refused = await postProvider(app, { ...connection(failing.url), check: true });
+      expect(refused.status).toBe(422);
+      expect((await refused.json()).failure).toMatchObject({ kind: 'http', status: 401 });
+      expect(await ownList(userA)).toEqual([]);
+
+      const saved = await postProvider(app, { ...connection(passing.url), check: true });
+      expect((await saved.json()).provider.lastCheck).toEqual({ at: expect.any(String), ok: true });
+      expect(await ownList(userA)).toHaveLength(1);
+    });
+
+    it('never returns a secret header value or the key, and returns plain header values', async () => {
+      const endpoint = await startEndpoint(echoingRefusal);
+      const app = buildApp(userA);
+      const created = await postProvider(app, connection(endpoint.url));
+      const { provider } = await created.clone().json();
+
+      const texts = await Promise.all(
+        [
+          created,
+          await app.request('/web/config/custom-providers'),
+          await postCheck(app, { previousId: provider.id, model: 'm1' }),
+          await postProvider(app, { ...connection(endpoint.url), previousId: provider.id, check: true }),
+        ].map(res => res.text()),
+      );
+
+      // The endpoint echoed both secrets back in every error body.
+      expect(texts.join('\n')).toContain('[redacted]');
+      for (const text of texts) {
+        expect(text).not.toContain('tenant-secret-value');
+        expect(text).not.toContain('sk-saved-key');
+      }
+      expect(JSON.parse(texts[1]!).providers[0].headers).toEqual([
+        { name: 'X-Tenant', secret: true },
+        { name: 'X-Region', secret: false, value: 'eu-west' },
+      ]);
+    });
   });
 });

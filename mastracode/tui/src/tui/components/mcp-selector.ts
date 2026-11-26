@@ -6,10 +6,11 @@
 import { Box, Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, TUI } from '@earendil-works/pi-tui';
 import type { McpServerStatus, McpSkippedServer } from '@mastra/code-sdk/mcp/types';
-import chalk from 'chalk';
 import { decodePrintableShortcut } from '../key-input.js';
 import { ClickableText } from '../mouse/hit-test.js';
-import { theme, getContrastText } from '../theme.js';
+import { theme } from '../theme.js';
+import type { MenuChrome, MenuHint } from './menu-chrome.js';
+import { labelColumnWidth, menuRow } from './menu-list.js';
 
 // =============================================================================
 // Types
@@ -110,7 +111,11 @@ const AUTHENTICATING_ACTIONS: ServerAction[] = [{ label: 'Cancel authentication'
 // McpSelectorComponent
 // =============================================================================
 
-export class McpSelectorComponent extends Box implements Focusable {
+export class McpSelectorComponent extends Box implements Focusable, MenuChrome {
+  menuHints(): readonly MenuHint[] {
+    return [{ key: 'r', label: 'reload all' }];
+  }
+
   private listContainer!: Container;
   private statuses: McpServerStatus[];
   private skipped: McpSkippedServer[];
@@ -158,7 +163,7 @@ export class McpSelectorComponent extends Box implements Focusable {
   }
 
   constructor(options: McpSelectorOptions) {
-    super(2, 1, text => theme.bg('overlayBg', text));
+    super(0, 0);
 
     this.tui = options.tui;
     this.statuses = options.statuses;
@@ -179,19 +184,9 @@ export class McpSelectorComponent extends Box implements Focusable {
   }
 
   private buildUI(): void {
-    // Title
-    const accent = theme.getTheme().accent;
-    const titleText = chalk.bgHex(accent).hex(getContrastText(accent)).bold(' Manage MCP servers ');
-    this.addChild(new Text(titleText, 0, 0));
-    this.addChild(new Spacer(1));
-
     // List container (includes server count + server list)
     this.listContainer = new Container();
     this.addChild(this.listContainer);
-
-    // Footer spacer + hints
-    this.addChild(new Spacer(1));
-    this.addChild(new Text(theme.fg('muted', '↑↓ navigate • Enter select • r reload all • Esc close'), 0, 0));
 
     // Initial render
     this.updateList();
@@ -209,10 +204,11 @@ export class McpSelectorComponent extends Box implements Focusable {
     const countLabel = this._reloading
       ? `${total} server${total !== 1 ? 's' : ''} — reconnecting...`
       : `${total} server${total !== 1 ? 's' : ''}`;
-    this.listContainer.addChild(new Text(theme.fg(this._reloading ? 'warning' : 'muted', countLabel), 0, 0));
+    this.listContainer.addChild(new Text(theme.fg(this._reloading ? 'warning' : 'muted', countLabel), 2, 0));
     this.listContainer.addChild(new Spacer(1));
 
     const totalItems = this.getTotalItems();
+    const column = labelColumnWidth([...this.statuses, ...this.skipped].map(server => server.name));
 
     for (let i = 0; i < this.statuses.length; i++) {
       const status = this.statuses[i]!;
@@ -268,16 +264,15 @@ export class McpSelectorComponent extends Box implements Focusable {
         );
       }
 
-      const cursor = isSelected ? theme.fg('accent', '› ') : '  ';
-      const name = isSelected ? theme.bold(theme.fg('accent', status.name)) : status.name;
       const transport = theme.fg('muted', `[${status.transport}]`);
       const toolInfo =
         !this._reloading && status.toolCount > 0 ? theme.fg('muted', ` · ${status.toolCount} tools`) : '';
 
       const serverIndex = i;
       this.listContainer.addChild(
-        new ClickableText(`${cursor}${icon} ${name} ${transport} ${stateText}${toolInfo}`, () =>
-          this.clickItem(serverIndex),
+        new ClickableText(
+          menuRow(isSelected, status.name, `${icon} ${stateText} ${transport}${toolInfo}`, column),
+          () => this.clickItem(serverIndex),
         ),
       );
 
@@ -286,13 +281,9 @@ export class McpSelectorComponent extends Box implements Focusable {
         for (let j = 0; j < this.subMenuActions.length; j++) {
           const action = this.subMenuActions[j]!;
           const actionSelected = j === this.subMenuIndex;
-          const actionCursor = actionSelected ? theme.fg('accent', '  › ') : '    ';
-          const actionText = actionSelected
-            ? theme.bold(theme.fg('accent', action.label))
-            : theme.fg('muted', action.label);
           const actionIndex = j;
           this.listContainer.addChild(
-            new ClickableText(`${actionCursor}${actionText}`, () => this.clickAction(actionIndex)),
+            new ClickableText(`  ${menuRow(actionSelected, action.label)}`, () => this.clickAction(actionIndex)),
           );
         }
       }
@@ -301,16 +292,15 @@ export class McpSelectorComponent extends Box implements Focusable {
     // Skipped servers
     if (this.skipped.length > 0) {
       this.listContainer.addChild(new Spacer(1));
-      this.listContainer.addChild(new Text(theme.fg('muted', 'Skipped:'), 0, 0));
+      this.listContainer.addChild(new Text(theme.fg('muted', 'Skipped:'), 2, 0));
       for (let i = 0; i < this.skipped.length; i++) {
         const s = this.skipped[i]!;
         const idx = this.statuses.length + i;
         const isSelected = idx === this.selectedIndex && !this.subMenuOpen;
-        const cursor = isSelected ? theme.fg('accent', '› ') : '  ';
-        const name = isSelected ? theme.bold(theme.fg('accent', s.name)) : s.name;
         this.listContainer.addChild(
-          new ClickableText(`${cursor}${theme.fg('warning', '⊘')} ${name} — ${theme.fg('muted', s.reason)}`, () =>
-            this.clickItem(idx),
+          new ClickableText(
+            menuRow(isSelected, s.name, `${theme.fg('warning', '⊘')} ${theme.fg('muted', s.reason)}`, column),
+            () => this.clickItem(idx),
           ),
         );
       }
@@ -318,7 +308,7 @@ export class McpSelectorComponent extends Box implements Focusable {
 
     // Empty state
     if (totalItems === 0) {
-      this.listContainer.addChild(new Text(theme.fg('muted', 'No MCP servers configured'), 0, 0));
+      this.listContainer.addChild(new Text(theme.fg('muted', 'No MCP servers configured'), 2, 0));
     }
 
     this.tui.requestRender();

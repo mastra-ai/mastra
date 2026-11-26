@@ -670,14 +670,9 @@ describe('AgentController: ask_user native suspension', () => {
       globalRunRegistry.clear();
     }
   });
-  it('emits tool_suspended carrying the question payload when ask_user suspends', async () => {
-    const { session } = await buildController(
-      'emit',
-      JSON.stringify({
-        question: 'Which environment?',
-        options: [{ label: 'staging' }, { label: 'production' }],
-      }),
-    );
+  it('emits tool_suspended carrying the question and its recommended choice', async () => {
+    const options = [{ label: 'staging', recommended: true }, { label: 'production' }];
+    const { session } = await buildController('emit', JSON.stringify({ question: 'Which environment?', options }));
 
     const events: any[] = [];
     session.subscribe(event => events.push(event));
@@ -689,7 +684,7 @@ describe('AgentController: ask_user native suspension', () => {
     expect(suspendEvent.toolName).toBe('ask_user');
     expect(suspendEvent.toolCallId).toBe('call-1');
     expect(suspendEvent.suspendPayload.question).toBe('Which environment?');
-    expect(suspendEvent.suspendPayload.options).toEqual([{ label: 'staging' }, { label: 'production' }]);
+    expect(suspendEvent.suspendPayload.options).toEqual(options);
     expect(suspendEvent.suspendPayload.selectionMode).toBe('single_select');
 
     // Display state should reflect the pending suspension.

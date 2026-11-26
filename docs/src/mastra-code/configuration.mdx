@@ -11,7 +11,7 @@ Mastra Code is configured through project-level files, global settings, and envi
 
 ## Custom configuration directory
 
-When embedding Mastra Code, pass `configDir` to [`createMastraCode()`](/reference#createmastracodeoptions) to replace the `.mastracode` directory name:
+When embedding Mastra Code, pass `configDir` to [`createMastraCode()`](/reference#mastracodeconfig) to replace the `.mastracode` directory name:
 
 ```typescript
 import { createMastraCode } from 'mastracode'
@@ -159,6 +159,20 @@ To preselect the device-code flow (for example in scripts or remote shells where
 export MASTRACODE_OPENAI_CODEX_AUTH_MODE=device
 ```
 
+### Codex fast
+
+Append `:fast` to a supported OpenAI model ID to request priority processing when you use Codex sign-in:
+
+```sh
+mastracode --model openai/gpt-6.2-sol:fast
+```
+
+When you sign in with Codex, `/model` also lists a `:fast` entry next to each supported model.
+
+`:fast` changes the request, not the model. Without the suffix, requests use the default service tier. The suffix has no effect when you use an OpenAI API key or a model without a Fast tier.
+
+Supported models: GPT-6.2 Sol, GPT-6.2 Astra, GPT-6.1 Sol, GPT-6.1 Terra, GPT-6 Astra, GPT-6 Sol, GPT-6 Luna, GPT-5.6, GPT-5.6 Sol, GPT-5.5 and GPT-5.4.
+
 ### Authentication priority for anthropic
 
 When resolving Anthropic models, Mastra Code checks for credentials in this order:
@@ -177,7 +191,41 @@ Authenticating with a Claude Max subscription through OAuth is a grey area. Anth
 
 Use `/custom-providers` to add OpenAI-compatible providers. Each provider has a name, base URL, optional API key, and one or more model IDs. Saved models appear in selectors such as `/models` and `/subagents` alongside built-in models.
 
-Custom providers are stored in `settings.json` in the application data directory. API keys saved through this flow are stored locally in plaintext, so use it only on a trusted user account and machine.
+Custom providers are stored in `settings.json` in the application data directory. API keys and header values saved through this flow are stored locally in plaintext, so use it only on a trusted user account and machine.
+
+Select a provider in `/custom-providers` to manage it. **Add model** first asks the endpoint for its model list and waits a few seconds for it. Models that aren't configured yet appear in a picker: pick one at a time, select **Add all**, or type an ID under **Custom response**. Without an answer, or with nothing new to offer, you type the model ID.
+
+Besides adding, removing, editing, and deleting, the menu offers:
+
+- **Test connection**: Calls `GET <base URL>/models` and shows how many models the endpoint lists and how long it took to answer, or why the call failed. This check doesn't call a model.
+- **Headers**: Adds or removes extra headers sent on every call to the provider. Each header is saved as secret or plain. A secret value is masked while you type it and shows as `••••` in the list.
+- **Auth scheme**: Chooses how the API key is sent: **Bearer token** sends `Authorization: Bearer <key>`, and **x-api-key header** sends `x-api-key: <key>`. Bearer token is the default.
+
+When a check fails, Mastra Code shows what went wrong, such as the HTTP status and the URL it called, followed by the error text the endpoint returned. Mastra Code keeps the API key and secret header values out of that text. Checks don't follow redirects.
+
+Header names must be valid HTTP header names and unique regardless of case. A provider can send up to 20 custom headers, and each value can be up to 4,096 characters. Headers that the HTTP client sets, such as `Host` and `Content-Type`, are refused, as is the header that carries the API key for the chosen auth scheme.
+
+If you edit a provider and change its base URL to another origin (scheme, host, or port), Mastra Code removes its secret headers so their values aren't sent to the new address. Add them again under **Headers**.
+
+A provider with an auth scheme and headers looks like this in `settings.json`. A header without `"secret"` counts as secret.
+
+```json
+{
+  "customProviders": [
+    {
+      "name": "Acme Gateway",
+      "url": "https://llm.acme.dev/v1",
+      "apiKey": "sk-acme-...",
+      "authScheme": "x-api-key",
+      "headers": [
+        { "name": "X-Org-Id", "value": "org-123", "secret": false },
+        { "name": "X-Gateway-Token", "value": "gw-...", "secret": true }
+      ],
+      "models": ["acme-large"]
+    }
+  ]
+}
+```
 
 ## Direct shell passthrough
 

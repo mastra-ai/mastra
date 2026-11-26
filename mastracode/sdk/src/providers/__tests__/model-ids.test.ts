@@ -1,5 +1,70 @@
 import { describe, expect, it } from 'vitest';
-import { getCredentialProviderId, normalizeLegacyModelId } from '../model-ids.js';
+import { getCatalogThinkingLevels } from '../../thinking-catalog.js';
+import {
+  getCredentialProviderId,
+  normalizeLegacyModelId,
+  parseCodexModelSelection,
+  withCodexFastModels,
+} from '../model-ids.js';
+
+describe('parseCodexModelSelection', () => {
+  it.each(['openai/gpt-6.2-sol', 'mastra/openai/gpt-6.2-astra'])('keeps the canonical model %s', modelId => {
+    expect(parseCodexModelSelection(`${modelId}:fast`)).toEqual({ modelId, codexServiceTier: 'fast' });
+    expect(getCatalogThinkingLevels(`${modelId}:fast`)).toEqual(getCatalogThinkingLevels(modelId));
+  });
+
+  it.each([
+    'openrouter/openai/gpt-6.2-sol:fast',
+    'anthropic/claude:fast',
+    'openai/gpt-6.2-sol:FAST',
+    'openai-proxy/gpt-6.2-sol:fast',
+    'acme/local:fast',
+  ])('does not reserve the suffix for %s', modelId => expect(parseCodexModelSelection(modelId)).toEqual({ modelId }));
+
+  it.each(['openai/gpt-5.3', 'openai/gpt-5.4-mini', 'mastra/openai/gpt-4.1'])(
+    'drops the suffix without requesting Fast on %s, which has no Fast tier',
+    modelId => expect(parseCodexModelSelection(`${modelId}:fast`)).toEqual({ modelId }),
+  );
+});
+
+describe('withCodexFastModels', () => {
+  const model = (id: string, hasApiKey = true) => {
+    const [provider, modelName] = id.split('/') as [string, string];
+    return { id, provider, modelName, hasApiKey };
+  };
+
+  it('lists a Fast entry right after each connected OpenAI model that supports it', () => {
+    const models = [model('anthropic/claude-fable-5'), model('openai/gpt-6.2-sol'), model('openai/gpt-5.3')];
+
+    expect(withCodexFastModels(models, { codexOAuth: true }).map(m => m.id)).toEqual([
+      'anthropic/claude-fable-5',
+      'openai/gpt-6.2-sol',
+      'openai/gpt-6.2-sol:fast',
+      'openai/gpt-5.3',
+    ]);
+    expect(withCodexFastModels(models, { codexOAuth: true })[2]).toEqual({
+      ...model('openai/gpt-6.2-sol'),
+      id: 'openai/gpt-6.2-sol:fast',
+      modelName: 'gpt-6.2-sol:fast',
+    });
+  });
+
+  it('lists no Fast entries without Codex sign-in, where Fast has no effect', () => {
+    const models = [model('openai/gpt-6.2-sol'), model('openai/gpt-6.2-sol:fast')];
+
+    expect(withCodexFastModels(models, { codexOAuth: false }).map(m => m.id)).toEqual(['openai/gpt-6.2-sol']);
+  });
+
+  it('skips models that are not connected and never lists a Fast entry twice', () => {
+    const models = [model('openai/gpt-6.1-sol', false), model('openai/gpt-6.2-sol'), model('openai/gpt-6.2-sol:fast')];
+
+    expect(withCodexFastModels(models, { codexOAuth: true }).map(m => m.id)).toEqual([
+      'openai/gpt-6.1-sol',
+      'openai/gpt-6.2-sol',
+      'openai/gpt-6.2-sol:fast',
+    ]);
+  });
+});
 
 describe('normalizeLegacyModelId', () => {
   it.each([

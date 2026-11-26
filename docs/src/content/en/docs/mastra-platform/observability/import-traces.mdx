@@ -114,7 +114,7 @@ Set `SINCE` and `UNTIL` to ISO 8601 dates or timestamps. The following rules app
 - The selected window can't exceed 30 days.
 - If only `--until` is set, the default start is 30 days before the current time.
 
-This 30-day import window is separate from your plan's data retention period.
+This 30-day import window is separate from the trace retention period described in [Mastra Platform observability](/docs/mastra-platform/observability/overview).
 
 The earlier `--from` and `--to` names still work, but they're deprecated hidden aliases of `--since` and `--until` and don't appear in the command help. Use `--since` and `--until` in new commands.
 

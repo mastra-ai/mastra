@@ -1,6 +1,6 @@
 {
   "name": "@mastra/factory",
-  "version": "0.30.0",
+  "version": "0.32.0-alpha.2",
   "description": "Mastra Software Factory module: the server core behind the Mastra Software Factory — storage domains, integrations, and surfaces for agent-powered software delivery",
   "type": "module",
   "publishConfig": {
@@ -8,6 +8,7 @@
   },
   "files": [
     "dist",
+    "!dist/**/*.d.*ts.map",
     "factory-skills"
   ],
   "main": "dist/index.js",
@@ -73,6 +74,7 @@
     "chat": "catalog:",
     "fetch-to-node": "^2.1.0",
     "hono": "^4.13.13",
+    "jose": "^6.2.12",
     "posthog-node": "^5.57.1",
     "zod": "catalog:"
   },
@@ -84,6 +86,7 @@
     "@mastra/deployer": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/pg": "workspace:*",
+    "@mastra/redis-streams": "workspace:*",
     "@mastra/server": "workspace:*",
     "@types/node": "22.19.15",
     "msw": "^2.12.11",

@@ -11,6 +11,7 @@
   ],
   "temperature": [
     "deepseek-ai/deepseek-v4-pro",
+    "deepseek-ai/deepseek-v4-pro-0813",
     "deepseek-ai/deepseek-v4.1-flash-1017",
     "google/gemma-4-31b-it",
     "meta/muse-spark-open",
@@ -25,6 +26,7 @@
   ],
   "structuredOutput": [
     "deepseek-ai/deepseek-v4-pro",
+    "deepseek-ai/deepseek-v4-pro-0813",
     "deepseek-ai/deepseek-v4.1-flash-1017",
     "google/gemma-4-31b-it",
     "meta/muse-spark-open",
@@ -44,16 +46,10 @@
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "moonshotai/kimi-k3.1-pro": [
+    "deepseek-ai/deepseek-v4-pro-0813": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "moonshotai/kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "high", "max"]
       }
     ],
     "deepseek-ai/deepseek-v4.1-flash-1017": [
@@ -68,34 +64,16 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "google/gemma-4-31b-it": [
+    "moonshotai/kimi-k3": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
-    "qwen/qwen3.6-27b": [
+    "moonshotai/kimi-k3.1-pro": [
       {
         "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "qwen/qwen3.8-27b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "motif-technologies/motif-3": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
     "zai-org/glm-5.3-flash": [
@@ -108,6 +86,36 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "qwen/qwen3.8-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "qwen/qwen3.6-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "google/gemma-4-31b-it": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "motif-technologies/motif-3": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ]
   }

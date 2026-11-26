@@ -7,7 +7,7 @@ description: "Browse Together AI model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/togetherai.svg" alt="Together AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Together AI
 
-Access 33 Together AI models through Mastra's model router. Authentication is handled automatically using the `TOGETHER_API_KEY` environment variable.
+Access 27 Together AI models through Mastra's model router. Authentication is handled automatically using the `TOGETHER_API_KEY` environment variable.
 
 Learn more in the [Together AI documentation](https://docs.together.ai/docs/serverless-models).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "togetherai/LiquidAI/LFM2-24B-A2B"
+  model: "togetherai/MiniMaxAI/MiniMax-M3.1-Flash"
 });
 
 // Generate a response
@@ -40,18 +40,6 @@ for await (const chunk of stream) {
 <ProviderModelsTable
   models={[
   {
-    "model": "togetherai/deepseek-ai/DeepSeek-V4-Pro-0813",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 384000,
-    "inputCost": 1.32,
-    "outputCost": 3.96
-  },
-  {
     "model": "togetherai/deepseek-ai/DeepSeek-V4.1-Flash",
     "imageInput": true,
     "audioInput": false,
@@ -62,6 +50,54 @@ for await (const chunk of stream) {
     "maxOutput": 384000,
     "inputCost": 0.3,
     "outputCost": 1.2
+  },
+  {
+    "model": "togetherai/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 384000,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "togetherai/deepseek-ai/DeepSeek-V4.1-Flash-1017-fast",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 384000,
+    "inputCost": 0.6,
+    "outputCost": 2.4
+  },
+  {
+    "model": "togetherai/elorian-labs/glimpse-1.0",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 256000,
+    "inputCost": 0.6,
+    "outputCost": 3
+  },
+  {
+    "model": "togetherai/meta-models/Muse-Glimmer-30B",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.35,
+    "outputCost": 1.5
   },
   {
     "model": "togetherai/meta-models/Muse-Spark-Open-816B-A42B",
@@ -76,16 +112,16 @@ for await (const chunk of stream) {
     "outputCost": 4.25
   },
   {
-    "model": "togetherai/MiniMaxAI/MiniMax-M3",
+    "model": "togetherai/MiniMaxAI/MiniMax-M3.1-Flash",
     "imageInput": true,
     "audioInput": false,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 524288,
-    "maxOutput": 524288,
-    "inputCost": 0.3,
-    "outputCost": 1.2
+    "contextWindow": 1048576,
+    "maxOutput": 512000,
+    "inputCost": 0.15,
+    "outputCost": 0.6
   },
   {
     "model": "togetherai/moonshotai/Kimi-K3",
@@ -124,16 +160,16 @@ for await (const chunk of stream) {
     "outputCost": 0.5
   },
   {
-    "model": "togetherai/openai/gpt-oss-120b",
-    "imageInput": false,
+    "model": "togetherai/Prism-ML/Ternary-Bonsai-27B",
+    "imageInput": true,
     "audioInput": false,
-    "videoInput": false,
+    "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 131072,
-    "inputCost": 0.15,
-    "outputCost": 0.6
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "togetherai/Qwen/Qwen3.5-9B",
@@ -172,6 +208,42 @@ for await (const chunk of stream) {
     "outputCost": 7.5
   },
   {
+    "model": "togetherai/Qwen/Qwen3.7-Plus",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.32,
+    "outputCost": 1.28
+  },
+  {
+    "model": "togetherai/Qwen/Qwen3.8-Flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.15,
+    "outputCost": 0.47
+  },
+  {
+    "model": "togetherai/Qwen/Qwen4-Max",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 262144,
+    "inputCost": 1.5,
+    "outputCost": 4.5
+  },
+  {
     "model": "togetherai/reflection/Beam-1.0-501B-A23B",
     "imageInput": false,
     "audioInput": false,
@@ -184,16 +256,40 @@ for await (const chunk of stream) {
     "outputCost": 1.2
   },
   {
-    "model": "togetherai/thinkingmachines/Inkling",
-    "imageInput": true,
-    "audioInput": true,
+    "model": "togetherai/ricursive-ai/Ripple-65B-Preview",
+    "imageInput": false,
+    "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 524288,
+    "contextWindow": 131072,
     "maxOutput": 131072,
-    "inputCost": 1,
-    "outputCost": 4.05
+    "inputCost": 0.2,
+    "outputCost": 0.6
+  },
+  {
+    "model": "togetherai/tencent/Hy4",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.834,
+    "outputCost": 2.501
+  },
+  {
+    "model": "togetherai/thinkingmachines/Inkling-2-Small",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.3,
+    "outputCost": 1
   },
   {
     "model": "togetherai/zai-org/GLM-5.2",
@@ -247,7 +343,7 @@ const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
   model: {
-    id: "togetherai/LiquidAI/LFM2-24B-A2B",
+    id: "togetherai/MiniMaxAI/MiniMax-M3.1-Flash",
     apiKey: process.env.TOGETHER_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -268,7 +364,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "togetherai/zai-org/GLM-5.3-Flash"
-      : "togetherai/LiquidAI/LFM2-24B-A2B";
+      : "togetherai/MiniMaxAI/MiniMax-M3.1-Flash";
   }
 });
 ```

@@ -156,7 +156,7 @@ function PackageRow({ pkg }: { pkg: PackageUpdateInfo }) {
       <span className={cn('font-mono tabular-nums', versionToneClass(pkg))}>{pkg.version}</span>
       {needsUpdate && pkg.latestVersion && (
         <>
-          <IconArrowRight aria-label="updates to" className="size-icon-xs text-placeholder" />
+          <IconArrowRight aria-label="updates to" className="size-icon-xs text-subtle-foreground" />
           <span className="font-mono text-foreground tabular-nums">{pkg.latestVersion}</span>
         </>
       )}
@@ -167,7 +167,7 @@ function PackageRow({ pkg }: { pkg: PackageUpdateInfo }) {
 function versionToneClass(pkg: PackageUpdateInfo) {
   if (pkg.isDeprecated) return 'text-destructive-foreground';
   if (pkg.isOutdated) return 'text-warning-foreground';
-  return 'text-placeholder';
+  return 'text-subtle-foreground';
 }
 
 function UpdateCommand({ packages }: { packages: PackageUpdateInfo[] }) {
