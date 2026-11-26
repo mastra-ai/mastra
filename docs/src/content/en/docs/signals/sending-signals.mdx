@@ -58,7 +58,7 @@ const result = agent.queueMessage('Also check whether the tests need updates.', 
 await result.accepted
 ```
 
-Queued input waits for the active run to finish, then starts a new run. On an idle thread it starts immediately. [`cancelQueuedMessages()`](/reference/agents/agent#cancelqueuedmessagesoptions) removes queued input without stopping the active run. Cancellation is best-effort across processes and doesn't revoke accepted input.
+Queued input waits for the active run to finish, then starts a new run. On an idle thread it starts immediately. [`cancelQueuedMessages()`](/reference/agents/agent#cancelqueuedmessagesoptions) removes input that no run has taken yet, without stopping the active run. Its awaited result lists the IDs this process cancelled, including ones it deleted from memory storage when it knows the thread's store: this process started the thread's current run and that run hasn't ended, or the agent's memory is a fixed instance and this process knows the thread's run keeps its signals in storage. Other processes cancel matching input when they get the request, and those IDs aren't in the result. Input a run already took stays delivered.
 
 [`queueSignal()`](/reference/agents/agent#queuesignalsignal-options) queues typed context with the same behavior but keeps the signal's `type`, `tagName`, and attributes.
 
@@ -83,7 +83,7 @@ await result.accepted
 
 Mastra passes `contents` as written and XML-escapes attribute values. A closing tag matching the signal's own tag is escaped so content can't end it early; this isn't a prompt-injection defense, so treat forwarded third-party text as untrusted. Use XML-safe `tagName` and attribute names with letters, numbers, periods, hyphens, or the underscore character, starting with a letter or underscore.
 
-Like `sendMessage()`, `sendSignal()` delivers by default. Set `transient: true` to apply context only to the current request; Mastra doesn't store it, and transient signals can't be state signals. The [Agent reference](/reference/agents/agent#sendsignalsignal-options) covers `attributes`, `metadata`, and `providerOptions`.
+Like `sendMessage()`, `sendSignal()` delivers by default. Set `transient: true` to apply context only to the current request. Mastra never saves a transient signal as a message, so later turns don't find it in the history. When the run keeps its signals in memory storage, the signal waits there as a hidden row until a run takes it, and the row is deleted when the run that took it ends. One no run took waits for the thread's next turn. A run that fails before its progress is saved gives back the signals it took, and the thread's next turn receives them again, so a transient signal can be seen twice. A signal taken by a step that crashes before saving its state, in a run that never recovers or ends, stays as a hidden row until the thread is deleted. Transient signals can't be state signals. The [Agent reference](/reference/agents/agent#sendsignalsignal-options) covers `attributes`, `metadata`, and `providerOptions`.
 
 ## Input that outlives the conversation
 

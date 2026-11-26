@@ -3,12 +3,14 @@
  * consumed one signal, while a second signal sent to it waits. The worker's
  * workflows store refuses the results of the run's second model call, so the
  * step's deliveries run out and the workflow fails without a saved transcript
- * for that turn. The worker's settle closes the run's signals before the
- * failure reaches the process that started it.
+ * for that turn. The worker's settle closes the run's signals, with the
+ * consumed ids of the state the failure event carries, before the failure
+ * reaches the process that started it.
  *
- * The user sees: neither message is lost with the failed turn. The thread's
- * next turn answers both, each once, and the failed run takes nothing after
- * it ended.
+ * The user sees: the message the failed turn's model already read ends with
+ * that turn, as it does for a run that fails in the process that started it.
+ * The message the failed run never took is answered by the thread's next
+ * turn, once, and the failed run takes nothing after it ended.
  */
 import { randomUUID } from 'node:crypto';
 
@@ -40,7 +42,7 @@ function copies(text: string, part: string): number {
 
 describe('evented run that fails in the worker process', () => {
   it(
-    "gives the signals it never saved to the thread's next turn, each once, and takes nothing after it ended",
+    "drops the signal its failed turn consumed, gives the one it never took to the thread's next turn once, and takes nothing after it ended",
     async () => {
       const env = await createXprocEnv({ workers: false });
       const agentId = `signal-failed-run-${randomUUID()}`;
@@ -122,15 +124,18 @@ describe('evented run that fails in the worker process', () => {
           { runId, status: 'failed' },
           { runId: expect.not.stringMatching(runId), status: 'success' },
         ]);
-        // The next turn's model gets both signals, each once.
+        // The next turn's model gets the signal the failed run never took, once, and not the one it consumed.
         const nextTurn = userTexts(calls.at(-1)!.prompt).join('\n');
-        expect(copies(nextTurn, TAKEN), observed).toBe(1);
+        expect(copies(nextTurn, TAKEN), observed).toBe(0);
         expect(copies(nextTurn, WAITING), observed).toBe(1);
 
-        // The next turn saved both as messages, once each, and nothing waits or stays hidden for the failed run.
+        // The next turn saved the waiting signal once. The consumed one is neither a saved message nor pending.
         const saved = (await view.listMessages({ threadId: scope.threadId, perPage: false })).messages;
-        expect(saved.filter(message => message.id === taken.signal.id)).toHaveLength(1);
         expect(saved.filter(message => message.id === waiting.signal.id)).toHaveLength(1);
+        expect(
+          saved.filter(message => message.id === taken.signal.id),
+          observed,
+        ).toEqual([]);
         expect(await view.getSignalRun({ threadId: scope.threadId })).toBeNull();
         expect(await view.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
         // A send addressed to the failed run is refused for it.
@@ -141,6 +146,13 @@ describe('evented run that fails in the worker process', () => {
             toRunId: runId,
           }),
         ).toBe('run-closed');
+        // Nothing is left claimed by the failed run either: its claim, once it is named the thread's run again,
+        // returns every row it holds, hidden or not.
+        await view.setSignalRun({ threadId: scope.threadId, runId });
+        expect(
+          (await view.claimPendingSignals({ threadId: scope.threadId, runId, consumedIds: [] })).map(row => row.id),
+          observed,
+        ).toEqual([]);
 
         peer.send('finish');
         await peer.result();

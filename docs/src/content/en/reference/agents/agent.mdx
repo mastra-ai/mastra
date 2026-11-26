@@ -361,7 +361,7 @@ Cancels pending input without aborting the active run. Supply exactly one select
 - `queueOwnerId` cancels only the calling Agent's `queueMessage()` and `queueSignal()` entries in that owner group. It doesn't cancel other Agents' input or signals in the other queues.
 
 ```typescript
-const { cancelledSignalIds } = agent.cancelQueuedMessages({
+const { cancelledSignalIds } = await agent.cancelQueuedMessages({
   resourceId: 'user-123',
   threadId: 'thread-abc',
   signalIds: ['signal-123', 'signal-456'],
@@ -394,7 +394,7 @@ const { cancelledSignalIds } = agent.cancelQueuedMessages({
 ]}
 />
 
-Returns `{ cancelledSignalIds: string[] }`, containing each ID actually cancelled by this call once. An empty array means none of the selected signals were still pending locally. A signal waiting to acquire or transfer its lease remains cancellable. Once execution or forwarding starts, the local copy is no longer cancellable.
+Returns `Promise<{ cancelledSignalIds: string[] }>`. The promise resolves once this process cancelled its matching input and, when it knows the thread's store, the storage call that deletes stored signals answered. It doesn't wait for other processes. Each ID this process cancelled is listed once. A signal the run already took isn't cancelled. The promise rejects when the storage call that cancels the signals fails. An empty array means none of the selected signals were still pending where this process could cancel them. A signal waiting to acquire or transfer its lease remains cancellable. Once execution or forwarding starts, the local copy is no longer cancellable.
 
 For `signalIds`, Mastra publishes all requested IDs through PubSub, even when none are pending locally. Other processes subscribed to the thread cancel matching pending input, including signals waiting on a lease. Propagation is best-effort and asynchronous, without remote acknowledgements, so an empty local result doesn't mean the requested signals remain queued elsewhere. Owner-group cancellation remains local to the calling Agent. It leaves continuations from `continueWithMessages()`, saved messages, state updates, and notification records unchanged. Accepted acknowledgements remain settled.
 
@@ -408,7 +408,7 @@ Sends a signal to an active run or memory thread.
     name: 'signal',
     type: "{ type: 'user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder'; tagName?: string; contents: string | Array<TextPart | FilePart>; attributes?: Record<string, JSONValue>; metadata?: Record<string, unknown>; providerOptions?: ProviderMetadata; transient?: boolean }",
     description:
-      "Signal context to send to the thread. `type` is the semantic signal category. `tagName` controls the XML tag the model sees. For example, `{ type: 'notification', tagName: 'github-review' }` renders as `<github-review>...</github-review>`. `tagName` and attribute names must be XML-safe: letters, numbers, periods, hyphens, and underscores, starting with a letter or underscore. Set `transient: true` to deliver the signal to the current model request without storing it; transient signals are never stored, state signals cannot be transient, and combining `transient` with a `persist` behavior discards the signal. Legacy `user-message` and `system-reminder` payloads are still accepted and normalized. Unknown `type` values are rejected; use `tagName` for custom XML tags.",
+      "Signal context to send to the thread. `type` is the semantic signal category. `tagName` controls the XML tag the model sees. For example, `{ type: 'notification', tagName: 'github-review' }` renders as `<github-review>...</github-review>`. `tagName` and attribute names must be XML-safe: letters, numbers, periods, hyphens, and underscores, starting with a letter or underscore. Set `transient: true` to deliver the signal to the current model request without saving it as a message, so later turns don't find it in the history. When the run keeps its signals in memory storage, a transient signal waits there as a hidden row until a run takes it, and the row is deleted when the run that took it ends. One no run took waits for the thread's next turn. A run that fails before its progress is saved gives back the signals it took, and the thread's next turn receives them again, so a transient signal can be seen twice. State signals cannot be transient, and combining `transient` with a `persist` behavior discards the signal. Legacy `user-message` and `system-reminder` payloads are still accepted and normalized. Unknown `type` values are rejected; use `tagName` for custom XML tags.",
   },
   {
     name: 'options',
