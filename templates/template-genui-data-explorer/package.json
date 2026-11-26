@@ -27,12 +27,12 @@
     "start:ui": "node --env-file-if-exists=.env scripts/next.ts start"
   },
   "dependencies": {
-    "@ag-ui/client": "1.0.2",
-    "@ag-ui/core": "1.0.2",
-    "@ag-ui/mastra": "1.1.6",
-    "@copilotkit/react-core": "1.79.1",
-    "@copilotkit/react-ui": "1.79.1",
-    "@copilotkit/runtime": "1.79.1",
+    "@ag-ui/client": "1.0.5",
+    "@ag-ui/core": "1.0.5",
+    "@ag-ui/mastra": "2.0.2",
+    "@copilotkit/react-core": "1.90.0",
+    "@copilotkit/react-ui": "1.90.0",
+    "@copilotkit/runtime": "1.90.0",
     "@mastra/client-js": "latest",
     "@mastra/core": "latest",
     "@mastra/libsql": "latest",
@@ -57,6 +57,21 @@
     "vitest": "4.1.12"
   },
   "overrides": {
+    "@copilotkit/channels-core": {
+      "zod": "$zod"
+    },
+    "@copilotkit/channels-intelligence": {
+      "zod": "$zod"
+    },
+    "@copilotkit/channels-slack": {
+      "zod": "$zod"
+    },
+    "@copilotkit/channels-teams": {
+      "zod": "$zod"
+    },
+    "@copilotkit/runtime": {
+      "zod": "$zod"
+    },
     "@graphql-tools/utils@<12.0.1": "12.0.3",
     "@hono/node-server": "2.1.6",
     "@segment/analytics-node": {
@@ -71,7 +86,7 @@
       "minimatch": "11.0.9"
     },
     "tinypool@<2.1.2": "2.1.2",
-    "undici@<6.29.1": "6.29.1"
+    "undici@<7.30.2": "7.30.2"
   },
   "engines": {
     "node": ">=24.15.0"
