@@ -812,7 +812,14 @@ export class MemoryPG extends MemoryStorage {
           `UPDATE ${threadsTable} SET "resourceId" = $1, "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id = $2`,
           [resourceId, threadId],
         );
-        await t.none(`UPDATE ${messagesTable} SET "resourceId" = $1 WHERE thread_id = $2`, [resourceId, threadId]);
+        // In lock order: a save can be moving these rows to another thread without holding this one.
+        await t.none(
+          `WITH locked AS (
+             SELECT id FROM ${messagesTable} WHERE thread_id = $2 ORDER BY ${MESSAGE_LOCK_ORDER} FOR UPDATE
+           )
+           UPDATE ${messagesTable} m SET "resourceId" = $1 FROM locked WHERE m.id = locked.id`,
+          [resourceId, threadId],
+        );
 
         return { ...normalized, resourceId, updatedAt: new Date() };
       }, READ_COMMITTED);
@@ -2529,8 +2536,8 @@ export class MemoryPG extends MemoryStorage {
     const messagesTable = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
     try {
       const deleted = await this.#db.client.tx(async t => {
-        // updateThreadResourceId updates the thread's rows in no particular order under its thread
-        // lock; without waiting for that lock, this delete could take rows in the opposite order.
+        // Waits for a close, a transfer or a deletion that holds the thread row, so the delete below
+        // reads the rows as that write left them: a row a close put back to pending can be cancelled.
         await t.none(`SELECT 1 FROM ${threadsTable} WHERE id = $1 FOR SHARE`, [threadId]);
         return t.manyOrNone<{ id: string }>(
           `WITH locked AS (
