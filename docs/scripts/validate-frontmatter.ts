@@ -29,6 +29,8 @@ export const DEFAULT_CONFIG: ValidationConfig = {
     'docs/studio/cloud.mdx',
     // Migration guides aren't embedded in package docs; they stay on the site and in the MCP docs server.
     'reference/migrations/',
+    // Third-party integration pages document packages that aren't part of Mastra.
+    'integrations/sandboxes/wbx.mdx',
   ],
   // Allow for @mastra/* packages + mastra + create-mastra + mastracode
   packagePattern: /^(@mastra\/[\w-]+|mastra|create-mastra|mastracode)$/,

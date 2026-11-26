@@ -40,6 +40,7 @@ export async function openAddProvider(user: UserEvent, container: HTMLElement = 
 
 export const CUSTOM_PROVIDERS_URL = `${TEST_BASE_URL}/web/config/custom-providers`;
 export const customProviderUrl = (id: string) => `${CUSTOM_PROVIDERS_URL}/${encodeURIComponent(id)}`;
+export const CHECK_URL = `${CUSTOM_PROVIDERS_URL}/check`;
 
 export function stubCustomProviders(providers: CustomProviderInfo[]) {
   server.use(http.get(CUSTOM_PROVIDERS_URL, () => HttpResponse.json({ providers })));
@@ -70,14 +71,20 @@ export async function openCustomEndpointForm(user: UserEvent, addProviderDialog:
   return screen.findByRole('dialog', { name: 'Add custom endpoint' });
 }
 
+/** Types a model id into the form's models picker and picks it, as someone adding an id the endpoint did not list. */
+export async function typeModel(user: UserEvent, form: HTMLElement, model: string) {
+  await user.type(within(form).getByRole('combobox', { name: 'Models' }), `${model}{Enter}`);
+}
+
+/** Fills the custom endpoint form's name, URL and models, typing each model id. */
 export async function fillCustomEndpoint(
   user: UserEvent,
   form: HTMLElement,
-  endpoint: { name: string; url: string; models: string },
+  endpoint: { name: string; url: string; models: string[] },
 ) {
   await user.type(within(form).getByPlaceholderText('e.g. my-llm'), endpoint.name);
   await user.type(within(form).getByPlaceholderText('https://api.example.com/v1'), endpoint.url);
-  await user.type(within(form).getByPlaceholderText('model-a, model-b'), endpoint.models);
+  for (const model of endpoint.models) await typeModel(user, form, model);
 }
 
 export async function saveKey(user: UserEvent, key: string) {

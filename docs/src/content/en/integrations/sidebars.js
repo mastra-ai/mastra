@@ -387,6 +387,12 @@ const sidebars = {
             iconDark: 'https://cdn.simpleicons.org/vercel/white?viewbox=auto&size=28',
           },
         },
+        {
+          type: 'doc',
+          id: 'sandboxes/wbx',
+          label: 'WBX Sandbox',
+          customProps: { icon: '/img/integrations/wbx.svg', customCSS: 'dark:invert' },
+        },
       ],
     },
     {
@@ -760,6 +766,12 @@ const sidebars = {
           id: 'tools/brightdata',
           label: 'Bright Data',
           customProps: { icon: '/img/integrations/bright-data.svg' },
+        },
+        {
+          type: 'doc',
+          id: 'tools/exa',
+          label: 'Exa',
+          customProps: { icon: 'https://app.nango.dev/images/template-logos/exa.svg' },
         },
         {
           type: 'doc',
@@ -1325,6 +1337,14 @@ const sidebars = {
           label: 'Digits',
           customProps: {
             icon: 'https://app.nango.dev/images/template-logos/digits.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'other/figma',
+          label: 'Figma',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/figma?viewbox=auto&size=28',
           },
         },
         {

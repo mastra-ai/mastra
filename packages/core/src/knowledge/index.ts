@@ -557,8 +557,8 @@ export class Knowledge extends MastraBase {
 
   /**
    * Calls `listener` after each committed write made through this instance's store
-   * (`getStorage()`): tool writes, host writes and scope creation. Writes made on a store obtained
-   * some other way aren't seen. Events carry ids, not content and not access: anything that relays
+   * (`getStorage()`): tool writes, host writes, importer runs and scope creation. Writes in a
+   * transaction are reported once it commits. Writes made on a store obtained some other way aren't seen. Events carry ids, not content and not access: anything that relays
    * them to people must re-read each page under that person's read scope. Returns an unsubscribe.
    */
   onChange(listener: KnowledgeChangeListener): () => void {

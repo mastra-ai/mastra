@@ -102,20 +102,15 @@ describe('Mastra Config Spread Handling', () => {
     expect(() => mastra.getAgent('nullAgent' as any)).toThrow(MastraError);
   });
 
-  it('should throw meaningful error when addAgent is called with undefined directly', () => {
+  it.each([
+    ['should throw meaningful error when addAgent is called with undefined directly', undefined, 'undefined'],
+    ['should throw meaningful error when addAgent is called with null directly', null, 'null'],
+  ] as const)('%s', (_title, value, expected) => {
     const mastra = new Mastra({ logger: false });
 
-    expect(() => mastra.addAgent(undefined as any)).toThrow(MastraError);
-    expect(() => mastra.addAgent(undefined as any)).toThrow('Cannot add agent');
-    expect(() => mastra.addAgent(undefined as any)).toThrow('undefined');
-  });
-
-  it('should throw meaningful error when addAgent is called with null directly', () => {
-    const mastra = new Mastra({ logger: false });
-
-    expect(() => mastra.addAgent(null as any)).toThrow(MastraError);
-    expect(() => mastra.addAgent(null as any)).toThrow('Cannot add agent');
-    expect(() => mastra.addAgent(null as any)).toThrow('null');
+    expect(() => mastra.addAgent(value as any)).toThrow(MastraError);
+    expect(() => mastra.addAgent(value as any)).toThrow('Cannot add agent');
+    expect(() => mastra.addAgent(value as any)).toThrow(expected);
   });
 
   it('should preserve server config when spreading', () => {

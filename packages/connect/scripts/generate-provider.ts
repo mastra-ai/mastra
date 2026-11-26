@@ -1991,6 +1991,133 @@ function adaptFigmaAction(action: ExtractedAction): ExtractedAction {
   return adapted;
 }
 
+/** Exa's current search categories: `publication` and `people` replaced `research paper` and `linkedin profile`, and `pdf`, `github`, and `tweet` are deprecated. */
+const EXA_CATEGORY_ENUM = "z.enum(['company', 'people', 'publication', 'news', 'personal site', 'financial report'])";
+
+/**
+ * Corrections to the Exa templates, from Exa's current API reference and changelog:
+ * - The category and search-type enums list values Exa has retired
+ *   (`tweet` now answers 400) and miss `publication`, `people`, and `lite`;
+ *   the search description still named the retired neural and keyword types.
+ * - Exa ignores `startCrawlDate` and `endCrawlDate`.
+ * - `maxAgeHours` replaced `livecrawl` on contents.
+ * - Titles, URLs, dates, images, and favicons can be `null`, and one such
+ *   result failed a whole search or answer.
+ * - get_contents checked for a content option in execute, and Exa refuses
+ *   category/filter combinations, summaries on `lite`, and content ages over
+ *   720 hours that the templates let through, and blank queries would be
+ *   sent as billed searches; the schemas say so now.
+ * Drop an entry once the upstream template is fixed.
+ */
+const EXA_FIXES: Readonly<Record<string, ProviderActionFixes & { description?: string }>> = {
+  search: {
+    description:
+      "Search the web with Exa and return ranked results, optionally with each page's text, highlights, or summary.",
+    statements: [
+      {
+        pattern:
+          /type: z\s*\.enum\(\['auto', 'neural', 'keyword', 'fast', 'instant', 'deep-lite', 'deep', 'deep-reasoning'\]\)\s*\.optional\(\)\s*\.describe\(\s*"[^"]*"\s*\)/,
+        replacement:
+          "type: z.enum(['auto', 'lite', 'fast', 'instant', 'deep-lite', 'deep', 'deep-reasoning']).optional().describe(\"Search type: 'auto' (default), 'lite' or 'instant' for the lowest latency ('lite' returns no summaries), 'fast', or 'deep-lite', 'deep', or 'deep-reasoning' for multi-step search that takes several seconds and costs more.\")",
+        count: 1,
+        what: 'search types',
+      },
+      {
+        pattern: /category: z\s*\.enum\(\[[^\]]*\]\)\s*\.optional\(\)\s*\.describe\('Content category filter\.'\)/,
+        replacement: `category: ${EXA_CATEGORY_ENUM}.optional().describe('Content category filter. company and people do not accept published-date filters, and people does not accept excludeDomains.')`,
+        count: 1,
+        what: 'categories',
+      },
+      {
+        pattern:
+          /,\s*(start|end)CrawlDate: z\s*\.string\(\)\s*\.refine\([^\n]*\)\s*\.optional\(\)\s*\.describe\('[^']*'\)/,
+        replacement: '',
+        count: 2,
+        what: 'crawl dates',
+      },
+      {
+        pattern: /(summary: SummaryInputSchema\.optional\(\)\.describe\('[^']*'\)\s*\}\))/,
+        replacement: `$1
+    .refine(input => !['company', 'people'].includes(input.category ?? '') || (input.startPublishedDate === undefined && input.endPublishedDate === undefined), { message: 'The company and people categories do not accept published-date filters.', path: ['category'] })
+    .refine(input => input.category !== 'people' || input.excludeDomains === undefined, { message: 'The people category does not accept excludeDomains.', path: ['excludeDomains'] })
+    .refine(input => input.type !== 'lite' || input.summary === undefined, { message: 'The lite search type does not return summaries; use auto or ask for text or highlights.', path: ['summary'] })`,
+        count: 1,
+        what: 'category filters',
+      },
+      {
+        pattern: /query: z\.string\(\)\.min\(1\)\.describe\('The search query string\.'\)/,
+        replacement: "query: z.string().trim().min(1).describe('The search query string.')",
+        count: 1,
+        what: 'blank queries',
+      },
+      {
+        pattern: /(title|url|publishedDate|image|favicon): z\.string\(\)\.optional\(\)/,
+        replacement: '$1: z.string().nullish()',
+        count: 5,
+        what: 'nullable result fields',
+      },
+    ],
+    exec: [
+      {
+        pattern: /if \(input\.(start|end)CrawlDate !== undefined\) \{\s*requestBody\['\w+'\] = input\.\w+;\s*\}\s*/,
+        replacement: '',
+        count: 2,
+        what: 'crawl dates',
+      },
+    ],
+  },
+  'get-contents': {
+    statements: [
+      {
+        pattern: /livecrawl: z\.enum\(\['never', 'fallback', 'always', 'auto'\]\)\.optional\(\)\s*\}\)/,
+        replacement: `maxAgeHours: z.number().int().min(-1).max(720).optional().describe('Maximum age in hours (up to 720) of cached content Exa may return before crawling the page again. 0 always crawls; -1 only uses the cache.')
+}).refine(input => input.text !== undefined || input.highlights !== undefined || input.summary !== undefined, { message: 'Provide at least one of text, highlights, or summary.' })`,
+        count: 1,
+        what: 'content age and options',
+      },
+    ],
+    exec: [
+      {
+        pattern: /if \(!input\.text && !input\.highlights && !input\.summary\) \{[\s\S]*?\}\);\s*\}\s*/,
+        replacement: '',
+        count: 1,
+        what: 'content option check',
+      },
+      {
+        pattern: /\.\.\.\(input\.livecrawl !== undefined && \{ livecrawl: input\.livecrawl \}\)/,
+        replacement: '...(input.maxAgeHours !== undefined && { maxAgeHours: input.maxAgeHours })',
+        count: 1,
+        what: 'content age',
+      },
+    ],
+  },
+  answer: {
+    statements: [
+      {
+        pattern: /query: z\.string\(\)\.describe\(/,
+        replacement: 'query: z.string().trim().min(1).describe(',
+        count: 1,
+        what: 'blank questions',
+      },
+      {
+        pattern: /(title|url|text): z\.string\(\)\.optional\(\)/,
+        replacement: '$1: z.string().nullish()',
+        count: 6,
+        what: 'nullable citation fields',
+      },
+    ],
+  },
+};
+
+function adaptExaAction(action: ExtractedAction): ExtractedAction {
+  const fixes = EXA_FIXES[action.candidate.actionSlug];
+  let adapted = action;
+  if (fixes?.statements) adapted = rewriteModuleStatements(adapted, fixes.statements);
+  if (fixes?.exec) adapted = rewriteExecBody(adapted, fixes.exec);
+  if (fixes?.description) adapted = { ...adapted, description: fixes.description };
+  return adapted;
+}
+
 /** Identifier fields of each GitLab update tool; any other field counts as an update. */
 const GITLAB_UPDATE_IDENTIFIERS: Readonly<Record<string, readonly string[]>> = {
   'update-group': ['id'],
@@ -2677,6 +2804,9 @@ function applyProviderActionOverrides(action: ExtractedAction): ExtractedAction 
   if (action.candidate.providerId === 'figma') {
     return adaptFigmaAction(action);
   }
+  if (action.candidate.providerId === 'exa') {
+    return adaptExaAction(action);
+  }
   if (action.candidate.providerId === 'confluence') {
     return routeConfluenceThroughProviderBase(action);
   }
@@ -2840,6 +2970,8 @@ const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   'figma/get-webhook': 'excluded: webhooks are managed by Mastra, not agents',
   'figma/update-webhook': 'excluded: webhooks are managed by Mastra, not agents',
   'figma/delete-webhook': 'excluded: webhooks are managed by Mastra, not agents',
+  // Exa deprecated /findSimilar in favor of /search.
+  'exa/find-similar': 'excluded: Exa deprecated /findSimilar in favor of /search',
 };
 
 /**

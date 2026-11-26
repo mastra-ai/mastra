@@ -32,33 +32,20 @@ describe('InlineSkillSource', () => {
       expect(await source.exists('inline/simple-skill')).toBe(true);
     });
 
-    it('returns true for SKILL.md', async () => {
-      expect(await source.exists('inline/code-review/SKILL.md')).toBe(true);
-    });
-
-    it('returns true for references directory when skill has references', async () => {
-      expect(await source.exists('inline/code-review/references')).toBe(true);
-    });
-
-    it('returns false for references directory when skill has no references', async () => {
-      expect(await source.exists('inline/simple-skill/references')).toBe(false);
+    it.each([
+      ['returns true for SKILL.md', 'inline/code-review/SKILL.md', true],
+      ['returns true for references directory when skill has references', 'inline/code-review/references', true],
+      ['returns false for references directory when skill has no references', 'inline/simple-skill/references', false],
+      ['returns false for non-existent skills', 'inline/nonexistent', false],
+      ['returns false for non-inline paths', './local/path', false],
+      ['returns false for non-existent reference files', 'inline/code-review/references/nope.md', false],
+    ] as const)('%s', async (_title, input, expected) => {
+      expect(await source.exists(input)).toBe(expected);
     });
 
     it('returns true for specific reference files', async () => {
       expect(await source.exists('inline/code-review/references/checklist.md')).toBe(true);
       expect(await source.exists('inline/code-review/references/examples.md')).toBe(true);
-    });
-
-    it('returns false for non-existent skills', async () => {
-      expect(await source.exists('inline/nonexistent')).toBe(false);
-    });
-
-    it('returns false for non-inline paths', async () => {
-      expect(await source.exists('./local/path')).toBe(false);
-    });
-
-    it('returns false for non-existent reference files', async () => {
-      expect(await source.exists('inline/code-review/references/nope.md')).toBe(false);
     });
   });
 

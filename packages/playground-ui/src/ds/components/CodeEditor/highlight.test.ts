@@ -80,6 +80,14 @@ describe('highlight', () => {
   it('returns null for languages without a grammar', async () => {
     expect(await highlight('fn main() {}', 'rust')).toBeNull();
   });
+
+  it('leaves code too large to color as plain text', async () => {
+    const row = '{"id":"row","text":"shipped the change","count":3,"ok":true},';
+    const json = (bytes: number) => `[${row.repeat(Math.ceil(bytes / row.length))}null]`;
+
+    expect(await highlight(json(157_000), 'json')).toBeNull();
+    expect(rejoin((await highlight(json(20_000), 'json'))?.tokens ?? null)).toBe(json(20_000));
+  });
 });
 
 describe('languageForPath', () => {

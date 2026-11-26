@@ -1,3 +1,4 @@
+import type { ModelSelectionRequest } from '@mastra/factory/model-packs';
 import type { AgentControllerEvent, MastraDBMessage } from '@mastra/client-js';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -12,6 +13,7 @@ import { useSwitchAgentControllerThreadMutation } from '../../../../../hooks/use
 import { ChatSessionContext } from '../../context/ChatSessionContext';
 import { ChatConnectionContext } from '../../context/ChatConnectionContext';
 import { ChatModelsProvider } from '../../context/ChatModelsProvider';
+import { ChatThinkingProvider } from '../../context/ChatThinkingProvider';
 import { ChatTranscriptContext } from '../../context/ChatTranscriptContext';
 import { useAgentControllerTranscript } from '../../hooks/useAgentControllerTranscript';
 import { AGENT_CONTROLLER_ID } from '../../services/constants';
@@ -106,7 +108,9 @@ function ErrorSession({
           }}
         >
           <ChatModelsProvider>
-            <TranscriptEntries entries={transcript.entries} onApprove={() => {}} onRespond={() => {}} />
+            <ChatThinkingProvider>
+              <TranscriptEntries entries={transcript.entries} onApprove={() => {}} onRespond={() => {}} />
+            </ChatThinkingProvider>
           </ChatModelsProvider>
         </ChatTranscriptContext.Provider>
       </ChatConnectionContext.Provider>
@@ -122,6 +126,21 @@ function ErrorSession({
   );
 }
 
+function recordModelSwitches() {
+  const modelSwitches: ModelSelectionRequest[] = [];
+  server.use(
+    http.put<never, { selection: ModelSelectionRequest }>(
+      `${TEST_BASE_URL}/web/config/session-model`,
+      async ({ request }) => {
+        const { selection } = await request.json();
+        modelSwitches.push(selection);
+        return HttpResponse.json({ modelSelection: { kind: 'model' } });
+      },
+    ),
+  );
+  return modelSwitches;
+}
+
 describe('chat run errors', () => {
   beforeEach(() => {
     server.use(
@@ -132,7 +151,10 @@ describe('chat run errors', () => {
         HttpResponse.json({ models: [], modelScope: 'user', defaultModelId: null }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: null, thinkingLevel: null }),
+        HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
+      ),
+      http.get(`${TEST_BASE_URL}/api/agent-controller/${AGENT_CONTROLLER_ID}/sessions/:sessionId`, () =>
+        HttpResponse.json({ controllerId: AGENT_CONTROLLER_ID, resourceId: 'resource-1', settings: {} }),
       ),
     );
   });
@@ -181,15 +203,8 @@ describe('chat run errors', () => {
   });
 
   it('quotes a refused model and switches the session to another one from the card', async () => {
-    const modelSwitches: unknown[] = [];
+    const modelSwitches = recordModelSwitches();
     server.use(
-      http.post(
-        `${TEST_BASE_URL}/api/agent-controller/${AGENT_CONTROLLER_ID}/sessions/:sessionId/model`,
-        async ({ request }) => {
-          modelSwitches.push(await request.json());
-          return HttpResponse.json({ ok: true });
-        },
-      ),
       http.get(`${TEST_BASE_URL}/web/config/models`, () =>
         HttpResponse.json({
           models: [
@@ -221,7 +236,7 @@ describe('chat run errors', () => {
     await user.click(await screen.findByRole('button', { name: 'Change model' }));
     await user.click(await screen.findByRole('option', { name: /GPT-5\.4(?! Mini)/ }));
 
-    await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'openai/gpt-5.4' }]));
+    await waitFor(() => expect(modelSwitches).toMatchObject([{ kind: 'model', modelId: 'openai/gpt-5.4' }]));
   });
 
   it.each([
@@ -252,15 +267,8 @@ describe('chat run errors', () => {
   ])(
     'names the model behind $title and offers another model next to the credentials',
     async ({ title, model, reply }) => {
-      const modelSwitches: unknown[] = [];
+      const modelSwitches = recordModelSwitches();
       server.use(
-        http.post(
-          `${TEST_BASE_URL}/api/agent-controller/${AGENT_CONTROLLER_ID}/sessions/:sessionId/model`,
-          async ({ request }) => {
-            modelSwitches.push(await request.json());
-            return HttpResponse.json({ ok: true });
-          },
-        ),
         http.get(`${TEST_BASE_URL}/web/config/models`, () =>
           HttpResponse.json({
             models: [
@@ -280,7 +288,9 @@ describe('chat run errors', () => {
       await user.click(await screen.findByRole('button', { name: 'Change model' }));
       await user.click(await screen.findByRole('option', { name: /Claude Opus 4\.5/ }));
 
-      await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'anthropic/claude-opus-4-5' }]));
+      await waitFor(() =>
+        expect(modelSwitches).toMatchObject([{ kind: 'model', modelId: 'anthropic/claude-opus-4-5' }]),
+      );
     },
   );
 
@@ -476,7 +486,7 @@ describe('chat run errors on an account limit', () => {
         HttpResponse.json({ project: { id: 'factory-1', modelScope: 'hybrid' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: null, thinkingLevel: null }),
+        HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/models`, () =>
         HttpResponse.json({
@@ -509,7 +519,7 @@ describe('chat run errors on an account limit', () => {
     stubCredential('organization');
     renderWithProviders(<ErrorSession messages={[rateLimited]} modelId="anthropic/claude-opus-5-5" />);
 
-    await expectCredentialHolder('Shared by the organization');
+    await expectCredentialHolder('Card work uses the organization’s keys');
   });
 
   it('tells the chat owner the limit belongs to their own subscription', async () => {
@@ -531,26 +541,17 @@ describe('chat run errors on an account limit', () => {
   });
 
   it('stops naming the failed model’s credential once the session switches to another provider', async () => {
-    const modelSwitches: unknown[] = [];
+    const modelSwitches = recordModelSwitches();
     stubCredential('organization');
-    server.use(
-      http.post(
-        `${TEST_BASE_URL}/api/agent-controller/${AGENT_CONTROLLER_ID}/sessions/:sessionId/model`,
-        async ({ request }) => {
-          modelSwitches.push(await request.json());
-          return HttpResponse.json({ ok: true });
-        },
-      ),
-    );
     const user = userEvent.setup();
     const { rerender } = renderWithProviders(
       <ErrorSession messages={[rateLimited]} modelId="anthropic/claude-opus-5-5" />,
     );
-    await expectCredentialHolder('Shared by the organization');
+    await expectCredentialHolder('Card work uses the organization’s keys');
 
     await user.click(await screen.findByRole('button', { name: 'Change model' }));
     await user.click(await screen.findByRole('option', { name: /gpt-5\.5/i }));
-    await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'openai/gpt-5.5' }]));
+    await waitFor(() => expect(modelSwitches).toMatchObject([{ kind: 'model', modelId: 'openai/gpt-5.5' }]));
     rerender(<ErrorSession messages={[rateLimited]} modelId="openai/gpt-5.5" />);
 
     expect(screen.getByText('Provider rate limit reached')).toBeVisible();

@@ -14,7 +14,7 @@ Sends Tracing data to Arize Phoenix or Arize AX, as well as any OpenTelemetry-co
 ## Constructor
 
 ```typescript oxfmt:false
-new ArizeExporter(config: ArizeExporterConfig)
+new ArizeExporter(config?: ArizeExporterConfig)
 ```
 
 ## `ArizeExporterConfig`
@@ -38,7 +38,7 @@ Inherits from `OtelExporterConfig` (excluding `provider`), which includes:
 
 - `timeout?: number` - Export timeout in milliseconds (default: 30000)
 - `batchSize?: number` - Number of spans per batch (default: 512)
-- `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: WARN)
+- `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
 - `resourceAttributes?: Record<string, any>` - Custom resource attributes
 
 ### Metadata passthrough

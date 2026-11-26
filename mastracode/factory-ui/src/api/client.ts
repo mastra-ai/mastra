@@ -25,27 +25,38 @@ export interface ApiClient {
   del<T>(path: string, body?: unknown): Promise<T>;
 }
 
-/** A non-2xx response. `status` lets callers treat specific statuses (like 404) differently. */
+/**
+ * A non-2xx response. `status` lets callers treat specific statuses (like 404) differently, and `body` holds the
+ * parsed JSON when a caller needs more than the message, such as the failure a refused save reports.
+ */
 export class ApiError extends Error {
   override name = 'ApiError';
+  /** Builds the error from the message shown to people, the HTTP status and the parsed JSON body, if any. */
   constructor(
     message: string,
     readonly status: number,
+    readonly body?: unknown,
   ) {
     super(message);
   }
 }
 
-async function extractError(res: Response): Promise<string> {
+/** Builds the `ApiError` for a failing response, reading its JSON body once. */
+async function extractError(res: Response): Promise<ApiError> {
+  let body: unknown;
   try {
-    const data = (await res.clone().json()) as { error?: unknown; message?: unknown } | null;
-    // `error` is often a machine code (`credentials_unavailable`); `message` is the sentence written for people.
-    if (data && typeof data.message === 'string' && data.message) return data.message;
-    if (data && typeof data.error === 'string') return data.error;
+    body = await res.json();
   } catch {
     // Non-JSON body — fall through to the status-based message.
   }
-  return `Request failed (${res.status})`;
+  if (body && typeof body === 'object') {
+    const message = 'message' in body ? body.message : undefined;
+    const error = 'error' in body ? body.error : undefined;
+    // `error` is often a machine code (`credentials_unavailable`); `message` is the sentence written for people.
+    if (typeof message === 'string' && message) return new ApiError(message, res.status, body);
+    if (typeof error === 'string') return new ApiError(error, res.status, body);
+  }
+  return new ApiError(`Request failed (${res.status})`, res.status, body);
 }
 
 export function createApiClient({ baseUrl, fetchImpl }: ApiClientConfig): ApiClient {
@@ -65,7 +76,7 @@ export function createApiClient({ baseUrl, fetchImpl }: ApiClientConfig): ApiCli
       init.body = JSON.stringify(body);
     }
     const res = await doFetch(`${baseUrl}${path}`, init);
-    if (!res.ok) throw new ApiError(await extractError(res), res.status);
+    if (!res.ok) throw await extractError(res);
     return (await res.json()) as T;
   }
 

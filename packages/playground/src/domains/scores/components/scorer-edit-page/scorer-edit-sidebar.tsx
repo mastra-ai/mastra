@@ -10,7 +10,6 @@ import {
 import { Input } from '@mastra/playground-ui/components/Input';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
@@ -179,32 +178,34 @@ export function ScorerEditSidebar({
         {mode === 'edit' && onSaveDraft ? (
           <div className="flex gap-2">
             <Button
-              icon={isSavingDraft ? <Spinner /> : <IconFloppyDisk1 />}
               onClick={onSaveDraft}
-              disabled={isSavingDraft || isSubmitting}
+              disabled={isSubmitting}
               className="flex-1"
+              icon={<IconFloppyDisk1 />}
+              loading={isSavingDraft}
             >
-              {isSavingDraft ? 'Saving...' : 'Save'}
+              Save
             </Button>
             <Button
-              icon={isSubmitting ? <Spinner /> : <IconCheckmark2Medium />}
               variant="primary"
               onClick={onPublish}
-              disabled={isSubmitting || isSavingDraft}
+              disabled={isSavingDraft}
               className="flex-1"
+              icon={<IconCheckmark2Medium />}
+              loading={isSubmitting}
             >
-              {isSubmitting ? 'Publishing...' : 'Publish'}
+              Publish
             </Button>
           </div>
         ) : (
           <Button
-            icon={isSubmitting ? <Spinner /> : <IconCheckmark2Medium />}
             variant="primary"
             onClick={onPublish}
-            disabled={isSubmitting}
             className="w-full"
+            icon={<IconCheckmark2Medium />}
+            loading={isSubmitting}
           >
-            {isSubmitting ? 'Creating...' : 'Create scorer'}
+            Create scorer
           </Button>
         )}
       </div>

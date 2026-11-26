@@ -35,7 +35,7 @@ import type { StructuredOutputOptions } from '../../types';
 import { isDurableAgentLike } from '../../types';
 import { assertExecutionOwned, isExecutionFenceError } from '../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../memory-fga';
-import { getRunRegistryEntry } from '../run-registry';
+import { getLiveRunRequestContext, getRunRegistryEntry } from '../run-registry';
 import { toLiveStructuredOutputSchema } from '../structured-output-null-transform';
 import type { AgentFinishEventData, DurableAgenticWorkflowInput, RunRegistryEntry } from '../types';
 import { resolveRuntimeDependencies } from '../utils/resolve-runtime';
@@ -81,6 +81,8 @@ export interface DurableFinishSideEffectsResult {
   titleForStream?: Promise<string | undefined>;
   /** Chunks from the `structuredOutput.model` structuring pass, to publish before FINISH. */
   structuredOutputChunks?: ChunkType[];
+  /** The validated `structuredOutput` object, when the run asked for one. */
+  object?: unknown;
   /**
    * Chunks output processors wrote with `writer.custom()` in processOutputResult. Publish them
    * marked output-processed, after `structuredOutputChunks` and before the tripwire or FINISH,
@@ -96,10 +98,12 @@ export interface DurableFinishSideEffectsResult {
   };
 }
 
-function restoreRequestContext(
+function mergeRequestContextForFinalization(
   entries: Record<string, unknown> | undefined,
   fallback: RequestContext | undefined,
+  liveRunContext: RequestContext | undefined,
 ): RequestContext {
+  if (liveRunContext) return liveRunContext;
   if (!entries) return fallback ?? new RequestContext();
 
   const restored = new RequestContext<unknown>(fallback?.entries());
@@ -182,7 +186,11 @@ export async function runDurableFinishSideEffects({
     }
   }
 
-  const effectiveRequestContext = restoreRequestContext(initData.requestContextEntries, requestContext);
+  const effectiveRequestContext = mergeRequestContextForFinalization(
+    initData.requestContextEntries,
+    requestContext,
+    getLiveRunRequestContext(registryEntry, runId, requestContext),
+  );
   // Snapshots drop MastraMemory (it holds a live instance), but memory processors read
   // memoryConfig (e.g. readOnly) from it. Restore it from durable state when it's missing.
   if (!effectiveRequestContext.has('MastraMemory') && durableState?.threadId) {
@@ -226,11 +234,13 @@ export async function runDurableFinishSideEffects({
       ? toLiveStructuredOutputSchema(structuredOutput.schema, structuredOutput.nullToUndefined)
       : undefined);
   let structuredOutputChunks: ChunkType[] | undefined;
+  let object: unknown;
   // The structuring model reads tool calls and results too, so a tool-only answer still qualifies.
   const structuringParts = structuredOutput?.hasStructuringModel ? responseStreamParts(messageList) : undefined;
   if (structuredOutputSchema && (structuredOutputText.trim() || structuringParts?.length)) {
     const finishReason = outputResult?.finishReason;
     const truncated = finishReason === 'length' || finishReason === 'content-filter';
+    const failed = finishReason === 'abort' || finishReason === 'error';
     const errorStrategy = liveStructuredOutput ? liveStructuredOutput.errorStrategy : structuredOutput?.errorStrategy;
     const fallbackValue = liveStructuredOutput ? liveStructuredOutput.fallbackValue : structuredOutput?.fallbackValue;
     let value: unknown;
@@ -239,7 +249,6 @@ export async function runDurableFinishSideEffects({
       // separate structuring model turns that answer into the object.
       const structuringModel = liveStructuredOutput?.model ?? structuredOutput.structuringModelConfig?.originalConfig;
       // Never structure partial text from an aborted or failed turn.
-      const failed = finishReason === 'abort' || finishReason === 'error';
       if (structuringModel && !truncated && !failed) {
         structuredOutputChunks = await runStructuringPass({
           options: {
@@ -272,6 +281,8 @@ export async function runDurableFinishSideEffects({
     const lastAssistantMessage = messageList.get.response
       .db()
       .findLast(message => message.role === 'assistant' && !message.content?.metadata?.completionResult);
+    // The caller of a failed or aborted run gets no object.
+    object = failed ? undefined : value;
     if (value !== undefined && lastAssistantMessage) {
       lastAssistantMessage.content.metadata = {
         ...lastAssistantMessage.content.metadata,
@@ -547,6 +558,7 @@ export async function runDurableFinishSideEffects({
     titleGeneration,
     titleForStream,
     structuredOutputChunks,
+    object,
     outputResultChunks,
   };
 }
@@ -611,6 +623,7 @@ export async function runDurableDeadlineOutputPass({
   messageListState,
   cutOffText,
   entry,
+  executionId,
   mastra,
   tracingContext,
   logger,
@@ -623,13 +636,18 @@ export async function runDurableDeadlineOutputPass({
   messageListState: SerializedMessageListState;
   cutOffText?: string;
   entry: RunRegistryEntry;
+  executionId: string;
   mastra?: Mastra;
   /** The run's agent span, so the deadline pass shows in the run's trace as the finish pass does. */
   tracingContext?: TracingContext;
   logger: IMastraLogger;
 }): Promise<void> {
   const durableState = initData.state;
-  const requestContext = restoreRequestContext(initData.requestContextEntries, entry.requestContext);
+  const requestContext = mergeRequestContextForFinalization(
+    initData.requestContextEntries,
+    undefined,
+    getLiveRunRequestContext(entry, runId, undefined, executionId),
+  );
   if (!requestContext.has('MastraMemory') && durableState?.threadId) {
     requestContext.set('MastraMemory', {
       thread: { id: durableState.threadId },

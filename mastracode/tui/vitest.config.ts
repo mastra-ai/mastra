@@ -16,6 +16,9 @@ export default defineConfig({
           env: {
             FORCE_COLOR: '1',
             TERM: 'dumb',
+            // Pin the locale so dates and numbers format the same on every machine. Workers are
+            // started with this env, so the locale reaches ICU before anything formats.
+            LC_ALL: 'en_US.UTF-8',
           },
         },
       },

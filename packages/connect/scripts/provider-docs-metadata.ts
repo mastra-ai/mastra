@@ -64,13 +64,7 @@ export interface ChannelConnectionDocs {
 }
 
 /** Providers present in src/providers but not part of the documented release. */
-export const EXCLUDED_PROVIDERS: ReadonlySet<string> = new Set([
-  'confluence',
-  'figma',
-  'stripe',
-  'twitter-v2',
-  'zendesk',
-]);
+export const EXCLUDED_PROVIDERS: ReadonlySet<string> = new Set(['confluence', 'stripe', 'twitter-v2', 'zendesk']);
 
 /** Shared Connect setup that every generated page links to as its prerequisite. */
 export const CONNECT_GUIDE_PATH = '/docs/mastra-platform/connect';
@@ -109,6 +103,27 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     ownership: 'handwritten-with-partial',
     summary:
       'convert text to speech, transcribe audio and video, clone voices, compose music, manage conversational AI agents, voices and voice settings, and pronunciation dictionaries, and read and delete history items, dubbing projects, conversations, and knowledge-base documents',
+    emit: true,
+  },
+  exa: {
+    name: 'Exa',
+    logo: { src: 'https://app.nango.dev/images/template-logos/exa.svg' },
+    canonicalPage: 'tools/exa.mdx',
+    ownership: 'generated-page',
+    category: 'Tools',
+    summary: 'search the web, read page contents, and answer questions with cited sources',
+    note: 'Exa bills each search, contents, and answer call to the API key on the connection. The `deep` search types run multi-step searches that take several seconds and cost more than `auto` or `lite`.',
+    emit: true,
+  },
+  figma: {
+    name: 'Figma',
+    logo: { slug: 'figma' },
+    canonicalPage: 'other/figma.mdx',
+    ownership: 'generated-page',
+    category: 'Other providers',
+    summary:
+      'read files, versions, components, and styles, render images, manage comments and dev resources, and read and update variables',
+    note: "Figma only lets full members of Enterprise organizations use the variable tools, and updating variables also needs edit access to the file. On other plans, Figma refuses those calls. Node IDs work in either the `1:2` form the API uses or the `1-2` form in Figma URLs. The toolset can't list a team's projects or files, so give the agent a file key or file URL.",
     emit: true,
   },
   fireflies: {

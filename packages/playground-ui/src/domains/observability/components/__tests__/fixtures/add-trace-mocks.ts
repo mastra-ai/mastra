@@ -49,3 +49,15 @@ export const trajectoryWithToolCalls: Trajectory = {
 export const trajectoryWithoutToolCalls: Trajectory = {
   steps: [{ stepType: 'model_generation', name: 'gen' }],
 };
+
+export const trajectoryWithProviderToolCall: Trajectory = {
+  steps: [
+    {
+      stepType: 'provider_tool_call',
+      name: 'web_search',
+      toolArgs: { query: 'Seattle weather' },
+      toolResult: { results: ['Rain'] },
+      durationMs: 800,
+    },
+  ],
+};

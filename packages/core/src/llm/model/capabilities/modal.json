@@ -31,18 +31,6 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "moonshotai/Kimi-K3.1-Pro": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "nvidia/GLM-5.3-Flash-NVFP4": [
       {
         "type": "effort",
@@ -55,16 +43,16 @@
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "zai-org/GLM-5.3": [
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "zai-org/GLM-5.3-Flash": [
+    "Qwen/Qwen3.8-2.4T-A95B": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "xhigh"]
       }
     ],
     "Qwen/Qwen3.8-Max-VL-Thinking": [
@@ -73,10 +61,22 @@
         "values": ["none", "high"]
       }
     ],
-    "Qwen/Qwen3.8-2.4T-A95B": [
+    "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "xhigh"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "moonshotai/Kimi-K3.1-Pro": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

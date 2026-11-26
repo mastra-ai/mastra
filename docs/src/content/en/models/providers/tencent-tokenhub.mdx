@@ -7,7 +7,7 @@ description: "Browse Tencent TokenHub model IDs, capabilities, context windows, 
 
 # <img src="https://models.dev/logos/tencent-tokenhub.svg" alt="Tencent TokenHub logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Tencent TokenHub
 
-Access 24 Tencent TokenHub models through Mastra's model router. Authentication is handled automatically using the `TENCENT_TOKENHUB_API_KEY` environment variable.
+Access 26 Tencent TokenHub models through Mastra's model router. Authentication is handled automatically using the `TENCENT_TOKENHUB_API_KEY` environment variable.
 
 Learn more in the [Tencent TokenHub documentation](https://cloud.tencent.com/document/product/1823/130050).
 
@@ -260,6 +260,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 1048576,
     "inputCost": 2,
     "outputCost": 10
+  },
+  {
+    "model": "tencent-tokenhub/kimi-k3.1-pro-highspeed",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 4,
+    "outputCost": 20
+  },
+  {
+    "model": "tencent-tokenhub/mimo-v2.5-pro",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.435,
+    "outputCost": 0.87
   },
   {
     "model": "tencent-tokenhub/mimo-v2.6-flash",

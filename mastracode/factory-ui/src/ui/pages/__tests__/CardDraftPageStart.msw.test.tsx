@@ -59,7 +59,7 @@ describe("a card draft's first prompt", () => {
     const { router, client } = renderAt(`/factories/${FACTORY_ID}/cards/${CARD_ID}`);
 
     const modelPicker = await screen.findByLabelText('Session model');
-    await waitFor(() => expect(modelPicker).toHaveAttribute('title', expect.stringContaining('gpt-4o-mini')));
+    await waitFor(() => expect(modelPicker).toHaveTextContent('GPT-4o Mini'));
     await user.click(modelPicker);
     await user.click(await screen.findByRole('option', { name: /GPT-5\.4 Mini/ }));
     const composer = screen.getByRole('textbox', { name: 'Message' });
@@ -73,7 +73,7 @@ describe("a card draft's first prompt", () => {
     created.resolve();
     await waitFor(() => expect(router.state.location.pathname).toBe(THREAD_PATH));
     await waitFor(() => expect(route.posted).toEqual(['repair the facts']));
-    expect(route.bindingsBeforePrompt).toEqual(['model:openai/gpt-5.4-mini']);
+    expect(route.bindingsBeforePrompt).toEqual(['model:openai/gpt-5.4-mini thinking:medium']);
     expect(within(conversation).getAllByText('repair the facts')).toHaveLength(1);
     expect(composer).toHaveFocus();
 

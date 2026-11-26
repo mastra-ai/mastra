@@ -308,7 +308,7 @@ export function usePendingConnect(options: UsePendingConnectOptions = {}) {
   const [pending, setPending] = useState<PendingConnect | null>(null);
   const [settled, setSettled] = useState<SettledConnect | null>(null);
   const [connectedProviders, setConnectedProviders] = useState<ReadonlySet<string>>(new Set());
-  const popupRef = useRef<Pick<Window, 'closed'> | null>(null);
+  const popupRef = useRef<Pick<Window, 'closed' | 'close'> | null>(null);
   const headlessRef = useRef<HeadlessAuthHandle | null>(null);
   // Mirrors `pending` for async guards (the SDK promise settles outside the
   // render cycle); written directly at every transition so a cancel is never
@@ -494,6 +494,7 @@ export function usePendingConnect(options: UsePendingConnectOptions = {}) {
   const cancel = useCallback(() => {
     headlessRef.current?.close();
     headlessRef.current = null;
+    popupRef.current?.close();
     popupRef.current = null;
     pendingRef.current = null;
     setPending(null);

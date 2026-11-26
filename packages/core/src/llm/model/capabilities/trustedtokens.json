@@ -31,6 +31,24 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
+    "google/gemma-4-26B-A4B-it": [
+      {
+        "type": "effort",
+        "values": ["none", "medium"]
+      }
+    ],
+    "google/diffusiongemma-26B-A4B-it": [
+      {
+        "type": "effort",
+        "values": ["none", "medium"]
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B": [
+      {
+        "type": "effort",
+        "values": ["none", "medium"]
+      }
+    ],
     "openai/gpt-oss-120b": [
       {
         "type": "effort",
@@ -43,10 +61,22 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B": [
+    "Qwen/Qwen3.8-27B": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "Qwen/Qwen3.6-35B-A3B-FP8": [
       {
         "type": "effort",
         "values": ["none", "medium"]
+      }
+    ],
+    "zai-org/GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "zai-org/GLM-5.3": [
@@ -59,36 +89,6 @@
       {
         "type": "effort",
         "values": ["none", "high", "max"]
-      }
-    ],
-    "zai-org/GLM-5.3-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "Qwen/Qwen3.6-35B-A3B-FP8": [
-      {
-        "type": "effort",
-        "values": ["none", "medium"]
-      }
-    ],
-    "Qwen/Qwen3.8-27B": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "google/diffusiongemma-26B-A4B-it": [
-      {
-        "type": "effort",
-        "values": ["none", "medium"]
-      }
-    ],
-    "google/gemma-4-26B-A4B-it": [
-      {
-        "type": "effort",
-        "values": ["none", "medium"]
       }
     ]
   }

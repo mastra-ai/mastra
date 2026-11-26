@@ -52,10 +52,10 @@ function UnsavedChangesBanner({ ctx }: { ctx: NonNullable<ReturnType<typeof useO
             variant="default"
             size="sm"
             onClick={() => handleSaveDraft()}
-            disabled={isSavingDraft}
             icon={<IconFloppyDisk1 />}
+            loading={isSavingDraft}
           >
-            {isSavingDraft ? 'Saving...' : saveLabel}
+            {saveLabel}
           </Button>
         )
       }

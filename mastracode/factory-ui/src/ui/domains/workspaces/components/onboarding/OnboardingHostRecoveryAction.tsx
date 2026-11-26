@@ -1,5 +1,4 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Link } from 'react-router';
 
 import { HOST_NAMES } from '../../services/sourceControlHosts';
@@ -28,13 +27,7 @@ export function OnboardingHostRecoveryAction({
     );
   }
   return (
-    <Button
-      icon={retrying ? <Spinner size="sm" aria-hidden="true" /> : undefined}
-      variant="ghost"
-      aria-label={`Retry ${HOST_NAMES[host]}`}
-      disabled={retrying}
-      onClick={onRetry}
-    >
+    <Button variant="ghost" aria-label={`Retry ${HOST_NAMES[host]}`} onClick={onRetry} loading={retrying}>
       Retry
     </Button>
   );

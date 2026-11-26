@@ -102,7 +102,7 @@ export function WorkspaceSearchResults() {
       </div>
     );
   }
-  if (isError) return <WorkspaceError error={error} fallback="Search failed." className="m-2" />;
+  if (isError) return <WorkspaceError error={error ?? undefined} fallback="Search failed." className="m-2" />;
   if (!data?.length) return <EmptyState titleSlot="No results" />;
 
   return (

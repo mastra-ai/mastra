@@ -33,7 +33,11 @@ export type ResolveAgentByIdResult =
  * confirmed-miss vs. transient-error distinction) can't drift between call
  * sites.
  */
-export async function resolveAgentById(mastra: Mastra, agentId: string): Promise<ResolveAgentByIdResult> {
+export async function resolveAgentById(
+  mastra: Mastra,
+  agentId: string,
+  editorOptions?: { versionId: string },
+): Promise<ResolveAgentByIdResult> {
   try {
     return { status: 'found', agent: mastra.getAgentById(agentId) };
   } catch {
@@ -44,7 +48,7 @@ export async function resolveAgentById(mastra: Mastra, agentId: string): Promise
   if (!editor) return { status: 'missing' };
 
   try {
-    const agent = await editor.agent.getById(agentId);
+    const agent = await editor.agent.getById(agentId, editorOptions);
     return agent ? { status: 'found', agent } : { status: 'missing' };
   } catch (error) {
     return { status: 'error', error };

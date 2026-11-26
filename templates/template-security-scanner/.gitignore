@@ -1,0 +1,14 @@
+node_modules/
+.mastra/
+dist/
+coverage/
+test-results/
+playwright-report/
+data/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+/package-lock.json
+/web/dist/

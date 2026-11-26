@@ -150,20 +150,6 @@ describe('voice capabilities', () => {
       expectTypeOf<CompositeVoice>().toMatchTypeOf<VoiceConfigType>();
     });
 
-    it('should accept MastraVoice directly without CompositeVoice wrapper', () => {
-      const mockVoice = new MockVoice({ speaker: 'mock-voice' });
-
-      const agent = new Agent({
-        id: 'direct-voice-agent',
-        name: 'Direct Voice Agent',
-        instructions: 'You are a voice assistant.',
-        model: openai('gpt-4o-mini'),
-        voice: mockVoice,
-      });
-
-      expect(agent.voice).toBeDefined();
-    });
-
     it('voice methods should work when MastraVoice passed directly', async () => {
       const mockVoice = new MockVoice({ speaker: 'mock-voice' });
 

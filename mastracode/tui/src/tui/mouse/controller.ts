@@ -1,6 +1,6 @@
 /**
- * Mouse support scoped to where Mastra Code owns the interaction: capturing
- * modal overlays and the slash autocomplete list (opt-in through the
+ * Mouse support scoped to where Mastra Code owns the interaction: menus in the
+ * prompt slot, capturing modal overlays and the slash autocomplete list (opt-in through the
  * `mouseDialogs` setting). Mouse tracking is enabled only while one of those
  * is on screen, so the transcript keeps native wheel scrollback and text
  * selection the rest of the time.
@@ -14,8 +14,8 @@
  * - Every pointer event is mapped through a cursor position report: the
  *   terminal says where the hardware cursor really is, so rows line up with
  *   the rendered frame even when the screen is offset from pi-tui's model.
- *   Autocomplete rows are resolved relative to the cursor; modals are shifted
- *   by the measured offset.
+ *   Autocomplete rows are resolved relative to the cursor; menus and modals are
+ *   shifted by the measured offset.
  *
  * Input mouse mode (opt-in through the `mouseInput` setting) also
  * captures the mouse while no dialog is open, for the input box: a press
@@ -30,6 +30,7 @@
 import type { Component, TUI } from '@earendil-works/pi-tui';
 
 import type { CustomEditor } from '../components/custom-editor.js';
+import type { MastraTUI } from '../prompt-slot.js';
 import { locate } from './hit-test.js';
 import { markHoveredRows } from './hover-marker.js';
 import { tuiInternals } from './pi-tui-internals.js';
@@ -175,12 +176,12 @@ export class MouseController {
   }
 
   private wantsTracking(): boolean {
-    return this.inputOwnsPointer() || this.dialogOverlay() !== undefined || this.suggestionsOwnPointer();
+    return this.inputOwnsPointer() || this.dialog() !== undefined || this.suggestionsOwnPointer();
   }
 
-  /** The topmost dialog, when dialogs are opted in to mouse support. */
-  private dialogOverlay(): OverlayEntry | undefined {
-    return this.dialogMouseEnabled ? tuiInternals(this.ui).getTopmostVisibleOverlay() : undefined;
+  /** The dialog on top (a modal, or the menu in the prompt slot), when dialogs are opted in to mouse support. */
+  private dialog(): Component | undefined {
+    return this.dialogMouseEnabled ? this.topDialog() : undefined;
   }
 
   /** True when the slash suggestion list is open and opted in to mouse support. */
@@ -188,13 +189,16 @@ export class MouseController {
     return this.dialogMouseEnabled && this.editor.isShowingAutocomplete();
   }
 
-  private topOverlayComponent(): Component | undefined {
-    return tuiInternals(this.ui).getTopmostVisibleOverlay()?.component;
+  private topDialog(): Component | undefined {
+    return (
+      tuiInternals(this.ui).getTopmostVisibleOverlay()?.component ??
+      (this.ui as Partial<MastraTUI>).promptSlot?.mountedMenu()
+    );
   }
 
   /** True when pointer events belong to the input box rather than a dialog or suggestion list. */
   private inputOwnsPointer(): boolean {
-    return this.inputMouseMode && tuiInternals(this.ui).getTopmostVisibleOverlay() === undefined;
+    return this.inputMouseMode && this.topDialog() === undefined;
   }
 
   private endInputDrag(): void {
@@ -216,7 +220,7 @@ export class MouseController {
 
   private syncTracking(): void {
     // Closed dialogs would otherwise stay referenced (with all their data) until exit.
-    const top = tuiInternals(this.ui).getTopmostVisibleOverlay()?.component;
+    const top = this.topDialog();
     for (const [component, render] of this.decoratedRenders) {
       if (component === top) continue;
       component.render = render;
@@ -306,13 +310,13 @@ export class MouseController {
    * longer reaches the bottom of the screen, or a multiplexer pane offset).
    */
   private handlePointer(event: TerminalMouseEvent, action: MouseAction): void {
-    if (!this.dialogOverlay() && !this.suggestionsOwnPointer() && action !== 'inputPress') return;
+    if (!this.dialog() && !this.suggestionsOwnPointer() && action !== 'inputPress') return;
 
     const pending = this.pendingPointer;
     if (pending) {
       // One cursor query at a time: a newer hover replaces the queued one, a click wins over hover.
       if (action !== 'hover' || pending.action === 'hover') {
-        this.pendingPointer = { ...pending, event, action, overlay: this.topOverlayComponent() };
+        this.pendingPointer = { ...pending, event, action, overlay: this.topDialog() };
       }
       return;
     }
@@ -328,7 +332,7 @@ export class MouseController {
       event,
       action,
       timer,
-      overlay: this.topOverlayComponent(),
+      overlay: this.topDialog(),
       expectedCursorRow: this.expectedCursorRow(),
     };
     this.outstandingCursorQueries++;
@@ -346,7 +350,7 @@ export class MouseController {
   ): void {
     // Keys aren't held up by the cursor query, so a dialog can close or open while it's in flight
     // (e.g. Esc); applying the event then would hit whatever is now on screen at that spot.
-    if (this.topOverlayComponent() !== origin) {
+    if (this.topDialog() !== origin) {
       if (action === 'inputPress') this.endInputDrag();
       return;
     }
@@ -354,18 +358,18 @@ export class MouseController {
       this.resolveInputPress(event, cursorRow);
       return;
     }
-    const overlay = this.dialogOverlay();
-    if (overlay) {
+    const dialog = this.dialog();
+    if (dialog) {
       const shifted = { ...event, row: event.row - (cursorRow === undefined ? 0 : cursorRow - expectedCursorRow) };
       // Pointer events outside the modal are ignored; the modal stays in control.
       if (action === 'click') {
-        const target = this.locateInOverlay(overlay, shifted)?.target;
+        const target = this.locateInDialog(dialog, shifted)?.target;
         if (target) {
           target.activate();
           this.ui.requestRender();
         }
       } else {
-        this.hoverOverlay(overlay, shifted);
+        this.hoverDialog(dialog, shifted);
       }
       return;
     }
@@ -406,9 +410,26 @@ export class MouseController {
    * real screen is offset from where overlays are drawn.
    */
   private expectedCursorRow(): number {
-    const internals = tuiInternals(this.ui);
-    const viewportStart = Math.max(0, internals.previousLines.length - this.ui.terminal.rows);
-    return internals.hardwareCursorRow - viewportStart + 1;
+    return tuiInternals(this.ui).hardwareCursorRow - this.viewportStart() + 1;
+  }
+
+  /** The frame line at the top of the screen, assuming the last one is at the bottom. */
+  private viewportStart(): number {
+    return Math.max(0, tuiInternals(this.ui).previousLines.length - this.ui.terminal.rows);
+  }
+
+  private locateInDialog(dialog: Component, event: TerminalMouseEvent) {
+    const overlay = tuiInternals(this.ui).getTopmostVisibleOverlay();
+    return overlay ? this.locateInOverlay(overlay, event) : this.locateInSlot(dialog, event);
+  }
+
+  /** Converts a screen position to a position inside the menu in the prompt slot, part of the frame itself. */
+  private locateInSlot(menu: Component, event: TerminalMouseEvent) {
+    const top = (this.ui as Partial<MastraTUI>).promptSlotTop;
+    if (top === undefined) return undefined;
+    const { columns: width } = this.ui.terminal;
+    const point = { row: event.row - 1 + this.viewportStart() - top, col: event.col - 1, width };
+    return { point, target: locate(menu, point) };
   }
 
   /**
@@ -429,11 +450,11 @@ export class MouseController {
     return { point, target: locate(overlay.component, point) };
   }
 
-  private hoverOverlay(overlay: OverlayEntry, event: TerminalMouseEvent): void {
-    const located = this.locateInOverlay(overlay, event);
+  private hoverDialog(component: Component, event: TerminalMouseEvent): void {
+    const located = this.locateInDialog(component, event);
     const previous = this.overlayHover;
-    this.overlayHover = located && { component: overlay.component, row: located.point.row, col: located.point.col };
-    if (this.overlayHover) this.decorateRender(overlay.component);
+    this.overlayHover = located && { component, row: located.point.row, col: located.point.col };
+    if (this.overlayHover) this.decorateRender(component);
     if (previous || this.overlayHover) this.ui.requestRender();
   }
 

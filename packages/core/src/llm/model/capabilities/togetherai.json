@@ -1,6 +1,7 @@
 {
   "attachment": [
     "MiniMaxAI/MiniMax-M3.1-Flash",
+    "Prism-ML/Ternary-Bonsai-27B",
     "Qwen/Qwen3.5-9B",
     "Qwen/Qwen3.8-Flash",
     "Qwen/Qwen4-Max",
@@ -20,6 +21,7 @@
   ],
   "temperature": [
     "MiniMaxAI/MiniMax-M3.1-Flash",
+    "Prism-ML/Ternary-Bonsai-27B",
     "Qwen/Qwen3.5-9B",
     "Qwen/Qwen3.6-Plus",
     "Qwen/Qwen3.7-Max",
@@ -36,6 +38,7 @@
     "nvidia/NVIDIA-Nemotron-3.5-Super-VL",
     "openai/gpt-oss-120b",
     "reflection/Beam-1.0-501B-A23B",
+    "ricursive-ai/Ripple-65B-Preview",
     "tencent/Hy4",
     "thinkingmachines/Inkling",
     "thinkingmachines/Inkling-2-Small",
@@ -45,6 +48,7 @@
   ],
   "structuredOutput": [
     "MiniMaxAI/MiniMax-M3.1-Flash",
+    "Prism-ML/Ternary-Bonsai-27B",
     "Qwen/Qwen3.5-9B",
     "Qwen/Qwen3.6-Plus",
     "Qwen/Qwen3.7-Max",
@@ -63,6 +67,7 @@
     "nvidia/NVIDIA-Nemotron-3.5-Super-VL",
     "openai/gpt-oss-120b",
     "reflection/Beam-1.0-501B-A23B",
+    "ricursive-ai/Ripple-65B-Preview",
     "tencent/Hy4",
     "thinkingmachines/Inkling",
     "thinkingmachines/Inkling-2-Small",
@@ -71,16 +76,21 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "moonshotai/Kimi-K3.1-Pro": [
+    "nvidia/NVIDIA-Nemotron-3.5-Super-VL": [
       {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
+        "type": "toggle"
       }
     ],
-    "moonshotai/Kimi-K3": [
+    "meta-models/Muse-Spark-Open-816B-A42B": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "meta-models/Muse-Glimmer-30B": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "thinkingmachines/Inkling": [
@@ -95,10 +105,45 @@
         "values": ["minimal", "low", "medium", "high", "max"]
       }
     ],
+    "elorian-labs/glimpse-1.0": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
     "openai/gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "Prism-ML/Ternary-Bonsai-27B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "reflection/Beam-1.0-501B-A23B": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "tencent/Hy4": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "MiniMaxAI/MiniMax-M3.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "deepseek-ai/DeepSeek-V4-Pro-0813": [
@@ -116,45 +161,40 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
     "deepseek-ai/DeepSeek-V4.1-Flash-1017-fast": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "elorian-labs/glimpse-1.0": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3.5-Super-VL": [
+    "Qwen/Qwen3.7-Plus": [
       {
         "type": "toggle"
       }
     ],
-    "meta-models/Muse-Glimmer-30B": [
+    "Qwen/Qwen3.8-Flash": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
+        "values": ["low", "medium", "xhigh"]
       }
     ],
-    "meta-models/Muse-Spark-Open-816B-A42B": [
+    "Qwen/Qwen3.5-9B": [
       {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
+        "type": "toggle"
       }
     ],
-    "reflection/Beam-1.0-501B-A23B": [
+    "Qwen/Qwen3.6-Plus": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "zai-org/GLM-5.3": [
@@ -172,46 +212,16 @@
         "values": ["high", "max"]
       }
     ],
-    "zai-org/GLM-5.3-Flash": [
+    "moonshotai/Kimi-K3": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
-    "Qwen/Qwen3.7-Plus": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.5-9B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.8-Flash": [
-      {
-        "type": "toggle"
-      },
+    "moonshotai/Kimi-K3.1-Pro": [
       {
         "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "Qwen/Qwen3.6-Plus": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "MiniMaxAI/MiniMax-M3.1-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "tencent/Hy4": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
+        "values": ["none", "low", "medium", "high", "max"]
       }
     ]
   }

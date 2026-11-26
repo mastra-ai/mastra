@@ -18,7 +18,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
  * is the user's own permissions (GET /auth/capabilities).
  *
  * Behavior under test:
- * - While the user's permissions are still loading, the guard shows a spinner
+ * - While the user's permissions are still loading, the guard shows the loader
  *   and never leaks the protected children.
  * - Once resolved, it applies normal gating: allows accessible routes,
  *   redirects denied routes to the first accessible route, and avoids an
@@ -41,10 +41,6 @@ vi.mock('react-router', async importOriginal => {
     },
   };
 });
-
-vi.mock('@mastra/playground-ui/components/Spinner', () => ({
-  Spinner: () => <div data-testid="route-guard-spinner" />,
-}));
 
 import { RoutePermissionGuard } from '../route-permission-guard';
 import { server } from '@/test/msw-server';
@@ -126,14 +122,14 @@ describe('RoutePermissionGuard', () => {
     vi.clearAllMocks();
   });
 
-  it('shows a spinner (not the protected children) while the user permissions load', async () => {
+  it('shows the loader (not the protected children) while the user permissions load', async () => {
     server.use(authHandler(adminCapabilities, { hang: true }));
 
     renderGuard('/agents');
 
     // The capabilities request hangs, so the guard stays in its loading branch
     // and never leaks the children.
-    expect(await screen.findByTestId('route-guard-spinner')).toBeTruthy();
+    expect(await screen.findByRole('status', { name: 'Loading' })).toBeTruthy();
     expect(screen.queryByTestId('protected-content')).toBeNull();
   });
 
@@ -143,7 +139,7 @@ describe('RoutePermissionGuard', () => {
     renderGuard('/agents');
 
     expect(await screen.findByTestId('protected-content')).toBeTruthy();
-    expect(screen.queryByTestId('route-guard-spinner')).toBeNull();
+    expect(screen.queryByRole('status', { name: 'Loading' })).toBeNull();
     expect(navigateSpy).not.toHaveBeenCalled();
   });
 

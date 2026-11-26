@@ -6,7 +6,6 @@ const PAGE_TITLES: Record<string, string> = {
   activity: 'Activity',
   knowledge: 'Knowledge',
   new: 'New session',
-  'new-factory': 'New factory',
   review: 'Review',
   rules: 'Rules',
   work: 'Work',

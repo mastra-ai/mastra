@@ -183,8 +183,8 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
             </div>
           ) : null}
 
-          <Button icon={<IconArrowBoxRight />} type="submit" disabled={isPending} className="w-full" size="lg">
-            {isPending ? (isSignIn ? 'Signing in...' : 'Creating account...') : isSignIn ? 'Sign in' : 'Create account'}
+          <Button icon={<IconArrowBoxRight />} type="submit" loading={isPending} className="w-full" size="lg">
+            {isSignIn ? 'Sign in' : 'Create account'}
           </Button>
 
           {signUpEnabled && (
@@ -216,8 +216,8 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
       )}
 
       {hasSSO && sso && (
-        <Button icon={sso.icon} onClick={handleSSOLogin} disabled={isSSOPending} className="w-full" size="lg">
-          {isSSOPending ? 'Redirecting...' : sso.text || 'Sign in'}
+        <Button icon={sso.icon} onClick={handleSSOLogin} className="w-full" size="lg" loading={isSSOPending}>
+          {sso.text || 'Sign in'}
         </Button>
       )}
     </LoginLayout>

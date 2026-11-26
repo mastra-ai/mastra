@@ -20,9 +20,10 @@ export function SkillSaveButton({
       variant="primary"
       size="sm"
       onClick={onSave}
-      disabled={disabled || pending}
+      disabled={disabled}
+      loading={pending}
     >
-      {pending ? 'Saving...' : editing ? 'Save' : 'Create'}
+      {editing ? 'Save' : 'Create'}
     </Button>
   );
 }

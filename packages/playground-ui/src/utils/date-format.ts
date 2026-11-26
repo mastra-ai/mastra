@@ -54,13 +54,15 @@ const PRESET_OPTIONS = {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-    fractionalSecondDigits: 2,
+    fractionalSecondDigits: 3,
     // oxlint-disable-next-line playground-ui/date-locale -- log lines keep one clock and width, so they line up
     hourCycle: 'h23',
   },
 } satisfies Record<string, Intl.DateTimeFormatOptions>;
 
 type FormatterKey = keyof typeof PRESET_OPTIONS;
+
+export type FractionDigits = 1 | 2 | 3;
 
 const formatters = new Map<string, Intl.DateTimeFormat>();
 
@@ -84,12 +86,13 @@ function clockOf(locale?: string): Clock {
   return clock;
 }
 
-function getFormatter(key: FormatterKey, locale?: string, timeZone?: string) {
-  const cacheKey = `${locale ?? ''}|${timeZone ?? ''}|${key}`;
+function getFormatter(key: FormatterKey, locale?: string, timeZone?: string, fractionDigits?: FractionDigits) {
+  const cacheKey = `${locale ?? ''}|${timeZone ?? ''}|${key}|${fractionDigits ?? ''}`;
   let formatter = formatters.get(cacheKey);
   if (!formatter) {
     const options: Intl.DateTimeFormatOptions = { ...PRESET_OPTIONS[key], timeZone };
     if (options.hour === 'numeric') options.hour = clockOf(locale).hour;
+    if (fractionDigits) options.fractionalSecondDigits = fractionDigits;
     formatter = new Intl.DateTimeFormat(locale, options);
     formatters.set(cacheKey, formatter);
   }
@@ -225,11 +228,15 @@ export interface LogLineTimestampParts {
 
 export function formatLogLineTimestamp(
   value: DateInput,
-  { locale, timeZone }: { locale?: string; timeZone?: string } = {},
+  {
+    locale,
+    timeZone,
+    fractionDigits = 2,
+  }: { locale?: string; timeZone?: string; fractionDigits?: FractionDigits } = {},
 ): LogLineTimestampParts | undefined {
   const date = toDate(value);
   if (!date) return undefined;
-  const parts = getFormatter('logLine', locale, timeZone).formatToParts(date);
+  const parts = getFormatter('logLine', locale, timeZone, fractionDigits).formatToParts(date);
   const timeStart = parts.findIndex(part => part.type === 'hour');
   const fractionStart = parts.findIndex(part => part.type === 'fractionalSecond');
   const join = (from: number, to: number) =>
@@ -247,8 +254,15 @@ export function formatLogLineTimestamp(
 /** Date and time down to milliseconds, for trace debugging. `withDate: false` keeps only the time. */
 export function formatTimestampPrecise(
   value: DateInput,
-  { locale, withDate = true }: { locale?: string; withDate?: boolean } = {},
+  {
+    locale,
+    timeZone,
+    withDate = true,
+    fractionDigits,
+  }: { locale?: string; timeZone?: string; withDate?: boolean; fractionDigits?: FractionDigits } = {},
 ) {
   const date = toDate(value);
-  return date ? getFormatter(withDate ? 'precise' : 'timePrecise', locale).format(date) : undefined;
+  return date
+    ? getFormatter(withDate ? 'precise' : 'timePrecise', locale, timeZone, fractionDigits).format(date)
+    : undefined;
 }

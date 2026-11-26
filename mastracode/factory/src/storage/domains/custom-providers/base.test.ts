@@ -8,7 +8,7 @@ import { describe, expect, it, onTestFinished } from 'vitest';
 import { createFactorySecretEncryption } from '../../../secret-encryption.js';
 import type { FactorySecretEncryption } from '../../../secret-encryption.js';
 import { createFactoryStorageForTests } from '../../test-utils.js';
-import { CustomProvidersStorage } from './base.js';
+import { CUSTOM_PROVIDERS_SCHEMA, CustomProvidersStorage } from './base.js';
 import type { CustomProviderInput, CustomProviderRecord, CustomProviderWrite } from './base.js';
 
 /**
@@ -404,5 +404,135 @@ describe('CustomProvidersStorage enabling secretEncryption', () => {
     await expect(domain.ensureReady()).resolves.toBeUndefined();
     const [provider] = await domain.list({ orgId: 'org-1' });
     expect(provider!.apiKey).toBe(lookalike);
+  });
+});
+
+describe('CustomProvidersStorage headers and last check', () => {
+  const owner = { orgId: 'org-1' };
+  const headers = [
+    { name: 'X-Tenant', value: 'tenant-secret-value' },
+    { name: 'X-Region', value: 'eu-west', secret: false },
+  ];
+  const withHeaders = async () => {
+    const { customProviders } = await createFactoryStorageForTests();
+    saved(await customProviders.create({ owner, createdBy: 'admin', input: endpoint({ apiKey: 'sk-1', headers }) }));
+    return customProviders;
+  };
+
+  it('stores header values encrypted and reads them back with their secret flags', async () => {
+    const url = `file:${join(mkdtempSync(join(tmpdir(), 'factory-cp-')), 'headers.db')}`;
+    const { backend, domain } = await makeFileStore(url, createFactorySecretEncryption({ primary: testKey }));
+
+    saved(await domain.create({ owner, createdBy: 'admin', input: endpoint({ headers }) }));
+
+    expect((await domain.get({ owner, providerId: 'my-llm' }))!.headers).toEqual([
+      { name: 'X-Tenant', value: 'tenant-secret-value', secret: true },
+      { name: 'X-Region', value: 'eu-west', secret: false },
+    ]);
+    const row = await backend.ops.findOne<{ headers: string }>('custom_providers', { provider_id: 'my-llm' });
+    expect(row!.headers).toMatch(/^mastra:factory-secret:v1:/);
+    expect(row!.headers).not.toContain('tenant-secret-value');
+  });
+
+  // The Factory never returns a secret value, so an edit names the header without it.
+  it('keeps a saved header value by name on an edit, ignoring case', async () => {
+    const storage = await withHeaders();
+
+    const edited = saved(
+      await storage.update({
+        owner,
+        providerId: 'my-llm',
+        input: endpoint({ headers: [{ name: 'x-tenant' }, { name: 'X-Region', value: 'us-east' }] }),
+      }),
+    );
+
+    expect(edited.headers).toEqual([
+      { name: 'x-tenant', value: 'tenant-secret-value', secret: true },
+      { name: 'X-Region', value: 'us-east', secret: false },
+    ]);
+  });
+
+  // A kept secret value must not become readable, or travel to a server the user never typed it for.
+  it.each([
+    ['turns a secret header plain', endpoint({ headers: [{ name: 'X-Tenant', secret: false }] })],
+    [
+      'moves a secret header to another origin',
+      endpoint({ url: 'https://other.example.com/v1', apiKey: 'sk-2', headers: [{ name: 'X-Tenant' }] }),
+    ],
+  ])('asks for the header value again when an edit %s without it', async (_case, input) => {
+    const storage = await withHeaders();
+
+    expect(await storage.update({ owner, providerId: 'my-llm', input })).toEqual({ refused: 'header_value_required' });
+    expect(await storage.get({ owner, providerId: 'my-llm' })).toMatchObject({
+      url: 'https://llm.example.com/v1',
+      headers: [{ value: 'tenant-secret-value', secret: true }, { value: 'eu-west' }],
+    });
+  });
+
+  it('keeps the last check only while the URL, key and headers stay the same', async () => {
+    const storage = await withHeaders();
+    const passed = { at: '2026-11-26T10:00:00.000Z', ok: true };
+    const update = (input: CustomProviderInput) => storage.update({ owner, providerId: 'my-llm', input });
+
+    saved(await update(endpoint({ apiKey: 'sk-1', headers, lastCheck: passed })));
+    expect(saved(await update(endpoint({ models: ['m', 'n'] }))).lastCheck).toEqual(passed);
+
+    for (const changed of [
+      endpoint({ url: 'https://llm.example.com/v2' }),
+      endpoint({ apiKey: 'sk-2' }),
+      endpoint({ headers: [{ name: 'X-Tenant' }] }),
+    ]) {
+      saved(await update(endpoint({ apiKey: 'sk-1', headers, lastCheck: passed })));
+      expect(saved(await update(changed)).lastCheck).toBeNull();
+    }
+  });
+
+  // A check takes seconds, and its result must not label settings it never tested.
+  it('does not apply a check to a row edited since it was checked', async () => {
+    const { customProviders: storage } = await createFactoryStorageForTests();
+    const checked = saved(await storage.create({ owner, createdBy: 'admin', input: endpoint() }));
+    const passed = { at: '2026-11-26T10:00:00.000Z', ok: true };
+    saved(
+      await storage.update({ owner, providerId: 'my-llm', input: endpoint({ url: 'https://llm.example.com/v2' }) }),
+    );
+
+    expect(await storage.recordCheck({ owner, providerId: 'my-llm', checked, lastCheck: passed })).toBeNull();
+    // A save that tested the old row would otherwise keep secrets it never sent.
+    const input = endpoint({ models: ['n'], lastCheck: passed });
+    expect(await storage.update({ owner, providerId: 'my-llm', input, checked })).toEqual({ refused: 'changed' });
+    expect(await storage.get({ owner, providerId: 'my-llm' })).toMatchObject({ models: ['m'], lastCheck: null });
+  });
+
+  it('reads and edits a row written before headers, schemes and checks existed', async () => {
+    const url = `file:${join(mkdtempSync(join(tmpdir(), 'factory-cp-')), 'legacy-columns.db')}`;
+    {
+      const backend = new LibSQLFactoryStorage({ id: 'custom-providers-legacy-columns', url });
+      await backend.init();
+      const { auth_scheme: _a, headers: _h, last_check: _l, ...legacyColumns } = CUSTOM_PROVIDERS_SCHEMA.columns;
+      await backend.ensureCollections([{ name: 'custom_providers', columns: legacyColumns }]);
+      await backend.ops.insertOne('custom_providers', {
+        org_id: 'org-1',
+        created_by: 'admin',
+        provider_id: 'my-llm',
+        name: 'My LLM',
+        url: 'https://llm.example.com/v1',
+        api_key: JSON.stringify('sk-legacy'),
+        models: ['m'],
+        created_at: new Date(),
+        updated_at: new Date(),
+      });
+      await backend.close();
+    }
+
+    const { domain } = await makeFileStore(url);
+    expect(await domain.get({ owner, providerId: 'my-llm' })).toMatchObject({
+      apiKey: 'sk-legacy',
+      authScheme: null,
+      headers: [],
+      lastCheck: null,
+    });
+    expect(
+      saved(await domain.update({ owner, providerId: 'my-llm', input: endpoint({ headers }) })).headers,
+    ).toHaveLength(2);
   });
 });

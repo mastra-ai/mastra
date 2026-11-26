@@ -7,6 +7,7 @@
 import { randomUUID } from 'node:crypto';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+import type { FactoryBoardEngine } from '../board-engine/engine.js';
 import { boardForWorkItem } from '../boards/index.js';
 
 import type { BoardRegistry } from '../boards/index.js';
@@ -16,8 +17,6 @@ import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { factoryWorkItemUrl } from '../links.js';
 import { transitionBodySchema } from '../routes/contracts.js';
-import type { FactoryTransitionService } from '../rules/transition-service.js';
-import { MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
 import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
@@ -33,7 +32,15 @@ import {
   retryFactoryDecision,
 } from '../work-items/decision-actions.js';
 import type { FactoryDecisionActionResult } from '../work-items/decision-actions.js';
-import { MAX_TEXT, findWorkItem, workItemRefSchema, truncate, workItemNotFound, workItemStage } from './read-tools.js';
+import {
+  MAX_TEXT,
+  findWorkItem,
+  resolveBoardRef,
+  workItemRefSchema,
+  truncate,
+  workItemNotFound,
+  workItemStage,
+} from './read-tools.js';
 import { requirePerson } from './scope.js';
 import type { FactoryToolScope } from './scope.js';
 
@@ -45,8 +52,8 @@ export interface FactoryWorkItemToolDependencies {
   intakeRoutes?: IntakeRoutesReader;
   /** Which evaluator places a filed card; the old `route-list` by default. */
   intakeEvaluator?: IntakeEvaluator;
-  /** Governed stage moves; filing and moving items refuse while it is unavailable. */
-  transitionService: Pick<FactoryTransitionService, 'transition'> | undefined;
+  /** The board engine every stage move goes through; filing and moving items refuse while it is unavailable. */
+  boardEngine: Pick<FactoryBoardEngine, 'requestMove'> | undefined;
   /** Writes audit rows with an explicit actor; tool calls have no HTTP request to read one from. */
   auditRecorder: AuditRecorder;
   /** Finds the caller session's source-control provider, whose linked repositories a card can name. */
@@ -182,7 +189,7 @@ export function createFactoryWorkItemTools(
     factory_create_work_item: createTool({
       id: 'factory_create_work_item',
       description:
-        'File a new work item on this Factory for the person you are working with, on the board the project\'s intake rules pick (or the board named). It enters its board\'s first phase, or the phase an intake rule names, and this session follows it. Check factory_list_work_items for an existing item first. When no intake rule takes it, the call is refused: ask the person which board it belongs on and call again with that board. Name the repository when you know it; a run on a card that names none determines it from the card. Filing a card does not do the work. When the person asked for the work to be done now ("fix it", "build this", "lets do it", "go for it"), start the card in the same turn with factory_transition_work_item, or start a side session for it when that is where the work belongs, then report only what the result confirms: the stage the card moved to, the side session you started, or the refusal or approval the move is waiting on. Say its work is running only once factory_inspect_work_item shows a session mid-run on it. Leave a card unstarted only when they asked for it to be filed or tracked for later.',
+        'File a new work item on this Factory for the person you are working with, on the board the project\'s intake rules pick (or the board named). It enters its board\'s first phase, or the phase an intake rule names, and this session follows it. Check factory_list_work_items for an existing item first. When no intake rule takes it, the call is refused: ask the person which board it belongs on and call again with that board. Name the repository when you know it; a run on a card that names none determines it from the card. Filing a card does not do the work. When the person asked for the work to be done now ("fix it", "build this", "lets do it", "go for it"), start the card in the same turn with factory_transition_work_item, or start a side session for it when that is where the work belongs, then report only what the result confirms: the stage the card moved to, the side session you started, or the refusal or approval the move is waiting on. Say its work is running only once factory_inspect_work_item shows a session mid-run on it. Leave a card unstarted only when they asked for it to be filed or tracked for later. Someone who asked in this conversation for side sessions, or not to use the board, wants their later work in side sessions too, and so does work that follows from a side session: use a side session for it instead of filing a card. When they now ask for a card ("put this on the board"), file it and start it as usual; that request ends the side-session preference for their later work, until they ask for side sessions again.',
       inputSchema: z
         .object({
           title: z.string().trim().min(1).max(512).describe('Short title, as it should read on the card.'),
@@ -197,17 +204,21 @@ export function createFactoryWorkItemTools(
             .string()
             .trim()
             .min(1)
-            .max(MAX_BOARD_IDENTIFIER_LENGTH)
+            .max(200)
             .optional()
-            .describe("The board's key, when the person picked one; files it in that board's first phase."),
+            .describe(
+              'The board the person picked, by its id (e.g. "work") or its displayed name; files it in that board\'s first phase.',
+            ),
         })
         .strict(),
-      execute: async ({ title, description, repository, board }) => {
+      execute: async ({ title, description, repository, board: boardRef }) => {
         if (repository) await requireRepository(repository);
+        const boards = await toBoardSource(deps.boards).load(project);
+        const board = boardRef === undefined ? undefined : resolveBoardRef(boards, boardRef);
         const created = await createFactoryWorkItem({
           workItems: deps.workItems,
-          boards: await toBoardSource(deps.boards).load(project),
-          transitionService: deps.transitionService,
+          boards,
+          boardEngine: deps.boardEngine,
           intakeRoutes: deps.intakeRoutes,
           intakeEvaluator: deps.intakeEvaluator,
           audit,
@@ -264,7 +275,7 @@ export function createFactoryWorkItemTools(
         })
         .strict(),
       execute: async ({ workItem, stage, rerun: rerunRequested }) => {
-        if (!deps.transitionService) throw new Error('Factory stage transitions are not available right now.');
+        if (!deps.boardEngine) throw new Error('Factory stage transitions are not available right now.');
         const item = await requireItem(workItem);
         // Following the card is what lets this session hear when its run waits on someone, and
         // answer it from here. It comes after the request: a failed follow is reported with it.
@@ -326,7 +337,7 @@ export function createFactoryWorkItemTools(
           ...(rerun ? { reenter: true } : {}),
         });
         if (!parsed.success) throw new Error(`"${stage}" is not a valid stage name.`);
-        const result = await deps.transitionService.transition({
+        const result = await deps.boardEngine.requestMove({
           ...parsed.data,
           ...project,
           workItemId: item.id,

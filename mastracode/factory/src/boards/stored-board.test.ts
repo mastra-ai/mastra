@@ -721,6 +721,7 @@ describe('serving a stored row that fell out of step with code', () => {
     const row = editWork('planning', phase => ({
       ...phase,
       nextPhases: workBoard.phases.planning.nextPhases.filter(next => next !== 'execute'),
+      outcomes: phase.outcomes?.filter(outcome => outcome.to !== 'execute'),
       exitTool: undefined,
     }));
 

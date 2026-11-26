@@ -7,7 +7,7 @@ description: "Browse OCI Generative AI model IDs, capabilities, context windows,
 
 # <img src="https://models.dev/logos/oci.svg" alt="OCI Generative AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OCI Generative AI
 
-Access 9 OCI Generative AI models through Mastra's model router. Authentication is handled automatically using the `OCI_GENAI_API_KEY` environment variable.
+Access 10 OCI Generative AI models through Mastra's model router. Authentication is handled automatically using the `OCI_GENAI_API_KEY` environment variable.
 
 Learn more in the [OCI Generative AI documentation](https://docs.oracle.com/en-us/iaas/Content/generative-ai/pretrained-models.htm).
 
@@ -140,6 +140,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 500000,
     "inputCost": 2,
     "outputCost": 6
+  },
+  {
+    "model": "oci/xai.grok-4.7",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 500000,
+    "maxOutput": 500000,
+    "inputCost": 2,
+    "outputCost": 6
   }
 ]}
 />
@@ -178,7 +190,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "oci/xai.grok-4.6"
+      ? "oci/xai.grok-4.7"
       : "oci/meta.llama-3.3-70b-instruct";
   }
 });

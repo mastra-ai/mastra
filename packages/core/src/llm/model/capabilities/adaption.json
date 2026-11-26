@@ -19,6 +19,11 @@
     "qwen3.8-27b"
   ],
   "reasoning": {
+    "gemma-4-31b-it": [
+      {
+        "type": "toggle"
+      }
+    ],
     "deepseek-v4-flash": [
       {
         "type": "effort",
@@ -35,27 +40,22 @@
         "type": "toggle"
       }
     ],
-    "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "glm-5.2": [
       {
         "type": "effort",
         "values": ["none", "high", "max"]
       }
     ],
-    "gemma-4-31b-it": [
-      {
-        "type": "toggle"
-      }
-    ],
     "qwen3.8-27b": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }
