@@ -64,6 +64,22 @@ function buildApp(env: XprocEnv, agentId: string, role: string, pubsub = env.pub
   return { storage, memoryStorage, runner, mastra, close };
 }
 
+/** A process's pubsub client that records the `signal-available` hints it publishes. */
+class HintRecordingPubSub extends UnixSocketPubSub {
+  readonly hints: Array<{ runId: string; signalId: unknown }> = [];
+
+  override async publish(...args: Parameters<UnixSocketPubSub['publish']>) {
+    const [topic, event] = args;
+    if (event.type === 'signal-available' && topic.startsWith('agent.control.')) {
+      this.hints.push({
+        runId: topic.slice('agent.control.'.length),
+        signalId: (event.data as { signalId?: unknown } | undefined)?.signalId,
+      });
+    }
+    return super.publish(...args);
+  }
+}
+
 /** Text of the prompt's user messages, in order. */
 function userTexts(prompt: unknown): string[] {
   return ((prompt ?? []) as Array<{ role: string; content: unknown }>)
@@ -252,7 +268,7 @@ describe('message sent to an evented run whose steps run in another process', ()
       const scope = { resourceId: `resource-${randomUUID()}`, threadId: `thread-${randomUUID()}` };
       const starter = buildApp(env, agentId, 'starter');
       let other: ReturnType<typeof buildApp> | undefined;
-      let otherPubsub: UnixSocketPubSub | undefined;
+      let otherPubsub: HintRecordingPubSub | undefined;
       const chunks: Array<{ type: string }> = [];
       try {
         const peer = await env.spawnPeer(WORKER, { agentId, reasoning: true } satisfies SignalActiveRunPeerArgs, {
@@ -261,7 +277,7 @@ describe('message sent to an evented run whose steps run in another process', ()
         });
         await peer.waitFor('worker-ready');
         if (sender === 'other-instance') {
-          otherPubsub = new UnixSocketPubSub(env.socketPath);
+          otherPubsub = new HintRecordingPubSub(env.socketPath);
           other = buildApp(env, agentId, 'other-instance', otherPubsub);
         }
         const context = () => `${JSON.stringify({ chunks: chunks.map(chunk => chunk.type) })}\n${env.describe()}`;
@@ -284,7 +300,14 @@ describe('message sent to an evented run whose steps run in another process', ()
 
         const sent = (other ?? starter).runner.sendSignal({ type: 'user', contents }, scope);
         const accepted = stripOutput(await guarded(sent.accepted, 'accepted', context));
-        await peer.waitFor('reasoning-cut-short', { timeoutMs: DEFAULT_HANG_GUARD_MS });
+        // The other instance stored the message itself, so it is the one that announced it.
+        if (otherPubsub) {
+          expect(otherPubsub.hints, JSON.stringify(accepted)).toEqual([{ runId, signalId: sent.signal.id }]);
+        }
+        const handled = await peer.waitFor<{ signalId: string }>('hint-handled', { timeoutMs: DEFAULT_HANG_GUARD_MS });
+        // A request the hint did not cut answers now, and the message waits for the next drain point.
+        peer.send('release-reasoning');
+        const ended = await peer.waitFor<{ state: string }>('reasoning-ended', { timeoutMs: DEFAULT_HANG_GUARD_MS });
         await guarded(consumed, 'the run', context);
 
         const calls: ModelCallReport[] = [];
@@ -299,10 +322,15 @@ describe('message sent to an evented run whose steps run in another process', ()
 
         const observed = JSON.stringify({
           accepted,
+          handled,
+          ended,
+          otherHints: otherPubsub?.hints,
           calls: calls.map(report => ({ call: report.call, users: userTexts(report.prompt) })),
           stored: stored.map(message => ({ id: message.id, role: message.role, content: message.content })),
         });
         expect(accepted, observed).toEqual({ action: 'deliver', runId });
+        expect(handled, observed).toEqual({ signalId: sent.signal.id });
+        expect(ended.state, observed).toBe('cut-short');
         // The request that was cut short, the one asked again with the message, then the barrier.
         expect(calls.length, observed).toBe(3);
         expect(userTexts(calls[0]!.prompt).join('\n').includes(contents), observed).toBe(false);
