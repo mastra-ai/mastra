@@ -90,3 +90,5 @@ export { resolveChannelRenderContext } from './thread-lookup';
 export type { ChannelsSource } from './thread-lookup';
 export { ATTACH_FILE_MAX_BYTES, ATTACH_FILE_TOOL_NAME, createChannelAttachFileTool } from './attach-file-tool';
 export type { ChannelAttachFileOptions } from './attach-file-tool';
+export { ChannelToolAnnouncementProcessor } from './tool-announcement-processor';
+export type { ChannelToolAnnouncement, ChannelToolAnnouncementOptions } from './tool-announcement-processor';

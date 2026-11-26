@@ -12,19 +12,10 @@ export interface SlackThreadDeps {
 }
 
 /**
- * Whether this run's thread is a Slack thread, so the channel tools have
- * somewhere to post. A run started from Slack says so on `requestContext`; a
- * web prompt or a woken run on a Slack-linked session costs one thread read.
- * Plain web sessions get `false` and no channel tools.
- */
-export async function isSlackThread(requestContext: RequestContext, deps: SlackThreadDeps): Promise<boolean> {
-  return (await slackThreadOf(requestContext, deps)) !== null;
-}
-
-/**
  * The run's Slack thread, with its chat thread id (`slack:C…:ts`) when known,
- * or null when the run isn't on a Slack thread. Same cost as
- * {@link isSlackThread}.
+ * or null when the run isn't on a Slack thread. A run started from Slack says so on
+ * `requestContext`; a web prompt or a woken run on a Slack-linked session costs
+ * one thread read.
  */
 export async function slackThreadOf(
   requestContext: RequestContext,

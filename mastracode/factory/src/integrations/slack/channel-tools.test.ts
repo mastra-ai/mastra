@@ -1,5 +1,5 @@
 import { MessageList } from '@mastra/core/agent';
-import { AgentControllerChannels, REPLY_TOOL_NAME } from '@mastra/core/channels';
+import { AgentControllerChannels, ChannelToolAnnouncementProcessor, REPLY_TOOL_NAME } from '@mastra/core/channels';
 import type { ProcessInputStepArgs } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -128,5 +128,10 @@ describe('Slack channel tools', () => {
   it('leaves out the reply tool when reply text is shown', async () => {
     const { channels, requestContext } = await factoryWithSlack({ textDisplay: 'show' });
     expect(await stepTools(channels, requestContext)).not.toHaveProperty(REPLY_TOOL_NAME);
+  });
+
+  it('adds only the pull request announcer as its own output processor', async () => {
+    const { slack } = await factoryWithSlack();
+    expect(slack.processors.output.map(p => p.constructor)).toEqual([ChannelToolAnnouncementProcessor]);
   });
 });
