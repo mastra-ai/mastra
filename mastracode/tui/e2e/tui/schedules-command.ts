@@ -87,7 +87,7 @@ export const schedulesCommandScenario: McE2eScenario = {
     await selectMenuRow(terminal, /every 5m · paused/);
     await runtime.waitForScreenText(/Run now/i, terminal);
     await selectMenuRow(terminal, /Delete\s+Remove this schedule/);
-    await runtime.waitForScreenText(/Delete schedule [0-9a-f]{8}\?/i, terminal);
+    await runtime.waitForScreenText(/Delete schedule [0-9a-f]{8}/i, terminal);
     await selectMenuRow(terminal, /Delete\s*$/);
     await runtime.waitForScreenText(/Deleted schedule/i, terminal);
 

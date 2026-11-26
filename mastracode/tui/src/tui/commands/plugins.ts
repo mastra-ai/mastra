@@ -1,14 +1,15 @@
-import { Box, SelectList, Spacer, Text, matchesKey } from '@earendil-works/pi-tui';
+import { Box, Container, Spacer, Text, matchesKey } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 
 import type { LoadedPlugin, PluginScope } from '@mastra/code-sdk/plugins/types';
 import type { MastraCodePluginConfigOption, MastraCodePluginConfigValue } from '../../plugin.js';
+import { MenuList, menuNote } from '../components/menu-list.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
 import { askModalQuestion } from '../modal-question.js';
 import { showModalOverlay } from '../overlay.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
-import { getSelectListTheme, theme } from '../theme.js';
+import { theme } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
 
 const INSTALL_VALUE = '__install__';
@@ -22,7 +23,7 @@ class PluginInstallProgress extends Box {
     private specifier: string,
     private onCancel: () => void,
   ) {
-    super(4, 2, text => theme.bg('overlayBg', text));
+    super(2, 0);
     this.rebuild();
   }
 
@@ -52,9 +53,7 @@ class PluginInstallProgress extends Box {
 
   private rebuild(): void {
     this.clear();
-    this.addChild(new Text(theme.bold(theme.fg('accent', 'Installing GitHub plugin')), 0, 0));
     this.addChild(new Text(this.specifier, 0, 0));
-    this.addChild(new Text(theme.fg('dim', 'Press Esc or Ctrl-C to cancel.'), 0, 0));
     this.addChild(new Spacer(1));
     const output = this.lines.length > 0 ? this.lines : ['Waiting for clone output...'];
     for (const line of output) {
@@ -95,31 +94,26 @@ function pluginStatus(plugin: LoadedPlugin): string {
   return theme.fg('error', 'load failed');
 }
 
-function pluginLabel(plugin: LoadedPlugin): string {
+function pluginItem(plugin: LoadedPlugin): SelectItem {
   const name = plugin.name ? `${plugin.name} ` : '';
-  return `  ${name}${theme.fg('dim', `(${plugin.id})`)}  ${theme.fg('dim', plugin.scope)}  ${pluginStatus(plugin)}`;
+  return {
+    value: `${plugin.scope}:${plugin.id}`,
+    label: `${name}${theme.fg('dim', `(${plugin.id})`)}`,
+    description: `${theme.fg('dim', plugin.scope)}  ${pluginStatus(plugin)}`,
+  };
 }
 
 function buildPluginItems(plugins: LoadedPlugin[]): SelectItem[] {
   const project = plugins.filter(plugin => plugin.scope === 'project');
   const global = plugins.filter(plugin => plugin.scope === 'global');
-  return [
-    { value: INSTALL_VALUE, label: '  Install new plugin' },
-    ...project.map(plugin => ({ value: `project:${plugin.id}`, label: pluginLabel(plugin) })),
-    ...global.map(plugin => ({ value: `global:${plugin.id}`, label: pluginLabel(plugin) })),
-  ];
+  return [{ value: INSTALL_VALUE, label: 'Install new plugin' }, ...project.map(pluginItem), ...global.map(pluginItem)];
 }
 
 function showPluginsList(ctx: SlashCommandContext): void {
   const plugins = ctx.pluginManager?.getLoadedPlugins() ?? [];
   const items = buildPluginItems(plugins);
-  const container = new Box(4, 2, text => theme.bg('overlayBg', text));
-  container.addChild(new Text(theme.bold(theme.fg('accent', 'Plugins')), 0, 0));
-  container.addChild(new Spacer(1));
-  container.addChild(new Text(theme.fg('dim', 'Scaffold with: mastracode plugin scaffold <dir>'), 0, 0));
-  container.addChild(new Spacer(1));
-
-  const list = new SelectList(items, Math.min(items.length, 15), getSelectListTheme());
+  const container = new Container();
+  const list = new MenuList(items, Math.min(items.length, 15));
   list.onSelect = item => {
     if (item.value === INSTALL_VALUE) {
       ctx.state.ui.hideOverlay();
@@ -137,10 +131,10 @@ function showPluginsList(ctx: SlashCommandContext): void {
 
   container.addChild(list);
   container.addChild(new Spacer(1));
-  container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc close'), 0, 0));
-  const modal = container as Box & { handleInput: (data: string) => void };
+  container.addChild(menuNote('Scaffold with: mastracode plugin scaffold <dir>'));
+  const modal = container as Container & { handleInput: (data: string) => void };
   modal.handleInput = (data: string) => list.handleInput(data);
-  showModalOverlay(ctx.state.ui, modal, { maxHeight: '80%' });
+  showModalOverlay(ctx.state.ui, modal, { title: 'Plugins' });
 }
 
 function reportPluginMutationError(ctx: SlashCommandContext, action: string, error: unknown): void {
@@ -162,7 +156,7 @@ async function withGithubPluginInstallProgress<T>(
     controller.abort();
     rejectCancelled(new Error('GitHub plugin install cancelled'));
   });
-  const overlay = showModalOverlay(ctx.state.ui, progress, { maxHeight: '70%' });
+  const overlay = showModalOverlay(ctx.state.ui, progress, { title: 'Installing GitHub plugin' });
   overlay?.focus?.();
   ctx.state.ui.requestRender?.();
   try {
@@ -182,9 +176,8 @@ async function withGithubPluginInstallProgress<T>(
 }
 
 function showPluginDetail(ctx: SlashCommandContext, plugin: LoadedPlugin): void {
-  const container = new Box(4, 2, text => theme.bg('overlayBg', text));
-  container.addChild(new Text(theme.bold(theme.fg('accent', plugin.name ?? plugin.id)), 0, 0));
-  container.addChild(new Spacer(1));
+  // Details line up with the action rows below.
+  const container = new Box(2, 0);
   container.addChild(new Text(`id: ${plugin.id}`, 0, 0));
   container.addChild(new Text(`scope: ${plugin.scope}`, 0, 0));
   container.addChild(new Text(`source: ${plugin.source} ${plugin.specifier}`, 0, 0));
@@ -205,12 +198,12 @@ function showPluginDetail(ctx: SlashCommandContext, plugin: LoadedPlugin): void 
 
   const actionLabel = plugin.enabled ? 'Deactivate' : 'Activate';
   const actionItems: SelectItem[] = [
-    ...(configEntries.length && plugin.status !== 'blocked' ? [{ value: 'configure', label: '  Configure' }] : []),
-    ...(plugin.status === 'blocked' ? [] : [{ value: 'toggle', label: `  ${actionLabel}` }]),
-    { value: 'uninstall', label: '  Uninstall' },
-    { value: BACK_VALUE, label: '  Back' },
+    ...(configEntries.length && plugin.status !== 'blocked' ? [{ value: 'configure', label: 'Configure' }] : []),
+    ...(plugin.status === 'blocked' ? [] : [{ value: 'toggle', label: actionLabel }]),
+    { value: 'uninstall', label: 'Uninstall' },
+    { value: BACK_VALUE, label: 'Back' },
   ];
-  const actions = new SelectList(actionItems, actionItems.length, getSelectListTheme());
+  const actions = new MenuList(actionItems, actionItems.length);
   actions.onSelect = item => {
     if (!ctx.pluginManager) return;
     if (item.value === BACK_VALUE) {
@@ -247,10 +240,13 @@ function showPluginDetail(ctx: SlashCommandContext, plugin: LoadedPlugin): void 
     ctx.state.ui.hideOverlay();
     showPluginsList(ctx);
   };
-  container.addChild(actions);
-  const modal = container as Box & { handleInput: (data: string) => void };
+  // The action rows sit outside the padded details so they line up with every other menu.
+  const menu = new Container();
+  menu.addChild(container);
+  menu.addChild(actions);
+  const modal = menu as Container & { handleInput: (data: string) => void };
   modal.handleInput = (data: string) => actions.handleInput(data);
-  showModalOverlay(ctx.state.ui, modal, { maxHeight: '80%' });
+  showModalOverlay(ctx.state.ui, modal, { title: plugin.name ?? plugin.id });
 }
 
 async function configurePluginFlow(ctx: SlashCommandContext, plugin: LoadedPlugin): Promise<void> {

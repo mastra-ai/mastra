@@ -39,7 +39,7 @@ async function setup(routes: StoredIntakeRouteInput[] = []) {
     createFactoryWorkItem({
       workItems: seed.workItems,
       boards,
-      boardEngine: new DispatcherBoardEngine({ transitionService }),
+      boardEngine: new DispatcherBoardEngine({ transitionService, workItems: seed.workItems, boards }),
       audit: async () => {},
       orgId: 'org-1',
       userId: 'user-1',
@@ -183,7 +183,7 @@ describe('createFactoryWorkItem under the intake order evaluator', () => {
       createFactoryWorkItem({
         workItems: seed.workItems,
         boards,
-        boardEngine: new DispatcherBoardEngine({ transitionService }),
+        boardEngine: new DispatcherBoardEngine({ transitionService, workItems: seed.workItems, boards }),
         audit: async () => {},
         orgId: 'org-1',
         userId: 'user-1',
@@ -353,6 +353,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         // `null` files with Factory transitions unavailable.
         boardEngine: CreateFactoryWorkItemArgs['boardEngine'] | null = new DispatcherBoardEngine({
           transitionService: service,
+          workItems,
+          boards,
         }),
       ): Promise<CreateFactoryWorkItemResult> =>
         createFactoryWorkItem({

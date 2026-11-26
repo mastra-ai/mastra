@@ -1,38 +1,31 @@
-import { Card, CardContent } from '@mastra/playground-ui/components/Card';
-import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 
-import { SkeletonRows } from '../../../../../ui/SkeletonRows';
-import { ROUTING_MAP_GRID_CLASS } from './RoutingMapLayout';
+import { ModelPackListSkeleton } from '../packs/ModelPackListSkeleton';
+import { ProviderRowsSkeleton } from '../providers/ProviderRows';
+import { DEFAULTS_CONTENT_CLASS, DEFAULTS_HEADER_CLASS, DefaultsIdentity } from './DefaultsCard';
+import type { ModelDefaults } from './model-routes';
+
+const DEFAULTS: ModelDefaults[] = ['personal', 'factory'];
 
 export function ModelRoutingSkeleton() {
   return (
-    <div role="status" aria-label="Loading model routing" className="@container">
-      <div aria-hidden className={ROUTING_MAP_GRID_CLASS}>
-        <SkeletonRows label="Loading model sources" rows={2} className="gap-3 self-center">
-          <Card>
-            <CardContent className="flex items-center gap-3">
-              <Skeleton className="size-8 shrink-0 motion-reduce:before:animate-none" />
-              <div className="min-w-0 flex-1">
-                <SkeletonText line="text-label" className="w-20 motion-reduce:before:animate-none" />
-                <SkeletonText line="text-meta" className="w-28 max-w-full motion-reduce:before:animate-none" />
-              </div>
-            </CardContent>
-          </Card>
-        </SkeletonRows>
-        <div className="hidden @min-[38rem]:block" />
-        <SkeletonRows label="Loading model defaults" rows={2} className="min-w-0 gap-3">
-          <Card>
-            <CardContent className="flex flex-col gap-4">
-              <div className="flex items-center gap-3">
-                <Skeleton className="size-8 shrink-0 motion-reduce:before:animate-none" />
-                <SkeletonText line="text-label" className="w-32 motion-reduce:before:animate-none" />
-              </div>
-              <Skeleton className="h-control-sm w-full rounded-full motion-reduce:before:animate-none" />
-              <Skeleton className="h-control-sm w-40 max-w-full rounded-full motion-reduce:before:animate-none" />
-            </CardContent>
-          </Card>
-        </SkeletonRows>
-      </div>
+    <div role="status" aria-label="Loading model defaults" className="flex flex-col gap-3">
+      {DEFAULTS.map(defaults => (
+        <SettingsContainer key={defaults} aria-hidden>
+          <section>
+            <header className={DEFAULTS_HEADER_CLASS}>
+              <DefaultsIdentity defaults={defaults} />
+              <Skeleton className="ml-auto h-6 w-28 rounded-md motion-reduce:before:animate-none" />
+            </header>
+            <div className={DEFAULTS_CONTENT_CLASS}>
+              <ModelPackListSkeleton label="Loading model packs" />
+              <hr className="border-border1" />
+              <ProviderRowsSkeleton />
+            </div>
+          </section>
+        </SettingsContainer>
+      ))}
     </div>
   );
 }

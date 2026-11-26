@@ -45,26 +45,27 @@ export function BuildTriggersRows({
           onCheckedChange={enabled => void onSave({ buildTriggers: { push: { enabled } } })}
         />
       </SettingsRow>
-      {push.enabled && (
-        <SettingsRow label="Push debounce" description="Minimum minutes between push-triggered builds, 0 to 1440.">
-          <CommittedInput
-            label="Push debounce in minutes"
-            type="number"
-            min={0}
-            max={1440}
-            value={String(push.debounceMinutes)}
-            disabled={disabled}
-            onCommit={raw => {
-              const debounceMinutes = Number(raw);
-              if (!Number.isInteger(debounceMinutes) || debounceMinutes < 0 || debounceMinutes > 1440) {
-                toast.error('Enter a whole number between 0 and 1440');
-                return Promise.reject(new Error('out of range'));
-              }
-              return onSave({ buildTriggers: { push: { debounceMinutes } } });
-            }}
-          />
-        </SettingsRow>
-      )}
+      <SettingsRow
+        label="Build debounce"
+        description="Minimum minutes between automatic rebuilds after a push or a new session, 0 to 1440."
+      >
+        <CommittedInput
+          label="Build debounce in minutes"
+          type="number"
+          min={0}
+          max={1440}
+          value={String(push.debounceMinutes)}
+          disabled={disabled}
+          onCommit={raw => {
+            const debounceMinutes = Number(raw);
+            if (!Number.isInteger(debounceMinutes) || debounceMinutes < 0 || debounceMinutes > 1440) {
+              toast.error('Enter a whole number between 0 and 1440');
+              return Promise.reject(new Error('out of range'));
+            }
+            return onSave({ buildTriggers: { push: { debounceMinutes } } });
+          }}
+        />
+      </SettingsRow>
     </>
   );
 }

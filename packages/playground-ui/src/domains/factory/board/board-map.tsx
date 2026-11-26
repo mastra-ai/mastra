@@ -17,7 +17,11 @@ const PINNED = 'sticky left-0 w-[100cqw] px-4';
  * Lines the first column's content up with the settings column above it (42rem wide, centered), and leaves the same
  * gutter after the last one. A column's content sits 1.25rem inside its edge.
  */
-const MAP_GUTTER = 'px-[max(0.75rem,calc((100cqw_-_42rem)/2_-_1.25rem))]';
+export const BOARD_MAP_PHASES = 'mx-auto flex w-max px-[max(0.75rem,calc((100cqw_-_42rem)/2_-_1.25rem))]';
+export const BOARD_MAP_PHASE =
+  'relative flex w-64 shrink-0 flex-col px-2 before:via-border-strong not-first:before:absolute not-first:before:inset-y-0 not-first:before:left-0 not-first:before:w-px not-first:before:bg-linear-to-b not-first:before:from-transparent not-first:before:to-transparent';
+export const BOARD_MAP_PHASE_TITLE = 'flex items-center gap-2 px-3 pt-3 pb-1';
+export const BOARD_MAP_PHASE_BODY = 'p-3';
 
 /** A settings block. Pinned, it stays in view while the Overview map scrolls sideways. */
 export function BoardSettingsColumn({
@@ -85,16 +89,12 @@ export function BoardMap({
           </Txt>
         </BoardSettingsColumn>
       )}
-      <ol aria-label="Phases" className={cn('mx-auto flex w-max', MAP_GUTTER)}>
+      <ol aria-label="Phases" className={BOARD_MAP_PHASES}>
         {phases.map(phase => {
           const parts = column(phase);
           return (
-            <li
-              key={phase.key}
-              aria-label={phase.name}
-              className="relative flex w-64 shrink-0 flex-col px-2 before:via-border-strong not-first:before:absolute not-first:before:inset-y-0 not-first:before:left-0 not-first:before:w-px not-first:before:bg-linear-to-b not-first:before:from-transparent not-first:before:to-transparent"
-            >
-              <div className="flex items-center gap-2 px-3 pt-3 pb-1">
+            <li key={phase.key} aria-label={phase.name} className={BOARD_MAP_PHASE}>
+              <div className={BOARD_MAP_PHASE_TITLE}>
                 <Link
                   href={parts.href}
                   className="flex min-w-0 items-center gap-2 hover:underline focus-visible:underline focus-visible:outline-hidden"
@@ -105,7 +105,7 @@ export function BoardMap({
                   </Txt>
                 </Link>
               </div>
-              <div className="p-3">
+              <div className={BOARD_MAP_PHASE_BODY}>
                 <PhaseWalkthrough
                   boardId={boardId}
                   phase={phase}

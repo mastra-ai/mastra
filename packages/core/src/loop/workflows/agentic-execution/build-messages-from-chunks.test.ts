@@ -11,6 +11,9 @@ function build(chunks: CollectedChunk[], tools?: any) {
   });
 }
 
+// A response that finished; item ids of an unfinished one are dropped.
+const FINISH: CollectedChunk = { type: 'finish', payload: { finishReason: 'stop', usage: {} } };
+
 function parts(chunks: CollectedChunk[], tools?: any) {
   const msgs = build(chunks, tools);
   return msgs[0]?.content.parts ?? [];
@@ -105,6 +108,7 @@ describe('buildMessagesFromChunks', () => {
       { type: 'text-start', payload: { id: 't1', providerMetadata: meta } },
       { type: 'text-delta', payload: { id: 't1', text: 'hi' } },
       { type: 'text-end', payload: { id: 't1' } },
+      FINISH,
     ]);
     expect(result[0]?.providerMetadata).toEqual(meta);
   });
@@ -116,8 +120,24 @@ describe('buildMessagesFromChunks', () => {
       { type: 'text-start', payload: { id: 't1', providerMetadata: startMeta } },
       { type: 'text-delta', payload: { id: 't1', text: 'hi' } },
       { type: 'text-end', payload: { id: 't1', providerMetadata: endMeta } },
+      FINISH,
     ]);
     expect(result[0]?.providerMetadata).toEqual(endMeta);
+  });
+
+  it('drops response item ids from a response that never finished (#31202)', () => {
+    const result = parts([
+      { type: 'reasoning-start', payload: { id: 'r1', providerMetadata: { openai: { itemId: 'rs_1' } } } },
+      { type: 'reasoning-delta', payload: { id: 'r1', text: 'think' } },
+      { type: 'reasoning-end', payload: { id: 'r1', providerMetadata: { openai: { itemId: 'rs_1' } } } },
+      { type: 'text-start', payload: { id: 't1', providerMetadata: { azure: { itemId: 'msg_1', phase: 'final' } } } },
+      { type: 'text-delta', payload: { id: 't1', text: 'partial' } },
+    ]);
+    expect(result).toEqual([
+      expect.objectContaining({ type: 'reasoning', reasoning: 'think' }),
+      expect.objectContaining({ type: 'text', text: 'partial', providerMetadata: { azure: { phase: 'final' } } }),
+    ]);
+    expect(result[0]).not.toHaveProperty('providerMetadata');
   });
 
   // ── Reasoning spans ─────────────────────────────────────────
@@ -172,6 +192,7 @@ describe('buildMessagesFromChunks', () => {
       { type: 'reasoning-start', payload: { id: 'r1', providerMetadata: startMeta } },
       { type: 'reasoning-delta', payload: { id: 'r1', text: 'think' } },
       { type: 'reasoning-end', payload: { id: 'r1', providerMetadata: endMeta } },
+      FINISH,
     ]);
     expect(result[0]).toMatchObject({
       type: 'reasoning',
@@ -466,7 +487,14 @@ describe('buildMessagesFromChunks', () => {
     });
   });
 
-  it('should merge tool-call + tool-error into a single output-error part', () => {
+  it.each([
+    [
+      'should merge tool-call + tool-error into a single output-error part',
+      'Provider tool failed',
+      'Provider tool failed',
+    ],
+    ['should fall back for Error instances without usable messages', '', 'Tool execution failed'],
+  ] as const)('%s', (_title, input, errorText) => {
     const result = parts([
       {
         type: 'tool-call',
@@ -483,7 +511,7 @@ describe('buildMessagesFromChunks', () => {
           toolCallId: 'tc1',
           toolName: 'myTool',
           args: { q: 'test' },
-          error: new Error('Provider tool failed'),
+          error: new Error(input),
           providerExecuted: true,
         },
       },
@@ -496,13 +524,17 @@ describe('buildMessagesFromChunks', () => {
         toolCallId: 'tc1',
         toolName: 'myTool',
         args: { q: 'test' },
-        errorText: 'Provider tool failed',
+        errorText,
       },
       providerExecuted: true,
     });
   });
 
-  it('should preserve string tool-error messages', () => {
+  it.each([
+    ['should preserve string tool-error messages', 'boom', 'boom'],
+    ['should fall back for falsy tool errors', null, 'Tool execution failed'],
+    ['should fall back for whitespace-only tool error strings', '   ', 'Tool execution failed'],
+  ] as const)('%s', (_title, error, errorText) => {
     const result = parts([
       {
         type: 'tool-call',
@@ -519,7 +551,7 @@ describe('buildMessagesFromChunks', () => {
           toolCallId: 'tc1',
           toolName: 'myTool',
           args: { q: 'test' },
-          error: 'boom',
+          error,
           providerExecuted: true,
         },
       },
@@ -532,7 +564,7 @@ describe('buildMessagesFromChunks', () => {
         toolCallId: 'tc1',
         toolName: 'myTool',
         args: { q: 'test' },
-        errorText: 'boom',
+        errorText,
       },
       providerExecuted: true,
     });
@@ -569,114 +601,6 @@ describe('buildMessagesFromChunks', () => {
         toolName: 'myTool',
         args: { q: 'test' },
         errorText: 'Provider object failure',
-      },
-      providerExecuted: true,
-    });
-  });
-
-  it('should fall back for falsy tool errors', () => {
-    const result = parts([
-      {
-        type: 'tool-call',
-        payload: {
-          toolCallId: 'tc1',
-          toolName: 'myTool',
-          args: { q: 'test' },
-          providerExecuted: true,
-        },
-      },
-      {
-        type: 'tool-error',
-        payload: {
-          toolCallId: 'tc1',
-          toolName: 'myTool',
-          args: { q: 'test' },
-          error: null,
-          providerExecuted: true,
-        },
-      },
-    ]);
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({
-      type: 'tool-invocation',
-      toolInvocation: {
-        state: 'output-error',
-        toolCallId: 'tc1',
-        toolName: 'myTool',
-        args: { q: 'test' },
-        errorText: 'Tool execution failed',
-      },
-      providerExecuted: true,
-    });
-  });
-
-  it('should fall back for whitespace-only tool error strings', () => {
-    const result = parts([
-      {
-        type: 'tool-call',
-        payload: {
-          toolCallId: 'tc1',
-          toolName: 'myTool',
-          args: { q: 'test' },
-          providerExecuted: true,
-        },
-      },
-      {
-        type: 'tool-error',
-        payload: {
-          toolCallId: 'tc1',
-          toolName: 'myTool',
-          args: { q: 'test' },
-          error: '   ',
-          providerExecuted: true,
-        },
-      },
-    ]);
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({
-      type: 'tool-invocation',
-      toolInvocation: {
-        state: 'output-error',
-        toolCallId: 'tc1',
-        toolName: 'myTool',
-        args: { q: 'test' },
-        errorText: 'Tool execution failed',
-      },
-      providerExecuted: true,
-    });
-  });
-
-  it('should fall back for Error instances without usable messages', () => {
-    const result = parts([
-      {
-        type: 'tool-call',
-        payload: {
-          toolCallId: 'tc1',
-          toolName: 'myTool',
-          args: { q: 'test' },
-          providerExecuted: true,
-        },
-      },
-      {
-        type: 'tool-error',
-        payload: {
-          toolCallId: 'tc1',
-          toolName: 'myTool',
-          args: { q: 'test' },
-          error: new Error(''),
-          providerExecuted: true,
-        },
-      },
-    ]);
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({
-      type: 'tool-invocation',
-      toolInvocation: {
-        state: 'output-error',
-        toolCallId: 'tc1',
-        toolName: 'myTool',
-        args: { q: 'test' },
-        errorText: 'Tool execution failed',
       },
       providerExecuted: true,
     });

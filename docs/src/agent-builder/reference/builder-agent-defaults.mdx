@@ -91,7 +91,7 @@ new MastraEditor({
             name: 'default',
             type: 'DefaultModelEntry',
             description:
-              'Pre-selected model on new-agent create. Required when the model picker is hidden. DefaultModelEntry requires `provider` and `modelId`, with an optional `kind`.',
+              "Pre-selected model on new-agent create. Required when the model picker is hidden. DefaultModelEntry requires `provider` and `modelId`. Set `kind: 'custom'` for a provider that isn't in the generated registry; omit `kind` for known providers.",
             isOptional: true,
           },
         ],

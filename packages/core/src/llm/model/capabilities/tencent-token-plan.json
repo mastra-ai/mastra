@@ -7,9 +7,11 @@
     "hy4-flash",
     "kimi-k2.7-code",
     "kimi-k3",
+    "kimi-k3.1-pro",
     "mimo-v2.6-flash",
     "minimax-m-3-0",
-    "minimax-m3"
+    "minimax-m3",
+    "minimax-m3.1-flash"
   ],
   "temperature": [
     "deepseek-v4-pro-0813",
@@ -21,6 +23,7 @@
     "glm-5.2",
     "glm-5.3",
     "glm-5.3-flash",
+    "glm-5.4",
     "hy3",
     "hy3-202608",
     "hy4",
@@ -28,7 +31,8 @@
     "hy4-preview",
     "mimo-v2.6-flash",
     "minimax-m-3-0",
-    "minimax-m3"
+    "minimax-m3",
+    "minimax-m3.1-flash"
   ],
   "structuredOutput": [
     "deepseek-v4-pro-0813",
@@ -40,6 +44,7 @@
     "glm-5.2",
     "glm-5.3",
     "glm-5.3-flash",
+    "glm-5.4",
     "hy3",
     "hy3-202608",
     "hy4",
@@ -47,13 +52,78 @@
     "hy4-preview",
     "kimi-k2.7-code",
     "kimi-k3",
+    "kimi-k3.1-pro",
     "mimo-v2.6-flash"
   ],
   "reasoning": {
-    "hy3": [
+    "glm-5-2": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "hy4": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "glm-5.4": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "hy4-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "glm-5.2": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "hy3-202608": [
       {
         "type": "effort",
         "values": ["none", "low", "high"]
+      }
+    ],
+    "minimax-m3.1-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "glm-5-3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "hy4-preview": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "minimax-m-3-0": [
+      {
+        "type": "toggle"
       }
     ],
     "deepseek-v4.1-flash-1017": [
@@ -74,53 +144,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "minimax-m-3-0": [
-      {
-        "type": "toggle"
-      }
-    ],
     "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "hy4-preview": [
+    "hy3": [
       {
         "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "glm-5.2": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "hy4": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "hy4-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "minimax-m3": [
-      {
-        "type": "toggle"
+        "values": ["none", "low", "high"]
       }
     ],
     "kimi-k3": [
@@ -129,25 +162,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5-3": [
+    "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5-2": [
-      {
-        "type": "toggle"
-      },
+    "kimi-k3.1-pro": [
       {
         "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "hy3-202608": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
     "mimo-v2.6-flash": [
@@ -155,7 +179,7 @@
         "type": "toggle"
       }
     ],
-    "deepseek/deepseek-v4-pro": [
+    "deepseek/deepseek-flash": [
       {
         "type": "toggle"
       },
@@ -164,7 +188,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek/deepseek-flash": [
+    "deepseek/deepseek-v4-pro": [
       {
         "type": "toggle"
       },

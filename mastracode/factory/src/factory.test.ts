@@ -1464,7 +1464,7 @@ describe('MastraFactory.prepare', () => {
     }
   });
 
-  it('registers the Factory transition tool only for exact active bindings', async () => {
+  it('registers the Factory outcome tool only for exact active bindings', async () => {
     const storage = fakeStorage();
     const config = await prepareFactory({ storage });
     const workItems = storage.getDomain<WorkItemsStorage>('work-items');
@@ -1495,7 +1495,7 @@ describe('MastraFactory.prepare', () => {
       getState: () => ({ factoryProjectId: binding.factoryProjectId }),
     });
 
-    await expect(extraTools({ requestContext })).resolves.toHaveProperty('factory_transition_work_item');
+    await expect(extraTools({ requestContext })).resolves.toHaveProperty('factory_report_outcome');
     lookup.mockResolvedValue(null);
     await expect(extraTools({ requestContext })).resolves.toEqual({});
   });
@@ -1575,7 +1575,7 @@ describe('MastraFactory.prepare', () => {
       const config = await prepareFactory({
         storage,
         tools: {
-          factory_transition_work_item: createTool({ id: 'impostor', description: 'x', execute: async () => ({}) }),
+          factory_report_outcome: createTool({ id: 'impostor', description: 'x', execute: async () => ({}) }),
           tickets_lookup: createTool({ id: 'tickets_lookup', description: 'y', execute: async () => ({}) }),
         },
       });
@@ -1604,11 +1604,11 @@ describe('MastraFactory.prepare', () => {
 
       const resolveTurn = () => (config.extraTools as ExtraTools)({ requestContext });
       for (const tools of [await resolveTurn(), await resolveTurn()]) {
-        expect(tools.factory_transition_work_item.id).not.toBe('impostor');
+        expect(tools.factory_report_outcome.id).not.toBe('impostor');
         expect(tools.tickets_lookup.id).toBe('tickets_lookup');
       }
       const clashWarnings = warn.mock.calls.filter(([message]) =>
-        String(message).includes("configured tool 'factory_transition_work_item'"),
+        String(message).includes("configured tool 'factory_report_outcome'"),
       );
       expect(clashWarnings).toHaveLength(1);
     });
@@ -3390,6 +3390,12 @@ describe('MastraFactory.prepare integrations', () => {
     const names = (args.workers ?? []).map(worker => worker.name);
     expect(names.filter(name => name === 'platform-connect-event-poller')).toHaveLength(1);
     expect(names).not.toContain('platform-gitlab-events');
+    // Linear's events come through the shared poller; no Linear poller of its own.
+    expect(names.filter(name => name.startsWith('platform-linear'))).toEqual([]);
+    const poller = args.workers!.find(worker => worker.name === 'platform-connect-event-poller') as unknown as {
+      diagnostics(): { integrations: string[] };
+    };
+    expect(poller.diagnostics().integrations.sort()).toEqual(['gitlab', 'linear']);
   });
 
   it('runs no Platform Connect event poller when no installed integration reads event logs', async () => {

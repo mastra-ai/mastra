@@ -347,7 +347,9 @@ vi.mock('../agents/model.js', () => ({
   createMastraCodeModelCatalogProvider: createMastraCodeModelCatalogProviderMock,
   getDynamicModel: vi.fn(),
   getGoalJudgeModel: vi.fn(),
+  requestModelRoute: vi.fn(() => ({ entries: [], host: false, modelId: undefined, thinkingLevel: undefined })),
   resolveModel: resolveModelMock,
+  setHostModelRoute: vi.fn(),
 }));
 
 vi.mock('../agents/tools.js', () => ({

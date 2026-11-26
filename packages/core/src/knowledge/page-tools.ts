@@ -1600,7 +1600,11 @@ function activityDate(name: 'since' | 'until', value: string): Date {
   return date;
 }
 
-type ActivityCursor = { v: 1; before: [string, string]; bind: string };
+/**
+ * v1 continues newest first before an event; v2 continues oldest first after a store position, or
+ * from the start of the range when `after` is null (an oldest-first read that hasn't passed one yet).
+ */
+type ActivityCursor = { v: 1; before: [string, string]; bind: string } | { v: 2; after: string | null; bind: string };
 
 async function activityBinding(parts: Array<string | undefined>): Promise<string> {
   const bytes = new TextEncoder().encode(JSON.stringify(parts.map(part => part ?? null)));
@@ -1625,6 +1629,13 @@ function decodeActivityCursor(value: string): ActivityCursor {
     ) {
       return cursor;
     }
+    if (
+      cursor?.v === 2 &&
+      (cursor.after === null || (typeof cursor.after === 'string' && cursor.after.length > 0)) &&
+      typeof cursor.bind === 'string'
+    ) {
+      return cursor;
+    }
   } catch {
     // Falls through to the refusal below.
   }
@@ -1644,10 +1655,12 @@ function activityTool(host: KnowledgePageToolHost) {
   return createTool({
     id: 'knowledge_activity',
     description:
-      'What changed in Knowledge over a period: page creates, edits, moves, merges and deletes, and notes added, restamped, removed or restored, newest first, with who made each change. ' +
+      'What changed in Knowledge over a period: page creates, edits, moves, merges and deletes, and notes added, restamped, removed or restored, newest first (or oldest first with `order: "oldest"`), with who made each change. ' +
       'Give `since` and/or `until` (a date like 2026-07-01, or a date-time with a zone like 2026-07-01T09:30:00Z; at least one); `from` narrows it to one page or scope. ' +
       "A note entry shows the note's current text (marked `current`), not its text when the change happened; a removed note shows no text. " +
-      `One result holds at most \`limit\` changes and about ${maxTokens.toLocaleString('en-US')} tokens of them; when it stops early, \`more\` is true and \`cursor\` continues (pass the same since, until and from).`,
+      `One result holds at most \`limit\` changes and about ${maxTokens.toLocaleString('en-US')} tokens of them; when it stops early, \`more\` is true and \`cursor\` continues (pass the same since, until, from and order). ` +
+      'Oldest first always returns a `cursor`, also when it has caught up or found nothing yet: keep it, and a later call with it returns only the changes it has not listed, none missed or repeated. ' +
+      'The exception: a page or note that becomes readable later (moved into view, or a note restamped or restored) keeps its earlier changes behind that cursor, and they are not returned. The move, restamp or restore itself comes through as a change of the page it changed: without `from`, or with `from` on that page or the scope it is in now, but not with `from` on another page (such as one under a moved folder). To see what came before it, read that page newest first with `from`.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1663,6 +1676,12 @@ function activityTool(host: KnowledgePageToolHost) {
           minLength: 1,
           description: `Only changes to this page or scope. ${pageRefDescription}`,
         },
+        order: {
+          type: 'string',
+          enum: ['newest', 'oldest'],
+          description:
+            'newest (default) lists the latest changes first; oldest lists them roughly in the order they happened, in an order where a change still being saved shows up on a later call instead of being skipped.',
+        },
         limit: {
           type: 'integer',
           minimum: 1,
@@ -1672,13 +1691,22 @@ function activityTool(host: KnowledgePageToolHost) {
         cursor: {
           type: 'string',
           minLength: 1,
-          description: "The previous result's cursor, for the changes after it (pass the same since, until and from).",
+          description:
+            "The previous result's cursor, for the changes after it (pass the same since, until, from and order).",
         },
       },
       additionalProperties: false,
     } satisfies JSONSchema7,
     execute: async (input, context) => {
-      const args = input as { since?: string; until?: string; from?: string; limit?: number; cursor?: string };
+      const args = input as {
+        since?: string;
+        until?: string;
+        from?: string;
+        order?: 'newest' | 'oldest';
+        limit?: number;
+        cursor?: string;
+      };
+      const oldest = args.order === 'oldest';
       if (args.since === undefined && args.until === undefined) {
         throw new Error('knowledge_activity needs since or until, e.g. since: "2026-07-01".');
       }
@@ -1689,10 +1717,19 @@ function activityTool(host: KnowledgePageToolHost) {
       }
       const limit = Math.min(Math.max(args.limit ?? ACTIVITY_DEFAULT_LIMIT, 1), ACTIVITY_MAX_LIMIT);
       // Refused before any listing: an adapter without date support can't serve a dated read or its continuation.
-      if (!(await host.getStorage()).getCapabilities().supportsActivityDateRange) {
+      const capabilities = (await host.getStorage()).getCapabilities();
+      if (!capabilities.supportsActivityDateRange) {
         throw new KnowledgeUnsupportedCapabilityError('listPageActivity date range');
       }
+      if (oldest && !capabilities.supportsActivityAscending) {
+        throw new KnowledgeUnsupportedCapabilityError('listPageActivity oldest first');
+      }
       const cursor = args.cursor === undefined ? undefined : decodeActivityCursor(args.cursor);
+      if (cursor && (cursor.v === 2) !== oldest) {
+        throw new Error(
+          'knowledge_activity: this cursor came from a call with different since, until, from or order. Pass the same ones as the call that returned it.',
+        );
+      }
 
       const run = await start(host, context);
       const origin = args.from ? await run.pageOrCloseMatches(args.from) : undefined;
@@ -1702,16 +1739,29 @@ function activityTool(host: KnowledgePageToolHost) {
         until?.toISOString(),
         'scopeId' in filter ? filter.scopeId : undefined,
         'pageId' in filter ? filter.pageId : undefined,
+        // Only oldest-first cursors carry the order, so newest-first cursors from before it existed still match.
+        ...(oldest ? ['oldest'] : []),
       ]);
       if (cursor && cursor.bind !== bind) {
         throw new Error(
-          'knowledge_activity: this cursor came from a call with different since, until or from. Pass the same ones as the call that returned it.',
+          'knowledge_activity: this cursor came from a call with different since, until, from or order. Pass the same ones as the call that returned it.',
         );
       }
 
       const entries: ActivityEntry[] = [];
       let used = 0;
-      let position = cursor ? { createdAt: new Date(cursor.before[0]), id: cursor.before[1] } : undefined;
+      // Newest first continues before an event; oldest first continues after the store's position.
+      let position: { createdAt: Date; id: string } | string | undefined = !cursor
+        ? undefined
+        : cursor.v === 2
+          ? (cursor.after ?? undefined)
+          : { createdAt: new Date(cursor.before[0]), id: cursor.before[1] };
+      const passed = (event: KnowledgePageActivityEvent) => {
+        if (!oldest) return { createdAt: event.createdAt, id: event.id };
+        if (!event.position)
+          throw new Error('knowledge_activity: the store returned an oldest-first change without a position.');
+        return event.position;
+      };
       let more = false;
       let stopped = false;
       let batches = 0;
@@ -1723,7 +1773,9 @@ function activityTool(host: KnowledgePageToolHost) {
           ...filter,
           ...(since ? { since } : {}),
           ...(until ? { until } : {}),
-          ...(position ? { before: position } : {}),
+          ...(typeof position === 'string' ? { order: 'asc' as const, after: position } : {}),
+          ...(position && typeof position !== 'string' ? { before: position } : {}),
+          ...(oldest && !position ? { order: 'asc' as const } : {}),
           limit: limit - entries.length,
         });
         more = batch.nextCursor !== undefined;
@@ -1746,7 +1798,7 @@ function activityTool(host: KnowledgePageToolHost) {
           const note = event.noteId ? notes.get(event.noteId) : undefined;
           if (!page || (event.noteId && !note)) {
             // Consumed, so the cursor moves past it, but never shown.
-            position = { createdAt: event.createdAt, id: event.id };
+            position = passed(event);
             continue;
           }
           const entry: ActivityEntry = {
@@ -1779,7 +1831,7 @@ function activityTool(host: KnowledgePageToolHost) {
           }
           entries.push(entry);
           used += size;
-          position = { createdAt: event.createdAt, id: event.id };
+          position = passed(event);
           if (entries.length >= limit) break;
         }
         if (!more) break;
@@ -1795,12 +1847,19 @@ function activityTool(host: KnowledgePageToolHost) {
           ? { from: { ref: (await pageRefs(run, [origin])).refs.get(origin.id) ?? origin.id, name: origin.name } }
           : {}),
         changes: entries,
-        ...(hasMore && position
-          ? {
-              more: true,
-              cursor: encodeActivityCursor({ v: 1, before: [position.createdAt.toISOString(), position.id], bind }),
+        ...(oldest
+          ? // Oldest first always returns a cursor, even when caught up or when it has read nothing yet
+            // (then it starts from the beginning of the range), so a later call misses nothing.
+            {
+              ...(hasMore ? { more: true } : {}),
+              cursor: encodeActivityCursor({ v: 2, after: typeof position === 'string' ? position : null, bind }),
             }
-          : {}),
+          : hasMore && position && typeof position !== 'string'
+            ? {
+                more: true,
+                cursor: encodeActivityCursor({ v: 1, before: [position.createdAt.toISOString(), position.id], bind }),
+              }
+            : {}),
       };
     },
   });

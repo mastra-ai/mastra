@@ -26,17 +26,19 @@ describe('V2 Message Format Support', () => {
       },
     ];
 
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ messages: v1Messages }),
-    });
+    (global.fetch as any).mockResolvedValueOnce(
+      new Response(JSON.stringify({ messages: v1Messages }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
 
     const result = await client.saveMessageToMemory({
       agentId,
       messages: v1Messages,
     });
 
-    expect(result).toEqual({ messages: v1Messages });
+    expect(result).toEqual(JSON.parse(JSON.stringify({ messages: v1Messages })));
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/memory/save-messages'),
       expect.objectContaining({
@@ -62,17 +64,19 @@ describe('V2 Message Format Support', () => {
       },
     ];
 
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ messages: v2Messages }),
-    });
+    (global.fetch as any).mockResolvedValueOnce(
+      new Response(JSON.stringify({ messages: v2Messages }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
 
     const result = await client.saveMessageToMemory({
       agentId,
       messages: v2Messages,
     });
 
-    expect(result).toEqual({ messages: v2Messages });
+    expect(result).toEqual(JSON.parse(JSON.stringify({ messages: v2Messages })));
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/memory/save-messages'),
       expect.objectContaining({
@@ -127,17 +131,19 @@ describe('V2 Message Format Support', () => {
       },
     ];
 
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ messages: mixedMessages }),
-    });
+    (global.fetch as any).mockResolvedValueOnce(
+      new Response(JSON.stringify({ messages: mixedMessages }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
 
     const result = await client.saveMessageToMemory({
       agentId,
       messages: mixedMessages,
     });
 
-    expect(result).toEqual({ messages: mixedMessages });
+    expect(result).toEqual(JSON.parse(JSON.stringify({ messages: mixedMessages })));
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/memory/save-messages'),
       expect.objectContaining({
@@ -164,10 +170,12 @@ describe('V2 Message Format Support', () => {
       },
     };
 
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ messages: [v2MessageWithAttachments] }),
-    });
+    (global.fetch as any).mockResolvedValueOnce(
+      new Response(JSON.stringify({ messages: [v2MessageWithAttachments] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
 
     const result = await client.saveMessageToMemory({
       agentId,
@@ -175,6 +183,6 @@ describe('V2 Message Format Support', () => {
     });
 
     expect(result.messages).toHaveLength(1);
-    expect(result.messages[0]).toEqual(v2MessageWithAttachments);
+    expect(result.messages[0]).toEqual(JSON.parse(JSON.stringify(v2MessageWithAttachments)));
   });
 });

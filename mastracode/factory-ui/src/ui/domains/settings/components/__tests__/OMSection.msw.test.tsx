@@ -151,14 +151,11 @@ describe('OMSection', () => {
       />,
     );
 
-    // The field itself is the search box: it holds the selected model's name until cleared.
     const search = await screen.findByRole('combobox', { name: 'Observer model' });
     await user.clear(search);
     await user.type(search, 'anthropic');
-    // The custom-value row stays first; the only catalog match is the Anthropic model.
     await waitFor(() =>
       expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual([
-        'Use “anthropic”',
         'Claude Haiku 4.5anthropic/claude-haiku-4-5',
       ]),
     );
@@ -166,6 +163,21 @@ describe('OMSection', () => {
     await user.clear(search);
     await user.type(search, 'claude-haiku');
     expect(await screen.findByRole('option', { name: /Claude Haiku 4\.5/ })).toBeInTheDocument();
+  });
+
+  it('offers a typed provider/model ID that is not in the catalog first', async () => {
+    server.use(http.get(OM_URL, () => HttpResponse.json({ config: baseConfig })));
+
+    const user = userEvent.setup();
+    renderWithProviders(<OMSection models={models} />);
+
+    const search = await screen.findByRole('combobox', { name: 'Observer model' });
+    await user.clear(search);
+    await user.type(search, 'acme/reasoner-2');
+
+    await waitFor(() =>
+      expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['Use “acme/reasoner-2”']),
+    );
   });
 
   it('loads the observer, reflector, thresholds, and attachment setting', async () => {

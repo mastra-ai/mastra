@@ -210,10 +210,10 @@ Span interface, used internally for tracing.
 
 ```typescript
 interface Span<TType extends SpanType> {
-  readonly id: string
-  readonly traceId: string
-  readonly type: TType
-  readonly name: string
+  id: string
+  traceId: string
+  type: TType
+  name: string
 
   /** Entity that created the span */
   entityType?: EntityType
@@ -909,7 +909,6 @@ Tool Call attributes.
 
 ```typescript
 interface ToolCallAttributes {
-  toolId?: string
   toolType?: string
   toolDescription?: string
   toolCallId?: string

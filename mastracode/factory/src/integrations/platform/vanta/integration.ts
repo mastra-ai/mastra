@@ -120,10 +120,14 @@ export class PlatformVantaIntegration extends PlatformConnectIntegration {
     // A Vanta connection the project can't see would read as all its vulnerabilities resolved.
     const unlinked = await this.binding.unlinkedOrgConnections(connections);
     if (unlinked.length > 0) {
-      logPlatformWarn('Skipping the Vanta sync until every Vanta connection is linked to the Factory project', {
-        connectionIds: unlinked,
-      });
-      // A refusal lands in needsLinking for the UI; a successful link re-runs the sync.
+      logPlatformWarn(
+        'Skipping the Vanta sync until every Vanta connection is linked to the Factory project; one detached from the project waits for an admin to link it again',
+        { connectionIds: unlinked },
+      );
+      // Links only connections the project never had: a refusal lands in
+      // needsLinking, one removed from the project in detached (both in the
+      // integration's diagnostics and connections listing), and a successful
+      // link re-runs the sync.
       await this.binding.linkOrgConnections().catch(error =>
         logPlatformWarn('Could not link Vanta connections to the Factory project', {
           error: error instanceof Error ? error.message : String(error),

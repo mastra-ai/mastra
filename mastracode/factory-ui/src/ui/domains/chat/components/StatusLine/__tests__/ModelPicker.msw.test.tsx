@@ -1,4 +1,5 @@
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import type { ModelPack, ModelSelectionRequest, ResolvedModelSelection } from '@mastra/factory/model-packs';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -9,6 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../../e2e/ui/render';
 import type { AvailableModelOption } from '../../../../../../hooks/useAvailableModels';
+import type { SessionModelTarget } from '../../../../../../hooks/useSessionModel';
 import { ChatConnectionContext } from '../../../context/ChatConnectionContext';
 import { ChatModelsProvider } from '../../../context/ChatModelsProvider';
 import { ChatSessionContext } from '../../../context/ChatSessionContext';
@@ -55,6 +57,20 @@ const models: AvailableModelOption[] = [
   },
 ];
 
+interface SessionPacks {
+  modelPacks: ModelPack[];
+  defaultModelPackId: string | null;
+  modelSelection: ResolvedModelSelection;
+}
+
+function everydayPack(modelId: string): SessionPacks {
+  return {
+    modelPacks: [{ id: 'everyday', name: 'Everyday', models: [{ modelId, thinkingLevel: 'medium' }] }],
+    defaultModelPackId: 'everyday',
+    modelSelection: { kind: 'model' },
+  };
+}
+
 const baseSession: ChatSessionContextApi = {
   sessionId: 'session-1',
   resourceId: 'user-1',
@@ -70,7 +86,7 @@ const baseSession: ChatSessionContextApi = {
 function renderPicker({
   kind = 'user',
   modelId = 'openai/gpt-5',
-  defaultModelId = 'anthropic/claude-sonnet-4-6',
+  packs,
   thinkingLevel,
   settingsLoaded,
   catalogLoaded,
@@ -78,7 +94,6 @@ function renderPicker({
   thinkingDefaultsFail = false,
   inFactory = false,
   modelScope,
-  factoryDefaultModelId,
   emptyCatalog = false,
   catalogFails = false,
   sessionPolicy,
@@ -86,9 +101,9 @@ function renderPicker({
   withChangeModelAction = false,
 }: {
   catalog?: AvailableModelOption[];
+  packs?: SessionPacks;
   kind?: ChatSessionContextApi['kind'];
   modelId?: string;
-  defaultModelId?: string | null;
   thinkingLevel?: string;
   settingsLoaded?: Promise<void>;
   catalogLoaded?: Promise<void>;
@@ -98,10 +113,8 @@ function renderPicker({
   inFactory?: boolean;
   /** Mount on a Factory route whose project has this model scope. */
   modelScope?: 'factory' | 'user' | 'hybrid';
-  factoryDefaultModelId?: string;
   sessionPolicy?: {
     modelScope: 'factory' | 'user';
-    defaultModelId: string | null;
     personalThinkingLevel?: ThinkingLevelSetting | null;
   };
   /** The Factory's scope has no credentials, so its catalog is empty. */
@@ -110,15 +123,15 @@ function renderPicker({
   catalogFails?: boolean;
   withChangeModelAction?: boolean;
 } = {}) {
-  const modelSwitches: unknown[] = [];
+  const modelSwitches: ModelSelectionRequest[] = [];
   const stateUpdates: unknown[] = [];
   server.use(
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-      HttpResponse.json({ modelId: defaultModelId, thinkingLevel: null }),
+      HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/config/models`, async ({ request }) => {
       await catalogLoaded;
-      if (!modelScope) return HttpResponse.json({ models: catalog });
+      if (!modelScope) return HttpResponse.json({ models: catalog, ...packs });
       const params = new URL(request.url).searchParams;
       if (params.has('resourceId')) {
         if (catalogFails) {
@@ -130,11 +143,6 @@ function renderPicker({
         const effectiveScope = sessionPolicy?.modelScope ?? (modelScope === 'hybrid' ? kind : modelScope);
         return HttpResponse.json({
           modelScope: effectiveScope,
-          defaultModelId: sessionPolicy
-            ? sessionPolicy.defaultModelId
-            : effectiveScope === 'factory'
-              ? (factoryDefaultModelId ?? null)
-              : defaultModelId,
           personalThinkingLevel: sessionPolicy?.personalThinkingLevel ?? null,
           models: emptyCatalog
             ? []
@@ -179,11 +187,21 @@ function renderPicker({
       }
       return HttpResponse.json({ ok: true });
     }),
-    http.post(`${API}/sessions/:resourceId/model`, async ({ request }) => {
-      modelSwitches.push(await request.json());
-      await modelSwitched;
-      return HttpResponse.json({ ok: true });
-    }),
+    http.put<never, SessionModelTarget & { selection: ModelSelectionRequest }>(
+      `${TEST_BASE_URL}/web/config/session-model`,
+      async ({ request }) => {
+        const { selection } = await request.json();
+        modelSwitches.push(selection);
+        await modelSwitched;
+        if (selection.kind === 'model') thinkingLevel = selection.thinkingLevel;
+        return HttpResponse.json({
+          modelSelection:
+            selection.kind === 'model'
+              ? { kind: 'model' }
+              : { kind: 'pack', packId: selection.kind === 'pack' ? selection.packId : packs?.defaultModelPackId },
+        });
+      },
+    ),
   );
   if (modelScope) {
     window.__MASTRACODE_CONFIG__ = { authEnabled: true };
@@ -197,7 +215,6 @@ function renderPicker({
             id: 'fp-1',
             name: 'Mastra',
             modelScope,
-            defaultModelId: factoryDefaultModelId,
             defaultThinkingLevel: 'low',
           },
         }),
@@ -252,7 +269,7 @@ describe('ModelPicker', () => {
   describe('when the catalog contains release dates', () => {
     it('offers newer models first within each provider', async () => {
       const user = userEvent.setup();
-      renderPicker({ catalog: datedModels, defaultModelId: 'openai/gpt-5' });
+      renderPicker({ catalog: datedModels });
       await user.click(await screen.findByLabelText('Session model'));
       const options = await screen.findAllByRole('option');
       expect(options.map(option => option.getAttribute('data-value'))).toEqual([
@@ -263,20 +280,18 @@ describe('ModelPicker', () => {
     });
   });
   it.each(['user', 'hybrid'] as const)(
-    'shows the thread owner catalog and default to a collaborator in %s scope',
+    'shows the thread owner catalog to a collaborator in %s scope',
     async modelScope => {
       const user = userEvent.setup();
       renderPicker({
         modelScope,
         kind: 'user',
         modelId: 'anthropic/claude-sonnet-4-6',
-        defaultModelId: 'openai/gpt-5',
-        sessionPolicy: { modelScope: 'user', defaultModelId: 'anthropic/claude-sonnet-4-6' },
+        sessionPolicy: { modelScope: 'user' },
       });
 
       await user.click(await screen.findByLabelText('Session model'));
-      const ownerOption = await screen.findByRole('option', { name: /Claude Sonnet 4\.6/ });
-      expect(within(ownerOption).getByText('Default')).toBeVisible();
+      expect(await screen.findByRole('option', { name: /Claude Sonnet 4\.6/ })).toBeInTheDocument();
       expect(screen.queryByRole('option', { name: /GPT-5/ })).not.toBeInTheDocument();
       expect(screen.queryByText(/not configured/)).not.toBeInTheDocument();
     },
@@ -287,12 +302,11 @@ describe('ModelPicker', () => {
     renderPicker({
       modelScope: 'hybrid',
       kind: 'user',
-      sessionPolicy: { modelScope: 'factory', defaultModelId: 'openai/gpt-5' },
+      sessionPolicy: { modelScope: 'factory' },
     });
 
     await user.click(await screen.findByLabelText('Session model'));
-    const factoryOption = await screen.findByRole('option', { name: /GPT-5/ });
-    expect(within(factoryOption).getByText('Default')).toBeVisible();
+    expect(await screen.findByRole('option', { name: /GPT-5/ })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: /Claude Sonnet 4\.6/ })).not.toBeInTheDocument();
     expect(await screen.findByRole('link', { name: 'Add an organization credential' })).toBeInTheDocument();
   });
@@ -302,11 +316,7 @@ describe('ModelPicker', () => {
     renderPicker({
       modelScope: 'user',
       modelId: 'anthropic/claude-sonnet-4-6',
-      sessionPolicy: {
-        modelScope: 'user',
-        defaultModelId: 'anthropic/claude-sonnet-4-6',
-        personalThinkingLevel: 'high',
-      },
+      sessionPolicy: { modelScope: 'user', personalThinkingLevel: 'high' },
     });
 
     expect(await openThinking(user, 'Thinking: High (Personal default)')).toBeInTheDocument();
@@ -318,7 +328,7 @@ describe('ModelPicker', () => {
     renderPicker({
       modelScope: 'user',
       modelId: 'anthropic/claude-sonnet-4-6',
-      sessionPolicy: { modelScope: 'user', defaultModelId: 'anthropic/claude-sonnet-4-6', personalThinkingLevel: null },
+      sessionPolicy: { modelScope: 'user', personalThinkingLevel: null },
     });
 
     expect(await openThinking(user, 'Thinking: Medium (Built-in default)')).toBeInTheDocument();
@@ -330,12 +340,10 @@ describe('ModelPicker', () => {
       modelScope: 'hybrid',
       kind: 'user',
       modelId: 'anthropic/claude-sonnet-4-6',
-      factoryDefaultModelId: 'openai/gpt-5',
     });
 
     await user.click(await screen.findByRole('button', { name: 'Session model' }));
-    const personalOption = await screen.findByRole('option', { name: /Claude Sonnet 4\.6/ });
-    expect(within(personalOption).getByText('Default')).toBeVisible();
+    expect(await screen.findByRole('option', { name: /Claude Sonnet 4\.6/ })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: /GPT-5/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/not configured/)).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Connect a provider' })).toBeInTheDocument();
@@ -343,14 +351,13 @@ describe('ModelPicker', () => {
   });
 
   it.each(['factory', 'hybrid'] as const)(
-    'marks the Factory default rather than the personal default in a %s work-item session',
+    'offers the Factory catalog with no personal reset in a %s work-item session',
     async modelScope => {
       const user = userEvent.setup();
-      renderPicker({ kind: 'factory', modelScope, factoryDefaultModelId: 'openai/gpt-5' });
+      renderPicker({ kind: 'factory', modelScope });
 
       await user.click(await screen.findByLabelText('Session model'));
-      const option = await screen.findByRole('option', { name: /GPT-5/ });
-      expect(within(option).getByText('Default')).toBeVisible();
+      expect(await screen.findByRole('option', { name: /GPT-5/ })).toBeInTheDocument();
       expect(screen.queryByRole('option', { name: /Reset to your default/ })).not.toBeInTheDocument();
     },
   );
@@ -413,16 +420,16 @@ describe('ModelPicker', () => {
     expect(screen.queryByRole('link', { name: 'Add an organization credential' })).not.toBeInTheDocument();
   });
 
-  it('shows only provider-grouped models and marks the default', async () => {
+  it('shows only provider-grouped models and no model-row Default badge', async () => {
     const user = userEvent.setup();
-    renderPicker();
+    renderPicker({ packs: everydayPack('anthropic/claude-sonnet-4-6') });
 
     await user.click(await screen.findByLabelText('Session model'));
 
     expect(screen.getByText('Anthropic')).toBeInTheDocument();
     expect(screen.getByText('OpenAI')).toBeInTheDocument();
-    const defaultOption = screen.getByRole('option', { name: /Claude Sonnet 4\.6/ });
-    expect(within(defaultOption).getByText('Default')).toBeInTheDocument();
+    const defaultPackModel = screen.getByRole('option', { name: /Claude Sonnet 4\.6/ });
+    expect(within(defaultPackModel).queryByText('Default')).not.toBeInTheDocument();
   });
 
   it("links to the Factory's model settings to connect another provider", async () => {
@@ -435,29 +442,32 @@ describe('ModelPicker', () => {
     expect(connect.getAttribute('href')).toMatch(/^\/factories\/fp-1\/settings\/models/);
   });
 
-  it('resets a deviating user session to the personal default', async () => {
+  it('resets a deviating user session to the default selection', async () => {
     const user = userEvent.setup();
-    const { client, modelSwitches } = renderPicker();
+    const { client, modelSwitches } = renderPicker({ packs: everydayPack('anthropic/claude-sonnet-4-6') });
 
     await user.click(await screen.findByLabelText('Session model'));
     await user.click(screen.getByRole('option', { name: 'Reset to your default' }));
     await waitForMutationsIdle(client);
 
-    await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'anthropic/claude-sonnet-4-6' }]));
+    await waitFor(() => expect(modelSwitches).toEqual([{ kind: 'default' }]));
   });
 
-  it('hides reset when the active model already matches the default', async () => {
+  it('hides reset when the session already runs the default pack', async () => {
     const user = userEvent.setup();
-    renderPicker({ modelId: 'anthropic/claude-sonnet-4-6' });
+    renderPicker({
+      modelId: 'anthropic/claude-sonnet-4-6',
+      packs: { ...everydayPack('anthropic/claude-sonnet-4-6'), modelSelection: { kind: 'pack', packId: 'everyday' } },
+    });
 
     await user.click(await screen.findByLabelText('Session model'));
 
     expect(screen.queryByRole('option', { name: 'Reset to your default' })).not.toBeInTheDocument();
   });
 
-  it('hides reset when the saved default is unavailable', async () => {
+  it("hides reset when the default pack's model is unavailable", async () => {
     const user = userEvent.setup();
-    renderPicker({ defaultModelId: 'google/gemini-unavailable' });
+    renderPicker({ packs: everydayPack('google/gemini-unavailable') });
 
     await user.click(await screen.findByLabelText('Session model'));
 
@@ -466,7 +476,7 @@ describe('ModelPicker', () => {
 
   it('keeps factory sessions model-only with no personal reset', async () => {
     const user = userEvent.setup();
-    renderPicker({ kind: 'factory' });
+    renderPicker({ kind: 'factory', packs: everydayPack('anthropic/claude-sonnet-4-6') });
 
     await user.click(await screen.findByLabelText('Session model'));
 
@@ -474,7 +484,7 @@ describe('ModelPicker', () => {
     expect(screen.queryByRole('option', { name: 'Reset to your default' })).not.toBeInTheDocument();
   });
 
-  it('keeps the saved thinking choice when switching to a model that cannot run it', async () => {
+  it('runs the picked model exactly at the saved thinking choice, even one it cannot run', async () => {
     const user = userEvent.setup();
     const { client, modelSwitches, stateUpdates } = renderPicker({
       modelId: 'anthropic/claude-sonnet-4-6',
@@ -485,13 +495,13 @@ describe('ModelPicker', () => {
     await user.click(screen.getByRole('option', { name: /GPT-5/ }));
     await waitForMutationsIdle(client);
 
-    expect(modelSwitches).toEqual([{ modelId: 'openai/gpt-5' }]);
+    expect(modelSwitches).toEqual([{ kind: 'model', modelId: 'openai/gpt-5', thinkingLevel: 'max' }]);
     expect(stateUpdates).toEqual([]);
   });
 
-  it('given no session level, when the session picks one, then it leaves the Factory default and saves it', async () => {
+  it('given no session level, when the session picks one, then it runs the model exactly at that level', async () => {
     const user = userEvent.setup();
-    const { client, stateUpdates } = renderPicker({ inFactory: true });
+    const { client, modelSwitches, stateUpdates } = renderPicker({ inFactory: true });
 
     await openThinking(user, 'Thinking: Medium (Factory default)');
     const ramp = screen.getByRole('slider', { name: 'Thinking' });
@@ -500,7 +510,8 @@ describe('ModelPicker', () => {
     fireEvent.keyUp(ramp);
     await waitForMutationsIdle(client);
 
-    expect(stateUpdates).toEqual([{ thinkingLevel: 'high' }]);
+    expect(modelSwitches).toEqual([{ kind: 'model', modelId: 'openai/gpt-5', thinkingLevel: 'high' }]);
+    expect(stateUpdates).toEqual([]);
     expect(await screen.findByRole('group', { name: 'Thinking: High (this session)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Use default' })).toBeInTheDocument();
   });

@@ -1,4 +1,4 @@
-import { DURABLE_STOP_WHEN_ERROR_ID, emitErrorEvent } from '@mastra/core/agent/durable';
+import { DURABLE_STOP_WHEN_ERROR_ID, emitErrorEvent, getRunRegistryEntry } from '@mastra/core/agent/durable';
 import { RequestContext } from '@mastra/core/di';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import { PubSub } from '@mastra/core/events';
@@ -27,7 +27,13 @@ import {
   NESTED_WORKFLOW_OUTPUT_MODE,
   resolveNestedWorkflowOutputMode,
 } from './nested-workflow-output';
-import { workflowResumeTracingContext, workflowTermination } from './observability-compat';
+import {
+  endFailedSegmentSpans,
+  segmentEndedBySuspension,
+  segmentSpanData,
+  workflowResumeTracingContext,
+  workflowTermination,
+} from './observability-compat';
 import { InngestPubSub } from './pubsub';
 import { InngestRun } from './run';
 import type {
@@ -862,12 +868,36 @@ export class InngestWorkflow<
               this.logger.debug?.('Failed to publish workflow-finish event:', publishError);
             }
 
+            // Last, so an Inngest retry of this step cannot end the run's spans twice. Only the first iteration's
+            // state keeps the workflow kind.
+            const agentState =
+              durableAgentInput ??
+              [inputData, resume?.stepResults?.input].find(input => input?.iterationCount !== undefined && input.runId);
+            let segmentEnded = false;
+            if (result.status === 'failed' && agentState && !engine.segmentEnded) {
+              const steps = result.steps as Record<string, any>;
+              segmentEnded = segmentEndedBySuspension(
+                segmentSpanData(requestContext, agentState.runId, agentState),
+                steps,
+              );
+              endFailedSegmentSpans({
+                mastra,
+                requestContext,
+                runId: agentState.runId,
+                state: agentState,
+                steps,
+                error: durableAgentWorkflowError(result.error).error,
+                live: getRunRegistryEntry(agentState.runId, mastra),
+              });
+            }
+
             // Throw after span ended for failed workflows
             if (result.status === 'failed') {
               throw new NonRetriableError(`Workflow failed`, {
                 cause: {
                   ...(shouldCompactNestedWorkflowOutput ? { ...returnedResult, runId } : result),
                   __mastraSpanErrorOrigin: coreObservability.getSpanErrorOrigin?.(result.error),
+                  ...(segmentEnded ? { __mastraSegmentEnded: true } : {}),
                 },
               });
             }

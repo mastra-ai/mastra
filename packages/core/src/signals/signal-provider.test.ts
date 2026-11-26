@@ -264,10 +264,13 @@ describe('SignalProvider', () => {
       p.stop();
     });
 
-    it('does not start polling when pollInterval is 0', () => {
-      const p = new TestSignalProvider({ pollInterval: 0 });
+    it.each([
+      ['does not start polling when pollInterval is 0', 0, 10_000],
+      ['skips poll when no subscriptions', 1000, 3500],
+    ] as const)('%s', (_title, pollInterval, input) => {
+      const p = new TestSignalProvider({ pollInterval });
       p.startPolling();
-      vi.advanceTimersByTime(10_000);
+      vi.advanceTimersByTime(input);
       expect(p.pollCalls).toHaveLength(0);
       p.stop();
     });
@@ -281,14 +284,6 @@ describe('SignalProvider', () => {
       expect(p.pollCalls).toHaveLength(3);
       expect(p.pollCalls[0]).toHaveLength(1);
       expect(p.pollCalls[0][0].externalResourceId).toBe('res-a');
-      p.stop();
-    });
-
-    it('skips poll when no subscriptions', () => {
-      const p = new TestSignalProvider({ pollInterval: 1000 });
-      p.startPolling();
-      vi.advanceTimersByTime(3500);
-      expect(p.pollCalls).toHaveLength(0);
       p.stop();
     });
 

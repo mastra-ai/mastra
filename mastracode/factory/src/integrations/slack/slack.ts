@@ -1,5 +1,5 @@
 import { migratePersistedModelSelection } from '@mastra/core/agent-controller';
-import { ChannelSessionRejectedError } from '@mastra/core/channels';
+import { ChannelSessionRejectedError, markNewChannelThread } from '@mastra/core/channels';
 import type {
   ChannelHandler,
   ChannelHandlerContext,
@@ -42,7 +42,6 @@ import type { WorkItemsStorage } from '../../storage/domains/work-items/base.js'
 import { FACTORY_SLACK_SENDER_KEY } from '../../tools/scope.js';
 import type { FactoryChannelsConfig } from '../base.js';
 import { prepareSessionRunContext } from '../subscription-session.js';
-import { markNewChannelSession } from './channel-session-link-processor.js';
 
 import { slackRunErrorCard } from './run-error-card.js';
 import { transcribeVoiceClips, voiceClipFailureCard } from './voice-clips.js';
@@ -1034,9 +1033,9 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
       // A mention on a not-yet-subscribed thread is a NEW session. The default
       // handler auto-subscribes, so once subscribed this is a follow-up — the
       // thread already carries its link. Factory posts nothing of its own:
-      // FactoryChannelSessionLinkProcessor emits the `Open session ↗` link right
+      // The session-link processor emits the `Open session ↗` link right
       // after the agent's first reply.
-      if (!(await thread.isSubscribed())) markNewChannelSession(ctx.requestContext);
+      if (!(await thread.isSubscribed())) markNewChannelThread(ctx.requestContext);
       acknowledgeReceipt(thread, deps);
       if (!(await transcribeBatch(thread, message, deps, ctx, gate))) return;
     } catch (error) {

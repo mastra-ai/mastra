@@ -135,7 +135,7 @@ describe('Session title regeneration', () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId`, () => HttpResponse.json({ project })),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: null, thinkingLevel: null }),
+        HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
       ),
       http.get(`${TEST_BASE_URL}/api/agent-controller/:agentControllerId/sessions/:resourceId/permissions`, () =>
         HttpResponse.json({}),
@@ -166,7 +166,7 @@ describe('Session title regeneration', () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId`, () => HttpResponse.json({ project })),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: null, thinkingLevel: null }),
+        HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
       ),
       http.get(`${TEST_BASE_URL}/api/agent-controller/:agentControllerId/sessions/:resourceId/permissions`, () =>
         HttpResponse.json({}),

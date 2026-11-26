@@ -32,6 +32,11 @@ export interface KnowledgeStorageCapabilities {
    * report it, and core refuses dated activity reads on them rather than return unbounded history.
    */
   supportsActivityDateRange?: boolean;
+  /**
+   * `listPageActivity` accepts `order: 'asc'` and `after` (oldest first). Adapters without it don't
+   * report it, and core refuses oldest-first activity reads on them.
+   */
+  supportsActivityAscending?: boolean;
 }
 
 /** @experimental */

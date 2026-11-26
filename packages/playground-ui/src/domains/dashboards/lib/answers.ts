@@ -63,3 +63,16 @@ export function measureOf(measures: Readonly<Record<string, unknown>>, name: str
   const value = new Map(Object.entries(measures)).get(name);
   return typeof value === 'number' ? value : undefined;
 }
+
+/**
+ * A trace or span measure over nothing: 0 for a count or sum, and no figure for an average, rate or
+ * percentile.
+ */
+export const emptyMeasure = (measure: string): 0 | undefined =>
+  measure === 'count' ||
+  measure === 'errorCount' ||
+  measure.endsWith('.sum') ||
+  measure.endsWith('.count') ||
+  measure.startsWith('countDistinct.')
+    ? 0
+    : undefined;

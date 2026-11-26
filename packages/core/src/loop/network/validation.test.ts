@@ -470,7 +470,10 @@ describe('formatCompletionFeedback', () => {
     expect(feedback).not.toContain('timed out');
   });
 
-  it('formats incomplete result', () => {
+  it.each([
+    ['formats incomplete result', false, '🔄 Will continue working on the task.'],
+    ['formats max iterations reached result', true, '⚠️ Max iterations reached'],
+  ] as const)('%s', (_title, input, expected) => {
     const result: CompletionRunResult = {
       complete: false,
       completionReason: 'Check failed',
@@ -488,38 +491,12 @@ describe('formatCompletionFeedback', () => {
       timedOut: false,
     };
 
-    const feedback = formatCompletionFeedback(result, false);
+    const feedback = formatCompletionFeedback(result, input);
 
     expect(feedback).toContain('❌ NOT COMPLETE');
     expect(feedback).toContain('Score: 0 ❌');
     expect(feedback).toContain('Reason: Test failed');
-    expect(feedback).toContain('🔄 Will continue working on the task.');
-  });
-
-  it('formats max iterations reached result', () => {
-    const result: CompletionRunResult = {
-      complete: false,
-      completionReason: 'Check failed',
-      scorers: [
-        {
-          score: 0,
-          passed: false,
-          reason: 'Test failed',
-          scorerId: 'test-scorer',
-          scorerName: 'Test Scorer',
-          duration: 100,
-        },
-      ],
-      totalDuration: 150,
-      timedOut: false,
-    };
-
-    const feedback = formatCompletionFeedback(result, true);
-
-    expect(feedback).toContain('❌ NOT COMPLETE');
-    expect(feedback).toContain('Score: 0 ❌');
-    expect(feedback).toContain('Reason: Test failed');
-    expect(feedback).toContain('⚠️ Max iterations reached');
+    expect(feedback).toContain(expected);
   });
 
   it('formats timeout indication', () => {
@@ -709,10 +686,13 @@ describe('runStreamCompletionScorers', () => {
       );
     });
 
-    it('uses agentId as networkName when agentName is not provided', async () => {
+    it.each([
+      ['uses agentId as networkName when agentName is not provided', 'my-agent-id', 'my-agent-id'],
+      ['uses "stream" as default networkName when neither agentId nor agentName provided', undefined, 'stream'],
+    ] as const)('%s', async (_title, agentId, networkName) => {
       const scorer = createMockScorer('scorer-1', 1);
       const context = createMockStreamContext({
-        agentId: 'my-agent-id',
+        agentId,
         agentName: undefined,
       });
 
@@ -721,25 +701,7 @@ describe('runStreamCompletionScorers', () => {
       expect(scorer.run).toHaveBeenCalledWith(
         expect.objectContaining({
           input: expect.objectContaining({
-            networkName: 'my-agent-id',
-          }),
-        }),
-      );
-    });
-
-    it('uses "stream" as default networkName when neither agentId nor agentName provided', async () => {
-      const scorer = createMockScorer('scorer-1', 1);
-      const context = createMockStreamContext({
-        agentId: undefined,
-        agentName: undefined,
-      });
-
-      await runStreamCompletionScorers([scorer] as any, context);
-
-      expect(scorer.run).toHaveBeenCalledWith(
-        expect.objectContaining({
-          input: expect.objectContaining({
-            networkName: 'stream',
+            networkName,
           }),
         }),
       );
@@ -797,19 +759,14 @@ describe('runStreamCompletionScorers', () => {
   });
 
   describe('empty scorers', () => {
-    it('returns complete with empty scorers array and all strategy', async () => {
+    it.each([
+      ['returns complete with empty scorers array and all strategy', 'all', true],
+      ['returns incomplete with empty scorers array and any strategy', 'any', false],
+    ] as const)('%s', async (_title, strategy, expected) => {
       const context = createMockStreamContext();
-      const result = await runStreamCompletionScorers([], context, { strategy: 'all' });
+      const result = await runStreamCompletionScorers([], context, { strategy });
 
-      expect(result.complete).toBe(true);
-      expect(result.scorers).toHaveLength(0);
-    });
-
-    it('returns incomplete with empty scorers array and any strategy', async () => {
-      const context = createMockStreamContext();
-      const result = await runStreamCompletionScorers([], context, { strategy: 'any' });
-
-      expect(result.complete).toBe(false);
+      expect(result.complete).toBe(expected);
       expect(result.scorers).toHaveLength(0);
     });
   });

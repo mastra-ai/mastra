@@ -131,7 +131,7 @@ The `accepted` promise resolves with one of these actions:
 - `deliver`: the input was sent to a run, or another process accepted responsibility for starting one.
 - `persist`: the input is to be stored without delivery or a new run. Wait for `persisted` to confirm the write.
 - `discard`: the input was dropped.
-- `blocked`: a paused run prevented Mastra from starting a new one on the thread.
+- `blocked`: the signal couldn't start or join a run. `reason` is `thread-blocked` when another run, such as a paused or suspended one, owns the thread, or `scope-mismatch` when the signal's `scopes` differ from those of the run active on the thread. Resume or wait for run `runId` to end, then send the signal again.
 
 When the action is `wake`, the result carries the run's `output` stream. A run that fails after starting reports the error there. A routing failure rejects `accepted`. Use [`persisted`](/reference/agents/agent#sendsignalsignal-options) to wait for a storage write.
 

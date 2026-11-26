@@ -887,7 +887,12 @@ export class FactoryDecisionDispatcher {
     this.#openRuns = options.openRuns;
     this.#controller = options.controller;
     this.#boardEngine =
-      options.boardEngine ?? new DispatcherBoardEngine({ transitionService: options.transitionService });
+      options.boardEngine ??
+      new DispatcherBoardEngine({
+        transitionService: options.transitionService,
+        workItems: options.storage,
+        boards: toBoardSource(options.boards),
+      });
     this.#boards = toBoardSource(options.boards);
     this.#intakeRoutes = options.intakeRoutes;
     this.#intakeEvaluator = options.intakeEvaluator;
@@ -1995,11 +2000,13 @@ export class FactoryDecisionDispatcher {
                 },
                 async () => {
                   await this.#withOpenRunHeartbeat(deliveryId, () => run.settle());
-                  if (run.endReason() !== 'complete' || workingRevision === null || (await run.supersededAtEnd()))
-                    return;
+                  if (run.endReason() !== 'complete' || (await run.supersededAtEnd())) return;
                   // A final tool result can persist after agent_end. Read this binding's trailing
-                  // results before deciding the unchanged card means the run did no work.
+                  // results before applying the run's outcome or deciding the unchanged card means
+                  // the run did no work.
                   await this.#reconcileRunBinding?.(binding);
+                  if (await this.#boardEngine.runEnded(binding, this.#boardEngine)) return;
+                  if (workingRevision === null) return;
                   const after = await this.#storage.get({ orgId: record.orgId, id: record.workItemId! });
                   if (after?.revision === workingRevision && !(await kickoffStale())) {
                     const linked = await this.#storage.listLinked({ item: after, limit: 100 });

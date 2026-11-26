@@ -21,14 +21,13 @@ describe('Workspace Resource', () => {
 
   // Helper to mock successful API responses
   const mockFetchResponse = (data: any) => {
-    const response = new Response(undefined, {
+    const response = new Response(JSON.stringify(data), {
       status: 200,
       statusText: 'OK',
       headers: new Headers({
         'Content-Type': 'application/json',
       }),
     });
-    response.json = () => Promise.resolve(data);
     (global.fetch as any).mockResolvedValueOnce(response);
   };
 
@@ -635,14 +634,13 @@ describe('WorkspaceSkillResource', () => {
 
   // Helper to mock successful API responses
   const mockFetchResponse = (data: any) => {
-    const response = new Response(undefined, {
+    const response = new Response(JSON.stringify(data), {
       status: 200,
       statusText: 'OK',
       headers: new Headers({
         'Content-Type': 'application/json',
       }),
     });
-    response.json = () => Promise.resolve(data);
     (global.fetch as any).mockResolvedValueOnce(response);
   };
 

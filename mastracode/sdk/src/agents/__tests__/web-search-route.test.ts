@@ -48,8 +48,11 @@ function requestContextFor(modelId: string): RequestContext {
   return requestContext;
 }
 
-/** Runs one agent turn with the model and tools mastracode builds, returning the first request sent. */
-async function firstRequest(modelId: string): Promise<{ url: string; body: any }> {
+/**
+ * Runs one agent turn with the model and tools mastracode builds, returning the first request sent.
+ * `sessionModelId` is the model the session's tools were built for, when the turn runs on a fallback.
+ */
+async function firstRequest(modelId: string, sessionModelId = modelId): Promise<{ url: string; body: any }> {
   const requests: { url: string; body: any }[] = [];
   vi.stubGlobal(
     'fetch',
@@ -71,7 +74,7 @@ async function firstRequest(modelId: string): Promise<{ url: string; body: any }
     name: 'web-search-wire',
     instructions: 'Search the web.',
     model: resolveModel(modelId, { requestContext }),
-    tools: await createDynamicTools()({ requestContext }),
+    tools: await createDynamicTools()({ requestContext: requestContextFor(sessionModelId) }),
   });
   await agent.generate('Find the latest release notes.', { requestContext, maxRetries: 0 }).catch(() => {});
   expect(requests.length).toBeGreaterThan(0);
@@ -122,6 +125,23 @@ describe('provider web search follows the model transport', () => {
         expect(buildFullPrompt({ ...promptContext, modelId })).toContain('**web_search**');
 
         const { url, body } = await firstRequest(modelId);
+        expect(url).toMatch(/\/v1\/chat\/completions$/);
+        expect(body.tools).toContainEqual({ type: 'openrouter:web_search' });
+        expect(JSON.stringify(body.tools)).not.toMatch(/openai:web_search|anthropic:web_search/);
+      },
+    );
+
+    // Technical: locally the gateway model reaches the agent with no model router around it, so
+    // a swap that lives in the router never sees this request.
+    it.each([
+      ['anthropic/claude-sonnet-4-5', 'anthropic'],
+      ['openai/gpt-5.5', 'openai'],
+    ] as const)(
+      'keeps web search when a local %s session falls back to a gateway model',
+      async (sessionModelId, route) => {
+        expect(resolveProviderWebSearchRoute(sessionModelId)).toBe(route);
+
+        const { url, body } = await firstRequest('mastra/deepseek/deepseek-chat', sessionModelId);
         expect(url).toMatch(/\/v1\/chat\/completions$/);
         expect(body.tools).toContainEqual({ type: 'openrouter:web_search' });
         expect(JSON.stringify(body.tools)).not.toMatch(/openai:web_search|anthropic:web_search/);
@@ -217,6 +237,42 @@ describe('provider web search follows the model transport', () => {
 
       const instructions = await getDynamicInstructions({ requestContext: tenantRequestContext(modelId) });
       expect(instructions).toContain('**web_search** — Search the web');
+    });
+
+    // Technical: the session's tools are built for its first model, and core only swapped native
+    // search for the gateway's on its own `mastra` gateway id, so the gateway answered 422.
+    it('keeps web search when a Claude subscription session falls back to a gateway model', async () => {
+      useTenantCredentials('oauth');
+      const sessionContext = tenantRequestContext('anthropic/claude-sonnet-4-5');
+      const tools = await createDynamicTools()({ requestContext: sessionContext });
+      expect(tools.web_search?.id).toBe('anthropic.web_search_20250305');
+
+      const requests: { url: string; body: any }[] = [];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = input instanceof Request ? input.url : String(input);
+          if (typeof init?.body === 'string') requests.push({ url, body: JSON.parse(init.body) });
+          return new Response(JSON.stringify({ error: { message: 'stubbed' } }), {
+            status: 400,
+            headers: { 'content-type': 'application/json' },
+          });
+        }),
+      );
+      const agent = new Agent({
+        id: 'web-search-fallback',
+        name: 'web-search-fallback',
+        instructions: 'Search the web.',
+        model: resolveModel('mastra/deepseek/deepseek-chat', { requestContext: sessionContext }),
+        tools,
+      });
+      await agent
+        .generate('Find the latest release notes.', { requestContext: sessionContext, maxRetries: 0 })
+        .catch(() => {});
+
+      expect(requests[0]?.url).toMatch(/\/v1\/chat\/completions$/);
+      expect(requests[0]?.body.tools).toContainEqual({ type: 'openrouter:web_search' });
+      expect(JSON.stringify(requests[0]?.body.tools)).not.toContain('anthropic:web_search');
     });
 
     it("routes search through the gateway on the tenant's own gateway key", async () => {

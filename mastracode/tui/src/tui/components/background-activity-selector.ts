@@ -1,8 +1,9 @@
-import { Box, Spacer, Text } from '@earendil-works/pi-tui';
-import type { SelectItem, SelectListTheme, TUI } from '@earendil-works/pi-tui';
+import { Container, Spacer, Text } from '@earendil-works/pi-tui';
+import type { SelectItem, TUI } from '@earendil-works/pi-tui';
 import type { BackgroundActivity } from '../background-activity.js';
 import { theme } from '../theme.js';
-import { WrappingSelectList } from './wrapping-select-list.js';
+import type { Filterable, MenuChrome, MenuHint } from './menu-chrome.js';
+import { MenuList } from './menu-list.js';
 
 export interface BackgroundActivitySelectorOptions {
   tui: TUI;
@@ -12,33 +13,23 @@ export interface BackgroundActivitySelectorOptions {
   onAbort: (activity: BackgroundActivity) => void;
 }
 
-export class BackgroundActivitySelectorComponent extends Box {
+export class BackgroundActivitySelectorComponent extends Container implements MenuChrome {
   focused = false;
-  private readonly list: WrappingSelectList;
+  private readonly list: MenuList;
   private readonly getActivity: (taskId: string) => BackgroundActivity | undefined;
   private readonly onAbort: (activity: BackgroundActivity) => void;
 
   constructor(options: BackgroundActivitySelectorOptions) {
-    super(4, 2, text => theme.bg('overlayBg', text));
+    super();
     const byId = new Map(options.activities.map(activity => [activity.taskId, activity]));
     this.getActivity = options.getActivity;
     this.onAbort = options.onAbort;
     const items: SelectItem[] = options.activities.map(activity => ({
       value: activity.taskId,
-      label: `  ${statusIcon(activity.status)} ${activity.toolName}`,
+      label: `${statusIcon(activity.status)} ${activity.toolName}`,
     }));
-    const selectTheme: SelectListTheme = {
-      selectedPrefix: value => theme.fg('accent', value),
-      selectedText: value => theme.fg('accent', value),
-      description: value => theme.fg('dim', value),
-      scrollInfo: value => theme.fg('dim', value),
-      noMatch: value => theme.fg('dim', value),
-    };
-
-    this.addChild(new Text(theme.bold(theme.fg('accent', 'Background activity')), 0, 0));
-    this.addChild(new Spacer(1));
-    this.list = new WrappingSelectList(items, 10, selectTheme);
-    const detailText = new Text('', 0, 0);
+    this.list = new MenuList(items, 10);
+    const detailText = new Text('', 2, 0);
     const updateDetail = (activity: BackgroundActivity) => {
       const state = activity.status === 'accepted' ? 'running' : activity.status;
       detailText.setText(theme.fg('dim', `${state} · task ${activity.taskId}`));
@@ -54,11 +45,22 @@ export class BackgroundActivitySelectorComponent extends Box {
     this.addChild(this.list);
     this.addChild(new Spacer(1));
     this.addChild(detailText);
-    this.addChild(new Spacer(1));
-    this.addChild(new Text(theme.fg('dim', '↑↓ inspect · D abort running · Esc close'), 0, 0));
 
     const first = options.activities[0];
     if (first) updateDetail(first);
+  }
+
+  menuTitle(): string {
+    return 'Background activity';
+  }
+
+  menuHints(): readonly MenuHint[] {
+    return [{ key: 'd', label: 'abort running' }];
+  }
+
+  /** Letters are shortcuts here (d aborts), so typing does not filter. */
+  menuFilterTarget(): Filterable | undefined {
+    return undefined;
   }
 
   handleInput(data: string): void {

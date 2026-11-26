@@ -33,15 +33,16 @@
     "zenifra/qwen3.8-max"
   ],
   "reasoning": {
-    "zenifra/qwen3.6-plus": [
+    "zenifra/deepseek-v4-flash-0731": [
       {
         "type": "toggle"
       },
       {
-        "type": "budget_tokens"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
-    "zenifra/qwen3.7-max": [
+    "zenifra/qwen3.6-plus": [
       {
         "type": "toggle"
       },
@@ -54,27 +55,12 @@
         "type": "toggle"
       }
     ],
-    "zenifra/deepseek-v4-pro": [
+    "zenifra/qwen3.7-plus": [
       {
         "type": "toggle"
       },
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zenifra/kimi-k2.5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zenifra/deepseek-v4-flash-0731": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "budget_tokens"
       }
     ],
     "zenifra/glm-5.2": [
@@ -86,10 +72,21 @@
         "values": ["high", "max"]
       }
     ],
-    "zenifra/kimi-k3": [
+    "zenifra/qwen3.8-max": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "xhigh"]
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "zenifra/kimi-k2.5": [
+      {
+        "type": "toggle"
       }
     ],
     "zenifra/qwen3.8-flash": [
@@ -112,24 +109,27 @@
         "type": "budget_tokens"
       }
     ],
-    "zenifra/qwen3.8-max": [
+    "zenifra/qwen3.7-max": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
       },
       {
         "type": "budget_tokens"
       }
     ],
-    "zenifra/qwen3.7-plus": [
+    "zenifra/kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zenifra/deepseek-v4-pro": [
       {
         "type": "toggle"
       },
       {
-        "type": "budget_tokens"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }
