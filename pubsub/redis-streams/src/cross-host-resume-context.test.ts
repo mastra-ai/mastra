@@ -12,7 +12,19 @@ import { killProcess, spawnFixture, waitFor, waitForLine } from '../test-fixture
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6381';
 const POSTGRES = process.env.POSTGRES_CONNECTION_STRING ?? 'postgres://postgres:postgres@localhost:5436/postgres';
 
-type Observation = { host: string; pid: number; event: string; marker?: string; user?: string; executionIds: string[] };
+type Observation = {
+  host: string;
+  pid: number;
+  event: string;
+  marker?: string;
+  user?: string;
+  executionIds: string[];
+  tools?: string[];
+};
+
+/** Tools the model was offered at each input step. */
+const offeredTools = (entries: Observation[]) =>
+  entries.filter(entry => entry.event === 'input-step').map(entry => entry.tools);
 
 describe('evented resume claimed by another host', () => {
   let mock: LLMock;
@@ -126,6 +138,9 @@ describe('evented resume claimed by another host', () => {
         { event: 'input-step', marker: 'B' },
         { event: 'llm-request', marker: 'B' },
       ]);
+      // The model step after the approved tool is offered the resuming caller's tools only.
+      expect(offeredTools(initial)).toEqual([['alice_only', 'approve']]);
+      expect(offeredTools(resumed)).toEqual([['approve', 'bob_only']]);
     } finally {
       if (hostB) await killProcess(hostB);
       await mastra.shutdown();
@@ -204,6 +219,11 @@ describe('evented resume claimed by another host', () => {
           .slice(beforeResume)
           .some(entry => entry.event === 'tool-result'),
       );
+      await waitFor(async () =>
+        read()
+          .slice(beforeResume)
+          .some(entry => entry.event === 'input-step'),
+      );
 
       const initial = read().slice(0, beforeResume);
       const resumed = read().slice(beforeResume);
@@ -221,6 +241,9 @@ describe('evented resume claimed by another host', () => {
       const toolRuns = resumed.filter(entry => entry.event === 'tool-execute');
       expect(toolRuns.length).toBeGreaterThan(0);
       for (const entry of toolRuns) expect(entry.user).toBe('bob');
+      // The model step after the approved tool is offered the resuming caller's tools only.
+      expect(offeredTools(initial)).toEqual([['alice_only', 'approve']]);
+      expect(offeredTools(resumed)).toEqual([['approve', 'bob_only']]);
     } finally {
       if (hostB) await killProcess(hostB);
       if (worker) await killProcess(worker);
