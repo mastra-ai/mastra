@@ -741,6 +741,8 @@ export function createDurableToolCallStep() {
           requestContext,
           rehydrateProcessors: true,
           replaceStale: true,
+          assertOwner: () =>
+            assertExecutionOwned({ runId, agentId: initData.agentId, requestContext, mastra: mastra as Mastra }),
           logger,
         });
         registryEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);

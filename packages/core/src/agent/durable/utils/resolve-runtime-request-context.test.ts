@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ProcessorState } from '../../../processors/runner';
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../../../request-context';
+import { DurableExecutionFenceError, EXECUTION_SUPERSEDED_ERROR_ID } from '../execution-fence';
 import { DURABLE_CONTEXT_SEGMENT_KEY, globalRunRegistry } from '../run-registry';
 import { rebuildRunToolsFromMastra } from './resolve-runtime';
 
@@ -328,6 +329,40 @@ describe('rebuildRunToolsFromMastra request context', () => {
         rehydrateProcessors: true,
         replaceStale: true,
       });
+      expect(entry.tools).toBe(laterTools);
+      expect(entry.requestContextSegment).toBe('segment-3');
+    } finally {
+      globalRunRegistry.delete(runId);
+    }
+  });
+
+  it('does not let a superseded segment replace an entry a later segment already published', async () => {
+    const runId = 'superseded-before-rebuild';
+    const laterTools = { approve: { id: 'approve', built: 'carol' } };
+    // Segment 3 published before segment 2's step reached the rebuild.
+    const entry: Record<string, unknown> = { model: {}, tools: laterTools, requestContextSegment: 'segment-3' };
+    globalRunRegistry.set(runId, entry as any);
+    const agent = {
+      ...makeAgent(),
+      getToolsForExecution: vi.fn().mockResolvedValue({ approve: { id: 'approve', built: 'bob' } }),
+    };
+    const details = { agentId: 'agent-1', runId, executionId: 'segment-2' };
+
+    try {
+      await expect(
+        rebuildRunToolsFromMastra({
+          mastra: makeMastra(agent),
+          runId,
+          agentId: 'agent-1',
+          state: {} as any,
+          requestContext: new RequestContext<unknown>([[DURABLE_CONTEXT_SEGMENT_KEY, 'segment-2']]),
+          rehydrateProcessors: true,
+          replaceStale: true,
+          assertOwner: async () => {
+            throw new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, details);
+          },
+        }),
+      ).rejects.toBeInstanceOf(DurableExecutionFenceError);
       expect(entry.tools).toBe(laterTools);
       expect(entry.requestContextSegment).toBe('segment-3');
     } finally {

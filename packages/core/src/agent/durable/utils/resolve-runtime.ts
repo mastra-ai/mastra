@@ -23,6 +23,7 @@ import { liveRequestEntries, restoreRequestContext } from '../../request-context
 import { SaveQueueManager } from '../../save-queue';
 import type { ToolsInput } from '../../types';
 import { isDurableAgentLike } from '../../types';
+import { DurableExecutionFenceError } from '../execution-fence';
 import { recordRunSavedMessages } from '../run-message-refs';
 import {
   getEntrySegment,
@@ -556,6 +557,11 @@ export async function rebuildRunToolsFromMastra(options: {
    * segments, as on a warm resume.
    */
   replaceStale?: boolean;
+  /**
+   * Throws when the step's execution no longer owns the run. Checked right before a stale entry is
+   * replaced, so a superseded segment cannot overwrite the entry a newer one already published.
+   */
+  assertOwner?: () => Promise<void>;
   logger?: { debug?: (...args: any[]) => void; error?: (...args: any[]) => void };
 }): Promise<RebuiltRunTools | undefined> {
   const {
@@ -646,6 +652,7 @@ export async function rebuildRunToolsFromMastra(options: {
           }
         : {}),
     };
+    if (options.replaceStale) await options.assertOwner?.();
     // A sibling may have published during construction. Keep lookup, merge and return synchronous.
     existing = getRunRegistryEntry(runId, mastra as Mastra | undefined);
     if (existing) {
@@ -704,7 +711,7 @@ export async function rebuildRunToolsFromMastra(options: {
       requestContext: resolveRequestContext,
     };
   } catch (error) {
-    if (error instanceof DurableProcessorRebuildError) throw error;
+    if (error instanceof DurableProcessorRebuildError || error instanceof DurableExecutionFenceError) throw error;
 
     const entry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
     // Falling back would silently drop call-time toolsets, so surface the failure.
