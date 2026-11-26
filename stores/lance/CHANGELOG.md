@@ -1,5 +1,14 @@
 # @mastra/lance
 
+## 1.6.3-alpha.0
+
+### Patch Changes
+
+- Fixed LanceDB vector upsert failing when metadata contains dotted keys or null values. Keys with dots are now stored as underscored columns (matching how filters already resolve them) and null values no longer break Arrow/Lance schema inference, so upserts succeed and metadata round-trips exactly on read. ([#31603](https://github.com/mastra-ai/mastra/pull/31603))
+
+- Updated dependencies [[`d2ac0b7`](https://github.com/mastra-ai/mastra/commit/d2ac0b705c184143ae9af79ffad282fbdd90fc6f), [`c5a632e`](https://github.com/mastra-ai/mastra/commit/c5a632e892d70f330de4bc2bf5a9054b91186405), [`9047217`](https://github.com/mastra-ai/mastra/commit/904721797d4576fdd0afaabee7da8fc7e5a72792), [`0d5613a`](https://github.com/mastra-ai/mastra/commit/0d5613a29c62d540370a72c485efff4059e151f8)]:
+  - @mastra/core@1.87.0-alpha.3
+
 ## 1.6.2
 
 ### Patch Changes

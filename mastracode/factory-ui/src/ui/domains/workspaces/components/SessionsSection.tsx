@@ -220,7 +220,7 @@ export function SessionsSection() {
       </Sidebar.NavHeader>
 
       <div className="flex flex-col gap-4">
-        {!response && !loadFailed && <SidebarNavigationSkeleton label="Loading sessions" />}
+        {!response && !loadFailed && <SidebarNavigationSkeleton label="Loading sessions" description={!view.compact} />}
         {groups.map(group => (
           <SessionGroupList
             key={group.key}

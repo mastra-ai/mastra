@@ -71,20 +71,12 @@ describe('AgentController modelFallbacks', () => {
 });
 
 describe('buildFableFallbackProviderOptions', () => {
-  it('enables an opus-4-8 fallback for the provider-prefixed fable-5 id', () => {
-    expect(buildFableFallbackProviderOptions('anthropic/claude-fable-5')).toEqual({
-      anthropic: { fallbacks: [{ model: 'claude-opus-4-8' }] },
-    });
-  });
-
-  it('enables the fallback for a bare fable-5 id', () => {
-    expect(buildFableFallbackProviderOptions('claude-fable-5')).toEqual({
-      anthropic: { fallbacks: [{ model: 'claude-opus-4-8' }] },
-    });
-  });
-
-  it('enables the fallback for a pack-prefixed fable-5 id', () => {
-    expect(buildFableFallbackProviderOptions('anthropic-custom/claude-fable-5')).toEqual({
+  it.each([
+    ['enables an opus-4-8 fallback for the provider-prefixed fable-5 id', 'anthropic/claude-fable-5'],
+    ['enables the fallback for a bare fable-5 id', 'claude-fable-5'],
+    ['enables the fallback for a pack-prefixed fable-5 id', 'anthropic-custom/claude-fable-5'],
+  ] as const)('%s', (_title, input) => {
+    expect(buildFableFallbackProviderOptions(input)).toEqual({
       anthropic: { fallbacks: [{ model: 'claude-opus-4-8' }] },
     });
   });

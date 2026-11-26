@@ -1,5 +1,8 @@
+import { createAnthropic } from '@ai-sdk/anthropic-v6';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { MastraModelGateway } from '../../../../llm/model/gateways/base';
+import type { GatewayLanguageModel } from '../../../../llm/model/gateways/base';
 import { MastraGateway } from '../../../../llm/model/gateways/mastra';
 import { ModelRouterLanguageModel } from '../../../../llm/model/router';
 import { createTool, webSearchTool } from '../../../../tools';
@@ -28,6 +31,45 @@ const providerTool = (id: string, args: Record<string, unknown> = {}) => ({
   name: id.slice(id.indexOf('.') + 1),
   args,
 });
+
+/**
+ * A host gateway shaped like Mastra Code's: every model id sits under its own prefix, `mastra/...`
+ * ids are forwarded to the Mastra gateway, and any other id calls the provider directly.
+ */
+class HostGateway extends MastraModelGateway {
+  readonly id = 'mastracode';
+  readonly name = 'Host gateway';
+  readonly #baseUrl: string;
+
+  constructor(baseUrl: string) {
+    super();
+    this.#baseUrl = baseUrl;
+  }
+
+  async fetchProviders() {
+    return {};
+  }
+
+  buildUrl() {
+    return undefined;
+  }
+
+  async getApiKey() {
+    return 'test-key';
+  }
+
+  async resolveLanguageModel({ providerId, modelId, apiKey }: { providerId: string; modelId: string; apiKey: string }) {
+    if (providerId === 'mastra') {
+      const [gatewayProviderId, ...rest] = modelId.split('/');
+      return new MastraGateway({ apiKey, baseUrl: this.#baseUrl }).resolveLanguageModel({
+        providerId: gatewayProviderId!,
+        modelId: rest.join('/'),
+        apiKey,
+      });
+    }
+    return createAnthropic({ apiKey, baseURL: `${this.#baseUrl}/v1` })(modelId) as unknown as GatewayLanguageModel;
+  }
+}
 
 describeForAllEngines('AIMock loop scenario: web search through the Mastra gateway', engine => {
   const getMock = useLoopScenarioAimock();
@@ -110,6 +152,46 @@ describeForAllEngines('AIMock loop scenario: web search through the Mastra gatew
     } as any);
 
     expect(sentToolTypes()).toEqual(['openrouter:web_search']);
+  });
+
+  const hostGatewayModel = (id: string) => () =>
+    new ModelRouterLanguageModel(id as `${string}/${string}`, [new HostGateway(getMock().url)]);
+
+  // Technical: the swap was keyed on the router's gateway id being `mastra`, so a host gateway
+  // forwarding `mastra/...` models sent the native tool and the gateway answered 422.
+  for (const nativeToolId of ['anthropic.web_search_20250305', 'openai.web_search']) {
+    it(`a session that falls back to a gateway model behind a host gateway keeps web search (${nativeToolId})`, async () => {
+      // The session's first model was a direct Anthropic/OpenAI one, so its native search tool is
+      // still in the tool list when the fallback model runs.
+      const { text, errors } = await runWithTools(
+        hostGatewayModel('mastracode/mastra/deepseek/deepseek-v4-flash-latest'),
+        { web_search: providerTool(nativeToolId) },
+      );
+
+      expect(errors).toBe('');
+      expect(text).toBe('Mostly clear, 4°C.');
+      expect(sentToolTypes()).toEqual(['openrouter:web_search']);
+    });
+  }
+
+  it('a generate call to a gateway model behind a host gateway sends the gateway web search', async () => {
+    getMock().on({}, { content: 'Mostly clear, 4°C.' });
+
+    await hostGatewayModel('mastracode/mastra/alibaba/qwen4-max')().doGenerate({
+      prompt: [{ role: 'user', content: [{ type: 'text', text: 'What is the weather in London?' }] }],
+      tools: [providerTool('anthropic.web_search_20250305')],
+    } as any);
+
+    expect(sentToolTypes()).toEqual(['openrouter:web_search']);
+  });
+
+  it('a model the host gateway sends straight to its provider keeps the native web search', async () => {
+    const { text } = await runWithTools(hostGatewayModel('mastracode/anthropic/claude-sonnet-5-5'), {
+      web_search: providerTool('anthropic.web_search_20250305'),
+    });
+
+    expect(text).toBe('Mostly clear, 4°C.');
+    expect(sentToolTypes()).toEqual(['web_search_20250305']);
   });
 
   it('the OAuth Anthropic route keeps the native Anthropic web search', async () => {

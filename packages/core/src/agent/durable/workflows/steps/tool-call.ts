@@ -92,7 +92,14 @@ import {
   runFencedToClaim,
 } from '../../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
-import { clearResumeInFlight, getRunRegistryEntry, globalRunRegistry, markRunActive } from '../../run-registry';
+import {
+  clearResumeInFlight,
+  DURABLE_CONTEXT_SEGMENT_KEY,
+  getLiveRunRequestContext,
+  getRunRegistryEntry,
+  globalRunRegistry,
+  markRunActive,
+} from '../../run-registry';
 import { claimSegmentEnd, liveSegmentSpan, segmentOwnsStep, segmentSpanData } from '../../segment-spans';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type {
@@ -320,6 +327,20 @@ async function flushMessagesBeforeSuspension({
   }
 }
 
+/**
+ * Context for output processors on a tool result. A live context is reused only for the execution that
+ * owns it. A context rebuilt from the run snapshot is returned as before; whether a rebuilt entry can
+ * outlive a resume by another caller is tracked in COR-1660.
+ */
+function toolResultRequestContext(
+  registryEntry: RunRegistryEntry | undefined,
+  runId: string,
+  stepRequestContext: RequestContext | undefined,
+) {
+  if (registryEntry?.requestContextRebuilt) return registryEntry.requestContext;
+  return getLiveRunRequestContext(registryEntry, runId, stepRequestContext) ?? stepRequestContext;
+}
+
 class DurableOutputProcessorError extends Error {
   constructor(error: unknown) {
     super(error instanceof Error ? error.message : String(error), { cause: error });
@@ -346,6 +367,7 @@ class DurableChunkPublishError extends Error {
 async function processChunkThroughOutputProcessors(
   chunk: ChunkType,
   registryEntry: RunRegistryEntry | undefined,
+  stepRequestContext: RequestContext | undefined,
   pubsub: PubSub | undefined,
   runId: string,
   agentName: string,
@@ -371,7 +393,7 @@ async function processChunkThroughOutputProcessors(
     runner,
     processorStates: registryEntry?.processorStates as Map<string, ProcessorState> | undefined,
     observabilityContext,
-    requestContext: registryEntry?.requestContext,
+    requestContext: toolResultRequestContext(registryEntry, runId, stepRequestContext),
     messageList,
     streamWriter: pubsub
       ? {
@@ -1002,7 +1024,7 @@ export function createDurableToolCallStep() {
           const authorizationRequestContext = restoreRequestContext(
             initData.requestContextEntries,
             requestContext,
-            registryEntry?.requestContext,
+            getLiveRunRequestContext(registryEntry, runId, requestContext),
           );
           const authorizeMemory = (permission: Parameters<typeof authorizeDurableMemory>[1]['permission']) =>
             authorizeDurableMemory(getDurableMemoryAuthorizationChecks(registryEntry), {
@@ -1066,12 +1088,14 @@ export function createDurableToolCallStep() {
       const approvalRequestContext = restoreRequestContext(
         initData.requestContextEntries,
         requestContext,
-        registryEntry?.requestContext,
+        getLiveRunRequestContext(registryEntry, runId, requestContext),
       );
       const requiresApproval = await toolRequiresApproval(tool, effectiveRequireToolApproval, args, {
         toolName,
         requestContext: Object.fromEntries(
-          [...approvalRequestContext.entries()].filter(([key]) => !INTERNAL_APPROVAL_KEYS.has(key)),
+          [...approvalRequestContext.entries()].filter(
+            ([key]) => key !== DURABLE_CONTEXT_SEGMENT_KEY && !INTERNAL_APPROVAL_KEYS.has(key),
+          ),
         ),
         // Use the same rebuilt-workspace fallback as execution (above), so
         // workspace-aware approval policies see their workspace cross-process.
@@ -1323,6 +1347,7 @@ export function createDurableToolCallStep() {
               await processChunkThroughOutputProcessors(
                 resultChunk,
                 registryEntry,
+                requestContext,
                 pubsub,
                 runId,
                 initData.agentId,
@@ -1486,6 +1511,7 @@ export function createDurableToolCallStep() {
               await processChunkThroughOutputProcessors(
                 deniedChunk as ChunkType,
                 registryEntry,
+                requestContext,
                 pubsub,
                 runId,
                 initData.agentId,
@@ -2206,7 +2232,7 @@ export function createDurableToolCallStep() {
                   requestContext: restoreRequestContext(
                     initData.requestContextEntries,
                     requestContext,
-                    registryEntry?.requestContext,
+                    getLiveRunRequestContext(registryEntry, runId, requestContext),
                   ),
                 });
               }
@@ -2620,7 +2646,7 @@ export function createDurableToolCallStep() {
               result,
               modelOutput: readModelOutput(providerMetadata),
               ...(processorObservabilityContext ?? {}),
-              requestContext: registryEntry.requestContext,
+              requestContext: toolResultRequestContext(registryEntry, runId, requestContext),
               retryCount: 0,
               writer: pubsub
                 ? {
@@ -2764,6 +2790,7 @@ export function createDurableToolCallStep() {
             await processChunkThroughOutputProcessors(
               resultChunk,
               registryEntry,
+              requestContext,
               pubsub,
               runId,
               initData.agentId,
@@ -2881,6 +2908,7 @@ export function createDurableToolCallStep() {
             await processChunkThroughOutputProcessors(
               errorChunk,
               registryEntry,
+              requestContext,
               pubsub,
               runId,
               initData.agentId,

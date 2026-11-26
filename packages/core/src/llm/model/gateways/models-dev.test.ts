@@ -949,22 +949,16 @@ describe('ModelsDevGateway', () => {
         },
       });
 
-    it('should prefer Google API key env var over legacy env var', async () => {
-      vi.stubEnv('GOOGLE_API_KEY', 'google-key');
+    it.each([
+      ['should prefer Google API key env var over legacy env var', 'google-key', 'google-key'],
+      ['should fall back to legacy Google Generative AI API key env var', '', 'legacy-google-key'],
+    ] as const)('%s', async (_title, input, expected) => {
+      vi.stubEnv('GOOGLE_API_KEY', input);
       vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'legacy-google-key');
 
       gateway = createGoogleGateway();
 
-      await expect(gateway.getApiKey('google/gemini-3.1-flash-lite')).resolves.toBe('google-key');
-    });
-
-    it('should fall back to legacy Google Generative AI API key env var', async () => {
-      vi.stubEnv('GOOGLE_API_KEY', '');
-      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'legacy-google-key');
-
-      gateway = createGoogleGateway();
-
-      await expect(gateway.getApiKey('google/gemini-3.1-flash-lite')).resolves.toBe('legacy-google-key');
+      await expect(gateway.getApiKey('google/gemini-3.1-flash-lite')).resolves.toBe(expected);
     });
   });
 });

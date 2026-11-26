@@ -311,7 +311,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       const { agentId, messageId, options: execOptions } = typedInput;
       const runId = typedInput.runId;
       const requestContext =
-        getLiveRunRequestContext(getRunRegistryEntry(runId, mastra as Mastra | undefined)) ?? params.requestContext;
+        getLiveRunRequestContext(
+          getRunRegistryEntry(runId, mastra as Mastra | undefined),
+          runId,
+          params.requestContext,
+        ) ?? params.requestContext;
       const logger = mastra?.getLogger?.();
       if (pubsub) await emitIterationStartEvent(pubsub, runId, inputData.stepIndex ?? 0);
 

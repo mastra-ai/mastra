@@ -10,6 +10,12 @@
     "sarvam-105b-conversations"
   ],
   "reasoning": {
+    "deepseekv4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
     "sarvam-105b": [
       {
         "type": "toggle"
@@ -17,18 +23,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "deepseekv4.1-flash-1017": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "gemma4": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
       }
     ],
     "deepseekv4.1-flash-1017-interactive": [
@@ -47,6 +41,12 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "gemma4": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ]
   }

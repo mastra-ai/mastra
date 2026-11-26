@@ -63,7 +63,7 @@ export function FactorySessionsNav({
           </li>
         ) : !sessions ? (
           <li>
-            <SidebarNavigationSkeleton label="Loading sessions" />
+            <SidebarNavigationSkeleton label="Loading sessions" description />
           </li>
         ) : sessions.length === 0 ? (
           <li>

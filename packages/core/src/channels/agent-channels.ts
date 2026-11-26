@@ -59,6 +59,8 @@ import type { InlineLinkRule } from './inline-media';
 import { ChatChannelOutputProcessor, CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';
 import type { ChatChannelRenderContext } from './output-processor';
 import { ChatChannelProcessor } from './processor';
+import { ChannelReplyModeProcessor, channelReplyTypingStatus, threadLinkOptions } from './reply-mode';
+import { ChannelReplyStreamProcessor, REPLY_TOOL_NAME } from './reply-tool';
 import { MastraStateAdapter } from './state-adapter';
 import { extractErrorMessage } from './stream-helpers';
 import type { PendingApprovalRecord } from './stream-helpers';
@@ -70,6 +72,8 @@ import {
   messageText,
 } from './thread-history';
 import type { ThreadHistoryLogContext, ThreadHistoryWindow } from './thread-history';
+import { ChannelThreadLinkProcessor, markNewChannelThread } from './thread-link-processor';
+import { resolveChannelRenderContext } from './thread-lookup';
 import type {
   ChannelAdapterConfig,
   ChannelConfig,
@@ -309,7 +313,7 @@ export class AgentChannels {
       if (value && typeof value === 'object' && 'adapter' in value) {
         const cfg = value as ChannelAdapterConfig;
         adapters[name] = cfg.adapter;
-        adapterConfigs[name] = cfg;
+        adapterConfigs[name] = cfg.replyMode ? withReplyModeDefaults(cfg) : cfg;
       } else {
         adapters[name] = value as Adapter;
         adapterConfigs[name] = { adapter: value as Adapter };
@@ -333,6 +337,8 @@ export class AgentChannels {
     this.channelToolNames = new Set(Object.keys(this.getTools()));
     // The card itself is the output; a tool card for the call would duplicate it.
     if (this.generativeUIEnabled) this.channelToolNames.add(RENDER_CARD_TOOL_NAME);
+    // Its post is the reply; a tool card for the call would duplicate it.
+    if (this.replyModeEnabled) this.channelToolNames.add(REPLY_TOOL_NAME);
   }
 
   /**
@@ -611,7 +617,7 @@ export class AgentChannels {
             'Channels require storage to be configured on the Mastra instance. Configure a storage provider like LibSQLStore.',
           );
         }
-        this.stateAdapter = new MastraStateAdapter(memoryStore, () => this.getOwnerId());
+        this.stateAdapter = new MastraStateAdapter(memoryStore, () => this.getOwnerId(), this.logger);
         this.log('info', 'Using MastraStateAdapter (subscriptions persist across restarts)');
       }
 
@@ -1337,7 +1343,36 @@ export class AgentChannels {
     if (this.generativeUIEnabled && !has(GENERATIVE_UI_PROCESSOR_ID)) {
       processors.push(new ChatChannelGenerativeUIProcessor(this));
     }
+    if (this.replyModeEnabled && !has(REPLY_MODE_PROCESSOR_ID)) {
+      processors.push(
+        new ChannelReplyModeProcessor({
+          resolveRender: (requestContext, state) => this.resolveRunRender(requestContext, state),
+          adapter: platform => this.adapterConfigs[platform],
+        }),
+      );
+    }
     return processors;
+  }
+
+  private get replyModeEnabled(): boolean {
+    return Object.values(this.adapterConfigs).some(cfg => cfg.replyMode);
+  }
+
+  /**
+   * The chat thread a run posts to: the one it came in on, else the one its
+   * thread (the controller's, or memory's) is linked to. Cached on `state`
+   * when given; `null` remembers a thread that isn't channel-backed.
+   */
+  private async resolveRunRender(
+    requestContext: RequestContext | undefined,
+    state?: Record<string, unknown>,
+  ): Promise<ChatChannelRenderContext | undefined> {
+    const inbound = requestContext?.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
+    if (inbound) return inbound;
+    if (state && 'render' in state) return (state.render as ChatChannelRenderContext | null) ?? undefined;
+    const render = await resolveChannelRenderContext(requestContext, () => this);
+    if (state) state.render = render ?? null;
+    return render;
   }
 
   /** Whether the Slack adapter opted into `generativeUI` (the only platform it supports). */
@@ -1364,9 +1399,22 @@ export class AgentChannels {
   }
 
   getOutputProcessors(configuredProcessors: OutputProcessorOrWorkflow[] = []): OutputProcessor[] {
-    const hasProcessor = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'chat-channel-render');
-    if (hasProcessor) return [];
-    return [new ChatChannelOutputProcessor(this)];
+    const has = (id: string) => configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === id);
+    const processors: OutputProcessor[] = [];
+    // Ahead of the render processor, so the link's text reaches the thread.
+    if (Object.values(this.adapterConfigs).some(cfg => cfg.threadLink) && !has(THREAD_LINK_PROCESSOR_ID)) {
+      processors.push(
+        new ChannelThreadLinkProcessor(requestContext => {
+          const render = requestContext.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
+          return render && threadLinkOptions(this.adapterConfigs[render.platform]?.threadLink);
+        }),
+      );
+    }
+    if (!has('chat-channel-render')) processors.push(new ChatChannelOutputProcessor(this));
+    if (this.replyModeEnabled && !has(REPLY_STREAM_PROCESSOR_ID)) {
+      processors.push(new ChannelReplyStreamProcessor(requestContext => this.resolveRunRender(requestContext)));
+    }
+    return processors;
   }
 
   /**
@@ -1740,6 +1788,7 @@ export class AgentChannels {
               requestContext,
             })
         : undefined,
+      onCreate: () => markNewChannelThread(requestContext),
       mastra,
     });
 
@@ -2836,6 +2885,50 @@ export class AgentChannels {
   }
 
   /**
+   * Map a chat thread to a Mastra thread (creating the mapping if needed) and
+   * subscribe to it, so follow-up replies reach the agent without a mention.
+   *
+   * Use this for threads the bot started itself, e.g. a scheduled digest posted
+   * to Slack. Inbound messages create the mapping automatically, but a thread
+   * the bot opened has none until someone mentions it. An existing mapping is
+   * reused and keeps its original owner.
+   *
+   * @example
+   * ```ts
+   * const sent = await channel.post('Daily digest');
+   * await agent.getChannels()!.subscribeThread({ thread: sent.thread, resourceId: 'digest-bot' });
+   * ```
+   */
+  async subscribeThread({
+    thread,
+    resourceId,
+    threadId,
+  }: {
+    thread: Thread;
+    /** Owner of the Mastra thread when a new mapping is created. */
+    resourceId: string;
+    /** Id for a newly created Mastra thread. Defaults to a random UUID. */
+    threadId?: string;
+  }): Promise<StorageThreadType> {
+    const mastra = this.getMastra();
+    if (!mastra) {
+      throw new Error('subscribeThread requires the agent to be registered with a Mastra instance.');
+    }
+    await this.initialize(mastra);
+
+    const mastraThread = await this.getOrCreateThread({
+      externalThreadId: thread.id,
+      channelId: thread.channelId,
+      platform: thread.adapter.name,
+      resourceId,
+      threadId: threadId ? () => threadId : undefined,
+      mastra,
+    });
+    await this.stateAdapter.subscribe(thread.id);
+    return mastraThread;
+  }
+
+  /**
    * Resolves an existing Mastra thread for the given external IDs, or creates one.
    */
   private async getOrCreateThread({
@@ -2844,6 +2937,7 @@ export class AgentChannels {
     platform,
     resourceId,
     threadId,
+    onCreate,
     mastra,
   }: {
     externalThreadId: string;
@@ -2861,6 +2955,8 @@ export class AgentChannels {
      * Omitted: a random UUID.
      */
     threadId?: (resolvedResourceId: string, defaultThreadId: string) => string | Promise<string>;
+    /** Called once when a new thread is created, never when one is reused. */
+    onCreate?: () => void;
     mastra: Mastra;
   }): Promise<StorageThreadType> {
     const {
@@ -2874,6 +2970,7 @@ export class AgentChannels {
       mastra,
     });
     if (existingThread) return existingThread;
+    onCreate?.();
 
     const resolvedResourceId = typeof resourceId === 'function' ? await resourceId() : resourceId;
     const defaultThreadId = crypto.randomUUID();
@@ -3137,4 +3234,22 @@ async function storedAttachmentBytes(fs: WorkspaceFilesystem, dir: string, root 
     else total += entry.size ?? (await fs.stat(path)).size;
   }
   return total;
+}
+
+const REPLY_MODE_PROCESSOR_ID = 'channel-reply-mode';
+const REPLY_STREAM_PROCESSOR_ID = 'channel-reply-stream';
+const THREAD_LINK_PROCESSOR_ID = 'channel-thread-link';
+
+/** Reply mode keeps reply text and tool calls out of the thread and shows progress in the status, unless set. */
+function withReplyModeDefaults(cfg: ChannelAdapterConfig): ChannelAdapterConfig {
+  const legacyCards = 'cards' in cfg && cfg.cards !== undefined;
+  // An explicit `undefined` means "not set", so it must not clear a default.
+  const set = Object.fromEntries(Object.entries(cfg).filter(([, value]) => value !== undefined));
+  const textDisplay = cfg.textDisplay ?? 'hidden';
+  return {
+    textDisplay,
+    ...(legacyCards ? {} : { toolDisplay: 'hidden' }),
+    typingStatus: channelReplyTypingStatus(textDisplay),
+    ...set,
+  } as ChannelAdapterConfig;
 }

@@ -72,18 +72,13 @@ describe('isTaskCompleteStep — working memory skip', () => {
     ]);
   });
 
-  it('skips scorers when only tool call was updateWorkingMemory', async () => {
+  it.each([
+    ['skips scorers when only tool call was updateWorkingMemory', 'updateWorkingMemory'],
+    ['skips scorers for the kebab-case id too', 'update-working-memory'],
+  ] as const)('%s', async (_title, toolName) => {
     const step = createIsTaskCompleteStep(baseParams() as any);
 
-    await executeStep(step, makeInput({ toolCalls: [{ toolName: 'updateWorkingMemory' }] }));
-
-    expect(runScorersSpy).not.toHaveBeenCalled();
-  });
-
-  it('skips scorers for the kebab-case id too', async () => {
-    const step = createIsTaskCompleteStep(baseParams() as any);
-
-    await executeStep(step, makeInput({ toolCalls: [{ toolName: 'update-working-memory' }] }));
+    await executeStep(step, makeInput({ toolCalls: [{ toolName }] }));
 
     expect(runScorersSpy).not.toHaveBeenCalled();
   });

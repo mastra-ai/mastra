@@ -394,7 +394,7 @@ Work declares `{ completed: 'done', canceled: 'canceled' }`. A board without `so
 
 The board engine decides how a card moves across its board. A person's move, the chat move tool, a new card's placement, a run start, an agent's move or review verdict, and a tool-result rule are all requested from the engine; none of them call the transition service directly. The default `DispatcherBoardEngine` commits each move through the transition service, with every board check, and the decision dispatcher runs the work the move queues. Provider events and rule decisions are queued as decisions first; the dispatcher requests their moves from the same engine when it runs them. A card filed without a transition (re-filed by a reconcile pass, or moved to another board when an intake route changes) is requested as a placement, which runs no phase rules.
 
-Pick the engine with the `boardEngine` option. It receives the transition service and returns the engine:
+Pick the engine with the `boardEngine` option. It receives the transition service, work item storage and the board registry, and returns the engine:
 
 ```typescript
 import { MastraFactory, createDispatcherBoardEngine } from '@mastra/factory';
@@ -405,7 +405,39 @@ const factory = new MastraFactory({
 });
 ```
 
-A custom engine implements `requestMove(request)`, which answers with the board's verdict (`accepted` or `rejected`), and `requestPlacement(placement)`, which answers `moved`, `unchanged` or `skipped`. One move can be requested more than once under the same `ingress.identity`, possibly concurrently: an agent's tool result asks right away, and the dispatcher replays the queued decision later. A custom engine must answer every repeat with its first verdict for that identity, except a `stale` refusal. Wrapping `createDispatcherBoardEngine(context)` keeps today's behavior, including this guarantee, while observing every move.
+A custom engine implements `requestMove(request)`, which answers with the board's verdict (`accepted` or `rejected`), `requestPlacement(placement)`, which answers `moved`, `unchanged` or `skipped`, and `runEnded(binding, engine)`, which Factory calls when a run of a session bound to a card ends `complete`. `runEnded` decides whether the run's phase ended: the default engine moves the card by the outcome its session reported (or its exit tool's success) and answers `true`, or answers `false` when the card holds no outcome. It can be called twice for one run end and must move the card once. `engine` is the engine Factory holds; the default engine requests the run's move through it, so an engine that wraps the default one sees that move in its own `requestMove`. One move can be requested more than once under the same `ingress.identity`, possibly concurrently: an agent's tool result asks right away, and the dispatcher replays the queued decision later. A custom engine must answer every repeat with its first verdict for that identity, except a `stale` refusal. Wrapping `createDispatcherBoardEngine(context)` keeps today's behavior, including this guarantee, while observing every move, as long as the wrapper forwards `runEnded` with the engine it was given:
+
+```typescript
+const factory = new MastraFactory({
+  storage,
+  boardEngine: context => {
+    const inner = createDispatcherBoardEngine(context);
+    return {
+      requestMove: request => {
+        audit(request);
+        return inner.requestMove(request);
+      },
+      requestPlacement: placement => inner.requestPlacement(placement),
+      runEnded: (binding, engine) => inner.runEnded(binding, engine),
+    };
+  },
+});
+```
+
+`createWorkflowBoardEngine` runs each card on a `factory-board` workflow run of its own, with run id `factory-board:<card id>`. The run starts on the first move asked of the card, applies each one in turn, and suspends between them until the card's next input. A run end reaches it as the move its outcome makes, requested through the engine Factory holds. Each move still commits through the transition service, so board checks, hooks and phase starts behave as with the default engine. `MastraFactory` registers the workflow with the host's Mastra, which stores the runs:
+
+```typescript
+import { MastraFactory, createWorkflowBoardEngine } from '@mastra/factory';
+
+const factory = new MastraFactory({
+  storage,
+  boardEngine: createWorkflowBoardEngine,
+});
+```
+
+A card's run takes its card from its run id, and a resume carries only an input id. The move itself and its answer stay in the process that asked for it, so the run stores nothing but its id, and a run started or resumed through Mastra's workflow API, which the engine didn't ask for, moves nothing. The process that asks for a move applies it, so this engine runs workflows on the default engine only. A move must not wait on another move of the same card, since that card's inputs are applied one at a time.
+
+A custom engine that runs on workflows of its own lists them under `workflows`, and `MastraFactory` registers them the same way.
 
 ### Board tool-result rules
 
@@ -1501,7 +1533,7 @@ Read tools and `factory_message_origin` are available on every turn. The other t
 
 Every tool that takes `workItem` accepts the card's id, its `#number`, or the issue or pull request it tracks: its link (`https://github.com/acme/app/pull/12`, including links to a pull request's files or a comment), `owner/repo#12`, `group/project!7` for a GitLab merge request, or a tracker key such as `ENG-42`. A reference finds the issue's or pull request's own card first, then the card it is attached to, such as a pull request on its issue's card. A bare `#number` can belong to several repositories and prefers an issue's card, so with several repositories the link is the safe choice. A reference that matches more than one card is refused with the candidates' ids. `factory_list_work_items` takes the same references as its `query`.
 
-`factory_transition_work_item` sends the requests the board's own buttons send, through the same rules: a move to another stage, or, with `rerun: true` and the stage the card is already in, a rerun of that stage, as **Start** does on the board. Asked for the card's own stage without `rerun`, it changes nothing and says so, including whether the stage's run is waiting for approval, so "move it to review" on a card that was already reviewed doesn't start another review. On a turn a person started, the run either one starts counts as approved by that person, so a run the board was holding for approval no longer waits, and a card that already has a run in flight or queued is refused as busy, as on the board. A rerun needs a person in the turn. Its result has the card's `url`, so a chat can link the card it moved. Approving a held run with `factory_resolve_proposal` starts it as the person. Retrying a failed one with `factory_retry_decision` keeps the run's original approver and needs no person in the turn. Either one makes the session follow the run's card in the same way, and their results carry the card's `url`. Following is what lets the run's report reach the session, which can then pass the outcome on in its chat. `factory_inspect_work_item` lists the card's stage, whether it can run again, and the stages its board lets it move to next, with the keys the tool takes. When someone asks for a card's own stage work without naming a session, such as a review of a pull request that has a card, the agent moves or reruns the card, so the review is recorded on the card and posted on the pull request. A side session is for work the person asks to run in one, and for work no stage does, such as pushing fixes to a pull request or taking it over.
+`factory_transition_work_item` sends the requests the board's own buttons send, through the same rules: a move to another stage, or, with `rerun: true` and the stage the card is already in, a rerun of that stage, as **Start** does on the board. Asked for the card's own stage without `rerun`, it changes nothing and says so, including whether the stage's run is waiting for approval, so "move it to review" on a card that was already reviewed doesn't start another review. On a turn a person started, the run either one starts counts as approved by that person, so a run the board was holding for approval no longer waits, and a card that already has a run in flight or queued is refused as busy, as on the board. A rerun needs a person in the turn. Its result has the card's `url`, so a chat can link the card it moved. Approving a held run with `factory_resolve_proposal` starts it as the person. Retrying a failed one with `factory_retry_decision` keeps the run's original approver and needs no person in the turn. Either one makes the session follow the run's card in the same way, and their results carry the card's `url`. Following is what lets the run's report reach the session, which can then pass the outcome on in its chat. `factory_inspect_work_item` lists the card's stage, whether it can run again, and the stages its board lets it move to next, with the keys the tool takes. When someone asks for a card's own stage work without naming a session, such as a review of a pull request that has a card, the agent moves or reruns the card, so the review is recorded on the card and posted on the pull request. A side session is for work the person asks to run in one, and for work no stage does, such as pushing fixes to a pull request or taking it over. Once a person in the conversation asks for a side session, or says not to use cards or the board, their later requests run in side sessions too, and work that follows from a side session, such as acting on what it found or fixing its pull request, goes back to that side session with `factory_signal_session`. Asking for a card wins: the agent files and starts it, and that ends the preference, so the person's later requests are routed as usual again until they ask for side sessions.
 
 #### Messaging between sessions
 

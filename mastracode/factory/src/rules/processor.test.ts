@@ -519,7 +519,7 @@ describe('FactoryPhaseStateProcessor', () => {
           configVersion: 'rules-v1',
           boards,
           storage,
-          boardEngine: new DispatcherBoardEngine({ transitionService }),
+          boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
         });
         await processor.processInputStep(inputArgs(requestContext(), [c.message]));
         // The tool's result never moves the card by itself.
@@ -591,7 +591,7 @@ describe('FactoryPhaseStateProcessor', () => {
         configVersion: 'rules-v1',
         boards,
         storage,
-        boardEngine: new DispatcherBoardEngine({ transitionService }),
+        boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
       });
       await processor.processInputStep(inputArgs(requestContext(), [approved()]));
       // A person sends the card to Building and back; the old result is read again from the thread.
@@ -638,7 +638,7 @@ describe('FactoryPhaseStateProcessor', () => {
         configVersion: 'rules-v1',
         boards,
         storage,
-        boardEngine: new DispatcherBoardEngine({ transitionService }),
+        boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
       });
       await processor.processInputStep(inputArgs(requestContext(), [approved()]));
       const card = await storage.get({ orgId: 'org-1', id: prepared.item.id });
@@ -670,7 +670,7 @@ describe('FactoryPhaseStateProcessor', () => {
           configVersion: 'rules-v1',
           boards,
           storage,
-          boardEngine: new DispatcherBoardEngine({ transitionService }),
+          boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
         });
         await processor.processInputStep(inputArgs(requestContext(), [approved()]));
         expect(await stageOf(storage, prepared.item.id)).toEqual([board.stage]);
@@ -711,7 +711,7 @@ describe('FactoryPhaseStateProcessor', () => {
           configVersion: 'rules-v1',
           boards,
           storage,
-          boardEngine: new DispatcherBoardEngine({ transitionService }),
+          boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
         });
         await processor.processInputStep(inputArgs(requestContext(), [c.message]));
         const card = await storage.get({ orgId: 'org-1', id: prepared.item.id });
@@ -798,7 +798,7 @@ describe('FactoryPhaseStateProcessor', () => {
           configVersion: 'rules-v1',
           boards,
           storage,
-          boardEngine: new DispatcherBoardEngine({ transitionService }),
+          boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
         });
         return { storage, prepared, transitionService, processor };
       };
@@ -838,7 +838,7 @@ describe('FactoryPhaseStateProcessor', () => {
         configVersion: 'rules-v1',
         boards,
         storage,
-        boardEngine: new DispatcherBoardEngine({ transitionService }),
+        boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
       });
       await processor.processInputStep(inputArgs(requestContext(), [approved()]));
       expect(await stageOf(storage, prepared.item.id)).toEqual(['planning']);
@@ -855,7 +855,7 @@ describe('FactoryPhaseStateProcessor', () => {
       configVersion: 'rules-v1',
       boards,
       storage,
-      boardEngine: new DispatcherBoardEngine({ transitionService }),
+      boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
     });
 
     await processor.processInputStep(
@@ -887,7 +887,7 @@ describe('FactoryPhaseStateProcessor', () => {
       configVersion: 'rules-v1',
       boards,
       storage,
-      boardEngine: new DispatcherBoardEngine({ transitionService }),
+      boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
     });
     const update = storage.update.bind(storage);
     let raced = false;
@@ -996,7 +996,7 @@ describe('FactoryPhaseStateProcessor', () => {
       configVersion: 'rules-v1',
       storage,
       boards,
-      boardEngine: new DispatcherBoardEngine({ transitionService }),
+      boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
       messageReader: reader as never,
     });
 
@@ -1058,7 +1058,7 @@ describe('FactoryPhaseStateProcessor', () => {
       listMessages: vi.fn(async () => ({ messages: [toolMessage({ toolName: 'finish' })], hasMore: false })),
     };
     const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
-    const defaultEngine = new DispatcherBoardEngine({ transitionService });
+    const defaultEngine = new DispatcherBoardEngine({ transitionService, workItems: storage, boards });
     const asked: string[] = [];
     // A host engine that refuses a move an agent's tool result asks for, but would take the same move from a rule.
     const boardEngine: FactoryBoardEngine = {
@@ -1074,6 +1074,7 @@ describe('FactoryPhaseStateProcessor', () => {
         };
       },
       requestPlacement: placement => defaultEngine.requestPlacement(placement),
+      runEnded: (binding, engine) => defaultEngine.runEnded(binding, engine),
     };
     const processor = new FactoryPhaseStateProcessor({
       configVersion: 'rules-v1',
@@ -1356,7 +1357,7 @@ describe('FactoryPhaseStateProcessor', () => {
       configVersion: 'rules-v1',
       boards,
       storage,
-      boardEngine: new DispatcherBoardEngine({ transitionService }),
+      boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
     });
     const context = requestContext();
 

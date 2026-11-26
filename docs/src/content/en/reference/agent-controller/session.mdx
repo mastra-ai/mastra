@@ -907,7 +907,7 @@ After every event, the session emits `display_state_changed` with the latest sna
 
 `session.state` exposes the active conversation's thread-owned preferences together with host-owned state. Updates are serialized and validated against the `stateSchema` passed to the AgentController. Visible state changes emit `state_changed`.
 
-Thread-owned preferences include thinking level, observational memory settings, and subagent model selections. Switching threads leaves host-owned custom fields and permission rules unchanged and doesn't persist them.
+Thread-owned preferences include thinking level, notifications, permission rules, observational memory settings, and subagent model selections. They're persisted with the thread and restored when you switch to it. Switching threads leaves host-owned custom fields unchanged and doesn't persist them.
 
 A queued write keeps its source thread through asynchronous updates and validation. Switching from A to B while a write is pending doesn't apply A's preferences to B. Host-field updates still affect the host. A retained run and the active view of the same thread share update ordering. A resumed run sees edits made while it was parked. Events without a source address that affect the conversation display are emitted only while that source is active.
 

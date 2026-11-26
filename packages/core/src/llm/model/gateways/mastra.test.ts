@@ -188,12 +188,15 @@ describe('MastraGateway', () => {
         });
     }
 
-    it('ignores a caller header that targets the reserved gateway header', async () => {
+    it.each([
+      ['ignores a caller header that targets the reserved gateway header', 'gpt-4o', 'openai'],
+      ['ignores a caller override on the anthropic path', 'claude-sonnet-4-20250514', 'anthropic'],
+    ] as const)('%s', async (_title, modelId, providerId) => {
       const { gateway, getHeaders } = createCapturingGateway();
 
       const model = gateway.resolveLanguageModel({
-        modelId: 'gpt-4o',
-        providerId: 'openai',
+        modelId,
+        providerId,
         apiKey: 'gateway-key',
         headers: { [GATEWAY_AUTH_HEADER]: 'Bearer caller-value', 'X-Custom': 'keep' },
       });
@@ -215,21 +218,6 @@ describe('MastraGateway', () => {
       await callModel(model);
 
       expect(getHeaders()?.get(GATEWAY_AUTH_HEADER)).toBe('Bearer gateway-key');
-    });
-
-    it('ignores a caller override on the anthropic path', async () => {
-      const { gateway, getHeaders } = createCapturingGateway();
-
-      const model = gateway.resolveLanguageModel({
-        modelId: 'claude-sonnet-4-20250514',
-        providerId: 'anthropic',
-        apiKey: 'gateway-key',
-        headers: { [GATEWAY_AUTH_HEADER]: 'Bearer caller-value', 'X-Custom': 'keep' },
-      });
-      await callModel(model);
-
-      expect(getHeaders()?.get(GATEWAY_AUTH_HEADER)).toBe('Bearer gateway-key');
-      expect(getHeaders()?.get('X-Custom')).toBe('keep');
     });
 
     it('still lets callers override User-Agent', async () => {

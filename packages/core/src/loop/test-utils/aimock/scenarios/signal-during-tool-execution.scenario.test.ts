@@ -177,6 +177,7 @@ describeForAllEngines('AIMock scenario: signal arrives while a tool is running',
     expect(callIndex).toBeGreaterThan(-1);
     expect(resultIndex).toBeGreaterThan(callIndex);
     expect(JSON.parse(second[resultIndex].content)).toEqual({ deployed: 'api' });
+    expect(JSON.stringify(second).split(REMINDER)).toHaveLength(2);
 
     // History keeps exactly one completed invocation, alongside the data part the tool wrote after the signal.
     const owners = toolInvocationsFor(messages, 'call_deploy');

@@ -23,10 +23,35 @@
     "qwen3.8-max"
   ],
   "reasoning": {
-    "kimi-k3": [
+    "mimo-v2.5-pro": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "doubao-seed-2.0-lite": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek-v4.1-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "mimo-v2.5": [
+      {
+        "type": "toggle"
       }
     ],
     "deepseek-v4-pro": [
@@ -38,27 +63,21 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "qwen3.8-max": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 0,
-        "max": 262144
-      }
-    ],
-    "deepseek-v4.1-flash": [
-      {
-        "type": "toggle"
-      },
+    "kimi-k3.1-pro": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "minimax-m3": [
+      {
+        "type": "toggle"
       }
     ],
     "glm-5.3": [
@@ -73,37 +92,18 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "minimax-m3": [
+    "qwen3.8-max": [
       {
         "type": "toggle"
-      }
-    ],
-    "mimo-v2.5-pro": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-5.3-flash": [
+      },
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "mimo-v2.5": [
+        "values": ["low", "medium", "xhigh"]
+      },
       {
-        "type": "toggle"
-      }
-    ],
-    "kimi-k3.1-pro": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "doubao-seed-2.0-lite": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "type": "budget_tokens",
+        "min": 0,
+        "max": 262144
       }
     ]
   }

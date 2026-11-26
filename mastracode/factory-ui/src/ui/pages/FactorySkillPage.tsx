@@ -2,13 +2,13 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Link, useNavigate, useParams } from 'react-router';
 
 import { useFactorySkillsQuery } from '../../hooks/useFactorySkills';
 import { boardSkillPath, boardSkillsPath } from '../domains/boardConfig/boardConfigPaths';
 import { NewSkillEditor } from '../domains/boardConfig/components/skills/NewSkillEditor';
 import { SkillEditor } from '../domains/boardConfig/components/skills/SkillEditor';
+import { SkillEditorSkeleton } from '../domains/boardConfig/components/skills/SkillEditorSkeleton';
 import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { HrefLink } from '../ui/HrefLink';
@@ -38,15 +38,7 @@ function SkillPageBody({ factoryId, boardId, skillName }: { factoryId: string; b
   const skills = useFactorySkillsQuery(factoryId);
   const skillsPath = boardSkillsPath(factoryId, boardId);
 
-  if (skills.isPending) {
-    return (
-      <div role="status" aria-label="Loading skill" className="flex flex-col gap-4">
-        <Skeleton className="h-9 w-2/3" />
-        <Skeleton className="h-5 w-full" />
-        <Skeleton className="h-40 w-full" />
-      </div>
-    );
-  }
+  if (skills.isPending) return <SkillEditorSkeleton />;
   if (skills.isLoadingError) {
     return (
       <LoadErrorState

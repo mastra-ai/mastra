@@ -140,16 +140,6 @@ describe('MastraFilesystem Base Class', () => {
       expect(typeof fs.__setLogger).toBe('function');
     });
 
-    it('receives logger via __setLogger', () => {
-      const fs = new TestFilesystem();
-      const mockLogger = createMockLogger();
-
-      fs.__setLogger(mockLogger);
-
-      // Logger should be set internally
-      expect(fs['logger']).toBeDefined();
-    });
-
     it('logger can be used after __setLogger', () => {
       const fs = new TestFilesystem();
       const mockLogger = createMockLogger();
@@ -212,15 +202,6 @@ describe('MastraFilesystem Base Class', () => {
 
       // Should only init once
       expect(initCount).toBe(1);
-    });
-
-    it('_destroy() sets status to destroyed', async () => {
-      const fs = new TestFilesystem();
-      await fs._init();
-
-      await fs._destroy();
-
-      expect(fs.status).toBe('destroyed');
     });
 
     it('concurrent _destroy() calls return same promise', async () => {

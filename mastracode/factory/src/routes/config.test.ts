@@ -1,4 +1,7 @@
 import { promises as fs } from 'node:fs';
+import { createServer } from 'node:http';
+import type { IncomingHttpHeaders, ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -2370,8 +2373,14 @@ describe('custom provider routes', () => {
     seed.customProviders.list({ orgId: user.organizationId ?? `user:${user.workosId}`, userId: user.workosId });
 
   beforeEach(async () => {
+    // A deployment id in the developer's shell would refuse the local test endpoints.
+    vi.stubEnv('MASTRA_DEPLOYMENT_ID', '');
     seed = await createFactoryStorageForTests();
     onCustomProvidersChanged.mockClear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('rejects unauthenticated access when web auth is enabled', async () => {
@@ -2703,5 +2712,212 @@ describe('custom provider routes', () => {
   it('validates the payload', async () => {
     expect((await postProvider(buildApp(userA), { url: 'https://x.example' })).status).toBe(400);
     expect((await postProvider(buildApp(userA), { name: 'x', url: 'ftp://bad' })).status).toBe(400);
+    // `/models` is appended as text, so it would land inside the query string.
+    const withQuery = await postProvider(buildApp(userA), { ...providerBody, url: 'https://llm.example.com/v1?a=1' });
+    expect(withQuery.status).toBe(400);
+  });
+
+  // Without a scheme the edit keeps x-api-key, under which Authorization is an ordinary header.
+  it('accepts an Authorization header on an edit that keeps a saved x-api-key scheme', async () => {
+    const app = buildApp(userA);
+    const headers = [{ name: 'Authorization', value: 'Basic gateway-user' }];
+    const { provider } = await (await postProvider(app, { ...providerBody, authScheme: 'x-api-key', headers })).json();
+
+    const edited = await postProvider(app, { ...providerBody, headers, previousId: provider.id });
+
+    expect(edited.status).toBe(200);
+  });
+
+  describe('checks against a real endpoint', () => {
+    type Respond = (path: string, res: ServerResponse) => void;
+    const closers: Array<() => Promise<void>> = [];
+
+    afterEach(async () => {
+      vi.unstubAllEnvs();
+      await Promise.all(closers.splice(0).map(close => close()));
+    });
+
+    /** A local endpoint that records the headers of every request it answers. */
+    async function startEndpoint(respond: Respond) {
+      const requests: Array<{ path: string; headers: IncomingHttpHeaders }> = [];
+      const server = createServer((req, res) => {
+        req.resume();
+        req.on('end', () => {
+          requests.push({ path: req.url ?? '', headers: req.headers });
+          respond(req.url ?? '', res);
+        });
+      });
+      await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+      closers.push(() => {
+        server.closeAllConnections();
+        return new Promise(resolve => server.close(() => resolve()));
+      });
+      return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`, requests };
+    }
+
+    /** Lists `m1` and answers "yes" to a streamed chat completion. */
+    const openAiCompatible: Respond = (path, res) => {
+      if (path.endsWith('/models')) {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ data: [{ id: 'm1' }] }));
+        return;
+      }
+      const chunk = (delta: unknown, finish: string | null) => {
+        const choices = [{ index: 0, delta, finish_reason: finish }];
+        return `data: ${JSON.stringify({ id: 'c', object: 'chat.completion.chunk', created: 0, model: 'm1', choices })}\n\n`;
+      };
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.end(`${chunk({ role: 'assistant', content: 'yes' }, null)}${chunk({}, 'stop')}data: [DONE]\n\n`);
+    };
+
+    /** Refuses every call with an error that echoes the request headers, as some gateways do. */
+    const echoingRefusal: Respond = (_path, res) => {
+      res.writeHead(401, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: `Invalid credentials: ${JSON.stringify(res.req.headers)}` } }));
+    };
+
+    const postCheck = (app: Hono, body: unknown) =>
+      app.request('/web/config/custom-providers/check', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    const connection = (url: string) => ({
+      name: 'My LLM',
+      url,
+      apiKey: 'sk-saved-key',
+      authScheme: 'x-api-key',
+      headers: [
+        { name: 'X-Tenant', value: 'tenant-secret-value' },
+        { name: 'X-Region', value: 'eu-west', secret: false },
+      ],
+      models: ['m1'],
+    });
+
+    it('lists the models of a draft and sends it the test message, storing nothing', async () => {
+      const endpoint = await startEndpoint(openAiCompatible);
+
+      const res = await postCheck(buildApp(userA), { ...connection(endpoint.url), model: 'm1' });
+
+      expect((await res.json()).check).toEqual({
+        models: { ok: true, models: ['m1'], latencyMs: expect.any(Number) },
+        reply: { ok: true, reply: 'yes', finishReason: 'stop', latencyMs: expect.any(Number) },
+      });
+      expect(endpoint.requests.map(request => request.path).sort()).toEqual(['/v1/chat/completions', '/v1/models']);
+      expect(await ownList(userA)).toEqual([]);
+    });
+
+    it('records the result of checking a saved provider', async () => {
+      const endpoint = await startEndpoint(openAiCompatible);
+      const app = buildApp(userA);
+      const { provider } = await (await postProvider(app, connection(endpoint.url))).json();
+
+      const body = await (await postCheck(app, { previousId: provider.id })).json();
+
+      expect(body.provider.lastCheck).toEqual({ at: expect.any(String), ok: true });
+      expect((await ownList(userA))[0]!.lastCheck).toEqual(body.provider.lastCheck);
+
+      // A row saved before query strings were refused is never called.
+      const calls = endpoint.requests.length;
+      await seed.storage.ops.updateMany(
+        'user_custom_providers',
+        { provider_id: provider.id },
+        { url: `${endpoint.url}?a=1` },
+      );
+      expect((await postCheck(app, { previousId: provider.id })).status).toBe(400);
+      expect(endpoint.requests).toHaveLength(calls);
+    });
+
+    it('reuses the saved key and secret headers for a draft on the same origin', async () => {
+      const endpoint = await startEndpoint(openAiCompatible);
+      const app = buildApp(userA);
+      const { provider } = await (await postProvider(app, connection(endpoint.url))).json();
+
+      await postCheck(app, { previousId: provider.id, url: `${endpoint.url}/`, headers: [{ name: 'X-Tenant' }] });
+
+      expect(endpoint.requests[0]!.headers).toMatchObject({
+        'x-api-key': 'sk-saved-key',
+        'x-tenant': 'tenant-secret-value',
+      });
+    });
+
+    // Reusing a saved secret elsewhere would let whoever edits the provider send it to their own server.
+    it('refuses a draft on another origin that would reuse the saved key, before calling it', async () => {
+      const saved = await startEndpoint(openAiCompatible);
+      const other = await startEndpoint(openAiCompatible);
+      const app = buildApp(userA);
+      const { provider } = await (await postProvider(app, connection(saved.url))).json();
+
+      const res = await postCheck(app, { previousId: provider.id, url: other.url });
+
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe('api_key_required');
+      expect(other.requests).toEqual([]);
+    });
+
+    it("refuses a member's check of an organization provider", async () => {
+      const endpoint = await startEndpoint(openAiCompatible);
+      const { provider } = await (
+        await postProvider(buildApp(admin), { ...connection(endpoint.url), scope: 'org' })
+      ).json();
+
+      const res = await postCheck(buildApp(userA), { previousId: provider.id, scope: 'org' });
+
+      expect(res.status).toBe(403);
+      expect(endpoint.requests).toEqual([]);
+    });
+
+    it('refuses a private address on a hosted Factory before calling it', async () => {
+      const endpoint = await startEndpoint(openAiCompatible);
+      vi.stubEnv('MASTRA_DEPLOYMENT_ID', 'deploy-1');
+
+      const res = await postCheck(buildApp(userA), { url: endpoint.url });
+
+      expect((await res.json()).error).toBe('custom_endpoint_url_refused');
+      expect(endpoint.requests).toEqual([]);
+    });
+
+    it('saves with check: true only when the connection test passes', async () => {
+      const passing = await startEndpoint(openAiCompatible);
+      const failing = await startEndpoint(echoingRefusal);
+      const app = buildApp(userA);
+
+      const refused = await postProvider(app, { ...connection(failing.url), check: true });
+      expect(refused.status).toBe(422);
+      expect((await refused.json()).failure).toMatchObject({ kind: 'http', status: 401 });
+      expect(await ownList(userA)).toEqual([]);
+
+      const saved = await postProvider(app, { ...connection(passing.url), check: true });
+      expect((await saved.json()).provider.lastCheck).toEqual({ at: expect.any(String), ok: true });
+      expect(await ownList(userA)).toHaveLength(1);
+    });
+
+    it('never returns a secret header value or the key, and returns plain header values', async () => {
+      const endpoint = await startEndpoint(echoingRefusal);
+      const app = buildApp(userA);
+      const created = await postProvider(app, connection(endpoint.url));
+      const { provider } = await created.clone().json();
+
+      const texts = await Promise.all(
+        [
+          created,
+          await app.request('/web/config/custom-providers'),
+          await postCheck(app, { previousId: provider.id, model: 'm1' }),
+          await postProvider(app, { ...connection(endpoint.url), previousId: provider.id, check: true }),
+        ].map(res => res.text()),
+      );
+
+      // The endpoint echoed both secrets back in every error body.
+      expect(texts.join('\n')).toContain('[redacted]');
+      for (const text of texts) {
+        expect(text).not.toContain('tenant-secret-value');
+        expect(text).not.toContain('sk-saved-key');
+      }
+      expect(JSON.parse(texts[1]!).providers[0].headers).toEqual([
+        { name: 'X-Tenant', secret: true },
+        { name: 'X-Region', secret: false, value: 'eu-west' },
+      ]);
+    });
   });
 });

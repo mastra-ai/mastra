@@ -5,10 +5,12 @@ import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import { executionFailureTermination } from '../../loop/shared/execution-outcome';
 import type { Mastra } from '../../mastra';
 import { unwrapMastraTracingProxy } from '../../observability/context';
+import type { RequestContext } from '../../request-context';
 import type { CoreTool } from '../../tools/types';
 import type { MessageList } from '../message-list';
 import type { SaveQueueManager } from '../save-queue';
 import { stopDurableExecutionParticipants } from './evented-execution';
+import { getExecutionClaim } from './execution-fence';
 import { stepFailure } from './segment-spans';
 import type { RunRegistryEntry } from './types';
 
@@ -68,8 +70,32 @@ export function getRunRegistryEntry(runId: string, mastra: Mastra | undefined): 
   return unwrapMastraTracingProxy(entry.mastra) === unwrapMastraTracingProxy(mastra) ? entry : undefined;
 }
 
-export function getLiveRunRequestContext(entry: RunRegistryEntry | undefined) {
-  return entry?.requestContextRebuilt ? undefined : entry?.requestContext;
+/**
+ * Request-context key that identifies a run segment on engines whose steps carry no Core execution
+ * claim (Inngest). The engine stores the same value on the registry entry it seeds for the segment.
+ */
+export const DURABLE_CONTEXT_SEGMENT_KEY = '__mastra_durableContextSegment';
+
+/**
+ * The registry's live request context, when it belongs to the execution running this step. Once
+ * another process claims the run (for example an approval from another host), the context cached
+ * here still belongs to the previous caller and must not be reused for the new execution.
+ */
+export function getLiveRunRequestContext(
+  entry: RunRegistryEntry | undefined,
+  runId: string | undefined,
+  stepContext: RequestContext | undefined,
+  executionId?: string,
+) {
+  const live = entry?.requestContext;
+  if (!live || entry.requestContextRebuilt) return undefined;
+  const expectedExecutionId = executionId ?? (runId ? getExecutionClaim(stepContext, runId)?.executionId : undefined);
+  if (!expectedExecutionId) {
+    const stepSegment = stepContext?.get(DURABLE_CONTEXT_SEGMENT_KEY);
+    if (stepSegment === undefined) return live;
+    return stepSegment === entry.requestContextSegment ? live : undefined;
+  }
+  return runId && getExecutionClaim(live, runId)?.executionId === expectedExecutionId ? live : undefined;
 }
 
 /**

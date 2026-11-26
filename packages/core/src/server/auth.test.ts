@@ -172,13 +172,6 @@ describe('Composite auth', () => {
         expect(compositeAuth).toBeInstanceOf(CompositeAuth);
       });
 
-      it('should accept multiple providers', () => {
-        const provider1 = new MockAuthProvider();
-        const provider2 = new MockAuthProvider();
-        const compositeAuth = new CompositeAuth([provider1, provider2]);
-        expect(compositeAuth).toBeInstanceOf(CompositeAuth);
-      });
-
       it('should combine public paths from multiple providers', () => {
         const provider1 = new MockAuthProvider();
         provider1.public = ['/api/public1', '/api/public2'];

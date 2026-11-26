@@ -30,7 +30,7 @@ export function SandboxEnvsBlock({ factoryId }: { factoryId: string }) {
     const message = envsQuery.error instanceof Error ? envsQuery.error.message : 'Failed to load environment variables';
     return <Notice variant="destructive">{message}</Notice>;
   }
-  if (!envsQuery.data) return <Skeleton className="h-16 w-full" />;
+  if (!envsQuery.data) return <Skeleton className="h-16 w-full motion-reduce:before:animate-none" />;
 
   return (
     <SandboxEnvList

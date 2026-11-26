@@ -76,22 +76,16 @@ describe('resolveDurableToolCallConcurrency', () => {
     ).toBe(1);
   });
 
-  it('ignores approval/suspend flags on tools excluded by activeTools', () => {
+  it.each([
+    ['ignores approval/suspend flags on tools excluded by activeTools', 'plain', 4],
+    ['still forces sequential execution when an active tool requires approval', 'gated', 1],
+  ] as const)('%s', (_title, value, expected) => {
     expect(
       resolveDurableToolCallConcurrency({
-        options: { toolCallConcurrency: 4, activeTools: ['plain'] },
+        options: { toolCallConcurrency: 4, activeTools: [value] },
         toolsMetadata: [tool({ name: 'plain' }), tool({ name: 'gated', requireApproval: true })],
       }),
-    ).toBe(4);
-  });
-
-  it('still forces sequential execution when an active tool requires approval', () => {
-    expect(
-      resolveDurableToolCallConcurrency({
-        options: { toolCallConcurrency: 4, activeTools: ['gated'] },
-        toolsMetadata: [tool({ name: 'plain' }), tool({ name: 'gated', requireApproval: true })],
-      }),
-    ).toBe(1);
+    ).toBe(expected);
   });
 
   // The check is against the step's effective active tool set, NOT the tools the model actually

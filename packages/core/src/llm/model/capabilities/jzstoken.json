@@ -59,15 +59,16 @@
     "qwen3.8-max"
   ],
   "reasoning": {
-    "kimi-k2.6": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "kimi-k3": [
+    "claude-opus-4-8": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-sonnet-5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "gpt-6.1-sol": [
@@ -76,51 +77,16 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gpt-6.1-terra": [
+    "claude-opus-4-7": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gpt-6-astra": [
+    "gpt-5.5": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gpt-5.6-sol": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "deepseek-v4-pro": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "claude-opus-5.5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "qwen3.8-max": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 0,
-        "max": 262144
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
     "deepseek-v4.1-flash": [
@@ -132,7 +98,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-v4-flash": [
+    "deepseek-v4-pro": [
       {
         "type": "toggle"
       },
@@ -141,31 +107,18 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "claude-opus-4-8": [
+    "gpt-6.1-terra": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "claude-opus-5": [
+    "kimi-k2.6": [
       {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+        "type": "toggle"
       }
     ],
-    "claude-opus-4-7": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "claude-sonnet-5.5": [
+    "gpt-6-astra": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -183,6 +136,24 @@
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
+    "gpt-5.6-sol": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-opus-5.5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-sonnet-5.5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "claude-haiku-4-5-20251001": [
       {
         "type": "toggle"
@@ -192,22 +163,51 @@
         "min": 1024
       }
     ],
-    "gpt-5.5": [
+    "kimi-k3.1-pro": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
+        "values": ["low", "high", "max"]
       }
     ],
-    "claude-sonnet-5": [
+    "deepseek-v4-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "claude-opus-5": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "kimi-k3.1-pro": [
+    "kimi-k3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "qwen3.8-max": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 0,
+        "max": 262144
       }
     ]
   }

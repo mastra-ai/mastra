@@ -262,7 +262,7 @@ async function runMemory(params: RunParams, run: RunIdentity): Promise<MastraMem
     requestContext: restoreRequestContext(
       run.requestContextEntries,
       params.requestContext,
-      getLiveRunRequestContext(entry),
+      getLiveRunRequestContext(entry, run.runId, params.requestContext),
     ),
   });
 }

@@ -539,7 +539,7 @@ Before a manager runs a task, it claims the task with a conditional write. The w
 
 While the task runs, the owner renews the lease every `leaseDurationMs / 3`, with a minimum of one second. Each renewal is conditional on the task still being `running` under the same owner. The task's final writes, such as `completed`, `failed`, `timed_out`, or `suspended`, carry the same condition, so a manager that lost the task can't overwrite the result of the manager that replaced it.
 
-The owner stops renewing when the task completes, fails, or suspends. On shutdown, the manager releases the leases it still holds, so other managers can recover those tasks without waiting for the lease to expire. A lease that isn't released, for example because the process crashed, expires on its own.
+The owner stops renewing when the task completes, fails, or suspends. On shutdown, the manager releases the leases it still holds, so other managers can recover those tasks without waiting for the lease to expire. A running task with `maxRetries: 0` can't run again, so shutdown fails it with `Worker process terminated before task completed`, the same ending as a crash, rather than cancelling it. A lease that isn't released, for example because the process crashed, expires on its own.
 
 ### Recover a task from a dead owner
 
@@ -549,7 +549,7 @@ When `recoverStaleTasksOnStart` is `true`, the default, each manager that runs t
 
 - If the task's worker shut down gracefully, it returns to `pending` and is dispatched again without using a retry.
 - If the worker died and the task's `retryCount` is below `maxRetries`, it uses a retry, returns to `pending`, and is dispatched again.
-- Otherwise, it fails with `Worker process terminated before task completed`.
+- Otherwise, it fails with `Worker process terminated before task completed`. The failure fires `task.failed` and `onTaskFailed` like any other failure.
 
 Only a crash counts against `maxRetries`, so a task that keeps taking its worker down stops after its retries are used, while a deploy doesn't use one.
 

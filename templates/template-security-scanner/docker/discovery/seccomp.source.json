@@ -1,0 +1,20 @@
+{
+  "project": "Moby seccomp profiles",
+  "version": "v0.2.3",
+  "revision": "836ae4d37ef2ec995c77c99fc55f5b5f3af3a897",
+  "sourceUrl": "https://raw.githubusercontent.com/moby/profiles/836ae4d37ef2ec995c77c99fc55f5b5f3af3a897/seccomp/default.json",
+  "upstreamFileSha256": "536529b665dd0972c37bfb569f5d4ac8a53592e7b00752bc39ff063ca9864c74",
+  "upstreamJsonSha256": "afb4934b023cfceaaec1a9d752ca3f801aaa96eb2e59abe6e7ea16976948e080",
+  "derivedOriginalFileSha256": "c38467d95d5cc27c1ce7b0fa1f17892acd1da14fe61d86fddc114099ce77846e",
+  "distributedFileSha256": "98d113cc082a550ffda5dc42c3a638a0a0326dc6a9fe2385f15eea3976fea53f",
+  "distributedJsonSha256": "46586788a72b5956ec642d23f54ae586c7efebd71e72cfcc6068f144e112f771",
+  "formatting": "The distributed JSON differs from the original derived file only in formatter whitespace. JSON fingerprints use SHA-256 of JSON.stringify of the parsed object, preserving key order.",
+  "change": {
+    "operation": "append one syscall rule; all upstream rules remain unchanged",
+    "rule": { "names": ["clone", "setns", "unshare", "chroot"], "action": "SCMP_ACT_ALLOW", "args": [] }
+  },
+  "purpose": "Permit Chromium to construct its own user namespaces and internal sandbox while outer Linux capabilities remain dropped.",
+  "license": "Apache-2.0",
+  "licenseFile": "LICENSE.moby-profiles",
+  "licenseSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+}

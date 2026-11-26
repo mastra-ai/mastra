@@ -78,8 +78,8 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
           persisted: initData.options.isTaskComplete,
           requestContext: restoreRequestContext(
             initData.requestContextEntries,
-            registryEntry?.requestContext,
-            getLiveRunRequestContext(registryEntry),
+            params.requestContext,
+            getLiveRunRequestContext(registryEntry, state.runId, params.requestContext),
           ),
           runId: state.runId,
           logger: mastra?.getLogger?.(),
@@ -130,7 +130,7 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
         resourceId: initData.state?.resourceId,
         customContext: restoreCustomContext(
           initData.requestContextEntries,
-          registryEntry?.requestContext ?? params.requestContext,
+          getLiveRunRequestContext(registryEntry, state.runId, params.requestContext) ?? params.requestContext,
         ),
         generateId: () => mastra?.generateId?.(),
         emitChunk: chunk => {

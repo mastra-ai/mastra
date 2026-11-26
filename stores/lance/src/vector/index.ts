@@ -482,12 +482,22 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           const flattenedMetadata = this.flattenObject(metadataItem, 'metadata');
           // Add all flattened metadata properties to the row data object
           Object.entries(flattenedMetadata).forEach(([key, value]) => {
-            rowData[key] = value;
+            // Skip null values. A column that is null in every row of the batch cannot be
+            // type-inferred by Arrow/Lance, which fails the whole upsert. The null is still
+            // preserved losslessly in _metadata_json below.
+            if (value === null) {
+              return;
+            }
+            // Lance rejects '.' in top-level field names, so replace dots with underscores.
+            // This matches filterTranslator, which does the same when building metadata filters.
+            rowData[key.replace(/\./g, '_')] = value;
           });
           // Store lossless JSON representation for round-trip fidelity
           rowData['_metadata_json'] = JSON.stringify(metadataItem);
         } else {
-          rowData['_metadata_json'] = '';
+          // Store '{}' (not '') so empty metadata round-trips as {} instead of falling back to
+          // flat extraction, which would surface phantom null columns from sibling rows.
+          rowData['_metadata_json'] = '{}';
         }
 
         return rowData;

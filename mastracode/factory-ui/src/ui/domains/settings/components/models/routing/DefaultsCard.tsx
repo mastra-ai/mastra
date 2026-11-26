@@ -15,6 +15,20 @@ import { MODEL_DEFAULTS_ICONS, MODEL_DEFAULTS_LABELS, MODEL_DEFAULTS_TONES, defa
 import type { ModelDefaults } from './model-routes';
 import { UsedByLanes } from './UsedByLanes';
 
+export const DEFAULTS_HEADER_CLASS = 'flex flex-wrap items-center gap-x-3 gap-y-2';
+export const DEFAULTS_CONTENT_CLASS = 'flex flex-col gap-3 pt-3';
+
+export function DefaultsIdentity({ defaults, className }: { defaults: ModelDefaults; className?: string }) {
+  return (
+    <div className={cn('flex min-w-0 items-center gap-3', className)}>
+      <IconTile icon={MODEL_DEFAULTS_ICONS[defaults]} className={MODEL_DEFAULTS_TONES[defaults]} />
+      <Txt as="h3" variant="label">
+        {MODEL_DEFAULTS_LABELS[defaults]}
+      </Txt>
+    </div>
+  );
+}
+
 export function DefaultsCard({
   defaults,
   scope,
@@ -35,13 +49,8 @@ export function DefaultsCard({
     <SettingsContainer>
       <section id={anchor} aria-label={MODEL_DEFAULTS_LABELS[defaults]} className="scroll-mt-4">
         <Collapsible open={inUse || expanded} onOpenChange={setExpanded}>
-          <header className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <div className={cn('flex min-w-0 items-center gap-3', !inUse && 'opacity-60')}>
-              <IconTile icon={MODEL_DEFAULTS_ICONS[defaults]} className={MODEL_DEFAULTS_TONES[defaults]} />
-              <Txt as="h3" variant="label">
-                {MODEL_DEFAULTS_LABELS[defaults]}
-              </Txt>
-            </div>
+          <header className={DEFAULTS_HEADER_CLASS}>
+            <DefaultsIdentity defaults={defaults} className={inUse ? undefined : 'opacity-60'} />
             <div className="ml-auto flex items-center gap-2">
               <UsedByLanes scope={scope} defaults={defaults} />
               {!inUse && (
@@ -55,7 +64,7 @@ export function DefaultsCard({
               )}
             </div>
           </header>
-          <CollapsibleContent className="flex flex-col gap-3 pt-3">
+          <CollapsibleContent className={DEFAULTS_CONTENT_CLASS}>
             {packs}
             <hr className="border-border1" />
             {providers}

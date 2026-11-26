@@ -22,21 +22,10 @@
     "kimi-k3.1-pro"
   ],
   "reasoning": {
-    "gemini-3.8-flash": [
+    "gpt-6-luna": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "kimi-k2.6": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "gpt-6.1-sol": [
@@ -45,16 +34,13 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "claude-haiku-5-5": [
-      {
-        "type": "toggle"
-      },
+    "claude-sonnet-5-5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gpt-6-astra": [
+    "claude-fable-5-1": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -69,25 +55,12 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "claude-sonnet-5-5": [
+    "kimi-k2.6": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "type": "toggle"
       }
     ],
-    "gpt-6-luna": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gemini-3.5-flash-lite": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "claude-fable-5-1": [
+    "gpt-6-astra": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -102,10 +75,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "gemini-4-argon": [
+    "gemini-3.5-flash-lite": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
     "kimi-k3.1-pro": [
@@ -114,10 +87,37 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "claude-haiku-5-5": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gemini-4-argon": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "claude-opus-5-5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gemini-3.8-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ]
   }

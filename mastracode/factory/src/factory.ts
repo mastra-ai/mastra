@@ -45,6 +45,7 @@ import type { FactoryStorage, FactoryStorageOps } from '@mastra/core/storage';
 import { readObjective, resolveGoalStore, writeObjective } from '@mastra/core/tools';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '@mastra/core/vector';
 import type { MastraWorker } from '@mastra/core/worker';
+import type { AnyWorkflow } from '@mastra/core/workflows';
 import { describeFactorySandbox, isFactorySandbox } from '@mastra/core/workspace';
 import type { FactorySandbox, FactorySandboxDescription, WorkspaceSandbox } from '@mastra/core/workspace';
 import {
@@ -719,6 +720,8 @@ export class MastraFactory {
   #stopMetrics: (() => Promise<void>) | undefined;
   /** Environment builds through the sandbox's `builds`; undefined when the sandbox has none. */
   #environmentBuilds: EnvironmentBuildRunner | undefined;
+  /** The board engine's own workflows, registered with Mastra next to Factory's. */
+  #boardEngineWorkflows: Readonly<Record<string, AnyWorkflow>> | undefined;
   /** The background session resource migration; resolves `true` when it moved run bindings. */
   #sessionResourceMigration: Promise<boolean> | undefined;
   #workItemSplitBackfill: { controller: AbortController; promise: Promise<void> } | undefined;
@@ -1625,8 +1628,13 @@ export class MastraFactory {
         })
       : undefined;
     const boardEngine = transitionService
-      ? (this.#config.boardEngine ?? createDispatcherBoardEngine)({ transitionService })
+      ? (this.#config.boardEngine ?? createDispatcherBoardEngine)({
+          transitionService,
+          workItems: workItemsStorage,
+          boards,
+        })
       : undefined;
+    this.#boardEngineWorkflows = boardEngine?.workflows;
     // Set once the API routes mount with the live controller; tools and processors read parked runs through it.
     let liveSessions: LiveSessions | undefined;
     // One set of storage and services behind the Factory tools, shared by agent sessions and the MCP endpoint.
@@ -1986,6 +1994,7 @@ export class MastraFactory {
               : [],
           ),
           ...(factoryProjectsStorage ? { projects: factoryProjectsStorage } : {}),
+          ...(this.#environmentBuilds ? { onSandboxCreated: this.#environmentBuilds.onSandboxCreated } : {}),
           sandboxEnvs: sandboxEnvsStorage,
           ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
           workspaceRegistry,
@@ -2654,9 +2663,9 @@ export class MastraFactory {
       });
       observeSessionRunEnd(session, { audit: auditDomain, openRuns: openRunsStorage });
       // A run the dispatcher no longer watches (a plan approved after its run parked) still ends
-      // its phase: the outcome its session reported moves the card when that run ends.
+      // its phase: the board engine hears of every run end of a bound session.
       observeSessionPhaseOutcome(session, {
-        deps: () => (boardEngine ? { storage: workItemsStorage, boards, boardEngine } : undefined),
+        boardEngine: () => boardEngine,
         binding: async () => {
           const row = await sourceControlSessions.getBySessionId(session.identity.getId());
           if (!row?.factoryProjectId) return null;
@@ -2849,7 +2858,14 @@ export class MastraFactory {
       // requests (`x-mastra-client-type: studio` routes to `studio.auth`).
       ...(auth ? { studio: { auth } } : {}),
       ...(integrationWorkers.length > 0 ? { workers: integrationWorkers } : {}),
-      ...(environmentBuilds ? { workflows: { [ENVIRONMENT_BUILD_WORKFLOW_ID]: environmentBuilds.workflow } } : {}),
+      ...(environmentBuilds || this.#boardEngineWorkflows
+        ? {
+            workflows: {
+              ...this.#boardEngineWorkflows,
+              ...(environmentBuilds ? { [ENVIRONMENT_BUILD_WORKFLOW_ID]: environmentBuilds.workflow } : {}),
+            },
+          }
+        : {}),
     };
   }
 

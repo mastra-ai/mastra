@@ -405,4 +405,42 @@ describe('BaseResource', () => {
       expect(customFetch).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe('empty success responses', () => {
+    it.each([200, 204, 205])('resolves a %d with an exactly empty body to undefined after one fetch', async status => {
+      const customFetch = vi.fn(async () => new Response(null, { status }));
+      // Two allowed retries make the old JSON-parse-and-retry behavior fail
+      // decisively instead of merely returning after the first attempt.
+      const customResource = new BaseResource({ baseUrl: serverUrl, retries: 2, backoffMs: 0, fetch: customFetch });
+
+      await expect(customResource.request('/empty')).resolves.toBeUndefined();
+      expect(customFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not repeat an opted-in write whose success body is empty', async () => {
+      const customFetch = vi.fn(async () => new Response(null, { status: 200 }));
+      const customResource = new BaseResource({ baseUrl: serverUrl, retries: 2, backoffMs: 0, fetch: customFetch });
+
+      await expect(
+        customResource.request('/write', { method: 'POST', body: { action: 'apply' } }),
+      ).resolves.toBeUndefined();
+      expect(customFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('treats a JSON null body as parsed null rather than an empty body', async () => {
+      const customFetch = vi.fn(async () => new Response('null', { status: 200 }));
+      const customResource = new BaseResource({ baseUrl: serverUrl, retries: 2, backoffMs: 0, fetch: customFetch });
+
+      await expect(customResource.request('/null')).resolves.toBeNull();
+      expect(customFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('still retries and rejects a non-empty success body that is malformed JSON', async () => {
+      const customFetch = vi.fn(async () => new Response('{', { status: 200 }));
+      const customResource = new BaseResource({ baseUrl: serverUrl, retries: 2, backoffMs: 0, fetch: customFetch });
+
+      await expect(customResource.request('/malformed')).rejects.toBeInstanceOf(Error);
+      expect(customFetch).toHaveBeenCalledTimes(3); // Initial request + 2 configured retries
+    });
+  });
 });

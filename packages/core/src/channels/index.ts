@@ -82,3 +82,13 @@ export type {
 
 // Re-export Chat SDK types for convenience
 export type { ActionEvent, ChatConfig, SlashCommandEvent } from 'chat';
+export type { ChannelReplyMode, ChannelReplyModeConfig, ChannelThreadLink } from './reply-mode';
+export { REPLY_TOOL_NAME } from './reply-tool';
+export { ChannelThreadLinkProcessor, markNewChannelThread, NEW_CHANNEL_THREAD_KEY } from './thread-link-processor';
+export type { ChannelThreadLinkProcessorOptions, ChannelThreadLinkTarget } from './thread-link-processor';
+export { resolveChannelRenderContext } from './thread-lookup';
+export type { ChannelsSource } from './thread-lookup';
+export { ATTACH_FILE_MAX_BYTES, ATTACH_FILE_TOOL_NAME, createChannelAttachFileTool } from './attach-file-tool';
+export type { ChannelAttachFileOptions } from './attach-file-tool';
+export { ChannelToolAnnouncementProcessor } from './tool-announcement-processor';
+export type { ChannelToolAnnouncement, ChannelToolAnnouncementOptions } from './tool-announcement-processor';
