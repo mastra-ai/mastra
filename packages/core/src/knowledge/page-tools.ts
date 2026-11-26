@@ -225,9 +225,9 @@ type HeldScope = { address: string; page?: KnowledgePage; role: KnowledgeRole | 
 
 /**
  * Every scope the run holds, in principal order, with its role and what it can do there. A held scope
- * gets its page on the first write, so before that its role comes from the declarations: without it a
- * model sees no scopes on its first turn and concludes it has nowhere to write. A stored scope it can't
- * read keeps only its address.
+ * gets its page on the first write, so before that its role comes from the declarations and the parent
+ * that write would link it under: without it a model sees no scopes on its first turn and concludes it
+ * has nowhere to write. A stored scope it can't read keeps only its address.
  */
 async function heldScopes(run: KnowledgeRun): Promise<HeldScope[]> {
   const stored = await run.storage.getScopesByAddress(run.principals);
@@ -235,7 +235,12 @@ async function heldScopes(run: KnowledgeRun): Promise<HeldScope[]> {
     run.principals.map(async address => {
       const found = stored.find(scope => scope.address === address);
       const page = found && knowledgeScopeReadable(found, run.read) ? found : undefined;
-      const role = found ? await run.roleOn(found) : knowledgeRoleOn(run.runtime.compiled, run.principals, { address });
+      const role = found
+        ? await run.roleOn(found)
+        : knowledgeRoleOn(run.runtime.compiled, run.principals, {
+            address,
+            parentAddress: run.runtime.firstWriteParentAddress(address, run.principals),
+          });
       const can: HeldScopeAccess = !role ? 'none' : knowledgeRoleAtLeast(role, 'contributor') ? 'write' : 'read';
       return { address, ...(page ? { page } : {}), role, can };
     }),

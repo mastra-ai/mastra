@@ -92,4 +92,42 @@ describe('Knowledge held scopes before any page exists', () => {
       can: 'write',
     });
   });
+
+  it('an unwritten scope reports the role a grant through its parent gives on the first write', async () => {
+    const knowledge = new Knowledge({
+      storage: new InMemoryStore(),
+      tools: true,
+      scopes: {
+        'org:$orgId': { access: [{ principal: 'self', role: 'viewer' }] },
+        // Bound only through the parent: the team's own params don't name the org.
+        'team:$teamId': { belongsTo: 'org:$orgId', access: [{ principal: 'org:$orgId', role: 'editor' }] },
+      },
+    });
+    const tools = knowledge.createTools();
+    const call = (tool: string, input: Record<string, unknown>) => {
+      const requestContext = new RequestContext();
+      setRunAgentScopes(requestContext, ['org:acme', 'team:core']);
+      return tools[tool]!.execute!(
+        input as never,
+        { requestContext, agent: { agentId: 'support' } } as never,
+      ) as Promise<any>;
+    };
+    const before = await call('knowledge_read', {});
+    expect(before.scopes.find((scope: any) => scope.address === 'team:core')).toEqual({
+      address: 'team:core',
+      name: 'team:core',
+      role: 'editor',
+      can: 'write',
+      empty: true,
+    });
+    const listed = await call('knowledge_list', {});
+    expect(listed.entries.find((entry: any) => entry.ref === 'team:core')).toMatchObject({ can: 'write', empty: true });
+
+    await call('knowledge_page', { op: 'write', name: 'Plan', scope: 'team:core', body: 'Ship it.' });
+    const after = await call('knowledge_read', {});
+    expect(after.scopes.find((scope: any) => scope.address === 'team:core')).toMatchObject({
+      role: 'editor',
+      can: 'write',
+    });
+  });
 });
