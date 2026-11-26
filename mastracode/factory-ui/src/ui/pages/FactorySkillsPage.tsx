@@ -2,7 +2,6 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
-import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { Link } from 'react-router';
 
@@ -15,29 +14,26 @@ import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfig
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 
 /**
- * The factory's skills that no board phase runs, opened from board settings. The board in the URL only keeps
- * its settings in the sidebar; the skills belong to the whole factory.
+ * The factory's skills that no board phase runs, opened from board settings. The board in the URL only leads back
+ * to its settings; the skills belong to the whole factory.
  */
 export function FactorySkillsPage() {
   const factory = useActiveFactory();
   const boardId = useBoardConfigRoute()?.boardId ?? '';
-  const { isMobile, desktopState } = useSidebar();
-  const sidebarHidden = isMobile || desktopState === 'collapsed';
   const board = useBoardQuery(factory.id, boardId).data?.board;
   const canEdit = useFactorySkillsQuery(factory.id).data?.canEdit ?? false;
 
   const slots = useSidebarHeaderSlots({
-    breadcrumbs:
-      sidebarHidden && board ? (
-        <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden">
-          <Crumb as={Link} to={boardConfigPath(factory.id, boardId)}>
-            {board.name}
-          </Crumb>
-          <Crumb as="span" isCurrent>
-            Skills
-          </Crumb>
-        </Breadcrumb>
-      ) : undefined,
+    breadcrumbs: board ? (
+      <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden">
+        <Crumb as={Link} to={boardConfigPath(factory.id, boardId)}>
+          {board.name}
+        </Crumb>
+        <Crumb as="span" isCurrent>
+          Skills
+        </Crumb>
+      </Breadcrumb>
+    ) : undefined,
   });
 
   return (
@@ -47,7 +43,7 @@ export function FactorySkillsPage() {
         <PageHeader>
           <PageHeader.Title>Skills</PageHeader.Title>
           <PageHeader.Description>
-            Agents load these when they need them. Skills a phase runs are on that phase's page.
+            Agents load these when they need them. Pick the skills a phase runs from that phase on the board.
           </PageHeader.Description>
           {canEdit && (
             <PageHeader.Action>

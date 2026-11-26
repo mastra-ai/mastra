@@ -247,9 +247,7 @@ describe("a skill's page", () => {
     expect(screen.getByText('Edited')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Description' })).toHaveValue('Our lint: check # first');
 
-    await user.click(
-      within(screen.getByRole('navigation', { name: 'Board configuration' })).getByRole('link', { name: 'Skills' }),
-    );
+    await user.click(screen.getByRole('link', { name: 'Back to Skills' }));
     expect(
       await within(await screen.findByRole('link', { name: /^changelog-lint/ })).findByText('Edited'),
     ).toBeInTheDocument();
@@ -467,8 +465,7 @@ describe("a skill's page", () => {
   it('asks before leaving with unsaved edits, and drops them only when told to', async () => {
     const { router } = openAt(`${SKILLS_PAGE}/changelog-lint`);
     const user = userEvent.setup();
-    const skillsLink = () =>
-      within(screen.getByRole('navigation', { name: 'Board configuration' })).getByRole('link', { name: 'Skills' });
+    const skillsLink = () => screen.getByRole('link', { name: 'Back to Skills' });
 
     await user.type(await screen.findByRole('textbox', { name: 'Description' }), ' locally');
     await user.click(skillsLink());

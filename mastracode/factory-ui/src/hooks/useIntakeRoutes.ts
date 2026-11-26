@@ -1,4 +1,6 @@
+import type { FACTORY_ROUTE_CONTRACTS } from '@mastra/factory/routes/contracts';
 import { queryOptions, skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { z } from 'zod';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -8,6 +10,9 @@ import { BoardRequestError } from './useBoardEditor';
 function routesPath(factoryProjectId: string, suffix = '') {
   return `/web/factory/projects/${encodeURIComponent(factoryProjectId)}/intake-routes${suffix}`;
 }
+
+type ReroutePreview = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeRouteReroutePreview.responseSchema>;
+type RerouteResult = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeRouteRerouteApply.responseSchema>;
 
 export async function sendRouteRequest<T>(
   baseUrl: string,
@@ -122,5 +127,25 @@ export function useIntakeRouteWrites(factoryProjectId: string | undefined) {
         // The intake order lists each board's rule count.
         queryClient.invalidateQueries({ queryKey: queryKeys.intakeOrder(factoryProjectId) }),
       ]),
+  });
+}
+
+/** Untouched cards that the current rules would now file on another board. */
+export function useReroutePreview(factoryProjectId: string) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.intakeReroute(factoryProjectId),
+    queryFn: () => sendRouteRequest<ReroutePreview>(baseUrl, routesPath(factoryProjectId, '/reroute')),
+  });
+}
+
+/** Moves the untouched cards `useReroutePreview` lists to the start of the board they now belong on. */
+export function useApplyReroute(factoryProjectId: string) {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation<RerouteResult, BoardRequestError>({
+    mutationFn: () =>
+      sendRouteRequest<RerouteResult>(baseUrl, routesPath(factoryProjectId, '/reroute'), { method: 'POST' }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.intakeReroute(factoryProjectId) }),
   });
 }
