@@ -13701,6 +13701,8 @@ export class Agent<
       model,
       modelList,
       tools,
+      // Request-built baseline, so a later caller's refresh can replace these closures.
+      requestTools: tools,
       workspace,
       memory,
       saveQueueManager,
