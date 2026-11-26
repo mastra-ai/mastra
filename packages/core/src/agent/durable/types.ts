@@ -1018,6 +1018,13 @@ export interface RunRegistryEntry {
    */
   interruptStepForSignals?: PendingSignalListener;
   /**
+   * Hears `signal-available` hints for the latest LLM step of a run that keeps
+   * its signals in storage, from whichever process stored them. Cleared when
+   * that step ends.
+   * @internal
+   */
+  onSignalAvailable?: (signalId: string) => void;
+  /**
    * Where this process reads and settles the signals of a run that keeps them
    * in memory storage, once resolved: set by preparation, or by the first
    * resolution that succeeded. See `durableRunSignalsStore`.

@@ -54,6 +54,7 @@ import type { PendingSignalListener, AgentMessageInput, AgentStateSignalInput, C
 import { applyStateSignal } from './state-signals';
 import { maySignalsBeStored, resolveThreadSignalsStore, storedRowsToSignals } from './stored-signals';
 import type { ThreadSignalsStore } from './stored-signals';
+import { publishSignalAvailable } from './streams/abort-transport';
 import { hasDurableExecution } from './streams/execution-capability';
 import { createThreadHistoryFilter, getPartProducedAt, stampPartProducedAt } from './thread-history';
 import { onThreadMessagesSaved } from './thread-saves';
@@ -4974,6 +4975,7 @@ export class AgentThreadStreamRuntime {
       await this.#storeLeftoverSignal(state, pubsub, key, record, signal, store);
       return;
     }
+    this.#publishSignalAvailable(record.agent, record.runId, signal.id);
     this.#publishPendingUserMessage(pubsub, key, record.runId, signal, 'pending');
     this.#notifyPendingSignals(state, key, signal);
     this.#publish(pubsub, key, {
@@ -5020,6 +5022,8 @@ export class AgentThreadStreamRuntime {
         await this.#storeLeftoverSignal(state, pubsub, key, run, signal, store);
         return;
       }
+      // A sender that stored the row announced it itself.
+      this.#publishSignalAvailable(run.agent, runId, signal.id);
     }
     if (this.#pendingUserMessageChunk(runId, signal, 'pending')) {
       this.#publish(pubsub, key, { type: 'user-message-admitted', signalId: signal.id, admittedRunId: runId });
@@ -5256,6 +5260,7 @@ export class AgentThreadStreamRuntime {
       if ((await this.#enqueueStoredSignal(state, key, store, signal, { runId: target, agent })) === 'run-closed') {
         return false;
       }
+      this.#publishSignalAvailable(agent, target, signal.id);
       this.#recordLocallyQueuedSignal(state, key, signal.id);
       state.locallyQueuedSignalIdsByThread.get(key)?.set(signal.id, target);
     }
@@ -5401,6 +5406,26 @@ export class AgentThreadStreamRuntime {
     }
     if (written === 'accepted') state.storedSignalTimes.set(key, Math.max(previous ?? 0, message.createdAt.getTime()));
     return written;
+  }
+
+  /**
+   * Tell the process running `runId`'s model request that a row for it committed, on the transport its abort
+   * requests travel on, where every executing process listens. The row reaches the run's next drain either way, so
+   * a failed publish changes nothing the sender is told.
+   */
+  #publishSignalAvailable(agent: Agent<any, any, any, any>, runId: string, signalId: string): void {
+    const logWarning = (error: unknown) =>
+      agent.__getLogger?.()?.warn?.('Could not announce a stored signal to the run executing it', {
+        runId,
+        signalId,
+        error,
+      });
+    try {
+      const pubsub = agent.__getStreamBus()?.forRun(agent.__usesSharedRunLog()).pubsub;
+      if (pubsub) void publishSignalAvailable(pubsub, runId, signalId).catch(logWarning);
+    } catch (error) {
+      logWarning(error);
+    }
   }
 
   /** Cancel pending rows behind this process's earlier writes for the thread. Resolves the ids deleted. */
