@@ -179,10 +179,17 @@ describe('rebuildRunToolsFromMastra request context', () => {
     const saveQueueManager = {};
     const processorStates = new Map();
     const outputProcessors = [{ id: 'kept' }];
+    const aliceTools = {
+      approve: { id: 'approve', built: 'alice' },
+      omitted: { id: 'omitted', built: 'alice' },
+    };
+    const processorTool = { id: 'processor-tool' };
     const entry = {
       model: {},
-      // prepareStep left only `approve` available for this step.
-      tools: { approve: { id: 'approve', built: 'alice' } },
+      requestTools: aliceTools,
+      baseTools: { ...aliceTools, processorTool },
+      // prepareStep withheld `omitted` for this step, and a processor added `processorTool`.
+      tools: { approve: aliceTools.approve, processorTool },
       memory: { built: 'alice' },
       workspace: { built: 'alice' },
       requestContext: new RequestContext([['mastra__user', { id: 'alice' }]]),
@@ -222,7 +229,12 @@ describe('rebuildRunToolsFromMastra request context', () => {
     try {
       await rebuild();
       const replaced = globalRunRegistry.get(runId)!;
-      expect(replaced.tools).toEqual({ approve: { id: 'approve', built: 'bob' } });
+      expect(replaced.tools).toEqual({ approve: { id: 'approve', built: 'bob' }, processorTool });
+      expect(replaced.baseTools).toEqual({
+        approve: { id: 'approve', built: 'bob' },
+        omitted: { id: 'omitted', built: 'bob' },
+        processorTool,
+      });
       expect(replaced.memory).toEqual({ built: 'bob' });
       expect(replaced.workspace).toEqual({ built: 'bob' });
       expect(replaced.requestContext?.get('mastra__user')).toEqual({ id: 'bob' });

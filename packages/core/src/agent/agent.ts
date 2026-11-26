@@ -182,7 +182,7 @@ import type {
 import { validateToolInput } from '../tools/validation';
 import type { DynamicArgument } from '../types';
 import type { ToolOptions } from '../utils';
-import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge, rebindProcessorTools } from '../utils';
+import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
 import { resolveDynamicArgument } from '../utils/dynamic-argument';
 import { slugify } from '../utils/slugify';
 import type { IMastraVoice } from '../voice';
@@ -262,6 +262,7 @@ import {
   globalRunRegistry,
   markResumeInFlight,
   deleteRunRegistryEntry,
+  refreshRunRequestTools,
 } from './durable/run-registry';
 import { carrySegmentSpans, openedSegment } from './durable/segment-spans';
 import type { SegmentSpanData } from './durable/segment-spans';
@@ -15743,23 +15744,9 @@ export class Agent<
           backgroundTaskPolicy: resolvedOptions.backgroundTaskPolicy,
           model: entry.model,
         });
-        const refresh = (current: Record<string, CoreTool>, previous: Record<string, CoreTool> | undefined) => {
-          const next = { ...current };
-          for (const [name, tool] of Object.entries(requestTools)) {
-            // A name missing from current but present in previous was withheld by a processor.
-            const configured = name in current ? current[name] === previous?.[name] : !previous || !(name in previous);
-            if (configured) next[name] = tool;
-          }
-          return next;
-        };
         for (const reg of new Set([entry, getRunRegistryEntry(runId, this.#mastra)])) {
           if (!reg) continue;
-          reg.tools = rebindProcessorTools(refresh(reg.tools ?? {}, reg.requestTools), resumeRequestContext);
-          if (reg.baseTools)
-            reg.baseTools = rebindProcessorTools(refresh(reg.baseTools, reg.requestTools), resumeRequestContext);
-          // Tools this rebuild did not produce still hold their earlier build, so
-          // keep that as their baseline; otherwise a later resume can never refresh them.
-          reg.requestTools = { ...reg.requestTools, ...requestTools };
+          refreshRunRequestTools(reg, requestTools, resumeRequestContext);
           if (options?.delegation) reg.delegation = resolvedOptions.delegation;
         }
       } catch (error) {

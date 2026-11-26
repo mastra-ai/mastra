@@ -29,6 +29,7 @@ import {
   getStepSegment,
   globalRunRegistry,
   isStaleRunRegistryEntry,
+  refreshRunRequestTools,
   setRunRegistryEntry,
 } from '../run-registry';
 import type {
@@ -439,6 +440,8 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       // so sibling steps in this process trust it instead of rebuilding.
       isPlaceholder: false,
       tools,
+      // Marks these as request-built, so a later segment can rebuild them for its caller.
+      requestTools: tools,
       model,
       modelList,
       workspace,
@@ -547,8 +550,9 @@ export async function rebuildRunToolsFromMastra(options: {
   /** Restore processors for tool execution, not persistence-only rebuilds. */
   rehydrateProcessors?: boolean;
   /**
-   * Replace the entry's tools, memory, workspace and context when they were built for an earlier
-   * segment (see `isStaleRunRegistryEntry`). Save queue and processor state carry across segments.
+   * Rebuild the entry's request-built tools, memory, workspace and context when they were built for
+   * an earlier segment (see `isStaleRunRegistryEntry`). Save queue and processor state carry across
+   * segments.
    */
   replaceStale?: boolean;
   logger?: { debug?: (...args: any[]) => void; error?: (...args: any[]) => void };
@@ -621,6 +625,7 @@ export async function rebuildRunToolsFromMastra(options: {
     // live per-request instances from a populated in-process entry.
     const patch: Partial<RunRegistryEntry> = {
       tools,
+      requestTools: tools,
       workspace,
       memory,
       saveQueueManager,
@@ -646,11 +651,7 @@ export async function rebuildRunToolsFromMastra(options: {
         (existing.baseTools !== undefined || existing.tools !== undefined);
       // Re-checked here: a sibling step of the same segment may already have replaced the entry.
       if (options.replaceStale && isStaleRunRegistryEntry(existing, runId, requestContext)) {
-        // Keep the step's tool snapshot (prepareStep may have omitted tools), rebuilt for this caller.
-        const snapshotNames = Object.keys(existing.tools ?? {});
-        existing.tools = hasAuthoritativeToolSnapshot
-          ? Object.fromEntries(Object.entries(tools).filter(([name]) => snapshotNames.includes(name)))
-          : tools;
+        refreshRunRequestTools(existing, tools, resolveRequestContext);
         existing.workspace = workspace;
         existing.memory = memory;
         existing.requestContext = resolveRequestContext;
@@ -661,7 +662,10 @@ export async function rebuildRunToolsFromMastra(options: {
         existing.requestContextRebuilt = true;
         existing.requestContextSegment = getStepSegment(runId, requestContext);
       }
-      if (!hasAuthoritativeToolSnapshot && Object.keys(existing.tools ?? {}).length === 0) existing.tools = tools;
+      if (!hasAuthoritativeToolSnapshot && Object.keys(existing.tools ?? {}).length === 0) {
+        existing.tools = tools;
+        existing.requestTools = tools;
+      }
       existing.workspace ??= workspace;
       existing.memory ??= memory;
       existing.saveQueueManager ??= saveQueueManager;

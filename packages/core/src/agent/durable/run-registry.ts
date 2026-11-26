@@ -7,6 +7,7 @@ import type { Mastra } from '../../mastra';
 import { unwrapMastraTracingProxy } from '../../observability/context';
 import type { RequestContext } from '../../request-context';
 import type { CoreTool } from '../../tools/types';
+import { rebindProcessorTools } from '../../utils';
 import type { MessageList } from '../message-list';
 import type { SaveQueueManager } from '../save-queue';
 import { stopDurableExecutionParticipants } from './evented-execution';
@@ -122,6 +123,33 @@ export function isStaleRunRegistryEntry(
   const entrySegment =
     (runId ? getExecutionClaim(entry.requestContext, runId)?.executionId : undefined) ?? entry.requestContextSegment;
   return entrySegment !== undefined && entrySegment !== stepSegment;
+}
+
+/**
+ * Swap in `requestTools`, rebuilt for a new caller, wherever the entry still holds a tool built for
+ * an earlier request, and rebind processor-added tools to `requestContext`. Tools a processor added,
+ * replaced or withheld are kept as the processor left them (#25960, #27544).
+ */
+export function refreshRunRequestTools(
+  entry: RunRegistryEntry,
+  requestTools: Record<string, CoreTool>,
+  requestContext: RequestContext,
+) {
+  const refresh = (current: Record<string, CoreTool>, previous: Record<string, CoreTool> | undefined) => {
+    const next = { ...current };
+    for (const [name, tool] of Object.entries(requestTools)) {
+      // A name missing from current but present in previous was withheld by a processor.
+      const configured = name in current ? current[name] === previous?.[name] : !previous || !(name in previous);
+      if (configured) next[name] = tool;
+    }
+    return next;
+  };
+  entry.tools = rebindProcessorTools(refresh(entry.tools ?? {}, entry.requestTools), requestContext);
+  if (entry.baseTools)
+    entry.baseTools = rebindProcessorTools(refresh(entry.baseTools, entry.requestTools), requestContext);
+  // Tools this rebuild did not produce still hold their earlier build, so
+  // keep that as their baseline; otherwise a later resume can never refresh them.
+  entry.requestTools = { ...entry.requestTools, ...requestTools };
 }
 
 /**
