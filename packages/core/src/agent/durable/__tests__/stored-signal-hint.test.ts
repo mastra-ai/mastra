@@ -383,7 +383,10 @@ function newScope() {
   return { resourceId: `resource-${crypto.randomUUID()}`, threadId: `thread-${crypto.randomUUID()}` };
 }
 
-/** Consumes a run's stream; `reasoned` and `answering` resolve once the consumer saw reasoning or text. */
+/**
+ * Consumes a run's stream; `reasoned` and `answering` resolve once the consumer saw reasoning or text, and reject
+ * when the stream ends or fails first.
+ */
 function consume(stream: { fullStream: AsyncIterable<unknown> }) {
   const chunks: Array<{ type: string; payload?: any }> = [];
   const reasoned = gate();
@@ -397,7 +400,23 @@ function consume(stream: { fullStream: AsyncIterable<unknown> }) {
     const error = chunks.find(chunk => chunk.type === 'error');
     if (error) throw error.payload?.error ?? new Error('the run reported an error');
   })();
-  return { chunks, reasoned: reasoned.promise, answering: answering.promise, done };
+  const seen = (chunkGate: ReturnType<typeof gate>, chunkType: string) => {
+    const seenFirst = Promise.race([
+      chunkGate.promise,
+      done.then(
+        () => {
+          throw new Error(`the run's stream ended without a ${chunkType} chunk`);
+        },
+        error => {
+          throw new Error(`the run's stream failed before a ${chunkType} chunk`, { cause: error });
+        },
+      ),
+    ]);
+    // A test that waits on only some of the gates leaves the others unawaited.
+    void seenFirst.catch(() => {});
+    return seenFirst;
+  };
+  return { chunks, reasoned: seen(reasoned, 'reasoning-delta'), answering: seen(answering, 'text-delta'), done };
 }
 
 /**
