@@ -39,6 +39,8 @@ export const guidesListing: WorkspaceFsListResponse = {
 export const fileContents: Record<string, string> = {
   'README.md': '# Hello workspace',
   'docs/guides/intro.md': '# Intro',
+  'docs/guides/images.md':
+    '# Images\n\n![Logo](../../logo.png)\n\n![Badge](https://example.com/badge.svg)\n\n![Missing](./missing.png)',
   'src/index.ts': 'const answer = 42;',
   'skills/review/SKILL.md': '---\nname: review\ndescription: Reviews code\n---\n# Review skill',
   'logo.png': 'iVBORw0KGgo=',
@@ -47,6 +49,9 @@ export const fileContents: Record<string, string> = {
   'cache/large.json': JSON.stringify({
     rows: Array.from({ length: 1_000 }, (_, i) => ({ id: `row-${i}`, text: 'shipped the change', ok: true })),
   }),
+  'src/large.ts': Array.from({ length: 2_000 }, (_, i) => `export const value${i} = compute(${i}, "row ${i}");`).join(
+    '\n',
+  ),
   'cache/nested.json': `${'['.repeat(5000)}1${']'.repeat(5000)}`,
   'sfx/applause.wav': 'RIFF$\u00e2\u0004\u0000WAVEfmt \u0010\u0000\u0000\u0000\u0001\u0000',
 };
