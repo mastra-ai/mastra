@@ -59,6 +59,11 @@ export interface FactoryTransitionRequest {
   initialEntry?: boolean;
   /** Starts the stage's runner again when the item already holds that stage, to restart work the entry invalidated. */
   reenter?: boolean;
+  /**
+   * Internal: the board engine stopped the card's run for this person's move, so the move isn't
+   * refused because the card is busy.
+   */
+  interruptedRun?: true;
   /** Internal proof that this move consumes an approved `submit_plan` result. */
   planApproved?: true;
   /** Internal: the tool whose successful result this move consumes (a tool-result rule's move). */
@@ -651,6 +656,7 @@ export class FactoryTransitionService {
     if (
       isHumanTransition(request) &&
       !request.initialEntry &&
+      !(request.interruptedRun && !crossesBoards) &&
       // Leaving the board strands whatever run is queued or underway, so every cross-board move of
       // a busy card is refused — whatever cause it names, even into a phase sharing the old one's
       // name or a phase that starts nothing itself.
