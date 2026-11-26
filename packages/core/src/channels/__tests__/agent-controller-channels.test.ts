@@ -1081,6 +1081,23 @@ describe('AgentControllerChannels', () => {
     }, 30_000);
   });
 
+  describe('paused tool cards', () => {
+    it('ignores resume buttons, which sessions cannot answer', async () => {
+      const { adapter, channels } = await createSetup();
+      const log = vi.spyOn(channels as any, 'log');
+
+      await simulateAction(channels, adapter, 'chan-1:t-resume', 'tool_resume:call-1:next');
+
+      expect(log).toHaveBeenCalledWith(
+        'info',
+        'Tool resume buttons are not supported by this channels instance',
+        expect.objectContaining({ toolCallId: 'call-1' }),
+      );
+      expect(adapter.postMessage).not.toHaveBeenCalled();
+      expect(adapter.editMessage).not.toHaveBeenCalled();
+    }, 30_000);
+  });
+
   describe('approvals through sessions', () => {
     it('parks at the approval gate, posts a card, and the approve action drives the engine continuation', async () => {
       const { tool, executeSpy } = createDeployTool();

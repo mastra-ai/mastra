@@ -1,0 +1,36 @@
+---
+'@mastra/core': minor
+---
+
+Added buttons to paused tools in Slack, Telegram and Teams threads. A tool that pauses with a `channelCard` in its suspend payload now shows that card in the thread, and a click on a `toolResumeButton()` resumes the tool with `{ action }`. The tool can pause again with a new card for multi-step flows, and the clicked card updates in place. A click takes the card's buttons off while the tool answers, and only buttons on the card currently shown are accepted, so a double click or a late click on an earlier step's button is ignored. Before, a paused tool left the thread stuck with nothing to click.
+
+`getChannelRun(requestContext)` tells a tool which thread it runs in, who clicked (or sent the message), and that user's resource ID (from `resolveResourceId`, or `<platform>:<userId>`), so the tool can compare it with the conversation's resource before acting for the clicker. That check means "same user" only when resource IDs are per user; a hook that maps a whole channel to one resource lets every member through.
+
+```ts
+import { getChannelRun, toolResumeButton } from '@mastra/core/channels';
+import { Actions, Card } from 'chat';
+
+execute: async (input, context) => {
+  const action = context.agent?.resumeData?.action;
+  if (action === 'confirm') {
+    const run = getChannelRun(context.requestContext); // { platform, thread, actor, actorResourceId }
+    if (run?.actorResourceId !== context.agent?.resourceId) return 'Only the owner can deploy';
+    return 'confirmed';
+  }
+  if (action === 'cancel') return 'cancelled';
+  const toolCallId = context.agent!.toolCallId;
+  await context.agent!.suspend({
+    channelCard: Card({
+      title: 'Ready to deploy?',
+      children: [
+        Actions([
+          toolResumeButton({ toolCallId, action: 'confirm', label: 'Deploy', style: 'primary' }),
+          toolResumeButton({ toolCallId, action: 'cancel', label: 'Cancel' }),
+        ]),
+      ],
+    }),
+  });
+};
+```
+
+Output processors on `Agent` now also receive `tool-call-suspended` chunks, as they already did on durable and evented agents.

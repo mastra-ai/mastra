@@ -36,6 +36,41 @@ export type { InlineLinkEntry } from './inline-media';
  */
 export type PostableMessage = string | CardElement | { markdown: string };
 
+/**
+ * Fields a tool can add to its suspend payload for channel runs.
+ *
+ * When a tool suspends with a `channelCard` on a Slack, Telegram or Teams
+ * thread, the card is posted in place of the tool's running card. Buttons
+ * built with `toolResumeButton()` resume the paused call with `{ action }`.
+ * A click takes the card's buttons off while the tool answers, and only the
+ * buttons on the card currently shown count. Suspending again with a new
+ * `channelCard` replaces the card in place. In `'cards'` mode the tool's result
+ * then replaces the card; in other modes the card stays, without buttons.
+ * After a restart, or on an instance that did not show the card, the click is
+ * matched against the paused call in history rather than the card, so a tool
+ * should still check the `action` it gets.
+ *
+ * @example
+ * ```ts
+ * execute: async (input, { agent }) => {
+ *   if (agent?.resumeData?.action === 'go') return 'done';
+ *   const toolCallId = agent!.toolCallId;
+ *   await agent!.suspend({
+ *     channelCard: Card({
+ *       children: [
+ *         CardText('Ready?'),
+ *         Actions([toolResumeButton({ toolCallId, action: 'go', label: 'Go', style: 'primary' })]),
+ *       ],
+ *     }),
+ *   } satisfies ChannelSuspendPayload);
+ * }
+ * ```
+ */
+export interface ChannelSuspendPayload {
+  /** The card to show in the channel thread while the tool is paused. */
+  channelCard?: CardElement;
+}
+
 /** What `formatError` knows about the failure beyond the error itself. */
 export interface ChannelErrorContext {
   requestContext?: RequestContext;
@@ -797,6 +832,10 @@ export interface ChannelConfig {
    *
    * Only affects **newly-created** threads. Once a thread exists it keeps its stored
    * `resourceId`, so this never relocates memory on an existing conversation.
+   *
+   * It also runs when someone clicks a `toolResumeButton()`, with a text-less
+   * message from the clicker, to tell the paused tool the clicker's resource ID
+   * (`getChannelRun().actorResourceId`). That never changes the thread's owner.
    *
    * Return `defaultResourceId` (`${platform}:${message.author.userId}`) to keep the
    * built-in behavior. Not set: behavior is unchanged.

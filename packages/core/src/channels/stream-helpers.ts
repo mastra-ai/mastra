@@ -1,4 +1,4 @@
-import type { Adapter, StreamChunk, Thread } from 'chat';
+import type { Adapter, CardElement, StreamChunk, Thread } from 'chat';
 import type { IMastraLogger } from '../logger/logger';
 import { describeProviderError, readProviderErrorDetails } from '../loop/shared/provider-error-details';
 import type { AgentChunkType } from '../stream/types';
@@ -10,7 +10,7 @@ import {
   formatToolRunning,
   stripToolPrefix,
 } from './formatting';
-import type { PostableMessage, ToolDisplayEvent } from './types';
+import type { ChannelSuspendPayload, PostableMessage, ToolDisplayEvent } from './types';
 
 /**
  * Approval card metadata stashed when a driver posts an approval card. The
@@ -28,6 +28,8 @@ export interface PendingApprovalRecord {
   args?: Record<string, unknown>;
   /** Platform user id of the person whose message triggered the tool call. */
   requesterId?: string;
+  /** A paused tool's `channelCard`, as last shown. */
+  card?: CardElement;
 }
 
 /**
@@ -403,4 +405,67 @@ export function chunkToFallbackMessage(chunk: StreamChunk): string | null {
     return chunk.title && chunk.title.length > 0 ? chunk.title : null;
   }
   return null;
+}
+
+/** Suspensions whose card was shown, so each is shown once however many streams carry it. */
+const shownSuspensions = new WeakSet<object>();
+
+/** The `channelCard` a paused tool put in its suspend payload, if it is a Chat SDK card. */
+export function channelCardOf(suspendPayload: unknown): CardElement | undefined {
+  const card = (suspendPayload as ChannelSuspendPayload | undefined)?.channelCard;
+  return card && typeof card === 'object' && card.type === 'card' && Array.isArray(card.children) ? card : undefined;
+}
+
+/**
+ * Post the `channelCard` of a paused tool (see `ChannelSuspendPayload`). Both
+ * drivers call this for `tool-call-suspended` chunks. The card replaces the
+ * tool's running card, or the card it suspended with before (a resumed run
+ * seeds that one through the approval stash), so a re-suspension edits the
+ * same message; otherwise it is posted. The card is recorded like an approval
+ * card, with the card itself, so the click handler can resume the run and
+ * check the clicked button is on the card shown.
+ */
+export async function postSuspendedToolCard(args: {
+  chunk: Extract<AgentChunkType<any>, { type: 'tool-call-suspended' }>;
+  card: CardElement;
+  tracker: ToolTracker;
+  adapter: Pick<Adapter<any, any>, 'editMessage'>;
+  chatThread: Pick<Thread, 'id' | 'post'>;
+  toolMessageIds: Map<string, string | undefined>;
+  getPendingApproval: (toolCallId: string) => PendingApprovalRecord | undefined;
+  onApprovalPosted: (toolCallId: string, record: PendingApprovalRecord) => void;
+  logger?: IMastraLogger;
+}): Promise<void> {
+  const { chunk, card, tracker, adapter, chatThread, toolMessageIds, getPendingApproval, onApprovalPosted, logger } =
+    args;
+  const enr = tracker.enrichApproval({
+    toolCallId: chunk.payload.toolCallId,
+    toolName: chunk.payload.toolName,
+    args: chunk.payload.args,
+  });
+  // Durable and evented runs hand one suspension to every open stream (the
+  // same payload object). Show it once, so a stream that lags behind can't
+  // put back a card whose buttons were already clicked.
+  if (shownSuspensions.has(chunk.payload)) return;
+  shownSuspensions.add(chunk.payload);
+  const existing = getPendingApproval(enr.toolCallId);
+  const messageId = await editOrPostMessage({
+    adapter,
+    chatThread,
+    messageId: toolMessageIds.get(enr.toolCallId) ?? existing?.messageId,
+    message: card,
+    logger,
+  });
+  if (messageId) toolMessageIds.set(enr.toolCallId, messageId);
+  onApprovalPosted(enr.toolCallId, {
+    messageId,
+    displayName: enr.displayName,
+    argsSummary: enr.argsSummary,
+    startedAt: existing?.startedAt ?? Date.now(),
+    runId: chunk.runId ?? existing?.runId,
+    toolName: enr.toolName,
+    args: (enr.args ?? {}) as Record<string, unknown>,
+    requesterId: existing?.requesterId,
+    card,
+  });
 }

@@ -49,6 +49,14 @@ export interface ChatChannelRenderContext {
   approvalContext?: { toolCallId: string; messageId: string };
 }
 
+/** The render context channels stash, with who caused the run. Read through `getChannelRun()`. */
+export interface ChannelRunRenderContext extends ChatChannelRenderContext {
+  /** Who caused this run: the inbound message's author, or the clicker of a resume button. */
+  actor?: { userId: string; userName?: string; fullName?: string };
+  /** `actor`'s resource ID, when it could be resolved. */
+  actorResourceId?: string;
+}
+
 /** Chunks that carry reply text, kept out of the channel by `textDisplay: 'hidden'`. */
 const TEXT_CHUNK_TYPES: ReadonlySet<string> = new Set(['text-start', 'text-delta', 'text-end']);
 

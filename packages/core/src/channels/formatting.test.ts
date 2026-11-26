@@ -23,7 +23,9 @@ import {
   formatToolHeader,
   formatToolResult,
   formatToolRunning,
+  parseToolResumeActionId,
   stripToolPrefix,
+  toolResumeButton,
 } from './formatting';
 
 // ---------------------------------------------------------------------------
@@ -343,4 +345,75 @@ describe('formatToolDenied (plain text)', () => {
     const result = formatToolDenied('run_code', '', undefined, false);
     expect(result).not.toContain('by');
   });
+});
+
+// ---------------------------------------------------------------------------
+// toolResumeButton
+// ---------------------------------------------------------------------------
+
+describe('toolResumeButton', () => {
+  it('builds a button whose id names the tool call and the action', () => {
+    expect(toolResumeButton({ toolCallId: 'call_abc', action: 'connect', label: 'Connect', style: 'primary' })).toEqual(
+      {
+        type: 'button',
+        id: 'tool_resume:call_abc:connect',
+        label: 'Connect',
+        style: 'primary',
+      },
+    );
+    expect(toolResumeButton({ toolCallId: 'call_abc', action: 'cancel', label: 'Cancel' })).toEqual({
+      type: 'button',
+      id: 'tool_resume:call_abc:cancel',
+      label: 'Cancel',
+    });
+  });
+
+  it('round-trips through the click parser, even when the tool call id has colons', () => {
+    const { id } = toolResumeButton({ toolCallId: 'a:b:c', action: 'done', label: 'Done' });
+    expect(parseToolResumeActionId(id)).toEqual({ toolCallId: 'a:b:c', action: 'done' });
+  });
+
+  it.each(['', 'Connect', '1go', 'go now', 'go:on', 'a'.repeat(17)])('rejects the action name %j', action => {
+    expect(() => toolResumeButton({ toolCallId: 'call_abc', action, label: 'Go' })).toThrow(/must match/);
+  });
+
+  it('rejects an empty tool call id', () => {
+    expect(() => toolResumeButton({ toolCallId: '', action: 'go', label: 'Go' })).toThrow(/toolCallId is required/);
+  });
+
+  // Telegram's adapter sends a button id as `chat:{"a":"<id>"}` (13 bytes around it),
+  // and Telegram accepts 64 bytes, so the id itself gets 51.
+  it("accepts the longest id Telegram's 64 bytes of button data fit", () => {
+    const action = 'a'.repeat(16);
+    // `tool_resume:` (12) + id (22) + `:` (1) + action (16) = 51
+    const id = toolResumeButton({ toolCallId: 'x'.repeat(22), action, label: 'Go' }).id;
+    expect(id).toHaveLength(51);
+    expect(new TextEncoder().encode(`chat:${JSON.stringify({ a: id })}`)).toHaveLength(64);
+  });
+
+  it("fits a provider's tool call id with a short action", () => {
+    // An Anthropic tool call id is 30 characters.
+    expect(() =>
+      toolResumeButton({ toolCallId: 'toolu_01A09q90qw90lq917835lq9a', action: 'connect', label: 'Connect' }),
+    ).not.toThrow();
+  });
+
+  it('rejects ids too long for Telegram, counting bytes rather than characters', () => {
+    expect(() => toolResumeButton({ toolCallId: 'x'.repeat(23), action: 'a'.repeat(16), label: 'Go' })).toThrow(
+      /takes 65 bytes/,
+    );
+    // 22 characters, 23 bytes.
+    expect(() => toolResumeButton({ toolCallId: `${'x'.repeat(21)}é`, action: 'a'.repeat(16), label: 'Go' })).toThrow(
+      /takes 65 bytes/,
+    );
+  });
+});
+
+describe('parseToolResumeActionId', () => {
+  it.each(['tool_approve:call_abc', 'tool_resume:call_abc', 'tool_resume::go', 'tool_resume:call_abc:Go'])(
+    'ignores %j',
+    actionId => {
+      expect(parseToolResumeActionId(actionId)).toBeUndefined();
+    },
+  );
 });

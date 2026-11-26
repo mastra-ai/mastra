@@ -277,6 +277,51 @@ describe('createToolCallStep delegated run identity provenance', () => {
     expect(failureChunk.payload.toolCallId).toBe('call-suspend-2');
   });
 
+  it.each([
+    ['publishes the suspension through the writer, so output processors see it', vi.fn(async () => {}), false],
+    [
+      'delivers the suspension directly when the writer rejects it',
+      vi.fn().mockRejectedValue(new Error('processor rejected the suspension')),
+      true,
+    ],
+  ])('%s', async (_name, outputWriter, direct) => {
+    const messageList = new MessageList({ threadId: 'thread-1', resourceId: 'resource' });
+    messageList.add({ id: 'user-1', role: 'user', content: 'process this' }, 'input');
+    const enqueue = vi.fn();
+    const suspend = vi.fn().mockResolvedValue(undefined);
+    const tool = createTool({
+      id: 'suspend-tool',
+      description: 'Suspends until resumed',
+      inputSchema: z.object({ data: z.string() }),
+      suspendSchema: z.object({ reason: z.string() }),
+      execute: async (_input, context) => await context?.agent?.suspend?.({ reason: 'waiting' }),
+    });
+    const toolCallStep = createToolCallStep({
+      tools: { suspendTool: tool } as unknown as ToolSet,
+      messageList,
+      controller: { enqueue },
+      runId: 'suspension-writer-run',
+      streamState: { serialize: vi.fn().mockReturnValue('serialized-state') },
+      outputWriter,
+      _internal: { saveQueueManager: { flushMessages: vi.fn(async () => {}) }, threadId: 'thread-1' },
+    } as any);
+
+    await toolCallStep.execute(
+      makeBaseExecuteParams(suspend, {
+        inputData: { toolCallId: 'call-suspend-3', toolName: 'suspendTool', args: { data: 'x' } },
+      }),
+    );
+
+    const suspension = expect.objectContaining({
+      type: 'tool-call-suspended',
+      payload: expect.objectContaining({ toolCallId: 'call-suspend-3', suspendPayload: { reason: 'waiting' } }),
+    });
+    expect(outputWriter).toHaveBeenCalledWith(suspension);
+    if (direct) expect(enqueue).toHaveBeenCalledWith(suspension);
+    else expect(enqueue.mock.calls.map(([chunk]: [any]) => chunk.type)).not.toContain('tool-call-suspended');
+    expect(suspend).toHaveBeenCalled();
+  });
+
   it('derives the delegated run from the claimed suspended call instead of a sibling run claim', async () => {
     const runResume = async (suspendedToolCallId: string, suspendedToolRunId: string) => {
       const execute = vi.fn(async () => ({ ok: true }));

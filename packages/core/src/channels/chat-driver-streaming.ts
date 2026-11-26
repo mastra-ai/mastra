@@ -8,9 +8,11 @@ import { asOmChunk, formatTokens, renderOmTaskUpdate } from './om';
 import type { PendingApprovalRecord } from './stream-helpers';
 import {
   ToolTracker,
+  channelCardOf,
   editOrPostMessage,
   postFileAttachment,
   postStreamError,
+  postSuspendedToolCard,
   postTripwire,
   renderBuiltInToolEvent,
 } from './stream-helpers';
@@ -807,6 +809,43 @@ export async function runStreamingDriver({
         runId: (chunk as { runId?: string }).runId,
         toolName: enr.toolName,
         args: (enr.args ?? {}) as Record<string, unknown>,
+      });
+      continue;
+    }
+
+    if (chunk.type === 'tool-call-suspended') {
+      // A paused tool can bring its own card (`suspendPayload.channelCard`);
+      // without one, or in `'text'` mode, which has no buttons, nothing is posted.
+      if (channelToolNames.has(chunk.payload.toolName)) continue;
+      if (toolDisplay === 'text' && !toolDisplayFn) continue;
+      const card = channelCardOf(chunk.payload.suspendPayload);
+      if (!card) continue;
+      // Park the plan row like an approval, or closing the session marks it failed.
+      if (rendersToolsInPlan) {
+        const enr = tracker.enrichApproval({
+          toolCallId: chunk.payload.toolCallId,
+          toolName: chunk.payload.toolName,
+          args: chunk.payload.args,
+        });
+        pushToSession({
+          type: 'task_update',
+          id: enr.toolCallId,
+          title: formatTaskTitle(enr.displayName, enr.argsSummary, enr.args),
+          status: 'complete',
+          details: 'Waiting for the user…',
+        });
+      }
+      await closeSession();
+      await postSuspendedToolCard({
+        chunk,
+        card,
+        tracker,
+        adapter,
+        chatThread,
+        toolMessageIds,
+        getPendingApproval,
+        onApprovalPosted,
+        logger,
       });
       continue;
     }

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Chat, Adapter, Attachment, ChatConfig, Message, StateAdapter, Thread } from 'chat';
+import type { Chat, ActionEvent, Adapter, Attachment, Author, ChatConfig, Message, StateAdapter, Thread } from 'chat';
 import { z } from 'zod';
 
 import type { Agent } from '../agent/agent';
@@ -44,7 +44,11 @@ import {
   formatArgsSummary,
   formatToolApproved,
   formatToolDenied,
+  parseToolResumeActionId,
   stripToolPrefix,
+  TOOL_RESUME_ACTION_PREFIX,
+  toolResumeActionsOf,
+  withoutButtons,
 } from './formatting';
 import { ChatChannelGenerativeUIProcessor, GENERATIVE_UI_PROCESSOR_ID, RENDER_CARD_TOOL_NAME } from './generative-ui';
 import {
@@ -57,7 +61,7 @@ import {
 } from './inline-media';
 import type { InlineLinkRule } from './inline-media';
 import { ChatChannelOutputProcessor, CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';
-import type { ChatChannelRenderContext } from './output-processor';
+import type { ChannelRunRenderContext, ChatChannelRenderContext } from './output-processor';
 import { ChatChannelProcessor } from './processor';
 import { ChannelReplyModeProcessor, channelReplyTypingStatus, threadLinkOptions } from './reply-mode';
 import { ChannelReplyStreamProcessor, REPLY_TOOL_NAME } from './reply-tool';
@@ -108,6 +112,7 @@ type ChannelAgent = Pick<
   | 'sendMessage'
   | 'approveToolCall'
   | 'declineToolCall'
+  | 'resumeStream'
   | 'listSuspendedRuns'
   | 'getMemory'
   | 'getWorkspace'
@@ -195,6 +200,19 @@ type ApprovalCardKey = { threadId: string; messageId: string; toolCallId: string
 
 const approvalCardKey = ({ threadId, messageId, toolCallId }: ApprovalCardKey) =>
   JSON.stringify([threadId, messageId, toolCallId]);
+
+/** Key of a paused tool's card, kept apart from approval cards in the lookup cache. */
+const suspendedCardKey = (card: ApprovalCardKey) => `suspended:${approvalCardKey(card)}`;
+
+/** The identity fields of a Chat SDK author that `getChannelRun` exposes. */
+const channelActor = (author: Author | undefined): ChannelRunRenderContext['actor'] =>
+  author?.userId
+    ? {
+        userId: author.userId,
+        ...(author.userName ? { userName: author.userName } : {}),
+        ...(author.fullName ? { fullName: author.fullName } : {}),
+      }
+    : undefined;
 
 /** Platforms whose chat-SDK adapters render interactive approval buttons. */
 const APPROVAL_BUTTON_PLATFORMS = new Set(['slack', 'discord', 'teams', 'gchat', 'google-chat', 'telegram']);
@@ -551,6 +569,291 @@ export class AgentChannels {
   }
 
   /**
+   * Answer a paused tool's card: a click on a `toolResumeButton` resumes that
+   * tool call with `{ action }`. Guarded like an approval click: the card must
+   * belong to a mapped thread and a paused call, only the user who triggered the
+   * call may click (unless `toolApprovers: 'anyone'`), one click per card runs at
+   * a time, and a card whose run waits on another tool call is stale. The resumed
+   * run edits the card in place, whether the tool suspends again or finishes.
+   */
+  private async handleToolResumeAction(
+    event: ActionEvent,
+    mastra: Mastra,
+    requestContext: RequestContext,
+  ): Promise<void> {
+    const platform = event.adapter.name;
+    const { actionId, messageId } = event;
+    const parsed = parseToolResumeActionId(actionId);
+    const actionEventContext = {
+      platform,
+      threadId: (event.thread as Thread | null)?.id,
+      messageId,
+      actionId,
+      toolCallId: parsed?.toolCallId,
+      actorId: event.user?.userId,
+    };
+    let inFlightKey: string | undefined;
+    let cardKey: string | undefined;
+    let restoreCard: (() => Promise<void>) | undefined;
+    let forgetCard: (() => void) | undefined;
+    try {
+      if (!parsed) {
+        this.log('info', 'Malformed tool resume action', actionEventContext);
+        return;
+      }
+      const { toolCallId, action } = parsed;
+      // AgentControllerChannels sets no agent: its sessions have no way to resume a paused tool.
+      if (!(this.getDispatchAgent() as ChannelAgent | undefined)) {
+        this.log('info', 'Tool resume buttons are not supported by this channels instance', actionEventContext);
+        return;
+      }
+      const chatThread = event.thread as Thread | null;
+      if (!chatThread) {
+        this.log('info', 'No thread in action event', actionEventContext);
+        return;
+      }
+      const adapterConfig = this.adapterConfigs[platform];
+      if (!this.adapters[platform]) throw new Error(`No adapter for platform "${platform}"`);
+
+      const externalThreadId = this.resolveExternalThreadId({ platform, chatThread, messageId });
+      const { thread: mastraThread } = await this.findThreadMapping({
+        externalThreadId,
+        channelId: chatThread.channelId,
+        platform,
+        mastra,
+      });
+      if (!mastraThread) {
+        this.log('warn', 'No mapped channel thread found for tool resume action', actionEventContext);
+        return;
+      }
+      const card = { threadId: mastraThread.id, messageId, toolCallId };
+      cardKey = suspendedCardKey(card);
+      if (this.getApprovalLookup(cardKey)?.result.status === 'answered') {
+        this.log('info', 'Paused tool call already answered', actionEventContext);
+        return;
+      }
+
+      // The card recorded when it was posted, else the paused call in history
+      // (after a restart, or when another instance posted the card).
+      const stashed = this.pendingApprovalCards.get(toolCallId);
+      // The card on screen decides which clicks count: an older card for this
+      // call, an action the current step does not offer, or a card already
+      // being answered (its buttons are stripped) is a late click.
+      if (stashed && !stashed.card) {
+        // An approval card's record: a resume id on it is forged.
+        this.log('info', 'Ignoring tool resume action on an approval card', actionEventContext);
+        return;
+      }
+      if (stashed?.card) {
+        if (
+          (stashed.messageId && stashed.messageId !== messageId) ||
+          !toolResumeActionsOf(stashed.card, toolCallId).includes(action)
+        ) {
+          this.log('info', 'Ignoring tool resume action the card no longer offers', actionEventContext);
+          return;
+        }
+      }
+      let runId = stashed?.runId;
+      let requesterId = stashed?.requesterId;
+      if (!runId) {
+        const { result: lookup } = await this.lookupPersistedApproval({ mastra, card, platform, suspended: true });
+        if (lookup.status === 'answered') {
+          this.log('info', 'Paused tool call already answered', actionEventContext);
+          return;
+        }
+        if (lookup.status === 'pending') {
+          runId = lookup.runId;
+          if (adapterConfig?.toolApprovers !== 'anyone' && !requesterId && lookup.authors.length > 1) {
+            this.log('info', 'Ignoring tool resume action: requester is ambiguous', actionEventContext);
+            return;
+          }
+          requesterId ??= lookup.authors[0];
+        }
+      }
+      if (!runId) {
+        this.log('info', 'No paused tool call found', actionEventContext);
+        return;
+      }
+
+      const actorId = event.user?.userId;
+      if (adapterConfig?.toolApprovers !== 'anyone' && requesterId && actorId && requesterId !== actorId) {
+        this.log('info', `Ignoring tool resume action from ${actorId}: only ${requesterId} may answer`, {
+          ...actionEventContext,
+          requesterId,
+        });
+        return;
+      }
+
+      if (this.approvalsInFlight.has(cardKey)) {
+        this.log('info', 'Ignoring tool resume action: the card is already being answered', actionEventContext);
+        return;
+      }
+      this.approvalsInFlight.add(cardKey);
+      inFlightKey = cardKey;
+
+      const memory = { thread: mastraThread.id, resource: mastraThread.resourceId };
+      if (await this.isAnsweredElsewhere({ runId, toolCallId, memory })) {
+        this.setApprovalLookup(cardKey, {
+          result: { status: 'answered' },
+          expiresAt: Date.now() + APPROVAL_LOOKUP_TTL_MS,
+        });
+        if (stashed) this.pendingApprovalCards.delete(toolCallId);
+        if (stashed?.card) {
+          await this.adapters[platform]!.editMessage(chatThread.id, messageId, withoutButtons(stashed.card)).catch(
+            err =>
+              this.log('warn', 'Failed to take the buttons off a stale tool card', {
+                ...actionEventContext,
+                error: err,
+              }),
+          );
+        }
+        this.log('info', 'Ignoring stale tool resume action (run waits on another tool call)', {
+          ...actionEventContext,
+          runId,
+        });
+        return;
+      }
+
+      const { channelContext } = await this.buildEventContext({
+        chatThread,
+        platform,
+        eventType: 'action',
+        messageId,
+        actor: event.user,
+      });
+      requestContext.set('channel', channelContext);
+
+      // The clicker's resource ID, resolved as if they had sent a message here.
+      const actor = channelActor(event.user);
+      let actorResourceId: string | undefined;
+      if (actor) {
+        const { Message: ChatMessage } = await getChatModule();
+        const clickerMessage = new ChatMessage({
+          attachments: [],
+          author: event.user,
+          formatted: { type: 'root', children: [] },
+          id: event.triggerId ?? crypto.randomUUID(),
+          metadata: { dateSent: new Date(), edited: false },
+          raw: event.raw,
+          text: '',
+          threadId: externalThreadId,
+        });
+        const resolved = this.resolveChannelResourceId({
+          platform,
+          chatThread,
+          message: clickerMessage,
+          defaultResourceId: `${platform}:${actor.userId}`,
+          requestContext,
+        });
+        try {
+          actorResourceId = typeof resolved === 'string' ? resolved : await resolved();
+        } catch (err) {
+          // The tool still runs; it just can't tell whose resource the clicker is.
+          this.log('warn', "Failed to resolve the tool resume clicker's resource ID", {
+            ...actionEventContext,
+            error: err,
+          });
+        }
+      }
+
+      // Take the buttons off while the tool answers, so the card can't be
+      // clicked again until the tool shows its next step or finishes.
+      if (stashed?.card) {
+        // The card changed or the call finished while this click was checked.
+        if (this.pendingApprovalCards.get(toolCallId) !== stashed) {
+          this.log('info', 'Ignoring tool resume action the card no longer offers', actionEventContext);
+          return;
+        }
+        const answering = withoutButtons(stashed.card);
+        const answeringRecord = { ...stashed, card: answering };
+        this.pendingApprovalCards.set(toolCallId, answeringRecord);
+        // Only undo this click's strip: the tool may have shown a newer card since.
+        const stillAnswering = () => this.pendingApprovalCards.get(toolCallId) === answeringRecord;
+        restoreCard = async () => {
+          if (!stillAnswering()) return;
+          this.pendingApprovalCards.set(toolCallId, stashed);
+          await this.adapters[platform]!.editMessage(chatThread.id, messageId, stashed.card!);
+        };
+        forgetCard = () => {
+          if (stillAnswering()) this.pendingApprovalCards.delete(toolCallId);
+        };
+        try {
+          await this.adapters[platform]!.editMessage(chatThread.id, messageId, answering);
+        } catch (err) {
+          this.log('warn', 'Failed to take the buttons off a clicked tool card', { ...actionEventContext, error: err });
+        }
+      }
+
+      requestContext.set(
+        CHAT_CHANNEL_RENDER_CONTEXT_KEY,
+        this._buildRenderContext(chatThread, platform, {
+          approvalContext: { toolCallId, messageId },
+          requesterId,
+          actor,
+          actorResourceId,
+        }),
+      );
+
+      const resumed = await this.getDispatchAgent().resumeStream(
+        { action },
+        { runId, toolCallId, requestContext, memory },
+      );
+      // Drive the run to completion so serverless runtimes don't kill it.
+      void resumed.consumeStream().catch(err => {
+        this.log('error', 'Error consuming resumed tool stream', { error: err });
+      });
+    } catch (err) {
+      if (err instanceof ChannelSessionRejectedError) {
+        this.log('info', 'Session resolver refused the tool resume action', {
+          ...actionEventContext,
+          reason: err.message,
+        });
+        return;
+      }
+      const resumeError = classifyResumeError(err);
+      if (resumeError === 'answered') {
+        if (cardKey) {
+          this.setApprovalLookup(cardKey, {
+            result: { status: 'answered' },
+            expiresAt: Date.now() + APPROVAL_LOOKUP_TTL_MS,
+          });
+        }
+        forgetCard?.();
+        this.log('info', 'Ignoring stale tool resume action (run already answered)', actionEventContext);
+        return;
+      }
+      if (resumeError === 'in-progress') {
+        // The run may be resuming another of its paused calls (or this one, from
+        // elsewhere), so the card stays answerable until a click learns otherwise.
+        await restoreCard?.().catch(restoreErr =>
+          this.log('warn', 'Failed to restore the buttons of a tool card', {
+            ...actionEventContext,
+            error: restoreErr,
+          }),
+        );
+        this.log('info', 'Ignoring tool resume action: the run is already resuming', actionEventContext);
+        return;
+      }
+      this.log('error', 'Error handling tool resume action', { ...actionEventContext, error: err });
+      // The run is still waiting, so give the card its buttons back.
+      await restoreCard?.().catch(restoreErr =>
+        this.log('warn', 'Failed to restore the buttons of a tool card', { ...actionEventContext, error: restoreErr }),
+      );
+      try {
+        if (event.thread) {
+          const error = err instanceof Error ? err : new Error(String(err));
+          const formatError = this.adapterConfigs[platform]?.formatError;
+          await event.thread.post(formatError ? formatError(error, { requestContext }) : `❌ Error: ${error.message}`);
+        }
+      } catch (postErr) {
+        this.log('warn', 'Failed to post error message for action', { ...actionEventContext, error: postErr });
+      }
+    } finally {
+      if (inFlightKey) this.approvalsInFlight.delete(inFlightKey);
+    }
+  }
+
+  /**
    * Resume a suspended run with a denial and drive the resumed stream to
    * completion (serverless safety).
    */
@@ -861,6 +1164,9 @@ export class AgentChannels {
               }
               return handleMessage(chatThread, message);
             }
+            if (actionId.startsWith(TOOL_RESUME_ACTION_PREFIX)) {
+              return this.handleToolResumeAction(event, mastra, handlerContext.requestContext);
+            }
             if (!actionId.startsWith('tool_approve:') && !actionId.startsWith('tool_deny:')) return;
             const platform = event.adapter.name;
             const messageId = event.messageId;
@@ -925,6 +1231,11 @@ export class AgentChannels {
               let toolArgs: Record<string, unknown> | undefined;
 
               const stashed = this.pendingApprovalCards.get(toolCallId);
+              if (stashed?.card) {
+                // A paused tool's card, not an approval: an approve/deny id on it is forged.
+                this.log('info', 'Ignoring tool approval action on a paused tool card', actionEventContext);
+                return;
+              }
               let requesterId = stashed?.requesterId;
               if (stashed?.runId) {
                 runId = stashed.runId;
@@ -1768,13 +2079,26 @@ export class AgentChannels {
     // channel thread reply) gets its own mastra thread.
     const externalThreadId = chatThread.id;
     const defaultResourceId = `${platform}:${message.author.userId}`;
+    const ownerResourceId = this.resolveChannelResourceId({
+      platform,
+      chatThread,
+      message,
+      defaultResourceId,
+      requestContext,
+    });
+    // The author's resource ID for `getChannelRun`. A `resolveResourceId` hook only
+    // runs when this message creates the thread, so otherwise it stays unknown.
+    let authorResourceId = typeof ownerResourceId === 'string' ? ownerResourceId : undefined;
     const mastraThread = await this.getOrCreateThread({
       externalThreadId,
       channelId: chatThread.channelId,
       platform,
       // Lazily resolved: the hook only runs when we're actually creating a new
       // thread, never when reusing an existing one (which keeps its stored owner).
-      resourceId: this.resolveChannelResourceId({ platform, chatThread, message, defaultResourceId, requestContext }),
+      resourceId:
+        typeof ownerResourceId === 'string'
+          ? ownerResourceId
+          : async () => (authorResourceId = await ownerResourceId()),
       // Same laziness for the thread id hook; it runs after the resourceId
       // resolves so hosts can align the two (e.g. thread id = session id).
       threadId: this.resolveThreadId
@@ -1930,7 +2254,11 @@ export class AgentChannels {
     // subscription consumer: rendering now happens inline with the run that
     // produces the chunks, so only the Lambda that won the wake race
     // (signals reservation) renders the reply.
-    const renderContext = this._buildRenderContext(chatThread, platform, { requesterId: message.author?.userId });
+    const renderContext = this._buildRenderContext(chatThread, platform, {
+      requesterId: message.author?.userId,
+      actor: channelActor(message.author),
+      actorResourceId: authorResourceId,
+    });
     requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, renderContext);
 
     void chatThread.subscribe().catch(err => {
@@ -2317,8 +2645,10 @@ export class AgentChannels {
     {
       approvalContext,
       requesterId,
-    }: { approvalContext?: { toolCallId: string; messageId: string }; requesterId?: string } = {},
-  ): ChatChannelRenderContext {
+      actor,
+      actorResourceId,
+    }: Pick<ChannelRunRenderContext, 'approvalContext' | 'actor' | 'actorResourceId'> & { requesterId?: string } = {},
+  ): ChannelRunRenderContext {
     const adapter = this.adapters[platform]!;
     const adapterConfig = this.adapterConfigs[platform];
     const streaming = this.resolveStreaming(adapterConfig?.streaming);
@@ -2362,6 +2692,8 @@ export class AgentChannels {
       generativeUI: platform === 'slack' && adapterConfig?.generativeUI === true,
       onAbort: adapterConfig?.onAbort,
       approvalContext,
+      actor,
+      actorResourceId,
     };
   }
 
@@ -2632,8 +2964,10 @@ export class AgentChannels {
     mastra: Mastra;
     card: ApprovalCardKey;
     platform: string;
+    /** A paused tool's card (`suspendedTools`) rather than an approval card (`pendingToolApprovals`). */
+    suspended?: boolean;
   }): Promise<{ result: ApprovalLookupResult; cached: boolean }> {
-    const key = approvalCardKey(args.card);
+    const key = args.suspended ? suspendedCardKey(args.card) : approvalCardKey(args.card);
     const cached = this.getApprovalLookup(key);
     if (cached) return { result: cached.result, cached: true };
     const inFlight = this.approvalLookupsInFlight.get(key);
@@ -2641,7 +2975,12 @@ export class AgentChannels {
 
     // Entries are per card, so a card posted later for a reused toolCallId
     // gets its own key and needs no invalidation.
-    const promise = this.readPersistedApproval({ mastra: args.mastra, platform: args.platform, ...args.card });
+    const promise = this.readPersistedApproval({
+      mastra: args.mastra,
+      platform: args.platform,
+      metadataKey: args.suspended ? 'suspendedTools' : 'pendingToolApprovals',
+      ...args.card,
+    });
     this.approvalLookupsInFlight.set(key, promise);
     try {
       const result = await promise;
@@ -2720,11 +3059,13 @@ export class AgentChannels {
     threadId,
     toolCallId,
     platform,
+    metadataKey = 'pendingToolApprovals',
   }: {
     mastra: Mastra;
     threadId: string;
     toolCallId: string;
     platform: string;
+    metadataKey?: 'pendingToolApprovals' | 'suspendedTools';
   }): Promise<ApprovalLookupResult> {
     const storage = mastra.getStorage();
     const memoryStore = storage ? await storage.getStore('memory') : undefined;
@@ -2735,9 +3076,16 @@ export class AgentChannels {
     let found: PersistedPendingApproval | undefined;
     // Messages older than the approval, newest-first.
     let earlier: MastraDBMessage[] = [];
+    // Inbound channel messages are stored as user signals rather than user messages.
+    const isUserTurn = (m: MastraDBMessage) => {
+      if (m.role === 'user') return true;
+      const signal = m.role === 'signal' ? m.content?.metadata?.signal : undefined;
+      const type = signal && typeof signal === 'object' ? (signal as { type?: unknown }).type : undefined;
+      return type === 'user' || type === 'user-message';
+    };
     const turnBounds = () => {
-      const start = earlier.findIndex(m => m.role === 'user');
-      const end = earlier.findIndex((m, i) => i > start && m.role !== 'user');
+      const start = earlier.findIndex(isUserTurn);
+      const end = earlier.findIndex((m, i) => i > start && !isUserTurn(m));
       return { start, end };
     };
     for (let page = 0; ; page++) {
@@ -2752,9 +3100,7 @@ export class AgentChannels {
         earlier.push(...messages);
       } else {
         for (const [index, msg] of messages.entries()) {
-          const pending = msg.content?.metadata?.pendingToolApprovals as
-            | Record<string, PersistedPendingApproval>
-            | undefined;
+          const pending = msg.content?.metadata?.[metadataKey] as Record<string, PersistedPendingApproval> | undefined;
           found = pending && Object.values(pending).find(entry => entry.toolCallId === toolCallId);
           if (found) {
             earlier = messages.slice(index + 1);
