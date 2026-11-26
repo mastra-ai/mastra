@@ -1,4 +1,4 @@
-import { Txt } from '@/ds/components/Txt';
+import { Spinner } from '@/ds/components/Spinner';
 
 export interface LogViewPageEdgeProps {
   label: string;
@@ -17,11 +17,12 @@ export function LogViewPageEdge({ label, isFetching, onVisible }: LogViewPageEdg
   };
 
   return (
-    <div ref={observe} role="status" className="col-span-full flex min-h-6 items-center px-3">
+    <div ref={observe} role="status" className="col-span-full flex min-h-6 items-center justify-center px-3">
       {isFetching && (
-        <Txt as="span" variant="caption" tone="muted">
-          {label}
-        </Txt>
+        <>
+          <Spinner size="sm" aria-hidden className="text-muted-foreground" />
+          <span className="sr-only">{label}</span>
+        </>
       )}
     </div>
   );

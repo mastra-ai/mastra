@@ -166,11 +166,11 @@ list.current?.scrollToLog(errorLineId);
 
 <Canvas of={LogViewStories.NewestFirst} />
 
-Pass `hasNextPage`, `isFetchingNextPage` and `onFetchNextPage` from your infinite query. The list calls `onFetchNextPage` when the older end comes into view, and also on its own when the lines fit without scrolling. While a page loads, a "Loading older logs" line shows at that end. It keeps its height between pages, so the lines don't shift.
+Pass `hasNextPage`, `isFetchingNextPage` and `onFetchNextPage` from your infinite query. The list calls `onFetchNextPage` when the older end comes into view, and also on its own when the lines fit without scrolling. While a page loads, a spinner shows centered at that end, and screen readers hear "Loading older logs". The row keeps its height between pages, so the lines don't shift.
 
 <Canvas of={LogViewStories.LoadingOlder} />
 
-Some APIs page forward in time instead, returning newer logs on each page. Pass `nextPage="newer"` with `order="oldest-first"`. The list then opens on the oldest line at the top, and a "Loading newer logs" line at the bottom loads the next page as it comes into view.
+Some APIs page forward in time instead, returning newer logs on each page. Pass `nextPage="newer"` with `order="oldest-first"`. The list then opens on the oldest line at the top, and the next page loads when the bottom comes into view, with the spinner there while it loads.
 
 <Canvas of={LogViewStories.LoadingNewer} />
 
