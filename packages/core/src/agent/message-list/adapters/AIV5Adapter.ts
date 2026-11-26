@@ -28,10 +28,6 @@ import { preserveResponseItemIdsOnMerge } from '../utils/response-item-metadata'
 import { sanitizeToolName } from '../utils/tool-name';
 import { normalizeToolOutput, unwrapLegacyToolOutput } from '../utils/unwrap-legacy-tool-output';
 
-function isAIV5DataUIPart(part: AIV5Type.UIMessage['parts'][number]): part is AIV5Type.DataUIPart<AIV5.UIDataTypes> {
-  return part.type.startsWith('data-') && 'data' in part;
-}
-
 type AIV5AssistantModelMessage = Extract<AIV5Type.ModelMessage, { role: 'assistant' }>;
 type AIV5AssistantContentPart = Exclude<AIV5AssistantModelMessage['content'], string>[number];
 
@@ -879,8 +875,11 @@ export class AIV5Adapter {
         }
 
         // Handle data-* parts (custom parts emitted by tools via writer.custom())
-        if (isAIV5DataUIPart(p)) {
-          return p;
+        if (typeof p.type === 'string' && p.type.startsWith('data-')) {
+          return {
+            type: p.type,
+            data: 'data' in p ? p.data : undefined,
+          };
         }
 
         return null;
