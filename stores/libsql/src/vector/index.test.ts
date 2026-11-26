@@ -6,8 +6,8 @@ import { createVectorTestSuite } from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 
-import { LibSQLVector } from './index.js';
 import type { LibSQLVectorFilter } from './filter.js';
+import { LibSQLVector } from './index.js';
 
 const libSQLVectorDB = new LibSQLVector({
   url: process.env.LIBSQL_TEST_URL ?? 'file::memory:?cache=shared',
