@@ -269,7 +269,7 @@ describe('message sent to an evented run whose steps run in another process', ()
       const starter = buildApp(env, agentId, 'starter');
       let other: ReturnType<typeof buildApp> | undefined;
       let otherPubsub: HintRecordingPubSub | undefined;
-      const chunks: Array<{ type: string }> = [];
+      const chunks: Array<{ type: string; payload?: any }> = [];
       try {
         const peer = await env.spawnPeer(WORKER, { agentId, reasoning: true } satisfies SignalActiveRunPeerArgs, {
           role: 'signal-active-run-worker',
@@ -327,10 +327,22 @@ describe('message sent to an evented run whose steps run in another process', ()
           otherHints: otherPubsub?.hints,
           calls: calls.map(report => ({ call: report.call, users: userTexts(report.prompt) })),
           stored: stored.map(message => ({ id: message.id, role: message.role, content: message.content })),
+          chunks: chunks.map(chunk => chunk.type),
         });
         expect(accepted, observed).toEqual({ action: 'deliver', runId });
         expect(handled, observed).toEqual({ signalId: sent.signal.id });
         expect(ended.state, observed).toBe('cut-short');
+        // The cut request produced only reasoning, so the run's text comes from the request asked again within it,
+        // not from a turn that followed a failed run.
+        expect(
+          chunks.filter(chunk => chunk.type === 'error'),
+          observed,
+        ).toEqual([]);
+        const answered = chunks
+          .filter(chunk => chunk.type === 'text-delta')
+          .map(chunk => chunk.payload?.text ?? '')
+          .join('');
+        expect(answered, observed).not.toBe('');
         // The request that was cut short, the one asked again with the message, then the barrier.
         expect(calls.length, observed).toBe(3);
         expect(userTexts(calls[0]!.prompt).join('\n').includes(contents), observed).toBe(false);

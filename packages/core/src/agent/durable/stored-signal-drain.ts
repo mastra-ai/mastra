@@ -200,7 +200,10 @@ export async function claimStoredSignals({
  * signals are not stored, `drain()` resolves `undefined` when the store could
  * not be resolved or a read failed, so the saved consumed set stays as it is.
  * A failed claim takes nothing, as the loop's other drain points do: the rows
- * come back at the next drain. It does not check for an abort; callers check
+ * come back at the next drain. A claim that was written while its answer
+ * failed leaves the rows claimed by this run, so a cancel no longer finds
+ * them, and the run's next drain returns them because their ids are not in
+ * its consumed set. It does not check for an abort; callers check
  * before calling it.
  */
 export function storedSignalDrain({
