@@ -91,7 +91,7 @@ export class OrchestrationWorker extends MastraWorker {
 
     await this.#transport.start(
       { route: (event, ack, nack, extend) => this.#processEvent(event, ack, nack, extend) },
-      this.deps.mastra,
+      this.deps.localWorkflowRoute,
     );
 
     this.#running = true;

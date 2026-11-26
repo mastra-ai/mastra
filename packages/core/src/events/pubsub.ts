@@ -107,6 +107,11 @@ export abstract class PubSub {
    * EventEmitter, GCP Pub/Sub push subscriptions) should declare `'push'`.
    * Implementations that support both modes should declare both.
    */
+  /** Whether `subscribe({ localOnly: true })` can bypass broker registration. */
+  get supportsLocalSubscriptions(): boolean {
+    return !this.deliversAcrossProcesses;
+  }
+
   get supportedModes(): ReadonlyArray<PubSubDeliveryMode> {
     return ['pull'];
   }

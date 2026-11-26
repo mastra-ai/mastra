@@ -103,7 +103,13 @@ export class SchedulerWorker extends MastraWorker {
     this.#scheduler = new Scheduler({
       schedulesStore,
       pubsub: deps.pubsub,
-      config: { ...this.#config, isTargetReady, isTargetCurrent, canExecuteLocally },
+      config: {
+        ...this.#config,
+        isTargetReady,
+        isTargetCurrent,
+        canExecuteLocally,
+        localWorkflowRoute: deps.localWorkflowRoute,
+      },
     });
     this.#scheduler.__setLogger(deps.logger);
 

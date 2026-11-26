@@ -305,6 +305,35 @@ describe('UnixSocketPubSub', () => {
     expect(second).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps local-only subscriptions out of broker deliveries to the same group', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const client = new UnixSocketPubSub(path);
+    pubsubs.push(broker, client);
+    const local = vi.fn();
+    const shared = vi.fn();
+    await broker.subscribe('topic-a', local, { group: 'workers', localOnly: true });
+    await broker.subscribe('topic-a', shared, { group: 'workers' });
+
+    await client.publish('topic-a', makeEvent({ type: 'broker' }));
+    await waitFor(() =>
+      expect(shared).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'broker' }),
+        expect.anything(),
+        expect.anything(),
+      ),
+    );
+    expect(local).not.toHaveBeenCalled();
+
+    await broker.unsubscribe('topic-a', shared);
+    await broker.publish('topic-a', makeEvent({ type: 'local' }), { localOnly: true });
+    expect(local).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'local' }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
   it('keeps localOnly grouped delivery within the publishing instance', async () => {
     const path = await socketPath();
     const broker = new UnixSocketPubSub(path);

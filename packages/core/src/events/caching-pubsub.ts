@@ -183,6 +183,10 @@ export class CachingPubSub extends PubSub {
     return this.inner.__rawBus();
   }
 
+  get supportsLocalSubscriptions(): boolean {
+    return this.inner.supportsLocalSubscriptions;
+  }
+
   get supportsNativeBatching(): boolean {
     return this.inner.supportsNativeBatching;
   }

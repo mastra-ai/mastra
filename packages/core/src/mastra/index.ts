@@ -25,10 +25,9 @@ import type { IMastraEditor } from '../editor';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { MastraScorer } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
-import { canHandleLocalWorkflowEvent, pinLocalWorkflowEvent } from '../events/local-workflow-affinity';
 import type { PubSub } from '../events/pubsub';
 import { isRunLocalTopic } from '../events/topics';
-import type { Event, EventCallback } from '../events/types';
+import type { Event, EventCallback, SubscribeOptions } from '../events/types';
 import type { Harness } from '../harness';
 import { AvailableHooks, deregisterHook, registerHook } from '../hooks';
 import type { Knowledge } from '../knowledge';
@@ -1149,6 +1148,14 @@ export class Mastra<
   #bundler?: BundlerConfig;
   #idGenerator?: MastraIdGenerator;
   #pubsub: PubSub;
+  #localWorkflowTopic = `workflows.local.${crypto.randomUUID()}`;
+  #localWorkflowFallback?: EventEmitterPubSub;
+
+  get #localWorkflowBus(): PubSub {
+    return this.#pubsub.supportsLocalSubscriptions
+      ? this.#pubsub
+      : (this.#localWorkflowFallback ??= new EventEmitterPubSub());
+  }
   #backgroundTaskConfig?: BackgroundTaskManagerConfig;
   #backgroundTaskManager?: BackgroundTaskManager;
   #schedulerConfig?: SchedulerConfig;
@@ -1374,7 +1381,7 @@ export class Mastra<
                     return Promise.resolve(self.getStorage()?.getStore('workflows')).then(store =>
                       store?.supportsWorkflowStepGuards()
                         ? target.publish(topic, event, { localOnly: false })
-                        : target.publish(topic, pinLocalWorkflowEvent(event, self), { localOnly: true }),
+                        : self.#localWorkflowBus.publish(self.#localWorkflowTopic, event, { localOnly: true }),
                     );
                   }
                   // A local-only start in a process that consumes no workflow
@@ -1394,9 +1401,9 @@ export class Mastra<
                           `Start workers in this process (mastra.startWorkers()) to run it.`,
                       );
                   }
-                  return target.publish(topic, topic === 'workflows' ? pinLocalWorkflowEvent(event, self) : event, {
-                    localOnly: true,
-                  });
+                  return topic === 'workflows'
+                    ? self.#localWorkflowBus.publish(self.#localWorkflowTopic, event, { localOnly: true })
+                    : target.publish(topic, event, { localOnly: true });
                 }
               } else if (isRunLocalTopic(topic)) {
                 // Per-run watch stream events. Only the publishing process
@@ -1405,6 +1412,25 @@ export class Mastra<
                 return target.publish(topic, event, { localOnly: true });
               }
               return target.publish(topic, event);
+            };
+          }
+          if (prop === 'subscribe') {
+            return async (topic: string, cb: EventCallback, options?: SubscribeOptions) => {
+              await target.subscribe(topic, cb, options);
+              if (topic === 'workflows' && !options?.group) {
+                try {
+                  await self.#localWorkflowBus.subscribe(self.#localWorkflowTopic, cb, { ...options, localOnly: true });
+                } catch (error) {
+                  await target.unsubscribe(topic, cb);
+                  throw error;
+                }
+              }
+            };
+          }
+          if (prop === 'unsubscribe') {
+            return async (topic: string, cb: EventCallback) => {
+              if (topic === 'workflows') await self.#localWorkflowBus.unsubscribe(self.#localWorkflowTopic, cb);
+              await target.unsubscribe(topic, cb);
             };
           }
           // Bind methods to `target` so private field access (#subscribers etc.)
@@ -7193,6 +7219,7 @@ export class Mastra<
       storage: this.#storage,
       logger: this.#logger as unknown as IMastraLogger,
       mastra: this,
+      localWorkflowRoute: { topic: this.#localWorkflowTopic, pubsub: this.#localWorkflowBus },
     };
 
     let schedulerWorker = this.#findSchedulerWorker();
@@ -8139,6 +8166,7 @@ export class Mastra<
       storage: this.#storage!,
       logger: this.#logger as unknown as IMastraLogger,
       mastra: this,
+      localWorkflowRoute: { topic: this.#localWorkflowTopic, pubsub: this.#localWorkflowBus },
     };
 
     let targets: MastraWorker[];
@@ -8267,10 +8295,7 @@ export class Mastra<
           if (nack) track(nack().catch(err => this.#logger.error('Error nacking workflow event', err)));
           return;
         }
-        if (
-          !canHandleLocalWorkflowEvent(event, this) ||
-          (wfId && rId && !this.#ownsWorkflow(wfId, rId, data?.parentWorkflow))
-        ) {
+        if (wfId && rId && !this.#ownsWorkflow(wfId, rId, data?.parentWorkflow)) {
           if (ack) {
             track(ack().catch(err => this.#logger?.error?.('Error acking skipped workflow event', err)));
           }
@@ -8319,6 +8344,12 @@ export class Mastra<
         track(inFlight);
       };
       await this.#pubsub.subscribe('workflows', cb);
+      try {
+        await this.#localWorkflowBus.subscribe(this.#localWorkflowTopic, cb, { localOnly: true });
+      } catch (error) {
+        await this.#pubsub.unsubscribe('workflows', cb);
+        throw error;
+      }
       this.#pushSubscription = { topic: 'workflows', cb };
     }
   }
@@ -8379,6 +8410,7 @@ export class Mastra<
       storage: this.#storage!,
       logger: this.#logger as unknown as IMastraLogger,
       mastra: this,
+      localWorkflowRoute: { topic: this.#localWorkflowTopic, pubsub: this.#localWorkflowBus },
     };
 
     for (const worker of this.#workers) {
@@ -8440,6 +8472,7 @@ export class Mastra<
 
     // Tear down the in-process push subscription wired during startWorkers().
     if (this.#pushSubscription) {
+      await this.#localWorkflowBus.unsubscribe(this.#localWorkflowTopic, this.#pushSubscription.cb);
       await this.#pubsub.unsubscribe(this.#pushSubscription.topic, this.#pushSubscription.cb);
       this.#pushSubscription = undefined;
     }
@@ -8463,6 +8496,7 @@ export class Mastra<
     this.#userEventSubscriptions = [];
     await this.#unwireSchedulerWakeSubscription();
 
+    await this.#localWorkflowFallback?.flush();
     await this.#pubsub.flush();
     this.#executionWorkersStarted = false;
     // Workers are gone again, so a stranded workflow event should warn again.
@@ -8970,6 +9004,7 @@ export class Mastra<
 
     // Workers and runs are stopped, so nothing publishes anymore. Close transports
     // that hold connections (e.g. Redis) so they don't keep the process alive.
+    await this.#localWorkflowFallback?.close();
     const pubsub = this.#pubsub as PubSub & { close?: () => Promise<void> };
     if (typeof pubsub.close === 'function') {
       try {

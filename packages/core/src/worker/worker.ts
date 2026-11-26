@@ -13,6 +13,7 @@ export interface WorkerStopOptions {
 
 export interface WorkerDeps {
   pubsub: PubSub;
+  localWorkflowRoute?: { pubsub: PubSub; topic: string };
   storage: MastraCompositeStore;
   logger: IMastraLogger;
   mastra?: Mastra;

@@ -564,8 +564,9 @@ export class Scheduler extends MastraBase {
         // protects that hop, letting a stale consumer refuse the fire
         // instead of executing its own outdated graph.
         const localOnly = this.#config.canExecuteLocally?.() === true;
-        await this.#pubsub.publish(
-          TOPIC_WORKFLOWS,
+        const route = localOnly ? this.#config.localWorkflowRoute : undefined;
+        await (route?.pubsub ?? this.#pubsub).publish(
+          route?.topic ?? TOPIC_WORKFLOWS,
           {
             type: 'workflow.start',
             runId: claimId,
