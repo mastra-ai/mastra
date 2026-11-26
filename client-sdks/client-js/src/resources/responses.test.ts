@@ -814,11 +814,57 @@ describe('Responses Resource', () => {
       });
     });
 
+    // A CRLF, LF or CR ending may sit next to any other, so `\n\r\n`, `\n\r` and `\r\n\r` are
+    // also valid blank-line frame breaks. (#31000)
+    const mixedDelimiters: Array<{ name: string; delimiter: string }> = [
+      { name: 'LF then CRLF', delimiter: '\n\r\n' },
+      { name: 'LF then CR', delimiter: '\n\r' },
+      { name: 'CRLF then CR', delimiter: '\r\n\r' },
+    ];
+
+    function mixedDelimiterPayload(delimiter: string): string {
+      return `data: ${JSON.stringify(textDeltaEvent)}${delimiter}data: ${JSON.stringify(buildCompletedEvent())}`;
+    }
+
+    it.each(mixedDelimiters)('parses $name framing in coalesced chunks', async ({ delimiter }) => {
+      mockRawSseResponse(mixedDelimiterPayload(delimiter));
+
+      const stream = await client.responses.create({
+        model: 'openai/gpt-5',
+        agent_id: 'support-agent',
+        input: 'Say hello',
+        stream: true,
+      });
+
+      const events = await collectEvents(stream);
+
+      expect(events.map(event => event.type)).toEqual(['response.output_text.delta', 'response.completed']);
+      expect(events[0]).toMatchObject({ delta: 'Hello' });
+      expect(events[1]).toMatchObject({ response: { output_text: 'Hello world' } });
+    });
+
+    it.each(mixedDelimiters)('parses $name framing one byte at a time', async ({ delimiter }) => {
+      mockRawSseResponse(mixedDelimiterPayload(delimiter), { chunkSize: 1 });
+
+      const stream = await client.responses.create({
+        model: 'openai/gpt-5',
+        agent_id: 'support-agent',
+        input: 'Say hello',
+        stream: true,
+      });
+
+      const events = await collectEvents(stream);
+
+      expect(events.map(event => event.type)).toEqual(['response.output_text.delta', 'response.completed']);
+      expect(events[0]).toMatchObject({ delta: 'Hello' });
+      expect(events[1]).toMatchObject({ response: { output_text: 'Hello world' } });
+    });
+
     it('chooses the earliest boundary when delimiters are mixed', async () => {
       // Three events framed CRLF, then CR, then LF. Any parser that prefers one delimiter
       // form globally merges the earlier frames into one `JSON.parse` and fails. (#31000)
       mockRawSseResponse(
-        `data: ${JSON.stringify(textDeltaEvent)}\r\n\r\n` + `data: ${JSON.stringify(buildCompletedEvent())}\r\r`,
+        `data: ${JSON.stringify(textDeltaEvent)}\r\n\r\ndata: ${JSON.stringify(buildCompletedEvent())}\r\r`,
       );
 
       const stream = await client.responses.create({
@@ -858,7 +904,7 @@ describe('Responses Resource', () => {
       const firstLine = `{"type":"response.output_text.delta","sequence_number":1,"output_index":0,`;
       const secondLine = `"content_index":0,"item_id":"msg_123","delta":"Hello"}`;
       mockRawSseResponse(
-        `data: ${firstLine}\r\ndata: ${secondLine}\r\n\r\n` + `data: ${JSON.stringify(buildCompletedEvent())}\r\n\r\n`,
+        `data: ${firstLine}\r\ndata: ${secondLine}\r\n\r\ndata: ${JSON.stringify(buildCompletedEvent())}\r\n\r\n`,
       );
 
       const stream = await client.responses.create({
@@ -877,7 +923,7 @@ describe('Responses Resource', () => {
 
     it('parses a final event that arrives without a trailing delimiter at EOF', async () => {
       mockRawSseResponse(
-        `data: ${JSON.stringify(textDeltaEvent)}\r\n\r\n` + `data: ${JSON.stringify(buildCompletedEvent())}`,
+        `data: ${JSON.stringify(textDeltaEvent)}\r\n\r\ndata: ${JSON.stringify(buildCompletedEvent())}`,
       );
 
       const stream = await client.responses.create({

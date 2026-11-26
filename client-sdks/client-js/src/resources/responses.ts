@@ -96,22 +96,51 @@ function parseSseBlock(block: string): ResponsesStreamEvent | null {
 }
 
 /**
- * Locates the first blank-line event separator, accepting `\r\n\r\n`, `\n\n` or `\r\r`.
- * Returns the earliest match so mixed line endings cannot merge frames; the caller must
- * wait for more input when none is found rather than guessing a partial boundary.
+ * Returns the byte length of the line ending starting at `index` (`\r\n`, `\n` or `\r`), or 0.
+ * `\r\n` is matched as a single ending so a CRLF pair is never read as two separate breaks.
  */
-function findSseBoundary(text: string): { index: number; length: number } | null {
-  const candidates = [
-    { index: text.indexOf('\r\n\r\n'), length: 4 },
-    { index: text.indexOf('\n\n'), length: 2 },
-    { index: text.indexOf('\r\r'), length: 2 },
-  ].filter(candidate => candidate.index !== -1);
-
-  if (!candidates.length) {
-    return null;
+function matchLineEnding(text: string, index: number): number {
+  if (text.startsWith('\r\n', index)) {
+    return 2;
   }
 
-  return candidates.reduce((earliest, candidate) => (candidate.index < earliest.index ? candidate : earliest));
+  const char = text[index];
+  return char === '\n' || char === '\r' ? 1 : 0;
+}
+
+/**
+ * Locates the first blank-line event separator: any two adjacent line endings, so `\r\n\r\n`,
+ * `\n\n`, `\r\r` and the mixed forms `\n\r\n`, `\n\r` and `\r\n\r` are all recognised. Scanning
+ * for the earliest ending pair keeps mixed line endings from merging frames.
+ *
+ * While the stream is open, a pair that would end on a lone `\r` at the very end of the buffer is
+ * withheld: that CR may be the first half of a CRLF that has not arrived yet, so the caller waits
+ * for more input instead of guessing a partial boundary. At EOF (`done`) the pair is accepted.
+ */
+function findSseBoundary(text: string, done = false): { index: number; length: number } | null {
+  let index = 0;
+
+  while (index < text.length) {
+    const first = matchLineEnding(text, index);
+    if (!first) {
+      index += 1;
+      continue;
+    }
+
+    const second = matchLineEnding(text, index + first);
+    if (second) {
+      const length = first + second;
+      const endsOnTrailingCr = text[index + length - 1] === '\r' && index + length === text.length;
+      if (!endsOnTrailingCr || done) {
+        return { index, length };
+      }
+      return null;
+    }
+
+    index += first;
+  }
+
+  return null;
 }
 
 export class ResponsesStream implements AsyncIterable<ResponsesStreamEvent> {
@@ -136,7 +165,7 @@ export class ResponsesStream implements AsyncIterable<ResponsesStreamEvent> {
         const { done, value } = await reader.read();
         buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
 
-        let boundary = findSseBoundary(buffer);
+        let boundary = findSseBoundary(buffer, done);
         while (boundary) {
           const block = buffer.slice(0, boundary.index);
           buffer = buffer.slice(boundary.index + boundary.length);
@@ -146,7 +175,7 @@ export class ResponsesStream implements AsyncIterable<ResponsesStreamEvent> {
             yield parsed;
           }
 
-          boundary = findSseBoundary(buffer);
+          boundary = findSseBoundary(buffer, done);
         }
 
         if (done) {
