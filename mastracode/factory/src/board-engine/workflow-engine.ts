@@ -59,6 +59,11 @@ type PendingInput =
 
 type CardRef = Pick<FactoryTransitionRequest, 'workItemId'>;
 
+/** Whether the record was made in this phase of this board. */
+function sameVisit(previous: FactoryCardRunRecord, board: string, phase: string): boolean {
+  return previous.phase === phase && previous.board === board;
+}
+
 /**
  * A board engine where each card has one `factory-board` workflow run that applies everything
  * asked of the card, one input at a time: a move request, and the end of a run of the card's
@@ -71,11 +76,6 @@ type CardRef = Pick<FactoryTransitionRequest, 'workItemId'>;
  * Its workflow must be registered with the host's Mastra (`MastraFactory` does this), which
  * gives the runs their storage. A card's run starts on the first input asked of it.
  */
-/** Whether the record was made in this phase of this board. A record older than `board` matches by phase. */
-function sameVisit(previous: FactoryCardRunRecord, board: string, phase: string): boolean {
-  return previous.phase === phase && (previous.board === undefined || previous.board === board);
-}
-
 export class WorkflowBoardEngine implements FactoryBoardEngine {
   readonly workflow: FactoryBoardWorkflow;
   /** Inputs for one card in this process wait their turn, so a resume never finds the run busy with our own. */
