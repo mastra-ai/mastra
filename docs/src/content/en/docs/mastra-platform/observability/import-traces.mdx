@@ -128,6 +128,8 @@ Run the command without `--dry-run` to upload the prepared traces:
 npx mastra traces import langfuse --target-project my-mastra-project
 ```
 
+If you already ran a dry run, upload with the `--resume` command it printed instead. It uploads the prepared data without reading the source again and keeps the window you chose.
+
 The CLI displays the preparation summary and asks for confirmation before upload. Pass `--yes` to skip this prompt in an automated environment:
 
 ```bash npm2yarn
