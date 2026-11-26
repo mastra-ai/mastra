@@ -68,7 +68,13 @@ function platformControlPlane() {
     if (req.headers['x-organization-id'] !== ORG_ID) return send(403, { error: 'Organization access required' });
     const adminOnly = () => {
       if (role === 'admin') return false;
-      send(403, { error: 'Missing permission: org:settings:manage' });
+      // The Platform API answers with problem details, not `{ error }`.
+      send(403, {
+        type: 'authorization_error',
+        title: 'Forbidden',
+        status: 403,
+        detail: 'Missing permission: org:settings:manage',
+      });
       return true;
     };
 
