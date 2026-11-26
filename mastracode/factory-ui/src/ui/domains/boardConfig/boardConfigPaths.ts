@@ -5,9 +5,7 @@ export interface BoardConfigLocation {
   boardId: string;
   /** The phase selected on the board's canvas. */
   phaseKey?: string;
-  /** The factory skills page or one of its skill pages, opened from this board's settings. Skills are factory-wide. */
-  skills?: true;
-  /** The routing page, opened from this board's settings. Like skills, routing is not one board's. */
+  /** The routing page, opened from this board's settings. Routing is not one board's. */
   intake?: true;
 }
 
@@ -62,30 +60,13 @@ export function boardConfigPath(factoryId: string, boardId: string, phaseKey?: s
   return `${phaseKey ? `${path}/${encodeURIComponent(phaseKey)}` : path}${focusSearch(focus)}`;
 }
 
-/**
- * The factory skills page, opened from this board's settings. It sits outside `config/` because any phase key,
- * including `skills`, can name a phase there.
- */
-export function boardSkillsPath(factoryId: string, boardId: string): string {
-  return `${boardPath(factoryId, boardId)}/skills`;
-}
-
-export function boardSkillPath(factoryId: string, boardId: string, skillName: string): string {
-  return `${boardSkillsPath(factoryId, boardId)}/${encodeURIComponent(skillName)}`;
-}
-
-/** The form that creates a skill. Not under `skills/`, where `new` could be a skill's name. */
-export function newSkillPath(factoryId: string, boardId: string): string {
-  return `${boardPath(factoryId, boardId)}/new-skill`;
-}
-
 /** The order intake asks boards to take a new item, on the routing page. */
 export const INTAKE_ORDER_ANCHOR = 'intake-order';
 
 /** Items no board took, on the routing page. */
 export const NOT_ROUTED_ANCHOR = 'not-routed';
 
-/** Sources, the intake order and items no board took. Outside `config/` like the skills page. */
+/** Sources, the intake order and items no board took. Outside `config/`, where any phase key can name a phase. */
 export function boardIntakePath(
   factoryId: string,
   boardId: string,
@@ -100,21 +81,19 @@ export function newBoardPath(factoryId: string): string {
   return `/factories/${factoryId}/new-board`;
 }
 
-const BOARD_CONFIG_PATH =
-  /^\/factories\/([^/]+)\/(?:(work)|boards\/([^/]+))\/(?:config(?:\/([^/]+))?|(skills(?:\/[^/]+)?|new-skill)|(intake))\/?$/;
+const BOARD_CONFIG_PATH = /^\/factories\/([^/]+)\/(?:(work)|boards\/([^/]+))\/(?:config(?:\/([^/]+))?|(intake))\/?$/;
 
 /** Reads a board configuration path, so places outside the page outlet know what is open. */
 export function parseBoardConfigPath(pathname: string): BoardConfigLocation | undefined {
   const match = BOARD_CONFIG_PATH.exec(pathname);
   if (!match) return undefined;
-  const [, factoryId, builtinBoard, customBoard, phaseKey, skills, intake] = match;
+  const [, factoryId, builtinBoard, customBoard, phaseKey, intake] = match;
   // A hand-typed URL can carry a broken escape; it then names no board page.
   try {
     return {
       factoryId: decodeURIComponent(factoryId ?? ''),
       boardId: builtinBoard ?? decodeURIComponent(customBoard ?? ''),
       ...(phaseKey ? { phaseKey: decodeURIComponent(phaseKey) } : {}),
-      ...(skills ? { skills: true } : {}),
       ...(intake ? { intake: true } : {}),
     };
   } catch {

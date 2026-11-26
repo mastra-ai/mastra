@@ -100,8 +100,8 @@ export function BoardCanvas({
       ?.boards.some(other => other.id === boardId);
     if (!changed || listed === false) return false;
     const next = parseBoardConfigPath(nextLocation.pathname);
-    // Skills and routing have no save bar, so leaving for them counts as leaving the board's settings.
-    return next?.factoryId !== factoryId || next.boardId !== boardId || next.skills === true || next.intake === true;
+    // Routing has no save bar, so leaving for it counts as leaving the board's settings.
+    return next?.factoryId !== factoryId || next.boardId !== boardId || next.intake === true;
   });
   // Reloading or closing the tab would drop the edits too.
   useBeforeUnload(event => {

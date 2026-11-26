@@ -100,6 +100,13 @@ export function GlobalSearchNavigationResults({
       />
       <CommandPaletteItem
         icon={<IconSettingsGear5 />}
+        title={SETTINGS_SECTION_LABELS.skills}
+        subtitle="Settings"
+        value={`Skills Settings skills instructions phases new skill ${settingsSectionPath(factoryId, 'skills')}`}
+        onSelect={() => onSelect(settingsSectionPath(factoryId, 'skills'), true)}
+      />
+      <CommandPaletteItem
+        icon={<IconSettingsGear5 />}
         title={SETTINGS_SECTION_LABELS.behavior}
         subtitle="Settings"
         value={`Behavior Settings behavior ${settingsSectionPath(factoryId, 'behavior')}`}

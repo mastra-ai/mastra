@@ -18,7 +18,8 @@ import type { DataRouter, RouteObject, ShouldRevalidateFunction } from 'react-ro
 import { continuesTranscript } from './domains/chat/context/transcriptKey';
 import { opensWithPrompt } from './domains/chat/services/promptHandoff';
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
-import { boardConfigPath, boardSkillsPath, newBoardPath } from './domains/boardConfig/boardConfigPaths';
+import { boardConfigPath, newBoardPath } from './domains/boardConfig/boardConfigPaths';
+import { NEW_SKILL_PAGE, newSkillPath, settingsSectionPath, skillPath } from './domains/settings/settingsSections';
 import { AuthPendingSkeleton, RootGuards } from './domains/auth/components/RootGuards';
 import { CustomBoardPage, WorkBoardPage } from './pages/BoardPage';
 
@@ -86,10 +87,6 @@ const KnowledgePage = lazyPage(
 );
 const SettingsPage = lazyPage(
   () => import('./pages/SettingsPage').then(module => module.SettingsPage),
-  <AppPageLoader />,
-);
-const FactorySkillsPage = lazyPage(
-  () => import('./pages/FactorySkillsPage').then(module => module.FactorySkillsPage),
   <AppPageLoader />,
 );
 const FactorySkillPage = lazyPage(
@@ -225,11 +222,14 @@ function BoardSettingsRedirect() {
   return <Navigate to={boardConfigPath(factoryId, params.get('board') ?? 'work')} replace />;
 }
 
-/** Skills used to live in Settings; old links open them beside the Work board's settings. */
-function SkillsSettingsRedirect() {
-  const { factoryId } = useParams<{ factoryId: string }>();
+/** Skills sat beside a board's settings before they moved to Settings; old links open them there. */
+function LegacySkillsRedirect({ create = false }: { create?: boolean }) {
+  const { factoryId, skillName } = useParams<{ factoryId: string; skillName: string }>();
   if (!factoryId) return null;
-  return <Navigate to={boardSkillsPath(factoryId, 'work')} replace />;
+  if (create) return <Navigate to={newSkillPath(factoryId)} replace />;
+  return (
+    <Navigate to={skillName ? skillPath(factoryId, skillName) : settingsSectionPath(factoryId, 'skills')} replace />
+  );
 }
 
 /** The board's Rules page (and Card moves before it) became the board's canvas; `?into=` opened one phase's rules. */
@@ -331,12 +331,10 @@ export function createAppRoutes(services?: RouteLoaderServices, holdsNavigation?
                         { path: 'boards/:boardId', element: <CustomBoardPage />, ...loadOnEntry(prefetchBoard) },
                         { path: 'work/config/:phaseKey?', ...lazyRoute(BoardConfigPage) },
                         { path: 'boards/:boardId/config/:phaseKey?', ...lazyRoute(BoardConfigPage) },
-                        { path: 'work/skills', ...lazyRoute(FactorySkillsPage) },
-                        { path: 'boards/:boardId/skills', ...lazyRoute(FactorySkillsPage) },
-                        { path: 'work/skills/:skillName', ...lazyRoute(FactorySkillPage) },
-                        { path: 'boards/:boardId/skills/:skillName', ...lazyRoute(FactorySkillPage) },
-                        { path: 'work/new-skill', ...lazyRoute(FactorySkillPage) },
-                        { path: 'boards/:boardId/new-skill', ...lazyRoute(FactorySkillPage) },
+                        { path: 'work/skills/:skillName?', element: <LegacySkillsRedirect /> },
+                        { path: 'boards/:boardId/skills/:skillName?', element: <LegacySkillsRedirect /> },
+                        { path: 'work/new-skill', element: <LegacySkillsRedirect create /> },
+                        { path: 'boards/:boardId/new-skill', element: <LegacySkillsRedirect create /> },
                         { path: 'work/intake', ...lazyRoute(BoardIntakePage) },
                         { path: 'boards/:boardId/intake', ...lazyRoute(BoardIntakePage) },
                         { path: 'work/rules', element: <LegacyRulesRedirect /> },
@@ -357,7 +355,8 @@ export function createAppRoutes(services?: RouteLoaderServices, holdsNavigation?
                             { index: true, element: <Navigate to="account" replace /> },
                             { path: 'connections/slack', ...lazyRoute(SlackConnectionPage) },
                             { path: 'board', element: <BoardSettingsRedirect /> },
-                            { path: 'skills', element: <SkillsSettingsRedirect /> },
+                            { path: 'skills/:skillName', ...lazyRoute(FactorySkillPage) },
+                            { path: NEW_SKILL_PAGE, ...lazyRoute(FactorySkillPage) },
                             { path: ':section', ...lazyRoute(SettingsPage) },
                           ],
                         },
