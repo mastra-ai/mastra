@@ -7,8 +7,12 @@ import { connectLinear, migrateLinearWorkspaces } from '../ui/domains/factory/se
 import { linearStatusQueryOptions, useLinearStatusQuery } from './useLinearData';
 import { useConnectPlatformProviderMutation } from './usePlatformConnections';
 
-/** `redirecting`: the page is leaving for Linear. `done`: the popup finished. `failed`: it didn't. */
-export type LinearConnectOutcome = 'redirecting' | 'done' | 'failed';
+/**
+ * `redirecting`: the page is leaving for Linear. `done`: the popup finished and the
+ * connection is active. `activating`: it finished but the connection isn't active yet.
+ * `failed`: it didn't finish.
+ */
+export type LinearConnectOutcome = 'redirecting' | 'done' | 'activating' | 'failed';
 
 /**
  * Connect a Linear workspace the way this server supports. A Platform server
@@ -28,7 +32,19 @@ export function useLinearConnect() {
   const connect = async (
     options: { workspaceId?: string; beforeRedirect?: () => void } = {},
   ): Promise<LinearConnectOutcome> => {
-    const status = await queryClient.query({ ...linearStatusQueryOptions(baseUrl), staleTime: 'static' });
+    let status = await queryClient.query({ ...linearStatusQueryOptions(baseUrl), staleTime: 'static' });
+    // Without a status the server's mode is unknown; leaving for self-managed OAuth would be a guess.
+    if (status.mode !== 'platform' && (status.reason === 'unavailable' || status.reason === 'auth_required')) {
+      status = await queryClient.fetchQuery({ ...linearStatusQueryOptions(baseUrl), staleTime: 0 });
+    }
+    if (status.mode !== 'platform' && status.reason === 'auth_required') {
+      toast.error('Sign in again to connect Linear.');
+      return 'failed';
+    }
+    if (status.mode !== 'platform' && status.reason === 'unavailable') {
+      toast.error("Couldn't reach Factory to connect Linear. Try again.");
+      return 'failed';
+    }
     if (status.mode !== 'platform') {
       options.beforeRedirect?.();
       connectLinear(baseUrl, options.workspaceId);
@@ -36,7 +52,11 @@ export function useLinearConnect() {
     }
     try {
       const connection = await platformConnect.mutateAsync({});
-      toast.success(connection ? 'Linear connected' : 'Linear authorization completed. The connection is activating.');
+      if (!connection) {
+        toast.success('Linear authorization completed. The connection is activating.');
+        return 'activating';
+      }
+      toast.success('Linear connected');
       return 'done';
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to connect Linear');

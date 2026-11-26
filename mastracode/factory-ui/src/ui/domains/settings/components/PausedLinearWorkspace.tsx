@@ -18,7 +18,8 @@ export function PausedLinearWorkspace({
   onRemove?: () => void;
 }) {
   // Once Linear's status shows the workspace connected, this row unmounts; a
-  // finished connect that leaves it mounted connected some other workspace.
+  // connect that finished active and leaves it mounted connected some other workspace.
+  // One still activating says nothing yet about which workspace it serves.
   const [error, setError] = useState<string>();
   return (
     <SettingsItem

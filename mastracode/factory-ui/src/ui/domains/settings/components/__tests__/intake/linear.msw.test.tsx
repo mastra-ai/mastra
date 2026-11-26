@@ -1,7 +1,10 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { focusManager } from '@tanstack/react-query';
+import { act } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { LINEAR_MIGRATION_POLL_MS } from '../../../../../../hooks/useLinearData';
 import { listedRepository } from '../../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../../e2e/ui/render';
@@ -79,6 +82,7 @@ describe('IntakeSection linear', () => {
   beforeEach(() => {
     authCalls.length = 0;
   });
+  afterEach(() => vi.useRealTimers());
 
   const sourceId = (workspaceId: string, projectId: string) =>
     `linear-project:${Buffer.from(JSON.stringify({ workspaceId, projectId })).toString('base64url')}`;
@@ -154,6 +158,40 @@ describe('IntakeSection linear', () => {
     // Imported connections can't be reauthorized in place, so both attempts were fresh connects.
     expect(minted).toEqual(['connect', 'connect']);
     expect(authCalls.map(call => call.integrationId)).toEqual(['linear', 'linear']);
+  });
+
+  it("doesn't call a paused workspace's reconnect the wrong workspace while the connection is still activating", async () => {
+    linearConnectSessions();
+    server.use(
+      http.get(`${LINEAR_CONNECT_ROOT}/connections`, () =>
+        // The new connection isn't listed as active yet.
+        HttpResponse.json({ connections: [] }),
+      ),
+    );
+    useIntakeHandlers({
+      status: linearWorkspaceStatus,
+      config: { ...baseConfig(), linear: { enabled: true, sourceIds: [pausedProject, liveProject] } },
+    });
+    renderIntakeSection();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Reconnect Mastra' }));
+    const dialog = await screen.findByRole('dialog');
+    vi.useFakeTimers({ toFake: ['setTimeout', 'Date'], shouldAdvanceTime: true });
+    try {
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Continue to Linear' }));
+      // Poll past the wait for the connection to turn active, until the connect finishes and closes the dialog.
+      for (let elapsed = 0; dialog.hasAttribute('data-open') && elapsed < 70_000; elapsed += 2_000) {
+        await act(() => vi.advanceTimersByTimeAsync(2_000));
+        // Let the poll's request settle on a real tick; only setTimeout and Date are faked.
+        await act(() => new Promise(resolve => setImmediate(resolve)));
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+
+    // The connect finished and closed the dialog (jsdom never ends its exit animation).
+    expect(dialog).not.toHaveAttribute('data-open');
+    expect(screen.queryByText(/This workspace is still disconnected/)).not.toBeInTheDocument();
   });
 
   it('shows healthy sources and a retry for a workspace outage without calling it disconnected', async () => {
@@ -608,11 +646,11 @@ describe('IntakeSection linear', () => {
       );
       renderIntakeSection();
 
-      await userEvent.click(
-        within(await screen.findByRole('region', { name: 'Sources' })).getByRole('button', {
-          name: 'Connect Linear',
-        }),
+      // The loaded section replaces the skeleton's, so find the region again until its button shows.
+      const connect = await waitFor(() =>
+        within(screen.getByRole('region', { name: 'Sources' })).getByRole('button', { name: 'Connect Linear' }),
       );
+      await userEvent.click(connect);
 
       expect(await screen.findByRole('group', { name: 'Linear projects and teams' })).toBeInTheDocument();
       expect(minted).toEqual(['connect']);
@@ -652,6 +690,56 @@ describe('IntakeSection linear', () => {
 
       expect(await screen.findByText("Linear isn't answering for some connections")).toBeInTheDocument();
       expect(screen.getByText(/Factory couldn't reach 1 Linear connection and keeps checking/)).toBeInTheDocument();
+    });
+
+    it("keeps the card open to say Linear isn't answering when no workspace or source is known yet", async () => {
+      useIntakeHandlers({
+        status: platformStatus({ unidentified: [{ connectionId: 'conn-beta', error: 'Linear returned 503' }] }),
+        config: { ...baseConfig(), linear: { enabled: true, sourceIds: [] } },
+      });
+      renderIntakeSection();
+
+      expect(await screen.findByText("Linear isn't answering for some connections")).toBeInTheDocument();
+    });
+
+    it('clears the move notice once the server finishes moving the workspaces', async () => {
+      let moved = false;
+      useIntakeHandlers({
+        status: platformStatus({
+          reason: 'migration_required',
+          migration: { required: true, pending: ['acme'], skipped: [] },
+        }),
+      });
+      server.use(
+        http.get(LINEAR_STATUS_URL, () =>
+          HttpResponse.json(
+            moved
+              ? platformStatus()
+              : platformStatus({
+                  reason: 'migration_required',
+                  migration: { required: true, pending: ['acme'], skipped: [] },
+                }),
+          ),
+        ),
+      );
+      // jsdom reports the page hidden, where React Query skips interval refetches; this is a visible tab,
+      // focused before rendering so focusing doesn't refetch on its own.
+      focusManager.setFocused(true);
+      // The poll's interval starts at mount, so the clock is faked before rendering.
+      vi.useFakeTimers({ toFake: ['setInterval', 'Date'], shouldAdvanceTime: true });
+      try {
+        renderIntakeSection();
+        expect(await screen.findByText('Moving Linear to Mastra Connect')).toBeInTheDocument();
+
+        moved = true;
+        await act(() => vi.advanceTimersByTimeAsync(LINEAR_MIGRATION_POLL_MS));
+        vi.useRealTimers();
+        // Asserted before focus resets, since a focus change refetches on its own.
+        await waitFor(() => expect(screen.queryByText('Moving Linear to Mastra Connect')).not.toBeInTheDocument());
+      } finally {
+        vi.useRealTimers();
+        focusManager.setFocused(undefined);
+      }
     });
 
     it('shows a move to Mastra Connect in progress without asking anyone to act', async () => {
