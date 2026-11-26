@@ -2664,37 +2664,49 @@ export class MastraFactory {
       observeSessionRunEnd(session, { audit: auditDomain, openRuns: openRunsStorage });
       // A run the dispatcher no longer watches (a plan approved after its run parked) still ends
       // its phase: the board engine hears of every run end of a bound session.
-      observeSessionPhaseOutcome(session, {
-        boardEngine: () => boardEngine,
-        binding: async () => {
-          const row = await sourceControlSessions.getBySessionId(session.identity.getId());
-          if (!row?.factoryProjectId) return null;
-          return workItemsStorage.findActiveRunBindingForSession({
-            orgId: row.orgId,
-            factoryProjectId: row.factoryProjectId,
-            sessionId: row.sessionId,
-          });
-        },
-      });
+      const runBinding = async () => {
+        const row = await sourceControlSessions.getBySessionId(session.identity.getId());
+        if (!row?.factoryProjectId) return null;
+        return workItemsStorage.findActiveRunBindingForSession({
+          orgId: row.orgId,
+          factoryProjectId: row.factoryProjectId,
+          sessionId: row.sessionId,
+        });
+      };
+      observeSessionPhaseOutcome(session, { boardEngine: () => boardEngine, binding: runBinding });
+      // A run that waits for a person's yes or no leaves its card waiting on that answer.
+      const runPaused = async () => {
+        if (!boardEngine?.runPaused) return;
+        try {
+          const binding = await runBinding();
+          if (binding) await boardEngine.runPaused(binding, 'approval');
+        } catch (error) {
+          console.warn('[Factory] Unable to tell the board engine a session waits for approval.', error);
+        }
+      };
       // Every run end of a work or side session, and every tool call it holds for
       // approval, reaches whoever follows it, however the run started;
       // re-attached when a session is created again.
       observeSessionRunReports(
         session,
-        (outcome, since) =>
-          reportSessionRunEnd({
+        async (outcome, since) => {
+          if (outcome.status === 'blocked' && (outcome.approval || outcome.decision)) await runPaused();
+          await reportSessionRunEnd({
             sessionId: session.identity.getId(),
             threadId: session.thread.getId(),
             outcome,
             since,
-          }),
+          });
+        },
         {
-          onApprovalRequested: request =>
-            notifyApprovalRequested({
+          onApprovalRequested: async request => {
+            await runPaused();
+            await notifyApprovalRequested({
               sessionId: session.identity.getId(),
               threadId: session.thread.getId(),
               ...request,
-            }),
+            });
+          },
           answersItself: toolCallId => this.#dispatcher?.autoApproves(toolCallId) ?? false,
         },
       );

@@ -44,6 +44,10 @@ type PendingInput =
       runEnded: FactoryRunEndedBinding;
       /** Whether the card's phase holds an outcome for the engine to move it by. */
       answer?: { outcome: boolean } | { error: unknown };
+    }
+  | {
+      runPaused: FactoryRunEndedBinding;
+      answer?: { paused: true } | { error: unknown };
     };
 
 type CardRef = Pick<FactoryTransitionRequest, 'workItemId'>;
@@ -79,6 +83,17 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
           try {
             const next = await this.#stateAfterRunEnd(pending.runEnded, state);
             pending.answer = { outcome: next?.state === 'running' && next.lastOutcome !== undefined };
+            return next;
+          } catch (error) {
+            pending.answer = { error };
+            return undefined;
+          }
+        }
+        if ('runPaused' in pending) {
+          if (pending.runPaused.workItemId !== workItemId) return undefined;
+          try {
+            const next = await this.#stateAfterRunPause(pending.runPaused, state);
+            pending.answer = { paused: true };
             return next;
           } catch (error) {
             pending.answer = { error };
@@ -133,6 +148,16 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
       { storage: this.#context.workItems, boards: this.#context.boards, boardEngine: engine },
       binding,
     );
+  }
+
+  /**
+   * Tells the card's run that its phase's session waits on a person's answer. The card awaits
+   * approval until the next input says otherwise: the move an approval makes, or a run end.
+   */
+  async runPaused(binding: FactoryRunEndedBinding): Promise<void> {
+    const pending = { runPaused: binding } satisfies PendingInput as Extract<PendingInput, { runPaused: unknown }>;
+    await this.#ask(binding, pending);
+    if (pending.answer && 'error' in pending.answer) throw pending.answer.error;
   }
 
   /** What the card's run last recorded the card doing; nothing for a card no input was asked of. */
@@ -209,6 +234,28 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
       ...(probes === 0
         ? { state: 'probing' as const }
         : { state: 'needs_attention' as const, reason: NO_OUTCOME_REASON }),
+    };
+  }
+
+  /**
+   * What the card is doing once a run of its session stopped for a person's answer. A session that
+   * doesn't work the card's phase (a chat on a resting card) changes nothing.
+   */
+  async #stateAfterRunPause(
+    binding: FactoryRunEndedBinding,
+    previous: FactoryCardRunRecord,
+  ): Promise<FactoryCardRunRecord | undefined> {
+    const item = await this.#context.workItems.get({ orgId: binding.orgId, id: binding.workItemId });
+    const phase = item?.stages.length === 1 ? item.stages[0] : undefined;
+    if (!item || !phase) return undefined;
+    const board = (await toBoardSource(this.#context.boards).load(binding)).get(boardForWorkItem(item));
+    if (!board || board.phaseKind(phase) !== 'working' || board.roleForPhase(phase) !== binding.role) return undefined;
+    return {
+      state: 'awaiting_approval',
+      phase,
+      probes: previous.phase === phase ? (previous.probes ?? 0) : 0,
+      ...(previous.lastOutcome ? { lastOutcome: previous.lastOutcome } : {}),
+      ...(previous.countedRunEnd ? { countedRunEnd: previous.countedRunEnd } : {}),
     };
   }
 

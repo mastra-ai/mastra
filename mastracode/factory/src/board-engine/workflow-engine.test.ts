@@ -247,6 +247,52 @@ describe('the workflow board engine', () => {
     });
   });
 
+  it("leaves the card awaiting approval while its phase's session waits on a person, keeping its probe count", async () => {
+    const { storage, engine, item, binding } = await setup();
+    await engine.runEnded({ ...binding, runEnd: 'run-1' }, engine);
+
+    await engine.runPaused(binding);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'awaiting_approval',
+      phase: 'planning',
+      probes: 1,
+    });
+
+    // The approved plan ends the phase, and the resumed run's end moves the card.
+    await storage.update({
+      orgId: ORG,
+      id: item.id,
+      userId: 'agent:binding',
+      patch: {
+        metadata: {
+          [PHASE_EXIT_METADATA_KEY]: { phase: 'planning', tool: 'submit_plan', at: new Date().toISOString() },
+        },
+      },
+    });
+    await expect(engine.runEnded({ ...binding, runEnd: 'run-2' }, engine)).resolves.toBe(true);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'running',
+      phase: 'execute',
+      probes: 0,
+      lastOutcome: 'advance',
+    });
+  });
+
+  it("records no approval wait for a session that doesn't work the card's phase", async () => {
+    const { storage, engine, item, binding } = await setup();
+
+    await engine.runPaused({ ...binding, role: 'review' });
+    await expect(engine.describe({ workItemId: item.id })).resolves.toBeUndefined();
+
+    await engine.requestMove(await personMove(storage, item.id, 'intake', 'drag-1')());
+    await engine.runPaused(binding);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'resting',
+      phase: 'intake',
+      probes: 0,
+    });
+  });
+
   it('counts nothing against the next phase when the run end that moved the card there is told again', async () => {
     const { storage, engine, item, binding } = await setup();
     await storage.update({

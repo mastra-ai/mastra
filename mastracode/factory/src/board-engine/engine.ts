@@ -65,6 +65,12 @@ export interface FactoryBoardEngine {
    */
   runEnded(binding: FactoryRunEndedBinding, engine: Pick<FactoryBoardEngine, 'requestMove'>): Promise<boolean>;
   /**
+   * Tells the engine that a run of a session bound to a card stopped to wait for a person: a tool
+   * call held for approval, or a tool (a submitted plan) that asks for a yes or no. The run carries
+   * on once someone answers. For an engine that keeps what a card is doing.
+   */
+  runPaused?(binding: FactoryRunEndedBinding, reason: 'approval'): Promise<void>;
+  /**
    * What the card is doing as the engine last recorded it, for an engine that keeps that. Nothing
    * for a card it has no record of.
    */
