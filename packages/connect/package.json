@@ -63,7 +63,7 @@
     "node": ">=22.13.0"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.86.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.87.0-0 <2.0.0-0",
     "zod": ">=3.0.0 || >=4.0.0"
   },
   "devDependencies": {

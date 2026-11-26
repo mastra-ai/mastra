@@ -1,6 +1,8 @@
+import { getChannelRun, toolResumeButton } from '@mastra/core/channels';
+import type { ChannelRun, ChannelSuspendPayload } from '@mastra/core/channels';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import type { IntegrationCatalogEntry, ProjectConnection } from './client.js';
+import type { ConnectSession, ConnectUrl, IntegrationCatalogEntry, ProjectConnection } from './client.js';
 
 /**
  * Record key of the built-in connect-prompt tool. Reserved: a provider tool
@@ -40,15 +42,22 @@ export interface ConnectPromptPayload {
 }
 
 /**
- * What a chat UI resumes a paused `request_connection` call with once the
- * user's connection settles: `active`, or `failed` with the reason the UI saw
- * (closed window, rejected credentials, connection limit). The tool re-checks
- * the platform rather than trusting it, so a stale or forged resume can't
- * report a false success, and a failure that raced a success reports success.
+ * What a paused `request_connection` call is resumed with.
+ *
+ * A chat UI resumes it once the user's connection settles: `active`, or
+ * `failed` with the reason the UI saw (closed window, rejected credentials,
+ * connection limit). In Slack, Telegram and Teams threads, the card's buttons
+ * resume it with an `action`: `connect` sends the clicker a private sign-in
+ * link, `check` looks for the connection, and `cancel` gives up.
+ *
+ * The tool re-checks the platform rather than trusting either, so a stale or
+ * forged resume can't report a false success, and a failure that raced a
+ * success reports success.
  */
-export const connectPromptResumeSchema = z.discriminatedUnion('status', [
+export const connectPromptResumeSchema = z.union([
   z.object({ provider: z.string().min(1), status: z.literal('active') }),
   z.object({ provider: z.string().min(1), status: z.literal('failed'), error: z.string().trim().min(1).max(500) }),
+  z.object({ action: z.enum(['connect', 'check', 'cancel']) }),
 ]);
 
 export type ConnectPromptResume = z.infer<typeof connectPromptResumeSchema>;
@@ -58,6 +67,63 @@ export interface ConnectPromptInputs {
   connections: ProjectConnection[];
   /** Effective code or project allowlist; undefined means the full catalog. */
   allowlist: Set<string> | undefined;
+}
+
+/** What a paused call carries in a channel thread: its card and the sign-in it started. */
+interface ChannelConnectPromptPayload extends ConnectPromptPayload, ChannelSuspendPayload {
+  /** Connection the clicker's sign-in link creates. Not a capability: reading its link needs the owner's assertion. */
+  connectionId?: string;
+  /** When that sign-in link stops working. */
+  expiresAt?: string;
+}
+
+/** Error the call fails with when the user presses Cancel, matching Studio's card. */
+const CONNECT_CANCELLED_ERROR = 'The user cancelled connecting.';
+
+const NOT_OWNER_NOTICE = 'Only the person this conversation belongs to can connect an account here.';
+const EXPIRED_ERROR = 'The sign-in link expired.';
+const FAILED_ERROR = 'The sign-in did not finish.';
+
+function connectCard(
+  toolCallId: string,
+  text: string,
+  primary: { action: 'connect' | 'check'; label: string },
+): NonNullable<ChannelSuspendPayload['channelCard']> {
+  return {
+    type: 'card',
+    children: [
+      { type: 'text', content: text },
+      {
+        type: 'actions',
+        children: [
+          toolResumeButton({ toolCallId, ...primary, style: 'primary' }),
+          toolResumeButton({ toolCallId, action: 'cancel', label: 'Cancel' }),
+        ],
+      },
+    ],
+  };
+}
+
+function connectPromptCard(toolCallId: string, name: string) {
+  return connectCard(toolCallId, `Connect **${name}** to continue.`, { action: 'connect', label: `Connect ${name}` });
+}
+
+/**
+ * Sends the sign-in link to the clicker only: a Slack ephemeral, a Teams
+ * targeted message, or a DM elsewhere. False when it couldn't be delivered
+ * privately; the link is never posted anywhere else.
+ */
+async function sendPrivately(run: ChannelRun, name: string, link: ConnectUrl): Promise<boolean> {
+  try {
+    const sent = await run.thread.postEphemeral(
+      run.actor!.userId,
+      `Connect ${name}: ${link.connectUrl}\nThis link is only for you and stops working at ${link.expiresAt}.`,
+      { fallbackToDM: true },
+    );
+    return sent !== null;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -77,9 +143,18 @@ export interface ConnectPromptInputs {
 export function buildConnectPromptTool({
   loadInputs,
   resourceId,
+  createSession,
+  getConnectUrl,
+  invalidate,
 }: {
   loadInputs: () => Promise<ConnectPromptInputs>;
   resourceId: string;
+  /** Starts a sign-in for this resource. Used by the channel card's Connect button. */
+  createSession: (provider: string) => Promise<ConnectSession>;
+  /** Reads a pending sign-in's vendor link under this resource's assertion. */
+  getConnectUrl: (connectionId: string) => Promise<ConnectUrl>;
+  /** Tells tool resolutions a connection settled, as the status route does. */
+  invalidate: (connection: ProjectConnection) => void;
 }) {
   return createTool({
     id: CONNECT_PROMPT_TOOL_KEY,
@@ -132,6 +207,72 @@ export function buildConnectPromptTool({
 
       const agent = context?.agent;
       const resumed = agent?.resumeData as ConnectPromptResume | undefined;
+      if (resumed && 'action' in resumed) {
+        const name = payload.providers[0]?.displayName ?? requested?.id ?? input.provider ?? 'The provider';
+        const failed = (error: string): ConnectPromptPayload => ({
+          ...payload,
+          message: `${name} could not be connected: ${error}`,
+          error,
+        });
+        if (!requested) return failed('It is no longer available to connect.');
+        if (payload.providers[0]?.connected) {
+          const settled = connections.find(
+            connection =>
+              connection.integrationId.toLowerCase() === requested.id.toLowerCase() && connection.status === 'active',
+          );
+          if (settled) invalidate(settled);
+          return { ...payload, message: `${name} connected successfully.` };
+        }
+        if (resumed.action === 'cancel') return failed(CONNECT_CANCELLED_ERROR);
+
+        const previous = agent?.suspendPayload as ChannelConnectPromptPayload | undefined;
+        const toolCallId = agent!.toolCallId;
+        const pause = async (next: Omit<ChannelConnectPromptPayload, keyof ConnectPromptPayload>) => {
+          await agent!.suspend({ ...payload, ...next } satisfies ChannelConnectPromptPayload);
+          return payload;
+        };
+        const waiting = (
+          text: string,
+          signIn: Pick<ChannelConnectPromptPayload, 'connectionId' | 'expiresAt'> | undefined = previous,
+        ) =>
+          pause({
+            connectionId: signIn?.connectionId,
+            expiresAt: signIn?.expiresAt,
+            channelCard: connectCard(toolCallId, text, { action: 'check', label: "I've connected" }),
+          });
+
+        if (resumed.action === 'check') {
+          if (previous?.connectionId !== undefined) {
+            const signIn = connections.find(connection => connection.id === previous.connectionId);
+            if (signIn && signIn.status !== 'pending') return failed(FAILED_ERROR);
+            const expired = previous.expiresAt !== undefined && Date.parse(previous.expiresAt) <= Date.now();
+            // The platform drops a sign-in that was never finished.
+            if (!signIn || expired) return failed(EXPIRED_ERROR);
+          }
+          return waiting(`${name} isn't connected yet. Finish in the private link, then press I've connected.`);
+        }
+
+        // Connect: only the person the conversation belongs to may start a
+        // sign-in, since the account they connect serves this resource.
+        const run = getChannelRun(context?.requestContext);
+        if (!run?.actor || run.actorResourceId !== resourceId) {
+          if (run?.actor) {
+            await run.thread
+              .postEphemeral(run.actor.userId, NOT_OWNER_NOTICE, { fallbackToDM: false })
+              .catch(() => null);
+          }
+          return pause({ channelCard: connectPromptCard(toolCallId, name) });
+        }
+        const session = await createSession(requested.id);
+        const link = await getConnectUrl(session.connectionId);
+        const delivered = await sendPrivately(run, name, link);
+        return waiting(
+          delivered
+            ? `I sent you a private link to connect ${name}. When you're done, press I've connected.`
+            : `I couldn't send you a private link. Connect ${name} from the app, then press I've connected.`,
+          { connectionId: session.connectionId, expiresAt: link.expiresAt },
+        );
+      }
       if (resumed) {
         const provider = payload.providers.find(entry => entry.id.toLowerCase() === resumed.provider.toLowerCase());
         const name = provider?.displayName ?? resumed.provider;
@@ -150,7 +291,18 @@ export function buildConnectPromptTool({
       // Pause the run until the user connects; the chat UI resumes it with the
       // settled provider so the agent continues without a user message.
       // Outside an agent run there is nothing to resume, so return the prompt.
-      if (agent?.suspend) await agent.suspend(payload);
+      // In a Slack, Telegram or Teams thread the card's buttons resume it.
+      if (agent?.suspend) {
+        const name = payload.providers[0]!.displayName ?? requested.id;
+        await agent.suspend(
+          getChannelRun(context?.requestContext)
+            ? ({
+                ...payload,
+                channelCard: connectPromptCard(agent.toolCallId, name),
+              } satisfies ChannelConnectPromptPayload)
+            : payload,
+        );
+      }
       return payload;
     },
   });
