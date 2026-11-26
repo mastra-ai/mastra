@@ -7,6 +7,8 @@ import type { InlineSkill } from '@mastra/core/skills';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
+import { createDispatcherBoardEngine } from '../board-engine/engine.js';
+import type { FactoryBoardEngine } from '../board-engine/engine.js';
 import {
   boardFlow,
   boardForWorkItem,
@@ -173,6 +175,8 @@ export interface FactoryApiRoutesDeps {
     cache: ProjectBoardCache;
   };
   factoryTransitionService?: FactoryTransitionService;
+  /** The board engine routes and the run-start path submit moves to; wraps the transition service by default. */
+  factoryBoardEngine?: FactoryBoardEngine;
   sessionRetirement?: import('../sandbox/session-retirement.js').SessionRetirementCoordinator;
   /** Moves a thread with its observation vectors onto another memory resource. */
   moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
@@ -182,6 +186,7 @@ export interface FactoryApiRoutesDeps {
   runSlots?: () => { inUse: number; cap: number; interactive: { inUse: number; cap: number } } | undefined;
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
+    boardEngine: FactoryBoardEngine;
     startCoordinator: FactoryStartCoordinator;
     prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   }) => void;
@@ -889,11 +894,19 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         audit: deps.audit,
       }))
     : undefined;
-  const startCoordinator = transitionService
+  const boardEngine = transitionService
+    ? (deps.factoryBoardEngine ??
+      createDispatcherBoardEngine({
+        transitionService,
+        workItems: deps.domains.workItems,
+        boards: deps.boardRegistry,
+      }))
+    : undefined;
+  const startCoordinator = boardEngine
     ? new FactoryStartCoordinator(
         deps.controller,
         deps.domains.workItems,
-        transitionService,
+        boardEngine,
         request =>
           resolveFactorySourceControl({
             sourceControls,
@@ -906,9 +919,10 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         deps.boardRegistry,
       )
     : undefined;
-  if (transitionService && startCoordinator) {
+  if (transitionService && boardEngine && startCoordinator) {
     deps.onFactoryRuntime?.({
       transitionService,
+      boardEngine,
       startCoordinator,
       ...(sourceControlRegistrations.length > 0
         ? {
@@ -962,7 +976,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       modelCredentials: deps.domains.modelCredentials,
       modelDefaults: deps.domains.modelDefaults,
       sourceControlSessions,
-      sourceControls,
       workItems: deps.domains.workItems,
       memorySettings: deps.domains.memorySettings,
       factoryProjects: deps.domains.projects,
@@ -1037,7 +1050,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           intakeRoutes: deps.storedBoards?.storage,
           intakeEvaluator: deps.intakeEvaluator,
           queueHealth: deps.domains.queueHealth,
-          transitionService,
+          boardEngine,
           startCoordinator,
           ...(sourceControlRegistrations.length > 0
             ? {
@@ -1071,10 +1084,11 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           boards: deps.storedBoards.cache,
         }).routes()
       : []),
-    ...(deps.factoryReady && deps.storedBoards
+    ...(deps.factoryReady && deps.storedBoards && boardEngine
       ? new IntakeRouteRoutes({
           auth: deps.auth,
           audit: deps.audit,
+          boardEngine,
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
           storage: deps.storedBoards.storage,

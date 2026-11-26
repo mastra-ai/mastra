@@ -8,7 +8,6 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { ProviderInfo } from '../../../../../api/types';
 import { datedModels } from '../../../settings/components/__tests__/fixtures/models';
-import { CreateFactoryModelStep } from '../create-factory/CreateFactoryModelStep';
 import {
   chooseProvider,
   chooseSubscription,
@@ -126,7 +125,7 @@ describe('Model provider onboarding', () => {
             }),
           ),
           http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-            HttpResponse.json({ modelId: null, thinkingLevel: null }),
+            HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
           ),
           http.post(`${TEST_BASE_URL}/web/config/providers/mastra/connect`, () => {
             connect();
@@ -447,8 +446,11 @@ describe('Model provider onboarding', () => {
             name: 'my-llm',
             url: 'https://api.example.com/v1',
             apiKey: 'sk-test',
+            authScheme: 'bearer',
+            headers: [],
             models: ['model-a'],
             scope,
+            check: true,
           });
           created = true;
           return HttpResponse.json({ ok: true, provider });
@@ -459,7 +461,7 @@ describe('Model provider onboarding', () => {
     function registerNoPersonalDefault() {
       server.use(
         http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-          HttpResponse.json({ modelId: null, thinkingLevel: null }),
+          HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
         ),
       );
     }
@@ -471,8 +473,8 @@ describe('Model provider onboarding', () => {
       await user.type(screen.getByPlaceholderText('e.g. my-llm'), 'my-llm');
       await user.type(screen.getByPlaceholderText('https://api.example.com/v1'), 'https://api.example.com/v1');
       await user.type(screen.getByPlaceholderText('Paste API key'), 'sk-test');
-      await user.type(screen.getByPlaceholderText('model-a, model-b'), 'model-a');
-      await user.click(screen.getByRole('button', { name: 'Add' }));
+      await user.type(screen.getByRole('combobox', { name: 'Models' }), 'model-a{Enter}');
+      await user.click(screen.getByRole('button', { name: 'Test & save' }));
       return user;
     }
 
@@ -486,7 +488,7 @@ describe('Model provider onboarding', () => {
       await user.click(screen.getByRole('button', { name: 'Add a custom provider' }));
       await user.type(screen.getByPlaceholderText('e.g. my-llm'), 'my-llm');
       await user.type(screen.getByPlaceholderText('https://api.example.com/v1'), 'https://api.example.com/v1');
-      await user.click(screen.getByRole('button', { name: 'Add' }));
+      await user.click(screen.getByRole('button', { name: 'Test & save' }));
 
       expect(await screen.findByText('At least one model is required.')).toBeVisible();
     });
@@ -1055,67 +1057,6 @@ describe('Model provider onboarding', () => {
       ).toBeVisible();
       expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
-    });
-  });
-
-  describe('when creating a later Factory', () => {
-    it('keeps personal credentials connected under the existing default semantics', async () => {
-      registerAuthHandler();
-      server.use(
-        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
-          HttpResponse.json({
-            orgKeyAdmin: false,
-            providers: [{ provider: 'openai', source: 'stored-user', userCredential: 'api_key' }],
-          }),
-        ),
-        http.get(`${TEST_BASE_URL}/web/config/models`, () =>
-          HttpResponse.json({
-            models: [{ id: 'openai/gpt-5.6-sol', provider: 'openai', modelName: 'gpt-5.6-sol', hasApiKey: true }],
-          }),
-        ),
-      );
-      const user = userEvent.setup();
-
-      renderWithProviders(
-        <Command>
-          <CreateFactoryModelStep query="" onPick={vi.fn()} />
-        </Command>,
-      );
-
-      await user.click(await screen.findByText('OpenAI'));
-
-      expect(await screen.findByText('openai/gpt-5.6-sol')).toBeInTheDocument();
-      expect(screen.queryByRole('dialog', { name: 'Connect OpenAI' })).not.toBeInTheDocument();
-    });
-
-    it('offers newer models first', async () => {
-      registerAuthHandler();
-      server.use(
-        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
-          HttpResponse.json({
-            orgKeyAdmin: false,
-            providers: [{ provider: 'openai', source: 'stored-user', userCredential: 'api_key' }],
-          }),
-        ),
-        http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: datedModels })),
-      );
-      const user = userEvent.setup();
-
-      renderWithProviders(
-        <Command>
-          <CreateFactoryModelStep query="" onPick={vi.fn()} />
-        </Command>,
-      );
-
-      await user.click(await screen.findByText('OpenAI'));
-      await screen.findByText('openai/gpt-5');
-
-      expect(screen.getAllByRole('option').map(option => option.getAttribute('data-value'))).toEqual([
-        'openai/gpt-5',
-        'openai/gpt-4.1',
-        'openai/gpt-4o',
-        'change-provider',
-      ]);
     });
   });
 

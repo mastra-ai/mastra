@@ -15,12 +15,15 @@ export type ModalQuestionOptions = {
   allowCustomResponse?: boolean;
   selectedOptionLabel?: string;
   multiline?: boolean;
+  /** Show typed text as asterisks, for secrets. */
+  masked?: boolean;
   overlay?: {
     widthPercent?: number;
     maxHeight?: OverlayOptions['maxHeight'];
   };
 };
 
+/** Show a question dialog over the TUI and resolve with the answer, or null when the user cancels. */
 export function askModalQuestion(tui: TUI, options: ModalQuestionOptions): Promise<string | null> {
   return new Promise(resolve => {
     const question = new AskQuestionDialogComponent({
@@ -28,6 +31,7 @@ export function askModalQuestion(tui: TUI, options: ModalQuestionOptions): Promi
       title: options.title,
       options: options.options,
       multiline: options.multiline,
+      masked: options.masked,
       tui,
       allowEmptyInput: options.allowEmptyInput,
       allowCustomResponse: options.allowCustomResponse,

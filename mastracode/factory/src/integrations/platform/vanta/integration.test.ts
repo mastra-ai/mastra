@@ -212,7 +212,11 @@ describe('Vanta sync through the Factory project connections', () => {
       },
     });
     const ctx = {
-      storage: { projects: seeded.projects, intake: seeded.intake },
+      storage: {
+        projects: seeded.projects,
+        intake: seeded.intake,
+        generic: seeded.integrations.forIntegration('vanta'),
+      },
       runtime: {
         configVersion: 'factory-config-v1',
         workItems: seeded.workItems,
@@ -292,6 +296,31 @@ describe('Vanta sync through the Factory project connections', () => {
     expect(summary).toMatchObject({ projects: 0, checked: 0, closed: 0 });
     expect(commits).not.toHaveBeenCalled();
     expect(vanta.needsLinking).toEqual([{ connectionId: 'conn-refused', reason: expect.any(String) }]);
+  });
+
+  it('closes no cards, and links nothing back, when a Vanta connection was detached from the project', async () => {
+    const platform = await startFakePlatform();
+    platform.orgConnections = [
+      { id: 'conn-linked', integrationId: 'vanta', status: 'active' },
+      { id: 'conn-detached', integrationId: 'vanta', status: 'active' },
+    ];
+    // Only the detached connection holds vuln-filed.
+    platform.proxy = vulnerabilityPages([{ id: 'vuln-new' }]);
+    const first = await setup(platform);
+    first.vanta.workers(first.ctx);
+    await first.vanta.binding.ensureBootLinked();
+    expect(platform.linked.has('conn-detached')).toBe(true);
+
+    // Someone removes it from the project; the deployment restarts on the same storage.
+    platform.linked.delete('conn-detached');
+    const restarted = new SyncOnce({ connect: platform.connect() });
+    restarted.workers(first.ctx);
+    const summary = await restarted.syncOnce(first.ctx);
+
+    expect(summary).toMatchObject({ projects: 0, checked: 0, closed: 0 });
+    expect(first.commits).not.toHaveBeenCalled();
+    expect(platform.linked.has('conn-detached')).toBe(false);
+    expect(platform.count('POST', '/v2/projects/proj_factory/connections/conn-detached')).toBe(1);
   });
 
   it('links a Vanta connection that appears after boot, skipping only the sync that found it', async () => {

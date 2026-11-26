@@ -43,6 +43,8 @@ export const FACTORY_BOARD_PHASES_SCHEMA: CollectionSchema = {
     exit_tool: { type: 'json', nullable: true },
     // Factory tools the phase grants the session working the card there, e.g. ["factory_record_review_verdict"].
     tools: { type: 'json', nullable: true },
+    // Outcomes the phase's session may report, e.g. [{ key: "advance", label: "Plan approved", to: "execute" }].
+    outcomes: { type: 'json', nullable: true },
   },
   uniqueIndexes: [
     {

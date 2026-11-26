@@ -46,6 +46,12 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
+    "google/gemma-4-31B-it": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
     "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4": [
       {
         "type": "effort",
@@ -58,28 +64,34 @@
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "moonshotai/kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "moonshotai/Kimi-K3.1-Pro": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
     "meta/muse-spark-open": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "Qwen/Qwen3.5-35B-A3B-FP8-dottxt": [
+    "deepseek-ai/DeepSeek-V4-Flash-0731": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Pro-0813": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "Qwen/Qwen3.6-35B-A3B-FP8": [
@@ -94,19 +106,19 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "google/gemma-4-31B-it": [
+    "Qwen/Qwen3.5-35B-A3B-FP8-dottxt": [
       {
         "type": "effort",
         "values": ["none", "high"]
       }
     ],
-    "zai-org/GLM-5.3": [
+    "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "zai-org/GLM-5.3-Flash": [
+    "zai-org/GLM-5.3": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -118,25 +130,13 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
+    "moonshotai/Kimi-K3.1-Pro": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Flash-0731": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4.1-Flash-1017": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Pro-0813": [
+    "moonshotai/kimi-k3": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]

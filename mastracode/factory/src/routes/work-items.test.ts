@@ -6,10 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 
+import { DispatcherBoardEngine } from '../board-engine/engine.js';
 import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { createTestBoard, createTriageWorkRegistry, triageWorkBoard } from '../boards/test-utils.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
+import type { FactoryTransitionRequest } from '../rules/transition-service.js';
 import type { FactoryRuleActor } from '../rules/types.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
 import {
@@ -24,6 +26,8 @@ let auditFailure: Error | undefined;
 let acceptedHook: Array<{ workItemId: string }> = [];
 /** Committed stage changes: production reports them and ends the left phase's goal from here. */
 let committedHook: Array<{ workItemId: string; fromStage?: string; toStage: string }> = [];
+/** Every input the routes hand the board engine, in order. */
+let engineInputs: FactoryTransitionRequest[] = [];
 
 const auditRecorder: AuditRecorder = {
   async record(input) {
@@ -101,18 +105,27 @@ function buildApp(
       // No intake rules to read: the route list, as before intake order.
       intakeEvaluator: 'route-list',
       queueHealth: seed.queueHealth,
-      transitionService: new FactoryTransitionService({
-        configVersion: 'factory-config-v1',
-        storage: seed.workItems,
-        boards: boardRegistry,
-        audit: auditRecorder,
-        onAccepted: async args => {
-          acceptedHook.push({ workItemId: args.workItemId });
+      boardEngine: {
+        requestMove: input => {
+          engineInputs.push(input);
+          return new DispatcherBoardEngine({
+            workItems: seed.workItems,
+            boards: boardRegistry,
+            transitionService: new FactoryTransitionService({
+              configVersion: 'factory-config-v1',
+              storage: seed.workItems,
+              boards: boardRegistry,
+              audit: auditRecorder,
+              onAccepted: async args => {
+                acceptedHook.push({ workItemId: args.workItemId });
+              },
+              onTransitionCommitted: async args => {
+                committedHook.push({ workItemId: args.workItemId, fromStage: args.fromStage, toStage: args.toStage });
+              },
+            }),
+          }).requestMove(input);
         },
-        onTransitionCommitted: async args => {
-          committedHook.push({ workItemId: args.workItemId, fromStage: args.fromStage, toStage: args.toStage });
-        },
-      }),
+      },
       startCoordinator,
       sessionRepository,
       liveSessions: { parked: () => undefined, parkedIn: () => [] },
@@ -229,6 +242,8 @@ describe('installed board catalog', () => {
           context: 'release-preparer',
           role: 'release-preparer',
           autoStart: false,
+          // A board that lists no outcomes offers one per next phase.
+          outcomes: [{ key: 'shipped', label: 'Shipped', to: 'shipped' }],
           transitions: [{ outcome: null, to: 'shipped' }],
         },
         { id: 'shipped', name: 'Shipped', title: 'Shipped', kind: 'terminal', nextPhases: [], transitions: [] },
@@ -876,6 +891,17 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
         metadata: expect.objectContaining({ ingressType: 'human', configVersion: 'factory-config-v1' }),
       }),
     );
+  });
+
+  it("hands the card's placement and the person's move to the board engine", async () => {
+    engineInputs = [];
+    const item = await createItem();
+    const res = await transition(item);
+    expect(res.status).toBe(200);
+    expect(engineInputs.map(input => [input.workItemId, input.stage, input.ingress.type])).toEqual([
+      [item.id, 'intake', expect.any(String)],
+      [item.id, 'planning', 'human'],
+    ]);
   });
 
   it('stamps the browser request onto the row a move leaves behind', async () => {

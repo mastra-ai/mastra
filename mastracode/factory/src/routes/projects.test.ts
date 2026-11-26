@@ -78,6 +78,56 @@ describe('ProjectRoutes', () => {
     expect((await app.request(`/web/factory/projects/${created.project.id}`)).status).toBe(404);
   });
 
+  it("still creates an organization's second project, warning once per process that it is deprecated", async () => {
+    vi.resetModules();
+    const { ProjectRoutes: FreshProjectRoutes } = await import('./projects.js');
+    const seed = await createFactoryStorageForTests();
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      const organizationId = context.req.header('x-org') ?? 'org-1';
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as never,
+      new FreshProjectRoutes({
+        auth: fakeRouteAuth(),
+        projects: seed.projects,
+        sourceControl: seed.sourceControl,
+      }).routes(),
+    );
+    const create = (name: string, org = 'org-1') =>
+      app.request('/web/factory/projects', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-org': org },
+        body: JSON.stringify({ name }),
+      });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const deprecations = () =>
+      warn.mock.calls.filter(([message]) => String(message).includes('more than one Factory project'));
+
+    try {
+      expect((await create('Platform')).status).toBe(201);
+      expect((await create('Acme', 'org-2')).status).toBe(201);
+      expect(deprecations()).toEqual([]);
+
+      expect((await create('Payments')).status).toBe(201);
+      expect((await create('Growth')).status).toBe(201);
+      expect(deprecations()).toEqual([
+        [
+          '[Mastra Factory] Creating more than one Factory project in an organization is deprecated: each organization will have one Factory project. The project is still created; see the README "One project per Factory" section.',
+        ],
+      ]);
+
+      const listed = (await (await app.request('/web/factory/projects')).json()) as {
+        projects: Array<{ name: string }>;
+      };
+      expect(listed.projects.map(project => project.name).sort()).toEqual(['Growth', 'Payments', 'Platform']);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("hands a deleted factory's Jira projects back so another factory can take all their issues", async () => {
     const seed = await createFactoryStorageForTests();
     const create = (name: string) => seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name } });
@@ -276,11 +326,8 @@ describe('ProjectRoutes', () => {
     expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('hybrid');
   });
 
-  it('requires an organization admin to change the thinking default and rejects unknown levels', async () => {
+  it('lets a member who is not an organization admin create a Factory on its default model', async () => {
     const seed = await createFactoryStorageForTests();
-    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Shared' } });
-    expect(project.defaultThinkingLevel).toBe('medium');
-    const isOrganizationAdmin = vi.fn(async () => false);
     const app = new Hono();
     app.use('*', async (context, next) => {
       context.set('factoryAuthUser' as never, { workosId: 'member', organizationId: 'org-1' } as never);
@@ -288,29 +335,25 @@ describe('ProjectRoutes', () => {
     });
     mountApiRoutes(
       app as never,
-      projectRoutes(seed, undefined, undefined, undefined, { auth: fakeRouteAuth({ isOrganizationAdmin }) }),
+      projectRoutes(seed, undefined, undefined, undefined, {
+        auth: fakeRouteAuth({ isOrganizationAdmin: async () => false }),
+      }),
     );
-    const patch = (body: Record<string, unknown>) =>
-      app.request(`/web/factory/projects/${project.id}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      });
 
-    const denied = await patch({ defaultThinkingLevel: 'high' });
-    expect(denied.status).toBe(403);
-    expect(await denied.json()).toMatchObject({
-      error: 'forbidden',
-      message: 'Organization administrator access is required to change the thinking default.',
+    const created = await app.request('/web/factory/projects', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Shared', defaultModelId: 'anthropic/claude-opus-5.5' }),
     });
-    expect((await seed.projects.getById({ id: project.id }))?.defaultThinkingLevel).toBe('medium');
-
-    isOrganizationAdmin.mockResolvedValue(true);
-    expect((await patch({ defaultThinkingLevel: 'enormous' })).status).toBe(400);
-    const saved = await patch({ defaultThinkingLevel: 'high' });
-    expect(saved.status).toBe(200);
-    expect(await saved.json()).toMatchObject({ project: { defaultThinkingLevel: 'high' } });
-    expect((await seed.projects.getById({ id: project.id }))?.defaultThinkingLevel).toBe('high');
+    expect(created.status).toBe(201);
+    const defaultPack = {
+      defaultModelId: 'anthropic/claude-opus-5.5',
+      defaultModelPackId: 'default',
+      modelPacks: [{ id: 'default', models: [{ modelId: 'anthropic/claude-opus-5.5' }] }],
+    };
+    const { project } = (await created.json()) as { project: { id: string } };
+    expect(project).toMatchObject(defaultPack);
+    expect(await seed.projects.getById({ id: project.id })).toMatchObject(defaultPack);
   });
 
   it('creates a project in the requested model scope and rejects unknown scopes', async () => {
@@ -335,245 +378,6 @@ describe('ProjectRoutes', () => {
     expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('user');
 
     expect((await create({ name: 'Bad', modelScope: 'org' })).status).toBe(400);
-  });
-
-  describe('apply default model', () => {
-    const mount = (
-      seed: FactoryStorageTestSeed,
-      overrides?: Partial<ConstructorParameters<typeof ProjectRoutes>[0]>,
-      user: { workosId: string; organizationId?: string } | null = {
-        workosId: 'user-1',
-        organizationId: 'org-1',
-      },
-    ) => {
-      const app = new Hono();
-      app.use('*', async (context, next) => {
-        if (user) context.set('factoryAuthUser' as never, user as never);
-        await next();
-      });
-      mountApiRoutes(app as never, projectRoutes(seed, undefined, undefined, undefined, overrides));
-      return app;
-    };
-
-    it('requires project access and a configured default model', async () => {
-      const seed = await createFactoryStorageForTests();
-      const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
-      const path = `/web/factory/projects/${project.id}/apply-default-model`;
-
-      expect((await mount(seed, undefined, null).request(path, { method: 'POST' })).status).toBe(401);
-      expect(
-        (
-          await mount(seed, undefined, { workosId: 'user-2', organizationId: 'org-2' }).request(path, {
-            method: 'POST',
-          })
-        ).status,
-      ).toBe(404);
-
-      const forbidden = await mount(seed, {
-        auth: fakeRouteAuth({ isOrganizationAdmin: async () => false }),
-      }).request(path, { method: 'POST' });
-      expect(forbidden.status).toBe(403);
-      expect(await forbidden.json()).toEqual({
-        error: 'forbidden',
-        message: 'Organization administrator access is required to update running sessions.',
-      });
-
-      const response = await mount(seed).request(path, { method: 'POST' });
-      expect(response.status).toBe(400);
-      expect(await response.json()).toEqual({
-        error: 'default_model_not_set',
-        message: 'Set a default model on the project first.',
-      });
-    });
-
-    it('acknowledges before applying the default to running bound threads', async () => {
-      const seed = await createFactoryStorageForTests();
-      const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
-      await seed.projects.update({
-        orgId: 'org-1',
-        id: project.id,
-        input: { defaultModelId: 'anthropic/claude-opus-4-6' },
-      });
-      const now = new Date();
-      const binding = (threadId: string, workItemId: string, resourceId: string) => ({
-        id: `binding-${threadId}`,
-        orgId: 'org-1',
-        factoryProjectId: project.id,
-        workItemId,
-        role: 'work',
-        threadId,
-        resourceId,
-        sessionId: `session-${threadId}`,
-        branch: `factory/${threadId}`,
-        status: 'active' as const,
-        createdAt: now,
-        revokedAt: null,
-      });
-      const bindings = [
-        binding('thread-applied', 'item-applied', 'resource-applied'),
-        binding('thread-applied', 'item-applied', 'resource-applied'),
-        binding('thread-no-item', 'item-missing', 'resource-no-item'),
-        binding('thread-inactive', 'item-inactive', 'resource-inactive'),
-        binding('thread-not-running', 'item-not-running', 'resource-not-running'),
-        binding('thread-missing', 'item-thread-missing', 'resource-thread-missing'),
-        binding('thread-lookup-failed', 'item-lookup-failed', 'resource-lookup-failed'),
-        binding('thread-mode-unknown', 'item-mode-unknown', 'resource-mode-unknown'),
-        binding('thread-apply-failed', 'item-apply-failed', 'resource-apply-failed'),
-      ];
-      const item = (id: string, stages = ['execute']) => ({ id, factoryProjectId: project.id, stages });
-      const items = new Map([
-        ['item-applied', item('item-applied')],
-        ['item-inactive', item('item-inactive', ['done'])],
-        ['item-not-running', item('item-not-running')],
-        ['item-thread-missing', item('item-thread-missing')],
-        ['item-lookup-failed', item('item-lookup-failed')],
-        ['item-mode-unknown', item('item-mode-unknown')],
-        ['item-apply-failed', item('item-apply-failed')],
-      ]);
-      let releaseFirstWrite = () => {};
-      const firstWrite = new Promise<void>(resolve => (releaseFirstWrite = resolve));
-      const setSettingOn = vi
-        .fn()
-        .mockImplementationOnce(() => firstWrite)
-        .mockResolvedValue(undefined);
-      const failingSetSettingOn = vi.fn().mockRejectedValue(new Error('write failed'));
-      const sessions = new Map([
-        [
-          'session-thread-applied',
-          {
-            thread: {
-              getById: vi.fn().mockResolvedValue({ metadata: { currentModeId: 'plan' } }),
-              setSettingOn,
-            },
-          },
-        ],
-        ['session-thread-missing', { thread: { getById: vi.fn().mockResolvedValue(null), setSettingOn } }],
-        [
-          'session-thread-mode-unknown',
-          { thread: { getById: vi.fn().mockResolvedValue({ metadata: {} }), setSettingOn } },
-        ],
-        [
-          'session-thread-apply-failed',
-          {
-            thread: {
-              getById: vi.fn().mockResolvedValue({ metadata: { currentModeId: 'plan' } }),
-              setSettingOn: failingSetSettingOn,
-            },
-          },
-        ],
-      ]);
-      const workItems = {
-        listRunBindings: vi.fn().mockResolvedValue(bindings),
-        get: vi.fn(async ({ id }: { id: string }) => items.get(id) ?? null),
-      } as unknown as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['workItems']>;
-      const setThreadModel = vi.fn().mockResolvedValue({ live: false });
-      const controller = {
-        getSession: vi.fn(async (sessionId: string) => {
-          if (sessionId === 'session-thread-lookup-failed') throw new Error('gateway unavailable');
-          return sessions.get(sessionId) ?? null;
-        }),
-        setThreadModel,
-      } as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['controller']>;
-
-      const completed = vi.spyOn(console, 'info').mockImplementation(() => {});
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      try {
-        const response = await mount(seed, { workItems, controller }).request(
-          `/web/factory/projects/${project.id}/apply-default-model`,
-          { method: 'POST' },
-        );
-
-        expect(response.status).toBe(202);
-        expect(await response.json()).toEqual({ modelId: 'anthropic/claude-opus-4-6', status: 'started' });
-        await vi.waitFor(() => expect(setSettingOn).toHaveBeenCalledTimes(1));
-        expect(completed).not.toHaveBeenCalled();
-        releaseFirstWrite();
-        await vi.waitFor(() =>
-          expect(completed).toHaveBeenCalledWith('[factory] apply-default-model completed', {
-            projectId: project.id,
-            modelId: 'anthropic/claude-opus-4-6',
-            applied: 3,
-            skipped: 5,
-          }),
-        );
-        expect(warn).toHaveBeenCalledTimes(2);
-        // A bound session that is not loaded gets the model stored on its thread.
-        expect(setThreadModel).toHaveBeenCalledTimes(1);
-        expect(setThreadModel).toHaveBeenCalledWith({
-          resourceId: 'resource-not-running',
-          threadId: 'thread-not-running',
-          modelId: 'anthropic/claude-opus-4-6',
-        });
-        expect(failingSetSettingOn).toHaveBeenCalledTimes(1);
-        expect(setSettingOn).toHaveBeenCalledTimes(2);
-        expect(setSettingOn).toHaveBeenNthCalledWith(1, {
-          threadId: 'thread-applied',
-          key: 'currentModelId',
-          value: 'anthropic/claude-opus-4-6',
-        });
-        expect(setSettingOn).toHaveBeenNthCalledWith(2, {
-          threadId: 'thread-mode-unknown',
-          key: 'currentModelId',
-          value: 'anthropic/claude-opus-4-6',
-        });
-      } finally {
-        releaseFirstWrite();
-        completed.mockRestore();
-        warn.mockRestore();
-      }
-    });
-
-    it('does not let an older delayed request overwrite a newer default', async () => {
-      const seed = await createFactoryStorageForTests();
-      const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
-      await seed.projects.update({
-        orgId: 'org-1',
-        id: project.id,
-        input: { defaultModelId: 'openai/old' },
-      });
-      let releaseWrite = () => {};
-      const blockedWrite = new Promise<void>(resolve => (releaseWrite = resolve));
-      const writes: Array<{ threadId: string; value: string }> = [];
-      const setSettingOn = vi.fn(async ({ threadId, value }: { threadId: string; value: string }) => {
-        if (value === 'openai/old') await blockedWrite;
-        writes.push({ threadId, value });
-      });
-      const bindings = ['thread-one', 'thread-two'].map(threadId => ({
-        sessionId: 'session-1',
-        threadId,
-        workItemId: 'item-1',
-        status: 'active' as const,
-      }));
-      const workItems = {
-        listRunBindings: vi.fn().mockResolvedValue(bindings),
-        get: vi.fn().mockResolvedValue({ id: 'item-1', factoryProjectId: project.id, stages: ['execute'] }),
-      } as unknown as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['workItems']>;
-      const controller = {
-        getSession: vi.fn().mockResolvedValue({ thread: { getById: vi.fn().mockResolvedValue({}), setSettingOn } }),
-      } as unknown as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['controller']>;
-      const completed = vi.spyOn(console, 'info').mockImplementation(() => {});
-      try {
-        const app = mount(seed, { workItems, controller });
-        const path = `/web/factory/projects/${project.id}/apply-default-model`;
-        const first = await app.request(path, { method: 'POST' });
-        expect(first.status).toBe(202);
-        await vi.waitFor(() => expect(setSettingOn).toHaveBeenCalledTimes(1));
-        await seed.projects.update({ orgId: 'org-1', id: project.id, input: { defaultModelId: 'openai/new' } });
-        const second = await app.request(path, { method: 'POST' });
-        expect(second.status).toBe(202);
-        expect(await second.json()).toEqual({ modelId: 'openai/new', status: 'started' });
-        releaseWrite();
-        await vi.waitFor(() => expect(completed).toHaveBeenCalledTimes(2));
-        expect(writes).toEqual([
-          { threadId: 'thread-one', value: 'openai/old' },
-          { threadId: 'thread-one', value: 'openai/new' },
-          { threadId: 'thread-two', value: 'openai/new' },
-        ]);
-      } finally {
-        releaseWrite();
-        completed.mockRestore();
-      }
-    });
   });
 
   it('retires active repository sessions before destructive project deletion', async () => {
@@ -1285,6 +1089,79 @@ describe('ProjectRoutes', () => {
     expect(await invalidScope.json()).toEqual({ error: 'invalid_project' });
   });
 
+  it('lets only an organization admin save model packs, sent together with a default pack that exists', async () => {
+    const seed = await createFactoryStorageForTests();
+    const isOrganizationAdmin = vi.fn(async () => false);
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'member', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as never,
+      projectRoutes(seed, undefined, undefined, undefined, { auth: fakeRouteAuth({ isOrganizationAdmin }) }),
+    );
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Valid' } });
+    const patch = (body: Record<string, unknown>) =>
+      app.request(`/web/factory/projects/${project.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    const build = {
+      id: 'build',
+      name: 'Build',
+      models: [
+        { modelId: 'anthropic/claude-opus-5.5', thinkingLevel: 'medium' },
+        { modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'high' },
+      ],
+    };
+    const packs = { modelPacks: [build], defaultModelPackId: 'build' };
+
+    const denied = await patch(packs);
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({
+      error: 'forbidden',
+      message: 'Organization administrator access is required to change the model packs.',
+    });
+    expect((await seed.projects.getById({ id: project.id }))?.modelPacks).toEqual([]);
+
+    const deniedDefault = await patch({ defaultModelId: 'openai/gpt-5.6-sol' });
+    expect(deniedDefault.status).toBe(403);
+    expect(await deniedDefault.json()).toMatchObject({
+      error: 'forbidden',
+      message: 'Organization administrator access is required to change the default model.',
+    });
+    expect((await seed.projects.getById({ id: project.id }))?.defaultModelId).toBeNull();
+
+    isOrganizationAdmin.mockResolvedValue(true);
+    for (const body of [
+      { modelPacks: [build] },
+      { defaultModelPackId: 'build' },
+      { modelPacks: [build], defaultModelPackId: 'missing' },
+    ]) {
+      const rejected = await patch(body);
+      expect(rejected.status).toBe(400);
+      expect(await rejected.json()).toEqual({ error: 'invalid_project' });
+    }
+
+    const saved = await patch(packs);
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toMatchObject({
+      project: { ...packs, defaultModelId: 'anthropic/claude-opus-5.5', defaultThinkingLevel: 'medium' },
+    });
+    const read = await app.request(`/web/factory/projects/${project.id}`);
+    expect(await read.json()).toMatchObject({ project: packs });
+
+    const renamedDefault = await patch({ defaultModelId: 'openai/gpt-5.6-sol' });
+    expect(await renamedDefault.json()).toMatchObject({
+      project: {
+        defaultModelId: 'openai/gpt-5.6-sol',
+        modelPacks: [{ ...build, models: [{ modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'medium' }] }],
+      },
+    });
+  });
+
   describe('environment', () => {
     /** A provider with two integer settings, strict about unknown keys. */
     class StubFactorySandbox extends FactorySandbox<{ cpuCount?: number; memoryMb?: number }> {
@@ -1303,7 +1180,7 @@ describe('ProjectRoutes', () => {
       }
     }
 
-    async function seedEnvironment() {
+    async function seedEnvironment(sandbox: FactorySandbox = new StubFactorySandbox()) {
       const seed = await createFactoryStorageForTests();
       const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Env' } });
       const github = seed.sourceControl.forIntegration('github');
@@ -1340,10 +1217,7 @@ describe('ProjectRoutes', () => {
         context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
         await next();
       });
-      mountApiRoutes(
-        app as never,
-        projectRoutes(seed, ['github'], undefined, undefined, { sandbox: new StubFactorySandbox() }),
-      );
+      mountApiRoutes(app as never, projectRoutes(seed, ['github'], undefined, undefined, { sandbox }));
       return { seed, project, github, links, app };
     }
 
@@ -1573,6 +1447,64 @@ describe('ProjectRoutes', () => {
       // A patch that sets the rejected value itself is still refused.
       const refused = await patch(app, project.id, { settings: { memoryMb: 256 } });
       expect(refused.status).toBe(400);
+    });
+
+    describe('a setting whose schema became a list of choices', () => {
+      /** Offers CPU as a list, the way a provider does once a free range turns out to be wrong. */
+      class ChoiceFactorySandbox extends FactorySandbox<{ cpuCount?: number; label?: string }> {
+        readonly provider = 'stub';
+        readonly settings = {
+          type: 'object',
+          properties: {
+            cpuCount: { type: 'integer', default: 2, oneOf: [{ const: 1 }, { const: 2 }, { const: 4 }, { const: 8 }] },
+            label: { type: 'string' },
+          },
+          additionalProperties: false,
+        } as const;
+        create(_ctx: FactorySandboxContext) {
+          throw new Error('not constructed in route tests');
+        }
+      }
+      const read = async (app: Hono, projectId: string) =>
+        (await (await app.request(`/web/factory/projects/${projectId}/environment`)).json()).environment.settings;
+
+      it.each([3, 64, 0])(
+        'drops a stored %i that is not a choice when the environment is read, so the default applies, and saves that',
+        async stored => {
+          const { seed, project, app } = await seedEnvironment(new ChoiceFactorySandbox());
+          await seed.projects.update({
+            orgId: 'org-1',
+            id: project.id,
+            input: { sandboxSettings: { cpuCount: stored, label: 'kept' } },
+          });
+
+          expect(await read(app, project.id)).toEqual({ label: 'kept' });
+          expect((await seed.projects.getById({ id: project.id }))?.sandboxSettings).toEqual({ label: 'kept' });
+        },
+      );
+
+      it('clears the stored settings when the only stored value is not a choice', async () => {
+        const { seed, project, app } = await seedEnvironment(new ChoiceFactorySandbox());
+        await seed.projects.update({ orgId: 'org-1', id: project.id, input: { sandboxSettings: { cpuCount: 3 } } });
+
+        expect(await read(app, project.id)).toEqual({});
+        expect((await seed.projects.getById({ id: project.id }))?.sandboxSettings).toBeNull();
+      });
+
+      it('leaves an offered value alone', async () => {
+        const { seed, project, app } = await seedEnvironment(new ChoiceFactorySandbox());
+        await seed.projects.update({ orgId: 'org-1', id: project.id, input: { sandboxSettings: { cpuCount: 4 } } });
+        const before = (await seed.projects.getById({ id: project.id }))?.updatedAt;
+
+        expect(await read(app, project.id)).toEqual({ cpuCount: 4 });
+        expect((await seed.projects.getById({ id: project.id }))?.updatedAt).toEqual(before);
+      });
+
+      it('still refuses a save that sets a value that is not a choice', async () => {
+        const { project, app } = await seedEnvironment(new ChoiceFactorySandbox());
+
+        expect((await patch(app, project.id, { settings: { cpuCount: 3 } })).status).toBe(400);
+      });
     });
 
     it('reports no sandbox and refuses settings when the factory has none configured', async () => {
@@ -1815,7 +1747,7 @@ describe('ProjectRoutes', () => {
         expect(environment.sandbox.capabilities.builds).toEqual({ available: true, history: true });
         expect(environment.buildTriggers).toEqual({
           schedule: { enabled: false, cron: null, timezone: null, scheduleAvailable: true },
-          push: { enabled: false, debounceMinutes: 10 },
+          push: { enabled: false, debounceMinutes: 30 },
         });
         expect(environment.build).toBeNull();
         expect(environment.buildRequested).toBeUndefined();

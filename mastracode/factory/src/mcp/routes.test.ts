@@ -5,8 +5,11 @@ import type { AddressInfo } from 'node:net';
 import { MCPClient } from '@mastra/mcp';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import type { CryptoKey, JWTPayload } from 'jose';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DispatcherBoardEngine } from '../board-engine/engine.js';
 import { createBoardRegistry } from '../boards/index.js';
 import { PLATFORM_AUTH_PROVIDER } from '../platform-auth-host.js';
 import type { RouteAuth } from '../routes/route.js';
@@ -15,13 +18,17 @@ import { createSourceControlSessionLookup } from '../session/factory-session.js'
 import { AuditDomain } from '../storage/domains/audit/domain.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryToolDependencies } from '../tools/index.js';
+import { createWorkosMcpCallerResolver } from './caller.js';
+import type { McpCallerResolver } from './caller.js';
 import { ACTIVITY_SETTLE_MS } from './events.js';
 import {
   buildFactoryMcpRoutes,
   connectorSessionId,
+  factoryMcpResource,
   PLATFORM_MCP_AUTHORIZATION_SERVER,
   resolveMcpAuthorizationServers,
 } from './routes.js';
+import { createMcpTokenVerifier } from './token.js';
 
 describe('resolveMcpAuthorizationServers', () => {
   it('prefers config, then env, then Platform AuthKit', () => {
@@ -56,11 +63,9 @@ describe('resolveMcpAuthorizationServers', () => {
 
 const PUBLIC_ORIGIN = 'https://factory.example.com';
 
-/**
- * Bearer token → tenant. Platform's `/auth/verify` is the real boundary and
- * can't run here; everything behind it (projects, work items, sessions,
- * subscriptions, audit) is real Factory storage.
- */
+const RESOURCE = factoryMcpResource(PUBLIC_ORIGIN);
+
+/** Who each test token was issued to; tests name tokens, `bearer()` turns them into signed JWTs. */
 const USERS: Record<string, { orgId?: string; userId: string }> = {
   'token-alice': { orgId: 'org-1', userId: 'alice' },
   'token-bob': { orgId: 'org-1', userId: 'bob' },
@@ -68,24 +73,115 @@ const USERS: Record<string, { orgId?: string; userId: string }> = {
   'token-no-org': { userId: 'drifter' },
 };
 
-function tokenAuth(): RouteAuth {
-  const tenants = new WeakMap<Context, { orgId?: string; userId: string }>();
+/**
+ * An OAuth authorization server over real HTTP: RFC 8414 metadata and a JWKS,
+ * signing RS256 access tokens the way AuthKit does with Resource Indicators on.
+ * `outage` makes either endpoint answer 503, or never answer; `discovery`
+ * picks which well-known document describes the server. `path` gives the
+ * issuer a path, as multi-tenant servers do: RFC 8414 metadata then lives at
+ * `/.well-known/oauth-authorization-server<path>`, OpenID Connect discovery
+ * at `<path>/.well-known/openid-configuration`.
+ */
+async function startAuthorizationServer({ path = '' }: { path?: string } = {}) {
+  const signingKey = async (kid: string) => {
+    const { publicKey, privateKey } = await generateKeyPair('RS256');
+    return { kid, privateKey, jwk: { ...(await exportJWK(publicKey)), kid, alg: 'RS256', use: 'sig' } };
+  };
+  let key = await signingKey('key-1');
+  let jwksPath = `${path}/oauth2/jwks`;
+  let issuer = '';
+  const outage: { metadata: false | 'down' | 'hang'; jwks: false | 'down' | 'hang' | 'malformed' } = {
+    metadata: false,
+    jwks: false,
+  };
+  const hanging: Array<() => void> = [];
+  const discovery: { kind: 'oauth' | 'openid'; issuer?: string } = { kind: 'oauth' };
+  /** How long metadata takes to answer, and how often it has been read. */
+  const metadata = { delayMs: 0, reads: 0 };
+  hangingResponses.push(() => hanging.splice(0).forEach(end => end()));
+  const server = createServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    const document =
+      discovery.kind === 'oauth'
+        ? `/.well-known/oauth-authorization-server${path}`
+        : `${path}/.well-known/openid-configuration`;
+    if (req.url === document) {
+      metadata.reads++;
+      if (outage.metadata === 'hang') hanging.push(() => res.end());
+      else if (outage.metadata) res.writeHead(503).end('{}');
+      else {
+        const body = JSON.stringify({ issuer: discovery.issuer ?? issuer, jwks_uri: `${origin}${jwksPath}` });
+        setTimeout(() => res.end(body), metadata.delayMs);
+      }
+    } else if (req.url === jwksPath) {
+      if (outage.jwks === 'hang') hanging.push(() => res.end());
+      else if (outage.jwks === 'malformed') res.end('{}');
+      else if (outage.jwks) res.writeHead(503).end('{}');
+      else res.end(JSON.stringify({ keys: [key.jwk] }));
+    } else {
+      res.writeHead(404).end('{}');
+    }
+  });
+  servers.push(server);
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  issuer = `${origin}${path}`;
   return {
-    enabled: () => true,
-    ensureUser: async c => {
-      const token = c.req.header('Authorization')?.replace(/^Bearer /, '');
-      const user = token ? USERS[token] : undefined;
-      if (user) tenants.set(c, user);
-      return user;
+    issuer,
+    outage,
+    discovery,
+    metadata,
+    /** Sign with a new key published at a new JWKS URL, retiring the old URL. */
+    rotateKeys: async (newJwksPath: string) => {
+      key = await signingKey(`key-${Date.now()}`);
+      jwksPath = newJwksPath;
     },
-    tenant: c => tenants.get(c),
-    isOrganizationAdmin: async () => false,
+    sign: (claims: JWTPayload, options: SignOptions = {}) => sign(key.privateKey, key.kid, issuer, claims, options),
   };
 }
 
-async function setup() {
+interface SignOptions {
+  issuer?: string;
+  audience?: string | string[] | null;
+  expiresIn?: string;
+}
+
+function sign(key: CryptoKey, kid: string, issuer: string, claims: JWTPayload, options: SignOptions): Promise<string> {
+  const jwt = new SignJWT(claims)
+    .setProtectedHeader({ alg: 'RS256', kid })
+    .setIssuer(options.issuer ?? issuer)
+    .setIssuedAt()
+    .setExpirationTime(options.expiresIn ?? '1h');
+  const audience = options.audience === undefined ? RESOURCE : options.audience;
+  if (audience !== null) jwt.setAudience(audience);
+  return jwt.sign(key);
+}
+
+/** Signed tokens for the `USERS` names, filled per test by `setup()`. */
+const signedTokens = new Map<string, string>();
+const bearer = (token: string) => signedTokens.get(token) ?? token;
+
+async function setup(
+  options: {
+    resolveCaller?: McpCallerResolver;
+    timeoutMs?: number;
+    issuerPath?: string;
+    metadataMaxAgeMs?: number;
+    organizationId?: string;
+  } = {},
+) {
   const seed = await createFactoryStorageForTests();
-  const auth = tokenAuth();
+  const authServer = await startAuthorizationServer({ path: options.issuerPath });
+  for (const [name, user] of Object.entries(USERS)) {
+    signedTokens.set(name, await authServer.sign({ sub: user.userId, ...(user.orgId ? { org_id: user.orgId } : {}) }));
+  }
+  // The MCP endpoint checks its own tokens; the audit domain's route auth is never consulted here.
+  const auth: RouteAuth = {
+    enabled: () => true,
+    ensureUser: async () => undefined,
+    tenant: () => undefined,
+    isOrganizationAdmin: async () => false,
+  };
   const boards = createBoardRegistry();
   const sourceControl = seed.sourceControl.forIntegration('github');
   const auditDomain = new AuditDomain({ auth, audit: seed.audit, projects: seed.projects });
@@ -93,11 +189,15 @@ async function setup() {
     workItems: seed.workItems,
     audit: seed.audit,
     boards,
-    transitionService: new FactoryTransitionService({
-      configVersion: 'mcp-test',
+    boardEngine: new DispatcherBoardEngine({
+      workItems: seed.workItems,
       boards,
-      storage: seed.workItems,
-      audit: auditDomain,
+      transitionService: new FactoryTransitionService({
+        configVersion: 'mcp-test',
+        boards,
+        storage: seed.workItems,
+        audit: auditDomain,
+      }),
     }),
     auditRecorder: auditDomain,
     sessions: createSourceControlSessionLookup([sourceControl]),
@@ -122,9 +222,16 @@ async function setup() {
 
   const app = new Hono();
   const routes = buildFactoryMcpRoutes({
-    auth,
+    verifyAccessToken: createMcpTokenVerifier({
+      authorizationServers: [authServer.issuer],
+      resource: RESOURCE,
+      ...(options.resolveCaller ? { resolveCaller: options.resolveCaller } : {}),
+      ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
+      ...(options.metadataMaxAgeMs ? { metadataMaxAgeMs: options.metadataMaxAgeMs } : {}),
+    }),
     publicOrigin: PUBLIC_ORIGIN,
-    authorizationServers: ['https://auth.example.com'],
+    authorizationServers: [authServer.issuer],
+    ...(options.organizationId ? { organizationId: options.organizationId } : {}),
     projects: seed.projects,
     // No repository is linked, so the connector session has no row to file.
     sourceControls: [sourceControl],
@@ -171,12 +278,15 @@ async function setup() {
       });
     }
   };
-  return { ...seed, project, item, base, url: mcpUrl(base, project.id), createSessions };
+  return { ...seed, project, item, base, authServer, url: mcpUrl(base), createSessions };
 }
 
 const servers: Server[] = [];
 const clients: MCPClient[] = [];
+/** Ends responses a hanging authorization server is holding open, so its server can close. */
+const hangingResponses: Array<() => void> = [];
 afterEach(async () => {
+  hangingResponses.splice(0).forEach(end => end());
   await Promise.all(clients.splice(0).map(client => client.disconnect()));
   await Promise.all(servers.splice(0).map(server => new Promise(resolve => server.close(resolve))));
 });
@@ -210,14 +320,14 @@ function client(url: string, token: string): MCPClient {
   const mcp = new MCPClient({
     id: `factory-mcp-test-${Math.random()}`,
     servers: {
-      factory: { url: new URL(url), requestInit: { headers: { Authorization: `Bearer ${token}` } } },
+      factory: { url: new URL(url), requestInit: { headers: { Authorization: `Bearer ${bearer(token)}` } } },
     },
   });
   clients.push(mcp);
   return mcp;
 }
 
-const mcpUrl = (base: string, project: string) => `${base}/web/factory/projects/${project}/mcp`;
+const mcpUrl = (base: string) => `${base}/mcp`;
 
 const PROTOCOL_VERSION = '2026-07-28';
 
@@ -242,7 +352,7 @@ async function claudeRequest(
       'Mcp-Protocol-Version': PROTOCOL_VERSION,
       'Mcp-Method': method,
       ...(name ? { 'Mcp-Name': name } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(token ? { Authorization: `Bearer ${bearer(token)}` } : {}),
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -264,8 +374,9 @@ async function claudeRequest(
 /** A JSON-RPC reply, whether the server answered with JSON or a one-shot SSE stream. */
 async function readJsonRpc(response: Response): Promise<{ result?: any; error?: any } | null> {
   const text = await response.text();
-  if (!text) return null;
-  if (!response.headers.get('Content-Type')?.includes('text/event-stream')) return JSON.parse(text);
+  const contentType = response.headers.get('Content-Type') ?? '';
+  if (!text || !/json|event-stream/.test(contentType)) return null;
+  if (!contentType.includes('text/event-stream')) return JSON.parse(text);
   const messages = text
     .split('\n')
     .filter(line => line.startsWith('data:'))
@@ -277,28 +388,265 @@ function toolText(result: { content: Array<{ type: string; text: string }> }): a
   return JSON.parse(result.content.find(part => part.type === 'text')!.text);
 }
 
+/**
+ * WorkOS user management as the resolver calls it: users by id, and each
+ * user's active memberships. `members` is mutable so a test can remove someone,
+ * and `down` makes users or memberships lookups fail with a 500.
+ */
+function workosDirectory(members: Record<string, string[]>, down = { users: false, memberships: false }) {
+  const people: Record<string, { firstName: string; lastName: string; email: string }> = {
+    alice: { firstName: 'Alice', lastName: 'Liddell', email: 'alice@example.com' },
+    bob: { firstName: 'Bob', lastName: 'Builder', email: 'bob@example.com' },
+  };
+  const userManagement = {
+    getUser: async (userId: string) => {
+      if (down.users) throw Object.assign(new Error('Internal Server Error'), { status: 500 });
+      const person = people[userId];
+      if (!person) throw Object.assign(new Error('User not found'), { status: 404 });
+      return { id: userId, profilePictureUrl: null, ...person };
+    },
+    listOrganizationMemberships: async ({ userId, organizationId }: { userId: string; organizationId: string }) => {
+      if (down.memberships) throw Object.assign(new Error('Internal Server Error'), { status: 500 });
+      return {
+        data: (members[userId] ?? [])
+          .filter(orgId => orgId === organizationId)
+          .map(orgId => ({ organizationId: orgId })),
+      };
+    },
+  };
+  return createWorkosMcpCallerResolver(
+    userManagement as unknown as Parameters<typeof createWorkosMcpCallerResolver>[0],
+  );
+}
+
 describe('Factory MCP server', () => {
-  it('Claude’s connector is sent to sign in', async () => {
-    const { base, project, url } = await setup();
+  it('Claude’s connector is sent to sign in for this endpoint', async () => {
+    const { base, url, authServer } = await setup();
 
     const response = await claudeRequest(url, 'server/discover');
 
     expect(response.status).toBe(401);
     const challenge = response.headers.get('WWW-Authenticate') ?? '';
     const metadataUrl = /resource_metadata="([^"]+)"/.exec(challenge)?.[1];
-    expect(metadataUrl).toBe(
-      `${PUBLIC_ORIGIN}/.well-known/oauth-protected-resource/web/factory/projects/${project.id}/mcp`,
-    );
+    expect(metadataUrl).toBe(`${PUBLIC_ORIGIN}/.well-known/oauth-protected-resource/mcp`);
 
     // The connector follows the pointer; this server answers it under its local address.
+    // `resource` is what the connector asks the authorization server to bind its token to.
     const metadata = await fetch(`${base}${new URL(metadataUrl!).pathname}`);
     expect(metadata.status).toBe(200);
     expect(await metadata.json()).toEqual({
-      resource: `${PUBLIC_ORIGIN}/web/factory/projects/${project.id}/mcp`,
-      authorization_servers: ['https://auth.example.com'],
+      resource: `${PUBLIC_ORIGIN}/mcp`,
+      authorization_servers: [authServer.issuer],
       bearer_methods_supported: ['header'],
       resource_name: 'Mastra Factory',
     });
+  });
+
+  it('refuses tokens not issued for this endpoint', async () => {
+    const { url, authServer } = await setup();
+    const claims = { sub: 'alice', org_id: 'org-1' };
+    const refused = {
+      // A Platform login: no audience, valid everywhere Platform accepts a login.
+      'Platform login': await authServer.sign(claims, { audience: null }),
+      // Issued for Platform's own MCP server.
+      'Platform MCP token': await authServer.sign(claims, { audience: 'https://platform.mastra.ai/v1/mcp' }),
+      // Issued for another Factory.
+      'other Factory token': await authServer.sign(claims, { audience: 'https://other.factory.mastra.cloud/mcp' }),
+      // Signed with this server's key but naming an issuer the Factory doesn't trust.
+      'unknown issuer': await authServer.sign(claims, { issuer: 'https://attacker.example.com' }),
+      expired: await authServer.sign(claims, { expiresIn: '-1m' }),
+      'not a JWT': 'token-alice-but-opaque',
+      // Also issued for another resource, so it isn't for this endpoint alone.
+      'token for this and another resource': await authServer.sign(claims, {
+        audience: [RESOURCE, 'https://platform.mastra.ai/v1/mcp'],
+      }),
+      'empty subject': await authServer.sign({ ...claims, sub: '' }),
+      'non-string subject': await authServer.sign({ ...claims, sub: 42 as unknown as string }),
+    };
+    // A key the authorization server never published, under its issuer.
+    const stranger = await startAuthorizationServer();
+    const forged = await stranger.sign(claims, { issuer: authServer.issuer });
+
+    for (const [label, token] of Object.entries({ ...refused, 'forged signature': forged })) {
+      const response = await claudeRequest(url, 'tools/list', {}, token);
+      expect(response.status, label).toBe(401);
+      expect(response.headers.get('WWW-Authenticate'), label).toContain('error="invalid_token"');
+    }
+
+    const accepted = await claudeRequest(url, 'tools/list', {}, await authServer.sign(claims));
+    expect(accepted.status).toBe(200);
+  });
+
+  it("serves an organization's first project when it has created others since", async () => {
+    const { url, projects } = await setup();
+    const second = await projects.create({ orgId: 'org-1', userId: 'alice', input: { name: 'Second' } });
+    // The newest-updated project would come first if the endpoint went by list order.
+    await projects.update({ orgId: 'org-1', id: second.id, input: { name: 'Second, renamed' } });
+
+    const response = await claudeRequest(
+      url,
+      'tools/call',
+      { name: 'search', arguments: { query: 'login' } },
+      'token-alice',
+    );
+
+    expect(response.status).toBe(200);
+    expect(toolText(response.body!.result).results).toEqual([expect.objectContaining({ title: 'Fix the login page' })]);
+  });
+
+  it('someone removed from the organization loses access at once, though their token has not expired', async () => {
+    const members: Record<string, string[]> = { alice: ['org-1'] };
+    const { url } = await setup({ resolveCaller: workosDirectory(members) });
+
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(200);
+
+    members.alice = [];
+    const response = await claudeRequest(url, 'server/discover', {}, 'token-alice');
+    expect(response.status).toBe(401);
+    expect(response.headers.get('WWW-Authenticate')).toContain('error="invalid_token"');
+  });
+
+  it('finds the metadata of an authorization server whose issuer has a path', async () => {
+    const { url } = await setup({ issuerPath: '/tenant' });
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(200);
+
+    const openid = await setup({ issuerPath: '/tenant' });
+    openid.authServer.discovery.kind = 'openid';
+    expect((await claudeRequest(openid.url, 'server/discover', {}, 'token-alice')).status).toBe(200);
+  });
+
+  it('refuses to trust keys from metadata that describes another issuer', async () => {
+    const { url, authServer } = await setup();
+    authServer.discovery.issuer = 'https://attacker.example.com';
+
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(500);
+  });
+
+  it('follows an authorization server that moves its signing keys to a new URL', async () => {
+    const { url, authServer } = await setup({ metadataMaxAgeMs: 100 });
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(200);
+
+    await authServer.rotateKeys('/oauth2/jwks-2026');
+    const token = await authServer.sign({ sub: 'alice', org_id: 'org-1' });
+    // Once the metadata is read again, the Factory finds the new key at the new URL.
+    await new Promise(resolve => setTimeout(resolve, 150));
+    expect((await claudeRequest(url, 'server/discover', {}, token)).status).toBe(200);
+  });
+
+  it('a deployment pinned to one organization refuses tokens for another', async () => {
+    const { url, projects } = await setup({ organizationId: 'org-1' });
+    // Someone in the pinned org created a project under their other org.
+    await projects.create({ orgId: 'org-2', userId: 'alice', input: { name: 'Globex' } });
+
+    const outsider = await claudeRequest(url, 'server/discover', {}, 'token-mallory');
+    expect(outsider.status).toBe(403);
+    expect(outsider.body).toEqual({ error: 'organization_forbidden' });
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(200);
+  });
+
+  it('requests arriving during a slow metadata lookup share it', async () => {
+    const { url, authServer } = await setup({ metadataMaxAgeMs: 100 });
+    authServer.metadata.delayMs = 300;
+
+    const first = claudeRequest(url, 'server/discover', {}, 'token-alice');
+    // Arrives after the cache lifetime has passed, but before the lookup answers.
+    await new Promise(resolve => setTimeout(resolve, 150));
+    const second = claudeRequest(url, 'server/discover', {}, 'token-bob');
+
+    expect((await first).status).toBe(200);
+    expect((await second).status).toBe(200);
+    expect(authServer.metadata.reads).toBe(1);
+  });
+
+  it('accepts tokens from an authorization server that only publishes OpenID Connect discovery', async () => {
+    const { url, authServer } = await setup();
+    authServer.discovery.kind = 'openid';
+
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(200);
+  });
+
+  it('an authorization server outage is a server error, not a bad sign-in', async () => {
+    const { url, authServer } = await setup();
+
+    authServer.outage.metadata = 'down';
+    const noMetadata = await claudeRequest(url, 'server/discover', {}, 'token-alice');
+    expect(noMetadata.status).toBe(500);
+    expect(noMetadata.headers.get('WWW-Authenticate')).toBeNull();
+
+    authServer.outage.metadata = false;
+    authServer.outage.jwks = 'down';
+    const noKeys = await claudeRequest(url, 'server/discover', {}, 'token-alice');
+    expect(noKeys.status).toBe(500);
+    expect(noKeys.headers.get('WWW-Authenticate')).toBeNull();
+
+    authServer.outage.jwks = 'malformed';
+    const badKeys = await claudeRequest(url, 'server/discover', {}, 'token-alice');
+    expect(badKeys.status).toBe(500);
+    expect(badKeys.headers.get('WWW-Authenticate')).toBeNull();
+
+    // Once it's back, the next request signs in: the failures weren't cached.
+    authServer.outage.jwks = false;
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(200);
+  });
+
+  it('an authorization server that stops answering fails the request instead of holding it open', async () => {
+    const { url, authServer } = await setup({ timeoutMs: 200 });
+
+    authServer.outage.metadata = 'hang';
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(500);
+
+    authServer.outage.metadata = false;
+    authServer.outage.jwks = 'hang';
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(500);
+  });
+
+  it('a failed user or membership lookup is a server error, not access', async () => {
+    const down = { users: true, memberships: false };
+    const { url } = await setup({ resolveCaller: workosDirectory({ alice: ['org-1'] }, down) });
+
+    const usersDown = await claudeRequest(url, 'server/discover', {}, 'token-alice');
+    expect(usersDown.status).toBe(500);
+    expect(usersDown.headers.get('WWW-Authenticate')).toBeNull();
+
+    Object.assign(down, { users: false, memberships: true });
+    const membershipsDown = await claudeRequest(url, 'server/discover', {}, 'token-alice');
+    expect(membershipsDown.status).toBe(500);
+    expect(membershipsDown.headers.get('WWW-Authenticate')).toBeNull();
+    // An unknown user doesn't hide the outage, whichever lookup answers first.
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-mallory')).status).toBe(500);
+
+    down.memberships = false;
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(200);
+  });
+
+  it('a user who no longer exists is refused', async () => {
+    const { url } = await setup({ resolveCaller: workosDirectory({}) });
+    // `mallory` isn't in the directory at all.
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-mallory')).status).toBe(401);
+  });
+
+  it('the audit trail names who made a change from Claude', async () => {
+    const { url, item, project, audit } = await setup({ resolveCaller: workosDirectory({ alice: ['org-1'] }) });
+
+    const call = await claudeRequest(
+      url,
+      'tools/call',
+      { name: 'factory_update_work_item', arguments: { workItem: item.id, title: 'Fix the sign-in page' } },
+      'token-alice',
+    );
+    expect(call.body?.result.isError).not.toBe(true);
+
+    const { events } = await audit.list({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      actions: ['factory.work_item.updated'],
+    });
+    expect(events).toEqual([
+      expect.objectContaining({
+        actorId: 'alice',
+        metadata: expect.objectContaining({ __actorProfile: { name: 'Alice Liddell' } }),
+      }),
+    ]);
   });
 
   it('Claude’s connector discovers the Factory and lists its tools', async () => {
@@ -419,7 +767,7 @@ describe('Factory MCP server', () => {
       fetch(url, {
         method: 'POST',
         headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(token ? { Authorization: `Bearer ${bearer(token)}` } : {}),
           'Content-Type': 'application/json',
           Accept: 'application/json, text/event-stream',
         },
@@ -449,7 +797,7 @@ describe('Factory MCP server', () => {
         factory: {
           url: new URL(url),
           protocolVersion: 'legacy',
-          requestInit: { headers: { Authorization: 'Bearer token-alice' } },
+          requestInit: { headers: { Authorization: `Bearer ${bearer('token-alice')}` } },
         },
       },
     });
@@ -465,7 +813,7 @@ describe('Factory MCP server', () => {
     ]);
   });
 
-  it('denies a user from another organization', async () => {
+  it('finds no project for a user from an organization without a Factory project', async () => {
     const { url } = await setup();
     const response = await claudeRequest(url, 'tools/list', {}, 'token-mallory');
     expect(response.status).toBe(404);
@@ -661,7 +1009,7 @@ describe('Factory activity over MCP events', () => {
   it('activity from another org’s Factory never shows up', async () => {
     const { url, base, item, projects } = await setup();
     const globex = await projects.create({ orgId: 'org-2', userId: 'mallory', input: { name: 'Globex' } });
-    const globexUrl = mcpUrl(base, globex.id);
+    const globexUrl = mcpUrl(base);
 
     const start = await poll(globexUrl, 'token-mallory', null);
     tick(1000);

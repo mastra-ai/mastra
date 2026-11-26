@@ -24,6 +24,19 @@ describe('AskQuestionDialogComponent recommended option', () => {
     expect(lines.find(line => line.includes('Keep it local'))).not.toContain('(recommended)');
   });
 
+  it('keeps the tag visible after a label longer than its column', () => {
+    const dialog = new AskQuestionDialogComponent({
+      question: 'Which rollout?',
+      options: [
+        { label: 'Roll out to every region at once and watch the dashboards', description: 'Fast', recommended: true },
+        { label: 'Wait' },
+      ],
+      onSubmit: () => {},
+      onCancel: () => {},
+    });
+    expect(plain(dialog.render(80)).join('\n')).toContain('(recommended)');
+  });
+
   it('leaves the choice to the user: the cursor stays on the first option and answers carry the bare label', () => {
     const submitted: string[] = [];
     const dialog = new AskQuestionDialogComponent({

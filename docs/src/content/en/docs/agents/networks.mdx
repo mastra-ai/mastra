@@ -127,7 +127,7 @@ const stream = await routingAgent.network('Perform some sensitive action', {
 for await (const chunk of stream) {
   if (chunk.type === 'agent-execution-approval' || chunk.type === 'tool-execution-approval') {
     // Approve
-    const approvedStream = await routingAgent.approveNetworkToolCall(chunk.payload.toolCallId, {
+    const approvedStream = await routingAgent.approveNetworkToolCall({
       runId: stream.runId,
       memory: { thread: 'user-123', resource: 'my-app' },
     })

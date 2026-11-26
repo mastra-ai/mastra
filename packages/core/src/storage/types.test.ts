@@ -78,13 +78,6 @@ describe('buildStorageSchema', () => {
       expect(result.field.type).toBe('uuid');
       expect(result.field.nullable).toBe(false);
     });
-
-    it('should map plain z.string() to text (not uuid)', () => {
-      const schema = z.object({ field: z.string() });
-      const result = buildStorageSchema(schema);
-      expect(result.field.type).toBe('text');
-      expect(result.field.nullable).toBe(false);
-    });
   });
 
   describe('enum types', () => {

@@ -37,6 +37,46 @@ The **Repeat** setting runs an importer manually, hourly, daily, or weekly. Choo
 
 On the importer's page, select **Run now** to start a run, or stop a run that's going. Stopping a run also pauses its schedule. **Paused** stops scheduled runs, but **Run now** still works.
 
+### Run your own importers
+
+Your app can also bring its own importer classes, for a tool the platform doesn't support. [Write an importer](/docs/knowledge/importers#write-an-importer) shows how to write one. Pass them to `PlatformKnowledge` and add the route the platform calls to start a run:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { registerApiRoute } from '@mastra/core/server'
+import { PlatformKnowledge } from '@mastra/platform'
+import { HelpSpotImporter } from './importers/helpspot'
+
+const knowledge = new PlatformKnowledge({ importers: [HelpSpotImporter] })
+
+export const mastra = new Mastra({
+  knowledge,
+  server: {
+    apiRoutes: [
+      registerApiRoute('/_mastra/knowledge-importers/run', {
+        method: 'POST',
+        // The platform signs each request with a token for that one run.
+        requiresAuth: false,
+        handler: c => knowledge.handleImporterRun(c.req.raw),
+      }),
+    ],
+  },
+})
+```
+
+The platform sends a token for one run. `handleImporterRun()` uses it to claim the run, read the importer's settings, and write pages back to this instance. It answers at once and runs the import in the background. Credentials stay in your app: the platform names an environment variable for each one, and the app reads its value. A run whose variable isn't set fails with a missing-credential error.
+
+An importer never reads the app's own `MASTRA_KNOWLEDGE_ACCESS_TOKEN`, `MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_PLATFORM_SECRET_KEY`. To keep other variables away from importers, list them in `deniedCredentialEnv`:
+
+```typescript
+const knowledge = new PlatformKnowledge({
+  importers: [HelpSpotImporter],
+  deniedCredentialEnv: ['DATABASE_URL'],
+})
+```
+
+A run that asks for a denied variable fails with a missing-credential error, and the app logs a warning with the variable's name.
+
 ## Connect an agent
 
 Install the package:

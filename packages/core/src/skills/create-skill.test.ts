@@ -57,34 +57,18 @@ describe('createSkill', () => {
     expect(skill.metadata).toEqual({ category: 'testing', priority: 'high' });
   });
 
-  it('throws on invalid skill name', () => {
+  it.each([
+    ['throws on invalid skill name', 'INVALID_NAME', 'Bad name.', 'Invalid skill "INVALID_NAME"'],
+    ['throws on empty description', 'test-skill', '', 'Invalid skill "test-skill"'],
+    ['throws on name with consecutive hyphens', 'bad--name', 'A test skill.', 'Invalid skill "bad--name"'],
+  ] as const)('%s', (_title, name, description, expected) => {
     expect(() =>
       createSkill({
-        name: 'INVALID_NAME',
-        description: 'Bad name.',
+        name,
+        description,
         instructions: 'Instructions.',
       }),
-    ).toThrow('Invalid skill "INVALID_NAME"');
-  });
-
-  it('throws on empty description', () => {
-    expect(() =>
-      createSkill({
-        name: 'test-skill',
-        description: '',
-        instructions: 'Instructions.',
-      }),
-    ).toThrow('Invalid skill "test-skill"');
-  });
-
-  it('throws on name with consecutive hyphens', () => {
-    expect(() =>
-      createSkill({
-        name: 'bad--name',
-        description: 'A test skill.',
-        instructions: 'Instructions.',
-      }),
-    ).toThrow('Invalid skill "bad--name"');
+    ).toThrow(expected);
   });
 });
 

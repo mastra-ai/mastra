@@ -4,49 +4,17 @@
 import { FGADeniedError } from '@internal/auth/ee';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import { workosSdkMock } from './_types/workos-sdk-mock';
 import { MastraFGAWorkos, WorkOSFGAMembershipResolutionError } from './fga-provider';
 
-// Use globalThis to share mock between factory (hoisted) and test code
-vi.mock('@workos-inc/node', () => {
-  const auth = {
-    check: vi.fn(),
-    listResourcesForMembership: vi.fn(),
-    createResource: vi.fn(),
-    getResource: vi.fn(),
-    listResources: vi.fn(),
-    updateResource: vi.fn(),
-    deleteResource: vi.fn(),
-    deleteResourceByExternalId: vi.fn(),
-    assignRole: vi.fn(),
-    removeRole: vi.fn(),
-    listRoleAssignments: vi.fn(),
-  };
-  (globalThis as any).__mockAuthorization = auth;
-  return {
-    WorkOS: class {
-      authorization = auth;
-      constructor(_apiKey: string, _options?: any) {}
-    },
-  };
-});
+// One shared mock for the WorkOS SDK, registered identically by every test file
+// in this package. The package runs with `isolate: false`, so the first file to
+// import the SDK decides the mock that every later file receives — two
+// different mocks made the suites depend on which file ran first. See
+// ./_types/workos-sdk-mock.ts.
+vi.mock('@workos-inc/node');
 
-vi.mock('@internal/auth/ee', () => ({
-  FGADeniedError: class FGADeniedError extends Error {
-    user: any;
-    resource: any;
-    permission: string;
-    constructor(user: any, resource: any, permission: string) {
-      super(`FGA denied: ${permission}`);
-      this.name = 'FGADeniedError';
-      this.user = user;
-      this.resource = resource;
-      this.permission = permission;
-    }
-  },
-}));
-
-// Access the shared mock (set during vi.mock factory execution)
-const mockAuthorization = (globalThis as any).__mockAuthorization;
+const mockAuthorization = workosSdkMock.authorization;
 
 const testUser = {
   id: 'user-1',
@@ -354,7 +322,7 @@ describe('MastraFGAWorkos', () => {
           resource: { type: 'agent', id: 'agent-1' },
           permission: 'agents:execute',
         }),
-      ).rejects.toThrow('FGA denied');
+      ).rejects.toThrow('FGA authorization denied: user user-1 cannot agents:execute on agent:agent-1');
     });
 
     it('should throw FGADeniedError when WorkOS reports the resource is missing', async () => {

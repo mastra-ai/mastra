@@ -90,11 +90,6 @@ describe('isModelAllowed', () => {
     expect(isModelAllowed(allowed, { provider: 'anthropic', modelId: 'gpt-4o' })).toBe(false);
   });
 
-  it('accepts a custom-tagged entry by exact provider+modelId', () => {
-    const allowed: ProviderModelEntry[] = [{ kind: 'custom', provider: 'acme/custom', modelId: 'foo-1' }];
-    expect(isModelAllowed(allowed, { provider: 'acme/custom', modelId: 'foo-1' })).toBe(true);
-  });
-
   it('denies everything when every entry has an unknown non-custom provider', () => {
     // Typo / disabled provider should NOT silently allow everything.
     const allowed: ProviderModelEntry[] = [

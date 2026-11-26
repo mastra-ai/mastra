@@ -41,11 +41,10 @@ Execute a tool with specific arguments:
 
 ```typescript
 const result = await tool.execute({
-  args: {
+  data: {
     param1: 'value1',
     param2: 'value2',
   },
-  threadId: 'thread-1', // Optional: Thread context
-  resourceId: 'resource-1', // Optional: Resource identifier
+  runId: 'run-1', // Optional: Run identifier
 })
 ```

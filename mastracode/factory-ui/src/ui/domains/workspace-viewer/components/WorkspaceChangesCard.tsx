@@ -303,6 +303,8 @@ function hasLines(changes: WorkspaceChangesSummary): boolean {
   );
 }
 
+const cardSurfaceClass = 'bg-fill-subtle flex w-full min-w-0 flex-col gap-1 rounded-[14px] px-2 pt-1.5 pb-1';
+
 export function WorkspaceChangesCard({
   changes,
   onOpen,
@@ -322,7 +324,8 @@ export function WorkspaceChangesCard({
       aria-describedby={hasLines(changes) ? linesId : undefined}
       onClick={onOpen}
       className={cn(
-        'bg-fill-subtle hover:bg-fill flex w-full min-w-0 cursor-pointer flex-col gap-1 rounded-[14px] px-2 pt-1.5 pb-1 text-left transition-colors duration-150 motion-reduce:transition-none',
+        cardSurfaceClass,
+        'hover:bg-fill cursor-pointer text-left transition-colors duration-150 motion-reduce:transition-none',
         focusRing,
       )}
     >
@@ -343,5 +346,17 @@ export function WorkspaceChangesCard({
       {clean ? <StateRow icon={<IconCheckmark2Medium aria-hidden />}>No changes</StateRow> : null}
       {changes.state === 'read' && !clean ? <ReadChanges stats={changes.stats} linesId={linesId} /> : null}
     </button>
+  );
+}
+
+export function WorkspaceChangesCardSkeleton() {
+  return (
+    <div aria-hidden className={cardSurfaceClass}>
+      <span className="flex h-7 items-center gap-1.5">
+        <Skeleton className="size-icon-sm shrink-0 rounded-full motion-reduce:before:animate-none" />
+        <Skeleton className="h-3 w-1/4 motion-reduce:before:animate-none" />
+        {chevron}
+      </span>
+    </div>
   );
 }

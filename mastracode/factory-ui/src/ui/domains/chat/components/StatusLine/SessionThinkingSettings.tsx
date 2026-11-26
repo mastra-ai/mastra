@@ -36,7 +36,7 @@ export function SessionThinkingSettings({ modelId, switchingModel }: SessionThin
         value={state.effective.level}
         label="Thinking"
         onChange={setLevel}
-        reset={state.effective.origin === 'session' ? { label: 'Use default', onClick: resetLevel } : undefined}
+        reset={state.resettable ? { label: 'Use default', onClick: resetLevel } : undefined}
       />
     </div>
   );

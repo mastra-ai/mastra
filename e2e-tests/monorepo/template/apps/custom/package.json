@@ -17,6 +17,7 @@
     "@bufbuild/protobuf": "2.13.0",
     "@mastra/core": "e2e-test",
     "@mastra/deployer": "e2e-test",
+    "@mastra/libsql": "e2e-test",
     "@mastra/mcp": "e2e-test",
     "@mastra/observability": "e2e-test",
     "@mastra/server": "e2e-test",

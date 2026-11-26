@@ -104,6 +104,43 @@ export class ProjectEnvironment {
     return { merged: Object.keys(pruned).length > 0 ? pruned : null };
   }
 
+  /**
+   * The stored settings without the keys the sandbox's schema now rejects (a
+   * tightened range or choice list), so the sandbox falls back to its default
+   * for them. Undefined when nothing is rejected.
+   */
+  async #withoutRejected(stored: Record<string, unknown>): Promise<Record<string, unknown> | null | undefined> {
+    this.#settingsSchema ??= normalizeFactorySandboxSettings(this.deps.sandbox!);
+    const result = await this.#settingsSchema['~standard'].validate(stored);
+    if (!result.issues) return undefined;
+    const rejected = new Set(
+      result.issues.map(issue => {
+        const segment = issue.path?.[0];
+        return typeof segment === 'object' && segment !== null ? segment.key : segment;
+      }),
+    );
+    const kept = Object.fromEntries(Object.entries(stored).filter(([key]) => !rejected.has(key)));
+    if (Object.keys(kept).length === Object.keys(stored).length) return undefined;
+    return Object.keys(kept).length > 0 ? kept : null;
+  }
+
+  /** The project with any stored setting its sandbox now rejects removed, saved when one was. */
+  async #withValidSettings(orgId: string, project: FactoryProject): Promise<FactoryProject> {
+    if (!this.deps.sandbox || !project.sandboxSettings) return project;
+    if ((await this.#withoutRejected(project.sandboxSettings)) === undefined) return project;
+    const projects = await this.projects();
+    const saved = await projects.update({
+      orgId,
+      id: project.id,
+      input: async current => {
+        if (!current.sandboxSettings) return null;
+        const sandboxSettings = await this.#withoutRejected(current.sandboxSettings);
+        return sandboxSettings === undefined ? null : { sandboxSettings };
+      },
+    });
+    return saved ?? (await projects.get({ orgId, id: project.id })) ?? project;
+  }
+
   async projects(): Promise<FactoryProjectsStorage> {
     await this.deps.projects.ensureReady();
     return this.deps.projects;
@@ -148,7 +185,8 @@ export class ProjectEnvironment {
   }
 
   /** The environment as `projectEnvironmentResponseSchema` describes it, minus the build keys. */
-  async payload(orgId: string, project: FactoryProject) {
+  async payload(orgId: string, storedProject: FactoryProject) {
+    const project = await this.#withValidSettings(orgId, storedProject);
     const repositories = [];
     for (const { handle, projectRepository } of await this.links(orgId, project.id)) {
       const repository = await handle.repositories.get({ orgId, id: projectRepository.repositoryId });

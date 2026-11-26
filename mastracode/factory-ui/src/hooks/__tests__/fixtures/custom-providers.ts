@@ -5,6 +5,8 @@ export const customProvider: CustomProviderInfo = {
   name: 'My LLM',
   url: 'https://api.my-llm.test/v1',
   hasApiKey: true,
+  authScheme: 'bearer',
+  headers: [],
   models: ['my-llm/fast', 'my-llm/smart'],
   scope: 'user',
 };

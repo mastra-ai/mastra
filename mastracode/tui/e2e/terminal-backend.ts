@@ -116,9 +116,10 @@ class EmulatedTerminal implements Terminal {
   }
 
   /** 1-based screen position of the first visible occurrence of `text`. */
+  /** The lowest match: menus open at the bottom, under a chat that can hold the same text. */
   findOnScreen(text: string): { row: number; col: number } | undefined {
     const rows = this.serialize().view.split('\n');
-    for (let index = 0; index < rows.length; index += 1) {
+    for (let index = rows.length - 1; index >= 0; index -= 1) {
       const col = rows[index]!.indexOf(text);
       if (col >= 0) return { row: index + 1, col: col + 1 };
     }

@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LogRecord } from '../types';
 import { LogViewList } from './log-view-list';
+import type { LogViewListHandle } from './log-view-list';
 
 const scrollToIndex = vi.fn();
 let visibleCount: number | undefined;
@@ -284,6 +285,22 @@ describe('LogViewList', () => {
 
     expect(screen.getByText(/at d \(d\.js:4:4\)/)).toBeTruthy();
     expect(screen.queryByText(/more lines/)).toBeNull();
+  });
+
+  it('scrolls a line into view by its id, so a page can jump to an error', () => {
+    const handle: { current: LogViewListHandle | null } = { current: null };
+    render(<LogViewList ref={handle} logs={sandboxLines} logIdMap={idMap} />);
+
+    handle.current?.scrollToLog('line-1');
+
+    expect(scrollToIndex).toHaveBeenCalledWith(1, { align: 'center' });
+  });
+
+  it('shows lines that have no time or level', () => {
+    const lines = [{ message: 'npm warn deprecated inflight@1.0.6' }];
+    render(<LogViewList logs={lines} logIdMap={new Map(lines.map(log => [log, 'plain']))} />);
+
+    expect(screen.getByText('npm warn deprecated inflight@1.0.6')).toBeTruthy();
   });
 
   it('opens the clicked line', () => {

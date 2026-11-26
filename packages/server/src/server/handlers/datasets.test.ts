@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { createScorer } from '@mastra/core/evals';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import type { Event } from '@mastra/core/events';
 import { coreFeatures } from '@mastra/core/features';
@@ -132,6 +133,13 @@ describe('Datasets Handlers', () => {
       }
     }`);
 
+    beforeEach(() => {
+      mastra.addScorer(
+        createScorer({ id: 'my-scorer', description: 'Always 1' }).generateScore(() => 1),
+        'my-scorer',
+      );
+    });
+
     async function triggerAndReadBack(body: unknown) {
       const dataset = await mastra.datasets.create({ name: 'Experiment Trigger DS' });
       await dataset.addItem({ input: { prompt: 'hello' } });
@@ -215,6 +223,20 @@ describe('Datasets Handlers', () => {
         versions: { defaultStatus: 'published' },
       });
       expect(experiment?.datasetVersion).toBe(1);
+    });
+
+    it('returns 400 and creates no experiment when a scorer id is unknown', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Unknown scorer DS' });
+      await dataset.addItem({ input: { prompt: 'hello' } });
+
+      await expect(
+        TRIGGER_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          ...TRIGGER_EXPERIMENT_ROUTE.bodySchema.parse({ ...issueReproductionBody, scorerIds: ['typo-scorer'] }),
+        } as any),
+      ).rejects.toMatchObject({ status: 400, message: expect.stringContaining('typo-scorer') });
+      expect((await dataset.listExperiments({ page: 0, perPage: 10 })).experiments).toHaveLength(0);
     });
 
     it('converts a live RequestContext before forwarding to the dataset', async () => {

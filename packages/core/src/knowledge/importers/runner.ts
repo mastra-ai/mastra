@@ -38,6 +38,24 @@ export interface RunKnowledgeImportOptions {
   maxPasses?: number;
   /** Ops per flush. Default 200. */
   bufferSize?: number;
+  /**
+   * Largest flush request, in bytes of the request encoded as JSON (`runId`, `generation`, `seq`,
+   * `digest`, `ops` and `state`): the buffer is sent before an op or a saved state would take it
+   * over. An op or a state too big for a request on its own ends the run `flush_too_large` before
+   * anything more is sent, and so does any request that would still be over it when sent. With a
+   * limit, each pushed op is copied through JSON when handed over, so later changes to it are not
+   * sent and values JSON can't carry arrive as JSON makes them. A host that
+   * wraps the request, or limits its whole HTTP body, sets this a little under its limit. A host
+   * can also give a limit when the run starts; the lower of the two applies. A positive whole
+   * number. Default no limit.
+   */
+  maxFlushBytes?: number;
+  /**
+   * How long the oldest buffered op may wait before it is sent without waiting for a full buffer.
+   * A timed flush sends items only; the cursor is still saved only by `ctx.state.set`. A positive
+   * number of milliseconds, at most 2147483647. Default 30 seconds.
+   */
+  flushAfterMs?: number;
   /** Default 30 seconds. */
   heartbeatMs?: number;
   /** Resends of one flush or finish after a 5xx or network error. Default 8. */
@@ -94,7 +112,7 @@ const isRetryable = (error: unknown) =>
 
 /** The run ended for a reason that decides its outcome; buffered ops after it are dropped. */
 class RunStop extends Error {
-  constructor(readonly reason: 'canceled' | 'stopped' | 'host') {
+  constructor(readonly reason: 'canceled' | 'stopped' | 'flush') {
     super(`importer run ${reason}`);
   }
 }
@@ -123,11 +141,21 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     graceMs = 3 * 60_000,
     maxPasses = 200,
     bufferSize = 200,
+    maxFlushBytes: ownMaxFlushBytes = Infinity,
+    flushAfterMs = 30_000,
     heartbeatMs = 30_000,
     maxRetries = 8,
     hostCallTimeoutMs = 60_000,
     retryDelayMs = (attempt: number) => Math.min(250 * 2 ** attempt, 10_000),
   } = options;
+  // setTimeout treats a delay above 2^31 - 1 ms (about 24.8 days) as 1 ms.
+  if (!Number.isFinite(flushAfterMs) || flushAfterMs <= 0 || flushAfterMs > 2 ** 31 - 1) {
+    throw new TypeError(`flushAfterMs must be a positive number of milliseconds up to 2147483647, got ${flushAfterMs}`);
+  }
+
+  if (ownMaxFlushBytes !== Infinity && !(Number.isInteger(ownMaxFlushBytes) && ownMaxFlushBytes > 0)) {
+    throw new TypeError(`maxFlushBytes must be a positive whole number of bytes, got ${ownMaxFlushBytes}`);
+  }
 
   // Bounded but never resent: a start that timed out may have opened a run, which the host's
   // liveness check reclaims.
@@ -138,6 +166,12 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
   );
   if (started.status === 'skipped') return started;
   const { runId, generation } = started;
+  // The host's limit, when it gives one, bounds requests as well as the option does.
+  const hostMaxFlushBytes = started.maxFlushBytes;
+  const maxFlushBytes =
+    typeof hostMaxFlushBytes === 'number' && Number.isInteger(hostMaxFlushBytes) && hostMaxFlushBytes > 0
+      ? Math.min(ownMaxFlushBytes, hostMaxFlushBytes)
+      : ownMaxFlushBytes;
   const startedAt = Date.now();
 
   let lastSeq = started.lastSeq;
@@ -145,8 +179,17 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
   let unsettledSeq: number | undefined;
   let state: KnowledgeImporterState = { ...started.state };
   let buffer: KnowledgeImporterOp[] = [];
+  /** Encoded bytes of the ops in `buffer`, without the commas between them. */
+  let bufferBytes = 0;
   let stop: RunStop | undefined;
-  let hostFailure: KnowledgeImporterRunError | undefined;
+  /** Armed while the buffer holds ops; sends them once the oldest has waited `flushAfterMs`. */
+  let flushTimer: ReturnType<typeof setTimeout> | undefined;
+  const disarm = () => {
+    clearTimeout(flushTimer);
+    flushTimer = undefined;
+  };
+  /** Why a flush ended the run. Every later flush is refused, so no cursor is saved past its ops. */
+  let flushFailure: KnowledgeImporterRunError | undefined;
   const controller = new AbortController();
   let deadlineHit!: () => void;
   /** Settles at the hard deadline; never otherwise. */
@@ -157,6 +200,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
   const halt = (reason: RunStop['reason']) => {
     if (reason === 'stopped') deadlineHit();
     stop ??= new RunStop(reason);
+    disarm();
     controller.abort(stop);
     wake();
   };
@@ -188,17 +232,35 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
   let flushing: Promise<void> = Promise.resolve();
   /** `settle` sends an empty flush, which only runs the host's next settle slice. */
   function flush(staged?: KnowledgeImporterState, settle = false): Promise<void> {
+    disarm();
     const ops = buffer;
     buffer = [];
+    bufferBytes = 0;
     const next = flushing.then(async () => {
       if (stop) throw stop;
       if (ops.length === 0 && !staged && !settle) return;
       const body = { ops, ...(staged ? { state: staged } : {}) };
       const seq = lastSeq + 1;
-      const digest = await knowledgeImporterFlushDigest(body);
+      let digest: string;
+      try {
+        digest = await knowledgeImporterFlushDigest(body);
+      } catch (error) {
+        // Ops the host can't take are dropped from the buffer: end the run here, however the flush
+        // was triggered and whether or not the importer catches the error.
+        flushFailure = { code: 'importer_error' };
+        halt('flush');
+        throw error;
+      }
       // A stop that arrived while the digest was computed: send nothing.
       if (stop) throw stop;
       const request = { runId, generation, seq, digest, ...body };
+      // The estimate that split the buffer can't cover everything (an empty settle flush, a limit
+      // below the envelope): the request as sent is measured, and is never sent over the limit.
+      if (maxFlushBytes !== Infinity && encodedBytes(request) > maxFlushBytes) {
+        flushFailure = { code: 'flush_too_large' };
+        halt('flush');
+        throw stop;
+      }
       unsettledSeq = seq;
       try {
         const receipt = await withRetries(() => host.flush(request), 'mutation');
@@ -207,8 +269,8 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
       } catch (error) {
         // A refusal (409) or a 4xx means nothing was applied; a retryable failure may have committed.
         if (!isRetryable(error)) unsettledSeq = undefined;
-        hostFailure = { code: 'importer_error', retryable: isRetryable(error) };
-        halt('host');
+        flushFailure = { code: 'importer_error', retryable: isRetryable(error) };
+        halt('flush');
         throw stop;
       }
       unsettledSeq = undefined;
@@ -219,9 +281,74 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     return next;
   }
 
-  const push = async (op: KnowledgeImporterOp) => {
+  /** The request around the ops, at the longest `seq` it can have; `ops` empty, no `state`. */
+  const envelopeBytes = encodedBytes({
+    runId,
+    generation,
+    seq: Number.MAX_SAFE_INTEGER,
+    digest: '0'.repeat(64),
+    ops: [],
+  });
+  /**
+   * The envelope at the shortest `seq` the next request can have. A request's `seq` is only known
+   * when it is sent, so splitting plans for the longest; refusing what can never fit uses the
+   * shortest, and the request as sent is measured again before it goes.
+   */
+  const shortestEnvelopeBytes = () =>
+    envelopeBytes - String(Number.MAX_SAFE_INTEGER).length + String(lastSeq + 1).length;
+  /** Bytes of a request holding the buffer plus `extra` more ops' bytes over `more` ops, and a state. */
+  const requestBytes = (extra: number, more: number, stateBytes?: number) => {
+    const count = buffer.length + more;
+    const commas = Math.max(count - 1, 0);
+    // `,"state":` before the state's own JSON.
+    const state = stateBytes === undefined ? 0 : 9 + stateBytes;
+    return envelopeBytes + bufferBytes + extra + commas + state;
+  };
+  /**
+   * Measures what the importer hands over and returns a copy decoded from that encoding, so a value
+   * the importer changes after handing it over can't outgrow its measured size. Anything
+   * unencodable or too big ends the run here.
+   */
+  const measure = <T>(value: T, alone: (bytes: number) => number): { bytes: number; copy: T } => {
+    let json: string;
+    let bytes: number;
+    try {
+      json = JSON.stringify(value);
+      bytes = new TextEncoder().encode(json).byteLength;
+    } catch (error) {
+      flushFailure = { code: 'importer_error' };
+      halt('flush');
+      throw error;
+    }
+    if (alone(bytes) > maxFlushBytes) {
+      flushFailure = { code: 'flush_too_large' };
+      halt('flush');
+      throw stop;
+    }
+    return { bytes, copy: JSON.parse(json) as T };
+  };
+
+  const push = async (handed: KnowledgeImporterOp) => {
     if (stop) throw stop;
+    let op = handed;
+    let sending: Promise<void> | undefined;
+    if (maxFlushBytes !== Infinity) {
+      const { bytes, copy } = measure(handed, opBytes => shortestEnvelopeBytes() + opBytes);
+      op = copy;
+      // Taken now, with the op added after, so ops pushed meanwhile keep their order.
+      if (buffer.length > 0 && requestBytes(bytes, 1) > maxFlushBytes) sending = flush();
+      bufferBytes += bytes;
+    }
     buffer.push(op);
+    // Armed before waiting on a split's flush, so the ops left in the buffer wait flushAfterMs from
+    // now, not from that flush's ack. Queued behind any flush in flight, like every flush. A failure
+    // halts the run, which the importer sees on its next call.
+    if (!flushTimer && buffer.length < bufferSize) {
+      flushTimer = setTimeout(() => flush().catch(() => {}), flushAfterMs);
+      // A pending timed flush doesn't keep the process alive; the run's own awaits do.
+      flushTimer.unref?.();
+    }
+    if (sending) await sending;
     if (buffer.length >= bufferSize) await flush();
   };
 
@@ -289,7 +416,15 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
       get: async key => state[key],
       set: async (key, value) => {
         if (stop) throw stop;
-        await flush({ [key]: value });
+        const staged = { [key]: value };
+        if (maxFlushBytes !== Infinity) {
+          // State values are strings, so the state needs no copy.
+          const { bytes } = measure(staged, stateBytes => shortestEnvelopeBytes() + 9 + stateBytes);
+          // The ops go first on their own; the state follows in the next flush, so it still lands
+          // only once they have.
+          if (requestBytes(0, 0, bytes) > maxFlushBytes) void flush().catch(() => {});
+        }
+        await flush(staged);
       },
     },
     items: {
@@ -347,6 +482,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     }
   } finally {
     clearInterval(heartbeat);
+    disarm();
   }
   // Wait for a flush in flight, but not past the hard deadline (which halts the run and so wakes
   // `stopped`): if it is still unanswered then, its seq stays unsettled and the finish names
@@ -356,7 +492,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
 
   if (stop?.reason === 'canceled') return finish({ outcome: 'canceled', backlog: false });
   if (stop?.reason === 'stopped') return finish({ outcome: 'failed', backlog: false, error: { code: 'stopped' } });
-  const error = stop?.reason === 'host' ? hostFailure : failure;
+  const error = stop?.reason === 'flush' ? flushFailure : failure;
   if (error) return finish({ outcome: 'failed', backlog: false, error });
   return finish({ outcome: 'succeeded', backlog });
 }
@@ -385,4 +521,8 @@ async function finishRun(
     }
   }
   return { status: 'unfinished', runId: request.runId, lastSeq };
+}
+
+function encodedBytes(value: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(value)).byteLength;
 }
