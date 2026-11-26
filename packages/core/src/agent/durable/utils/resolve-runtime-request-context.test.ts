@@ -335,6 +335,32 @@ describe('rebuildRunToolsFromMastra request context', () => {
     }
   });
 
+  it('rebuilds tools for the method that started the run', async () => {
+    const runId = 'stale-segment-method';
+    globalRunRegistry.set(runId, {
+      model: {},
+      tools: { approve: {} },
+      methodType: 'generate',
+      requestContextSegment: 'segment-1',
+    } as any);
+    const agent = { ...makeAgent(), getToolsForExecution: vi.fn().mockResolvedValue({ approve: {} }) };
+
+    try {
+      await rebuildRunToolsFromMastra({
+        mastra: makeMastra(agent),
+        runId,
+        agentId: 'agent-1',
+        state: {} as any,
+        requestContext: new RequestContext<unknown>([[DURABLE_CONTEXT_SEGMENT_KEY, 'segment-2']]),
+        rehydrateProcessors: true,
+        replaceStale: true,
+      });
+      expect(agent.getToolsForExecution.mock.calls[0]![0].methodType).toBe('generate');
+    } finally {
+      globalRunRegistry.delete(runId);
+    }
+  });
+
   it('keeps tools built for the current segment', async () => {
     const runId = 'current-segment-keep';
     const tools = { approve: { id: 'approve', built: 'alice' } };

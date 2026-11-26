@@ -571,7 +571,8 @@ export async function rebuildRunToolsFromMastra(options: {
   if (!mastra) return undefined;
 
   // A later segment may publish its own entry while this rebuild awaits; only replace the one seen here.
-  const segmentBeforeRebuild = getEntrySegment(getRunRegistryEntry(runId, mastra as Mastra | undefined), runId);
+  const entryBeforeRebuild = getRunRegistryEntry(runId, mastra as Mastra | undefined);
+  const segmentBeforeRebuild = getEntrySegment(entryBeforeRebuild, runId);
   let agentResolved = false;
   try {
     const agent = await resolveRunAgent(mastra, agentId, runId, options.agentVersionId);
@@ -590,6 +591,8 @@ export async function rebuildRunToolsFromMastra(options: {
       memoryConfig: state.memoryConfig,
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
       clientTools: execOptions?.clientTools as ToolsInput | undefined,
+      // Build for the method that started the run, as a warm resume does (#29436).
+      methodType: entryBeforeRebuild?.methodType ?? 'stream',
       backgroundTaskEnabled: Boolean(backgroundTasks.backgroundTaskManager),
       backgroundTaskPolicy: execOptions?.backgroundTaskPolicy,
     });
