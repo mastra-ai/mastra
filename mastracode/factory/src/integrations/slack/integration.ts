@@ -18,9 +18,7 @@
  * capabilities by implementing `FactoryIntegration` from outside the package.
  */
 
-import { channelReplyMode } from '@mastra/core/channels';
-import type { AgentChannels, ChannelReplyMode } from '@mastra/core/channels';
-import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
+import type { AgentChannels } from '@mastra/core/channels';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import type { SlackAdapterChannelConfig } from '@mastra/slack';
@@ -32,7 +30,7 @@ import { factoryReplyInstructions, SESSION_LINK_LABEL } from './channel-reply-pr
 import { sessionLinkFromRequest } from './channel-session-link-processor.js';
 import { createSlackChatTools } from './chat-tools.js';
 import { createSlackConnectRoutes } from './connect-route.js';
-import { createShareFileTool, isSlackThread, resolveRenderContext, slackThreadOf } from './share-file-tool.js';
+import { createShareFileTool, isSlackThread, slackThreadOf } from './share-file-tool.js';
 import type { ShareFileToolDeps } from './share-file-tool.js';
 import { createSlackChannelsConfig } from './slack.js';
 import { DEFAULT_SLACK_TOOL_SETTINGS, slackToolSettingsSchema } from './tool-settings.js';
@@ -104,22 +102,17 @@ function adapterOverrides(options: SlackAdapterChannelConfig | undefined): Slack
 }
 
 /**
- * Core's channel reply mode under the caller's overrides. Tool calls stay out
- * of the thread: a Factory session runs hundreds of them, and a row per call
- * (or a card per call) buries the reply. Progress shows through the typing
- * status instead, which names the tool's current step; the session link
- * carries the full trace. `grouped` remains available via `adapterOptions` for
- * callers who want Slack's "Thinking Steps" widget.
+ * Core's reply mode, under the caller's overrides. Tool calls stay out of the
+ * thread: a Factory session runs hundreds of them, and a row per call (or a
+ * card per call) buries the reply. Progress shows through the typing status
+ * instead, which names the tool's current step; the session link carries the
+ * full trace. `grouped` remains available via `adapterOptions` for callers
+ * who want Slack's "Thinking Steps" widget.
  */
-function factoryReplyMode(overrides: SlackAdapterChannelConfig, deps: ShareFileToolDeps): ChannelReplyMode {
-  return channelReplyMode({
-    textDisplay: overrides.textDisplay ?? 'hidden',
-    guidance: { instructions: factoryReplyInstructions },
-    link: { label: SESSION_LINK_LABEL, link: ({ requestContext }) => sessionLinkFromRequest(requestContext) },
-    // Rebuild the thread for runs that didn't start from Slack (web prompts, woken runs).
-    resolveRender: requestContext => resolveRenderContext(requestContext, deps),
-  });
-}
+const FACTORY_REPLY_OPTIONS: Pick<SlackAdapterChannelConfig, 'replyMode' | 'threadLink'> = {
+  replyMode: { instructions: factoryReplyInstructions },
+  threadLink: { label: SESSION_LINK_LABEL, link: ({ requestContext }) => sessionLinkFromRequest(requestContext) },
+};
 
 export class SlackIntegration implements FactoryIntegration {
   readonly id = 'slack';
@@ -133,17 +126,9 @@ export class SlackIntegration implements FactoryIntegration {
   readonly #config: SlackIntegrationConfig;
   readonly #toolSettings: SlackToolSettings;
   readonly #adapterOptions: SlackAdapterChannelConfig;
-  readonly #reply: ChannelReplyMode;
   /** Bound in `initialize()`; the controller mounts after integrations are built. */
   #channels: ShareFileToolDeps['channels'];
   readonly #deps: ShareFileToolDeps = { channels: () => this.#channels?.() };
-  /**
-   * With reply text hidden (the Factory default) the agent speaks through
-   * `reply_in_thread`, so the prompt, reminder and live streaming for that
-   * tool come with it. The setting is fixed for the deployment, so it is
-   * decided once here rather than on every run.
-   */
-  readonly processors: { input: InputProcessor[]; output: OutputProcessor[] };
   /**
    * Whether `channels()` found a source-control owner on the context and wired
    * repo-backed sessions. Set at the channels() attach path, which runs once at
@@ -171,12 +156,7 @@ export class SlackIntegration implements FactoryIntegration {
     const granted = Object.fromEntries(Object.entries(config.tools ?? {}).filter(([, value]) => value !== undefined));
     this.#toolSettings = slackToolSettingsSchema.parse({ ...DEFAULT_SLACK_TOOL_SETTINGS, ...granted });
     const overrides = adapterOverrides(config.adapterOptions);
-    this.#reply = factoryReplyMode(overrides, this.#deps);
-    this.#adapterOptions = { ...this.#reply.adapterOptions, ...overrides };
-    this.processors = {
-      input: this.#reply.processors.input,
-      output: this.#reply.processors.output,
-    };
+    this.#adapterOptions = { ...FACTORY_REPLY_OPTIONS, ...overrides };
   }
 
   initialize(args: { channels?: () => AgentChannels | null | undefined }): void {
@@ -184,8 +164,8 @@ export class SlackIntegration implements FactoryIntegration {
   }
 
   /**
-   * On runs whose session is linked to a Slack thread: `attach_file`,
-   * `reply_in_thread` when reply text is hidden, and the Slack read, post,
+   * On runs whose session is linked to a Slack thread: `attach_file` and the
+   * Slack read, post,
    * search, lookup and DM tools. The tools find the thread to post into when
    * they are called.
    */
@@ -196,7 +176,6 @@ export class SlackIntegration implements FactoryIntegration {
     const sessionThreadId = slackThread.threadId;
     return {
       ...createShareFileTool(requestContext, this.#deps),
-      ...this.#reply.tools(requestContext),
       ...(chat && sessionThreadId
         ? await createSlackChatTools({ chat, sessionThreadId, settings: this.#toolSettings })
         : {}),

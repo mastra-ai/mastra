@@ -8,12 +8,16 @@ import { ChannelThreadLinkProcessor, markNewChannelThread } from '../thread-link
 
 const SUFFIX = '\n\n[Open thread ↗](https://app.test/threads/t1)';
 
-function run({ isNew = true, hidden = false } = {}) {
+function run({
+  isNew = true,
+  hidden = false,
+  link = (threadId?: string) => `https://app.test/threads/${threadId}`,
+} = {}) {
   const requestContext = new RequestContext();
   requestContext.set('MastraMemory', { thread: { id: 't1' }, resourceId: 'slack:U1' });
   if (isNew) markNewChannelThread(requestContext);
   if (hidden) requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, { textDisplay: 'hidden' });
-  const processor = new ChannelThreadLinkProcessor({ link: ({ threadId }) => `https://app.test/threads/${threadId}` });
+  const processor = new ChannelThreadLinkProcessor({ link: ({ threadId }) => link(threadId) });
   const state: Record<string, unknown> = {};
   const feed = (part: any) => processor.processOutputStream({ part, state, requestContext } as any);
   return { processor, state, feed, requestContext };
@@ -60,8 +64,7 @@ describe('ChannelThreadLinkProcessor', () => {
     expect(await processor.processOutputStream({ part: stepFinish, state, requestContext } as any)).toBe(stepFinish);
   });
 
-  it('keeps the link out of the saved message', () => {
-    const { processor, requestContext } = run();
+  function saved(suffix: string) {
     const messageList = new MessageList({ threadId: 't1', resourceId: 'slack:U1' });
     messageList.add(
       {
@@ -72,14 +75,42 @@ describe('ChannelThreadLinkProcessor', () => {
           format: 2,
           parts: [
             { type: 'text', text: 'Hi' },
-            { type: 'text', text: SUFFIX },
+            { type: 'text', text: suffix },
           ],
         },
       } as any,
       'response',
     );
+    return messageList;
+  }
+
+  it('keeps the link it posted out of the saved message', async () => {
+    const { processor, feed, requestContext } = run();
+    await feed(text);
+    await feed(stepFinish);
+    const messageList = saved(SUFFIX);
     processor.processOutputStep({ messageList, requestContext } as any);
-    const parts = messageList.get.response.db()[0]!.content.parts;
-    expect(parts).toEqual([expect.objectContaining({ type: 'text', text: 'Hi' })]);
+    expect(messageList.get.response.db()[0]!.content.parts).toEqual([
+      expect.objectContaining({ type: 'text', text: 'Hi' }),
+    ]);
+  });
+
+  it('strips the link it posted even when the link changes on every call', async () => {
+    let n = 0;
+    const { processor, feed, requestContext } = run({ link: () => `https://app.test/signed?n=${++n}` });
+    await feed(text);
+    const posted = ((await feed(stepFinish)) as any).payload.text as string;
+    const messageList = saved(posted);
+    processor.processOutputStep({ messageList, requestContext } as any);
+    expect(messageList.get.response.db()[0]!.content.parts).toEqual([
+      expect.objectContaining({ type: 'text', text: 'Hi' }),
+    ]);
+  });
+
+  it('leaves the saved message alone when it posted no link', () => {
+    const { processor, requestContext } = run();
+    const messageList = saved(SUFFIX);
+    processor.processOutputStep({ messageList, requestContext } as any);
+    expect(messageList.get.response.db()[0]!.content.parts).toHaveLength(2);
   });
 });

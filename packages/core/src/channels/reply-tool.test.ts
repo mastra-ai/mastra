@@ -18,6 +18,9 @@ function rebuildFrom(
     ((await buildRenderContextForThread((requestContext.get('controller') as { threadId: string }).threadId)) as never);
 }
 
+/** The thread the run came in on, nothing else. */
+const stashed = rebuildFrom(async () => undefined);
+
 type ReplyTool = {
   inputSchema: { safeParse: (input: unknown) => { success: boolean } };
   execute: (input: { text: string }, ctx: Record<string, unknown>) => Promise<unknown>;
@@ -46,7 +49,7 @@ function channelRun({
 }
 
 async function replyTool(requestContext: RequestContext): Promise<ReplyTool> {
-  const tool = createChannelReplyTool(requestContext, { link })[REPLY_TOOL_NAME];
+  const tool = createChannelReplyTool(requestContext, { link, resolveRender: stashed })[REPLY_TOOL_NAME];
   expect(tool).toBeDefined();
   return tool as unknown as ReplyTool;
 }
@@ -160,8 +163,12 @@ describe('streaming reply_in_thread into the thread', () => {
     ({ type, runId: 'r', from: 'AGENT', payload }) as any;
   const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 
-  async function feed(requestContext: RequestContext, argsDeltas: string[], options: ChannelReplyOptions = {}) {
-    const processor = new ChannelReplyStreamProcessor(options);
+  async function feed(
+    requestContext: RequestContext,
+    argsDeltas: string[],
+    options: Partial<ChannelReplyOptions> = {},
+  ) {
+    const processor = new ChannelReplyStreamProcessor(options.resolveRender ?? stashed);
     const state: Record<string, unknown> = {};
     const run = (part: unknown) => processor.processOutputStream({ part, state, requestContext } as any);
     await run(chunk('tool-call-input-streaming-start', { toolCallId: 'call-1', toolName: REPLY_TOOL_NAME }));

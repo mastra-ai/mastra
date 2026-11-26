@@ -1,38 +1,16 @@
-import { MessageList } from '@mastra/core/agent';
-import { ChannelReplyGuidanceProcessor } from '@mastra/core/channels';
-import type { ProcessInputStepArgs } from '@mastra/core/processors';
-import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { factoryReplyInstructions, sessionLink } from './channel-reply-processor.js';
 
-function instruction(requestContext: RequestContext, tools: Record<string, unknown> = {}): string {
-  const messageList = new MessageList({});
-  new ChannelReplyGuidanceProcessor({ instructions: factoryReplyInstructions }).processInputStep({
-    messageList,
-    requestContext,
-    tools,
-  } as unknown as ProcessInputStepArgs);
-  return String(messageList.getSystemMessages('channel-reply-guidance')[0]!.content);
-}
-
-function channelContext() {
-  const requestContext = new RequestContext();
-  requestContext.set('channel', { platform: 'slack', isDM: true });
-  return requestContext;
-}
-
 describe('factoryReplyInstructions', () => {
-  it('tells every run with the reply tool that pull request links are posted for it', () => {
-    // A merge wakes the session without `channel`, so the woken run needs this too.
-    for (const requestContext of [new RequestContext(), channelContext()]) {
-      expect(instruction(requestContext, { reply_in_thread: {} })).toContain("so don't post the link yourself");
-    }
-    expect(instruction(channelContext())).not.toContain("so don't post the link yourself");
+  it('tells a run with the reply tool that pull request links are posted for it', () => {
+    expect(factoryReplyInstructions({ canReply: true }).join('\n')).toContain("so don't post the link yourself");
+    expect(factoryReplyInstructions({ canReply: false }).join('\n')).not.toContain("so don't post the link yourself");
   });
 
   it('tells every channel run how to link GitHub, Linear and Factory references', () => {
-    for (const text of [instruction(channelContext()), instruction(new RequestContext(), { reply_in_thread: {} })]) {
+    for (const canReply of [true, false]) {
+      const text = factoryReplyInstructions({ canReply }).join('\n');
       expect(text).toContain('the repositories listed in your environment');
       expect(text).toContain('workspace URL pattern in the `linear_get_issue` tool description');
       expect(text).toContain('the `url` the Factory tools return');

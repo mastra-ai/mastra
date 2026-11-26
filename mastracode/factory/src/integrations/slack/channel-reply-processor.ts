@@ -14,6 +14,7 @@ export function factoryReplyInstructions({ canReply }: { canReply: boolean }): s
           "When you open a pull request, its link is posted to this thread for you, and again when it merges, so don't post the link yourself.",
         ]
       : []),
+    'Agent shorthand includes checkpoint counts and RED → GREEN or STOPPED.',
     "Build GitHub and GitLab links from the repository the reference belongs to, from the repositories listed in your environment or a tool result; with more than one repository, don't assume which one a bare number belongs to. Build Linear links from the workspace URL pattern in the `linear_get_issue` tool description, or from a URL a tool returned.",
     'Link Factory work items and sessions with the `url` the Factory tools return: [#123](<item url>). When something needs a person, ask them for it here and link the item; only send them to the web UI when the channel cannot do it, and then link the exact page.',
   ];

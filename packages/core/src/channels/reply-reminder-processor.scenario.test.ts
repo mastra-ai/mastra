@@ -1,8 +1,10 @@
-import { Agent } from '@mastra/core/agent';
-import { ChannelReplyReminderProcessor, REPLY_TOOL_NAME } from '@mastra/core/channels';
-import { createTool } from '@mastra/core/tools';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+
+import { Agent } from '../agent';
+import { createTool } from '../tools';
+import { ChannelReplyReminderProcessor } from './reply-reminder-processor';
+import { REPLY_TOOL_NAME } from './reply-tool';
 
 const MINUTE = 60_000;
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };

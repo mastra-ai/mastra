@@ -1,17 +1,17 @@
-import type { InputProcessor, OutputProcessor } from '../processors';
+import type { ProcessInputStepArgs, Processor } from '../processors';
 import type { RequestContext } from '../request-context';
+import type { ChatChannelRenderContext } from './output-processor';
 import { ChannelReplyGuidanceProcessor } from './reply-guidance-processor';
 import type { ChannelReplyGuidanceOptions } from './reply-guidance-processor';
 import { ChannelReplyReminderProcessor } from './reply-reminder-processor';
-import type { ChannelReplyReminderOptions } from './reply-reminder-processor';
-import { ChannelReplyStreamProcessor, createChannelReplyTool, REPLY_TOOL_NAME } from './reply-tool';
-import type { ChannelReplyOptions } from './reply-tool';
-import { ChannelThreadLinkProcessor } from './thread-link-processor';
+import { createChannelReplyTool, REPLY_TOOL_NAME } from './reply-tool';
+import type { ChannelThreadLinkProcessorOptions } from './thread-link-processor';
 import type { TypingStatusFn } from './typing-status';
 
 /**
  * Slack renders the status inline next to the app name, and rejects a status
- * (sent as its loading message) of 51 characters or more.
+ * (sent as its loading message) of 51 characters or more. Other platforms get
+ * the same cap; reply mode has only been tested on Slack.
  */
 const MAX_STATUS_LENGTH = 50;
 
@@ -41,14 +41,17 @@ function describeToolCall(args: unknown): string | undefined {
  * text hidden, streamed text never reaches the thread, so it gets no status:
  * an "is typing..." set after the reply tool's post would sit on the thread
  * with nothing coming, and race the clear at the end of the run.
+ *
+ * @internal
  */
 export function channelReplyTypingStatus(textDisplay: 'show' | 'hidden' = 'hidden'): TypingStatusFn {
   return chunk => {
     switch (chunk.type) {
       case 'reasoning-delta':
         return 'is thinking...';
+      // Reply text reaches the thread only when it is shown.
       case 'text-delta':
-        return textDisplay === 'hidden' ? undefined : 'is typing...';
+        return textDisplay === 'show' ? 'is typing...' : undefined;
       // The reply tool's text streams into the thread as the model writes it.
       case 'tool-call-input-streaming-start':
         return chunk.payload.toolName === REPLY_TOOL_NAME ? 'is typing...' : undefined;
@@ -62,42 +65,77 @@ export function channelReplyTypingStatus(textDisplay: 'show' | 'hidden' = 'hidde
   };
 }
 
-export interface ChannelReplyModeOptions extends ChannelReplyOptions {
-  /** Show the model's reply text in the thread instead of posting through `reply_in_thread`. */
-  textDisplay?: 'show' | 'hidden';
-  reminder?: ChannelReplyReminderOptions;
-  guidance?: ChannelReplyGuidanceOptions;
+/** How `replyMode` is configured on a channel adapter. */
+export interface ChannelReplyModeConfig {
+  /** Host-specific lines added to the reply guidance prompt, optionally depending on whether the run can reply. */
+  instructions?: ChannelReplyGuidanceOptions['instructions'];
+  /** How long a run may go without posting before it is nudged to post a status. Defaults to five minutes. */
+  reminderAfterMs?: number;
 }
 
-export interface ChannelReplyMode {
-  /** Spread into the channel adapter's config. */
-  adapterOptions: { textDisplay: 'show' | 'hidden'; toolDisplay: 'hidden'; typingStatus: TypingStatusFn };
-  processors: { input: InputProcessor[]; output: OutputProcessor[] };
-  /** Tools to add to channel runs: `reply_in_thread` with reply text hidden, else none. */
-  tools: (requestContext: RequestContext) => ReturnType<typeof createChannelReplyTool> | {};
+/** `replyMode` adapter option: `'tool'` for the defaults, or a config to tune the prompt and reminder. */
+export type ChannelReplyMode = 'tool' | ChannelReplyModeConfig;
+
+/** `threadLink` adapter option: a link builder, or one with a label. */
+export type ChannelThreadLink = ChannelThreadLinkProcessorOptions['link'] | ChannelThreadLinkProcessorOptions;
+
+export function threadLinkOptions(link: ChannelThreadLink | undefined): ChannelThreadLinkProcessorOptions | undefined {
+  if (!link) return undefined;
+  return typeof link === 'function' ? { link } : link;
+}
+
+/** The adapter settings reply mode reads for a run's platform. */
+export interface ChannelReplyModeAdapter {
+  replyMode?: ChannelReplyMode;
+  threadLink?: ChannelThreadLink;
+}
+
+interface ChannelReplyModeDeps {
+  /** The run's chat thread: the one it came in on, else the one its thread is linked to. Cached on `state`. */
+  resolveRender: (
+    requestContext: RequestContext | undefined,
+    state?: Record<string, unknown>,
+  ) => Promise<ChatChannelRenderContext | undefined>;
+  /** Adapter settings for a platform. */
+  adapter: (platform: string) => ChannelReplyModeAdapter | undefined;
+  now?: () => number;
 }
 
 /**
- * One chat display for channel runs: tool calls stay out of the thread, progress shows in the
- * typing status, and (by default) the agent speaks only through `reply_in_thread`, so posting is
- * a choice and it can stay quiet. A run that goes quiet too long is nudged to post a status, and
- * the first reply of a new thread links to it in the host's web UI.
+ * Installed by `AgentChannels` when an adapter sets `replyMode`. On runs whose chat
+ * thread is on that adapter (including runs started elsewhere whose thread is linked
+ * to it) it adds the `reply_in_thread` tool, the reply guidance prompt, and the
+ * nudge after a quiet stretch. Other runs are untouched.
+ *
+ * @internal
  */
-export function channelReplyMode(options: ChannelReplyModeOptions = {}): ChannelReplyMode {
-  const textDisplay = options.textDisplay ?? 'hidden';
-  const hidden = textDisplay === 'hidden';
-  return {
-    adapterOptions: { textDisplay, toolDisplay: 'hidden', typingStatus: channelReplyTypingStatus(textDisplay) },
-    processors: {
-      input: [
-        new ChannelReplyGuidanceProcessor(options.guidance),
-        ...(hidden ? [new ChannelReplyReminderProcessor(options.reminder)] : []),
-      ],
-      output: [
-        ...(options.link ? [new ChannelThreadLinkProcessor(options.link)] : []),
-        ...(hidden ? [new ChannelReplyStreamProcessor(options)] : []),
-      ],
-    },
-    tools: requestContext => (hidden ? createChannelReplyTool(requestContext, options) : {}),
-  };
+export class ChannelReplyModeProcessor implements Processor {
+  readonly id = 'channel-reply-mode';
+  readonly #deps: ChannelReplyModeDeps;
+
+  constructor(deps: ChannelReplyModeDeps) {
+    this.#deps = deps;
+  }
+
+  async processInputStep(args: ProcessInputStepArgs) {
+    const { requestContext, state } = args;
+    const render = await this.#deps.resolveRender(requestContext, state);
+    const adapter = render && this.#deps.adapter(render.platform);
+    // With reply text shown, the reply stream already posts; the tool would double every message.
+    if (!requestContext || !render || !adapter?.replyMode || render.textDisplay !== 'hidden') return undefined;
+    const config = adapter.replyMode === 'tool' ? {} : adapter.replyMode;
+    const tools = {
+      ...args.tools,
+      ...createChannelReplyTool(requestContext, {
+        resolveRender: async () => render,
+        link: threadLinkOptions(adapter.threadLink),
+      }),
+    };
+    const withTools = { ...args, tools };
+    new ChannelReplyGuidanceProcessor({ instructions: config.instructions }).processInputStep(withTools);
+    await new ChannelReplyReminderProcessor({ afterMs: config.reminderAfterMs, now: this.#deps.now }).processInputStep(
+      withTools,
+    );
+    return { tools, messageList: args.messageList };
+  }
 }

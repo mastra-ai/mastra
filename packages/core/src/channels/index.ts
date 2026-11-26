@@ -33,14 +33,6 @@ export type { ChatChannelRenderContext } from './output-processor';
 export { MastraStateAdapter } from './state-adapter';
 export { defaultTypingStatus } from './typing-status';
 export type { TypingStatusContext, TypingStatusFn, TypingStatusReturn } from './typing-status';
-export { ChannelReplyGuidanceProcessor } from './reply-guidance-processor';
-export type { ChannelReplyGuidanceOptions } from './reply-guidance-processor';
-export { channelReplyMode, channelReplyTypingStatus } from './reply-mode';
-export type { ChannelReplyMode, ChannelReplyModeOptions } from './reply-mode';
-export { ChannelReplyReminderProcessor, REPLY_REMINDER_AFTER_MS } from './reply-reminder-processor';
-export type { ChannelReplyReminderOptions } from './reply-reminder-processor';
-export { ChannelReplyStreamProcessor, createChannelReplyTool, REPLY_TOOL_NAME } from './reply-tool';
-export type { ChannelReplyOptions } from './reply-tool';
 export { resolveWaitUntil } from './wait-until';
 export type { WaitUntilFn, WaitUntilResolver } from './wait-until';
 export { CONTINUE_RUN_ACTION_ID, CONTINUE_RUN_MESSAGE, formatToolApproval } from './formatting';
@@ -90,5 +82,7 @@ export type {
 
 // Re-export Chat SDK types for convenience
 export type { ActionEvent, ChatConfig, SlashCommandEvent } from 'chat';
+export type { ChannelReplyMode, ChannelReplyModeConfig, ChannelThreadLink } from './reply-mode';
+export { REPLY_TOOL_NAME } from './reply-tool';
 export { ChannelThreadLinkProcessor, markNewChannelThread, NEW_CHANNEL_THREAD_KEY } from './thread-link-processor';
 export type { ChannelThreadLinkProcessorOptions, ChannelThreadLinkTarget } from './thread-link-processor';

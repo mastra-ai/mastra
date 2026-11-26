@@ -206,6 +206,57 @@ describe('AgentChannels', () => {
     });
   });
 
+  describe('replyMode and threadLink', () => {
+    it('installs reply mode, its stream and the thread link, and hides reply text and tool calls', () => {
+      const channels = new AgentChannels({
+        adapters: {
+          slack: {
+            adapter: createMockAdapter('slack'),
+            replyMode: 'tool',
+            threadLink: ({ threadId }) => `https://app.test/threads/${threadId}`,
+          },
+        },
+        threadContext: { addSystemMessage: false },
+      });
+      expect(channels.getInputProcessors().map(p => p.id)).toEqual(['channel-reply-mode']);
+      expect(channels.getOutputProcessors().map(p => p.id)).toEqual([
+        'channel-thread-link',
+        'chat-channel-render',
+        'channel-reply-stream',
+      ]);
+      expect((channels as any).adapterConfigs.slack).toMatchObject({ textDisplay: 'hidden', toolDisplay: 'hidden' });
+    });
+
+    it('treats display settings passed as undefined as unset', () => {
+      const channels = new AgentChannels({
+        adapters: {
+          slack: {
+            adapter: createMockAdapter('slack'),
+            replyMode: 'tool',
+            toolDisplay: undefined,
+            typingStatus: undefined,
+          },
+        },
+        threadContext: { addSystemMessage: false },
+      });
+      const cfg = (channels as any).adapterConfigs.slack;
+      expect(cfg).toMatchObject({ textDisplay: 'hidden', toolDisplay: 'hidden' });
+      expect(cfg.typingStatus).toBeTypeOf('function');
+    });
+
+    it('keeps display settings the adapter sets itself', () => {
+      const channels = new AgentChannels({
+        adapters: { slack: { adapter: createMockAdapter('slack'), replyMode: 'tool', toolDisplay: 'compact' } as any },
+      });
+      expect((channels as any).adapterConfigs.slack).toMatchObject({ textDisplay: 'hidden', toolDisplay: 'compact' });
+    });
+
+    it('adds nothing when no adapter asks for it', () => {
+      expect(agentChannels.getInputProcessors().map(p => p.id)).not.toContain('channel-reply-mode');
+      expect(agentChannels.getOutputProcessors().map(p => p.id)).toEqual(['chat-channel-render']);
+    });
+  });
+
   describe('channelConfig', () => {
     it('exposes the original ChannelConfig (round-trippable)', () => {
       const discord = createMockAdapter('discord');

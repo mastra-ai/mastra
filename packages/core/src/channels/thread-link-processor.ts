@@ -33,6 +33,8 @@ export interface ChannelThreadLinkProcessorOptions {
 
 /** Text-part id of the link delta; never collides with a model block id. */
 const LINK_PART_ID = 'mastra-channel-thread-link';
+const EMITTED_SUFFIX_KEY = 'mastra__channelThreadLinkSuffix';
+export const DEFAULT_LINK_LABEL = 'Open thread ↗';
 
 /**
  * Posts a link to the thread in the host's web UI right after the first reply of a new channel
@@ -53,12 +55,15 @@ const LINK_PART_ID = 'mastra-channel-thread-link';
  */
 export class ChannelThreadLinkProcessor implements Processor {
   readonly id = 'channel-thread-link';
-  readonly #link: ChannelThreadLinkProcessorOptions['link'];
-  readonly #label: string;
+  readonly #options: (requestContext: RequestContext) => ChannelThreadLinkProcessorOptions | undefined;
 
-  constructor({ link, label = 'Open thread ↗' }: ChannelThreadLinkProcessorOptions) {
-    this.#link = link;
-    this.#label = label;
+  /** Pass options, or a function picking them per run (e.g. by the run's platform). */
+  constructor(
+    options:
+      | ChannelThreadLinkProcessorOptions
+      | ((requestContext: RequestContext) => ChannelThreadLinkProcessorOptions | undefined),
+  ) {
+    this.#options = typeof options === 'function' ? options : () => options;
   }
 
   async processOutputStream({ part, state, requestContext }: ProcessOutputStreamArgs): Promise<ChunkType> {
@@ -71,6 +76,8 @@ export class ChannelThreadLinkProcessor implements Processor {
     state.linked = true;
     const suffix = this.#suffix(requestContext);
     if (!suffix) return part;
+    // Cleanup strips exactly what was posted: a link that changes per call (signed URL) can't be rebuilt.
+    requestContext.set(EMITTED_SUFFIX_KEY, suffix);
     state[REPROCESS_PART_KEY] = part;
     return {
       type: 'text-delta',
@@ -81,8 +88,7 @@ export class ChannelThreadLinkProcessor implements Processor {
   }
 
   processOutputStep({ messageList, requestContext }: ProcessOutputStepArgs) {
-    if (!linksThisRun(requestContext)) return messageList;
-    const suffix = this.#suffix(requestContext);
+    const suffix = requestContext?.get(EMITTED_SUFFIX_KEY) as string | undefined;
     if (!suffix) return messageList;
     for (const message of messageList.get.response.db()) {
       if (message.role !== 'assistant') continue;
@@ -98,14 +104,15 @@ export class ChannelThreadLinkProcessor implements Processor {
   }
 
   #suffix(requestContext: RequestContext): string | undefined {
+    const options = this.#options(requestContext);
+    if (!options) return undefined;
     const memory = parseMemoryRequestContext(requestContext);
-    const link = this.#link({ requestContext, threadId: memory?.thread?.id, resourceId: memory?.resourceId });
+    const link = options.link({ requestContext, threadId: memory?.thread?.id, resourceId: memory?.resourceId });
     // Own paragraph: the link closes the message, it is not part of the last sentence.
-    return link && `\n\n[${this.#label}](${link})`;
+    return link && `\n\n[${options.label ?? DEFAULT_LINK_LABEL}](${link})`;
   }
 }
 
-/** With reply text hidden the reply never reaches the thread, so there is nothing to close. */
 function linksThisRun(requestContext: RequestContext | undefined): requestContext is RequestContext {
   if (!requestContext?.get(NEW_CHANNEL_THREAD_KEY)) return false;
   const render = requestContext.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;

@@ -17,6 +17,12 @@ function ctxWith(overrides: Record<string, unknown> = {}) {
 
 const createSlackAdapterMock = vi.mocked(createSlackAdapter);
 
+/** Slack's adapter settings as core's AgentChannels resolves them from Factory's options. */
+function resolved(integration: SlackIntegration) {
+  const channels = new AgentChannels({ adapters: integration.channels(ctxWith()).adapters as any });
+  return (channels as any).adapterConfigs.slack as ReturnType<SlackIntegration['channels']>['adapters']['slack'];
+}
+
 beforeEach(() => {
   createSlackAdapterMock.mockClear();
 });
@@ -93,7 +99,7 @@ describe('SlackIntegration.channels', () => {
   it('uses concise progress statuses by default', () => {
     const integration = new SlackIntegration({ signingSecret: 'secret' });
 
-    const config = integration.channels(ctxWith());
+    const config = { adapters: { slack: resolved(integration) } };
     const typingStatus = config.adapters.slack.typingStatus;
 
     expect(typingStatus).toBeTypeOf('function');
@@ -132,7 +138,7 @@ describe('SlackIntegration.channels', () => {
 
   it('shows "is typing..." for streamed text when reply text is shown', () => {
     const integration = new SlackIntegration({ signingSecret: 'secret', adapterOptions: { textDisplay: 'show' } });
-    const typingStatus = integration.channels(ctxWith()).adapters.slack.typingStatus;
+    const typingStatus = resolved(integration).typingStatus;
     if (typeof typingStatus !== 'function') throw new Error('Expected a typing status function');
     const ctx = { currentStatus: undefined, channelTools: new Set<string>() } as any;
     expect(typingStatus({ type: 'text-delta' } as any, ctx)).toBe('is typing...');
@@ -140,7 +146,7 @@ describe('SlackIntegration.channels', () => {
 
   it("names the tool's current step in the typing status when its args describe it", () => {
     const integration = new SlackIntegration({ signingSecret: 'secret' });
-    const typingStatus = integration.channels(ctxWith()).adapters.slack.typingStatus;
+    const typingStatus = resolved(integration).typingStatus;
     if (typeof typingStatus !== 'function') throw new Error('Expected a typing status function');
     const ctx = { currentStatus: undefined, channelTools: new Set<string>() } as any;
     const status = (args: unknown) =>
@@ -200,7 +206,7 @@ describe('SlackIntegration.channels', () => {
       adapterOptions: { toolDisplay: undefined, typingStatus: undefined } as any,
     });
 
-    const config = integration.channels(ctxWith());
+    const config = { adapters: { slack: resolved(integration) } };
 
     expect(config.adapters.slack.toolDisplay).toBe('hidden');
     expect(config.adapters.slack.typingStatus).toBeTypeOf('function');
@@ -208,10 +214,10 @@ describe('SlackIntegration.channels', () => {
 
   it('keeps reply text out of Slack by default, so the agent posts through reply_in_thread', () => {
     const integration = new SlackIntegration({ signingSecret: 'secret' });
-    expect(integration.channels(ctxWith()).adapters.slack.textDisplay).toBe('hidden');
+    expect(resolved(integration).textDisplay).toBe('hidden');
 
     const shown = new SlackIntegration({ signingSecret: 'secret', adapterOptions: { textDisplay: 'show' } });
-    expect(shown.channels(ctxWith()).adapters.slack.textDisplay).toBe('show');
+    expect(resolved(shown).textDisplay).toBe('show');
   });
 
   it('lets a caller opt into the Thinking Steps widget', () => {
@@ -404,7 +410,7 @@ describe('SlackIntegration early typing status', () => {
   // adapter config to prove the run end clears it, including runs whose
   // stream maps to no status under Factory's typingStatus (text only, empty).
   async function statusesAfterRun(chunkTypes: string[]): Promise<string[]> {
-    const adapterConfig = new SlackIntegration({ signingSecret: 'secret' }).channels(ctxWith()).adapters.slack;
+    const adapterConfig = resolved(new SlackIntegration({ signingSecret: 'secret' }));
     const statuses: string[] = [];
     const thread = {
       id: 'slack:C1:1.0',

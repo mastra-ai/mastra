@@ -5,9 +5,8 @@ import type { Processor, ProcessOutputStreamArgs } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import { createTool } from '../tools';
-import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';
 import type { ChatChannelRenderContext } from './output-processor';
-import { NEW_CHANNEL_THREAD_KEY } from './thread-link-processor';
+import { DEFAULT_LINK_LABEL, NEW_CHANNEL_THREAD_KEY } from './thread-link-processor';
 import type { ChannelThreadLinkProcessorOptions } from './thread-link-processor';
 
 export const REPLY_TOOL_NAME = 'reply_in_thread';
@@ -21,32 +20,25 @@ const replyInput = z
   })
   .strict();
 
+type RenderResolver = (requestContext: RequestContext) => Promise<ChatChannelRenderContext | undefined>;
+
 /**
- * The only way a channel run speaks when the adapter hides reply text
- * (`textDisplay: 'hidden'`). Posting becomes a choice the agent makes, so it
- * stops narrating each step into the thread and can say nothing on purpose.
- * Offered only when the Slack adapter hides reply text and the run's thread is
- * linked to Slack; with text shown the reply stream already posts and this
- * tool would double every message.
+ * The only way a channel run speaks in reply mode, where the adapter hides reply
+ * text. Posting becomes a choice the agent makes, so it stops narrating each
+ * step into the thread and can say nothing on purpose.
+ *
+ * @internal
  */
 export interface ChannelReplyOptions {
-  /**
-   * Finds the chat thread to post to. Defaults to the thread the run came in on; pass one that
-   * rebuilds it from the run's thread id so runs started elsewhere (web UI, signals) can post too.
-   */
-  resolveRender?: (requestContext: RequestContext) => Promise<ChatChannelRenderContext | undefined>;
+  /** Finds the chat thread to post to: the run's own, or the one its thread is linked to. */
+  resolveRender: RenderResolver;
   /** Link to the thread in the host's web UI, appended to the first reply of a new channel thread. */
   link?: ChannelThreadLinkProcessorOptions;
 }
 
-const DEFAULT_LINK_LABEL = 'Open thread ↗';
-
-async function stashedRender(requestContext: RequestContext): Promise<ChatChannelRenderContext | undefined> {
-  return requestContext.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
-}
-
-export function createChannelReplyTool(requestContext: RequestContext, options: ChannelReplyOptions = {}) {
-  const resolveRender = options.resolveRender ?? stashedRender;
+/** @internal */
+export function createChannelReplyTool(requestContext: RequestContext, options: ChannelReplyOptions) {
+  const { resolveRender } = options;
   return {
     [REPLY_TOOL_NAME]: createTool({
       id: REPLY_TOOL_NAME,
@@ -110,10 +102,10 @@ function replyStreams(requestContext: RequestContext): Map<string, ReplyStream> 
 }
 
 /**
- * One streamed Slack post, opened on the first visible text so an abandoned
+ * One streamed post, opened on the first visible text so an abandoned
  * call never leaves an empty message behind.
  */
-function openReplyStream(chatThread: ChatChannelRenderContext['chatThread']): ReplyStream {
+function openReplyStream({ chatThread, logger }: ChatChannelRenderContext): ReplyStream {
   const queue: string[] = [];
   let sent = '';
   let closed = false;
@@ -133,7 +125,7 @@ function openReplyStream(chatThread: ChatChannelRenderContext['chatThread']): Re
     done ??= chatThread.post(chunks()).then(
       () => true,
       error => {
-        console.warn('[channels] streamed reply failed; posting it whole', { error });
+        logger?.warn('[channels] streamed reply failed; posting it whole', { error });
         return false;
       },
     );
@@ -172,10 +164,10 @@ function openReplyStream(chatThread: ChatChannelRenderContext['chatThread']): Re
  */
 export class ChannelReplyStreamProcessor implements Processor {
   readonly id = 'channel-reply-stream';
-  readonly #resolveRender: NonNullable<ChannelReplyOptions['resolveRender']>;
+  readonly #resolveRender: RenderResolver;
 
-  constructor(options: Pick<ChannelReplyOptions, 'resolveRender'> = {}) {
-    this.#resolveRender = options.resolveRender ?? stashedRender;
+  constructor(resolveRender: RenderResolver) {
+    this.#resolveRender = resolveRender;
   }
 
   async processOutputStream({ part, state, requestContext }: ProcessOutputStreamArgs): Promise<ChunkType> {
@@ -183,12 +175,12 @@ export class ChannelReplyStreamProcessor implements Processor {
     const args = (state.args ??= {}) as Record<string, string>;
     if (part.type === 'tool-call-input-streaming-start' && part.payload.toolName === REPLY_TOOL_NAME) {
       // Resolve the thread the same way the tool does, so a run started from
-      // the web UI or woken by a signal streams too, not only a Slack-started one.
+      // the web UI or woken by a signal streams too, not only a channel-started one.
       const render = await this.#resolveRender(requestContext);
       // A static adapter (`streaming: false`) posts each reply whole, so the tool does too.
       if (render?.textDisplay !== 'hidden' || !render.streaming?.enabled) return part;
       args[part.payload.toolCallId] = '';
-      replyStreams(requestContext).set(part.payload.toolCallId, openReplyStream(render.chatThread));
+      replyStreams(requestContext).set(part.payload.toolCallId, openReplyStream(render));
     } else if (part.type === 'tool-call-delta' && part.payload.toolCallId in args) {
       const json = (args[part.payload.toolCallId] += part.payload.argsTextDelta);
       const text = partialStringField(json, 'text');
@@ -210,7 +202,7 @@ const RUN_END = new Set<string>(['finish', 'abort', 'error', 'tripwire']);
 
 /**
  * Ends a streamed post whose call will never reach `execute`, keeping the text
- * shown so far, so Slack isn't left with a message that never finishes.
+ * shown so far, so the platform isn't left with a message that never finishes.
  */
 async function closeStream(requestContext: RequestContext, toolCallId: string): Promise<void> {
   const streams = replyStreams(requestContext);
