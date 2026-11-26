@@ -344,16 +344,19 @@ describe('Pending signals on connections that default to REPEATABLE READ', () =>
       for (let iteration = 0; iteration < ITERATIONS; iteration++) {
         const thread = await newThread();
         const runId = await startRun(thread);
-        await sendMany(thread, 2);
+        const seeded = ids(await sendMany(thread, 2));
         const resourceId = `resource-${randomUUID()}`;
         const messages = Array.from({ length: 6 }, () => signalFor(thread));
+        const accepted: string[] = [];
 
         const results = await startShifted<unknown>(
           [
-            ...messages.map(
-              (message, index) => () =>
-                (index % 2 === 0 ? ctx.memory : ctx.peer).enqueuePendingSignal({ message, toRunId: runId }),
-            ),
+            ...messages.map((message, index) => async () => {
+              const store = index % 2 === 0 ? ctx.memory : ctx.peer;
+              const result = await store.enqueuePendingSignal({ message, toRunId: runId });
+              expect(['accepted', 'thread-not-found']).toContain(result);
+              if (result === 'accepted') accepted.push(message.id);
+            }),
             () => ctx.peer.updateThreadResourceId({ threadId: thread.id, resourceId }),
           ],
           iteration,
@@ -362,12 +365,8 @@ describe('Pending signals on connections that default to REPEATABLE READ', () =>
         // A send either lands before the transfer and moves with it, or finds the thread under
         // another resource and is refused.
         expect(results.filter(result => result.status === 'rejected')).toEqual([]);
-        for (const result of results) {
-          if (result.status === 'fulfilled' && typeof result.value === 'string') {
-            expect(['accepted', 'thread-not-found']).toContain(result.value);
-          }
-        }
         const pending = await ctx.memory.listPendingSignals({ threadId: thread.id });
+        expect(sorted(ids(pending))).toEqual(sorted([...seeded, ...accepted]));
         expect(pending.filter(row => row.resourceId !== resourceId).map(row => row.id)).toEqual([]);
       }
     },
