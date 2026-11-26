@@ -112,21 +112,9 @@ Select **New alert** on the **Alerts** tab, then choose the kind of alert.
   <TabItem value="observability" label="Observability alert">
     <Steps>
       <StepItem>
-        Select **Observability alert**, then choose a template such as **Agent error rate** or **Daily cost budget**. To write your own query and condition, select **Start blank** and continue with the full form below.
+        Select **Observability alert**, then choose a template such as **Agent run failures** or **Daily cost budget**. A template fills in the form, including a starting threshold. The backtest then shows results right away. To write your own query and condition, select **Start blank**.
       </StepItem>
 
-      <StepItem>
-        A template opens a short form with one question, such as **What error rate should open an alert?** Enter your threshold, choose **All projects** or one project, and choose one or more destinations in **Send to**.
-      </StepItem>
-
-      <StepItem>
-        Review the **Backtest** chart, then select **Create alert**. To change anything else, select **Customize all settings** instead.
-      </StepItem>
-    </Steps>
-
-    In the full form, which opens from **Start blank** or **Customize all settings**:
-
-    <Steps>
       <StepItem>
         Under **Details**, give the alert a **Name**. Use **Description** to tell responders what to do when it opens, such as where to find the runbook.
       </StepItem>
@@ -136,15 +124,15 @@ Select **New alert** on the **Alerts** tab, then choose the kind of alert.
       </StepItem>
 
       <StepItem>
-        Under **Watch**, choose **Spans**, **Traces**, or **Scores**, then a **Metric** and, when offered, a statistic, such as an error rate or a p95 duration. Under **Only spans where** or **Only traces where**, add filters that include or exclude values, for example to watch one agent or to leave out a test user.
+        Under **Watch**, choose **Spans**, **Traces**, **Scores**, or **Custom metrics**, then a **Metric** and, when offered, a statistic, such as an error rate or a p95 duration. Under **Only spans where**, **Only traces where**, or **Only values where**, add filters that include or exclude values, for example to watch one agent or to leave out a test user.
       </StepItem>
 
       <StepItem>
-        Under **When it fires**, choose what to **Alert for**. Then choose a comparison (**above**, **at or above**, **below**, or **at or below**) and enter a threshold. Under **Over**, choose a window, such as **the last 15m** or **today (since midnight)**. The field's label shows when the day starts, which is midnight UTC unless the alert was set up with another timezone.
+        Under **When it fires**, choose what to **Alert for**. Then choose a comparison (**above**, **at or above**, **below**, or **at or below**) and enter a threshold. Under **Over**, choose a window, such as **the last 15m** or **since midnight UTC**. The midnight option names the alert's timezone, which is UTC unless the alert was set up with another timezone.
       </StepItem>
 
       <StepItem>
-        Review the **Backtest** chart. Once the condition is complete, the preview runs with the current threshold. The **6h**, **1d**, and **2d** ranges replay every check and show when the alert would have opened and closed. The **7d** and **30d** ranges, when offered, plot the value against the threshold without replaying checks. Some alerts offer shorter ranges. Adjust the threshold or window until the alert would open only when you'd want someone to act. The backtest uses past data and doesn't send notifications.
+        Review the **Backtest** chart. Once the condition is complete, the preview runs with the current threshold. The **6h**, **1d**, and **2d** ranges replay every check and show when the alert would have opened and closed. Longer ranges, such as **7d**, plot the value against the threshold without replaying checks when they're offered. Some alerts offer shorter ranges. Adjust the threshold or window until the alert would open only when you'd want someone to act. The backtest uses past data and doesn't send notifications.
       </StepItem>
 
       <StepItem>
@@ -152,7 +140,7 @@ Select **New alert** on the **Alerts** tab, then choose the kind of alert.
       </StepItem>
 
       <StepItem>
-        Select **Create alert**. To save the alert turned off, open the menu next to it and select **Create as disabled**.
+        Select **Create alert**.
       </StepItem>
     </Steps>
 
@@ -209,7 +197,7 @@ Notifications for an open observability alert let you close it by hand. Slack me
 
 ## Observability alert checks
 
-Mastra checks every enabled observability alert every five minutes. Each check measures the window you chose: with **the last 1h**, each check measures the past hour. **today (since midnight)** measures from the start of the day in the timezone shown in the window's label.
+Mastra checks every enabled observability alert every five minutes. Each check measures the window you chose: with **the last 1h**, each check measures the past hour. **since midnight UTC** measures from the start of the day in the timezone that the option names.
 
 Open **Advanced** in the alert form for these settings:
 
@@ -217,9 +205,9 @@ Open **Advanced** in the alert form for these settings:
 - **Skip agents with fewer than**, or the same setting for another group such as models: For spans and traces with a separate alert for each group, a minimum number of runs per check, so an agent with one failure out of two runs doesn't open the alert.
 - **Wait for late data**: How much of the newest data each check skips. Keep **None** if your data arrives on time. If your exporter sends spans in batches, choose the shortest delay that covers the usual time between the end of a span and when you can see it in Mastra. For example, if spans arrive up to 90 seconds late, choose **2m**. A 10:15 check with a 15-minute window then reads 09:58 to 10:13. The next check still runs at 10:20. A longer delay gives data more time to arrive but also delays detection.
 
-Some alerts can measure each group on its own. Under **Alert for**, choose **One alert for all traffic** for one check over everything, or a separate alert for each group, such as **A separate alert for each agent**, so one failing agent isn't hidden by healthy ones. If the backtest finds a group that crossed the threshold while all traffic combined didn't, the form shows a warning with a button to switch. Mastra checks up to 50 groups, prioritizing those closest to the threshold. All groups of one alert share one incident.
+Some alerts can measure each group on its own. Under **Alert for**, choose **One alert for all traffic** for one check over everything, or a separate alert for each group, such as **A separate alert for each agent**, so one failing agent isn't hidden by healthy ones. **Alert for** offers only the choices that can open more than one alert. A choice disappears when your filters narrow it to one value, such as one agent. For custom metrics, the choices are the metric's labels, and **One alert for the whole metric** checks everything together. If the backtest finds a group that crossed the threshold while all traffic combined didn't, the form shows a warning with a button to switch. Mastra checks up to 50 groups, prioritizing those closest to the threshold. All groups of one alert share one incident.
 
-An observability alert shows one of these states:
+On its own page, an observability alert shows one of these states:
 
 | State | Meaning |
 | - | - |
@@ -230,6 +218,8 @@ An observability alert shows one of these states:
 | No data | The window contained no matching data. |
 | Error | The query failed, for example because it timed out. |
 | Disabled | The alert is turned off and isn't checked. |
+
+On the **Alerts** tab, the **State** column sums up every alert, of either kind, as **On**, **Off**, **Firing**, or **Error**.
 
 **No data** and **Error** don't send notifications. If an alert stays in either state, check its filters and whether your application sent matching data during the window.
 
