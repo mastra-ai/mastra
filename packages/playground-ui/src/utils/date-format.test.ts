@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatClock,
   formatDate,
   formatLogLineTimestamp,
   formatMoment,
@@ -163,6 +164,33 @@ describe('formatDate', () => {
   });
 });
 
+describe('formatDate hours', () => {
+  it.each([
+    ['en-US', '9:05 AM', 'Sep 24, 9:05 AM'],
+    ['en-GB', '09:05', '24 Sept, 09:05'],
+    ['es-ES', '9:05', '24 sept, 9:05'],
+  ])('pads them only where %s does', (locale, time, dayTime) => {
+    const nineOhFive = new Date(2026, 8, 24, 9, 5);
+    expect(formatDate(nineOhFive, 'time', { locale })).toBe(time);
+    expect(formatDate(nineOhFive, 'day-time', { locale })).toBe(dayTime);
+  });
+});
+
+describe('formatClock', () => {
+  it.each([
+    ['en-US', '2 PM', '2:05 PM', '12 AM'],
+    ['en-GB', '14:00', '14:05', '00:00'],
+    ['de-DE', '14:00', '14:05', '00:00'],
+  ])('keeps %s times short but readable as times', (locale, onTheHour, withMinutes, midnight) => {
+    const label = (hours: number, minutes: number) => formatClock(new Date(2026, 8, 24, hours, minutes), { locale });
+    expect([label(14, 0), label(14, 5), label(0, 0)]).toEqual([onTheHour, withMinutes, midnight]);
+  });
+
+  it('returns undefined when unusable', () => {
+    expect(formatClock('not-a-date')).toBeUndefined();
+  });
+});
+
 describe('formatTimestampPrecise', () => {
   it('keeps milliseconds', () => {
     expect(formatTimestampPrecise(new Date('2026-01-05T14:03:07.250Z'), { locale: 'en-US' })).toBe(
@@ -198,6 +226,11 @@ describe('formatLogLineTimestamp', () => {
       time: '23:25:51',
       fraction: '.25',
     });
+  });
+
+  it('pads the hour even where the locale does not', () => {
+    const early = '2026-11-24T09:25:51.256Z';
+    expect(formatLogLineTimestamp(early, { locale: 'es-ES', timeZone: 'UTC' })?.time).toBe('09:25:51');
   });
 
   it('keeps the locale order and separators', () => {
