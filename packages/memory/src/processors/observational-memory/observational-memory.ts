@@ -337,6 +337,7 @@ import type { CompressionLevel } from './reflector-agent';
 import { isReflectionApplied, ReflectorRunner } from './reflector-runner';
 import { isOmReproCaptureEnabled, writeObserverExchangeReproCapture } from './repro-capture';
 import { RETRY_CONFIG } from './retry';
+import { samePartExceptTokenEstimate } from './same-part-content';
 import {
   calculateDynamicThreshold,
   calculateProjectedMessageRemoval,
@@ -2266,26 +2267,32 @@ export class ObservationalMemory {
     type Part = MastraDBMessage['content']['parts'][number] & { providerMetadata?: Record<string, any> };
     // Everything but the count itself is compared: `providerMetadata.mastra.modelOutput` changes what the model
     // sees, so two parts with the same raw result but different model outputs must not share a count.
-    const contentOf = (part: Part) => {
-      const { tokenEstimate: _tokenEstimate, ...mastra } = part.providerMetadata?.mastra ?? {};
-      return JSON.stringify({ ...part, providerMetadata: { ...part.providerMetadata, mastra } });
+    // Counted parts are bucketed by a cheap shape key so each stored part is deep-compared with a few candidates.
+    const shapeOf = (part: Part): string => {
+      const { type, text, toolCallId, toolInvocation } = part as Record<string, any>;
+      return `${type}|${toolCallId ?? toolInvocation?.toolCallId ?? ''}|${typeof text === 'string' ? text.length : ''}`;
     };
     const live = new Map(messages.map(message => [message.id, message]));
     const { messages: stored } = await this.storage.listMessagesById({ messageIds: [...live.keys()] });
     const updates: { id: string; content: MastraDBMessage['content'] }[] = [];
     for (const row of stored) {
-      const counts = new Map<string, unknown[]>();
+      const counted = new Map<string, { part: Part; taken: boolean }[]>();
+      let countedParts = 0;
       for (const part of (live.get(row.id)?.content.parts ?? []) as Part[]) {
-        const tokenEstimate = part.providerMetadata?.mastra?.tokenEstimate;
-        if (!tokenEstimate) continue;
-        const key = contentOf(part);
-        counts.set(key, [...(counts.get(key) ?? []), tokenEstimate]);
+        if (!part.providerMetadata?.mastra?.tokenEstimate) continue;
+        const shape = shapeOf(part);
+        counted.set(shape, [...(counted.get(shape) ?? []), { part, taken: false }]);
+        countedParts++;
       }
-      if (counts.size === 0) continue;
+      if (countedParts === 0) continue;
       let changed = false;
       const parts = (row.content.parts as Part[]).map(part => {
-        const tokenEstimate = counts.get(contentOf(part))?.shift();
-        if (!tokenEstimate) return part;
+        const match = counted
+          .get(shapeOf(part))
+          ?.find(candidate => !candidate.taken && samePartExceptTokenEstimate(candidate.part, part));
+        if (!match) return part;
+        match.taken = true;
+        const tokenEstimate = match.part.providerMetadata?.mastra?.tokenEstimate;
         changed = true;
         const providerMetadata = part.providerMetadata ?? {};
         return {
