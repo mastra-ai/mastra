@@ -24,7 +24,13 @@ import { SaveQueueManager } from '../../save-queue';
 import type { ToolsInput } from '../../types';
 import { isDurableAgentLike } from '../../types';
 import { recordRunSavedMessages } from '../run-message-refs';
-import { getRunRegistryEntry, globalRunRegistry, setRunRegistryEntry } from '../run-registry';
+import {
+  getRunRegistryEntry,
+  getStepSegment,
+  globalRunRegistry,
+  isStaleRunRegistryEntry,
+  setRunRegistryEntry,
+} from '../run-registry';
 import type {
   RunRegistryEntry,
   SerializableDurableState,
@@ -445,6 +451,8 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       processorStates,
       agent: rebuiltAgent,
       ...backgroundTasks,
+      // The tools, memory and workspace above were resolved for this segment's caller.
+      requestContextSegment: getStepSegment(runId, options.requestContext),
     };
     if (globalEntry) {
       Object.assign(globalEntry, rebuilt);
@@ -538,6 +546,11 @@ export async function rebuildRunToolsFromMastra(options: {
   requestContext?: RequestContext;
   /** Restore processors for tool execution, not persistence-only rebuilds. */
   rehydrateProcessors?: boolean;
+  /**
+   * Replace the entry's tools, memory, workspace and context when they were built for an earlier
+   * segment (see `isStaleRunRegistryEntry`). Save queue and processor state carry across segments.
+   */
+  replaceStale?: boolean;
   logger?: { debug?: (...args: any[]) => void; error?: (...args: any[]) => void };
 }): Promise<RebuiltRunTools | undefined> {
   const {
@@ -614,21 +627,40 @@ export async function rebuildRunToolsFromMastra(options: {
       agent: processorAgent,
       ...backgroundTasks,
       ...rebuiltProcessors,
-      ...(options.rehydrateProcessors ? { requestContext: resolveRequestContext, requestContextRebuilt: true } : {}),
+      ...(options.rehydrateProcessors
+        ? {
+            requestContext: resolveRequestContext,
+            requestContextRebuilt: true,
+            requestContextSegment: getStepSegment(runId, requestContext),
+          }
+        : {}),
     };
     // A sibling may have published during construction. Keep lookup, merge and return synchronous.
     existing = getRunRegistryEntry(runId, mastra as Mastra | undefined);
     if (existing) {
-      if (options.rehydrateProcessors && !existing.requestContext) {
-        existing.requestContext = resolveRequestContext;
-        existing.requestContextRebuilt = true;
-      }
       const registryModel = existing.model as { __metadataOnly?: boolean } | undefined;
       const hasAuthoritativeToolSnapshot =
         existing.isPlaceholder !== true &&
         !!registryModel &&
         registryModel.__metadataOnly !== true &&
         (existing.baseTools !== undefined || existing.tools !== undefined);
+      // Re-checked here: a sibling step of the same segment may already have replaced the entry.
+      if (options.replaceStale && isStaleRunRegistryEntry(existing, runId, requestContext)) {
+        // Keep the step's tool snapshot (prepareStep may have omitted tools), rebuilt for this caller.
+        const snapshotNames = Object.keys(existing.tools ?? {});
+        existing.tools = hasAuthoritativeToolSnapshot
+          ? Object.fromEntries(Object.entries(tools).filter(([name]) => snapshotNames.includes(name)))
+          : tools;
+        existing.workspace = workspace;
+        existing.memory = memory;
+        existing.requestContext = resolveRequestContext;
+        existing.requestContextRebuilt = true;
+        existing.requestContextSegment = getStepSegment(runId, requestContext);
+      } else if (options.rehydrateProcessors && !existing.requestContext) {
+        existing.requestContext = resolveRequestContext;
+        existing.requestContextRebuilt = true;
+        existing.requestContextSegment = getStepSegment(runId, requestContext);
+      }
       if (!hasAuthoritativeToolSnapshot && Object.keys(existing.tools ?? {}).length === 0) existing.tools = tools;
       existing.workspace ??= workspace;
       existing.memory ??= memory;

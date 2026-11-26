@@ -98,6 +98,32 @@ export function getLiveRunRequestContext(
   return runId && getExecutionClaim(live, runId)?.executionId === expectedExecutionId ? live : undefined;
 }
 
+/** The segment a step runs in: its Core execution claim, or the engine's segment id (Inngest). */
+export function getStepSegment(runId: string | undefined, stepContext: RequestContext | undefined) {
+  const executionId = runId ? getExecutionClaim(stepContext, runId)?.executionId : undefined;
+  if (executionId) return executionId;
+  const segment = stepContext?.get(DURABLE_CONTEXT_SEGMENT_KEY);
+  return typeof segment === 'string' ? segment : undefined;
+}
+
+/**
+ * Whether the entry's request-scoped state (tools, memory, workspace and context) was built for an
+ * earlier segment than the one running this step, for example when the run parked here and another
+ * host claimed the resume. An entry that records no segment is not treated as stale.
+ */
+export function isStaleRunRegistryEntry(
+  entry: RunRegistryEntry | undefined,
+  runId: string | undefined,
+  stepContext: RequestContext | undefined,
+) {
+  if (!entry) return false;
+  const stepSegment = getStepSegment(runId, stepContext);
+  if (!stepSegment) return false;
+  const entrySegment =
+    (runId ? getExecutionClaim(entry.requestContext, runId)?.executionId : undefined) ?? entry.requestContextSegment;
+  return entrySegment !== undefined && entrySegment !== stepSegment;
+}
+
 /**
  * Publish an entry for `runId`, owned by `mastra`, unless the slot holds
  * another Mastra instance's live run. Returns whether the entry was stored.

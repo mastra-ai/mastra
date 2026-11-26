@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ProcessorState } from '../../../processors/runner';
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../../../request-context';
-import { globalRunRegistry } from '../run-registry';
+import { DURABLE_CONTEXT_SEGMENT_KEY, globalRunRegistry } from '../run-registry';
 import { rebuildRunToolsFromMastra } from './resolve-runtime';
 
 /**
@@ -173,6 +173,98 @@ describe('rebuildRunToolsFromMastra request context', () => {
       }
     },
   );
+
+  it('replaces tools, memory and workspace built for an earlier segment, keeping run state', async () => {
+    const runId = 'stale-segment-replace';
+    const saveQueueManager = {};
+    const processorStates = new Map();
+    const outputProcessors = [{ id: 'kept' }];
+    const entry = {
+      model: {},
+      // prepareStep left only `approve` available for this step.
+      tools: { approve: { id: 'approve', built: 'alice' } },
+      memory: { built: 'alice' },
+      workspace: { built: 'alice' },
+      requestContext: new RequestContext([['mastra__user', { id: 'alice' }]]),
+      requestContextSegment: 'segment-1',
+      saveQueueManager,
+      processorStates,
+      outputProcessors,
+    };
+    globalRunRegistry.set(runId, entry as any);
+    const agent = {
+      getToolsForExecution: vi.fn().mockResolvedValue({
+        approve: { id: 'approve', built: 'bob' },
+        omitted: { id: 'omitted', built: 'bob' },
+      }),
+      getMemory: vi.fn().mockResolvedValue({ built: 'bob' }),
+      getWorkspace: vi.fn().mockResolvedValue({ built: 'bob' }),
+    };
+    const stepContext = () =>
+      new RequestContext<unknown>([
+        [DURABLE_CONTEXT_SEGMENT_KEY, 'segment-2'],
+        ['mastra__user', { id: 'bob' }],
+      ]);
+    const rebuild = () =>
+      rebuildRunToolsFromMastra({
+        mastra: makeMastra(agent),
+        runId,
+        agentId: 'agent-1',
+        state: {} as any,
+        requestContextEntries: { marker: 'A', mastra__user: { id: 'alice' } },
+        requestContext: stepContext(),
+        rehydrateProcessors: true,
+        replaceStale: true,
+      });
+
+    try {
+      await rebuild();
+      const replaced = globalRunRegistry.get(runId)!;
+      expect(replaced.tools).toEqual({ approve: { id: 'approve', built: 'bob' } });
+      expect(replaced.memory).toEqual({ built: 'bob' });
+      expect(replaced.workspace).toEqual({ built: 'bob' });
+      expect(replaced.requestContext?.get('mastra__user')).toEqual({ id: 'bob' });
+      expect(replaced.requestContext?.get('marker')).toBe('A');
+      expect(replaced.requestContextRebuilt).toBe(true);
+      expect(replaced.requestContextSegment).toBe('segment-2');
+      expect(replaced.saveQueueManager).toBe(saveQueueManager);
+      expect(replaced.processorStates).toBe(processorStates);
+      expect(replaced.outputProcessors).toBe(outputProcessors);
+
+      // A sibling step of the same segment reuses the replaced entry.
+      const tools = replaced.tools;
+      agent.getToolsForExecution.mockResolvedValue({ approve: { id: 'approve', built: 'sibling' } });
+      await rebuild();
+      expect(globalRunRegistry.get(runId)!.tools).toBe(tools);
+    } finally {
+      globalRunRegistry.delete(runId);
+    }
+  });
+
+  it('keeps tools built for the current segment', async () => {
+    const runId = 'current-segment-keep';
+    const tools = { approve: { id: 'approve', built: 'alice' } };
+    const requestContext = new RequestContext<unknown>([[DURABLE_CONTEXT_SEGMENT_KEY, 'segment-1']]);
+    globalRunRegistry.set(runId, { model: {}, tools, requestContext, requestContextSegment: 'segment-1' } as any);
+    const agent = { ...makeAgent(), getToolsForExecution: vi.fn().mockResolvedValue({ approve: {} }) };
+
+    try {
+      await rebuildRunToolsFromMastra({
+        mastra: makeMastra(agent),
+        runId,
+        agentId: 'agent-1',
+        state: {} as any,
+        requestContext: new RequestContext<unknown>([[DURABLE_CONTEXT_SEGMENT_KEY, 'segment-1']]),
+        rehydrateProcessors: true,
+        replaceStale: true,
+      });
+      const entry = globalRunRegistry.get(runId)!;
+      expect(entry.tools).toBe(tools);
+      expect(entry.requestContext).toBe(requestContext);
+    } finally {
+      globalRunRegistry.delete(runId);
+    }
+  });
 
   it('falls back to the run-level context when the step input has no snapshot', async () => {
     const agent = makeAgent();
