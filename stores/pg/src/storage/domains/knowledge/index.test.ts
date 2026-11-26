@@ -40,7 +40,7 @@ describe('KnowledgePG storage isolation', () => {
       const ddl = KnowledgePG.getExportDDL(schemaName).join('\n');
       expect(ddl).toContain('mastra_knowledge_sequences');
       expect(ddl).toContain('mastra_knowledge_sequence_items_order');
-      expect(ddl).toContain('mastra_knowledge_sequence_items_thread');
+      expect(ddl).toContain('mastra_knowledge_sequence_items_parent');
       await pool.query(ddl);
       const store = new PostgresStore({ id: 'sequence-export', pool, schemaName, disableInit: true });
       const knowledge = await store.getStore('knowledge');

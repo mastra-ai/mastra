@@ -20,6 +20,23 @@ export interface KnowledgeSequenceItemAuthor {
   name?: string;
 }
 
+/** At most this many links on one item. */
+export const MAX_KNOWLEDGE_SEQUENCE_ITEM_LINKS = 10;
+/** At most this many characters in an item's one-line title (and a link's title). */
+export const MAX_KNOWLEDGE_SEQUENCE_ITEM_TITLE = 300;
+/** At most this many bytes of an item's properties, serialized as JSON. */
+export const MAX_KNOWLEDGE_SEQUENCE_ITEM_PROPERTIES_BYTES = 16 * 1024;
+/** At most this many types in one `types` read filter. */
+export const MAX_KNOWLEDGE_SEQUENCE_TYPE_FILTER = 20;
+/** An item type key: lowercase letters, digits, `_` and `-`, starting with a letter or digit, at most 64 characters. */
+export const KNOWLEDGE_SEQUENCE_ITEM_TYPE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+
+export interface KnowledgeSequenceItemLink {
+  /** An http(s) URL. */
+  url: string;
+  title?: string;
+}
+
 export interface KnowledgeSequenceItemRecord {
   /** Store ID, stable for the item's life: edits keep it. */
   id: string;
@@ -33,26 +50,52 @@ export interface KnowledgeSequenceItemRecord {
   writtenAt: Date;
   /** When the source last edited it, or null. */
   editedAt: Date | null;
-  /** Set when the source deleted it. The body is cleared and the row kept, so a replay can't bring it back. */
+  /**
+   * Set when the source deleted it. Its title, body, links and properties are cleared and the row
+   * kept, so a replay can't bring it back.
+   */
   deletedAt: Date | null;
   author: KnowledgeSequenceItemAuthor | null;
-  /** The `externalId` of the thread's root item, for a reply. */
-  threadExternalId: string | null;
-  body: string;
+  /**
+   * The `externalId` of the item this one sits under, on the same sequence. One level: a parent has
+   * no parent of its own.
+   */
+  externalParentId: string | null;
+  /** The item's kind, e.g. `deploy`; null when untyped. A delete keeps it. */
+  type: string | null;
+  /** One line. */
+  title: string | null;
+  /** Markdown. */
+  body: string | null;
+  links: KnowledgeSequenceItemLink[];
+  /** A JSON object. */
+  properties: Record<string, unknown> | null;
   /** Starts at 1 and goes up by one with each change. */
   version: number;
   /** The Knowledge writer of the last change, e.g. `importer:slack`. */
   writtenBy: string;
 }
 
+/**
+ * The whole item: an upsert replaces every field, so one left out is cleared. It needs some content:
+ * a title, body, link or property.
+ */
 export interface UpsertKnowledgeSequenceItemInput {
   sequenceId: string;
   externalId: string;
   occurredAt: Date;
   editedAt?: Date | null;
   author?: KnowledgeSequenceItemAuthor | null;
-  threadExternalId?: string | null;
-  body: string;
+  /** Refused with {@link KnowledgeSequenceParentNotFoundError} unless it names an item of this sequence. */
+  externalParentId?: string | null;
+  type?: string | null;
+  /** One line, at most {@link MAX_KNOWLEDGE_SEQUENCE_ITEM_TITLE} characters. */
+  title?: string | null;
+  body?: string | null;
+  /** At most {@link MAX_KNOWLEDGE_SEQUENCE_ITEM_LINKS}. */
+  links?: KnowledgeSequenceItemLink[] | null;
+  /** A JSON object of at most {@link MAX_KNOWLEDGE_SEQUENCE_ITEM_PROPERTIES_BYTES} bytes. */
+  properties?: Record<string, unknown> | null;
   writtenBy: string;
   /** Bring back an item the source deleted. Without it, a deleted item stays deleted. */
   restore?: boolean;
@@ -79,16 +122,19 @@ export interface ListKnowledgeSequenceItemsInput {
   since?: Date;
   /** `occurredAt < until`. */
   until?: Date;
-  /** Only the thread with this root `externalId`: the root and its replies. */
-  threadExternalId?: string;
+  /** Only the item with this `externalId` and the items under it. */
+  externalParentId?: string;
   /** Newest first (`desc`, the default) or oldest first. */
   order?: 'asc' | 'desc';
   /** At most {@link MAX_KNOWLEDGE_SEQUENCE_READ_LIMIT}. */
   limit: number;
   /** The `nextCursor` of the previous read, with the same other arguments. */
   cursor?: string;
-  /** Include deleted items (body cleared). Off by default. */
+  /** Include deleted items (content cleared). Off by default. */
   includeDeleted?: boolean;
+  /** See {@link knowledgeSequenceTypeFilter}. */
+  types?: string[];
+  untyped?: boolean;
 }
 
 export interface KnowledgeSequenceItemsPage {
@@ -97,7 +143,10 @@ export interface KnowledgeSequenceItemsPage {
 }
 
 export interface SearchKnowledgeSequenceItemsInput {
-  /** Matched by word, as page search does (`knowledgeSearchWords`): an item matches any word in its body. */
+  /**
+   * Matched by word, as page search does (`knowledgeSearchWords`): an item matches any word in its
+   * title, body, link titles or string property values ({@link knowledgeSequenceItemSearchText}).
+   */
   query: string;
   /** Only items of live sequence pages readable under this scope. */
   read: KnowledgeReadScope;
@@ -111,6 +160,9 @@ export interface SearchKnowledgeSequenceItemsInput {
   until?: Date;
   /** At most {@link MAX_KNOWLEDGE_SEQUENCE_READ_LIMIT}. */
   limit: number;
+  /** See {@link knowledgeSequenceTypeFilter}. */
+  types?: string[];
+  untyped?: boolean;
 }
 
 export type KnowledgeSequencePurgeResult = { purgedIds: string[]; done: boolean };
@@ -131,6 +183,39 @@ export class KnowledgeSequenceNotFoundError extends Error {
   }
 }
 
+/** An item field breaks the item rules (no content, a field over its limit, a bad type key). Nothing was written. */
+export class KnowledgeSequenceItemInvalidError extends TypeError {
+  constructor(
+    readonly field: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'KnowledgeSequenceItemInvalidError';
+  }
+}
+
+/** `externalParentId` names no item of the item's own sequence. Nothing was written. */
+export class KnowledgeSequenceParentNotFoundError extends Error {
+  constructor(
+    readonly sequenceId: string,
+    readonly externalParentId: string,
+  ) {
+    super(`Knowledge sequence ${sequenceId} has no item ${JSON.stringify(externalParentId)} to put an item under.`);
+    this.name = 'KnowledgeSequenceParentNotFoundError';
+  }
+}
+
+/** Items nest one level: the parent is itself under another item, or the item has items under it. Nothing was written. */
+export class KnowledgeSequenceParentNestedError extends Error {
+  constructor(
+    readonly sequenceId: string,
+    readonly externalId: string,
+  ) {
+    super(`Knowledge sequence items nest one level only; ${JSON.stringify(externalId)} can't go there.`);
+    this.name = 'KnowledgeSequenceParentNestedError';
+  }
+}
+
 /** Items of a sequence are only purged once its page has been deleted longer than the caller's cutoff. */
 export class KnowledgeSequencePurgeRefusedError extends Error {
   constructor(readonly pageId: string) {
@@ -148,11 +233,12 @@ export abstract class KnowledgeSequencesStorage {
   /** The sequences among `pageIds`, live or deleted. */
   abstract listSequenceIds(input: { pageIds: string[] }): Promise<string[]>;
   /**
-   * Upserts by `(sequenceId, externalId)`. Unchanged content (body, author, times, thread) is
-   * `unchanged` and writes nothing. The sequence must be live.
+   * Upserts by `(sequenceId, externalId)`. Unchanged fields are `unchanged` and write nothing. The
+   * sequence must be live; refuses with {@link KnowledgeSequenceItemInvalidError},
+   * {@link KnowledgeSequenceParentNotFoundError} or {@link KnowledgeSequenceParentNestedError}.
    */
   abstract upsertItem(input: UpsertKnowledgeSequenceItemInput): Promise<KnowledgeSequenceItemUpsertResult>;
-  /** Marks the item deleted and clears its body. Only on a positive signal from the source. */
+  /** Marks the item deleted and clears its content, keeping its type. Only on a positive signal from the source. */
   abstract removeItem(input: {
     sequenceId: string;
     externalId: string;
@@ -160,7 +246,7 @@ export abstract class KnowledgeSequencesStorage {
     deletedAt?: Date;
   }): Promise<KnowledgeSequenceItemRemoveResult>;
   /**
-   * One item by its store `id`, deleted ones included (body cleared), or null when the sequence
+   * One item by its store `id`, deleted ones included (content cleared), or null when the sequence
    * isn't a live sequence page readable under `read` or has no such item.
    */
   abstract getItem(input: {
@@ -170,7 +256,7 @@ export abstract class KnowledgeSequencesStorage {
   }): Promise<KnowledgeSequenceItemRecord | null>;
   abstract listItems(input: ListKnowledgeSequenceItemsInput): Promise<KnowledgeSequenceItemsPage>;
   /**
-   * Keyword search over item bodies. Ranked by how many query words match, then newest
+   * Keyword search over item text ({@link knowledgeSequenceItemSearchText}). Ranked by how many query words match, then newest
    * `occurredAt`, then `id`. Deleted items never match. The visibility filter applies before the
    * limit, so a hidden sequence can't take a slot.
    */
@@ -193,13 +279,18 @@ export function sameKnowledgeSequenceItem(
   stored: KnowledgeSequenceItemRecord,
   input: UpsertKnowledgeSequenceItemInput,
 ): boolean {
+  const next = knowledgeSequenceItemContent(input);
   return (
-    stored.body === input.body &&
     stored.occurredAt.getTime() === input.occurredAt.getTime() &&
     (stored.editedAt?.getTime() ?? null) === (input.editedAt?.getTime() ?? null) &&
-    stored.threadExternalId === (input.threadExternalId ?? null) &&
     stored.author?.sourceId === input.author?.sourceId &&
-    (stored.author?.name ?? null) === (input.author?.name ?? null)
+    (stored.author?.name ?? null) === (input.author?.name ?? null) &&
+    stored.externalParentId === next.externalParentId &&
+    stored.type === next.type &&
+    stored.title === next.title &&
+    stored.body === next.body &&
+    canonicalJson(stored.links) === canonicalJson(next.links) &&
+    canonicalJson(stored.properties) === canonicalJson(next.properties)
   );
 }
 
@@ -212,6 +303,50 @@ export function isStaleKnowledgeSequenceEdit(
   return !input.editedAt || input.editedAt.getTime() < stored.editedAt.getTime();
 }
 
+/** JSON with object keys sorted, so two values compare equal whatever their key order. */
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, inner) =>
+    inner && typeof inner === 'object' && !Array.isArray(inner)
+      ? Object.fromEntries(Object.entries(inner).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : inner,
+  );
+}
+
+/** The stored form of an item's optional fields: absent and empty both become null (or no links). */
+export function knowledgeSequenceItemContent(
+  input: UpsertKnowledgeSequenceItemInput,
+): Pick<KnowledgeSequenceItemRecord, 'externalParentId' | 'type' | 'title' | 'body' | 'links' | 'properties'> {
+  return {
+    externalParentId: input.externalParentId || null,
+    type: input.type ?? null,
+    title: input.title || null,
+    body: input.body || null,
+    links: (input.links ?? []).map(link => (link.title ? { url: link.url, title: link.title } : { url: link.url })),
+    properties: input.properties && Object.keys(input.properties).length > 0 ? { ...input.properties } : null,
+  };
+}
+
+/**
+ * The lowercased text search matches: title, body, link titles and string property values (also
+ * strings inside arrays), one per line. Property keys, numbers and booleans aren't matched.
+ */
+export function knowledgeSequenceItemSearchText(
+  item: Pick<KnowledgeSequenceItemRecord, 'title' | 'body' | 'links' | 'properties'>,
+): string {
+  const parts: string[] = [];
+  if (item.title) parts.push(item.title);
+  if (item.body) parts.push(item.body);
+  for (const link of item.links) if (link.title) parts.push(link.title);
+  for (const value of Object.values(item.properties ?? {})) {
+    for (const inner of Array.isArray(value) ? value : [value]) if (typeof inner === 'string') parts.push(inner);
+  }
+  return parts.join('\n').toLowerCase();
+}
+
+function invalid(field: string, message: string): never {
+  throw new KnowledgeSequenceItemInvalidError(field, `A sequence item's ${field} ${message}`);
+}
+
 export function checkKnowledgeSequenceItemInput(input: UpsertKnowledgeSequenceItemInput): void {
   if (!input.externalId) throw new TypeError('A sequence item needs an externalId.');
   for (const [name, value] of [
@@ -222,6 +357,74 @@ export function checkKnowledgeSequenceItemInput(input: UpsertKnowledgeSequenceIt
       throw new TypeError(`A sequence item's ${name} must be a valid Date.`);
     }
   }
+  const { title, links, properties, type, externalParentId } = input;
+  if (title && (title.length > MAX_KNOWLEDGE_SEQUENCE_ITEM_TITLE || /[\r\n]/.test(title))) {
+    invalid('title', `must be one line of at most ${MAX_KNOWLEDGE_SEQUENCE_ITEM_TITLE} characters.`);
+  }
+  if (links) {
+    if (links.length > MAX_KNOWLEDGE_SEQUENCE_ITEM_LINKS) {
+      invalid('links', `are at most ${MAX_KNOWLEDGE_SEQUENCE_ITEM_LINKS}.`);
+    }
+    for (const link of links) {
+      let protocol: string | undefined;
+      try {
+        protocol = new URL(link.url).protocol;
+      } catch {
+        protocol = undefined;
+      }
+      if (protocol !== 'http:' && protocol !== 'https:') invalid('links', 'must be http(s) URLs.');
+      if (link.title && link.title.length > MAX_KNOWLEDGE_SEQUENCE_ITEM_TITLE) {
+        invalid('links', `titles are at most ${MAX_KNOWLEDGE_SEQUENCE_ITEM_TITLE} characters.`);
+      }
+    }
+  }
+  if (properties != null) {
+    if (typeof properties !== 'object' || Array.isArray(properties)) invalid('properties', 'must be a JSON object.');
+    if (new TextEncoder().encode(JSON.stringify(properties)).length > MAX_KNOWLEDGE_SEQUENCE_ITEM_PROPERTIES_BYTES) {
+      invalid('properties', `are at most ${MAX_KNOWLEDGE_SEQUENCE_ITEM_PROPERTIES_BYTES} bytes as JSON.`);
+    }
+  }
+  if (type != null && !KNOWLEDGE_SEQUENCE_ITEM_TYPE.test(type)) {
+    invalid('type', 'must be lowercase letters, digits, "_" or "-", starting with a letter or digit, at most 64.');
+  }
+  if (externalParentId && externalParentId === input.externalId)
+    invalid('externalParentId', "can't be the item itself.");
+  const content = knowledgeSequenceItemContent(input);
+  if (!content.title && !content.body && content.links.length === 0 && !content.properties) {
+    invalid('content', 'needs a title, body, link or property.');
+  }
+}
+
+/**
+ * The `types`/`untyped` read filter: `types` alone keeps those types; `untyped` alone keeps untyped
+ * items; both keep either; neither keeps everything. Applied before the limit. Refuses (RangeError)
+ * an empty `types`, more than {@link MAX_KNOWLEDGE_SEQUENCE_TYPE_FILTER}, or a malformed key.
+ * Returns null when nothing is filtered.
+ */
+export function knowledgeSequenceTypeFilter(input: {
+  types?: string[];
+  untyped?: boolean;
+}): { types: string[]; untyped: boolean } | null {
+  const { types, untyped = false } = input;
+  if (types !== undefined) {
+    if (types.length === 0 || types.length > MAX_KNOWLEDGE_SEQUENCE_TYPE_FILTER) {
+      throw new RangeError(`A sequence type filter takes 1 to ${MAX_KNOWLEDGE_SEQUENCE_TYPE_FILTER} types.`);
+    }
+    if (!types.every(type => KNOWLEDGE_SEQUENCE_ITEM_TYPE.test(type))) {
+      throw new RangeError('A sequence type filter takes item type keys only.');
+    }
+  }
+  if (!types && !untyped) return null;
+  return { types: types ?? [], untyped };
+}
+
+/** Whether an item passes {@link knowledgeSequenceTypeFilter}'s result. */
+export function knowledgeSequenceTypeMatches(
+  filter: { types: string[]; untyped: boolean } | null,
+  type: string | null,
+): boolean {
+  if (!filter) return true;
+  return type === null ? filter.untyped : filter.types.includes(type);
 }
 
 export function checkKnowledgeSequenceReadLimit(limit: number): void {

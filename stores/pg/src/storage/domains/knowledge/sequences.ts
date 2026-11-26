@@ -38,6 +38,7 @@ function tables(schemaName?: string) {
  * read goes through the sequence page, so moving or deleting the page reaches every item without
  * rewriting one. `occurredAt` is epoch milliseconds so the `(occurredAt, id)` cursor compares
  * exactly; IDs compare byte for byte under the `C` collation, matching the cursor's order.
+ * `searchText` is the lowercased text search matches (`knowledgeSequenceItemSearchText`).
  */
 export function pgKnowledgeSequencesDDL(schemaName?: string): string[] {
   const t = tables(schemaName);
@@ -56,14 +57,19 @@ export function pgKnowledgeSequencesDDL(schemaName?: string): string[] {
       "deletedAt" timestamptz,
       "authorSourceId" text,
       "authorName" text,
-      "threadExternalId" text COLLATE "C",
-      "body" text NOT NULL,
+      "externalParentId" text COLLATE "C",
+      "type" text COLLATE "C",
+      "title" text,
+      "body" text,
+      "links" jsonb,
+      "properties" jsonb,
+      "searchText" text NOT NULL,
       "version" integer NOT NULL,
       "writtenBy" text NOT NULL,
       UNIQUE ("sequenceId", "externalId")
     )`,
     `CREATE INDEX IF NOT EXISTS mastra_knowledge_sequence_items_order ON ${t.items} ("sequenceId", "occurredAt", "id")`,
-    `CREATE INDEX IF NOT EXISTS mastra_knowledge_sequence_items_thread ON ${t.items} ("sequenceId", "threadExternalId", "occurredAt", "id") WHERE "threadExternalId" IS NOT NULL`,
+    `CREATE INDEX IF NOT EXISTS mastra_knowledge_sequence_items_parent ON ${t.items} ("sequenceId", "externalParentId", "occurredAt", "id") WHERE "externalParentId" IS NOT NULL`,
   ];
 }
 
@@ -86,11 +92,23 @@ const toItem = (row: Row): KnowledgeSequenceItemRecord => ({
     row.authorSourceId === null
       ? null
       : { sourceId: row.authorSourceId, ...(row.authorName === null ? {} : { name: row.authorName }) },
-  threadExternalId: row.threadExternalId ?? null,
-  body: row.body,
+  externalParentId: row.externalParentId ?? null,
+  type: row.type ?? null,
+  title: row.title ?? null,
+  body: row.body ?? null,
+  links: row.links ?? [],
+  properties: row.properties ?? null,
   version: Number(row.version),
   writtenBy: row.writtenBy,
 });
+
+/** The `types`/`untyped` filter as a predicate on `type`; `arg` binds a value and returns its placeholder. */
+function typeSql(alias: string, filter: { types: string[]; untyped: boolean }, arg: (value: unknown) => string) {
+  const terms: string[] = [];
+  if (filter.types.length > 0) terms.push(`${alias}"type" = ANY(${arg(filter.types)}::text[])`);
+  if (filter.untyped) terms.push(`${alias}"type" IS NULL`);
+  return `(${terms.join(' OR ')})`;
+}
 
 /**
  * Sequences on PostgreSQL, on the same client and schema as the pages: on a transaction view the
@@ -150,6 +168,19 @@ export class PgKnowledgeSequences implements KnowledgeSequencesStorage {
     return row ? toItem(row) : undefined;
   }
 
+  /** Refuses a parent that isn't an item of this sequence, is itself under one, or an item with items under it. */
+  async #checkParent(tx: Queryable, sequenceId: string, externalId: string, externalParentId: string | null) {
+    if (!externalParentId) return;
+    const { KnowledgeSequenceParentNestedError, KnowledgeSequenceParentNotFoundError } = await loadCore();
+    const parent = await this.#item(tx, sequenceId, externalParentId);
+    if (!parent) throw new KnowledgeSequenceParentNotFoundError(sequenceId, externalParentId);
+    const under = await tx.oneOrNone(
+      `SELECT 1 FROM ${this.#t.items} WHERE "sequenceId" = $1 AND "externalParentId" = $2 LIMIT 1`,
+      [sequenceId, externalId],
+    );
+    if (parent.externalParentId || under) throw new KnowledgeSequenceParentNestedError(sequenceId, externalId);
+  }
+
   async markSequence({ pageId }: { pageId: string }): Promise<{ status: 'created' | 'unchanged' }> {
     const { KnowledgeNotFoundError, KnowledgeSequenceNotLeafError } = await loadCore();
     return this.#client.tx(async tx => {
@@ -184,25 +215,34 @@ export class PgKnowledgeSequences implements KnowledgeSequencesStorage {
       checkKnowledgeSequenceItemInput,
       createKnowledgeUlid,
       isStaleKnowledgeSequenceEdit,
+      knowledgeSequenceItemContent,
+      knowledgeSequenceItemSearchText,
       sameKnowledgeSequenceItem,
     } = await loadCore();
     checkKnowledgeSequenceItemInput(input);
     return this.#client.tx(async tx => {
       await this.#lockLive(tx, input.sequenceId);
       const stored = await this.#item(tx, input.sequenceId, input.externalId);
+      const content = knowledgeSequenceItemContent(input);
       const fields = [
         input.occurredAt.getTime(),
         input.editedAt ?? null,
         input.author?.sourceId ?? null,
         input.author?.name ?? null,
-        input.threadExternalId ?? null,
-        input.body,
+        content.externalParentId,
+        content.type,
+        content.title,
+        content.body,
+        content.links.length > 0 ? JSON.stringify(content.links) : null,
+        content.properties ? JSON.stringify(content.properties) : null,
+        knowledgeSequenceItemSearchText(content),
         input.writtenBy,
       ];
       if (!stored) {
+        await this.#checkParent(tx, input.sequenceId, input.externalId, content.externalParentId);
         await tx.none(
-          `INSERT INTO ${this.#t.items} ("occurredAt", "editedAt", "authorSourceId", "authorName", "threadExternalId", "body", "writtenBy", "id", "sequenceId", "externalId", "writtenAt", "version")
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), 1)`,
+          `INSERT INTO ${this.#t.items} ("occurredAt", "editedAt", "authorSourceId", "authorName", "externalParentId", "type", "title", "body", "links", "properties", "searchText", "writtenBy", "id", "sequenceId", "externalId", "writtenAt", "version")
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11, $12, $13, $14, $15, now(), 1)`,
           [...fields, createKnowledgeUlid(), input.sequenceId, input.externalId],
         );
         return { status: 'created' as const, item: (await this.#item(tx, input.sequenceId, input.externalId))! };
@@ -216,8 +256,9 @@ export class PgKnowledgeSequences implements KnowledgeSequencesStorage {
           return { status: 'ignored' as const, reason: 'stale' as const, item: stored };
         }
       }
+      await this.#checkParent(tx, input.sequenceId, input.externalId, content.externalParentId);
       await tx.none(
-        `UPDATE ${this.#t.items} SET "occurredAt" = $1, "editedAt" = $2, "authorSourceId" = $3, "authorName" = $4, "threadExternalId" = $5, "body" = $6, "writtenBy" = $7, "deletedAt" = NULL, "version" = "version" + 1 WHERE "id" = $8`,
+        `UPDATE ${this.#t.items} SET "occurredAt" = $1, "editedAt" = $2, "authorSourceId" = $3, "authorName" = $4, "externalParentId" = $5, "type" = $6, "title" = $7, "body" = $8, "links" = $9::jsonb, "properties" = $10::jsonb, "searchText" = $11, "writtenBy" = $12, "deletedAt" = NULL, "version" = "version" + 1 WHERE "id" = $13`,
         [...fields, stored.id],
       );
       return { status: 'updated' as const, item: (await this.#item(tx, input.sequenceId, input.externalId))! };
@@ -236,7 +277,7 @@ export class PgKnowledgeSequences implements KnowledgeSequencesStorage {
       if (!stored) return { status: 'missing' as const };
       if (stored.deletedAt) return { status: 'unchanged' as const, item: stored };
       await tx.none(
-        `UPDATE ${this.#t.items} SET "body" = '', "deletedAt" = $1, "writtenBy" = $2, "version" = "version" + 1 WHERE "id" = $3`,
+        `UPDATE ${this.#t.items} SET "title" = NULL, "body" = NULL, "links" = NULL, "properties" = NULL, "searchText" = '', "deletedAt" = $1, "writtenBy" = $2, "version" = "version" + 1 WHERE "id" = $3`,
         [input.deletedAt ?? new Date(), input.writtenBy, stored.id],
       );
       return { status: 'removed' as const, item: (await this.#item(tx, input.sequenceId, input.externalId))! };
@@ -257,9 +298,14 @@ export class PgKnowledgeSequences implements KnowledgeSequencesStorage {
   }
 
   async listItems(input: ListKnowledgeSequenceItemsInput): Promise<KnowledgeSequenceItemsPage> {
-    const { checkKnowledgeSequenceReadLimit, decodeKnowledgeSequenceCursor, encodeKnowledgeSequenceCursor } =
-      await loadCore();
+    const {
+      checkKnowledgeSequenceReadLimit,
+      decodeKnowledgeSequenceCursor,
+      encodeKnowledgeSequenceCursor,
+      knowledgeSequenceTypeFilter,
+    } = await loadCore();
     checkKnowledgeSequenceReadLimit(input.limit);
+    const typeFilter = knowledgeSequenceTypeFilter(input);
     const after = input.cursor ? decodeKnowledgeSequenceCursor(input.cursor) : undefined;
     const marked = await this.#client.oneOrNone(`SELECT 1 FROM ${this.#t.sequences} WHERE "pageId" = $1`, [
       input.sequenceId,
@@ -272,10 +318,11 @@ export class PgKnowledgeSequences implements KnowledgeSequencesStorage {
     if (!input.includeDeleted) where.push(`"deletedAt" IS NULL`);
     if (input.since) where.push(`"occurredAt" >= ${arg(input.since.getTime())}`);
     if (input.until) where.push(`"occurredAt" < ${arg(input.until.getTime())}`);
-    if (input.threadExternalId !== undefined) {
-      const thread = arg(input.threadExternalId);
-      where.push(`("externalId" = ${thread} OR "threadExternalId" = ${thread})`);
+    if (input.externalParentId !== undefined) {
+      const parent = arg(input.externalParentId);
+      where.push(`("externalId" = ${parent} OR "externalParentId" = ${parent})`);
     }
+    if (typeFilter) where.push(typeSql('', typeFilter, arg));
     if (after) {
       where.push(`("occurredAt", "id") ${desc ? '<' : '>'} (${arg(after.occurredAt)}, ${arg(after.id)})`);
     }
@@ -290,8 +337,9 @@ export class PgKnowledgeSequences implements KnowledgeSequencesStorage {
   }
 
   async searchItems(input: SearchKnowledgeSequenceItemsInput): Promise<KnowledgeSequenceItemRecord[]> {
-    const { checkKnowledgeSequenceReadLimit } = await loadCore();
+    const { checkKnowledgeSequenceReadLimit, knowledgeSequenceTypeFilter } = await loadCore();
     checkKnowledgeSequenceReadLimit(input.limit);
+    const typeFilter = knowledgeSequenceTypeFilter(input);
     const words = knowledgeSearchWords(input.query);
     if (!words.length) return [];
     const params = new Params();
@@ -302,13 +350,14 @@ export class PgKnowledgeSequences implements KnowledgeSequencesStorage {
       `e."deletedAt" IS NULL`,
       `p."deletedAt" IS NULL`,
       filter.readable('s'),
-      `(${patterns.map(pattern => `e."body" ILIKE ${pattern}`).join(' OR ')})`,
+      `(${patterns.map(pattern => `e."searchText" LIKE ${pattern}`).join(' OR ')})`,
     ];
     if (input.sequenceIds) where.push(`e."sequenceId" = ANY(${params.add(input.sequenceIds)}::text[])`);
     if (input.scopeIds) where.push(`p."scopeId" = ANY(${params.add(input.scopeIds)}::text[])`);
     if (input.since) where.push(`e."occurredAt" >= ${params.add(input.since.getTime())}`);
     if (input.until) where.push(`e."occurredAt" < ${params.add(input.until.getTime())}`);
-    const matched = patterns.map(pattern => `(CASE WHEN e."body" ILIKE ${pattern} THEN 1 ELSE 0 END)`).join(' + ');
+    if (typeFilter) where.push(typeSql('e.', typeFilter, value => params.add(value)));
+    const matched = patterns.map(pattern => `(CASE WHEN e."searchText" LIKE ${pattern} THEN 1 ELSE 0 END)`).join(' + ');
     const rows = await this.#client.any(
       `SELECT e.* FROM ${this.#t.items} e JOIN ${this.#t.sequences} t ON t."pageId" = e."sequenceId" JOIN ${this.#t.pages} p ON p."id" = e."sequenceId" JOIN ${this.#t.pages} s ON s."id" = p."scopeId" WHERE ${where.join(' AND ')} ORDER BY (${matched}) DESC, e."occurredAt" DESC, e."id" ASC LIMIT ${params.add(input.limit)}`,
       params.values,

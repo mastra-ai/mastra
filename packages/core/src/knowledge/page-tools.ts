@@ -172,8 +172,8 @@ function itemSummary(item: KnowledgeSequenceItemRecord, pageRef: string) {
     ...(item.editedAt ? { editedAt: item.editedAt.toISOString() } : {}),
     ...(item.deletedAt ? { deleted: true as const } : {}),
     ...(item.author ? { author: item.author.name ?? item.author.sourceId } : {}),
-    ...(item.threadExternalId ? { thread: item.threadExternalId } : {}),
-    body: item.body,
+    ...(item.externalParentId ? { thread: item.externalParentId } : {}),
+    body: item.body ?? '',
   };
 }
 
@@ -879,7 +879,7 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
           since: sequenceSince,
           until: sequenceUntil,
           order: args.order,
-          threadExternalId: args.thread,
+          externalParentId: args.thread,
           cursor: args.cursor,
           limit: items,
         });

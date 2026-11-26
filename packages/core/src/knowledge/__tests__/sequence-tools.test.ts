@@ -78,7 +78,7 @@ describe('Knowledge sequence reads through the agent tools', () => {
     const id = await sequence('org:acme', 'general');
     await post(id, 'root', 1, 'deploy is broken');
     await post(id, 'other', 2, 'lunch?');
-    await post(id, 'reply', 3, 'fixed it', { threadExternalId: 'root' });
+    await post(id, 'reply', 3, 'fixed it', { externalParentId: 'root' });
     await post(id, 'late', 9, 'all good');
 
     const range = await acme()('knowledge_read', {

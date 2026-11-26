@@ -30,7 +30,8 @@ const PAGES = KNOWLEDGE_PAGE_TABLES.pages;
 /**
  * Items carry no scope column: a read joins through the sequence page, so moving or deleting the
  * page reaches every item without rewriting one. Times are epoch milliseconds; `externalId`
- * compares byte for byte (BINARY).
+ * compares byte for byte (BINARY). `links` and `properties` are JSON text; `searchText` is the
+ * lowercased text search matches (`knowledgeSequenceItemSearchText`).
  */
 export const KNOWLEDGE_SEQUENCE_DDL = [
   `CREATE TABLE IF NOT EXISTS "${T.sequences}" (
@@ -47,14 +48,19 @@ export const KNOWLEDGE_SEQUENCE_DDL = [
     deletedAt INTEGER,
     authorSourceId TEXT,
     authorName TEXT,
-    threadExternalId TEXT,
-    body TEXT NOT NULL,
+    externalParentId TEXT,
+    type TEXT,
+    title TEXT,
+    body TEXT,
+    links TEXT,
+    properties TEXT,
+    searchText TEXT NOT NULL,
     version INTEGER NOT NULL,
     writtenBy TEXT NOT NULL,
     UNIQUE (sequenceId, externalId)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_kseq_items_order ON "${T.items}" (sequenceId, occurredAt, id)`,
-  `CREATE INDEX IF NOT EXISTS idx_kseq_items_thread ON "${T.items}" (sequenceId, threadExternalId, occurredAt, id) WHERE threadExternalId IS NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_kseq_items_parent ON "${T.items}" (sequenceId, externalParentId, occurredAt, id) WHERE externalParentId IS NOT NULL`,
 ];
 
 /** Loaded when first needed, so this adapter keeps loading on cores without `knowledge-sequences`. */
@@ -79,11 +85,27 @@ const toItem = (row: Row): KnowledgeSequenceItemRecord => ({
           sourceId: String(row.authorSourceId),
           ...(row.authorName === null ? {} : { name: String(row.authorName) }),
         },
-  threadExternalId: row.threadExternalId === null ? null : String(row.threadExternalId),
-  body: String(row.body),
+  externalParentId: row.externalParentId === null ? null : String(row.externalParentId),
+  type: row.type === null ? null : String(row.type),
+  title: row.title === null ? null : String(row.title),
+  body: row.body === null ? null : String(row.body),
+  links: row.links === null ? [] : JSON.parse(String(row.links)),
+  properties: row.properties === null ? null : JSON.parse(String(row.properties)),
   version: Number(row.version),
   writtenBy: String(row.writtenBy),
 });
+
+/** The `types`/`untyped` filter as a predicate on `type`. */
+function typeSql(alias: string, filter: { types: string[]; untyped: boolean }): { sql: string; args: InValue[] } {
+  const terms: string[] = [];
+  const args: InValue[] = [];
+  if (filter.types.length > 0) {
+    terms.push(`${alias}type IN (SELECT value FROM json_each(?))`);
+    args.push(JSON.stringify(filter.types));
+  }
+  if (filter.untyped) terms.push(`${alias}type IS NULL`);
+  return { sql: `(${terms.join(' OR ')})`, args };
+}
 
 /**
  * Sequences on LibSQL, over the same executor as the page store: on a transaction view the view's
@@ -142,6 +164,21 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
     return row ? toItem(row) : undefined;
   }
 
+  /** Refuses a parent that isn't an item of this sequence, is itself under one, or an item with items under it. */
+  async #checkParent(tx: Executor, sequenceId: string, externalId: string, externalParentId: string | null) {
+    if (!externalParentId) return;
+    const { KnowledgeSequenceParentNestedError, KnowledgeSequenceParentNotFoundError } = await loadCore();
+    const parent = await this.#item(tx, sequenceId, externalParentId);
+    if (!parent) throw new KnowledgeSequenceParentNotFoundError(sequenceId, externalParentId);
+    const under = await tx.execute({
+      sql: `SELECT 1 FROM "${T.items}" WHERE sequenceId = ? AND externalParentId = ? LIMIT 1`,
+      args: [sequenceId, externalId],
+    });
+    if (parent.externalParentId || under.rows.length > 0) {
+      throw new KnowledgeSequenceParentNestedError(sequenceId, externalId);
+    }
+  }
+
   async markSequence({ pageId }: { pageId: string }): Promise<{ status: 'created' | 'unchanged' }> {
     const { KnowledgeNotFoundError, KnowledgeSequenceNotLeafError } = await loadCore();
     return this.#transaction(async tx => {
@@ -177,25 +214,34 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
       checkKnowledgeSequenceItemInput,
       createKnowledgeUlid,
       isStaleKnowledgeSequenceEdit,
+      knowledgeSequenceItemContent,
+      knowledgeSequenceItemSearchText,
       sameKnowledgeSequenceItem,
     } = await loadCore();
     checkKnowledgeSequenceItemInput(input);
     return this.#transaction(async tx => {
       await this.#liveSequence(tx, input.sequenceId);
       const stored = await this.#item(tx, input.sequenceId, input.externalId);
+      const content = knowledgeSequenceItemContent(input);
       const fields = [
         input.occurredAt.getTime(),
         input.editedAt ? input.editedAt.getTime() : null,
         input.author?.sourceId ?? null,
         input.author?.name ?? null,
-        input.threadExternalId ?? null,
-        input.body,
+        content.externalParentId,
+        content.type,
+        content.title,
+        content.body,
+        content.links.length > 0 ? JSON.stringify(content.links) : null,
+        content.properties ? JSON.stringify(content.properties) : null,
+        knowledgeSequenceItemSearchText(content),
         input.writtenBy,
       ];
       if (!stored) {
+        await this.#checkParent(tx, input.sequenceId, input.externalId, content.externalParentId);
         await tx.execute({
-          sql: `INSERT INTO "${T.items}" (id, sequenceId, externalId, writtenAt, deletedAt, version, occurredAt, editedAt, authorSourceId, authorName, threadExternalId, body, writtenBy)
-            VALUES (?, ?, ?, ?, NULL, 1, ?, ?, ?, ?, ?, ?, ?)`,
+          sql: `INSERT INTO "${T.items}" (id, sequenceId, externalId, writtenAt, deletedAt, version, occurredAt, editedAt, authorSourceId, authorName, externalParentId, type, title, body, links, properties, searchText, writtenBy)
+            VALUES (?, ?, ?, ?, NULL, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           args: [createKnowledgeUlid(), input.sequenceId, input.externalId, Date.now(), ...fields],
         });
         return { status: 'created' as const, item: (await this.#item(tx, input.sequenceId, input.externalId))! };
@@ -208,8 +254,9 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
           return { status: 'ignored' as const, reason: 'stale' as const, item: stored };
         }
       }
+      await this.#checkParent(tx, input.sequenceId, input.externalId, content.externalParentId);
       await tx.execute({
-        sql: `UPDATE "${T.items}" SET occurredAt = ?, editedAt = ?, authorSourceId = ?, authorName = ?, threadExternalId = ?, body = ?, writtenBy = ?, deletedAt = NULL, version = version + 1 WHERE id = ?`,
+        sql: `UPDATE "${T.items}" SET occurredAt = ?, editedAt = ?, authorSourceId = ?, authorName = ?, externalParentId = ?, type = ?, title = ?, body = ?, links = ?, properties = ?, searchText = ?, writtenBy = ?, deletedAt = NULL, version = version + 1 WHERE id = ?`,
         args: [...fields, stored.id],
       });
       return { status: 'updated' as const, item: (await this.#item(tx, input.sequenceId, input.externalId))! };
@@ -228,7 +275,7 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
       if (!stored) return { status: 'missing' as const };
       if (stored.deletedAt) return { status: 'unchanged' as const, item: stored };
       await tx.execute({
-        sql: `UPDATE "${T.items}" SET body = '', deletedAt = ?, writtenBy = ?, version = version + 1 WHERE id = ?`,
+        sql: `UPDATE "${T.items}" SET title = NULL, body = NULL, links = NULL, properties = NULL, searchText = '', deletedAt = ?, writtenBy = ?, version = version + 1 WHERE id = ?`,
         args: [(input.deletedAt ?? new Date()).getTime(), input.writtenBy, stored.id],
       });
       return { status: 'removed' as const, item: (await this.#item(tx, input.sequenceId, input.externalId))! };
@@ -249,9 +296,14 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
   }
 
   async listItems(input: ListKnowledgeSequenceItemsInput): Promise<KnowledgeSequenceItemsPage> {
-    const { checkKnowledgeSequenceReadLimit, decodeKnowledgeSequenceCursor, encodeKnowledgeSequenceCursor } =
-      await loadCore();
+    const {
+      checkKnowledgeSequenceReadLimit,
+      decodeKnowledgeSequenceCursor,
+      encodeKnowledgeSequenceCursor,
+      knowledgeSequenceTypeFilter,
+    } = await loadCore();
     checkKnowledgeSequenceReadLimit(input.limit);
+    const typeFilter = knowledgeSequenceTypeFilter(input);
     const after = input.cursor ? decodeKnowledgeSequenceCursor(input.cursor) : undefined;
     const marked = await this.#read.execute({
       sql: `SELECT 1 FROM "${T.sequences}" WHERE pageId = ?`,
@@ -272,9 +324,14 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
       where.push('occurredAt < ?');
       args.push(input.until.getTime());
     }
-    if (input.threadExternalId !== undefined) {
-      where.push('(externalId = ? OR threadExternalId = ?)');
-      args.push(input.threadExternalId, input.threadExternalId);
+    if (input.externalParentId !== undefined) {
+      where.push('(externalId = ? OR externalParentId = ?)');
+      args.push(input.externalParentId, input.externalParentId);
+    }
+    if (typeFilter) {
+      const filter = typeSql('', typeFilter);
+      where.push(filter.sql);
+      args.push(...filter.args);
     }
     if (after) {
       const op = desc ? '<' : '>';
@@ -292,12 +349,13 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
   }
 
   async searchItems(input: SearchKnowledgeSequenceItemsInput): Promise<KnowledgeSequenceItemRecord[]> {
-    const { checkKnowledgeSequenceReadLimit } = await loadCore();
+    const { checkKnowledgeSequenceReadLimit, knowledgeSequenceTypeFilter } = await loadCore();
     checkKnowledgeSequenceReadLimit(input.limit);
+    const typeFilter = knowledgeSequenceTypeFilter(input);
     const words = knowledgeSearchWords(input.query);
     if (!words.length) return [];
     const likes = words.map(word => `%${escapeLike(word)}%`);
-    const has = `lower(e.body) LIKE ? ESCAPE '='`;
+    const has = `e.searchText LIKE ? ESCAPE '='`;
     // Visibility is filtered in the query, before the limit, so unreadable hits never crowd out readable ones.
     const readable = pageReadable('p', input.read);
     const where = [
@@ -322,6 +380,11 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
     if (input.until) {
       where.push('e.occurredAt < ?');
       args.push(input.until.getTime());
+    }
+    if (typeFilter) {
+      const filter = typeSql('e.', typeFilter);
+      where.push(filter.sql);
+      args.push(...filter.args);
     }
     const matched = words.map(() => `(CASE WHEN ${has} THEN 1 ELSE 0 END)`).join(' + ');
     const { rows } = await this.#read.execute({

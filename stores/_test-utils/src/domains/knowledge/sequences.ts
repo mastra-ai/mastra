@@ -1,8 +1,11 @@
 import type { KnowledgeStorage, KnowledgeSequencesStorage } from '@mastra/core/storage';
 import {
   KnowledgeNotFoundError,
+  KnowledgeSequenceItemInvalidError,
   KnowledgeSequenceNotFoundError,
   KnowledgeSequenceNotLeafError,
+  KnowledgeSequenceParentNestedError,
+  KnowledgeSequenceParentNotFoundError,
   KnowledgeSequencePurgeRefusedError,
 } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
@@ -96,7 +99,11 @@ export function createKnowledgeSequenceTests(createStore: () => Promise<Knowledg
         body: 'message 1',
         version: 1,
         author: { sourceId: 'U1', name: 'Ada' },
-        threadExternalId: null,
+        externalParentId: null,
+        title: null,
+        links: [],
+        properties: null,
+        type: null,
         editedAt: null,
         deletedAt: null,
         writtenBy: importer,
@@ -125,7 +132,7 @@ export function createKnowledgeSequenceTests(createStore: () => Promise<Knowledg
       const { item, sequences, page } = await setup();
       const created = await item('1', 0);
       const removed = await sequences.removeItem({ sequenceId: page.id, externalId: '1', writtenBy: importer });
-      expect(removed).toMatchObject({ status: 'removed', item: { id: created.item.id, body: '', version: 2 } });
+      expect(removed).toMatchObject({ status: 'removed', item: { id: created.item.id, body: null, version: 2 } });
       expect(removed.status === 'removed' && removed.item.deletedAt).toBeInstanceOf(Date);
       expect(await sequences.removeItem({ sequenceId: page.id, externalId: '1', writtenBy: importer })).toMatchObject({
         status: 'unchanged',
@@ -134,7 +141,7 @@ export function createKnowledgeSequenceTests(createStore: () => Promise<Knowledg
         status: 'missing',
       });
 
-      expect(await item('1', 0)).toMatchObject({ status: 'ignored', reason: 'deleted', item: { body: '' } });
+      expect(await item('1', 0)).toMatchObject({ status: 'ignored', reason: 'deleted', item: { body: null } });
       const restored = await item('1', 0, { restore: true });
       expect(restored).toMatchObject({
         status: 'updated',
@@ -198,17 +205,17 @@ export function createKnowledgeSequenceTests(createStore: () => Promise<Knowledg
       expect(new Set([...first.items.map(e => e.externalId), ...after]).size).toBe(4);
     });
 
-    it('reads one thread, root and replies, and leaves deleted items out unless asked', async () => {
+    it('reads one parent with the items under it, and leaves deleted items out unless asked', async () => {
       const { item, sequences, page } = await setup();
       await item('root', 0);
       await item('other', 1);
-      await item('r1', 2, { threadExternalId: 'root' });
-      await item('r2', 9, { threadExternalId: 'root' });
+      await item('r1', 2, { externalParentId: 'root' });
+      await item('r2', 9, { externalParentId: 'root' });
       await sequences.removeItem({ sequenceId: page.id, externalId: 'r1', writtenBy: importer });
       const thread = await sequences.listItems({
         sequenceId: page.id,
         read: 'all',
-        threadExternalId: 'root',
+        externalParentId: 'root',
         order: 'asc',
         limit: 10,
       });
@@ -216,7 +223,7 @@ export function createKnowledgeSequenceTests(createStore: () => Promise<Knowledg
       const withDeleted = await sequences.listItems({
         sequenceId: page.id,
         read: 'all',
-        threadExternalId: 'root',
+        externalParentId: 'root',
         order: 'asc',
         limit: 10,
         includeDeleted: true,
@@ -261,7 +268,7 @@ export function createKnowledgeSequenceTests(createStore: () => Promise<Knowledg
       expect(await get(acme, one.id, plain.id)).toBeNull();
 
       await sequences.removeItem({ sequenceId: page.id, externalId: '1', writtenBy: importer });
-      expect(await get(acme)).toMatchObject({ id: one.id, body: '', deletedAt: expect.any(Date) });
+      expect(await get(acme)).toMatchObject({ id: one.id, body: null, deletedAt: expect.any(Date) });
 
       const live = await store.getPage({ id: page.id, read: 'all' });
       await store.deletePage({ id: page.id, expectedVersion: live!.version, deletedBy: 'host' });
@@ -359,6 +366,191 @@ export function createKnowledgeSequenceTests(createStore: () => Promise<Knowledg
       expect(ids(await sequences.searchItems({ query: 'secrets', read: 'all', limit: 10 }))).toEqual([]);
     });
 
+    it('stores the item envelope, and a delete clears its content but keeps its type', async () => {
+      const { item, sequences, page } = await setup();
+      const links = [{ url: 'https://ci.example/run/7', title: 'Run 7' }, { url: 'http://ci.example/log' }];
+      const properties = { status: 'failed', durationMs: 4200, flaky: false, failed: ['a.test.ts', 'b.test.ts'] };
+      const created = await item('build-7', 0, { title: 'Build 7', body: undefined, links, properties, type: 'build' });
+      expect(created.item).toMatchObject({ title: 'Build 7', body: null, links, properties, type: 'build' });
+
+      // Properties compare by value, not key order.
+      const reordered = { failed: ['a.test.ts', 'b.test.ts'], flaky: false, durationMs: 4200, status: 'failed' };
+      expect(
+        await item('build-7', 0, { title: 'Build 7', body: undefined, links, properties: reordered, type: 'build' }),
+      ).toMatchObject({ status: 'unchanged' });
+      const passed = await item('build-7', 0, {
+        title: 'Build 7',
+        body: undefined,
+        links,
+        properties: { ...properties, status: 'passed' },
+        type: 'build',
+        editedAt: at(1),
+      });
+      expect(passed).toMatchObject({ status: 'updated', item: { properties: { status: 'passed' }, version: 2 } });
+      const untyped = await item('build-7', 0, { title: 'Build 7', body: undefined, type: null, editedAt: at(2) });
+      expect(untyped.item).toMatchObject({ type: null, links: [], properties: null, version: 3 });
+
+      await item('build-8', 1, { title: 'Build 8', body: undefined, links, properties, type: 'build' });
+      const removed = await sequences.removeItem({ sequenceId: page.id, externalId: 'build-8', writtenBy: importer });
+      expect(removed).toMatchObject({
+        status: 'removed',
+        item: { title: null, body: null, links: [], properties: null, type: 'build' },
+      });
+      const [stored] = (
+        await sequences.listItems({
+          sequenceId: page.id,
+          read: 'all',
+          limit: 10,
+          includeDeleted: true,
+          types: ['build'],
+        })
+      ).items;
+      expect(stored).toMatchObject({ externalId: 'build-8', type: 'build', title: null });
+    });
+
+    it('refuses an item with no content or a field over its limit, and writes nothing', async () => {
+      const { item, sequences, page } = await setup();
+      const refused = [
+        { body: undefined },
+        { body: '' },
+        { body: undefined, title: '', links: [], properties: {} },
+        { title: 'x'.repeat(301) },
+        { title: 'two\nlines' },
+        { links: Array.from({ length: 11 }, (_, i) => ({ url: `https://example.com/${i}` })) },
+        { links: [{ url: 'javascript:alert(1)' }] },
+        { links: [{ url: 'not a url' }] },
+        { properties: ['not', 'an', 'object'] },
+        { properties: { blob: 'x'.repeat(16 * 1024) } },
+        { type: 'Build' },
+        { type: '-build' },
+        { type: 'b'.repeat(65) },
+        { externalParentId: 'self' },
+      ];
+      for (const extra of refused) {
+        await expect(item('self', 0, extra), JSON.stringify(extra).slice(0, 80)).rejects.toBeInstanceOf(
+          KnowledgeSequenceItemInvalidError,
+        );
+      }
+      expect((await sequences.listItems({ sequenceId: page.id, read: 'all', limit: 10 })).items).toEqual([]);
+      // At the limits is fine.
+      await item('ok', 0, {
+        title: 't'.repeat(300),
+        links: Array.from({ length: 10 }, (_, i) => ({ url: `https://example.com/${i}` })),
+        type: 'a'.repeat(64),
+      });
+    });
+
+    it('takes a parent only from the same sequence, one level deep, and a deleted parent still counts', async () => {
+      const { store, scope, item, sequences, page } = await setup();
+      const other = await store.createPage({ parentId: scope.id, key: 'other', name: '#other', provenance: host });
+      await sequences.markSequence({ pageId: other.id });
+      await sequences.upsertItem({
+        sequenceId: other.id,
+        externalId: 'elsewhere',
+        occurredAt: at(0),
+        body: 'x',
+        writtenBy: importer,
+      });
+
+      await expect(item('orphan', 1, { externalParentId: 'nobody' })).rejects.toBeInstanceOf(
+        KnowledgeSequenceParentNotFoundError,
+      );
+      await expect(item('orphan', 1, { externalParentId: 'elsewhere' })).rejects.toBeInstanceOf(
+        KnowledgeSequenceParentNotFoundError,
+      );
+
+      await item('root', 0);
+      await item('reply', 1, { externalParentId: 'root' });
+      await expect(item('deeper', 2, { externalParentId: 'reply' })).rejects.toBeInstanceOf(
+        KnowledgeSequenceParentNestedError,
+      );
+      // An item with replies can't become a reply itself.
+      await item('top', 3);
+      await expect(item('root', 0, { externalParentId: 'top', editedAt: at(4) })).rejects.toBeInstanceOf(
+        KnowledgeSequenceParentNestedError,
+      );
+
+      await sequences.removeItem({ sequenceId: page.id, externalId: 'root', writtenBy: importer });
+      expect((await item('late', 5, { externalParentId: 'root' })).status).toBe('created');
+      const under = await sequences.listItems({
+        sequenceId: page.id,
+        read: 'all',
+        externalParentId: 'root',
+        order: 'asc',
+        limit: 10,
+      });
+      expect(under.items.map(e => e.externalId)).toEqual(['reply', 'late']);
+      const live = await sequences.listItems({ sequenceId: page.id, read: 'all', order: 'asc', limit: 10 });
+      expect(live.items.map(e => e.externalId)).toEqual(['reply', 'top', 'late']);
+    });
+
+    it('filters reads and search by type before the limit, with full pages and no item skipped', async () => {
+      const { item, sequences, page } = await setup();
+      // 12 items: every 4th a deploy, every 4th (offset 1) untyped, the rest notes.
+      for (let minute = 0; minute < 12; minute++) {
+        const type = minute % 4 === 0 ? 'deploy' : minute % 4 === 1 ? null : 'note';
+        await item(`i${minute}`, minute, { body: `release ${minute}`, type });
+      }
+      const ext = (items: { externalId: string }[]) => items.map(e => e.externalId);
+      const all = async (order: 'asc' | 'desc', filter: { types?: string[]; untyped?: boolean }) => {
+        const seen: string[] = [];
+        let cursor: string | undefined;
+        do {
+          const result = await sequences.listItems({
+            sequenceId: page.id,
+            read: 'all',
+            order,
+            limit: 2,
+            ...filter,
+            ...(cursor ? { cursor } : {}),
+          });
+          if (result.nextCursor) expect(result.items).toHaveLength(2);
+          seen.push(...ext(result.items));
+          cursor = result.nextCursor ?? undefined;
+        } while (cursor);
+        return seen;
+      };
+      expect(await all('asc', {})).toHaveLength(12);
+      expect(await all('asc', { untyped: false })).toHaveLength(12);
+      expect(await all('asc', { untyped: true })).toEqual(['i1', 'i5', 'i9']);
+      expect(await all('asc', { types: ['deploy'] })).toEqual(['i0', 'i4', 'i8']);
+      expect(await all('desc', { types: ['deploy'] })).toEqual(['i8', 'i4', 'i0']);
+      expect(await all('asc', { types: ['deploy'], untyped: true })).toEqual(['i0', 'i1', 'i4', 'i5', 'i8', 'i9']);
+      expect(await all('asc', { types: ['missing'] })).toEqual([]);
+
+      const search = (filter: { types?: string[]; untyped?: boolean }, limit = 10) =>
+        sequences.searchItems({ query: 'release', read: 'all', limit, ...filter }).then(ext);
+      expect(await search({})).toHaveLength(10);
+      expect(await search({ untyped: true })).toEqual(['i9', 'i5', 'i1']);
+      expect(await search({ types: ['deploy'] }, 2)).toEqual(['i8', 'i4']);
+      expect(await search({ types: ['deploy'], untyped: true }, 3)).toEqual(['i9', 'i8', 'i5']);
+
+      for (const types of [[], Array.from({ length: 21 }, (_, i) => `t${i}`), ['Bad']]) {
+        await expect(sequences.listItems({ sequenceId: page.id, read: 'all', limit: 2, types })).rejects.toBeInstanceOf(
+          RangeError,
+        );
+        await expect(sequences.searchItems({ query: 'release', read: 'all', limit: 2, types })).rejects.toBeInstanceOf(
+          RangeError,
+        );
+      }
+    });
+
+    it('searches titles, link titles and string property values, but not numbers', async () => {
+      const { item, sequences } = await setup();
+      await item('m', 0, { body: undefined, title: 'Milestone: beta launch' });
+      await item('l', 1, { body: 'see the runbook', links: [{ url: 'https://example.com', title: 'Rollback guide' }] });
+      await item('p', 2, { body: undefined, properties: { owner: 'Ada Lovelace', tags: ['infra'], count: 4242 } });
+      const ext = (query: string) =>
+        sequences.searchItems({ query, read: 'all', limit: 10 }).then(items => items.map(e => e.externalId));
+      expect(await ext('beta')).toEqual(['m']);
+      expect(await ext('rollback')).toEqual(['l']);
+      expect(await ext('lovelace')).toEqual(['p']);
+      expect(await ext('infra')).toEqual(['p']);
+      expect(await ext('4242')).toEqual([]);
+      // Property keys aren't searched, only values.
+      expect(await ext('owner')).toEqual([]);
+    });
+
     it('rolls item writes back with the transaction they were in', async () => {
       const { store, page } = await setup();
       await expect(
@@ -388,7 +580,7 @@ export function createKnowledgeSequenceTests(createStore: () => Promise<Knowledg
           sequenceId: page.id,
           externalId: 'bad',
           occurredAt: new Date(Number.NaN),
-          body: '',
+          body: 'x',
           writtenBy: importer,
         }),
       ).rejects.toBeInstanceOf(TypeError);

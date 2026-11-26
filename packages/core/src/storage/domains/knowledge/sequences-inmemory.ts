@@ -7,8 +7,14 @@ import {
   decodeKnowledgeSequenceCursor,
   encodeKnowledgeSequenceCursor,
   isStaleKnowledgeSequenceEdit,
+  knowledgeSequenceItemContent,
+  knowledgeSequenceItemSearchText,
+  knowledgeSequenceTypeFilter,
+  knowledgeSequenceTypeMatches,
   KnowledgeSequenceNotFoundError,
   KnowledgeSequenceNotLeafError,
+  KnowledgeSequenceParentNestedError,
+  KnowledgeSequenceParentNotFoundError,
   KnowledgeSequencePurgeRefusedError,
   KnowledgeSequencesStorage,
   sameKnowledgeSequenceItem,
@@ -84,6 +90,19 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
     return pageIds.filter(id => this.#s.sequences.has(id));
   }
 
+  /** Refuses a parent that isn't an item of this sequence, is itself under one, or an item with items under it. */
+  #checkParent(sequenceId: string, externalId: string, externalParentId: string | null): void {
+    if (!externalParentId) return;
+    const parent = this.#s.items.get(keyOf(sequenceId, externalParentId));
+    if (!parent) throw new KnowledgeSequenceParentNotFoundError(sequenceId, externalParentId);
+    if (parent.externalParentId) throw new KnowledgeSequenceParentNestedError(sequenceId, externalId);
+    for (const item of this.#s.items.values()) {
+      if (item.sequenceId === sequenceId && item.externalParentId === externalId) {
+        throw new KnowledgeSequenceParentNestedError(sequenceId, externalId);
+      }
+    }
+  }
+
   async upsertItem(input: UpsertKnowledgeSequenceItemInput): Promise<KnowledgeSequenceItemUpsertResult> {
     checkKnowledgeSequenceItemInput(input);
     this.#liveSequence(input.sequenceId);
@@ -93,11 +112,11 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
       occurredAt: new Date(input.occurredAt),
       editedAt: input.editedAt ? new Date(input.editedAt) : null,
       author: input.author ? { ...input.author } : null,
-      threadExternalId: input.threadExternalId ?? null,
-      body: input.body,
+      ...structuredClone(knowledgeSequenceItemContent(input)),
       writtenBy: input.writtenBy,
     };
     if (!stored) {
+      this.#checkParent(input.sequenceId, input.externalId, fields.externalParentId);
       const item: KnowledgeSequenceItemRecord = {
         id: createKnowledgeUlid(),
         sequenceId: input.sequenceId,
@@ -116,6 +135,7 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
       if (isStaleKnowledgeSequenceEdit(stored, input))
         return { status: 'ignored', reason: 'stale', item: copy(stored) };
     }
+    this.#checkParent(input.sequenceId, input.externalId, fields.externalParentId);
     const item = { ...stored, ...fields, deletedAt: null, version: stored.version + 1 };
     this.#s.items.set(key, item);
     return { status: 'updated', item: copy(item) };
@@ -134,7 +154,10 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
     if (stored.deletedAt) return { status: 'unchanged', item: copy(stored) };
     const item = {
       ...stored,
-      body: '',
+      title: null,
+      body: null,
+      links: [],
+      properties: null,
       deletedAt: input.deletedAt ?? new Date(),
       writtenBy: input.writtenBy,
       version: stored.version + 1,
@@ -155,6 +178,7 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
 
   async listItems(input: ListKnowledgeSequenceItemsInput): Promise<KnowledgeSequenceItemsPage> {
     checkKnowledgeSequenceReadLimit(input.limit);
+    const typeFilter = knowledgeSequenceTypeFilter(input);
     const after = input.cursor ? decodeKnowledgeSequenceCursor(input.cursor) : undefined;
     if (!this.#s.sequences.has(input.sequenceId) || !this.lookup(input.sequenceId, input.read)?.readable) {
       return { items: [], nextCursor: null };
@@ -170,12 +194,13 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
         if (since !== undefined && time < since) return false;
         if (until !== undefined && time >= until) return false;
         if (
-          input.threadExternalId !== undefined &&
-          item.externalId !== input.threadExternalId &&
-          item.threadExternalId !== input.threadExternalId
+          input.externalParentId !== undefined &&
+          item.externalId !== input.externalParentId &&
+          item.externalParentId !== input.externalParentId
         ) {
           return false;
         }
+        if (!knowledgeSequenceTypeMatches(typeFilter, item.type)) return false;
         if (after) {
           const position = compare(item, {
             occurredAt: new Date(after.occurredAt),
@@ -193,6 +218,7 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
 
   async searchItems(input: SearchKnowledgeSequenceItemsInput): Promise<KnowledgeSequenceItemRecord[]> {
     checkKnowledgeSequenceReadLimit(input.limit);
+    const typeFilter = knowledgeSequenceTypeFilter(input);
     const words = knowledgeSearchWords(input.query);
     if (!words.length) return [];
     const visible = new Set<string>();
@@ -208,12 +234,13 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
     return [...this.#s.items.values()]
       .filter(item => {
         if (!visible.has(item.sequenceId) || item.deletedAt) return false;
+        if (!knowledgeSequenceTypeMatches(typeFilter, item.type)) return false;
         const time = item.occurredAt.getTime();
         return (since === undefined || time >= since) && (until === undefined || time < until);
       })
       .map(item => {
-        const body = item.body.toLowerCase();
-        return { item, matched: words.filter(word => body.includes(word)).length };
+        const text = knowledgeSequenceItemSearchText(item);
+        return { item, matched: words.filter(word => text.includes(word)).length };
       })
       .filter(hit => hit.matched > 0)
       .sort(
