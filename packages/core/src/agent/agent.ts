@@ -15750,7 +15750,10 @@ export class Agent<
           if (options?.delegation) reg.delegation = resolvedOptions.delegation;
         }
       } catch (error) {
-        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] resume(${runId}) tool resolution failed: ${error}`);
+        // The entry's tools still close over the earlier caller; they must not run for this one.
+        this.#mastra?.getLogger?.()?.error?.(`[DurableAgent] resume(${runId}) tool resolution failed: ${error}`);
+        await executionFence.settle(async () => {});
+        throw error;
       }
     }
     setExecutionClaim(resumeRequestContext, runId, executionFence.claim);
