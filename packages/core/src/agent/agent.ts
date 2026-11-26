@@ -299,6 +299,7 @@ import type {
 import { DurableProcessorRebuildError } from './durable/utils/resolve-runtime';
 import { restoreCompletionPolicy } from './durable/utils/restore-completion';
 import { normalizeResumeGenerateArgs } from './durable/utils/resume-generate-args';
+import { serializeToolsetToolNames } from './durable/utils/serialize-state';
 import { deadlineMessageListState, runDurableDeadlineOutputPass } from './durable/workflows/finalize-run';
 import {
   hydrateMessageListState,
@@ -15755,11 +15756,21 @@ export class Agent<
         for (const reg of new Set([entry, getRunRegistryEntry(runId, this.#mastra)])) {
           if (!reg) continue;
           reg.tools = rebindProcessorTools(refresh(reg.tools ?? {}, reg.requestTools), resumeRequestContext);
-          if (reg.baseTools)
-            reg.baseTools = rebindProcessorTools(refresh(reg.baseTools, reg.requestTools), resumeRequestContext);
-          // Tools this rebuild did not produce still hold their earlier build, so
-          // keep that as their baseline; otherwise a later resume can never refresh them.
-          reg.requestTools = { ...reg.requestTools, ...requestTools };
+          // Later steps start from this caller's build, not the earlier caller's. Input processors run
+          // again every step, so the tools they add or withhold need no carrying over. Call-time
+          // toolsets cannot be repeated by a resume over HTTP, so the earlier call's are kept unless
+          // this resume passes its own.
+          const keptToolsets = options?.toolsets
+            ? {}
+            : Object.fromEntries(
+                (reg.callToolsetToolNames ?? []).flatMap(name => {
+                  const tool = reg.requestTools?.[name];
+                  return tool && !(name in requestTools) ? [[name, tool] as const] : [];
+                }),
+              );
+          reg.baseTools = { ...keptToolsets, ...requestTools };
+          reg.requestTools = reg.baseTools;
+          if (options?.toolsets) reg.callToolsetToolNames = serializeToolsetToolNames(options.toolsets);
           if (options?.delegation) reg.delegation = resolvedOptions.delegation;
         }
       } catch (error) {

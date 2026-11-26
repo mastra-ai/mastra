@@ -968,6 +968,11 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     mastra,
     tools,
     requestTools: tools,
+    callToolsetToolNames: optionsAreResolved
+      ? serializeToolsetToolNames(execOptions?.toolsets)?.filter(
+          name => !serializeToolsetToolNames(defaultOptions?.toolsets)?.includes(name),
+        )
+      : serializeToolsetToolNames(rawExecOptions?.toolsets),
     methodType,
     saveQueueManager,
     memory,
