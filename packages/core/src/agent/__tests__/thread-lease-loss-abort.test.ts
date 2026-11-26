@@ -2751,10 +2751,20 @@ function threadLeaseLoss(engine: EngineVariant) {
             runId: queue === 'follow-up' ? runId : pubsub.drainOwner,
           });
         } else {
-          await vi.waitFor(() => expect(forwarded()).toHaveLength(2));
-          for (const signalId of signalIds) {
+          // A run that keeps its signals in storage forwards no follow-up input it lost the thread with: the row
+          // stays pending for the thread's next run that reads the store.
+          const leftPending = (engine === 'evented' || engine === 'native-evented') && queue === 'follow-up';
+          const forwardedIds = leftPending ? [concurrent.signal.id] : signalIds;
+          await vi.waitFor(() => expect(forwarded()).toHaveLength(forwardedIds.length));
+          for (const signalId of forwardedIds) {
             expect(forwarded().filter(event => event.signal?.id === signalId)).toEqual([
               expect.objectContaining({ runId: successor }),
+            ]);
+          }
+          if (leftPending) {
+            const store = await (await agent.getMemory())!.storage.getStore('memory');
+            expect((await store!.listPendingSignals({ threadId: thread })).map(row => row.id)).toEqual([
+              sent!.signal.id,
             ]);
           }
         }
