@@ -80,9 +80,11 @@ export type AgentSignalInput =
        * Whether this signal is transient. Defaults to `false`.
        *
        * A transient signal is delivered to the model for the current call (it appears in the prompt
-       * for this turn), but it is not retained as part of the conversation: it is not written to
-       * storage and never re-enters the prompt on later turns. Re-send it each turn from a processor
-       * to keep a single fresh copy near the latest message instead of an accumulating history.
+       * for this turn), but it is never saved as a message of the conversation, so it never re-enters
+       * the prompt on later turns. When the run keeps its signals in memory storage, the signal waits
+       * there as a hidden row until a run takes it, and the row is deleted when that run ends. One the
+       * run never took waits for the thread's next turn. Re-send it each turn from a processor to keep
+       * a single fresh copy near the latest message instead of an accumulating history.
        *
        * Transient takes precedence over `persist` delivery behaviors: combining them means the
        * signal is dropped without being stored or delivered, and the accepted result reports
