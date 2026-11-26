@@ -8,15 +8,15 @@ import type {
   KnowledgePageSearchHit,
   KnowledgePinKind,
   KnowledgeStorage,
-  KnowledgeTimelineEntryRecord,
+  KnowledgeSequenceItemRecord,
 } from '../storage/domains/knowledge';
 import {
   KnowledgePageHasChildrenError,
   knowledgeScopeReadable,
   KnowledgeUnsupportedCapabilityError,
   MAX_KNOWLEDGE_PIN_LIST_DEPTH,
-  MAX_KNOWLEDGE_TIMELINE_READ_LIMIT,
-  parseKnowledgeTimelineTime,
+  MAX_KNOWLEDGE_SEQUENCE_READ_LIMIT,
+  parseKnowledgeSequenceTime,
 } from '../storage/domains/knowledge';
 import type { ToolAction } from '../tools';
 import { createTool } from '../tools';
@@ -159,35 +159,35 @@ function searchPageSummary(page: KnowledgePage, refs: KnowledgePageRefs, words: 
   return { ...pageSummary(page, refs), ...(hit ?? {}) };
 }
 
-/** A timeline entry's ref: its timeline page's ref, `@`, and the entry's store id (a ULID). */
-const ENTRY_REF = /^(.+)@([0-9A-HJKMNP-TV-Z]{26})$/;
-/** Entries a whole read of a timeline page brings along. */
-const TIMELINE_READ_ENTRIES = 20;
+/** A sequence item's ref: its sequence page's ref, `@`, and the item's store id (a ULID). */
+const ITEM_REF = /^(.+)@([0-9A-HJKMNP-TV-Z]{26})$/;
+/** Items a whole read of a sequence page brings along. */
+const SEQUENCE_READ_ITEMS = 20;
 
-function entrySummary(entry: KnowledgeTimelineEntryRecord, pageRef: string) {
+function itemSummary(item: KnowledgeSequenceItemRecord, pageRef: string) {
   return {
-    ref: `${pageRef}@${entry.id}`,
-    externalId: entry.externalId,
-    occurredAt: entry.occurredAt.toISOString(),
-    ...(entry.editedAt ? { editedAt: entry.editedAt.toISOString() } : {}),
-    ...(entry.deletedAt ? { deleted: true as const } : {}),
-    ...(entry.author ? { author: entry.author.name ?? entry.author.sourceId } : {}),
-    ...(entry.threadExternalId ? { thread: entry.threadExternalId } : {}),
-    body: entry.body,
+    ref: `${pageRef}@${item.id}`,
+    externalId: item.externalId,
+    occurredAt: item.occurredAt.toISOString(),
+    ...(item.editedAt ? { editedAt: item.editedAt.toISOString() } : {}),
+    ...(item.deletedAt ? { deleted: true as const } : {}),
+    ...(item.author ? { author: item.author.name ?? item.author.sourceId } : {}),
+    ...(item.threadExternalId ? { thread: item.threadExternalId } : {}),
+    body: item.body,
   };
 }
 
-function timelineTime(tool: string, field: string, value: string | undefined): Date | undefined {
+function sequenceTime(tool: string, field: string, value: string | undefined): Date | undefined {
   if (value === undefined) return undefined;
-  const time = parseKnowledgeTimelineTime(value);
+  const time = parseKnowledgeSequenceTime(value);
   if (!time) throw new Error(`${tool}: ${field} must be an ISO 8601 date-time with a zone, e.g. 2026-11-23T12:00:00Z.`);
   return time;
 }
 
-/** Whether the page is a timeline: always false on a store without timelines. */
-async function isTimeline(run: KnowledgeRun, page: KnowledgePage): Promise<boolean> {
-  const timelines = run.storage.timelines;
-  return !!timelines && (await timelines.listTimelineIds({ pageIds: [page.id] })).length > 0;
+/** Whether the page is a sequence: always false on a store without sequences. */
+async function isSequence(run: KnowledgeRun, page: KnowledgePage): Promise<boolean> {
+  const sequences = run.storage.sequences;
+  return !!sequences && (await sequences.listSequenceIds({ pageIds: [page.id] })).length > 0;
 }
 
 function noteSummary(note: KnowledgeNote, mentions?: Record<string, string>) {
@@ -332,10 +332,10 @@ async function requireAudienceAuthority(run: KnowledgeRun, audience: string[]): 
   }
 }
 
-type SearchHit = KnowledgePageSearchHit | { type: 'entry'; entry: KnowledgeTimelineEntryRecord; page: KnowledgePage };
+type SearchHit = KnowledgePageSearchHit | { type: 'item'; item: KnowledgeSequenceItemRecord; page: KnowledgePage };
 
 const hitKey = (hit: SearchHit) =>
-  hit.type === 'page' ? `page:${hit.page.id}` : hit.type === 'note' ? `note:${hit.note.id}` : `entry:${hit.entry.id}`;
+  hit.type === 'page' ? `page:${hit.page.id}` : hit.type === 'note' ? `note:${hit.note.id}` : `item:${hit.item.id}`;
 
 /** Reciprocal rank fusion of ranked lists, best `max` first. */
 function fuse(lists: SearchHit[][], max: number): SearchHit[] {
@@ -343,23 +343,23 @@ function fuse(lists: SearchHit[][], max: number): SearchHit[] {
   for (const list of lists) {
     list.forEach((hit, rank) => {
       const key = hitKey(hit);
-      const entry = fused.get(key) ?? { hit, score: 0 };
-      entry.score += 1 / (RRF_K + rank + 1);
-      fused.set(key, entry);
+      const item = fused.get(key) ?? { hit, score: 0 };
+      item.score += 1 / (RRF_K + rank + 1);
+      fused.set(key, item);
     });
   }
   return [...fused.values()]
     .sort((a, b) => b.score - a.score)
     .slice(0, max)
-    .map(entry => entry.hit);
+    .map(item => item.hit);
 }
 
 function searchTool(host: KnowledgePageToolHost) {
   return createTool({
     id: 'knowledge_search',
     description:
-      'Search the knowledge this run can read: page names, descriptions, bodies, notes and timeline entries (dated messages, e.g. a Slack channel). A page hit whose body contains a matched word carries a short `snippet` around it, numbered line by line like knowledge_read (with the heading it sits under when that is out of view), the `line` the snippet is centred on and `matchingLines`, how many lines match; read from that line, or with `match`, before relying on a snippet. Optional `scope` narrows to pages in those scopes. ' +
-      'Entries match by keyword only, not by meaning. `in` (a timeline page), `since` or `until` search entries alone. ' +
+      'Search the knowledge this run can read: page names, descriptions, bodies, notes and sequence items (dated messages, e.g. a Slack channel). A page hit whose body contains a matched word carries a short `snippet` around it, numbered line by line like knowledge_read (with the heading it sits under when that is out of view), the `line` the snippet is centred on and `matchingLines`, how many lines match; read from that line, or with `match`, before relying on a snippet. Optional `scope` narrows to pages in those scopes. ' +
+      'Items match by keyword only, not by meaning. `in` (a sequence page), `since` or `until` search items alone. ' +
       'Results are the best matches up to `limit`; more may match, so narrow the query or raise `limit` when a list looks short.',
     inputSchema: {
       type: 'object',
@@ -367,16 +367,16 @@ function searchTool(host: KnowledgePageToolHost) {
         query: { type: 'string', minLength: 1, description: 'What to look for.' },
         scope: { ...scopeListSchema, description: 'Only search pages in these scopes (addresses).' },
         limit: { ...limitSchema, description: 'Maximum results. Defaults to 10.' },
-        in: { type: 'string', minLength: 1, description: 'Only entries of this timeline page (a page ref).' },
+        in: { type: 'string', minLength: 1, description: 'Only items of this sequence page (a page ref).' },
         since: {
           type: 'string',
           minLength: 1,
-          description: 'Only entries that happened at or after this ISO 8601 date-time.',
+          description: 'Only items that happened at or after this ISO 8601 date-time.',
         },
         until: {
           type: 'string',
           minLength: 1,
-          description: 'Only entries that happened before this ISO 8601 date-time.',
+          description: 'Only items that happened before this ISO 8601 date-time.',
         },
       },
       required: ['query'],
@@ -391,49 +391,49 @@ function searchTool(host: KnowledgePageToolHost) {
         since: sinceInput,
         until: untilInput,
       } = input as { query: string; scope?: string[]; limit?: number; in?: string; since?: string; until?: string };
-      const since = timelineTime('knowledge_search', 'since', sinceInput);
-      const until = timelineTime('knowledge_search', 'until', untilInput);
+      const since = sequenceTime('knowledge_search', 'since', sinceInput);
+      const until = sequenceTime('knowledge_search', 'until', untilInput);
       const run = await start(host, context);
       const scopeIds = scope ? (await readableScopes(run, scope)).map(page => page.id) : undefined;
       const max = limitOf(limit);
-      const entriesOnly = !!(inRef || since || until);
-      let timelineIds: string[] | undefined;
+      const itemsOnly = !!(inRef || since || until);
+      let sequenceIds: string[] | undefined;
       if (inRef) {
         const page = await run.pageOrCloseMatches(inRef);
-        if (!(await isTimeline(run, page))) throw new Error(`knowledge_search: "${inRef}" is not a timeline.`);
-        timelineIds = [page.id];
+        if (!(await isSequence(run, page))) throw new Error(`knowledge_search: "${inRef}" is not a sequence.`);
+        sequenceIds = [page.id];
       }
       // Keyword search has no quoting: a quote mark would be matched as a literal character, so
       // `"api" "responses"` would find nothing. Search the quoted words instead.
       const words = knowledgeSearchQuery(query);
-      const timelines = run.storage.timelines;
-      const entryRecords =
-        words && timelines
-          ? await timelines.searchEntries({
+      const sequences = run.storage.sequences;
+      const itemRecords =
+        words && sequences
+          ? await sequences.searchItems({
               query: words,
               read: run.read,
-              timelineIds,
+              sequenceIds,
               scopeIds,
               since,
               until,
               limit: max,
             })
           : [];
-      const timelinePages = new Map<string, KnowledgePage>();
-      for (const id of new Set(entryRecords.map(entry => entry.timelineId))) {
+      const sequencePages = new Map<string, KnowledgePage>();
+      for (const id of new Set(itemRecords.map(item => item.sequenceId))) {
         const page = await run.storage.getPage({ id, read: run.read });
-        if (page) timelinePages.set(id, page);
+        if (page) sequencePages.set(id, page);
       }
-      const entryHits: SearchHit[] = entryRecords.flatMap(entry => {
-        const page = timelinePages.get(entry.timelineId);
-        return page ? [{ type: 'entry' as const, entry, page }] : [];
+      const itemHits: SearchHit[] = itemRecords.flatMap(item => {
+        const page = sequencePages.get(item.sequenceId);
+        return page ? [{ type: 'item' as const, item, page }] : [];
       });
       const lexical: SearchHit[] =
-        words && !entriesOnly
+        words && !itemsOnly
           ? await run.storage.searchPages({ query: words, read: run.read, scopeIds, limit: max })
           : [];
       let hits = lexical;
-      if (host.semantic && !entriesOnly) {
+      if (host.semantic && !itemsOnly) {
         const inScope = (page: KnowledgePage) => !scopeIds || scopeIds.includes(page.scopeId);
         // Every vector hit is re-read under the run's read scope before it can take a slot.
         const semantic = await host.semantic
@@ -454,9 +454,9 @@ function searchTool(host: KnowledgePageToolHost) {
           });
         hits = fuse([lexical, semantic], max);
       }
-      // Entries are found by keyword alone, so they join as one more ranked list.
-      if (entriesOnly) hits = entryHits;
-      else if (entryHits.length) hits = fuse([hits, entryHits], max);
+      // Items are found by keyword alone, so they join as one more ranked list.
+      if (itemsOnly) hits = itemHits;
+      else if (itemHits.length) hits = fuse([hits, itemHits], max);
       const addresses = await pageRefs(
         run,
         hits.map(hit => hit.page),
@@ -466,11 +466,11 @@ function searchTool(host: KnowledgePageToolHost) {
         hits.map(async hit =>
           hit.type === 'page'
             ? { type: 'page' as const, page: searchPageSummary(hit.page, addresses, words) }
-            : hit.type === 'entry'
+            : hit.type === 'item'
               ? {
-                  type: 'entry' as const,
+                  type: 'item' as const,
                   page: pageSummary(hit.page, addresses),
-                  entry: entrySummary(hit.entry, addresses.refs.get(hit.page.id) ?? hit.page.id),
+                  item: itemSummary(hit.item, addresses.refs.get(hit.page.id) ?? hit.page.id),
                 }
               : {
                   type: 'note' as const,
@@ -684,8 +684,8 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
       'For a long page, ask for its `outline` of headings with their line numbers, read one `section`, or `match` terms to see only the lines that contain them, with `context` lines around each. ' +
       'Those part reads return just that part of the body. ' +
       (canEdit ? 'To edit part of a long body, pass the `range` a read gave you to knowledge_page. ' : '') +
-      `A timeline page (dated entries, e.g. a Slack channel) comes with its latest ${TIMELINE_READ_ENTRIES} entries, newest first. Read more of them with \`timeline\`: a \`cursor\`, a time range, oldest first, or one thread. ` +
-      'An entry ref (`<page ref>@<entry id>`, from a read or a search) reads that one entry.',
+      `A sequence page (dated items, e.g. a Slack channel) comes with its latest ${SEQUENCE_READ_ITEMS} items, newest first. Read more of them with \`sequence\`: a \`cursor\`, a time range, oldest first, or one thread. ` +
+      'An item ref (`<page ref>@<item id>`, from a read or a search) reads that one item.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -742,37 +742,37 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
           description:
             'Maximum notes, children and mentioning notes. Defaults to 10. Not a line count: how much of the body comes back is set by the token cap.',
         },
-        timeline: {
+        sequence: {
           type: 'object',
           description:
-            "Read a timeline page's entries instead of the page: returns them with a nextCursor when more remain.",
+            "Read a sequence page's items instead of the page: returns them with a nextCursor when more remain.",
           properties: {
             since: {
               type: 'string',
               minLength: 1,
-              description: 'Entries that happened at or after this ISO 8601 date-time.',
+              description: 'Items that happened at or after this ISO 8601 date-time.',
             },
             until: {
               type: 'string',
               minLength: 1,
-              description: 'Entries that happened before this ISO 8601 date-time.',
+              description: 'Items that happened before this ISO 8601 date-time.',
             },
             order: { type: 'string', enum: ['desc', 'asc'], description: 'desc (newest first, the default) or asc.' },
             thread: {
               type: 'string',
               minLength: 1,
-              description: "One thread: the root entry's externalId. Returns the root and its replies.",
+              description: "One thread: the root item's externalId. Returns the root and its replies.",
             },
             cursor: {
               type: 'string',
               minLength: 1,
-              description: "The previous timeline read's nextCursor, with the same other arguments.",
+              description: "The previous sequence read's nextCursor, with the same other arguments.",
             },
             limit: {
               type: 'integer',
               minimum: 1,
-              maximum: MAX_KNOWLEDGE_TIMELINE_READ_LIMIT,
-              description: `Maximum entries. Defaults to ${TIMELINE_READ_ENTRIES}.`,
+              maximum: MAX_KNOWLEDGE_SEQUENCE_READ_LIMIT,
+              description: `Maximum items. Defaults to ${SEQUENCE_READ_ITEMS}.`,
             },
           },
           additionalProperties: false,
@@ -793,7 +793,7 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
         context: matchContext = KNOWLEDGE_READ_MATCH_CONTEXT,
         from,
         limit: requested,
-        timeline: timelineArgs,
+        sequence: sequenceArgs,
       } = input as {
         page?: string;
         notes?: boolean;
@@ -806,7 +806,7 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
         context?: number;
         from?: KnowledgeLinePosition;
         limit?: number;
-        timeline?: {
+        sequence?: {
           since?: string;
           until?: string;
           order?: 'asc' | 'desc';
@@ -827,13 +827,13 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
         );
       }
       if (outline && from) throw new Error('knowledge_read: an outline covers the whole body; pass it without from.');
-      if (timelineArgs && (outline || section || match || from || wantNotes || wantMentions)) {
+      if (sequenceArgs && (outline || section || match || from || wantNotes || wantMentions)) {
         throw new Error(
-          'knowledge_read: read a timeline on its own, without outline, section, match, from, notes or mentionedIn.',
+          'knowledge_read: read a sequence on its own, without outline, section, match, from, notes or mentionedIn.',
         );
       }
-      const timelineSince = timelineTime('knowledge_read', 'timeline.since', timelineArgs?.since);
-      const timelineUntil = timelineTime('knowledge_read', 'timeline.until', timelineArgs?.until);
+      const sequenceSince = sequenceTime('knowledge_read', 'sequence.since', sequenceArgs?.since);
+      const sequenceUntil = sequenceTime('knowledge_read', 'sequence.until', sequenceArgs?.until);
       const run = await start(host, context);
       const limit = limitOf(requested);
       if (!ref) {
@@ -849,49 +849,49 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
         };
       }
 
-      const entryRef = ENTRY_REF.exec(ref);
-      if (entryRef && run.storage.timelines && !timelineArgs) {
-        const timelinePage = await run.page(entryRef[1]!).catch(error => {
+      const itemRef = ITEM_REF.exec(ref);
+      if (itemRef && run.storage.sequences && !sequenceArgs) {
+        const sequencePage = await run.page(itemRef[1]!).catch(error => {
           if (error instanceof KnowledgeNotFoundError) return null;
           throw error;
         });
-        if (timelinePage && (await isTimeline(run, timelinePage))) {
-          const entry = await run.storage.timelines.getEntry({
-            timelineId: timelinePage.id,
-            id: entryRef[2]!,
+        if (sequencePage && (await isSequence(run, sequencePage))) {
+          const item = await run.storage.sequences.getItem({
+            sequenceId: sequencePage.id,
+            id: itemRef[2]!,
             read: run.read,
           });
-          if (!entry) throw new KnowledgeNotFoundError(ref);
-          const addresses = await pageRefs(run, [timelinePage]);
+          if (!item) throw new KnowledgeNotFoundError(ref);
+          const addresses = await pageRefs(run, [sequencePage]);
           return {
-            page: pageSummary(timelinePage, addresses),
-            entry: entrySummary(entry, addresses.refs.get(timelinePage.id) ?? timelinePage.id),
+            page: pageSummary(sequencePage, addresses),
+            item: itemSummary(item, addresses.refs.get(sequencePage.id) ?? sequencePage.id),
           };
         }
       }
 
       const page = await run.pageOrCloseMatches(ref);
-      const timeline = await isTimeline(run, page);
-      const readEntries = (args: NonNullable<typeof timelineArgs>, entries: number) =>
-        run.storage.timelines!.listEntries({
-          timelineId: page.id,
+      const sequence = await isSequence(run, page);
+      const readItems = (args: NonNullable<typeof sequenceArgs>, items: number) =>
+        run.storage.sequences!.listItems({
+          sequenceId: page.id,
           read: run.read,
-          since: timelineSince,
-          until: timelineUntil,
+          since: sequenceSince,
+          until: sequenceUntil,
           order: args.order,
           threadExternalId: args.thread,
           cursor: args.cursor,
-          limit: entries,
+          limit: items,
         });
-      if (timelineArgs) {
-        if (!timeline) throw new Error(`knowledge_read: "${ref}" is not a timeline.`);
-        const read = await readEntries(timelineArgs, timelineArgs.limit ?? TIMELINE_READ_ENTRIES);
+      if (sequenceArgs) {
+        if (!sequence) throw new Error(`knowledge_read: "${ref}" is not a sequence.`);
+        const read = await readItems(sequenceArgs, sequenceArgs.limit ?? SEQUENCE_READ_ITEMS);
         const addresses = await pageRefs(run, [page]);
         const ownRef = addresses.refs.get(page.id) ?? page.id;
         return {
           page: pageSummary(page, addresses),
-          timeline: {
-            entries: read.entries.map(entry => entrySummary(entry, ownRef)),
+          sequence: {
+            items: read.items.map(item => itemSummary(item, ownRef)),
             ...(read.nextCursor ? { nextCursor: read.nextCursor } : {}),
           },
         };
@@ -957,7 +957,7 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
         run.storage.listNotes({ pageId: page.id, read: run.read, limit }),
         run.storage.listChildPages({ parentId: page.id, read: run.read, limit }),
         run.storage.listNotesMentioning({ pageId: page.id, read: run.read, limit }),
-        timeline ? readEntries({}, TIMELINE_READ_ENTRIES) : undefined,
+        sequence ? readItems({}, SEQUENCE_READ_ITEMS) : undefined,
       ]);
       let childScopesCut = false;
       let childScopes: Array<{ address?: string; name: string; description?: string; restricted?: true }> = [];
@@ -1023,8 +1023,8 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
       if (latest) {
         more.push(
           latest.nextCursor
-            ? `timeline: this page is a timeline; these are its latest ${TIMELINE_READ_ENTRIES} entries. Read older ones with timeline: { cursor: "${latest.nextCursor}" }, or a range with timeline: { since, until, order, thread }.`
-            : 'timeline: this page is a timeline; these are all its entries. Read a range with timeline: { since, until, order, thread }.',
+            ? `sequence: this page is a sequence; these are its latest ${SEQUENCE_READ_ITEMS} items. Read older ones with sequence: { cursor: "${latest.nextCursor}" }, or a range with sequence: { since, until, order, thread }.`
+            : 'sequence: this page is a sequence; these are all its items. Read a range with sequence: { since, until, order, thread }.',
         );
       }
       return {
@@ -1035,8 +1035,8 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
         },
         ...(latest
           ? {
-              timeline: {
-                entries: latest.entries.map(entry => entrySummary(entry, ownRef)),
+              sequence: {
+                items: latest.items.map(item => itemSummary(item, ownRef)),
                 ...(latest.nextCursor ? { nextCursor: latest.nextCursor } : {}),
               },
             }

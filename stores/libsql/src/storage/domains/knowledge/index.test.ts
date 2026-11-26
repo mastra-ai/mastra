@@ -15,7 +15,7 @@ import {
   createKnowledgeHeldScopeTests,
   createKnowledgeHostWriteTests,
   createKnowledgePageStoreTests,
-  createKnowledgeTimelineTests,
+  createKnowledgeSequenceTests,
   createKnowledgeTransactionTests,
   knowledgeStoreThroughTransactions,
 } from '@internal/storage-test-utils';
@@ -31,7 +31,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { withClientWriteLock } from '../../db/write-lock';
 import { LibSQLStore } from '../../index';
-import { LIBSQL_KNOWLEDGE_TIMELINE_TABLES } from './timelines';
+import { LIBSQL_KNOWLEDGE_SEQUENCE_TABLES } from './sequences';
 import { getLibSQLKnowledgeIsolationKey, KnowledgeLibSQL, libsqlKnowledgeTransaction } from '.';
 
 const COMPAT_CONSTANTS = [
@@ -61,8 +61,8 @@ createKnowledgePageStoreTests(() => new KnowledgeLibSQL({ url: 'file::memory:?ca
 createKnowledgeHostWriteTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
 createKnowledgeHeldScopeTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
 
-// One shared database, emptied before each case by the reset that must also empty the timeline tables.
-createKnowledgeTimelineTests(async () => {
+// One shared database, emptied before each case by the reset that must also empty the sequence tables.
+createKnowledgeSequenceTests(async () => {
   const store = new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' });
   await store.init();
   await store.dangerouslyReset();
@@ -237,7 +237,7 @@ createKnowledgeSchemaResetTests(async () => {
           ...KNOWLEDGE_PAGES_TABLE_NAMES,
           'mastra_knowledge_pin_audiences',
           'mastra_knowledge_page_links',
-          ...Object.values(LIBSQL_KNOWLEDGE_TIMELINE_TABLES),
+          ...Object.values(LIBSQL_KNOWLEDGE_SEQUENCE_TABLES),
         ]),
       );
     },

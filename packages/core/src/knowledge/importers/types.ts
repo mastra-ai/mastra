@@ -42,37 +42,37 @@ export type KnowledgeImporterPageOp =
   | { op: 'remove'; sourceId: string };
 
 /**
- * One dated entry of a timeline item (a chat message, an event), keyed by the source's own ID.
+ * One dated item of a sequence page (a chat message, an event), keyed by the source's own ID.
  * Times are ISO 8601 strings so a flush survives a JSON round trip unchanged.
  */
-export interface KnowledgeImportEntry {
-  /** The source's own ID for the entry, unique within its timeline. */
+export interface KnowledgeImportSequenceItem {
+  /** The source's own ID for the item, unique within its sequence. */
   externalId: string;
-  /** When it happened at the source; entries are ordered by this. */
+  /** When it happened at the source; items are ordered by this. */
   occurredAt: string;
   /** When the source last edited it. */
   editedAt?: string;
   /** Who wrote it at the source. */
   author?: { sourceId: string; name?: string };
   body: string;
-  /** The `externalId` of the thread's root entry, for a reply. */
+  /** The `externalId` of the thread's root item, for a reply. */
   threadExternalId?: string;
 }
 
 /**
- * A buffered importer call that writes timeline entries. Only hosts whose run start advertises
- * `capabilities.timelines` take these; any other refuses the whole flush as `unsupported`.
+ * A buffered importer call that writes sequence items. Only hosts whose run start advertises
+ * `capabilities.sequences` take these; any other refuses the whole flush as `unsupported`.
  */
-export type KnowledgeImporterTimelineOp =
-  | { op: 'entry'; timeline: string; entry: KnowledgeImportEntry }
-  /** Only on a positive signal from the source (deleted); never because an entry was missing. */
-  | { op: 'removeEntry'; timeline: string; externalId: string };
+export type KnowledgeImporterSequenceOp =
+  | { op: 'sequenceItem'; sequence: string; sequenceItem: KnowledgeImportSequenceItem }
+  /** Only on a positive signal from the source (deleted); never because an item was missing. */
+  | { op: 'removeSequenceItem'; sequence: string; externalId: string };
 
 /** A buffered importer call, as sent in a flush. */
-export type KnowledgeImporterOp = KnowledgeImporterPageOp | KnowledgeImporterTimelineOp;
+export type KnowledgeImporterOp = KnowledgeImporterPageOp | KnowledgeImporterSequenceOp;
 
-export function isKnowledgeImporterTimelineOp(op: KnowledgeImporterOp): op is KnowledgeImporterTimelineOp {
-  return op.op === 'entry' || op.op === 'removeEntry';
+export function isKnowledgeImporterSequenceOp(op: KnowledgeImporterOp): op is KnowledgeImporterSequenceOp {
+  return op.op === 'sequenceItem' || op.op === 'removeSequenceItem';
 }
 
 /** Staged `ctx.state.set` values. They commit with the ops of the same flush, or not at all. */

@@ -11,7 +11,7 @@ import { resolvePgConfig } from '../../db';
 import { PgKnowledgeImporters, pgKnowledgeImportersDDL } from './importers';
 import { PgKnowledgePages, pgKnowledgePagesDDL } from './pages';
 import { inspectPgKnowledgePagesSchema, initPgKnowledgePagesSchema, resetPgKnowledgePagesSchema } from './pages-schema';
-import { PgKnowledgeTimelines, pgKnowledgeTimelinesDDL } from './timelines';
+import { PgKnowledgeSequences, pgKnowledgeSequencesDDL } from './sequences';
 
 const loadKnowledgePagesCore = createKnowledgePagesCoreLoader(coreFeatures, () => import('@mastra/core/storage'));
 
@@ -150,7 +150,7 @@ type PageStoreMethod = {
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export class KnowledgePG extends KnowledgeStorage {
   static getExportDDL(schemaName?: string): string[] {
-    return [...pgKnowledgePagesDDL(schemaName), ...pgKnowledgeTimelinesDDL(schemaName)].map(
+    return [...pgKnowledgePagesDDL(schemaName), ...pgKnowledgeSequencesDDL(schemaName)].map(
       statement => `${statement};`,
     );
   }
@@ -159,7 +159,7 @@ export class KnowledgePG extends KnowledgeStorage {
   readonly #schemaName?: string;
   readonly #pages: PgKnowledgePages;
   readonly #importers?: PgKnowledgeImporters;
-  readonly #timelines?: PgKnowledgeTimelines;
+  readonly #sequences?: PgKnowledgeSequences;
 
   /** The importer tables' DDL, for provisioning them ahead of time when storage init is disabled. */
   static getImportersExportDDL(schemaName?: string): string[] {
@@ -183,12 +183,12 @@ export class KnowledgePG extends KnowledgeStorage {
         };
       },
     });
-    if (coreFeatures.has('knowledge-timelines')) {
-      this.#timelines = new PgKnowledgeTimelines({
+    if (coreFeatures.has('knowledge-sequences')) {
+      this.#sequences = new PgKnowledgeSequences({
         client,
         schemaName,
         readable: async (id, read) => {
-          // getPage returns a deleted page too; a timeline reads only through a live one.
+          // getPage returns a deleted page too; a sequence reads only through a live one.
           const page = await this.#pages.getPage({ id, read });
           return !!page && !page.deletedAt;
         },
@@ -211,8 +211,8 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   /** Same client and schema as the pages: on a transaction view, the view's transaction. */
-  override get timelines(): PgKnowledgeTimelines | undefined {
-    return this.#timelines;
+  override get sequences(): PgKnowledgeSequences | undefined {
+    return this.#sequences;
   }
 
   /** Same client and schema as the pages: on a transaction view, the view's transaction. */
@@ -222,7 +222,7 @@ export class KnowledgePG extends KnowledgeStorage {
 
   async init(): Promise<void> {
     await initPgKnowledgePagesSchema(this.#client, this.#schemaName);
-    await this.#timelines?.init();
+    await this.#sequences?.init();
   }
 
   override async transaction<T>(
@@ -265,17 +265,17 @@ export class KnowledgePG extends KnowledgeStorage {
     await this.#client.tx(async tx => {
       const client = new TransactionDbClient(tx);
       if (this.#importers) await new PgKnowledgeImporters({ client, schemaName: this.#schemaName }).clearOnReset();
-      const timelines = this.#timelines
-        ? new PgKnowledgeTimelines({ client, schemaName: this.#schemaName, readable: async () => false })
+      const sequences = this.#sequences
+        ? new PgKnowledgeSequences({ client, schemaName: this.#schemaName, readable: async () => false })
         : undefined;
-      await timelines?.dropOnReset();
+      await sequences?.dropOnReset();
       await resetPgKnowledgePagesSchema(client, this.#schemaName);
-      await timelines?.init();
+      await sequences?.init();
     });
   }
 
   async dangerouslyClearAll(): Promise<void> {
-    await this.#timelines?.clearAll();
+    await this.#sequences?.clearAll();
     await this.#pages.clearAll();
   }
 

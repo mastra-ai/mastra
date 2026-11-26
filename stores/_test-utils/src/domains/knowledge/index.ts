@@ -144,7 +144,7 @@ export { createKnowledgeSearchSnippetTests } from './search-snippets';
 export { createKnowledgeTransactionTests, knowledgeStoreThroughTransactions } from './transaction';
 export type { KnowledgeTransactionFixture, KnowledgeTransactionImporterRows } from './transaction';
 export { createKnowledgeImportersStorageTests } from './importers';
-export { createKnowledgeTimelineTests } from './timelines';
+export { createKnowledgeSequenceTests } from './sequences';
 export { createKnowledgeImporterExportDDLTests, createKnowledgeImporterHostTests } from './importer-host';
 export { createKnowledgeHostedImporterHostTests } from './hosted-host';
 export type { KnowledgeImporterHostFixture } from './importer-host';

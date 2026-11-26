@@ -8,11 +8,11 @@ import {
   createKnowledgeLegacyUpgradeTests,
   createKnowledgePageStoreTests,
   createKnowledgeSearchSnippetTests,
-  createKnowledgeTimelineTests,
+  createKnowledgeSequenceTests,
   createKnowledgeTransactionTests,
   knowledgeStoreThroughTransactions,
 } from '@internal/storage-test-utils';
-import { parseKnowledgeTimelineTime } from '@mastra/core/storage';
+import { parseKnowledgeSequenceTime } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -32,17 +32,17 @@ afterAll(async () => {
 });
 
 describe('KnowledgePG storage isolation', () => {
-  it('provisions timeline tables and indexes from exported DDL with init disabled', async () => {
-    const schemaName = 'knowledge_timeline_export_test';
+  it('provisions sequence tables and indexes from exported DDL with init disabled', async () => {
+    const schemaName = 'knowledge_sequence_export_test';
     await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
     await pool.query(`CREATE SCHEMA "${schemaName}"`);
     try {
       const ddl = KnowledgePG.getExportDDL(schemaName).join('\n');
-      expect(ddl).toContain('mastra_knowledge_timelines');
-      expect(ddl).toContain('mastra_knowledge_timeline_entries_time');
-      expect(ddl).toContain('mastra_knowledge_timeline_entries_thread');
+      expect(ddl).toContain('mastra_knowledge_sequences');
+      expect(ddl).toContain('mastra_knowledge_sequence_items_order');
+      expect(ddl).toContain('mastra_knowledge_sequence_items_thread');
       await pool.query(ddl);
-      const store = new PostgresStore({ id: 'timeline-export', pool, schemaName, disableInit: true });
+      const store = new PostgresStore({ id: 'sequence-export', pool, schemaName, disableInit: true });
       const knowledge = await store.getStore('knowledge');
       const { scope } = await knowledge!.materializeScope({
         address: 'org:acme',
@@ -51,26 +51,26 @@ describe('KnowledgePG storage isolation', () => {
         provenance: { author: 'host' },
       });
       const page = await knowledge!.createPage({ parentId: scope.id, name: 'Events', provenance: { author: 'host' } });
-      await knowledge!.timelines!.markTimeline({ pageId: page.id });
-      const occurredAt = parseKnowledgeTimelineTime('2024-02-29T23:30:00.123-02:00')!;
-      const editedAt = parseKnowledgeTimelineTime('2024-03-01T02:00:00+00:00')!;
-      const written = await knowledge!.timelines!.upsertEntry({
-        timelineId: page.id,
+      await knowledge!.sequences!.markSequence({ pageId: page.id });
+      const occurredAt = parseKnowledgeSequenceTime('2024-02-29T23:30:00.123-02:00')!;
+      const editedAt = parseKnowledgeSequenceTime('2024-03-01T02:00:00+00:00')!;
+      const written = await knowledge!.sequences!.upsertItem({
+        sequenceId: page.id,
         externalId: '1',
         body: 'Leap day',
         occurredAt,
         editedAt,
         writtenBy: 'importer:slack',
       });
-      const reopened = new PostgresStore({ id: 'timeline-reopened', pool, schemaName, disableInit: true });
-      const read = await (await reopened.getStore('knowledge'))!.timelines!.listEntries({
-        timelineId: page.id,
+      const reopened = new PostgresStore({ id: 'sequence-reopened', pool, schemaName, disableInit: true });
+      const read = await (await reopened.getStore('knowledge'))!.sequences!.listItems({
+        sequenceId: page.id,
         read: 'all',
         limit: 10,
       });
-      expect(read.entries).toHaveLength(1);
-      expect(read.entries[0]).toMatchObject({
-        id: written.entry.id,
+      expect(read.items).toHaveLength(1);
+      expect(read.items[0]).toMatchObject({
+        id: written.item.id,
         body: 'Leap day',
         occurredAt: new Date('2024-03-01T01:30:00.123Z'),
         editedAt,
@@ -174,10 +174,10 @@ beforeAll(async () => {
 const snippetStorage = new PostgresStore({ id: 'knowledge-snippets', pool, schemaName: 'knowledge_snippet_test' });
 createKnowledgeSearchSnippetTests(() => snippetStorage);
 
-// Reset before each case: the reset must also drop and recreate the timeline tables.
-createKnowledgeTimelineTests(async () => {
-  const store = new KnowledgePG({ pool, schemaName: 'knowledge_timeline_test' });
-  await pool.query('CREATE SCHEMA IF NOT EXISTS "knowledge_timeline_test"');
+// Reset before each case: the reset must also drop and recreate the sequence tables.
+createKnowledgeSequenceTests(async () => {
+  const store = new KnowledgePG({ pool, schemaName: 'knowledge_sequence_test' });
+  await pool.query('CREATE SCHEMA IF NOT EXISTS "knowledge_sequence_test"');
   await store.init();
   await store.dangerouslyReset();
   return store;

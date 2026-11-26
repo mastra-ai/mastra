@@ -3,4 +3,4 @@ export * from './inmemory';
 export * from './pages';
 export * from './legacy';
 export * from './importers';
-export * from './timelines';
+export * from './sequences';

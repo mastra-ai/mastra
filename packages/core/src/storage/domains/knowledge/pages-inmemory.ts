@@ -205,8 +205,8 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     });
   }
 
-  /** For the timeline store beside it: the page, deleted or not, whether it has live children, and whether `read` reaches it. */
-  timelinePage(
+  /** For the sequence store beside it: the page, deleted or not, whether it has live children, and whether `read` reaches it. */
+  sequencePage(
     id: string,
     read: KnowledgeReadScope = 'all',
   ): { page: KnowledgePage; hasChildren: boolean; readable: boolean } | undefined {

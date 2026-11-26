@@ -31,7 +31,7 @@ import {
   parseKnowledgeImportTarget,
 } from './sink';
 import type { KnowledgeImportEmbedJob } from './sink';
-import { isKnowledgeImporterTimelineOp } from './types';
+import { isKnowledgeImporterSequenceOp } from './types';
 import type {
   KnowledgeImportCounts,
   KnowledgeImporterFinishRequest,
@@ -219,7 +219,7 @@ class AdmitRefusal extends Error {
   }
 }
 
-const LOCAL_CAPABILITIES: KnowledgeImporterCapabilities = { contract: 2, timelines: false };
+const LOCAL_CAPABILITIES: KnowledgeImporterCapabilities = { contract: 2, sequences: false };
 
 const conflict = (code: KnowledgeImporterHostConflictError['code'], message: string) =>
   new KnowledgeImporterHostConflictError(code, message);
@@ -577,11 +577,11 @@ export function createLocalKnowledgeImporterHost(
         if (replayed.digest !== digest) throw conflict('digest_mismatch', 'This seq was committed with other content.');
         return replayed.receipt as KnowledgeImporterFlushReceipt;
       }
-      // Timeline entries have no store here yet, so the whole flush is refused before anything applies.
+      // Sequence items have no store here yet, so the whole flush is refused before anything applies.
       const pageOps: KnowledgeImporterPageOp[] = [];
       for (const op of body.ops) {
-        if (isKnowledgeImporterTimelineOp(op)) {
-          throw conflict('unsupported', 'This host takes no timeline entries; nothing in the flush was applied.');
+        if (isKnowledgeImporterSequenceOp(op)) {
+          throw conflict('unsupported', 'This host takes no sequence items; nothing in the flush was applied.');
         }
         pageOps.push(op);
       }

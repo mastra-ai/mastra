@@ -6,7 +6,7 @@ import {
   createKnowledgeHostedImporterHostTests,
   createKnowledgeImportersStorageTests,
   createKnowledgePageStoreTests,
-  createKnowledgeTimelineTests,
+  createKnowledgeSequenceTests,
 } from './domains/knowledge';
 import { createObservabilityVNextTests } from './domains/observability-vnext';
 import { createTestSuite } from './factory';
@@ -34,8 +34,8 @@ createObservabilityVNextTests({
 // The shared Knowledge schema-4 page-store contract against the in-memory reference store.
 createKnowledgePageStoreTests(async () => (await new MockStore().getStore('knowledge'))!);
 
-// The timeline entry contract (r437) against the in-memory reference store.
-createKnowledgeTimelineTests(async () => (await new MockStore().getStore('knowledge'))!);
+// The sequence item contract (r437) against the in-memory reference store.
+createKnowledgeSequenceTests(async () => (await new MockStore().getStore('knowledge'))!);
 
 // The shared importer bookkeeping contract (r347 O2) against the in-memory reference store. One
 // process, so the reader is the same store and transactions are serialized.

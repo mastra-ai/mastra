@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { KnowledgeStorage, KnowledgeTimelinesStorage } from '../../storage/domains/knowledge';
+import type { KnowledgeStorage, KnowledgeSequencesStorage } from '../../storage/domains/knowledge';
 import { InMemoryStore } from '../../storage/mock';
 import { knowledgeMemoryScopes } from '../declarations';
 import { Knowledge } from '../index';
@@ -10,9 +10,9 @@ type Result = Record<string, any>;
 const at = (minute: number) => new Date(Date.UTC(2026, 10, 23, 12, minute));
 const importer = 'importer:slack';
 
-describe('Knowledge timeline reads through the agent tools', () => {
+describe('Knowledge sequence reads through the agent tools', () => {
   let store: KnowledgeStorage;
-  let timelines: KnowledgeTimelinesStorage;
+  let sequences: KnowledgeSequencesStorage;
   let knowledge: Knowledge;
 
   const as = (held: string[]) => {
@@ -23,7 +23,7 @@ describe('Knowledge timeline reads through the agent tools', () => {
   const acme = () => as(['org:acme', 'resource:u-acme']);
   const globex = () => as(['org:globex', 'resource:u-globex']);
 
-  async function timeline(scope: string, name: string) {
+  async function sequence(scope: string, name: string) {
     const org = scope.split(':')[1];
     const written = await as([scope, `resource:u-${org}`])('knowledge_page', {
       op: 'write',
@@ -31,16 +31,16 @@ describe('Knowledge timeline reads through the agent tools', () => {
       name,
       body: `The ${name} channel.`,
     });
-    await timelines.markTimeline({ pageId: written.page.id });
+    await sequences.markSequence({ pageId: written.page.id });
     return written.page.id as string;
   }
-  const post = (timelineId: string, externalId: string, minute: number, body: string, extra = {}) =>
-    timelines.upsertEntry({ timelineId, externalId, occurredAt: at(minute), body, writtenBy: importer, ...extra });
+  const post = (sequenceId: string, externalId: string, minute: number, body: string, extra = {}) =>
+    sequences.upsertItem({ sequenceId, externalId, occurredAt: at(minute), body, writtenBy: importer, ...extra });
 
   beforeEach(async () => {
     const storage = new InMemoryStore();
     store = (await storage.getStore('knowledge'))!;
-    timelines = store.timelines!;
+    sequences = store.sequences!;
     knowledge = new Knowledge({
       storage,
       scopes: knowledgeMemoryScopes(),
@@ -51,31 +51,31 @@ describe('Knowledge timeline reads through the agent tools', () => {
     (knowledge as any).logger = { warn() {}, debug() {}, info() {}, error() {} };
   });
 
-  it('reads a timeline page with its latest entries, newest first, and how to page on', async () => {
-    const id = await timeline('org:acme', 'general');
+  it('reads a sequence page with its latest items, newest first, and how to page on', async () => {
+    const id = await sequence('org:acme', 'general');
     for (let minute = 0; minute < 25; minute++) await post(id, `m${minute}`, minute, `message ${minute}`);
 
     const read = await acme()('knowledge_read', { page: 'general' });
     expect(read.page.body).toBe('The general channel.');
-    expect(read.timeline.entries).toHaveLength(20);
-    expect(read.timeline.entries[0]).toMatchObject({
+    expect(read.sequence.items).toHaveLength(20);
+    expect(read.sequence.items[0]).toMatchObject({
       externalId: 'm24',
       occurredAt: at(24).toISOString(),
       body: 'message 24',
     });
-    expect(read.timeline.entries[0].ref).toMatch(new RegExp(`^${read.page.ref}@[0-9A-Z]{26}$`));
-    expect(read.timeline.nextCursor).toEqual(expect.any(String));
-    expect(read.more.join('\n')).toContain('timeline');
+    expect(read.sequence.items[0].ref).toMatch(new RegExp(`^${read.page.ref}@[0-9A-Z]{26}$`));
+    expect(read.sequence.nextCursor).toEqual(expect.any(String));
+    expect(read.more.join('\n')).toContain('sequence');
 
-    const next = await acme()('knowledge_read', { page: 'general', timeline: { cursor: read.timeline.nextCursor } });
-    expect(next.timeline.entries.map((e: Result) => e.externalId)).toEqual(['m4', 'm3', 'm2', 'm1', 'm0']);
-    expect(next.timeline.nextCursor).toBeUndefined();
+    const next = await acme()('knowledge_read', { page: 'general', sequence: { cursor: read.sequence.nextCursor } });
+    expect(next.sequence.items.map((e: Result) => e.externalId)).toEqual(['m4', 'm3', 'm2', 'm1', 'm0']);
+    expect(next.sequence.nextCursor).toBeUndefined();
     // A range read comes without the page body.
     expect(next.page.body).toBeUndefined();
   });
 
   it('reads a range oldest first, with since, until and a limit, and one thread', async () => {
-    const id = await timeline('org:acme', 'general');
+    const id = await sequence('org:acme', 'general');
     await post(id, 'root', 1, 'deploy is broken');
     await post(id, 'other', 2, 'lunch?');
     await post(id, 'reply', 3, 'fixed it', { threadExternalId: 'root' });
@@ -83,49 +83,49 @@ describe('Knowledge timeline reads through the agent tools', () => {
 
     const range = await acme()('knowledge_read', {
       page: 'general',
-      timeline: { since: at(1).toISOString(), until: at(9).toISOString(), order: 'asc', limit: 2 },
+      sequence: { since: at(1).toISOString(), until: at(9).toISOString(), order: 'asc', limit: 2 },
     });
-    expect(range.timeline.entries.map((e: Result) => e.externalId)).toEqual(['root', 'other']);
+    expect(range.sequence.items.map((e: Result) => e.externalId)).toEqual(['root', 'other']);
     const rest = await acme()('knowledge_read', {
       page: 'general',
-      timeline: {
+      sequence: {
         since: at(1).toISOString(),
         until: at(9).toISOString(),
         order: 'asc',
         limit: 2,
-        cursor: range.timeline.nextCursor,
+        cursor: range.sequence.nextCursor,
       },
     });
-    expect(rest.timeline.entries.map((e: Result) => e.externalId)).toEqual(['reply']);
-    expect(rest.timeline.entries[0].thread).toBe('root');
+    expect(rest.sequence.items.map((e: Result) => e.externalId)).toEqual(['reply']);
+    expect(rest.sequence.items[0].thread).toBe('root');
 
-    const thread = await acme()('knowledge_read', { page: 'general', timeline: { thread: 'root', order: 'asc' } });
-    expect(thread.timeline.entries.map((e: Result) => e.externalId)).toEqual(['root', 'reply']);
+    const thread = await acme()('knowledge_read', { page: 'general', sequence: { thread: 'root', order: 'asc' } });
+    expect(thread.sequence.items.map((e: Result) => e.externalId)).toEqual(['root', 'reply']);
 
-    await expect(acme()('knowledge_read', { page: 'general', timeline: { since: 'yesterday' } })).rejects.toThrow(
+    await expect(acme()('knowledge_read', { page: 'general', sequence: { since: 'yesterday' } })).rejects.toThrow(
       /since/,
     );
-    await acme()('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Plain', body: 'Not a timeline.' });
-    await expect(acme()('knowledge_read', { page: 'Plain', timeline: {} })).rejects.toThrow(/not a timeline/);
+    await acme()('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Plain', body: 'Not a sequence.' });
+    await expect(acme()('knowledge_read', { page: 'Plain', sequence: {} })).rejects.toThrow(/not a sequence/);
   });
 
-  it('reads one entry back by its ref, and nothing through an unreadable timeline', async () => {
-    const id = await timeline('org:acme', 'general');
+  it('reads one item back by its ref, and nothing through an unreadable sequence', async () => {
+    const id = await sequence('org:acme', 'general');
     await post(id, 'root', 1, 'deploy is broken', { author: { id: 'U1', name: 'Ana' } });
-    const [hit] = (await acme()('knowledge_read', { page: 'general' })).timeline.entries;
+    const [hit] = (await acme()('knowledge_read', { page: 'general' })).sequence.items;
 
     const read = await acme()('knowledge_read', { page: hit.ref });
-    expect(read.entry).toMatchObject({ ref: hit.ref, externalId: 'root', body: 'deploy is broken', author: 'Ana' });
+    expect(read.item).toMatchObject({ ref: hit.ref, externalId: 'root', body: 'deploy is broken', author: 'Ana' });
     expect(read.page.id).toBe(id);
     expect(read.page.body).toBeUndefined();
 
     await expect(globex()('knowledge_read', { page: `${id}@${hit.ref.split('@')[1]}` })).rejects.toThrow();
   });
 
-  it('finds entries by keyword beside pages, narrowed by in, since and until, and never from a hidden timeline', async () => {
-    const general = await timeline('org:acme', 'general');
-    const ops = await timeline('org:acme', 'ops');
-    const secret = await timeline('org:globex', 'secret');
+  it('finds items by keyword beside pages, narrowed by in, since and until, and never from a hidden sequence', async () => {
+    const general = await sequence('org:acme', 'general');
+    const ops = await sequence('org:acme', 'ops');
+    const secret = await sequence('org:globex', 'secret');
     await post(general, 'g1', 1, 'the refund went through');
     await post(ops, 'o1', 2, 'refund queue is stuck');
     await post(ops, 'o2', 8, 'refund queue drained');
@@ -138,31 +138,31 @@ describe('Knowledge timeline reads through the agent tools', () => {
     });
 
     const all = await acme()('knowledge_search', { query: 'refund' });
-    const entries = all.results.filter((hit: Result) => hit.type === 'entry');
-    expect(entries.map((hit: Result) => hit.entry.externalId).sort()).toEqual(['g1', 'o1', 'o2']);
-    expect(entries[0].page.ref).toEqual(expect.any(String));
+    const items = all.results.filter((hit: Result) => hit.type === 'item');
+    expect(items.map((hit: Result) => hit.item.externalId).sort()).toEqual(['g1', 'o1', 'o2']);
+    expect(items[0].page.ref).toEqual(expect.any(String));
     expect(all.results.some((hit: Result) => hit.type === 'page' && hit.page.name === 'Refund policy')).toBe(true);
 
     const inOps = await acme()('knowledge_search', { query: 'refund', in: 'ops' });
-    expect(inOps.results.map((hit: Result) => hit.entry.externalId)).toEqual(['o2', 'o1']);
+    expect(inOps.results.map((hit: Result) => hit.item.externalId)).toEqual(['o2', 'o1']);
 
     const early = await acme()('knowledge_search', { query: 'refund', until: at(5).toISOString() });
-    expect(early.results.map((hit: Result) => hit.entry?.externalId)).toEqual(['o1', 'g1']);
+    expect(early.results.map((hit: Result) => hit.item?.externalId)).toEqual(['o1', 'g1']);
     const late = await acme()('knowledge_search', { query: 'refund', since: at(5).toISOString() });
-    expect(late.results.map((hit: Result) => hit.entry?.externalId)).toEqual(['o2']);
+    expect(late.results.map((hit: Result) => hit.item?.externalId)).toEqual(['o2']);
 
     await expect(acme()('knowledge_search', { query: 'refund', in: 'Refund policy' })).rejects.toThrow(
-      /not a timeline/,
+      /not a sequence/,
     );
   });
 
-  it('finds an entry by a word in its body but not by a paraphrase, until entries are embedded', async () => {
-    const general = await timeline('org:acme', 'general');
+  it('finds an item by a word in its body but not by a paraphrase, until items are embedded', async () => {
+    const general = await sequence('org:acme', 'general');
     await post(general, 'g1', 1, 'the refund went through');
 
     const byWord = await acme()('knowledge_search', { query: 'refund', in: 'general' });
-    expect(byWord.results.map((hit: Result) => hit.entry.externalId)).toEqual(['g1']);
-    // "reimbursement" sits beside "refund" for this embedder; entries have no vectors yet (step 5).
+    expect(byWord.results.map((hit: Result) => hit.item.externalId)).toEqual(['g1']);
+    // "reimbursement" sits beside "refund" for this embedder; items have no vectors yet (step 5).
     const byMeaning = await acme()('knowledge_search', { query: 'reimbursement', in: 'general' });
     expect(byMeaning.results).toEqual([]);
   });

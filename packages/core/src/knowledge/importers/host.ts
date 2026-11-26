@@ -1,4 +1,4 @@
-import { parseKnowledgeTimelineTime } from '../../storage/domains/knowledge/timelines';
+import { parseKnowledgeSequenceTime } from '../../storage/domains/knowledge/sequences';
 import type {
   KnowledgeImporterErrorCode,
   KnowledgeImporterFinishRequest,
@@ -42,7 +42,7 @@ export type KnowledgeImporterRunStart =
        * whole number.
        */
       maxFlushBytes?: number;
-      /** What this host takes. Absent from hosts older than contract 2: treat as `{ contract: 1, timelines: false }`. */
+      /** What this host takes. Absent from hosts older than contract 2: treat as `{ contract: 1, sequences: false }`. */
       capabilities?: KnowledgeImporterCapabilities;
     }
   /** Another run of the binding is going; the host recorded this one as skipped. */
@@ -52,8 +52,8 @@ export type KnowledgeImporterRunStart =
 export interface KnowledgeImporterCapabilities {
   /** The importer contract version; 2 adds capabilities and the `unsupported` refusal. */
   contract: number;
-  /** Takes `entry` and `removeEntry` ops. */
-  timelines: boolean;
+  /** Takes `sequenceItem` and `removeSequenceItem` ops. */
+  sequences: boolean;
 }
 
 /**
@@ -122,7 +122,7 @@ export type KnowledgeImporterHostConflictCode =
   | 'run_not_active'
   /** A finish replay that differs from the recorded finish. */
   | 'finish_mismatch'
-  /** The flush holds ops this host doesn't take (timeline ops on a host without timelines). Nothing was applied. */
+  /** The flush holds ops this host doesn't take (sequence ops on a host without sequences). Nothing was applied. */
   | 'unsupported';
 
 /** A host refused a flush or a finish (409 over HTTP). Retrying the same request won't help. @experimental */
@@ -273,7 +273,7 @@ const DECLARATION_FIELDS: Record<string, { kind: FieldKind; required?: boolean }
   fallbackParent: { kind: 'nonEmpty' },
 };
 
-const ENTRY_FIELDS: Record<string, { kind: FieldKind; required?: boolean }> = {
+const SEQUENCE_ITEM_FIELDS: Record<string, { kind: FieldKind; required?: boolean }> = {
   externalId: { kind: 'nonEmpty', required: true },
   occurredAt: { kind: 'isoTime', required: true },
   editedAt: { kind: 'isoTime' },
@@ -329,9 +329,9 @@ function checkFields<T>(
         out[key] = checkString(field, at, true);
         break;
       case 'isoTime': {
-        // Entries are ordered by these, so a string that parses wrong would look like data in the wrong place.
+        // Items are ordered by these, so a string that parses wrong would look like data in the wrong place.
         const time = checkString(field, at, true);
-        if (!parseKnowledgeTimelineTime(time)) {
+        if (!parseKnowledgeSequenceTime(time)) {
           throw new TypeError(`${at} must be an ISO 8601 date-time, got "${time}".`);
         }
         out[key] = time;
@@ -388,26 +388,28 @@ export function parseKnowledgeImporterFlushBody(body: { ops: unknown; state?: un
         if (extra) throw new TypeError(`${where} has unknown field "${extra}".`);
         return { op: 'remove', sourceId: checkString(op.sourceId, `${where}.sourceId`, true) };
       }
-      case 'entry': {
-        const extra = Object.keys(op).find(key => key !== 'op' && key !== 'timeline' && key !== 'entry');
+      case 'sequenceItem': {
+        const extra = Object.keys(op).find(key => key !== 'op' && key !== 'sequence' && key !== 'sequenceItem');
         if (extra) throw new TypeError(`${where} has unknown field "${extra}".`);
         return {
-          op: 'entry',
-          timeline: checkString(op.timeline, `${where}.timeline`, true),
-          entry: checkFields(op.entry, ENTRY_FIELDS, `${where}.entry`),
+          op: 'sequenceItem',
+          sequence: checkString(op.sequence, `${where}.sequence`, true),
+          sequenceItem: checkFields(op.sequenceItem, SEQUENCE_ITEM_FIELDS, `${where}.sequenceItem`),
         };
       }
-      case 'removeEntry': {
-        const extra = Object.keys(op).find(key => key !== 'op' && key !== 'timeline' && key !== 'externalId');
+      case 'removeSequenceItem': {
+        const extra = Object.keys(op).find(key => key !== 'op' && key !== 'sequence' && key !== 'externalId');
         if (extra) throw new TypeError(`${where} has unknown field "${extra}".`);
         return {
-          op: 'removeEntry',
-          timeline: checkString(op.timeline, `${where}.timeline`, true),
+          op: 'removeSequenceItem',
+          sequence: checkString(op.sequence, `${where}.sequence`, true),
           externalId: checkString(op.externalId, `${where}.externalId`, true),
         };
       }
       default:
-        throw new TypeError(`${where}.op must be "upsert", "declare", "remove", "entry" or "removeEntry".`);
+        throw new TypeError(
+          `${where}.op must be "upsert", "declare", "remove", "sequenceItem" or "removeSequenceItem".`,
+        );
     }
   });
   if (body.state === undefined || body.state === null) return { ops };

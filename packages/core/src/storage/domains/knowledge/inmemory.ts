@@ -3,19 +3,19 @@ import { KNOWLEDGE_STORAGE_CONTRACT_VERSION, KNOWLEDGE_STORAGE_SCHEMA_VERSION, K
 import { InMemoryKnowledgeImportersStorage } from './importers-inmemory';
 import type { KnowledgePageStore } from './pages';
 import { InMemoryKnowledgePageStore } from './pages-inmemory';
-import { InMemoryKnowledgeTimelinesStorage } from './timelines-inmemory';
+import { InMemoryKnowledgeSequencesStorage } from './sequences-inmemory';
 
 export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   readonly #pageStore = new InMemoryKnowledgePageStore();
   readonly #importers = new InMemoryKnowledgeImportersStorage();
-  readonly #timelines = new InMemoryKnowledgeTimelinesStorage((id, read) => this.#pageStore.timelinePage(id, read));
+  readonly #sequences = new InMemoryKnowledgeSequencesStorage((id, read) => this.#pageStore.sequencePage(id, read));
 
   override get importers(): InMemoryKnowledgeImportersStorage {
     return this.#importers;
   }
 
-  override get timelines(): InMemoryKnowledgeTimelinesStorage {
-    return this.#timelines;
+  override get sequences(): InMemoryKnowledgeSequencesStorage {
+    return this.#sequences;
   }
 
   // Schema-4 page store.
@@ -212,13 +212,13 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   async #savepoint<T>(operation: () => Promise<T>): Promise<T> {
     const before = this.#pageStore.snapshot();
     const importersBefore = this.#importers.snapshot();
-    const timelinesBefore = this.#timelines.snapshot();
+    const sequencesBefore = this.#sequences.snapshot();
     try {
       return await operation();
     } catch (error) {
       this.#pageStore.restore(before);
       this.#importers.restore(importersBefore);
-      this.#timelines.restore(timelinesBefore);
+      this.#sequences.restore(sequencesBefore);
       throw error;
     }
   }
@@ -260,6 +260,6 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     this.#pageStore.clear();
-    this.#timelines.clear();
+    this.#sequences.clear();
   }
 }
