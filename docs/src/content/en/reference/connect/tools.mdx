@@ -356,9 +356,16 @@ In an agent's [channel](/docs/channels) thread, the paused call shows a card wit
 1. **I've connected** checks the platform. When the connection is active, the call finishes and the agent continues. Otherwise the card keeps waiting, or the call finishes as failed when the sign-in didn't finish or its link expired.
 1. **Cancel** finishes the call as failed with "The user cancelled connecting."
 
+Each button checks the platform first. When the provider is already connected, for example from your app, the call finishes as connected, even after **Cancel**. The card needs an adapter that shows buttons and a `toolDisplay` mode other than `'text'`. In `'text'` mode no card is posted and the run stays paused.
+
 The sign-in link is never in the thread, in the card, in the tool's result, or in logs. When Mastra can't deliver it privately, or the platform can't start a sign-in, the card asks the user to connect the provider from your app instead, and still offers **I've connected** and **Cancel**.
 
-Only the person the conversation belongs to can start a sign-in. Mastra compares that user's resource ID, [`getChannelRun().actorResourceId`](/reference/agents/channels#getchannelrun), with the conversation's resource. Anyone else who selects **Connect** gets a notice and no sign-in starts. When the toolset resolves for a different resource than the conversation's, as the example below does when another member selects a button, **Connect** and **I've connected** leave the card unchanged and only **Cancel** ends the call. Who may answer the card at all follows the adapter's [`toolApprovers`](/reference/agents/channels#per-adapter-options) setting.
+Only the person the conversation belongs to can start a sign-in. Mastra compares that user's resource ID, [`getChannelRun().actorResourceId`](/reference/agents/channels#getchannelrun), with the conversation's resource. Anyone else who selects **Connect** gets a notice and no sign-in starts. The toolset must resolve for the conversation's resource too:
+
+- When it resolves for a different resource as the call starts, for example when another member asks in someone else's thread and the toolset follows the user who wrote, the call shows no card. It returns right away, telling the agent the provider can't be connected from this conversation and should be connected from your app.
+- When it resolves for a different resource as a button is selected, for example when another member selects it, **Connect** and **I've connected** leave the card unchanged and only **Cancel** ends the call.
+
+The call also returns without a card when the model's tool call ID is too long for a [button ID](/reference/agents/channels#toolresumebutton). Who may answer the card at all follows the adapter's [`toolApprovers`](/reference/agents/channels#per-adapter-options) setting.
 
 By default a channel conversation's resource is `<platform>:<userId>` of the user who started it. To scope the toolset to that user, derive `resourceId` from the channel request context:
 
