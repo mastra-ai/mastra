@@ -29,7 +29,7 @@ Before starting an import, you need:
 
 For an interactive import, sign in and select the organization that owns the destination project:
 
-```bash
+```bash npm2yarn
 npx mastra auth login
 npx mastra auth orgs switch
 ```
@@ -46,7 +46,7 @@ You can run `--dry-run` without this token because a dry run doesn't contact the
 
 `--target-project` names the destination: the Mastra Platform project that receives the traces. Specify it with a project name, slug, or ID, or set `MASTRA_PROJECT_ID`:
 
-```bash
+```bash npm2yarn
 npx mastra traces import langfuse --target-project my-mastra-project --dry-run
 ```
 
@@ -81,7 +81,7 @@ LANGFUSE_BASE_URL=https://us.cloud.langfuse.com
 
 Run a dry run before uploading:
 
-```bash
+```bash npm2yarn
 npx mastra traces import langfuse --target-project my-mastra-project --dry-run
 ```
 
@@ -99,7 +99,7 @@ It doesn't upload traces. The command prints a `--resume` command that uploads t
 
 By default, the command selects the last 30 days, ending when the import starts. Use `--since` and `--until` to choose a smaller window:
 
-```bash
+```bash npm2yarn
 npx mastra traces import langfuse \
   --target-project my-mastra-project \
   --since "$SINCE" \
@@ -124,13 +124,13 @@ Trace eligibility is based on the root observation's start time. The Langfuse ad
 
 Run the command without `--dry-run` to upload the prepared traces:
 
-```bash
+```bash npm2yarn
 npx mastra traces import langfuse --target-project my-mastra-project
 ```
 
 The CLI displays the preparation summary and asks for confirmation before upload. Pass `--yes` to skip this prompt in an automated environment:
 
-```bash
+```bash npm2yarn
 npx mastra traces import langfuse --target-project my-mastra-project --yes
 ```
 
@@ -144,7 +144,7 @@ If read-back isn't available yet or a sampled trace differs, the import pauses a
 
 Use the exact command printed by the CLI when a dry run, cancellation, interruption, upload failure, or paused verification leaves an import unfinished:
 
-```bash
+```bash npm2yarn
 npx mastra traces import langfuse \
   --resume 00000000-0000-0000-0000-000000000000 \
   --target-project my-mastra-project

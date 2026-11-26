@@ -37,6 +37,7 @@ const EXCLUDED_OPERATIONS = new Set(['getOpenApi', 'getHealth', 'getReadiness'])
 
 /** Generator inputs besides the spec that change what the pages contain. */
 const FINGERPRINT_INPUTS = [
+  'scripts/gateway-api/generate.ts',
   'scripts/gateway-api/markdown.ts',
   'scripts/gateway-api/pages.ts',
   'scripts/gateway-api/template.mustache',
