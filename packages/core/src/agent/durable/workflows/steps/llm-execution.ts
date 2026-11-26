@@ -78,7 +78,7 @@ import { createStep } from '../../../../workflows/workflow';
 import { isDownloadAssetsError } from '../../../message-list/prompt/download-assets';
 import { startRunStep } from '../../../run-lease-fence';
 import { createSignal } from '../../../signals';
-import type { AgentSignalInput, PendingSignalListener } from '../../../signals';
+import type { AgentSignalInput } from '../../../signals';
 import { TripWire } from '../../../trip-wire';
 import { isSupportedLanguageModel } from '../../../utils';
 import { ensureRemoteAbortListener, publishSignalAvailable, readRunDeadline } from '../../abort-transport';
@@ -86,7 +86,7 @@ import { DurableStepIds } from '../../constants';
 import { ExecutionFence, getExecutionOwnershipGuard } from '../../execution-fence';
 import { endRunSpansWithError, getRunRegistryEntry, markRunActive } from '../../run-registry';
 import { segmentSpanData } from '../../segment-spans';
-import { durableRunSignalsStore, storedSignalDrain } from '../../stored-signal-drain';
+import { CONSUMED_SIGNAL_IDS_KEY, durableRunSignalsStore, storedSignalDrain } from '../../stored-signal-drain';
 import {
   createStepStartChunk,
   emitChunkEvent,
@@ -810,7 +810,29 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             requestContext,
             getState: keys => params.getState(keys),
           });
-      const storedSignals = storedRead ? await storedRead() : undefined;
+      let storedSignals = storedRead ? await storedRead() : undefined;
+      // Hints the one more claim below looked for. A row it didn't find was cancelled, or the hint was a duplicate or
+      // named an unknown id, so waiting for the next step changes nothing for it.
+      const soughtSignalIds = new Set<string>();
+      // A signal announced while the claim ran may have committed after the claim read the store. One more claim
+      // takes it into this request. Its rows join the first claim's, which a run closed in between no longer returns.
+      if (
+        storedRead &&
+        storedSignals &&
+        [...hintedSignalIds].some(
+          id => !storedSignals!.state[CONSUMED_SIGNAL_IDS_KEY].includes(id) && !isInTranscript(id),
+        )
+      ) {
+        for (const id of hintedSignalIds) soughtSignalIds.add(id);
+        const first = storedSignals;
+        const second = await storedRead();
+        const taken = new Set(first.state[CONSUMED_SIGNAL_IDS_KEY]);
+        const added = (second?.signals ?? []).filter(signal => !taken.has(signal.id));
+        storedSignals = {
+          signals: [...first.signals, ...added],
+          state: { [CONSUMED_SIGNAL_IDS_KEY]: [...taken, ...added.map(signal => signal.id)] },
+        };
+      }
       if (storedSignals) consumedSignalsState = storedSignals.state;
       const queuedSignals = [
         ...(storedSignals?.signals ?? []),
@@ -822,9 +844,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       const admittedSignals = queuedSignals.map(signal => messageList.addSignal(signal));
       // Subscribed before the drain above, so nothing queued in between is missed.
       interruptible = true;
-      // A hint heard during the claims named a row they didn't take. Cutting this request short lets the next step
-      // claim it, as a hint during the request would.
-      const missedHint = [...hintedSignalIds].find(id => !isInTranscript(id));
+      // A hint no claim above looked for, such as one heard during the one more claim, names a row they may have
+      // missed. Cutting this request short lets the next step claim it, as a hint during the request would.
+      const missedHint = [...hintedSignalIds].find(id => !soughtSignalIds.has(id) && !isInTranscript(id));
       if (missedHint) interruptForSignals([{ id: missedHint }]);
       const processorPartCounts = new Map<ProcessorState, number>(
         [...(signalRegistry?.processorStates?.values() ?? [])].map(state => [state, state.streamParts.length]),
