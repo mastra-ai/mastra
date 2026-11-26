@@ -7,6 +7,7 @@ import { applyPhaseOutcome } from '../rules/phase-outcome-move.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryTransitionResult } from '../rules/types.js';
 import type { FactoryRunBindingRecord, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { FactoryCardRunState } from './board-workflow.js';
 
 /**
  * A card filed somewhere without a transition: re-filed by a reconcile pass, or moved to another
@@ -57,6 +58,11 @@ export interface FactoryBoardEngine {
    * it, so a wrapping engine sees that move like any other.
    */
   runEnded(binding: FactoryRunEndedBinding, engine: Pick<FactoryBoardEngine, 'requestMove'>): Promise<boolean>;
+  /**
+   * What the card is doing as the engine last recorded it, for an engine that keeps that. Nothing
+   * for a card it has no record of.
+   */
+  describe?(card: Pick<FactoryTransitionRequest, 'workItemId'>): Promise<FactoryCardRunState | undefined>;
   /** Workflows the engine runs cards on; `MastraFactory` registers them with the host's Mastra. */
   readonly workflows?: Readonly<Record<string, AnyWorkflow>>;
 }

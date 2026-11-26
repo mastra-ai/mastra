@@ -1,11 +1,14 @@
 import { isRunFenceConflictError, runOutsideRunFenceScope } from '@mastra/core/storage';
 
+import { boardForWorkItem } from '../boards/index.js';
+import { startsInAutoPhase } from '../boards/phase-automation.js';
+import { toBoardSource } from '../boards/project-boards.js';
 import { moveCardToBoard } from '../boards/relocate.js';
 import { applyPhaseOutcome } from '../rules/phase-outcome-move.js';
 import type { FactoryTransitionRequest } from '../rules/transition-service.js';
 import type { FactoryTransitionResult } from '../rules/types.js';
 import { boardRunId, createFactoryBoardWorkflow, FACTORY_BOARD_WORKFLOW_ID } from './board-workflow.js';
-import type { FactoryBoardWorkflow } from './board-workflow.js';
+import type { FactoryBoardWorkflow, FactoryCardRunState } from './board-workflow.js';
 import type {
   FactoryBoardEngine,
   FactoryBoardEngineContext,
@@ -58,14 +61,17 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
   constructor(context: FactoryBoardEngineContext) {
     this.#context = context;
     this.workflow = createFactoryBoardWorkflow({
-      apply: async (inputId, workItemId) => {
+      apply: async (inputId, workItemId, state) => {
         const pending = this.#pending.get(inputId);
-        if (!pending || pending.answer || pending.request.workItemId !== workItemId) return;
+        if (!pending || pending.answer || pending.request.workItemId !== workItemId) return undefined;
         try {
-          pending.answer = { result: await context.transitionService.transition(pending.request) };
+          const result = await context.transitionService.transition(pending.request);
+          pending.answer = { result };
+          return await this.#stateAfterMove(pending.request, result, state);
         } catch (error) {
           // A failed move is the caller's to report; the card's run keeps waiting for the next one.
-          pending.answer = { error };
+          pending.answer ??= { error };
+          return undefined;
         }
       },
     });
@@ -104,6 +110,44 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
       { storage: this.#context.workItems, boards: this.#context.boards, boardEngine: engine },
       binding,
     );
+  }
+
+  /** What the card's run last recorded the card doing; nothing for a card no input was asked of. */
+  async describe(card: CardRef): Promise<FactoryCardRunState | undefined> {
+    if (!this.workflow.mastra) return undefined;
+    const run = await this.workflow.getWorkflowRunById(boardRunId(card.workItemId), { withNestedWorkflows: false });
+    const state = (run?.steps?.phase as { payload?: FactoryCardRunState } | undefined)?.payload;
+    return state?.state ? state : undefined;
+  }
+
+  /**
+   * What the card is doing once a move was answered, from the phase it sits in now. A working
+   * phase is running when the move queued its run with a go-ahead: a person's or an agent's move,
+   * a card someone already started, or a phase that starts on its own. Otherwise it waits for one.
+   */
+  async #stateAfterMove(
+    request: FactoryTransitionRequest,
+    result: FactoryTransitionResult,
+    previous: FactoryCardRunState,
+  ): Promise<FactoryCardRunState | undefined> {
+    const item = await this.#context.workItems.get({ orgId: request.orgId, id: request.workItemId });
+    const phase = item?.stages[0];
+    if (!item || !phase) return undefined;
+    const boards = await toBoardSource(this.#context.boards).load(request);
+    const kind = boards.get(boardForWorkItem(item))?.phaseKind(phase);
+    if (!kind) return undefined;
+    const run =
+      result.status === 'accepted' ? result.decisions.find(decision => decision.type === 'invokeSkill') : undefined;
+    // A refused move, or one that left the card where it was, changes nothing the card was doing there.
+    if (previous.phase === phase && previous.state && !run) return previous;
+    if (kind !== 'working') return { state: kind, phase, probes: 0 };
+    const goAhead =
+      run !== undefined &&
+      (request.actor.type === 'human' ||
+        request.actor.type === 'agent' ||
+        item.autonomyArmedAt != null ||
+        startsInAutoPhase(boards, item, run));
+    return { state: goAhead ? 'running' : 'awaiting_start', phase, probes: 0 };
   }
 
   #ask(card: CardRef, inputId: string, pending: PendingInput): Promise<void> {

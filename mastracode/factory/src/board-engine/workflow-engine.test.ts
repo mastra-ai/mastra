@@ -109,6 +109,72 @@ describe('the workflow board engine', () => {
     });
   });
 
+  it('records what the card is doing after each move, by the phase it lands in', async () => {
+    const { storage, engine, item } = await setup();
+    await expect(engine.describe({ workItemId: item.id })).resolves.toBeUndefined();
+
+    await engine.requestMove(await personMove(storage, item.id, 'intake', 'drag-1')());
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'resting',
+      phase: 'intake',
+      probes: 0,
+    });
+
+    // A refused move leaves what the card was doing as it was.
+    await expect(
+      engine.requestMove(await personMove(storage, item.id, 'no-such-phase', 'drag-2')()),
+    ).resolves.toMatchObject({ status: 'rejected' });
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'resting',
+      phase: 'intake',
+      probes: 0,
+    });
+
+    await engine.requestMove(await personMove(storage, item.id, 'done', 'drag-3')());
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'terminal',
+      phase: 'done',
+      probes: 0,
+    });
+  });
+
+  it('records a working phase as running once its run has a go-ahead, and as awaiting its start until then', async () => {
+    const { storage, engine, item, binding } = await setup();
+    await engine.requestMove(await personMove(storage, item.id, 'intake', 'drag-1')());
+    const into = async (stage: string, identity: string) => ({
+      ...(await personMove(storage, item.id, stage, identity)()),
+      ingress: { type: 'rule' as const, identity },
+    });
+
+    // A rule's move carries nobody's go-ahead, and Planning doesn't start on its own.
+    await expect(
+      engine.requestMove({ ...(await into('planning', 'rule-1')), actor: { type: 'system', id: 'rule' } }),
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'planning' });
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'awaiting_start',
+      phase: 'planning',
+      probes: 0,
+    });
+
+    // The card's own session ending the phase is the go-ahead for the next phase's run.
+    await storage.update({
+      orgId: ORG,
+      id: item.id,
+      userId: 'agent:binding',
+      patch: {
+        metadata: {
+          [PHASE_EXIT_METADATA_KEY]: { phase: 'planning', tool: 'submit_plan', at: new Date().toISOString() },
+        },
+      },
+    });
+    await expect(engine.runEnded(binding, engine)).resolves.toBe(true);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'running',
+      phase: 'execute',
+      probes: 0,
+    });
+  });
+
   it("moves nothing on a resume the engine didn't ask for, and keeps the move out of the run's snapshot", async () => {
     const { storage, engine, mastra, item } = await setup();
     await engine.requestMove(await personMove(storage, item.id, 'intake', 'drag-1')());
@@ -127,6 +193,12 @@ describe('the workflow board engine', () => {
     const stored = await workflow.getWorkflowRunById(boardRunId(item.id));
     expect(JSON.stringify(stored)).not.toContain('user-1');
     expect(JSON.stringify(stored)).not.toContain(ORG);
+    // What the run recorded the card doing is all it holds, and the forged resumes left it alone.
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'resting',
+      phase: 'intake',
+      probes: 0,
+    });
     await expect(engine.requestMove(await personMove(storage, item.id, 'done', 'drag-2')())).resolves.toMatchObject({
       status: 'accepted',
       stage: 'done',
