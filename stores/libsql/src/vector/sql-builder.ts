@@ -26,20 +26,72 @@ type FilterOperator = {
 
 type OperatorFn = (key: string, value?: any) => FilterOperator;
 
+// JSON types reported by SQLite's `json_type()` for values compared with
+// `$eq`/`$ne`. `json_type()` reports booleans as 'true'/'false' (not 'boolean')
+// and numbers as either 'integer' or 'real'. Returns `null` for values we cannot
+// type-guard (objects, arrays, `undefined`), which fall back to a plain compare.
+const getJsonTypesForValue = (value: unknown): string[] | null => {
+  switch (typeof value) {
+    case 'boolean':
+      return [value ? 'true' : 'false'];
+    case 'number':
+      return ['integer', 'real'];
+    case 'bigint':
+      return ['integer'];
+    case 'string':
+      return ['text'];
+    default:
+      return null;
+  }
+};
+
+// Builds the stored-JSON-type guard for a value, or `null` when the value has no
+// JSON type we can match on.
+const getJsonTypeGuard = (jsonPath: string, value: unknown): string | null => {
+  const types = getJsonTypesForValue(value);
+  if (!types) return null;
+  const jsonType = `json_type(metadata, ${jsonPath})`;
+  return types.length === 1
+    ? `${jsonType} = '${types[0]}'`
+    : `${jsonType} IN (${types.map(type => `'${type}'`).join(', ')})`;
+};
+
 // Helper functions to create operators
-const createBasicOperator = (symbol: string) => {
+const createBasicOperator = (symbol: '=' | '!=') => {
   return (key: string, value: any): FilterOperator => {
     const jsonPath = getJsonPath(key);
+    const jsonType = `json_type(metadata, ${jsonPath})`;
+    const extracted = `json_extract(metadata, ${jsonPath})`;
+
+    // Select null versus non-null SQL at build time. Two-argument
+    // `json_type(metadata, path)` yields SQL NULL for an absent path and 'null'
+    // for an explicit JSON null, so the two are distinguishable. This also lets
+    // us bind the value once instead of repeating it to detect null.
+    if (value === null) {
+      return symbol === '='
+        ? { sql: `${jsonType} = 'null'`, needsValue: false }
+        : // $ne: null keeps the existing present/non-null requirement.
+          { sql: `${jsonType} IS NOT NULL AND ${jsonType} != 'null'`, needsValue: false };
+    }
+
+    const typeGuard = getJsonTypeGuard(jsonPath, value);
+    if (!typeGuard) {
+      // Objects/arrays (and undefined) keep the plain comparison.
+      return { sql: `${extracted} ${symbol} ?`, needsValue: true };
+    }
+
+    if (symbol === '=') {
+      // Require the stored JSON type and value to match, so a boolean never
+      // compares equal to the integer 0/1 that json_extract() returns for it.
+      return { sql: `(${typeGuard} AND ${extracted} = ?)`, needsValue: true };
+    }
+
+    // $ne: a present, non-null value whose stored JSON type differs is unequal,
+    // so only compare within the matching type. Missing and explicit-null rows
+    // keep their existing exclusion.
     return {
-      sql: `CASE 
-        WHEN ? IS NULL THEN json_extract(metadata, ${jsonPath}) IS ${symbol === '=' ? '' : 'NOT'} NULL
-        ELSE json_extract(metadata, ${jsonPath}) ${symbol} ?
-      END`,
+      sql: `(${jsonType} IS NOT NULL AND ${jsonType} != 'null' AND NOT (${typeGuard} AND ${extracted} = ?))`,
       needsValue: true,
-      transformValue: () => {
-        // Return the values directly, not in an object
-        return [value, value];
-      },
     };
   };
 };
@@ -52,9 +104,11 @@ const createNumericOperator = (symbol: string) => {
       typeof value === 'number' || (typeof value === 'string' && !isNaN(Number(value)) && value.trim() !== '');
 
     if (isNumeric) {
-      // For numeric values, cast to NUMERIC for proper comparison
+      // Range comparisons are numeric only: guard the CAST with the stored JSON
+      // type so booleans, text, null, arrays and objects are never coerced into
+      // numeric candidates. Numeric-string operands are still accepted.
       return {
-        sql: `CAST(json_extract(metadata, ${jsonPath}) AS NUMERIC) ${symbol} ?`,
+        sql: `(json_type(metadata, ${jsonPath}) IN ('integer', 'real') AND CAST(json_extract(metadata, ${jsonPath}) AS NUMERIC) ${symbol} ?)`,
         needsValue: true,
       };
     }
@@ -72,22 +126,29 @@ const validateJsonArray = (key: string) => {
    AND json_type(json_extract(metadata, ${jsonPath})) = 'array'`;
 };
 
-const pattern = /json_extract\(metadata, '\$\.(?:"[^"]*"(?:\."[^"]*")*|[^']+)'\)/g;
+// Matches the `json_extract(metadata, '<path>')` and `json_type(metadata, '<path>')`
+// expressions the builder emits, capturing the function name and the JSON path so
+// `$elemMatch` can repoint them at the current `json_each` element.
+const pattern = /(json_extract|json_type)\(metadata, ('\$\.(?:"[^"]*"(?:\."[^"]*")*|[^']+)')\)/g;
 
 function buildElemMatchConditions(value: any) {
   const conditions = Object.entries(value).map(([field, fieldValue]) => {
     if (field.startsWith('$')) {
       // Direct operators on array elements ($in, $gt, etc)
       const { sql, values } = buildCondition('elem.value', { [field]: fieldValue }, '');
-      // Replace the metadata path with elem.value
-      const elemSql = sql.replace(pattern, 'elem.value');
+      // Repoint row predicates at the current element: value reads use
+      // `elem.value`, and JSON type checks use `elem.type`, which reports the
+      // element's JSON type directly without re-parsing `elem.value`.
+      const elemSql = sql.replace(pattern, (_match, fn: string) => (fn === 'json_type' ? 'elem.type' : 'elem.value'));
       return { sql: elemSql, values };
     } else if (typeof fieldValue === 'object' && !Array.isArray(fieldValue)) {
       // Nested field with operators (count: { $gt: 20 })
       const { sql, values } = buildCondition(field, fieldValue, '');
-      // Replace the field path with elem.value path
+      // Repoint the field path at the same path inside the current element.
       const jsonPath = parseJsonPathKey(field);
-      const elemSql = sql.replace(pattern, `json_extract(elem.value, '$.${jsonPath}')`);
+      const elemSql = sql.replace(pattern, (_match, fn: string) =>
+        fn === 'json_type' ? `json_type(elem.value, '$.${jsonPath}')` : `json_extract(elem.value, '$.${jsonPath}')`,
+      );
       return { sql: elemSql, values };
     }
     const jsonPath = parseJsonPathKey(field);
@@ -434,13 +495,11 @@ function buildCondition(key: string, value: any, parentPath: string): FilterResu
     return handleLogicalOperator(key as '$and' | '$or' | '$not' | '$nor', value, parentPath);
   }
 
-  // If condition is not a FilterCondition object, assume it's an equality check
+  // If condition is not a FilterCondition object, it is an equality check.
+  // Route it through $eq so an explicit null and every primitive get the same
+  // type- and null-aware predicate as `{ field: { $eq: value } }`.
   if (!value || typeof value !== 'object') {
-    const jsonPath = getJsonPath(key);
-    return {
-      sql: `json_extract(metadata, ${jsonPath}) = ?`,
-      values: [value],
-    };
+    return processOperator(key, '$eq', value);
   }
 
   //TODO: Add regex support
