@@ -219,6 +219,42 @@ describe('provider web search follows the model transport', () => {
       expect(instructions).toContain('**web_search** — Search the web');
     });
 
+    // Technical: the session's tools are built for its first model, and core only swapped native
+    // search for the gateway's on its own `mastra` gateway id, so the gateway answered 422.
+    it('keeps web search when a Claude subscription session falls back to a gateway model', async () => {
+      useTenantCredentials('oauth');
+      const sessionContext = tenantRequestContext('anthropic/claude-sonnet-4-5');
+      const tools = await createDynamicTools()({ requestContext: sessionContext });
+      expect(tools.web_search?.id).toBe('anthropic.web_search_20250305');
+
+      const requests: { url: string; body: any }[] = [];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = input instanceof Request ? input.url : String(input);
+          if (typeof init?.body === 'string') requests.push({ url, body: JSON.parse(init.body) });
+          return new Response(JSON.stringify({ error: { message: 'stubbed' } }), {
+            status: 400,
+            headers: { 'content-type': 'application/json' },
+          });
+        }),
+      );
+      const agent = new Agent({
+        id: 'web-search-fallback',
+        name: 'web-search-fallback',
+        instructions: 'Search the web.',
+        model: resolveModel('mastra/deepseek/deepseek-chat', { requestContext: sessionContext }),
+        tools,
+      });
+      await agent
+        .generate('Find the latest release notes.', { requestContext: sessionContext, maxRetries: 0 })
+        .catch(() => {});
+
+      expect(requests[0]?.url).toMatch(/\/v1\/chat\/completions$/);
+      expect(requests[0]?.body.tools).toContainEqual({ type: 'openrouter:web_search' });
+      expect(JSON.stringify(requests[0]?.body.tools)).not.toContain('anthropic:web_search');
+    });
+
     it("routes search through the gateway on the tenant's own gateway key", async () => {
       vi.stubEnv('MASTRA_GATEWAY_API_KEY', '');
       const tenantStore: CredentialStore = {

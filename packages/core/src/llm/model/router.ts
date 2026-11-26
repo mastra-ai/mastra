@@ -20,7 +20,11 @@ import type {
 import { defaultGateways } from './gateways/defaults.js';
 import { GatewayManager } from './gateways/index.js';
 import { gatewayServesObservationalMemory } from './gateways/mastra.js';
-import { isOpenRouterModel, prepareToolsForMastraGateway } from './mastra-gateway-provider-tools.js';
+import {
+  isMastraGatewayModelId,
+  isOpenRouterModel,
+  prepareToolsForMastraGateway,
+} from './mastra-gateway-provider-tools.js';
 
 import { createOpenAIWebSocketFetch } from './openai-websocket-fetch.js';
 import type { OpenAIWebSocketFetch } from './openai-websocket-fetch.js';
@@ -469,7 +473,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       headers: mergeHeaders(this.config.headers, auth.headers),
       ...resolved,
     });
-    if (this.gatewayId === 'mastra' && isOpenRouterModel(model)) {
+    if (isMastraGatewayModelId(this.config.routerId, this.gatewayId) && isOpenRouterModel(model)) {
       sanitizedOptions = prepareToolsForMastraGateway(sanitizedOptions, this.config.routerId);
     }
 
@@ -531,7 +535,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       responsesWebSocket: websocket,
       ...resolved,
     });
-    if (this.gatewayId === 'mastra' && isOpenRouterModel(model)) {
+    if (isMastraGatewayModelId(this.config.routerId, this.gatewayId) && isOpenRouterModel(model)) {
       sanitizedOptions = prepareToolsForMastraGateway(sanitizedOptions, this.config.routerId);
     }
 

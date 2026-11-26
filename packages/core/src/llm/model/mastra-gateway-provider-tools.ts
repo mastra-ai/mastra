@@ -12,6 +12,14 @@ const NATIVE_WEB_SEARCH_TOOL_IDS: Record<WebSearchProviderToolId, true> = {
   'xai.web_search': true,
 };
 
+/**
+ * True for a `mastra/...` model id, the ids served by the Mastra gateway. A custom gateway that
+ * forwards those models keeps the id under its own prefix (`<gatewayId>/mastra/...`).
+ */
+export function isMastraGatewayModelId(routerId: string, gatewayId: string): boolean {
+  return routerId.startsWith('mastra/') || routerId.startsWith(`${gatewayId}/mastra/`);
+}
+
 /** True for the gateway's OpenRouter chat models, false for its native Anthropic OAuth models. */
 export function isOpenRouterModel(model: { provider?: unknown }): boolean {
   return (
