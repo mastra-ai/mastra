@@ -857,4 +857,136 @@ describe('QdrantFilterTranslator', () => {
       expect(translator.translate(filter)).toEqual(expected);
     });
   });
+
+  describe('Mixed Logical and Field Operators', () => {
+    it('ANDs a leading $or with a sibling field', () => {
+      const filter = {
+        $or: [{ status: 'active' }, { featured: true }],
+        tenantId: 'tenant-a',
+      } as QdrantVectorFilter;
+
+      expect(translator.translate(filter)).toEqual({
+        must: [
+          {
+            should: [
+              { key: 'status', match: { value: 'active' } },
+              { key: 'featured', match: { value: true } },
+            ],
+          },
+          { key: 'tenantId', match: { value: 'tenant-a' } },
+        ],
+      });
+    });
+
+    it('ANDs a trailing $or with a leading sibling field', () => {
+      const filter = {
+        tenantId: 'tenant-a',
+        $or: [{ status: 'active' }, { featured: true }],
+      } as QdrantVectorFilter;
+
+      expect(translator.translate(filter)).toEqual({
+        must: [
+          { key: 'tenantId', match: { value: 'tenant-a' } },
+          {
+            should: [
+              { key: 'status', match: { value: 'active' } },
+              { key: 'featured', match: { value: true } },
+            ],
+          },
+        ],
+      });
+    });
+
+    it('ANDs $and with sibling fields', () => {
+      const filter = {
+        $and: [{ price: { $gte: 10 } }, { price: { $lte: 100 } }],
+        category: 'books',
+      } as QdrantVectorFilter;
+
+      expect(translator.translate(filter)).toEqual({
+        must: [
+          {
+            must: [
+              { key: 'price', range: { gte: 10 } },
+              { key: 'price', range: { lte: 100 } },
+            ],
+          },
+          { key: 'category', match: { value: 'books' } },
+        ],
+      });
+    });
+
+    it('ANDs a root $not with sibling fields', () => {
+      const filter = {
+        $not: { status: 'archived' },
+        tenantId: 'tenant-a',
+      } as QdrantVectorFilter;
+
+      expect(translator.translate(filter)).toEqual({
+        must: [
+          { must_not: [{ key: 'status', match: { value: 'archived' } }] },
+          { key: 'tenantId', match: { value: 'tenant-a' } },
+        ],
+      });
+    });
+
+    it('ANDs several logical operators with several sibling fields', () => {
+      const filter = {
+        $or: [{ status: 'active' }, { featured: true }],
+        $and: [{ price: { $gt: 0 } }],
+        tenantId: 'tenant-a',
+        category: 'books',
+      } as QdrantVectorFilter;
+
+      expect(translator.translate(filter)).toEqual({
+        must: [
+          {
+            should: [
+              { key: 'status', match: { value: 'active' } },
+              { key: 'featured', match: { value: true } },
+            ],
+          },
+          { must: [{ key: 'price', range: { gt: 0 } }] },
+          { key: 'tenantId', match: { value: 'tenant-a' } },
+          { key: 'category', match: { value: 'books' } },
+        ],
+      });
+    });
+
+    it('ANDs a mixed object nested inside $and operands', () => {
+      const filter = {
+        $and: [{ $or: [{ status: 'active' }, { featured: true }], tenantId: 'tenant-a' }, { category: 'books' }],
+      } as QdrantVectorFilter;
+
+      expect(translator.translate(filter)).toEqual({
+        must: [
+          {
+            must: [
+              {
+                should: [
+                  { key: 'status', match: { value: 'active' } },
+                  { key: 'featured', match: { value: true } },
+                ],
+              },
+              { key: 'tenantId', match: { value: 'tenant-a' } },
+            ],
+          },
+          { key: 'category', match: { value: 'books' } },
+        ],
+      });
+    });
+
+    it('keeps field-level $not when mixed with sibling operators', () => {
+      const filter = {
+        price: { $not: { $gte: 100 }, $exists: true },
+      } as QdrantVectorFilter;
+
+      expect(translator.translate(filter)).toEqual({
+        must: [
+          { must_not: [{ key: 'price', range: { gte: 100 } }] },
+          { must_not: [{ is_null: { key: 'price' } }, { is_empty: { key: 'price' } }] },
+        ],
+      });
+    });
+  });
 });
