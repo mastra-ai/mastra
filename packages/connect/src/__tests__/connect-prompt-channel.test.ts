@@ -485,6 +485,9 @@ describe('request_connection in a channel thread', () => {
     await t.click('connect', bob);
 
     expect(t.platform.sessionsCreated()).toBe(0);
+    expect(t.recorded.filter(entry => entry.kind === 'ephemeral')).toEqual([
+      expect.objectContaining({ userId: bob.userId, body: expect.stringContaining('Only the person') }),
+    ]);
     expect(t.shownActions()).toEqual(['connect', 'cancel']);
   });
 

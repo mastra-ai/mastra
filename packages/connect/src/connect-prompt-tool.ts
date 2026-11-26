@@ -235,6 +235,14 @@ export function buildConnectPromptTool({
         const owner = agent?.resourceId ?? resourceId;
         if (resourceId !== owner) {
           if (resumed.action === 'cancel') return failed(CONNECT_CANCELLED_ERROR);
+          if (run?.actorResourceId === owner) {
+            context?.mastra
+              ?.getLogger?.()
+              ?.warn(
+                "request_connection's tools serve another resource than this conversation, so its owner can't connect here",
+                { toolsResourceId: resourceId, conversationResourceId: owner },
+              );
+          }
           await refuse();
           return pause({
             connectionId: previous?.connectionId,
@@ -292,7 +300,8 @@ export function buildConnectPromptTool({
           }
         } catch (error) {
           // The platform couldn't start a sign-in here; the app still can.
-          // Its errors carry the status and reason, never the link.
+          // Its errors carry the status and the platform's reason; the link is
+          // in no request or response on these paths.
           context?.mastra?.getLogger?.()?.warn('request_connection could not start a sign-in', {
             provider: requested.id,
             error: error instanceof Error ? error.message : String(error),
