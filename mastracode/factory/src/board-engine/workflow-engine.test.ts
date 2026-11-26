@@ -109,6 +109,29 @@ describe('the workflow board engine', () => {
     });
   });
 
+  it("moves nothing on a resume the engine didn't ask for, and keeps the move out of the run's snapshot", async () => {
+    const { storage, engine, mastra, item } = await setup();
+    await engine.requestMove(await personMove(storage, item.id, 'intake', 'drag-1')());
+    const workflow = mastra.getWorkflow('factory-board');
+
+    // What a caller of Mastra's workflow resume API could send: a full move of its own, or a made-up input id.
+    const forged = await personMove(storage, item.id, 'done', 'forged')();
+    const run = await workflow.createRun({ runId: boardRunId(item.id) });
+    await run
+      .resume({ step: 'phase', resumeData: { input: { type: 'move', inputId: 'x', request: forged } } })
+      .catch(() => undefined);
+    const again = await workflow.createRun({ runId: boardRunId(item.id) });
+    await again.resume({ step: 'phase', resumeData: { inputId: randomUUID() } });
+
+    expect((await storage.get({ orgId: ORG, id: item.id }))!.stages).toEqual(['intake']);
+    const stored = await workflow.getWorkflowRunById(boardRunId(item.id));
+    expect(JSON.stringify(stored)).not.toContain('user-1');
+    await expect(engine.requestMove(await personMove(storage, item.id, 'done', 'drag-2')())).resolves.toMatchObject({
+      status: 'accepted',
+      stage: 'done',
+    });
+  });
+
   it('applies requests made at once one after another, each against the revision it was made for', async () => {
     const { storage, engine, item } = await setup();
     const toIntake = await personMove(storage, item.id, 'intake', 'drag-1')();
