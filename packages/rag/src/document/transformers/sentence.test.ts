@@ -150,31 +150,53 @@ describe('SentenceTransformer boundaries', () => {
       expect(split('1. First item\n2. Second item')).toEqual(['1. First item\n2. Second item']);
     });
 
-    it('keeps a colon-introduced inline numbered list intact', () => {
-      expect(split('Steps: 1. Open the file 2. Save it.')).toEqual(['Steps: 1. Open the file 2. Save it.']);
+    it('keeps a colon-introduced numbered list whose next item follows immediately', () => {
+      expect(split('Steps: 1. Open 2. Edit')).toEqual(['Steps: 1. Open 2. Edit']);
       expect(split('Steps: 1. Open 2. Edit 3. Save the file.')).toEqual(['Steps: 1. Open 2. Edit 3. Save the file.']);
     });
 
-    it('still ends a sentence after a colon-labelled value', () => {
-      // The label happens to end with a colon, but no list starting at `1.` follows, so the
-      // integer is a sentence-final number, not a list marker.
+    it('still ends a sentence at a colon-labelled number', () => {
+      // A colon label and a colon-introduced list are only distinguishable while the list
+      // continues immediately, so the rule never looks at the number itself. All of the
+      // shapes below therefore split: `Result: 5. The score was 6. Done.` and the same prose
+      // with `1.`/`2.`, `Result: 1. The score was 2. Done.`, are the same shape.
       expect(split('Result: 5. Next sentence.')).toEqual(['Result: 5.', 'Next sentence.']);
       expect(split('Total: 5. Another line.')).toEqual(['Total: 5.', 'Another line.']);
+      expect(split('Result: 5. The score was 6. Done.')).toEqual(['Result: 5.', 'The score was 6.', 'Done.']);
+      expect(split('Result: 1. The score was 2. Done.')).toEqual(['Result: 1.', 'The score was 2.', 'Done.']);
+      expect(split('Steps: 1. Open the file 2. Save it.')).toEqual(['Steps: 1.', 'Open the file 2.', 'Save it.']);
       expect(split('It was built in 2020. Then it grew.')).toEqual(['It was built in 2020.', 'Then it grew.']);
     });
 
     it('keeps the boundary when a number appears later in the paragraph', () => {
       // The later numbers are sentence-final, not markers continuing a list opened by the
       // colon label, so the boundary after `5.` must not be suppressed by the lookahead.
-      expect(split('Result: 5. The score was 6. Done.')).toEqual(['Result: 5.', 'The score was 6.', 'Done.']);
       expect(split('Result: 5. Next sentence. 1. First item.')).toEqual([
         'Result: 5.',
         'Next sentence. 1. First item.',
+      ]);
+      expect(split('Result: 1. Next sentence. 2. Second item.')).toEqual([
+        'Result: 1.',
+        'Next sentence. 2. Second item.',
       ]);
     });
 
     it('still requires whitespace after ASCII enders', () => {
       expect(split('Hello.World')).toEqual(['Hello.World']);
     });
+
+    it('scans long newline runs without quadratic backtracking', () => {
+      // Guards the blank-line check in the boundary predicate. The previous unanchored
+      // `/(?:^|\n)\s*$/` was quadratic over newline runs: this input took >8s before the
+      // change and ~10ms after it, so the timeout below is the assertion.
+      const text = `a${'\n'.repeat(100_000)}X zz. Next.`;
+      const chunks = new SentenceTransformer({
+        maxSize: 1_000_000,
+        minSize: 1,
+        targetSize: 1,
+        overlap: 0,
+      }).splitText({ text });
+      expect(chunks).toEqual([`a${'\n'.repeat(100_000)}X zz.`, 'Next.']);
+    }, 5000);
   });
 });

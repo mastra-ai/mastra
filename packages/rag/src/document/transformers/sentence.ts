@@ -96,15 +96,17 @@ export class SentenceTransformer extends TextTransformer {
     //  - it starts a line (`\n2. Second`);
     //  - an earlier bare-number marker already appears in the sentence
     //    (`1. First 2. Second`);
-    //  - it opens a colon-introduced numbered list (`Steps: 1. Open 2. Save`).
-    // The colon lookahead stays bounded to the list itself: the first marker must be `1`
-    // and item `2` must follow, so neither a colon-labelled value (`Result: 5. The score
-    // was 6. Done.`) nor an unrelated later list (`Result: 5. Next. 1. First item.`) can
-    // suppress the sentence boundary after the number.
-    const startsLine = /(?:^|\n)\s*$/.test(prefix);
+    //  - it opens a colon-introduced numbered list whose next item follows immediately
+    //    (`Steps: 1. Open 2. Edit`).
+    // The colon lookahead is value-independent and bounded to the token that follows, so it
+    // never depends on the number's value or reaches a later, unrelated list: a colon-labelled
+    // value (`Result: 5. The score was 6. Done.`) and the same prose with `1.`/`2.`
+    // (`Result: 1. The score was 2. Done.`) both keep their sentence boundaries.
+    // `startsLine` inspects the last line of the prefix directly: the equivalent unanchored
+    // `/(?:^|\n)\s*$/` backtracks quadratically over long newline runs.
+    const startsLine = /^\s*$/.test(prefix.slice(prefix.lastIndexOf('\n') + 1));
     const hasEarlierMarker = /(?:^|\s)\d+\.\s/.test(prefix);
-    const startsColonList =
-      baseWord === '1' && previous !== undefined && previous.endsWith(':') && /\s2\.\s/.test(remainingText);
+    const startsColonList = previous !== undefined && previous.endsWith(':') && /^\s*\S+\s+\d+\.\s/.test(remainingText);
     const isListMarker =
       /^\d+$/.test(baseWord) &&
       (!previous ||
