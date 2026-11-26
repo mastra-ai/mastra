@@ -654,6 +654,8 @@ export async function rebuildRunToolsFromMastra(options: {
         // Memory and workspace stay: the save queue is bound to the entry's memory, and a warm resume
         // keeps them too. Which thread and resource they touch comes from the run.
         refreshRunRequestTools(existing, tools, resolveRequestContext);
+        // Cached memory permission checks passed for the earlier caller.
+        existing.memoryAuthorizationChecks = undefined;
         existing.requestContext = resolveRequestContext;
         existing.requestContextRebuilt = true;
         existing.requestContextSegment = getStepSegment(runId, requestContext);

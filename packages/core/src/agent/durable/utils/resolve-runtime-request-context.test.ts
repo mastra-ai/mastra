@@ -197,6 +197,7 @@ describe('rebuildRunToolsFromMastra request context', () => {
       saveQueueManager,
       processorStates,
       outputProcessors,
+      memoryAuthorizationChecks: new Map([['memory:write', Promise.resolve()]]),
     };
     globalRunRegistry.set(runId, entry as any);
     const agent = {
@@ -244,6 +245,7 @@ describe('rebuildRunToolsFromMastra request context', () => {
       expect(replaced.saveQueueManager).toBe(saveQueueManager);
       expect(replaced.processorStates).toBe(processorStates);
       expect(replaced.outputProcessors).toBe(outputProcessors);
+      expect(replaced.memoryAuthorizationChecks).toBeUndefined();
 
       // A sibling step of the same segment reuses the replaced entry.
       const tools = replaced.tools;
