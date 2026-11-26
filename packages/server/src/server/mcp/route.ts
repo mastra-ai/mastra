@@ -13,7 +13,6 @@ import {
   resolveBuiltinMCPPath,
   warnOnReservedMCPServerId,
 } from './config';
-import { OFFICIAL_SKILL_FILES } from './official-skills.generated';
 
 let requestStateKey: Uint8Array | undefined;
 
@@ -249,12 +248,43 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
   },
 });
 
+let officialSkillFiles: Promise<Readonly<Record<string, string>>> | undefined;
+
+/** The vendored skill contents (~150 KB), loaded on the first skills request rather than at startup. */
+function loadOfficialSkillFiles(): Promise<Readonly<Record<string, string>>> {
+  return (officialSkillFiles ??= import('./official-skills.generated').then(
+    module => module.OFFICIAL_SKILL_FILES,
+    error => {
+      officialSkillFiles = undefined;
+      throw error;
+    },
+  ));
+}
+
 /**
- * The official Mastra skills, vendored by `pnpm sync:mastra-skills`. One object for every request, so
- * `MCPServer` builds their digests once. They change only with a release, so clients may cache them.
+ * The official Mastra skills, vendored by `pnpm sync:mastra-skills` and read as a filesystem so their
+ * contents load lazily. One object for every request, so `MCPServer` builds their digests once. They
+ * change only with a release, so clients may cache them.
  */
 const OFFICIAL_SKILLS = {
-  files: OFFICIAL_SKILL_FILES,
+  files: {
+    async readdir(dir: string) {
+      const prefix = dir === '.' || dir === '' ? '' : `${dir}/`;
+      const entries = new Map<string, 'file' | 'directory'>();
+      for (const path of Object.keys(await loadOfficialSkillFiles())) {
+        if (!path.startsWith(prefix)) continue;
+        const [name, ...rest] = path.slice(prefix.length).split('/');
+        entries.set(name!, rest.length > 0 ? 'directory' : 'file');
+      }
+      if (entries.size === 0) throw new Error(`Directory not found: ${dir}`);
+      return [...entries].map(([name, type]) => ({ name, type }));
+    },
+    async readFile(path: string) {
+      const content = (await loadOfficialSkillFiles())[path];
+      if (content === undefined) throw new Error(`File not found: ${path}`);
+      return content;
+    },
+  },
   cacheHint: { ttlMs: 60 * 60 * 1000, cacheScope: 'public' as const },
 };
 

@@ -1,0 +1,98 @@
+name: Sync official Mastra skills
+
+permissions:
+  contents: read
+
+on:
+  # Keep the skills the built-in MCP server serves in step with github.com/mastra-ai/skills
+  schedule:
+    - cron: '30 7 * * *' # Daily
+  workflow_dispatch:
+
+concurrency:
+  group: sync-mastra-skills
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    # Only run on the main repository, not on forks
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: starsling-ubuntu-26.04
+    timeout-minutes: 15
+    env:
+      HUSKY: 0
+
+    steps:
+      - name: Initial checkout
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 10
+        with:
+          # Use default GITHUB_TOKEN for initial checkout
+          # This is needed to access the .github/actions/app-auth action
+          ref: main
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Dane App Auth
+        id: app-auth
+        uses: ./.github/actions/app-auth
+        with:
+          client-id: ${{ vars.DANE_CLIENT_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+
+      - name: Re-checkout with app token
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 10
+        with:
+          ref: main
+          token: ${{ steps.app-auth.outputs.token }}
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Sync skills
+        # Leaves the generated file untouched when the skills themselves haven't changed.
+        run: pnpm --filter ./packages/server sync:mastra-skills
+
+      - name: Check for changes
+        id: git-check
+        run: |
+          if ! git diff --quiet packages/server/src/server/mcp/official-skills.generated.ts; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create changeset
+        if: steps.git-check.outputs.changed == 'true'
+        run: |
+          if ls .changeset/automated-mastra-skills-*.md >/dev/null 2>&1; then
+            echo "Automated skills changeset already exists, skipping"
+          else
+            CHANGESET_FILE=".changeset/automated-mastra-skills-$(date +%Y%m%d-%H%M%S).md"
+            cat > "${CHANGESET_FILE}" << 'EOF'
+          ---
+          '@mastra/server': patch
+          ---
+
+          Update the official Mastra skills served by the built-in MCP server to the latest from github.com/mastra-ai/skills
+          EOF
+            echo "CHANGESET_FILE=${CHANGESET_FILE}" >> $GITHUB_ENV
+          fi
+
+      - name: Commit and push changes
+        if: steps.git-check.outputs.changed == 'true'
+        run: |
+          git add packages/server/src/server/mcp/official-skills.generated.ts
+          if [ -n "${CHANGESET_FILE}" ]; then
+            git add "${CHANGESET_FILE}"
+          fi
+          git commit -m "chore: sync official Mastra skills [skip ci]"
+          git pull --rebase --autostash
+          git push
+
+      - name: Log no changes
+        if: steps.git-check.outputs.changed != 'true'
+        run: echo "ℹ️ Official Mastra skills unchanged"
