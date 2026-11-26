@@ -27,7 +27,7 @@ import { SessionComposer, SessionSurface, TranscriptEntries } from '@mastra/play
   }
 >
   <TranscriptEntries entries={transcript.entries} onApprove={approve} onRespond={respond} />
-</SessionSurface>
+</SessionSurface>;
 ```
 
 Annotations are opt-in. Inside a `ChatAnnotationsProvider`, add `<TranscriptAnnotations />` to the children and pass `annotations={<ComposerAnnotations />}` to `SessionComposer`.

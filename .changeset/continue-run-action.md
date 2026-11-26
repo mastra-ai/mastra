@@ -15,10 +15,7 @@ const channels = {
       formatError: error =>
         Card({
           title: 'Run stopped',
-          children: [
-            CardText(error.message),
-            Actions([Button({ id: CONTINUE_RUN_ACTION_ID, label: 'Continue' })]),
-          ],
+          children: [CardText(error.message), Actions([Button({ id: CONTINUE_RUN_ACTION_ID, label: 'Continue' })])],
         }),
     },
   },

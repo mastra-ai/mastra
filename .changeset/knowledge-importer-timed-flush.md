@@ -10,7 +10,7 @@ await runKnowledgeImport({
   host,
   bindingId: 'linear',
   flushAfterMs: 10_000, // send waiting items after 10 seconds instead of 30
-})
+});
 ```
 
 If the host can't take a batch, the run fails there and no later `ctx.state.set()` saves a cursor past it, however the batch was sent.

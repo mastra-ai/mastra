@@ -781,6 +781,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'browsers/mastra-platform',
+          label: 'Mastra Platform',
+          customProps: { icon: '/img/integrations/mastra.svg', customCSS: 'dark:invert' },
+        },
+        {
+          type: 'doc',
           id: 'tools/gitlab',
           label: 'GitLab',
           customProps: {

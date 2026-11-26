@@ -1,70 +1,90 @@
-import { StagehandBrowser } from '@mastra/stagehand';
-import type { StagehandBrowserConfig } from '@mastra/stagehand';
+import { AgentBrowser } from '@mastra/agent-browser';
+import type { AgentBrowserConfig } from '@mastra/agent-browser';
+import { resolveViewportSize } from '@mastra/core/browser';
+import type { PlatformAccessToken } from '@mastra/platform-workspace';
+import { PlatformBrowserSessions } from './sessions';
+import type { PlatformBrowserSessionOptions } from './sessions';
+import { PlatformBrowserThreadManager } from './thread-manager';
+
+export type { PlatformBrowserSessionOptions } from './sessions';
 
 export interface PlatformBrowserOptions extends Omit<
-  StagehandBrowserConfig,
-  'cdpUrl' | 'scope' | 'env' | 'apiKey' | 'projectId'
+  AgentBrowserConfig,
+  'cdpUrl' | 'cdpHeaders' | 'createThreadManager' | 'profile' | 'executablePath' | 'recording'
 > {
-  /** Existing Platform-provisioned CDP URL. When supplied, no API request or access token is needed. */
-  cdpUrl?: string;
   /** Platform access token. Falls back to `MASTRA_PLATFORM_ACCESS_TOKEN`, then `MASTRA_PLATFORM_SECRET_KEY`. */
-  accessToken?: string;
+  accessToken?: PlatformAccessToken;
   /** Mastra Platform project ID. Falls back to `MASTRA_PROJECT_ID`. */
   projectId?: string;
-  /** Browser provisioning API URL. Falls back to `MASTRA_BROWSER_API_URL`. */
-  apiUrl?: string;
+  /** Environment the browsers belong to. Falls back to `MASTRA_ENVIRONMENT_ID`. */
+  environmentId?: string;
+  /** Options for every hosted browser this instance starts. */
+  session?: PlatformBrowserSessionOptions;
   fetch?: typeof fetch;
 }
 
-const DEFAULT_API_URL = 'https://platform.mastra.ai';
+/**
+ * Hosted browsers from Mastra Platform, driven with the same tools as {@link AgentBrowser}.
+ *
+ * Each thread gets its own browser by default (`scope: 'thread'`), ended when the thread's browser
+ * closes. With `scope: 'shared'`, every thread drives one browser, ended when this instance closes.
+ * The workspace proxy URL follows `MASTRA_WORKSPACE_PROXY_URL` or `MASTRA_PLATFORM_REGION`.
+ */
+export class PlatformBrowser extends AgentBrowser {
+  override readonly name = 'PlatformBrowser';
+  override readonly provider = 'mastra/platform';
 
-function trimTrailingSlashes(url: string): string {
-  let end = url.length;
-  while (end > 0 && url[end - 1] === '/') end--;
-  return url.slice(0, end);
-}
+  readonly #sessions: PlatformBrowserSessions;
+  readonly #shared: { id?: string };
 
-/** A Stagehand browser connected to a Platform-provisioned Browserbase session. */
-export class PlatformBrowser extends StagehandBrowser {
   constructor(options: PlatformBrowserOptions = {}) {
-    const {
-      cdpUrl,
-      accessToken = process.env.MASTRA_PLATFORM_ACCESS_TOKEN ?? process.env.MASTRA_PLATFORM_SECRET_KEY,
-      projectId = process.env.MASTRA_PROJECT_ID,
-      apiUrl = process.env.MASTRA_BROWSER_API_URL ?? DEFAULT_API_URL,
-      fetch: fetchImpl = fetch,
-      ...stagehandOptions
-    } = options;
-    if (!cdpUrl && !accessToken) throw new Error('PlatformBrowser: accessToken is required');
-    if (!cdpUrl && !projectId) throw new Error('PlatformBrowser: projectId is required');
+    const { accessToken, projectId, environmentId, session, fetch: fetchImpl, ...browserConfig } = options;
+    const viewport = resolveViewportSize(browserConfig.viewport);
+    const sessions = new PlatformBrowserSessions({
+      accessToken,
+      projectId,
+      environmentId,
+      session,
+      fetch: fetchImpl,
+      viewport,
+    });
+    const shared: { id?: string } = {};
 
-    super({
-      ...stagehandOptions,
-      scope: 'shared',
-      cdpUrl:
-        cdpUrl ||
-        (async () => {
-          const response = await fetchImpl(`${trimTrailingSlashes(apiUrl)}/v1/browsers/sessions`, {
-            method: 'POST',
-            headers: {
-              authorization: `Bearer ${accessToken}`,
-              'content-type': 'application/json',
-            },
-            body: JSON.stringify({ projectId }),
-            signal: AbortSignal.timeout(30_000),
-          });
-          if (!response.ok) throw new Error(`PlatformBrowser: browser provisioning failed (${response.status})`);
-          const result: unknown = await response.json();
-          if (
-            !result ||
-            typeof result !== 'object' ||
-            !('connectUrl' in result) ||
-            typeof result.connectUrl !== 'string'
-          ) {
-            throw new Error('PlatformBrowser: browser provisioning returned no connectUrl');
-          }
-          return result.connectUrl;
-        }),
+    if (browserConfig.scope === 'shared') {
+      super({
+        ...browserConfig,
+        scope: 'shared',
+        cdpUrl: async () => {
+          // A relaunch after the browser closed starts a fresh one; end the old one first.
+          if (shared.id) await sessions.end(shared.id).catch(() => {});
+          const opened = await sessions.open();
+          shared.id = opened.id;
+          return opened.cdpUrl;
+        },
+      });
+    } else {
+      super({
+        ...browserConfig,
+        scope: 'thread',
+        createThreadManager: config => new PlatformBrowserThreadManager({ ...config, sessions }),
+      });
+    }
+    this.#sessions = sessions;
+    this.#shared = shared;
+  }
+
+  /** Platform browsers always run on a remote host, so their PID must never be captured (issue #23588). */
+  protected override isRemoteThreadBrowser(): boolean {
+    return true;
+  }
+
+  protected override async doClose(): Promise<void> {
+    await super.doClose();
+    const id = this.#shared.id;
+    if (!id) return;
+    this.#shared.id = undefined;
+    await this.#sessions.end(id).catch(error => {
+      this.logger?.warn?.(`PlatformBrowser: couldn't end browser ${id}: ${error}`);
     });
   }
 }
