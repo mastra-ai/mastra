@@ -83,6 +83,7 @@ interface ChannelConnectPromptPayload extends ConnectPromptPayload, ChannelSuspe
 const CONNECT_CANCELLED_ERROR = 'The user cancelled connecting.';
 
 const NOT_OWNER_NOTICE = 'Only the person this conversation belongs to can connect an account here.';
+const UNCONFIRMED_NOTICE = "I couldn't confirm this conversation is yours, so I can't send you a sign-in link here.";
 const EXPIRED_ERROR = 'The sign-in link expired.';
 const FAILED_ERROR = 'The sign-in did not finish.';
 
@@ -304,6 +305,17 @@ export function buildConnectPromptTool({
 
         // Connect: only the person the conversation belongs to may start a
         // sign-in, since the account they connect serves this resource.
+        if (run?.actor && run.actorResourceId === undefined) {
+          // Core couldn't resolve this user's resource (a resolveResourceId
+          // hook that failed, or a reply in text mode), so ownership can't be
+          // checked here; the app can.
+          await run.thread
+            .postEphemeral(run.actor.userId, `${UNCONFIRMED_NOTICE} Connect ${name} from the app.`, {
+              fallbackToDM: false,
+            })
+            .catch(() => null);
+          return waiting(`Connect ${name} from the app, then press I've connected.`, undefined);
+        }
         if (!run?.actor || run.actorResourceId !== owner) {
           await refuse();
           return pause({ channelCard: connectPromptCard(toolCallId, name) });

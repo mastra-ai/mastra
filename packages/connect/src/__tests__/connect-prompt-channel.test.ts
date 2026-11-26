@@ -202,6 +202,8 @@ async function setup(
     /** Who starts the thread. */
     author?: typeof alice;
     toolCallId?: string;
+    /** A resolveResourceId hook that fails for button presses, which come with no text. */
+    resolveFailsOnClicks?: boolean;
     /** False when the call is expected to finish without showing a card. */
     expectCard?: boolean;
   } = {},
@@ -233,6 +235,14 @@ async function setup(
     adapters: {
       slack: { adapter: adapter as any, streaming: false, toolApprovers: options.toolApprovers ?? 'anyone' },
     },
+    ...(options.resolveFailsOnClicks
+      ? {
+          resolveResourceId: ({ message }: { message: { text?: string; author: { userId: string } } }) => {
+            if (!message.text) throw new Error('directory is down');
+            return `slack:${message.author.userId}`;
+          },
+        }
+      : {}),
   });
   agent.setChannels(channels);
   const mastra = new Mastra({ logger: false, storage: new InMemoryStore(), agents: { agent } });
@@ -494,6 +504,34 @@ describe('request_connection in a channel thread', () => {
     expect(t.replies()[0]).toContain("Linear can't be connected from this conversation. Connect it from the app.");
     expect(t.platform.sessionsCreated()).toBe(0);
     expect((await t.agent.listSuspendedRuns({})).runs).toEqual([]);
+  });
+
+  it("tells the owner to connect from the app when their resource can't be resolved, without calling them a stranger", async () => {
+    const t = await setup({ resolveFailsOnClicks: true });
+    await t.click('connect');
+
+    expect(t.platform.sessionsCreated()).toBe(0);
+    const notices = t.recorded.filter(entry => entry.kind === 'ephemeral');
+    expect(notices).toEqual([
+      expect.objectContaining({ userId: alice.userId, body: expect.stringContaining("couldn't confirm") }),
+    ]);
+    expect(notices[0]!.body).not.toContain('Only the person');
+    expect(t.cards().at(-1)!.body).toContain('from the app');
+    expect(t.shownActions()).toEqual(['check', 'cancel']);
+
+    t.platform.rows.push({
+      id: 'c_app',
+      integrationId: 'linear',
+      status: 'active',
+      resourceId: 'slack:U-ALICE',
+      connectedByUserId: null,
+      connectedAt: null,
+      createdAt: '2026-11-26T00:00:00Z',
+      accountLabel: null,
+    });
+    await t.click('check');
+    await vi.waitFor(() => expect(t.replies()).toHaveLength(1));
+    expect(t.replies()[0]).toContain('Linear connected successfully.');
   });
 
   it('tells the agent to connect from the app when the tool call id is too long for a button', async () => {
