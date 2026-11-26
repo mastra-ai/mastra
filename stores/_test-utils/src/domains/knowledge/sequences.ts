@@ -4,6 +4,7 @@ import {
   KnowledgeSequenceItemInvalidError,
   KnowledgeSequenceNotFoundError,
   KnowledgeSequenceNotLeafError,
+  KnowledgeSequenceOrderByChangeError,
   KnowledgeSequenceParentNestedError,
   KnowledgeSequenceParentNotFoundError,
   KnowledgeSequencePurgeRefusedError,
@@ -108,7 +109,7 @@ export function createKnowledgeSequenceTests(createStore: () => Promise<Knowledg
         deletedAt: null,
         writtenBy: importer,
       });
-      expect(created.item.occurredAt.getTime()).toBe(at(0).getTime());
+      expect(created.item.occurredAt?.getTime()).toBe(at(0).getTime());
       const replay = await item('1', 0, { author: { sourceId: 'U1', name: 'Ada' } });
       expect(replay).toEqual({ status: 'unchanged', item: created.item });
     });
@@ -631,6 +632,127 @@ export function createKnowledgeSequenceTests(createStore: () => Promise<Knowledg
           writtenBy: importer,
         }),
       ).rejects.toBeInstanceOf(TypeError);
+    });
+
+    describe('position order', () => {
+      async function positioned() {
+        const base = await setup();
+        const list = await base.store.createPage({
+          parentId: base.scope.id,
+          key: 'roadmap',
+          name: 'Roadmap',
+          provenance: host,
+        });
+        expect(await base.sequences.markSequence({ pageId: list.id, orderBy: 'position' })).toEqual({
+          status: 'created',
+        });
+        const put = (externalId: string, extra: Record<string, unknown> = {}) =>
+          base.sequences.upsertItem({
+            sequenceId: list.id,
+            externalId,
+            title: externalId,
+            writtenBy: 'agent:a',
+            ...extra,
+          });
+        const ids = async (extra: Record<string, unknown> = {}) =>
+          (await base.sequences.listItems({ sequenceId: list.id, read: 'all', limit: 100, ...extra })).items.map(
+            i => i.externalId,
+          );
+        return { ...base, list, put, ids };
+      }
+
+      it('appends, inserts after and before, and reads first-by-position by default, both ways', async () => {
+        const { put, ids } = await positioned();
+        await put('a');
+        await put('c');
+        await put('b', { after: 'a' });
+        await put('start', { before: 'a' });
+        await put('end');
+        expect(await ids()).toEqual(['start', 'a', 'b', 'c', 'end']);
+        expect(await ids({ order: 'desc' })).toEqual(['end', 'c', 'b', 'a', 'start']);
+      });
+
+      it('takes no occurredAt, keeps an item in place on edit, and moves it only when told', async () => {
+        const { put, ids, sequences, list } = await positioned();
+        const a = await put('a');
+        expect(a.status).toBe('created');
+        if (a.status !== 'created') return;
+        expect(a.item.occurredAt).toBeNull();
+        expect(a.item.position).toMatch(/^[0-9a-z]+$/);
+        await put('b');
+        await put('c');
+        const edited = await put('a', { title: 'a2' });
+        expect(edited.status).toBe('updated');
+        if (edited.status !== 'updated') return;
+        expect(edited.item.position).toBe(a.item.position);
+        expect(await put('a', { title: 'a2' })).toMatchObject({ status: 'unchanged' });
+        expect(await put('a', { title: 'a2', after: 'c' })).toMatchObject({ status: 'updated' });
+        expect(await ids()).toEqual(['b', 'c', 'a']);
+        const dated = await sequences.upsertItem({
+          sequenceId: list.id,
+          externalId: 'd',
+          title: 'dated',
+          occurredAt: at(3),
+          writtenBy: 'agent:a',
+        });
+        expect(dated).toMatchObject({ status: 'created', item: { occurredAt: at(3) } });
+      });
+
+      it('takes an explicit position key, and refuses a bad key, two placements, or an unknown anchor', async () => {
+        const { put, ids } = await positioned();
+        await put('x', { position: 'm' });
+        await put('y', { position: 'c' });
+        expect(await ids()).toEqual(['y', 'x']);
+        for (const extra of [{ position: 'A' }, { position: 'a_b' }, { position: '' }, { after: 'x', before: 'y' }]) {
+          await expect(put('bad', extra)).rejects.toBeInstanceOf(KnowledgeSequenceItemInvalidError);
+        }
+        await expect(put('bad', { after: 'nope' })).rejects.toBeInstanceOf(KnowledgeSequenceItemInvalidError);
+        expect(await ids()).toEqual(['y', 'x']);
+      });
+
+      it('pages by position cursor both ways with no item skipped, and refuses a time cursor', async () => {
+        const { put, sequences, list } = await positioned();
+        const all: string[] = [];
+        for (let i = 0; i < 7; i++) {
+          await put(`i${i}`);
+          all.push(`i${i}`);
+        }
+        for (const order of ['asc', 'desc'] as const) {
+          const seen: string[] = [];
+          let cursor: string | undefined;
+          do {
+            const page = await sequences.listItems({ sequenceId: list.id, read: 'all', limit: 3, order, cursor });
+            seen.push(...page.items.map(i => i.externalId));
+            if (page.nextCursor) expect(page.nextCursor).toMatch(/^p[0-9a-z]+_.+$/);
+            cursor = page.nextCursor ?? undefined;
+          } while (cursor);
+          expect(seen).toEqual(order === 'asc' ? all : [...all].reverse());
+        }
+        for (const cursor of ['t0_x', 'pA_x', 'p_x', 'pab', 'nonsense']) {
+          await expect(
+            sequences.listItems({ sequenceId: list.id, read: 'all', limit: 3, cursor }),
+          ).rejects.toBeInstanceOf(TypeError);
+        }
+      });
+
+      it('keeps the order mode fixed, and keeps time sequences to occurredAt', async () => {
+        const { sequences, list, page, item } = await positioned();
+        expect(await sequences.markSequence({ pageId: list.id, orderBy: 'position' })).toEqual({ status: 'unchanged' });
+        await expect(sequences.markSequence({ pageId: list.id })).rejects.toBeInstanceOf(
+          KnowledgeSequenceOrderByChangeError,
+        );
+        await expect(sequences.markSequence({ pageId: page.id, orderBy: 'position' })).rejects.toBeInstanceOf(
+          KnowledgeSequenceOrderByChangeError,
+        );
+        expect(await sequences.markSequence({ pageId: page.id, orderBy: 'timeline' })).toEqual({ status: 'unchanged' });
+        await expect(item('placed', 1, { after: 'x' })).rejects.toBeInstanceOf(KnowledgeSequenceItemInvalidError);
+        await expect(item('keyed', 1, { position: 'm' })).rejects.toBeInstanceOf(KnowledgeSequenceItemInvalidError);
+        await expect(
+          sequences.upsertItem({ sequenceId: page.id, externalId: 'undated', body: 'x', writtenBy: importer }),
+        ).rejects.toBeInstanceOf(KnowledgeSequenceItemInvalidError);
+        const created = await item('dated', 1);
+        expect(created).toMatchObject({ status: 'created', item: { position: null } });
+      });
     });
   });
 }

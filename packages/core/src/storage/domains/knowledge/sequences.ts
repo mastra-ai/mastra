@@ -1,7 +1,8 @@
+import { knowledgePositionBetween } from './pages';
 import type { KnowledgeReadScope } from './pages';
 
 /**
- * Sequences: a page whose dated items (chat messages, events) live in their own table, keyed by
+ * Sequences: a page whose ordered items (chat messages, deploys, milestones) live in their own table, keyed by
  * the source's ID, instead of one page per item. Reached through {@link KnowledgeStorage.sequences},
  * so on a transaction view it writes in the same transaction as the page writes.
  *
@@ -31,6 +32,15 @@ export const MAX_KNOWLEDGE_SEQUENCE_TYPE_FILTER = 20;
 /** An item type key: lowercase letters, digits, `_` and `-`, starting with a letter or digit, at most 64 characters. */
 export const KNOWLEDGE_SEQUENCE_ITEM_TYPE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
+/**
+ * How a sequence orders its items, fixed when the page is marked: `timeline` by `occurredAt`, or
+ * `position` by a fractional key set where the item goes.
+ */
+export type KnowledgeSequenceOrderBy = 'timeline' | 'position';
+
+/** A position key: `[0-9a-z]`, never ending in `0`, as `knowledgePositionBetween` makes. */
+export const KNOWLEDGE_SEQUENCE_POSITION = /^[0-9a-z]*[1-9a-z]$/;
+
 export interface KnowledgeSequenceItemLink {
   /** An http(s) URL. */
   url: string;
@@ -44,8 +54,13 @@ export interface KnowledgeSequenceItemRecord {
   sequenceId: string;
   /** The source's own ID for the item, unique within its sequence. Compared byte for byte. */
   externalId: string;
-  /** When it happened at the source. Items are ordered by this, then by `id`. */
-  occurredAt: Date;
+  /**
+   * When it happened at the source. A `timeline` sequence orders by this, then by `id`; a `position`
+   * one may leave it null.
+   */
+  occurredAt: Date | null;
+  /** Its order key on a `position` sequence (then by `id`); null on a `timeline` one. */
+  position: string | null;
   /** When Knowledge first stored it. */
   writtenAt: Date;
   /** When the source last edited it, or null. */
@@ -83,7 +98,8 @@ export interface KnowledgeSequenceItemRecord {
 export interface UpsertKnowledgeSequenceItemInput {
   sequenceId: string;
   externalId: string;
-  occurredAt: Date;
+  /** Required on a `timeline` sequence. */
+  occurredAt?: Date | null;
   editedAt?: Date | null;
   author?: KnowledgeSequenceItemAuthor | null;
   /** Refused with {@link KnowledgeSequenceParentNotFoundError} unless it names an item of this sequence. */
@@ -96,6 +112,14 @@ export interface UpsertKnowledgeSequenceItemInput {
   links?: KnowledgeSequenceItemLink[] | null;
   /** A JSON object of at most {@link MAX_KNOWLEDGE_SEQUENCE_ITEM_PROPERTIES_BYTES} bytes. */
   properties?: Record<string, unknown> | null;
+  /**
+   * Where it goes on a `position` sequence, at most one of: an explicit `position` key, or `after` /
+   * `before` another item's `externalId`. Left out, a new item goes last and an existing one stays
+   * put. Refused on a `timeline` sequence.
+   */
+  position?: string;
+  after?: string;
+  before?: string;
   writtenBy: string;
   /** Bring back an item the source deleted. Without it, a deleted item stays deleted. */
   restore?: boolean;
@@ -124,7 +148,10 @@ export interface ListKnowledgeSequenceItemsInput {
   until?: Date;
   /** Only the item with this `externalId` and the items under it. */
   externalParentId?: string;
-  /** Newest first (`desc`, the default) or oldest first. */
+  /**
+   * Along the sequence's order, descending or ascending. Defaults to `desc` (newest first) on a
+   * `timeline` sequence and `asc` (first position first) on a `position` one.
+   */
   order?: 'asc' | 'desc';
   /** At most {@link MAX_KNOWLEDGE_SEQUENCE_READ_LIMIT}. */
   limit: number;
@@ -172,6 +199,17 @@ export class KnowledgeSequenceNotLeafError extends Error {
   constructor(readonly pageId: string) {
     super(`Knowledge page ${pageId} has child pages, so it can't be a sequence.`);
     this.name = 'KnowledgeSequenceNotLeafError';
+  }
+}
+
+/** The page is already a sequence with the other `orderBy`, which can't change. Nothing was written. */
+export class KnowledgeSequenceOrderByChangeError extends Error {
+  constructor(
+    readonly pageId: string,
+    readonly orderBy: KnowledgeSequenceOrderBy,
+  ) {
+    super(`Knowledge sequence ${pageId} is ordered by ${orderBy}, which can't change.`);
+    this.name = 'KnowledgeSequenceOrderByChangeError';
   }
 }
 
@@ -227,9 +265,13 @@ export class KnowledgeSequencePurgeRefusedError extends Error {
 export abstract class KnowledgeSequencesStorage {
   /**
    * Makes a live page a sequence. Refuses with {@link KnowledgeSequenceNotLeafError} when it has
-   * live child pages, and `KnowledgeNotFoundError` when it isn't live. Repeating it is `unchanged`.
+   * live child pages, and `KnowledgeNotFoundError` when it isn't live. Repeating it is `unchanged`;
+   * repeating it with another `orderBy` (default `timeline`) is {@link KnowledgeSequenceOrderByChangeError}.
    */
-  abstract markSequence(input: { pageId: string }): Promise<{ status: 'created' | 'unchanged' }>;
+  abstract markSequence(input: {
+    pageId: string;
+    orderBy?: KnowledgeSequenceOrderBy;
+  }): Promise<{ status: 'created' | 'unchanged' }>;
   /** The sequences among `pageIds`, live or deleted. */
   abstract listSequenceIds(input: { pageIds: string[] }): Promise<string[]>;
   /**
@@ -257,7 +299,7 @@ export abstract class KnowledgeSequencesStorage {
   abstract listItems(input: ListKnowledgeSequenceItemsInput): Promise<KnowledgeSequenceItemsPage>;
   /**
    * Keyword search over item text ({@link knowledgeSequenceItemSearchText}). Ranked by how many query words match, then newest
-   * `occurredAt`, then `id`. Deleted items never match. The visibility filter applies before the
+   * `occurredAt` (undated last), then `id`. Deleted items never match. The visibility filter applies before the
    * limit, so a hidden sequence can't take a slot.
    */
   abstract searchItems(input: SearchKnowledgeSequenceItemsInput): Promise<KnowledgeSequenceItemRecord[]>;
@@ -274,14 +316,16 @@ export abstract class KnowledgeSequencesStorage {
   }): Promise<KnowledgeSequencePurgeResult>;
 }
 
-/** The fields an upsert compares to decide `unchanged`. */
+/** The fields an upsert compares to decide `unchanged`; `position` is the key the upsert resolved. */
 export function sameKnowledgeSequenceItem(
   stored: KnowledgeSequenceItemRecord,
   input: UpsertKnowledgeSequenceItemInput,
+  position: string | null,
 ): boolean {
   const next = knowledgeSequenceItemContent(input);
   return (
-    stored.occurredAt.getTime() === input.occurredAt.getTime() &&
+    (stored.occurredAt?.getTime() ?? null) === (input.occurredAt?.getTime() ?? null) &&
+    stored.position === position &&
     (stored.editedAt?.getTime() ?? null) === (input.editedAt?.getTime() ?? null) &&
     stored.author?.sourceId === input.author?.sourceId &&
     (stored.author?.name ?? null) === (input.author?.name ?? null) &&
@@ -374,8 +418,24 @@ function invalid(field: string, message: string): never {
   throw new KnowledgeSequenceItemInvalidError(field, `A sequence item's ${field} ${message}`);
 }
 
-export function checkKnowledgeSequenceItemInput(input: UpsertKnowledgeSequenceItemInput): void {
+export function checkKnowledgeSequenceItemInput(
+  input: UpsertKnowledgeSequenceItemInput,
+  orderBy: KnowledgeSequenceOrderBy,
+): void {
   if (!input.externalId) throw new TypeError('A sequence item needs an externalId.');
+  const placements = [input.position, input.after, input.before].filter(value => value !== undefined);
+  if (orderBy === 'timeline') {
+    if (!input.occurredAt) invalid('occurredAt', 'is required on a timeline sequence.');
+    if (placements.length) invalid('position', 'is set only on a position sequence.');
+  } else {
+    if (placements.length > 1) invalid('position', 'takes one of position, after or before.');
+    if (input.position !== undefined && !KNOWLEDGE_SEQUENCE_POSITION.test(input.position)) {
+      invalid('position', 'must be [0-9a-z] and not end in 0.');
+    }
+    if (input.after === input.externalId || input.before === input.externalId) {
+      invalid('position', "can't be placed next to itself.");
+    }
+  }
   for (const [name, value] of [
     ['occurredAt', input.occurredAt],
     ['editedAt', input.editedAt],
@@ -466,16 +526,60 @@ export function checkKnowledgeSequenceReadLimit(limit: number): void {
   }
 }
 
-/** Opaque `(occurredAt, id)` position after the last item returned. */
-export function encodeKnowledgeSequenceCursor(item: { occurredAt: Date; id: string }): string {
-  return `t${item.occurredAt.getTime()}_${item.id}`;
+/**
+ * The key a new or moved item takes on a `position` sequence. `neighbour(externalId, side)` returns
+ * that item's position and the position next to it on `side`, skipping the item being written, or
+ * null when there's no such item; `last()` the highest position, or null when empty.
+ */
+export async function knowledgeSequenceItemPosition(
+  input: UpsertKnowledgeSequenceItemInput,
+  stored: KnowledgeSequenceItemRecord | undefined,
+  find: {
+    neighbour(externalId: string, side: 'after' | 'before'): Promise<{ position: string; next: string | null } | null>;
+    last(): Promise<string | null>;
+  },
+): Promise<string> {
+  if (input.position !== undefined) return input.position;
+  for (const side of ['after', 'before'] as const) {
+    const anchor = input[side];
+    if (anchor === undefined) continue;
+    const found = await find.neighbour(anchor, side);
+    if (!found) invalid('position', `names no item ${JSON.stringify(anchor)} to go ${side}.`);
+    return side === 'after'
+      ? knowledgePositionBetween(found.position, found.next ?? undefined)
+      : knowledgePositionBetween(found.next ?? undefined, found.position);
+  }
+  if (stored?.position) return stored.position;
+  return knowledgePositionBetween((await find.last()) ?? undefined);
 }
 
-export function decodeKnowledgeSequenceCursor(cursor: string): { occurredAt: number; id: string } {
+/** Opaque position after the last item returned: `(occurredAt, id)` or `(position, id)`. */
+export function encodeKnowledgeSequenceCursor(item: {
+  occurredAt: Date | null;
+  position: string | null;
+  id: string;
+}): string {
+  return item.position !== null ? `p${item.position}_${item.id}` : `t${item.occurredAt!.getTime()}_${item.id}`;
+}
+
+export type KnowledgeSequenceCursor =
+  | { orderBy: 'timeline'; occurredAt: number; id: string }
+  | { orderBy: 'position'; position: string; id: string };
+
+/** Refuses (TypeError) a malformed cursor or one of the other order mode. */
+export function decodeKnowledgeSequenceCursor(
+  cursor: string,
+  orderBy: KnowledgeSequenceOrderBy,
+): KnowledgeSequenceCursor {
+  if (orderBy === 'position') {
+    const match = /^p([0-9a-z]+)_(.+)$/.exec(cursor);
+    if (!match) throw new TypeError('Not a position sequence cursor.');
+    return { orderBy, position: match[1]!, id: match[2]! };
+  }
   const match = /^t(-?\d+)_(.+)$/.exec(cursor);
   const occurredAt = Number(match?.[1]);
-  if (!match || !Number.isSafeInteger(occurredAt)) throw new TypeError('Not a sequence cursor.');
-  return { occurredAt, id: match[2]! };
+  if (!match || !Number.isSafeInteger(occurredAt)) throw new TypeError('Not a timeline sequence cursor.');
+  return { orderBy, occurredAt, id: match[2]! };
 }
 
 const ISO_PARTS = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:Z|[+-](\d{2}):(\d{2}))$/;

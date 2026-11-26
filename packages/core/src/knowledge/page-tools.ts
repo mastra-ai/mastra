@@ -168,7 +168,7 @@ function itemSummary(item: KnowledgeSequenceItemRecord, pageRef: string) {
   return {
     ref: `${pageRef}@${item.id}`,
     externalId: item.externalId,
-    occurredAt: item.occurredAt.toISOString(),
+    ...(item.occurredAt ? { occurredAt: item.occurredAt.toISOString() } : {}),
     ...(item.editedAt ? { editedAt: item.editedAt.toISOString() } : {}),
     ...(item.deletedAt ? { deleted: true as const } : {}),
     ...(item.author ? { author: item.author.name ?? item.author.sourceId } : {}),

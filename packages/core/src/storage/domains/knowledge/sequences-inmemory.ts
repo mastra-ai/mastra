@@ -8,11 +8,13 @@ import {
   encodeKnowledgeSequenceCursor,
   isStaleKnowledgeSequenceEdit,
   knowledgeSequenceItemContent,
+  knowledgeSequenceItemPosition,
   knowledgeSequenceItemSearchText,
   knowledgeSequenceTypeFilter,
   knowledgeSequenceTypeMatches,
   KnowledgeSequenceNotFoundError,
   KnowledgeSequenceNotLeafError,
+  KnowledgeSequenceOrderByChangeError,
   KnowledgeSequenceParentNestedError,
   KnowledgeSequenceParentNotFoundError,
   KnowledgeSequencePurgeRefusedError,
@@ -20,6 +22,7 @@ import {
   sameKnowledgeSequenceItem,
 } from './sequences';
 import type {
+  KnowledgeSequenceOrderBy,
   KnowledgeSequenceItemsPage,
   KnowledgeSequenceItemRecord,
   KnowledgeSequenceItemRemoveResult,
@@ -31,7 +34,7 @@ import type {
 } from './sequences';
 
 interface State {
-  sequences: Map<string, Date>;
+  sequences: Map<string, { createdAt: Date; orderBy: KnowledgeSequenceOrderBy }>;
   /** By `JSON.stringify([sequenceId, externalId])`. */
   items: Map<string, KnowledgeSequenceItemRecord>;
 }
@@ -44,9 +47,17 @@ type PageLookup = (
 const keyOf = (sequenceId: string, externalId: string) => JSON.stringify([sequenceId, externalId]);
 const copy = (item: KnowledgeSequenceItemRecord) => structuredClone(item);
 
-function compare(a: KnowledgeSequenceItemRecord, b: KnowledgeSequenceItemRecord): number {
-  const time = a.occurredAt.getTime() - b.occurredAt.getTime();
-  return time !== 0 ? time : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+type OrderKey = Pick<KnowledgeSequenceItemRecord, 'occurredAt' | 'position' | 'id'>;
+
+const byCode = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+/** Along the sequence's order: `(position, id)` when positioned, else `(occurredAt, id)`. */
+function compare(a: OrderKey, b: OrderKey): number {
+  const key =
+    a.position !== null && b.position !== null
+      ? byCode(a.position, b.position)
+      : (a.occurredAt?.getTime() ?? 0) - (b.occurredAt?.getTime() ?? 0);
+  return key !== 0 ? key : byCode(a.id, b.id);
 }
 
 /**
@@ -70,20 +81,48 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
     this.#s = { sequences: new Map(), items: new Map() };
   }
 
-  #liveSequence(sequenceId: string): void {
+  #liveSequence(sequenceId: string): KnowledgeSequenceOrderBy {
     const found = this.lookup(sequenceId);
-    if (!this.#s.sequences.has(sequenceId) || !found || found.page.deletedAt) {
-      throw new KnowledgeSequenceNotFoundError(sequenceId);
-    }
+    const sequence = this.#s.sequences.get(sequenceId);
+    if (!sequence || !found || found.page.deletedAt) throw new KnowledgeSequenceNotFoundError(sequenceId);
+    return sequence.orderBy;
   }
 
-  async markSequence({ pageId }: { pageId: string }): Promise<{ status: 'created' | 'unchanged' }> {
+  async markSequence({
+    pageId,
+    orderBy = 'timeline',
+  }: {
+    pageId: string;
+    orderBy?: KnowledgeSequenceOrderBy;
+  }): Promise<{ status: 'created' | 'unchanged' }> {
     const found = this.lookup(pageId);
     if (!found || found.page.deletedAt) throw new KnowledgeNotFoundError('page', pageId);
-    if (this.#s.sequences.has(pageId)) return { status: 'unchanged' };
+    const marked = this.#s.sequences.get(pageId);
+    if (marked) {
+      if (marked.orderBy !== orderBy) throw new KnowledgeSequenceOrderByChangeError(pageId, marked.orderBy);
+      return { status: 'unchanged' };
+    }
     if (found.hasChildren) throw new KnowledgeSequenceNotLeafError(pageId);
-    this.#s.sequences.set(pageId, new Date());
+    this.#s.sequences.set(pageId, { createdAt: new Date(), orderBy });
     return { status: 'created' };
+  }
+
+  #positioned(sequenceId: string, skip: string): KnowledgeSequenceItemRecord[] {
+    return [...this.#s.items.values()]
+      .filter(item => item.sequenceId === sequenceId && item.externalId !== skip && item.position !== null)
+      .sort(compare);
+  }
+
+  async #position(input: UpsertKnowledgeSequenceItemInput, stored: KnowledgeSequenceItemRecord | undefined) {
+    return knowledgeSequenceItemPosition(input, stored, {
+      neighbour: async (externalId, side) => {
+        const items = this.#positioned(input.sequenceId, input.externalId);
+        const at = items.findIndex(item => item.externalId === externalId);
+        if (at < 0) return null;
+        return { position: items[at]!.position!, next: items[side === 'after' ? at + 1 : at - 1]?.position ?? null };
+      },
+      last: async () => this.#positioned(input.sequenceId, input.externalId).at(-1)?.position ?? null,
+    });
   }
 
   async listSequenceIds({ pageIds }: { pageIds: string[] }): Promise<string[]> {
@@ -104,12 +143,14 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
   }
 
   async upsertItem(input: UpsertKnowledgeSequenceItemInput): Promise<KnowledgeSequenceItemUpsertResult> {
-    checkKnowledgeSequenceItemInput(input);
-    this.#liveSequence(input.sequenceId);
+    const orderBy = this.#liveSequence(input.sequenceId);
+    checkKnowledgeSequenceItemInput(input, orderBy);
     const key = keyOf(input.sequenceId, input.externalId);
     const stored = this.#s.items.get(key);
+    const position = orderBy === 'position' ? await this.#position(input, stored) : null;
     const fields = {
-      occurredAt: new Date(input.occurredAt),
+      occurredAt: input.occurredAt ? new Date(input.occurredAt) : null,
+      position,
       editedAt: input.editedAt ? new Date(input.editedAt) : null,
       author: input.author ? { ...input.author } : null,
       ...structuredClone(knowledgeSequenceItemContent(input)),
@@ -131,7 +172,7 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
     }
     if (stored.deletedAt && !input.restore) return { status: 'ignored', reason: 'deleted', item: copy(stored) };
     if (!stored.deletedAt) {
-      if (sameKnowledgeSequenceItem(stored, input)) return { status: 'unchanged', item: copy(stored) };
+      if (sameKnowledgeSequenceItem(stored, input, position)) return { status: 'unchanged', item: copy(stored) };
       if (isStaleKnowledgeSequenceEdit(stored, input))
         return { status: 'ignored', reason: 'stale', item: copy(stored) };
     }
@@ -179,20 +220,27 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
   async listItems(input: ListKnowledgeSequenceItemsInput): Promise<KnowledgeSequenceItemsPage> {
     checkKnowledgeSequenceReadLimit(input.limit);
     const typeFilter = knowledgeSequenceTypeFilter(input);
-    const after = input.cursor ? decodeKnowledgeSequenceCursor(input.cursor) : undefined;
-    if (!this.#s.sequences.has(input.sequenceId) || !this.lookup(input.sequenceId, input.read)?.readable) {
+    const sequence = this.#s.sequences.get(input.sequenceId);
+    if (!sequence || !this.lookup(input.sequenceId, input.read)?.readable) {
+      if (input.cursor) decodeKnowledgeSequenceCursor(input.cursor, sequence?.orderBy ?? 'timeline');
       return { items: [], nextCursor: null };
     }
-    const desc = (input.order ?? 'desc') === 'desc';
+    const cursor = input.cursor ? decodeKnowledgeSequenceCursor(input.cursor, sequence.orderBy) : undefined;
+    const after: OrderKey | undefined = cursor && {
+      id: cursor.id,
+      occurredAt: cursor.orderBy === 'timeline' ? new Date(cursor.occurredAt) : null,
+      position: cursor.orderBy === 'position' ? cursor.position : null,
+    };
+    const desc = (input.order ?? (sequence.orderBy === 'position' ? 'asc' : 'desc')) === 'desc';
     const since = input.since?.getTime();
     const until = input.until?.getTime();
     const matching = [...this.#s.items.values()]
       .filter(item => {
         if (item.sequenceId !== input.sequenceId) return false;
         if (item.deletedAt && !input.includeDeleted) return false;
-        const time = item.occurredAt.getTime();
-        if (since !== undefined && time < since) return false;
-        if (until !== undefined && time >= until) return false;
+        const time = item.occurredAt?.getTime();
+        if (since !== undefined && (time === undefined || time < since)) return false;
+        if (until !== undefined && (time === undefined || time >= until)) return false;
         if (
           input.externalParentId !== undefined &&
           item.externalId !== input.externalParentId &&
@@ -202,11 +250,8 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
         }
         if (!knowledgeSequenceTypeMatches(typeFilter, item.type)) return false;
         if (after) {
-          const position = compare(item, {
-            occurredAt: new Date(after.occurredAt),
-            id: after.id,
-          } as KnowledgeSequenceItemRecord);
-          if (desc ? position >= 0 : position <= 0) return false;
+          const side = compare(item, after);
+          if (desc ? side >= 0 : side <= 0) return false;
         }
         return true;
       })
@@ -235,7 +280,8 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
       .filter(item => {
         if (!visible.has(item.sequenceId) || item.deletedAt) return false;
         if (!knowledgeSequenceTypeMatches(typeFilter, item.type)) return false;
-        const time = item.occurredAt.getTime();
+        const time = item.occurredAt?.getTime();
+        if (time === undefined) return since === undefined && until === undefined;
         return (since === undefined || time >= since) && (until === undefined || time < until);
       })
       .map(item => {
@@ -246,7 +292,7 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
       .sort(
         (a, b) =>
           b.matched - a.matched ||
-          b.item.occurredAt.getTime() - a.item.occurredAt.getTime() ||
+          (b.item.occurredAt?.getTime() ?? -Infinity) - (a.item.occurredAt?.getTime() ?? -Infinity) ||
           (a.item.id < b.item.id ? -1 : 1),
       )
       .slice(0, input.limit)

@@ -5,6 +5,7 @@ import type {
   KnowledgeSequenceItemRecord,
   KnowledgeSequenceItemRemoveResult,
   KnowledgeSequenceItemUpsertResult,
+  KnowledgeSequenceOrderBy,
   KnowledgeSequencePurgeResult,
   KnowledgeSequencesStorage,
   ListKnowledgeSequenceItemsInput,
@@ -36,13 +37,15 @@ const PAGES = KNOWLEDGE_PAGE_TABLES.pages;
 export const KNOWLEDGE_SEQUENCE_DDL = [
   `CREATE TABLE IF NOT EXISTS "${T.sequences}" (
     pageId TEXT PRIMARY KEY,
-    createdAt INTEGER NOT NULL
+    createdAt INTEGER NOT NULL,
+    "orderBy" TEXT NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS "${T.items}" (
     id TEXT PRIMARY KEY,
     sequenceId TEXT NOT NULL REFERENCES "${T.sequences}" (pageId),
     externalId TEXT NOT NULL,
-    occurredAt INTEGER NOT NULL,
+    occurredAt INTEGER,
+    position TEXT,
     writtenAt INTEGER NOT NULL,
     editedAt INTEGER,
     deletedAt INTEGER,
@@ -60,6 +63,7 @@ export const KNOWLEDGE_SEQUENCE_DDL = [
     UNIQUE (sequenceId, externalId)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_kseq_items_order ON "${T.items}" (sequenceId, occurredAt, id)`,
+  `CREATE INDEX IF NOT EXISTS idx_kseq_items_position ON "${T.items}" (sequenceId, position, id) WHERE position IS NOT NULL`,
   `CREATE INDEX IF NOT EXISTS idx_kseq_items_parent ON "${T.items}" (sequenceId, externalParentId, occurredAt, id) WHERE externalParentId IS NOT NULL`,
 ];
 
@@ -74,7 +78,8 @@ const toItem = (row: Row): KnowledgeSequenceItemRecord => ({
   id: String(row.id),
   sequenceId: String(row.sequenceId),
   externalId: String(row.externalId),
-  occurredAt: new Date(Number(row.occurredAt)),
+  occurredAt: date(row.occurredAt),
+  position: row.position === null ? null : String(row.position),
   writtenAt: new Date(Number(row.writtenAt)),
   editedAt: date(row.editedAt),
   deletedAt: date(row.deletedAt),
@@ -146,12 +151,48 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
     return row ? { deletedAt: row.deletedAt ? Date.parse(String(row.deletedAt)) : null } : undefined;
   }
 
-  async #liveSequence(tx: Executor, sequenceId: string): Promise<void> {
+  async #liveSequence(tx: Executor, sequenceId: string): Promise<KnowledgeSequenceOrderBy> {
     const { rows } = await tx.execute({
-      sql: `SELECT 1 FROM "${T.sequences}" t JOIN "${PAGES}" p ON p.id = t.pageId WHERE t.pageId = ? AND p.deletedAt IS NULL`,
+      sql: `SELECT t."orderBy" FROM "${T.sequences}" t JOIN "${PAGES}" p ON p.id = t.pageId WHERE t.pageId = ? AND p.deletedAt IS NULL`,
       args: [sequenceId],
     });
     if (rows.length === 0) throw new (await loadCore()).KnowledgeSequenceNotFoundError(sequenceId);
+    return String(rows[0]!.orderBy) as KnowledgeSequenceOrderBy;
+  }
+
+  /** The key `input` places its item at; reads its neighbours inside the write transaction. */
+  async #position(tx: Executor, input: UpsertKnowledgeSequenceItemInput, stored?: KnowledgeSequenceItemRecord) {
+    const { knowledgeSequenceItemPosition } = await loadCore();
+    const others = `sequenceId = ? AND externalId != ? AND position IS NOT NULL`;
+    return knowledgeSequenceItemPosition(input, stored, {
+      neighbour: async (externalId, side) => {
+        const anchor = (
+          await tx.execute({
+            sql: `SELECT position, id FROM "${T.items}" WHERE ${others} AND externalId = ?`,
+            args: [input.sequenceId, input.externalId, externalId],
+          })
+        ).rows[0];
+        if (!anchor) return null;
+        const position = String(anchor.position);
+        const [op, dir] = side === 'after' ? ['>', 'ASC'] : ['<', 'DESC'];
+        const next = (
+          await tx.execute({
+            sql: `SELECT position FROM "${T.items}" WHERE ${others} AND (position ${op} ? OR (position = ? AND id ${op} ?)) ORDER BY position ${dir}, id ${dir} LIMIT 1`,
+            args: [input.sequenceId, input.externalId, position, position, String(anchor.id)],
+          })
+        ).rows[0];
+        return { position, next: next ? String(next.position) : null };
+      },
+      last: async () => {
+        const row = (
+          await tx.execute({
+            sql: `SELECT MAX(position) AS position FROM "${T.items}" WHERE ${others}`,
+            args: [input.sequenceId, input.externalId],
+          })
+        ).rows[0];
+        return row?.position == null ? null : String(row.position);
+      },
+    });
   }
 
   async #item(tx: Executor, sequenceId: string, externalId: string): Promise<KnowledgeSequenceItemRecord | undefined> {
@@ -179,21 +220,34 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
     }
   }
 
-  async markSequence({ pageId }: { pageId: string }): Promise<{ status: 'created' | 'unchanged' }> {
-    const { KnowledgeNotFoundError, KnowledgeSequenceNotLeafError } = await loadCore();
+  async markSequence({
+    pageId,
+    orderBy = 'timeline',
+  }: {
+    pageId: string;
+    orderBy?: KnowledgeSequenceOrderBy;
+  }): Promise<{ status: 'created' | 'unchanged' }> {
+    const { KnowledgeNotFoundError, KnowledgeSequenceNotLeafError, KnowledgeSequenceOrderByChangeError } =
+      await loadCore();
     return this.#transaction(async tx => {
       const page = await this.#page(tx, pageId);
       if (!page || page.deletedAt !== null) throw new KnowledgeNotFoundError('page', pageId);
-      const marked = await tx.execute({ sql: `SELECT 1 FROM "${T.sequences}" WHERE pageId = ?`, args: [pageId] });
-      if (marked.rows.length > 0) return { status: 'unchanged' as const };
+      const marked = (
+        await tx.execute({ sql: `SELECT "orderBy" FROM "${T.sequences}" WHERE pageId = ?`, args: [pageId] })
+      ).rows[0];
+      if (marked) {
+        const current = String(marked.orderBy) as KnowledgeSequenceOrderBy;
+        if (current !== orderBy) throw new KnowledgeSequenceOrderByChangeError(pageId, current);
+        return { status: 'unchanged' as const };
+      }
       const child = await tx.execute({
         sql: `SELECT 1 FROM "${PAGES}" WHERE parentId = ? AND deletedAt IS NULL LIMIT 1`,
         args: [pageId],
       });
       if (child.rows.length > 0) throw new KnowledgeSequenceNotLeafError(pageId);
       await tx.execute({
-        sql: `INSERT INTO "${T.sequences}" (pageId, createdAt) VALUES (?, ?)`,
-        args: [pageId, Date.now()],
+        sql: `INSERT INTO "${T.sequences}" (pageId, createdAt, "orderBy") VALUES (?, ?, ?)`,
+        args: [pageId, Date.now(), orderBy],
       });
       return { status: 'created' as const };
     });
@@ -218,13 +272,15 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
       knowledgeSequenceItemSearchText,
       sameKnowledgeSequenceItem,
     } = await loadCore();
-    checkKnowledgeSequenceItemInput(input);
     return this.#transaction(async tx => {
-      await this.#liveSequence(tx, input.sequenceId);
+      const orderBy = await this.#liveSequence(tx, input.sequenceId);
+      checkKnowledgeSequenceItemInput(input, orderBy);
       const stored = await this.#item(tx, input.sequenceId, input.externalId);
+      const position = orderBy === 'position' ? await this.#position(tx, input, stored) : null;
       const content = knowledgeSequenceItemContent(input);
       const fields = [
-        input.occurredAt.getTime(),
+        input.occurredAt ? input.occurredAt.getTime() : null,
+        position,
         input.editedAt ? input.editedAt.getTime() : null,
         input.author?.sourceId ?? null,
         input.author?.name ?? null,
@@ -240,8 +296,8 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
       if (!stored) {
         await this.#checkParent(tx, input.sequenceId, input.externalId, content.externalParentId);
         await tx.execute({
-          sql: `INSERT INTO "${T.items}" (id, sequenceId, externalId, writtenAt, deletedAt, version, occurredAt, editedAt, authorSourceId, authorName, externalParentId, type, title, body, links, properties, searchText, writtenBy)
-            VALUES (?, ?, ?, ?, NULL, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          sql: `INSERT INTO "${T.items}" (id, sequenceId, externalId, writtenAt, deletedAt, version, occurredAt, position, editedAt, authorSourceId, authorName, externalParentId, type, title, body, links, properties, searchText, writtenBy)
+            VALUES (?, ?, ?, ?, NULL, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           args: [createKnowledgeUlid(), input.sequenceId, input.externalId, Date.now(), ...fields],
         });
         return { status: 'created' as const, item: (await this.#item(tx, input.sequenceId, input.externalId))! };
@@ -249,14 +305,14 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
       if (stored.deletedAt && !input.restore)
         return { status: 'ignored' as const, reason: 'deleted' as const, item: stored };
       if (!stored.deletedAt) {
-        if (sameKnowledgeSequenceItem(stored, input)) return { status: 'unchanged' as const, item: stored };
+        if (sameKnowledgeSequenceItem(stored, input, position)) return { status: 'unchanged' as const, item: stored };
         if (isStaleKnowledgeSequenceEdit(stored, input)) {
           return { status: 'ignored' as const, reason: 'stale' as const, item: stored };
         }
       }
       await this.#checkParent(tx, input.sequenceId, input.externalId, content.externalParentId);
       await tx.execute({
-        sql: `UPDATE "${T.items}" SET occurredAt = ?, editedAt = ?, authorSourceId = ?, authorName = ?, externalParentId = ?, type = ?, title = ?, body = ?, links = ?, properties = ?, searchText = ?, writtenBy = ?, deletedAt = NULL, version = version + 1 WHERE id = ?`,
+        sql: `UPDATE "${T.items}" SET occurredAt = ?, position = ?, editedAt = ?, authorSourceId = ?, authorName = ?, externalParentId = ?, type = ?, title = ?, body = ?, links = ?, properties = ?, searchText = ?, writtenBy = ?, deletedAt = NULL, version = version + 1 WHERE id = ?`,
         args: [...fields, stored.id],
       });
       return { status: 'updated' as const, item: (await this.#item(tx, input.sequenceId, input.externalId))! };
@@ -304,15 +360,19 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
     } = await loadCore();
     checkKnowledgeSequenceReadLimit(input.limit);
     const typeFilter = knowledgeSequenceTypeFilter(input);
-    const after = input.cursor ? decodeKnowledgeSequenceCursor(input.cursor) : undefined;
-    const marked = await this.#read.execute({
-      sql: `SELECT 1 FROM "${T.sequences}" WHERE pageId = ?`,
-      args: [input.sequenceId],
-    });
-    if (marked.rows.length === 0 || !(await this.#readable(input.sequenceId, input.read))) {
+    const marked = (
+      await this.#read.execute({
+        sql: `SELECT "orderBy" FROM "${T.sequences}" WHERE pageId = ?`,
+        args: [input.sequenceId],
+      })
+    ).rows[0];
+    const orderBy = (marked ? String(marked.orderBy) : 'timeline') as KnowledgeSequenceOrderBy;
+    const after = input.cursor ? decodeKnowledgeSequenceCursor(input.cursor, orderBy) : undefined;
+    if (!marked || !(await this.#readable(input.sequenceId, input.read))) {
       return { items: [], nextCursor: null };
     }
-    const desc = (input.order ?? 'desc') === 'desc';
+    const key = orderBy === 'position' ? 'position' : 'occurredAt';
+    const desc = (input.order ?? (orderBy === 'position' ? 'asc' : 'desc')) === 'desc';
     const where = ['sequenceId = ?'];
     const args: InValue[] = [input.sequenceId];
     if (!input.includeDeleted) where.push('deletedAt IS NULL');
@@ -335,12 +395,13 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
     }
     if (after) {
       const op = desc ? '<' : '>';
-      where.push(`(occurredAt ${op} ? OR (occurredAt = ? AND id ${op} ?))`);
-      args.push(after.occurredAt, after.occurredAt, after.id);
+      const value = after.orderBy === 'position' ? after.position : after.occurredAt;
+      where.push(`(${key} ${op} ? OR (${key} = ? AND id ${op} ?))`);
+      args.push(value, value, after.id);
     }
     const dir = desc ? 'DESC' : 'ASC';
     const { rows } = await this.#read.execute({
-      sql: `SELECT * FROM "${T.items}" WHERE ${where.join(' AND ')} ORDER BY occurredAt ${dir}, id ${dir} LIMIT ?`,
+      sql: `SELECT * FROM "${T.items}" WHERE ${where.join(' AND ')} ORDER BY ${key} ${dir}, id ${dir} LIMIT ?`,
       args: [...args, input.limit + 1],
     });
     const items = rows.slice(0, input.limit).map(toItem);
