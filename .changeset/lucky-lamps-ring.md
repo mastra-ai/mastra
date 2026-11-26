@@ -2,4 +2,6 @@
 '@mastra/core': patch
 ---
 
-Durable agents now offer the resuming caller's tools after a resume. When someone else approved or resumed a paused run (on the same server, on another server, or after crash recovery), later model steps could still be offered tools built for the user who started the run. Those steps now get the resuming caller's tools. Call-time `toolsets` from the starting call are kept when the resume doesn't pass its own.
+When someone other than the person who started an agent run approves a paused tool call, the call now runs as the approver. Before, it could run as the person who started the run, depending on which server handled the approval.
+
+After the approval, the run also offers the model the approver's tools, on the same server, on another server, and after crash recovery. If the paused call is to a tool the approver doesn't have, it now fails with a tool error instead of running as the person who started the run. Call-time `toolsets` from the starting call are kept when the approval doesn't pass its own.
