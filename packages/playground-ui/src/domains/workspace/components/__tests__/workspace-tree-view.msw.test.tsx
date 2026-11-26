@@ -228,8 +228,10 @@ describe('WorkspaceTreeView', () => {
 
       fireEvent.click(await screen.findByRole('button', { name: 'New folder in src' }));
 
-      expect(await screen.findByText('Could not load folder.')).toBeTruthy();
-      expect(screen.getByPlaceholderText('Folder name')).toBeTruthy();
+      const error = (await screen.findByText('Could not load folder.')).closest('[role="treeitem"]');
+      const field = screen.getByPlaceholderText('Folder name').closest('[role="treeitem"]');
+      expect([field?.getAttribute('aria-posinset'), field?.getAttribute('aria-setsize')]).toEqual(['1', '2']);
+      expect([error?.getAttribute('aria-posinset'), error?.getAttribute('aria-setsize')]).toEqual(['2', '2']);
     });
   });
 

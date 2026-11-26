@@ -29,10 +29,10 @@ interface TreeState {
 export function buildWorkspaceTreeRows(root: WorkspaceEntry[], rootPath: string, state: TreeState) {
   const rows: WorkspaceTreeRow[] = [];
 
-  const addLevel = (entries: WorkspaceEntry[], parent: string, level: number) => {
+  const addLevel = (entries: WorkspaceEntry[], parent: string, level: number, failed?: { error?: Error }) => {
     const creating = state.creatingIn === parent;
     const offset = creating ? 1 : 0;
-    const setSize = entries.length + offset;
+    const setSize = entries.length + offset + (failed ? 1 : 0);
     if (creating) rows.push({ kind: 'input', id: `${parent}/\0new`, parent, level, posInSet: 1, setSize });
     entries.forEach((entry, index) => {
       const path = joinPath(parent, entry.name);
@@ -45,17 +45,12 @@ export function buildWorkspaceTreeRows(root: WorkspaceEntry[], rootPath: string,
       const listing = expanded ? state.listings.get(path) : undefined;
       rows.push({ kind: 'entry', ...place, expanded, loading: listing?.isLoading ?? false });
       if (!listing) return;
-      addLevel(listing.data ?? [], path, level + 1);
-      if (listing.data || listing.isLoading) return;
-      rows.push({
-        kind: 'error',
-        id: `${path}/\0error`,
-        error: listing.error,
-        level: level + 1,
-        posInSet: 1,
-        setSize: 1,
-      });
+      const failed = !listing.data && !listing.isLoading ? { error: listing.error } : undefined;
+      addLevel(listing.data ?? [], path, level + 1, failed);
     });
+    if (failed) {
+      rows.push({ kind: 'error', id: `${parent}/\0error`, error: failed.error, level, posInSet: setSize, setSize });
+    }
   };
 
   addLevel(root, rootPath, 0);
