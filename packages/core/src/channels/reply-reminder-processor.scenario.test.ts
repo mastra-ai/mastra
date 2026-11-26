@@ -1,10 +1,10 @@
-import { Agent } from '@mastra/core/agent';
-import { createTool } from '@mastra/core/tools';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { FactoryReplyReminderProcessor } from './reply-reminder-processor.js';
-import { REPLY_TOOL_NAME } from './reply-tool.js';
+import { Agent } from '../agent';
+import { createTool } from '../tools';
+import { ChannelReplyReminderProcessor } from './reply-reminder-processor';
+import { REPLY_TOOL_NAME } from './reply-tool';
 
 const MINUTE = 60_000;
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
@@ -86,7 +86,7 @@ describe('reply reminder in a real agent run', () => {
       instructions: 'You work.',
       model: model as never,
       tools: { work, [REPLY_TOOL_NAME]: reply },
-      inputProcessors: [new FactoryReplyReminderProcessor({ now: () => now })],
+      inputProcessors: [new ChannelReplyReminderProcessor({ now: () => now })],
     });
 
     const stream = await agent.stream('go', { maxSteps: 5 });

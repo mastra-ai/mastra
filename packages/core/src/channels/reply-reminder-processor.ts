@@ -1,9 +1,8 @@
-import type { MastraDBMessage } from '@mastra/core/agent';
-import type { ProcessInputStepArgs, Processor } from '@mastra/core/processors';
+import type { MastraDBMessage } from '../agent/message-list';
+import type { ProcessInputStepArgs, Processor } from '../processors';
+import { REPLY_TOOL_NAME } from './reply-tool';
 
-import { REPLY_TOOL_NAME } from './reply-tool.js';
-
-const ID = 'factory-reply-reminder';
+const ID = 'channel-reply-reminder';
 
 /** How long a run may work without posting before it is nudged. */
 export const REPLY_REMINDER_AFTER_MS = 5 * 60_000;
@@ -14,7 +13,7 @@ interface ReminderState {
   seenCalls?: string[];
 }
 
-export interface FactoryReplyReminderOptions {
+export interface ChannelReplyReminderOptions {
   afterMs?: number;
   now?: () => number;
 }
@@ -28,12 +27,12 @@ export interface FactoryReplyReminderOptions {
  * cached prompt prefix is untouched. Only runs that have the reply tool are
  * touched.
  */
-export class FactoryReplyReminderProcessor implements Processor {
+export class ChannelReplyReminderProcessor implements Processor {
   readonly id = ID;
   readonly #afterMs: number;
   readonly #now: () => number;
 
-  constructor({ afterMs = REPLY_REMINDER_AFTER_MS, now = Date.now }: FactoryReplyReminderOptions = {}) {
+  constructor({ afterMs = REPLY_REMINDER_AFTER_MS, now = Date.now }: ChannelReplyReminderOptions = {}) {
     this.#afterMs = afterMs;
     this.#now = now;
   }
