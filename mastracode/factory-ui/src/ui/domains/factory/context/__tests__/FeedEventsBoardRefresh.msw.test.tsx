@@ -437,14 +437,17 @@ describe('FeedEventsProvider, on the board', () => {
       const stream = pushableFeedStream(PROJECT_ID);
       server.use(stream.handler);
       const { requests, board } = boardEndpoints();
-      const answered = Promise.withResolvers<void>();
+      let answer = () => {};
+      const answered = new Promise<void>(resolve => {
+        answer = resolve;
+      });
       server.use(
         http.post(`${BOARD_URL}/item-1/transition`, async () => {
           // The move settled before the route's answer got back: its frame comes first.
           board.stage = 'review';
           stream.move({ inputId: 'input-1', status: 'accepted' });
           stream.push();
-          await answered.promise;
+          await answered;
           return HttpResponse.json({ inputId: 'input-1' }, { status: 202 });
         }),
       );
@@ -458,7 +461,7 @@ describe('FeedEventsProvider, on the board', () => {
       await waitFor(() => expect(requests.decisions).toBeGreaterThan(before.decisions));
       expect(rendered.result.current.move.isPending).toBe(true);
 
-      answered.resolve();
+      answer();
       await waitFor(() => expect(rendered.result.current.move.data).toEqual({ status: 'landed', inputId: 'input-1' }));
       await waitForMutationsIdle(rendered.client);
       expect(rendered.result.current.cards.data?.[0]?.stages).toEqual(['review']);
