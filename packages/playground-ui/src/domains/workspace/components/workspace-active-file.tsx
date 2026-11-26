@@ -88,7 +88,7 @@ export function WorkspaceActiveFileContent({ renderPreview }: { renderPreview?: 
   if (!activeFilePath) return null;
   if (isLoading) return <WorkspaceFileSkeleton />;
   // A failed background refetch keeps showing the last content.
-  if (!data) return <WorkspaceError error={error} fallback="Could not load file." className="m-4" />;
+  if (!data) return <WorkspaceError error={error ?? undefined} fallback="Could not load file." className="m-4" />;
 
   const file = { path: activeFilePath, content: data.content, mimeType: data.mimeType };
   return renderPreview?.(file) ?? <DefaultPreview {...file} />;

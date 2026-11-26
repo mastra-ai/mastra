@@ -159,7 +159,7 @@ describe('WorkspaceViewerPanel', () => {
       const user = userEvent.setup();
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
       await openFiles(user);
-      if (file.path.startsWith('src/')) await user.click(await screen.findByRole('button', { name: 'src' }));
+      if (file.path.startsWith('src/')) await user.click(await screen.findByRole('treeitem', { name: /^src/ }));
       await user.click(await screen.findByText(file.name));
 
       const viewer = await screen.findByLabelText('Workspace file viewer');
@@ -305,7 +305,7 @@ describe('WorkspaceViewerPanel', () => {
       expect(screen.queryByText('agent.ts')).not.toBeInTheDocument();
       expect(treeRequests).toEqual(['']);
 
-      await user.click(screen.getByRole('button', { name: 'src' }));
+      await user.click(screen.getByRole('treeitem', { name: /^src/ }));
       expect(await screen.findByText('agent.ts')).toBeInTheDocument();
       expect(treeRequests).toEqual(['', 'src']);
     });
@@ -397,7 +397,7 @@ describe('WorkspaceViewerPanel', () => {
       const user = userEvent.setup();
       const { client } = renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
       await openFiles(user);
-      await user.click(await screen.findByRole('button', { name: 'src' }));
+      await user.click(await screen.findByRole('treeitem', { name: /^src/ }));
       await screen.findByText('agent.ts');
 
       await user.click(screen.getByRole('button', { name: 'Refresh workspace files' }));
@@ -412,7 +412,7 @@ describe('WorkspaceViewerPanel', () => {
       const { client } = renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
       await openFiles(user);
 
-      await user.click(await screen.findByRole('button', { name: 'src' }));
+      await user.click(await screen.findByRole('treeitem', { name: /^src/ }));
       await user.click(await screen.findByText('agent.ts'));
 
       const viewer = await screen.findByLabelText('Workspace file viewer');
@@ -424,7 +424,7 @@ describe('WorkspaceViewerPanel', () => {
       await waitForMutationsIdle(client);
       await user.click(screen.getByRole('button', { name: 'Back to files' }));
 
-      expect(screen.getByRole('button', { name: 'src' })).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByRole('treeitem', { name: /^src/ })).toHaveAttribute('aria-expanded', 'true');
       expect(screen.getByText('agent.ts')).toBeInTheDocument();
     });
 
@@ -498,7 +498,7 @@ describe('WorkspaceViewerPanel', () => {
 
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
       await openFiles(user);
-      await user.click(await screen.findByRole('button', { name: 'src' }));
+      await user.click(await screen.findByRole('treeitem', { name: /^src/ }));
 
       expect(await screen.findByText(/not available in this session/)).toBeInTheDocument();
       expect(screen.getByText('README.md')).toBeInTheDocument();

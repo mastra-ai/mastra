@@ -12,6 +12,9 @@ import {
   WORKSPACE_ID,
   WORKSPACE_URL,
   docsListing,
+  LOG_COUNT,
+  logsListing,
+  rootWithLogsListing,
   fileContents,
   mountedRootListing,
   fileSearchResponse,
@@ -134,7 +137,7 @@ describe('WorkspaceTreeView', () => {
       const paths = spyListedPaths({ '.': rootListing, src: srcListing });
       renderView();
 
-      fireEvent.click(await screen.findByRole('button', { name: /^src/ }));
+      fireEvent.click(await screen.findByRole('treeitem', { name: /^src/ }));
 
       expect(await screen.findByRole('treeitem', { name: /^index\.ts/ })).toBeTruthy();
       expect(screen.getByRole('treeitem', { name: /^src/ }).getAttribute('aria-expanded')).toBe('true');
@@ -150,11 +153,85 @@ describe('WorkspaceTreeView', () => {
       );
       renderView();
 
-      fireEvent.click(await screen.findByRole('button', { name: /^src/ }));
+      fireEvent.click(await screen.findByRole('treeitem', { name: /^src/ }));
 
       const folder = screen.getByRole('treeitem', { name: /^src/ });
       expect(await within(folder).findByRole('status', { name: 'Loading src' })).toBeTruthy();
       expect(screen.queryByTestId('workspace-folder-skeleton')).toBeNull();
+    });
+  });
+
+  describe('when a folder holds thousands of files', () => {
+    it('draws only the rows near the view, each with its place in the folder', async () => {
+      server.use(listHandler({ '.': rootWithLogsListing, logs: logsListing }));
+      renderView();
+
+      fireEvent.click(await screen.findByRole('treeitem', { name: /^logs/ }));
+
+      const first = await screen.findByRole('treeitem', { name: /^run-0\.json/ });
+      expect(first.getAttribute('aria-level')).toBe('2');
+      expect(first.getAttribute('aria-posinset')).toBe('1');
+      expect(first.getAttribute('aria-setsize')).toBe(String(LOG_COUNT));
+      expect(screen.getAllByRole('treeitem').length).toBeLessThan(60);
+      expect(screen.queryByRole('treeitem', { name: new RegExp(`^run-${LOG_COUNT - 1}\\.json`) })).toBeNull();
+    });
+
+    it('moves one tab stop with the arrow keys, up to the parent with Left, and closes it with Left again', async () => {
+      server.use(listHandler({ '.': rootWithLogsListing, logs: logsListing }));
+      renderView();
+      const folder = await screen.findByRole('treeitem', { name: /^logs/ });
+      fireEvent.click(folder);
+      await screen.findByRole('treeitem', { name: /^run-0\.json/ });
+      folder.focus();
+
+      fireEvent.keyDown(folder, { key: 'ArrowDown' });
+      const first = screen.getByRole('treeitem', { name: /^run-0\.json/ });
+      expect(document.activeElement).toBe(first);
+      expect(first.tabIndex).toBe(0);
+      expect(screen.getByRole('treeitem', { name: /^logs/ }).tabIndex).toBe(-1);
+
+      fireEvent.keyDown(first, { key: 'ArrowLeft' });
+      expect(document.activeElement).toBe(screen.getByRole('treeitem', { name: /^logs/ }));
+
+      fireEvent.keyDown(document.activeElement ?? folder, { key: 'ArrowLeft' });
+      expect(screen.getByRole('treeitem', { name: /^logs/ }).getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByRole('treeitem', { name: /^run-0\.json/ })).toBeNull();
+    });
+  });
+
+  describe('when an open folder is empty', () => {
+    it('keeps focus on it with Right instead of jumping to the next row', async () => {
+      server.use(listHandler({ '.': rootListing, docs: { path: 'docs', entries: [] } }));
+      renderView();
+      const docs = await screen.findByRole('treeitem', { name: /^docs/ });
+      fireEvent.click(docs);
+      await waitFor(() => expect(docs.getAttribute('aria-expanded')).toBe('true'));
+      docs.focus();
+
+      fireEvent.keyDown(docs, { key: 'ArrowRight' });
+
+      expect(document.activeElement).toBe(screen.getByRole('treeitem', { name: /^docs/ }));
+    });
+  });
+
+  describe('when a folder fails to load', () => {
+    it('still offers the new folder field inside it, beside the error', async () => {
+      server.use(
+        http.get(`${WORKSPACE_URL}/fs/list`, ({ request }) => {
+          const path = new URL(request.url).searchParams.get('path');
+          return path === 'src'
+            ? HttpResponse.json({ error: 'boom' }, { status: 500 })
+            : HttpResponse.json(rootListing);
+        }),
+      );
+      renderView({ onCreateDirectory: vi.fn() });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'New folder in src' }));
+
+      const error = (await screen.findByText('Could not load folder.')).closest('[role="treeitem"]');
+      const field = screen.getByPlaceholderText('Folder name').closest('[role="treeitem"]');
+      expect([field?.getAttribute('aria-posinset'), field?.getAttribute('aria-setsize')]).toEqual(['1', '2']);
+      expect([error?.getAttribute('aria-posinset'), error?.getAttribute('aria-setsize')]).toEqual(['2', '2']);
     });
   });
 
@@ -253,7 +330,7 @@ describe('WorkspaceTreeView', () => {
         </MastraReactProvider>
       );
       const { rerender } = render(view());
-      fireEvent.click(await screen.findByRole('button', { name: /^src/ }));
+      fireEvent.click(await screen.findByRole('treeitem', { name: /^src/ }));
       await screen.findByRole('treeitem', { name: /^index\.ts/ });
 
       rerender(view('docs/guides/intro.md'));
@@ -268,7 +345,7 @@ describe('WorkspaceTreeView', () => {
       server.use(listHandler({ '.': rootListing, src: srcListing }), readHandler());
       renderView();
 
-      fireEvent.click(await screen.findByRole('button', { name: /^src/ }));
+      fireEvent.click(await screen.findByRole('treeitem', { name: /^src/ }));
       const file = await screen.findByRole('treeitem', { name: /^index\.ts/ });
       fireEvent.click(file);
 
@@ -774,6 +851,32 @@ describe('WorkspaceTreeView', () => {
       await waitFor(() => expect(deleted).toEqual([{ path: 'src', type: 'directory' }]));
       expect(screen.getByRole('treeitem', { name: /^src/ }).getAttribute('aria-expanded')).toBe('false');
       expect([...paths]).toEqual(['.']);
+    });
+
+    it('closes an open folder it deleted, so its listing is not requested again', async () => {
+      const requests: string[] = [];
+      server.use(
+        http.get(`${WORKSPACE_URL}/fs/list`, ({ request }) => {
+          const path = new URL(request.url).searchParams.get('path') ?? '.';
+          requests.push(path);
+          return HttpResponse.json(path === 'src' ? srcListing : rootListing);
+        }),
+      );
+      renderView({ onDelete: () => {} });
+      const src = await screen.findByRole('treeitem', { name: /^src/ });
+      fireEvent.click(src);
+      await screen.findByRole('treeitem', { name: /^index\.ts/ });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Delete src' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+
+      await waitFor(() =>
+        expect(screen.getByRole('treeitem', { name: /^src/ }).getAttribute('aria-expanded')).toBe('false'),
+      );
+      const before = requests.filter(path => path === 'src').length;
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(requests.filter(path => path === 'src').length).toBe(before);
+      expect(screen.queryByRole('treeitem', { name: /^index\.ts/ })).toBeNull();
     });
   });
 
