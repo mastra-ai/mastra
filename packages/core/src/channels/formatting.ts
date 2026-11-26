@@ -1,4 +1,4 @@
-import type { ButtonElement, ButtonStyle } from 'chat';
+import type { ButtonElement, ButtonStyle, CardElement } from 'chat';
 
 import { chatModule } from './chat-lazy';
 import type { PostableMessage } from './types';
@@ -162,14 +162,18 @@ export const TOOL_RESUME_ACTION_PREFIX = 'tool_resume:';
 const TOOL_RESUME_ACTION_PATTERN = /^[a-z][a-z0-9_-]{0,15}$/;
 
 /** Telegram's limit on a button's `callback_data`, the tightest of the supported platforms. */
-const MAX_ACTION_ID_BYTES = 64;
+const MAX_CALLBACK_DATA_BYTES = 64;
+
+/** Bytes Telegram's adapter sends for a button id: it wraps it as `chat:{"a":"<id>"}`. */
+const callbackDataBytes = (id: string) => new TextEncoder().encode(`chat:${JSON.stringify({ a: id })}`).length;
 
 /**
  * Build a button for a paused tool's `channelCard` (see {@link ChannelSuspendPayload}).
  * A click resumes the paused tool call with `{ action }`.
  *
- * @throws when `action` does not match `/^[a-z][a-z0-9_-]{0,15}$/`, or when the
- * button's id is longer than 64 bytes, which Telegram does not accept.
+ * @throws when `toolCallId` is empty, when `action` does not match
+ * `/^[a-z][a-z0-9_-]{0,15}$/`, or when the button's id is too long for
+ * Telegram, whose button data is limited to 64 bytes (about 50 for the id).
  */
 export function toolResumeButton({
   toolCallId,
@@ -184,14 +188,15 @@ export function toolResumeButton({
   label: string;
   style?: ButtonStyle;
 }): ButtonElement {
+  if (!toolCallId) throw new Error('toolResumeButton: toolCallId is required');
   if (!TOOL_RESUME_ACTION_PATTERN.test(action)) {
     throw new Error(`toolResumeButton: action "${action}" must match ${TOOL_RESUME_ACTION_PATTERN}`);
   }
   const id = `${TOOL_RESUME_ACTION_PREFIX}${toolCallId}:${action}`;
-  const bytes = new TextEncoder().encode(id).length;
-  if (bytes > MAX_ACTION_ID_BYTES) {
+  const bytes = callbackDataBytes(id);
+  if (bytes > MAX_CALLBACK_DATA_BYTES) {
     throw new Error(
-      `toolResumeButton: the button id "${id}" is ${bytes} bytes; channels accept at most ${MAX_ACTION_ID_BYTES}`,
+      `toolResumeButton: the button id "${id}" takes ${bytes} bytes of Telegram button data; it accepts at most ${MAX_CALLBACK_DATA_BYTES}`,
     );
   }
   return { type: 'button', id, label, ...(style ? { style } : {}) };
@@ -206,6 +211,37 @@ export function parseToolResumeActionId(actionId: string): { toolCallId: string;
   const action = rest.slice(separator + 1);
   if (separator <= 0 || !TOOL_RESUME_ACTION_PATTERN.test(action)) return undefined;
   return { toolCallId, action };
+}
+
+/** The actions of `toolCallId`'s {@link toolResumeButton}s on a card. */
+export function toolResumeActionsOf(card: CardElement, toolCallId: string): string[] {
+  const actions: string[] = [];
+  const visit = (node: unknown) => {
+    if (!node || typeof node !== 'object') return;
+    const { type, id, children } = node as { type?: unknown; id?: unknown; children?: unknown };
+    if (type === 'button' && typeof id === 'string') {
+      const parsed = parseToolResumeActionId(id);
+      if (parsed?.toolCallId === toolCallId) actions.push(parsed.action);
+    }
+    if (Array.isArray(children)) children.forEach(visit);
+  };
+  visit(card);
+  return actions;
+}
+
+/** A card without its buttons, shown while a click on it is being answered. */
+export function withoutButtons(card: CardElement): CardElement {
+  const strip = (children: unknown[]): unknown[] =>
+    children
+      .filter(child => {
+        const type = (child as { type?: unknown } | null)?.type;
+        return type !== 'actions' && type !== 'button';
+      })
+      .map(child => {
+        const nested = (child as { children?: unknown }).children;
+        return Array.isArray(nested) ? { ...(child as object), children: strip(nested) } : child;
+      });
+  return { ...card, children: strip(card.children) as CardElement['children'] };
 }
 
 /** Format a tool approval request message */

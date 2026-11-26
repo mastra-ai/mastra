@@ -406,20 +406,34 @@ describe('toolResumeButton', () => {
     expect(() => toolResumeButton({ toolCallId: 'call_abc', action, label: 'Go' })).toThrow(/must match/);
   });
 
-  it('accepts the longest action name and an id of exactly 64 bytes', () => {
-    const action = 'a'.repeat(16);
-    // `tool_resume:` (12) + id + `:` (1) + action (16) = 64
-    const toolCallId = 'x'.repeat(35);
-    expect(toolResumeButton({ toolCallId, action, label: 'Go' }).id).toHaveLength(64);
+  it('rejects an empty tool call id', () => {
+    expect(() => toolResumeButton({ toolCallId: '', action: 'go', label: 'Go' })).toThrow(/toolCallId is required/);
   });
 
-  it('rejects ids over the 64 bytes Telegram accepts, counting bytes rather than characters', () => {
-    expect(() => toolResumeButton({ toolCallId: 'x'.repeat(36), action: 'a'.repeat(16), label: 'Go' })).toThrow(
-      /65 bytes/,
+  // Telegram's adapter sends a button id as `chat:{"a":"<id>"}` (13 bytes around it),
+  // and Telegram accepts 64 bytes, so the id itself gets 51.
+  it("accepts the longest id Telegram's 64 bytes of button data fit", () => {
+    const action = 'a'.repeat(16);
+    // `tool_resume:` (12) + id (22) + `:` (1) + action (16) = 51
+    const id = toolResumeButton({ toolCallId: 'x'.repeat(22), action, label: 'Go' }).id;
+    expect(id).toHaveLength(51);
+    expect(new TextEncoder().encode(`chat:${JSON.stringify({ a: id })}`)).toHaveLength(64);
+  });
+
+  it("fits a provider's tool call id with a short action", () => {
+    // An Anthropic tool call id is 30 characters.
+    expect(() =>
+      toolResumeButton({ toolCallId: 'toolu_01A09q90qw90lq917835lq9a', action: 'connect', label: 'Connect' }),
+    ).not.toThrow();
+  });
+
+  it('rejects ids too long for Telegram, counting bytes rather than characters', () => {
+    expect(() => toolResumeButton({ toolCallId: 'x'.repeat(23), action: 'a'.repeat(16), label: 'Go' })).toThrow(
+      /takes 65 bytes/,
     );
-    // 35 characters, 36 bytes: the id is 64 characters but 65 bytes.
-    expect(() => toolResumeButton({ toolCallId: `${'x'.repeat(34)}é`, action: 'a'.repeat(16), label: 'Go' })).toThrow(
-      /65 bytes/,
+    // 22 characters, 23 bytes.
+    expect(() => toolResumeButton({ toolCallId: `${'x'.repeat(21)}é`, action: 'a'.repeat(16), label: 'Go' })).toThrow(
+      /takes 65 bytes/,
     );
   });
 });

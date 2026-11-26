@@ -47,6 +47,8 @@ import {
   parseToolResumeActionId,
   stripToolPrefix,
   TOOL_RESUME_ACTION_PREFIX,
+  toolResumeActionsOf,
+  withoutButtons,
 } from './formatting';
 import { ChatChannelGenerativeUIProcessor, GENERATIVE_UI_PROCESSOR_ID, RENDER_CARD_TOOL_NAME } from './generative-ui';
 import {
@@ -59,7 +61,7 @@ import {
 } from './inline-media';
 import type { InlineLinkRule } from './inline-media';
 import { ChatChannelOutputProcessor, CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';
-import type { ChatChannelRenderContext } from './output-processor';
+import type { ChannelRunRenderContext, ChatChannelRenderContext } from './output-processor';
 import { ChatChannelProcessor } from './processor';
 import { ChannelReplyModeProcessor, channelReplyTypingStatus, threadLinkOptions } from './reply-mode';
 import { ChannelReplyStreamProcessor, REPLY_TOOL_NAME } from './reply-tool';
@@ -203,7 +205,7 @@ const approvalCardKey = ({ threadId, messageId, toolCallId }: ApprovalCardKey) =
 const suspendedCardKey = (card: ApprovalCardKey) => `suspended:${approvalCardKey(card)}`;
 
 /** The identity fields of a Chat SDK author that `getChannelRun` exposes. */
-const channelActor = (author: Author | undefined): ChatChannelRenderContext['actor'] =>
+const channelActor = (author: Author | undefined): ChannelRunRenderContext['actor'] =>
   author?.userId
     ? {
         userId: author.userId,
@@ -592,6 +594,7 @@ export class AgentChannels {
     };
     let inFlightKey: string | undefined;
     let cardKey: string | undefined;
+    let restoreCard: (() => Promise<void>) | undefined;
     try {
       if (!parsed) {
         this.log('info', 'Malformed tool resume action', actionEventContext);
@@ -632,6 +635,18 @@ export class AgentChannels {
       // The card recorded when it was posted, else the paused call in history
       // (after a restart, or when another instance posted the card).
       const stashed = this.pendingApprovalCards.get(toolCallId);
+      // The card on screen decides which clicks count: an older card for this
+      // call, an action the current step does not offer, or a card already
+      // being answered (its buttons are stripped) is a late click.
+      if (stashed?.card) {
+        if (
+          (stashed.messageId && stashed.messageId !== messageId) ||
+          !toolResumeActionsOf(stashed.card, toolCallId).includes(action)
+        ) {
+          this.log('info', 'Ignoring tool resume action the card no longer offers', actionEventContext);
+          return;
+        }
+      }
       let runId = stashed?.runId;
       let requesterId = stashed?.requesterId;
       if (!runId) {
@@ -715,7 +730,31 @@ export class AgentChannels {
           defaultResourceId: `${platform}:${actor.userId}`,
           requestContext,
         });
-        actorResourceId = typeof resolved === 'string' ? resolved : await resolved();
+        try {
+          actorResourceId = typeof resolved === 'string' ? resolved : await resolved();
+        } catch (err) {
+          // The tool still runs; it just can't tell whose resource the clicker is.
+          this.log('warn', "Failed to resolve the tool resume clicker's resource ID", {
+            ...actionEventContext,
+            error: err,
+          });
+        }
+      }
+
+      // Take the buttons off while the tool answers, so the card can't be
+      // clicked again until the tool shows its next step or finishes.
+      if (stashed?.card) {
+        const answering = withoutButtons(stashed.card);
+        this.pendingApprovalCards.set(toolCallId, { ...stashed, card: answering });
+        restoreCard = async () => {
+          this.pendingApprovalCards.set(toolCallId, stashed);
+          await this.adapters[platform]!.editMessage(chatThread.id, messageId, stashed.card!);
+        };
+        try {
+          await this.adapters[platform]!.editMessage(chatThread.id, messageId, answering);
+        } catch (err) {
+          this.log('warn', 'Failed to take the buttons off a clicked tool card', { ...actionEventContext, error: err });
+        }
       }
 
       requestContext.set(
@@ -760,6 +799,10 @@ export class AgentChannels {
         return;
       }
       this.log('error', 'Error handling tool resume action', { ...actionEventContext, error: err });
+      // The run is still waiting, so give the card its buttons back.
+      await restoreCard?.().catch(restoreErr =>
+        this.log('warn', 'Failed to restore the buttons of a tool card', { ...actionEventContext, error: restoreErr }),
+      );
       try {
         if (event.thread) {
           const error = err instanceof Error ? err : new Error(String(err));
@@ -2563,8 +2606,8 @@ export class AgentChannels {
       requesterId,
       actor,
       actorResourceId,
-    }: Pick<ChatChannelRenderContext, 'approvalContext' | 'actor' | 'actorResourceId'> & { requesterId?: string } = {},
-  ): ChatChannelRenderContext {
+    }: Pick<ChannelRunRenderContext, 'approvalContext' | 'actor' | 'actorResourceId'> & { requesterId?: string } = {},
+  ): ChannelRunRenderContext {
     const adapter = this.adapters[platform]!;
     const adapterConfig = this.adapterConfigs[platform];
     const streaming = this.resolveStreaming(adapterConfig?.streaming);

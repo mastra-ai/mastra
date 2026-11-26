@@ -820,6 +820,21 @@ export async function runStreamingDriver({
       if (toolDisplay === 'text' && !toolDisplayFn) continue;
       const card = channelCardOf(chunk.payload.suspendPayload);
       if (!card) continue;
+      // Park the plan row like an approval, or closing the session marks it failed.
+      if (rendersToolsInPlan) {
+        const enr = tracker.enrichApproval({
+          toolCallId: chunk.payload.toolCallId,
+          toolName: chunk.payload.toolName,
+          args: chunk.payload.args,
+        });
+        pushToSession({
+          type: 'task_update',
+          id: enr.toolCallId,
+          title: formatTaskTitle(enr.displayName, enr.argsSummary, enr.args),
+          status: 'complete',
+          details: 'Waiting for the user…',
+        });
+      }
       await closeSession();
       await postSuspendedToolCard({
         chunk,

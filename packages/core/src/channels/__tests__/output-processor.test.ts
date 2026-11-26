@@ -3018,4 +3018,34 @@ describe('paused tool channel cards', () => {
       });
     });
   }
+
+  it.each(['timeline', 'grouped'] as const)(
+    "'%s': parks the tool's plan row as waiting rather than failed, and posts the card",
+    async toolDisplay => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay });
+      await drive(
+        channels,
+        [{ type: 'tool-call', payload: call }, suspended({ channelCard: card('Pick one') })],
+        chatThread,
+      );
+
+      const { StreamingPlan } = await getChatModule();
+      const plan = calls.find(c => c.kind === 'post' && c.arg instanceof StreamingPlan) as Extract<
+        Call,
+        { kind: 'post' }
+      >;
+      const rows = (await drainStreamingPlan(plan.arg)).filter(
+        (p): p is { type: 'task_update'; id: string; status: string; details?: string } =>
+          typeof p === 'object' && (p as any).type === 'task_update',
+      );
+      expect(rows.at(-1)).toMatchObject({ id: 't1', status: 'complete', details: 'Waiting for the user…' });
+      expect((await nonPlanPosts(calls)).map(p => p.arg)).toEqual([card('Pick one')]);
+    },
+  );
+
+  it('records the card it showed, so the click handler can check which buttons it offers', async () => {
+    const { channels, chatThread } = makeChannels({ streaming: false, toolDisplay: 'cards' });
+    await drive(channels, [suspended({ channelCard: card('Pick one') })], chatThread);
+    expect((channels as any).pendingApprovalCards.get('t1')?.card).toEqual(card('Pick one'));
+  });
 });

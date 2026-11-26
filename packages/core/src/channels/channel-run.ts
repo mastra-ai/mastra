@@ -2,7 +2,7 @@ import type { Thread } from 'chat';
 
 import type { RequestContext } from '../request-context';
 import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';
-import type { ChatChannelRenderContext } from './output-processor';
+import type { ChannelRunRenderContext } from './output-processor';
 
 /** What a tool can know about the channel run it executes in. */
 export interface ChannelRun {
@@ -10,12 +10,16 @@ export interface ChannelRun {
   platform: string;
   /** The Chat SDK thread the run answers in, for e.g. `thread.postEphemeral()`. */
   thread: Thread;
-  /** The author of the message that started the run, or the user who clicked the button that resumed it. */
+  /**
+   * The author of the message that started the run, or the user who clicked the
+   * `toolResumeButton()` that resumed it. Unset on runs resumed by approval buttons.
+   */
   actor?: { userId: string; userName?: string; fullName?: string };
   /**
    * `actor`'s resource ID: `resolveResourceId` applied to them, or `${platform}:${userId}` without that hook.
-   * Always set on a resume click. On an inbound message it is unknown when a `resolveResourceId` hook is
-   * configured and the message continues an existing thread, since the hook only runs for new threads.
+   * Set on a resume click unless the hook throws. On an inbound message it is unknown when a
+   * `resolveResourceId` hook is configured and the message continues an existing thread, since the
+   * hook only runs for new threads there.
    */
   actorResourceId?: string;
 }
@@ -33,7 +37,7 @@ export interface ChannelRun {
  * ```
  */
 export function getChannelRun(requestContext: RequestContext | undefined): ChannelRun | undefined {
-  const render = requestContext?.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
+  const render = requestContext?.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChannelRunRenderContext | undefined;
   if (!render?.chatThread) return undefined;
   return {
     platform: render.platform,

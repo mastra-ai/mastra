@@ -600,7 +600,15 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s paused tool cards', 
    * A channel agent whose `stepper` tool shows a next/stop card, then a done/stop
    * card on `next`, and returns `'finished'` on `done` or `'stopped'` on `stop`.
    */
-  async function setup(options: { toolApprovers?: 'anyone'; resolveResourceId?: boolean; twin?: boolean } = {}) {
+  async function setup(
+    options: {
+      toolApprovers?: 'anyone';
+      resolveResourceId?: boolean | 'throws-for-bob';
+      twin?: boolean;
+      toolDisplay?: 'hidden';
+      holdNext?: boolean;
+    } = {},
+  ) {
     // Durable run IDs bypass Mastra.generateId; see the inbound execution cases above.
     const realCrypto = await vi.importActual<typeof import('node:crypto')>('node:crypto');
     vi.spyOn(globalThis.crypto, 'randomUUID').mockImplementation(realCrypto.randomUUID);
@@ -622,14 +630,26 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s paused tool cards', 
     adapter.editMessage = vi.fn(async () => {});
     const threadId = `thread-${engine}-${randomUUID()}`;
     const config = {
-      adapters: { slack: { adapter, streaming: false, toolApprovers: options.toolApprovers } },
+      adapters: {
+        slack: { adapter, streaming: false, toolApprovers: options.toolApprovers, toolDisplay: options.toolDisplay },
+      },
       resolveThreadId: () => threadId,
       ...(options.resolveResourceId
-        ? { resolveResourceId: ({ message }: { message: Message }) => `team:${message.author.userId}` }
+        ? {
+            resolveResourceId: ({ message }: { message: Message }) => {
+              if (options.resolveResourceId === 'throws-for-bob' && message.author.userId === bob.userId) {
+                throw new Error('directory is down');
+              }
+              return `team:${message.author.userId}`;
+            },
+          }
         : {}),
     };
 
     const seen: Array<{ action?: string; actor?: string; actorResourceId?: string }> = [];
+    let releaseNext = () => {};
+    /** Hold the tool after a `next` click, until `releaseNext()`, before it shows the next step. */
+    const holdNext = new Promise<void>(resolve => (releaseNext = resolve));
     const stepper = createTool({
       id: 'stepper',
       description: 'Walk the user through two steps',
@@ -642,6 +662,7 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s paused tool cards', 
         const id = context.agent!.toolCallId;
         if (action === 'done') return 'finished';
         if (action === 'stop') return 'stopped';
+        if (action === 'next' && options.holdNext) await holdNext;
         await context.agent!.suspend({
           channelCard: card(id, action === 'next' ? ['done', 'stop'] : ['next', 'stop']),
         });
@@ -719,7 +740,26 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s paused tool cards', 
       await channels.close();
       await mastra.stopWorkers();
     };
-    return { agent, llm, adapter, seen, resumeStream, cardMessage, click, restart, cleanup, toolCallId, threadId };
+    /** The button actions on each version of message `messageId`, oldest first. */
+    const versions = (messageId: string) =>
+      adapter.editMessage.mock.calls
+        .filter((call: unknown[]) => call[1] === messageId)
+        .map((call: unknown[]) => [...JSON.stringify(call[2]).matchAll(/tool_resume:[^"]*:([a-z]+)"/g)].map(m => m[1]));
+    return {
+      agent,
+      llm,
+      adapter,
+      seen,
+      resumeStream,
+      cardMessage,
+      click,
+      restart,
+      cleanup,
+      versions,
+      releaseNext,
+      toolCallId,
+      threadId,
+    };
   }
 
   /** Lets an ignored click's resume, if one slipped through, reach the agent. */
@@ -842,6 +882,110 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s paused tool cards', 
       await t.click('next', first, bob);
       await t.cardMessage('done');
       expect(t.seen[1]).toEqual({ action: 'next', actor: 'U2', actorResourceId: 'team:U2' });
+    } finally {
+      await t.cleanup();
+    }
+  }, 20_000);
+
+  it('ignores a late click on the previous step once the next step shows', async () => {
+    const t = await setup();
+    try {
+      const first = await t.cardMessage('next');
+      await t.click('next', first);
+      await t.cardMessage('done');
+      // A double click landing after the card moved on, or a forged action.
+      await t.click('next', first);
+      // A current action, but on another (older) message for this call.
+      await t.click('done', 'post-older');
+      await settle();
+      expect(t.resumeStream).toHaveBeenCalledTimes(1);
+      expect(t.seen.map(entry => entry.action)).toEqual([undefined, 'next']);
+    } finally {
+      await t.cleanup();
+    }
+  }, 20_000);
+
+  it('ignores a click that lands after the first was taken, while the tool is still answering it', async () => {
+    const t = await setup({ holdNext: true });
+    try {
+      const first = await t.cardMessage('next');
+      await t.click('next', first);
+      await vi.waitFor(() => expect(t.seen).toHaveLength(2));
+      await t.click('stop', first);
+      await settle();
+      t.releaseNext();
+      await t.cardMessage('done');
+      expect(t.resumeStream).toHaveBeenCalledTimes(1);
+      expect(t.seen.map(entry => entry.action)).toEqual([undefined, 'next']);
+    } finally {
+      t.releaseNext();
+      await t.cleanup();
+    }
+  }, 20_000);
+
+  it('takes the buttons off a clicked card, and leaves none once the call finished', async () => {
+    const t = await setup({ toolDisplay: 'hidden' });
+    try {
+      const first = await t.cardMessage('next');
+      await t.click('next', first);
+      await t.cardMessage('done');
+      await t.click('done', first);
+      await vi.waitFor(() => expect(JSON.stringify(t.adapter.postMessage.mock.calls)).toContain('All done'), {
+        timeout: 5000,
+      });
+      // Clicked: no buttons; the next step: done/stop; clicked again: no buttons. Nothing reopens it.
+      // (Durable and evented runs show the next step through both open streams, so collapse repeats.)
+      const shown = t.versions(first).filter((v, i, all) => i === 0 || v.join() !== all[i - 1]!.join());
+      expect(shown).toEqual([[], ['done', 'stop'], []]);
+    } finally {
+      await t.cleanup();
+    }
+  }, 20_000);
+
+  it('gives the card its buttons back when resuming fails, so the user can click again', async () => {
+    const t = await setup();
+    try {
+      const first = await t.cardMessage('next');
+      t.resumeStream.mockRejectedValueOnce(new Error('storage hiccup'));
+      await t.click('next', first);
+      expect(t.versions(first).at(-1)).toEqual(['next', 'stop']);
+      expect(JSON.stringify(t.adapter.postMessage.mock.calls)).toContain('storage hiccup');
+
+      await t.click('next', first);
+      await t.cardMessage('done');
+      expect(t.seen.map(entry => entry.action)).toEqual([undefined, 'next']);
+    } finally {
+      await t.cleanup();
+    }
+  }, 20_000);
+
+  it('still resumes when resolveResourceId fails for the clicker, without a resource ID', async () => {
+    const t = await setup({ resolveResourceId: 'throws-for-bob', toolApprovers: 'anyone' });
+    try {
+      const first = await t.cardMessage('next');
+      await t.click('next', first, bob);
+      await t.cardMessage('done');
+      expect(t.seen[1]).toEqual({ action: 'next', actor: 'U2', actorResourceId: undefined });
+    } finally {
+      await t.cleanup();
+    }
+  }, 20_000);
+
+  it('finds a re-suspended call in history after a restart, and still checks who clicks', async () => {
+    const t = await setup();
+    try {
+      const first = await t.cardMessage('next');
+      await t.click('next', first);
+      await t.cardMessage('done');
+      await t.restart();
+      await t.click('done', first, bob);
+      await settle();
+      expect(t.resumeStream).toHaveBeenCalledTimes(1);
+
+      await t.click('done', first);
+      await vi.waitFor(() => expect(t.seen.map(entry => entry.action)).toEqual([undefined, 'next', 'done']), {
+        timeout: 5000,
+      });
     } finally {
       await t.cleanup();
     }

@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added buttons to paused tools in Slack, Telegram and Teams threads. A tool that pauses with a `channelCard` in its suspend payload now shows that card in the thread, and a click on a `toolResumeButton()` resumes the tool with `{ action }`. The tool can pause again with a new card for multi-step flows, and the clicked card updates in place. Before, a paused tool left the thread stuck with nothing to click.
+Added buttons to paused tools in Slack, Telegram and Teams threads. A tool that pauses with a `channelCard` in its suspend payload now shows that card in the thread, and a click on a `toolResumeButton()` resumes the tool with `{ action }`. The tool can pause again with a new card for multi-step flows, and the clicked card updates in place. A click takes the card's buttons off while the tool answers, so a double click or a late click on an earlier step is ignored. Before, a paused tool left the thread stuck with nothing to click.
 
 `getChannelRun(requestContext)` tells a tool which thread it runs in, who clicked (or sent the message), and that user's resource ID, so the tool can check the clicker owns the conversation before acting for them.
 

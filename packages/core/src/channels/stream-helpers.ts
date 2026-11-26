@@ -28,6 +28,8 @@ export interface PendingApprovalRecord {
   args?: Record<string, unknown>;
   /** Platform user id of the person whose message triggered the tool call. */
   requesterId?: string;
+  /** A paused tool's `channelCard`, as last shown. */
+  card?: CardElement;
 }
 
 /**
@@ -417,8 +419,8 @@ export function channelCardOf(suspendPayload: unknown): CardElement | undefined 
  * tool's running card, or the card it suspended with before (a resumed run
  * seeds that one through the approval stash), so a re-suspension edits the
  * same message; otherwise it is posted. The card is recorded like an approval
- * card so the click handler can resume the run and the tool's result edits it.
- *
+ * card, with the card itself, so the click handler can resume the run and
+ * check the clicked button is on the card shown.
  */
 export async function postSuspendedToolCard(args: {
   chunk: Extract<AgentChunkType<any>, { type: 'tool-call-suspended' }>;
@@ -456,5 +458,6 @@ export async function postSuspendedToolCard(args: {
     toolName: enr.toolName,
     args: (enr.args ?? {}) as Record<string, unknown>,
     requesterId: existing?.requesterId,
+    card,
   });
 }
