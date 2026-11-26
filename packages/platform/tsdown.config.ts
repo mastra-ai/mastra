@@ -10,7 +10,7 @@ export default defineConfig({
   dts: false,
   treeshake: true,
   deps: {
-    neverBundle: ['@mastra/core', '@mastra/platform-workspace', '@mastra/stagehand'],
+    neverBundle: ['@mastra/client-js', '@mastra/core', '@mastra/platform-workspace', '@mastra/stagehand'],
   },
   onSuccess: async () => {
     await generateTypes(process.cwd());

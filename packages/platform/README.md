@@ -1,6 +1,6 @@
 # @mastra/platform (experimental)
 
-Hosted Mastra Platform clients for Memory, Knowledge, and Browser, with Sandbox and Filesystem re-exported from the `@mastra/platform-workspace` dependency.
+Hosted Mastra Platform clients for managed agents, Memory, Knowledge, and Browser, with Sandbox and Filesystem re-exported from the `@mastra/platform-workspace` dependency.
 
 ## Installation
 
@@ -26,6 +26,80 @@ const knowledge = new PlatformKnowledge();
 ```
 
 `PlatformSandbox` and `PlatformFilesystem` are also available from `@mastra/platform`.
+
+### Managed agents
+
+`MastraPlatform` creates and runs agents hosted on Mastra Platform. Use a project access token: it names its project, so `projectId` is only needed for other tokens (or set `MASTRA_PROJECT_ID`).
+
+```ts
+import { MastraPlatform } from '@mastra/platform';
+
+const platform = new MastraPlatform({ accessToken: process.env.MASTRA_PLATFORM_ACCESS_TOKEN });
+
+const agent = await platform.createAgent({
+  name: 'Support',
+  instructions: 'Answer billing questions.',
+  model: 'openai/gpt-5-mini',
+});
+
+const response = await agent.stream('Where is my invoice?', {
+  memory: { thread: 'thread-1', resource: 'user-1' },
+});
+await response.processDataStream({ onChunk: async chunk => console.log(chunk) });
+
+const { messages } = await agent.listMessages('thread-1', { resourceId: 'user-1' });
+```
+
+Every run acts for an end user, whose memory, threads, and connected accounts it uses. Pass `memory.resource`, or `resourceId` for a run without memory. Use `platform.getAgent(id)` for an existing agent; agents also have `generate`, `details`, `update`, `delete`, and `listThreads`.
+
+### Memory, knowledge, connected accounts, and sandboxes
+
+The same client reaches the project's other services with the same token.
+
+```ts
+// Memory and Knowledge instances (IDs fall back to MASTRA_MEMORY_INSTANCE_ID / MASTRA_KNOWLEDGE_INSTANCE_ID)
+const memory = platform.getMemory({ instanceId: 'mem_123' });
+const { threads } = await memory.client.listThreads({ resourceId: 'user-1' });
+const knowledge = platform.getKnowledge({ instanceId: 'kn_123' });
+
+// Connect an end user's GitHub account: send them to connectUrl to sign in
+const { connectUrl } = await platform.connect.createConnectSession('github', { resourceId: 'user-1' });
+const connections = await platform.connect.listConnections({ resourceId: 'user-1' });
+
+// Start a sandbox and run a command in it
+const sandbox = await platform.createSandbox({ environmentId: 'env_123' });
+const { stdout } = await sandbox.executeCommand('ls', ['-la']);
+
+// Later, reconnect to it by ID (fails if it no longer exists)
+const again = await platform.getSandbox(sandbox.sandboxId!);
+const sandboxes = await platform.sandboxes.list('env_123');
+```
+
+`getMemory` and `getKnowledge` return the same `PlatformMemory` and `PlatformKnowledge` you can pass to an agent. An end user's connections are visible to, and removable by, only that end user. `getSandbox` reconnects through the provider that runs the sandbox; `createSandbox` with a `sandboxId` reattaches if it can and otherwise starts a new one.
+
+### Provisioning projects
+
+Signed in as an organization member (for example with a token from `mastra auth tokens create`), the same client creates projects and provisions what runs in them. Provisioning runs in the background: `create` returns the resource while it is still `provisioning`, and `waitUntilReady` polls until it is ready, throwing `MastraPlatformError` if provisioning fails.
+
+```ts
+const platform = new MastraPlatform({ accessToken: process.env.MASTRA_API_TOKEN, organizationId: 'org_123' });
+
+const created = await platform.projects.create({ name: 'Support Desk' });
+const project = platform.project(created.id);
+await project.setupAgents();
+
+const [production] = await project.environments.list();
+const memory = await project.memoryInstances.create({ name: 'support-memory' });
+await project.memoryInstances.waitUntilReady(memory.id);
+
+const database = await project.databases.create({ kind: 'turso', name: 'app-db' });
+await project.databases.waitUntilReady(database.id);
+const { envVars } = await project.databases.connection(database.id);
+
+const files = await project.filesystems.create({ environmentId: production.id, name: 'uploads' });
+```
+
+Creating Memory instances, Knowledge instances, and databases requires the `admin` role.
 
 ### Hosted browser
 
