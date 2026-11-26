@@ -380,6 +380,20 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     return next;
   }
 
+  /**
+   * Answers an input for a card that no longer exists, so no run is started to wait on it forever:
+   * the card's session can end a run after the card was deleted.
+   */
+  async #answeredWithoutCard(pending: PendingInput): Promise<boolean> {
+    const asked =
+      'runEnded' in pending ? pending.runEnded : 'runPaused' in pending ? pending.runPaused : pending.request;
+    if (await this.#context.workItems.get({ orgId: asked.orgId, id: asked.workItemId })) return false;
+    if ('runEnded' in pending) pending.answer = { outcome: false };
+    else if ('runPaused' in pending) pending.answer = { paused: true };
+    else pending.answer = { result: await this.#context.transitionService.transition(pending.request) };
+    return true;
+  }
+
   async #resume(card: CardRef, inputId: string, pending: PendingInput): Promise<void> {
     if (!this.workflow.mastra) {
       throw new Error('The board workflow is not registered with Mastra, so cards have no runs to move them.');
@@ -391,6 +405,7 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
       if (!stored || ENDED_RUN_STATUSES.has(stored.status)) {
         // An ended run keeps nothing the card needs; its next input runs a new one under the same id.
         if (stored) await this.workflow.deleteWorkflowRunById(runId);
+        if (await this.#answeredWithoutCard(pending)) return;
         await this.#start(runId);
         continue;
       }
