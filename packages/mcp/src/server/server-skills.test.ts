@@ -1,6 +1,7 @@
 import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { ConsoleLogger } from '@mastra/core/logger';
 import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { SKILLS_EXTENSION_ID, SkillsClient, SkillVerificationError } from '@modelcontextprotocol/client/ext/skills';
@@ -333,6 +334,22 @@ describe('MCPServer skills from a Mastra filesystem', () => {
         await client.close();
       }
     } finally {
+      await served.close();
+    }
+  });
+
+  it('fails listing, with a warning in the server log, when the skills folder is missing', async () => {
+    const server = createServer({ files: new LocalFilesystem({ basePath: base }), root: 'no-such-folder' });
+    // The server logs through a child of the logger it is given.
+    const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
+    server.__setLogger(new ConsoleLogger({ level: 'silent' }));
+    const served = await serveHTTP(server);
+    try {
+      const response = await rawRequest(served.url, { method: 'skills/list', params: {} });
+      expect(response.json().error).toMatchObject({ code: -32603 });
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/^Could not list skills: .*no-such-folder/));
+    } finally {
+      warn.mockRestore();
       await served.close();
     }
   });

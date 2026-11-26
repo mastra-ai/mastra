@@ -351,7 +351,8 @@ function catalogSource(config: MCPServerSkillFiles, warn: (message: string) => v
       const building = buildCatalog(config, files, warn);
       built = building;
       // A failed build is retried on the next request.
-      building.catch(() => {
+      building.catch(error => {
+        warn(`Could not list skills: ${error instanceof Error ? error.message : String(error)}`);
         if (built === building) built = undefined;
       });
     }

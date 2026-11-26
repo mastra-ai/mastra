@@ -1780,7 +1780,9 @@ const server = new MCPServer({
 })
 ```
 
-With a `./skills/git-workflow/SKILL.md` and a `./skills/git-workflow/references/REFERENCE.md`, the server serves `skill://git-workflow/SKILL.md` and `skill://git-workflow/references/REFERENCE.md`.
+With `git-workflow/SKILL.md` and `git-workflow/references/REFERENCE.md` in the skills folder, the server serves `skill://git-workflow/SKILL.md` and `skill://git-workflow/references/REFERENCE.md`.
+
+A relative `basePath` resolves from the directory the server runs in. That's `src/mastra/public` under `mastra dev` and `.mastra/output` after `mastra build`, which copies `src/mastra/public` into its output. Keep the skills in `src/mastra/public/skills` so the same path works in both, or pass an absolute path. If the folder doesn't exist, listing skills fails and the server logs a warning.
 
 To serve the skills in an agent's workspace, pass its filesystem and the folder that holds them: `{ files: workspace.filesystem, root: 'skills' }`. Set `root` to the skills folder rather than the workspace root, because the server walks every folder under `root` to find skills.
 
