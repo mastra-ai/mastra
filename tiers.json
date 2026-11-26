@@ -13473,9 +13473,9 @@
     },
     "packages/core/src/channels/__tests__/agent-channels.test.ts": {
       "tier": "in",
-      "since": "2026-11-20",
-      "last_failure": "2026-11-24",
-      "reason": "pr-catch",
+      "since": "2026-11-26",
+      "last_failure": "2026-11-26",
+      "reason": "versioning-fail",
       "pr_failures": {
         "136587567948": {
           "date": "2026-11-20",
