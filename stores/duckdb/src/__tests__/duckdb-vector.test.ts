@@ -404,6 +404,63 @@ describe('DuckDBVector', () => {
       });
     });
 
+    describe('non-scalar and mixed operands', () => {
+      // Regression: a nonempty $nin whose operands are all objects (or all null)
+      // used to drop the predicate entirely, so the filter matched every row and
+      // a filtered delete removed the whole index.
+      const rows = [
+        { id: 'obj-empty', metadata: { stage: {} } },
+        { id: 'obj-value', metadata: { stage: { a: 1 } } },
+        { id: 'arr-empty', metadata: { stage: [] } },
+        { id: 'scalar-bool', metadata: { stage: false } },
+        { id: 'scalar-num', metadata: { stage: 0 } },
+        { id: 'null-stage', metadata: { stage: null } },
+        { id: 'missing-stage', metadata: { other: 'x' } },
+      ];
+
+      beforeEach(async () => {
+        await seed(rows);
+      });
+
+      it('$in matches an object operand by its stored JSON text', async () => {
+        expect(await matchingIds({ stage: { $in: [{}] } })).toEqual(['obj-empty']);
+        expect(await matchingIds({ stage: { $in: [{ a: 1 }] } })).toEqual(['obj-value']);
+      });
+
+      it('$in supports mixed scalar and object operands', async () => {
+        expect(await matchingIds({ stage: { $in: [false, {}] } })).toEqual(['obj-empty', 'scalar-bool']);
+      });
+
+      it('a nonempty object-only $nin still restricts the result set', async () => {
+        expect(await matchingIds({ stage: { $nin: [{}] } })).toEqual([
+          'arr-empty',
+          'obj-value',
+          'scalar-bool',
+          'scalar-num',
+        ]);
+      });
+
+      it('a nonempty null-only $nin matches nothing rather than everything', async () => {
+        expect(await matchingIds({ stage: { $nin: [null] } })).toEqual([]);
+      });
+
+      it('$nin supports mixed scalar and object operands', async () => {
+        expect(await matchingIds({ stage: { $nin: [false, {}] } })).toEqual(['arr-empty', 'obj-value', 'scalar-num']);
+      });
+
+      it('a filtered delete with an object-only $nin preserves unrelated rows', async () => {
+        await vectorDB.deleteVectors({ indexName: scalarIndexName, filter: { stage: { $nin: [{}] } } });
+
+        expect(await matchingIds({})).toEqual(['missing-stage', 'null-stage', 'obj-empty']);
+      });
+
+      it('a filtered delete with a null-only $nin preserves every row', async () => {
+        await vectorDB.deleteVectors({ indexName: scalarIndexName, filter: { stage: { $nin: [null] } } });
+
+        expect(await matchingIds({})).toEqual(rows.map(r => r.id).sort());
+      });
+    });
+
     describe('nested paths and logical composition', () => {
       beforeEach(async () => {
         await seed([

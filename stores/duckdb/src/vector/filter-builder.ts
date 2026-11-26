@@ -223,16 +223,16 @@ function buildOperatorCondition(field: string, operators: Record<string, unknown
           // Array fields: match when any element is in the list.
           // Scalar fields: match with the same type-aware equality used elsewhere,
           // so `[0]` does not select a stored boolean and `['0']` does not select a number.
+          // Non-scalar operands (objects, null) fall back to a text comparison of the
+          // stored JSON, matching the pre-existing behaviour for those operands.
           const jsonPath = `json_extract(metadata, '$.${escapeString(field)}')`;
           const stringLiterals = value.map(v => toSqlLiteral(String(v))).join(', ');
-          const scalarEquality = value
-            .filter(isScalarValue)
-            .map(v => buildScalarEquality(field, v))
+          const equality = value
+            .map(v => (isScalarValue(v) ? buildScalarEquality(field, v) : `${fieldPath} = ${toSqlLiteral(v)}`))
             .join(' OR ');
-          const scalarClause = scalarEquality ? ` OR (${scalarEquality})` : '';
 
-          // TRY_CAST returns NULL if not an array, so the scalar clause covers non-arrays.
-          conditions.push(`(list_has_any(TRY_CAST(${jsonPath} AS VARCHAR[]), [${stringLiterals}])${scalarClause})`);
+          // TRY_CAST returns NULL if not an array, so the equality clause covers non-arrays.
+          conditions.push(`(list_has_any(TRY_CAST(${jsonPath} AS VARCHAR[]), [${stringLiterals}]) OR (${equality}))`);
         } else {
           // Empty array - no matches
           conditions.push('1=0');
@@ -241,15 +241,16 @@ function buildOperatorCondition(field: string, operators: Record<string, unknown
 
       case '$nin':
         if (Array.isArray(value) && value.length > 0) {
+          // A nonempty $nin must always constrain the result set: never let it
+          // compile to no predicate, which would match (and mutate) every row.
+          // Scalar operands use the type-aware equality; non-scalar operands
+          // (objects, null) fall back to the pre-existing text comparison.
           const equality = value
-            .filter(isScalarValue)
-            .map(v => buildScalarEquality(field, v))
+            .map(v => (isScalarValue(v) ? buildScalarEquality(field, v) : `${fieldPath} = ${toSqlLiteral(v)}`))
             .join(' OR ');
-          if (equality) {
-            // Same three-valued logic as $ne: missing and explicit-null values
-            // stay excluded rather than satisfying the negation.
-            conditions.push(`(${fieldPath} IS NOT NULL AND NOT (${equality}))`);
-          }
+          // Same three-valued logic as $ne: missing and explicit-null values
+          // stay excluded rather than satisfying the negation.
+          conditions.push(`(${fieldPath} IS NOT NULL AND NOT (${equality}))`);
         }
         // Empty array - all matches (no condition added)
         break;
