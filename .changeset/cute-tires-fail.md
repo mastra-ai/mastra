@@ -4,7 +4,7 @@
 
 Fixed signals sent to a running evented agent not reaching the run when its steps execute in another process. Evented agents with memory now keep these signals in the messages table of their memory storage on Postgres, LibSQL and the in-memory store, so a message or steer sent while the run is working reaches the run's next model call. When every process shares the storage, as with Postgres or a LibSQL file or server, that holds when the call runs in another process. On the in-memory store, signals stay in one process. The run needs a thread and a `resourceId`. A signal the run never took becomes the thread's next turn.
 
-A run that does not hold its thread keeps its signals in the process that started it, for example a run with `readOnly` memory started beside an active run, or a run started with `prepare()`.
+A run with `readOnly` memory, or a run started with `prepare()`, keeps its signals in the process that started it.
 
 **`sendSignal` resolves `accepted` after the signal is stored**
 
