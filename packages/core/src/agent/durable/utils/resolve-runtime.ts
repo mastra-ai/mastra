@@ -597,6 +597,8 @@ export async function rebuildRunToolsFromMastra(options: {
       memoryConfig: state.memoryConfig,
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
       clientTools: execOptions?.clientTools as ToolsInput | undefined,
+      // Call-time toolsets only exist in the process that started the run.
+      toolsets: entryBeforeRebuild?.toolsets,
       // Build for the method that started the run, as a warm resume does (#29436).
       methodType: entryBeforeRebuild?.methodType ?? 'stream',
       backgroundTaskEnabled: Boolean(backgroundTasks.backgroundTaskManager),

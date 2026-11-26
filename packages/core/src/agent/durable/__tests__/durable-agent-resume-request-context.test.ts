@@ -40,19 +40,23 @@ function createModel() {
   });
 }
 
-function startProcess(storage: InMemoryStore, seen: unknown[], { withholdTool = false } = {}) {
+function createWhoami(seen: unknown[]) {
+  return createTool({
+    id: 'whoami',
+    description: 'Reports the caller',
+    inputSchema: z.object({}),
+    requireApproval: true,
+    execute: async (_input, context) => {
+      seen.push(context?.requestContext?.get('who'));
+      return { ok: true };
+    },
+  });
+}
+
+function startProcess(storage: InMemoryStore, seen: unknown[], { withholdTool = false, viaToolset = false } = {}) {
   globalRunRegistry.clear();
   const tools = {
-    whoami: createTool({
-      id: 'whoami',
-      description: 'Reports the caller',
-      inputSchema: z.object({}),
-      requireApproval: true,
-      execute: async (_input, context) => {
-        seen.push(context?.requestContext?.get('who'));
-        return { ok: true };
-      },
-    }),
+    ...(viaToolset ? {} : { whoami: createWhoami(seen) }),
     secret: createTool({
       id: 'secret',
       description: 'Withheld by a processor in the withhold case',
@@ -92,11 +96,14 @@ function contextFor(who: string) {
   return requestContext;
 }
 
-async function suspendForApproval(options?: { withholdTool?: boolean }) {
+async function suspendForApproval(options?: { withholdTool?: boolean; viaToolset?: boolean }) {
   const storage = new InMemoryStore();
   const seen: unknown[] = [];
   const durableAgent = startProcess(storage, seen, options);
-  const stream = await durableAgent.stream('Who am I?', { requestContext: contextFor('first') });
+  const stream = await durableAgent.stream('Who am I?', {
+    requestContext: contextFor('first'),
+    ...(options?.viaToolset ? { toolsets: { calls: { whoami: createWhoami(seen) } } } : {}),
+  });
 
   let toolCallId: string | undefined;
   for await (const chunk of stream.fullStream as AsyncIterable<any>) {
@@ -148,6 +155,20 @@ describe('durable agent approval resume request context (#25960)', () => {
     });
     expect(globalRunRegistry.get(run.runId)?.tools).not.toHaveProperty('secret');
     await drain(stream);
+
+    expect(run.seen).toEqual(['second']);
+  });
+
+  it('keeps a call-time toolset tool when a same-process resume does not repeat toolsets', async () => {
+    const run = await suspendForApproval({ viaToolset: true });
+
+    await drain(
+      await run.durableAgent.approveToolCall({
+        runId: run.runId,
+        toolCallId: run.toolCallId,
+        requestContext: contextFor('second'),
+      }),
+    );
 
     expect(run.seen).toEqual(['second']);
   });

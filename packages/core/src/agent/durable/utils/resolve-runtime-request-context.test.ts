@@ -370,12 +370,14 @@ describe('rebuildRunToolsFromMastra request context', () => {
     }
   });
 
-  it('rebuilds tools for the method that started the run', async () => {
+  it('rebuilds tools for the method and toolsets that started the run', async () => {
     const runId = 'stale-segment-method';
+    const toolsets = { calls: { lookup: { id: 'lookup' } } };
     globalRunRegistry.set(runId, {
       model: {},
       tools: { approve: {} },
       methodType: 'generate',
+      toolsets,
       requestContextSegment: 'segment-1',
     } as any);
     const agent = { ...makeAgent(), getToolsForExecution: vi.fn().mockResolvedValue({ approve: {} }) };
@@ -391,6 +393,7 @@ describe('rebuildRunToolsFromMastra request context', () => {
         replaceStale: true,
       });
       expect(agent.getToolsForExecution.mock.calls[0]![0].methodType).toBe('generate');
+      expect(agent.getToolsForExecution.mock.calls[0]![0].toolsets).toBe(toolsets);
     } finally {
       globalRunRegistry.delete(runId);
     }

@@ -15722,8 +15722,10 @@ export class Agent<
     // rebuilt everything in prepare() above.
     if (!coldSnapshot && (options?.requestContext || options?.delegation || options?.hooks || droppedStartingUser)) {
       try {
+        // A resume does not have to repeat the call-time toolsets, so rebuild those the run started with.
+        const toolsets = options?.toolsets ?? entry.toolsets;
         const requestTools = await this.agentForExecution.getToolsForExecution({
-          toolsets: resolvedOptions.toolsets,
+          toolsets,
           clientTools: resolvedOptions.clientTools,
           threadId: memoryInfo?.threadId,
           resourceId: memoryInfo?.resourceId,
@@ -15747,6 +15749,7 @@ export class Agent<
         for (const reg of new Set([entry, getRunRegistryEntry(runId, this.#mastra)])) {
           if (!reg) continue;
           refreshRunRequestTools(reg, requestTools, resumeRequestContext);
+          reg.toolsets = toolsets;
           if (options?.delegation) reg.delegation = resolvedOptions.delegation;
         }
       } catch (error) {
