@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { LanguageModelV4CallOptions } from '@ai-sdk/provider-v7';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { ModelsDevGateway } from './models-dev.js';
 
 describe('ModelsDevGateway OpenAI Responses requests', () => {
@@ -41,9 +41,13 @@ describe('ModelsDevGateway OpenAI Responses requests', () => {
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
     const address = server.address() as AddressInfo;
     baseURL = `http://127.0.0.1:${address.port}/v1`;
+    vi.stubEnv('OPENAI_BASE_URL', baseURL);
   });
 
-  afterAll(() => server.close());
+  afterAll(() => {
+    vi.unstubAllEnvs();
+    server.close();
+  });
 
   it('serializes compaction options for built-in OpenAI models', async () => {
     const gateway = new ModelsDevGateway({
