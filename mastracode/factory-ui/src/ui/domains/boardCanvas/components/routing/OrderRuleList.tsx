@@ -1,4 +1,4 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { OrderRuleList as SharedOrderRuleList } from '@mastra/playground-ui/domains/factory';
 import type { ReactNode } from 'react';
 
 import type { InstalledBoardInfo } from '../../../../../api/types';
@@ -25,26 +25,19 @@ export function OrderRuleList({
   /** Rows after the rules. */
   children?: ReactNode;
 }) {
+  const lanes =
+    lines &&
+    ARRIVAL_EVENTS.map(event => ({
+      event,
+      icon: <LaneIcon event={event} />,
+      rules: lines
+        .filter(line => line.event === event)
+        .map(line => <OrderRuleRow key={`${event}:${line.rule.id}`} line={line} board={board} onOpen={onOpenRule} />),
+    }));
+
   return (
-    <ul aria-label={`${name} rules for new items`} className="flex flex-col gap-0.5">
-      {lines &&
-        ARRIVAL_EVENTS.map(event => {
-          const lane = lines.filter(line => line.event === event);
-          if (lane.length === 0) {
-            return (
-              <li key={event} className="flex h-5.5 items-center gap-1.5">
-                <LaneIcon event={event} />
-                <Txt as="span" variant="caption" tone="muted">
-                  {last ? 'No rules, ends Not routed' : 'No rules, goes to the next board'}
-                </Txt>
-              </li>
-            );
-          }
-          return lane.map(line => (
-            <OrderRuleRow key={`${event}:${line.rule.id}`} line={line} board={board} onOpen={onOpenRule} />
-          ));
-        })}
+    <SharedOrderRuleList name={name} lanes={lanes} last={last}>
       {children}
-    </ul>
+    </SharedOrderRuleList>
   );
 }

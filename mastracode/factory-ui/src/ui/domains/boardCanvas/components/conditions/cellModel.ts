@@ -1,9 +1,38 @@
 import type { FilterBarField } from '@mastra/playground-ui/components/FilterBar';
 
-import { operatorLabel } from './conditionControls';
-import { isPresenceField } from '../../../settings/components/conditionFields';
+import {
+  CONDITION_OPERATORS,
+  isPresenceField,
+  legacyConditionFields,
+} from '../../../settings/components/conditionFields';
 import { VALUELESS, canNest, emptyRow, isGroup, newKey } from '../../../settings/components/conditionTree';
 import type { Group, Item, Row } from '../../../settings/components/conditionTree';
+import { narrowSuggestions } from '../../../settings/components/sourceSuggestions';
+
+const LEGACY_FIELDS = legacyConditionFields();
+
+export function operatorLabel(field: FilterBarField | undefined, operator: string): string {
+  return (
+    field?.operatorLabels?.[operator] ??
+    CONDITION_OPERATORS.find(candidate => candidate.id === operator)?.label ??
+    operator
+  );
+}
+
+/** The fields a row can pick, with a stored field the picker no longer offers kept so it can be changed away from. */
+export function rowFields(row: Row, fields: FilterBarField[], limits: Row[]) {
+  const legacy = LEGACY_FIELDS.find(candidate => candidate.id === row.field);
+  const shown = legacy && !fields.some(candidate => candidate.id === legacy.id) ? [legacy, ...fields] : fields;
+  const listed = shown.find(candidate => candidate.id === row.field);
+  return { shown, field: listed && narrowSuggestions(listed, limits) };
+}
+
+/** A condition as one sentence, for its cell's accessible name: "Labels has bug, documentation". */
+export function rowText(row: Row, fields: FilterBarField[]): string {
+  const { field } = rowFields(row, fields, []);
+  const { operator, values } = summarize(row, field);
+  return [field?.label ?? (row.field || 'Choose a field'), operator, values.join(', ')].filter(Boolean).join(' ');
+}
 
 /** The group with `key`'s row replaced, or removed when `next` is undefined; groups left empty drop out. */
 export function replaceRow(group: Group, key: string, next: Item | undefined): Group {
@@ -53,14 +82,6 @@ export function dropBlank(group: Group): Group {
   return { ...group, items };
 }
 
-export function findRow(group: Group, key: string): Row | undefined {
-  for (const item of group.items) {
-    const found = isGroup(item) ? findRow(item, key) : item.key === key ? item : undefined;
-    if (found) return found;
-  }
-  return undefined;
-}
-
 /** A condition as its cell reads it: "Labels" "has" "bug", or "Author trust" "is" "Outside author". */
 export function summarize(row: Row, field: FilterBarField | undefined): { operator: string; values: string[] } {
   if (!field) return { operator: '', values: [] };
@@ -81,10 +102,4 @@ export function summarize(row: Row, field: FilterBarField | undefined): { operat
   if (VALUELESS.has(row.operator) || row.value === undefined) return { operator, values: [] };
   const values = Array.isArray(row.value) ? row.value : [row.value];
   return { operator, values: values.map(label).filter(value => value !== '') };
-}
-
-/** One short value fits after the operator; several, or a long one, go on their own line. */
-export function valueInline(fieldLabel: string, operator: string, values: readonly string[]): boolean {
-  const [only] = values;
-  return values.length === 1 && only !== undefined && fieldLabel.length + operator.length + only.length <= 34;
 }

@@ -1,3 +1,20 @@
+import {
+  AddRuleRow,
+  BoardStatsRow,
+  CanvasFrame,
+  CanvasToolbar,
+  IntakeOrderList,
+  IntakeOrderStatus,
+  IntakeReorderButtons,
+  NewRuleRow,
+  OrderBoardCard,
+  OrderCardHeader,
+  SourceLinks,
+  StackLink,
+  TestInput,
+  UnsavedPill,
+} from '@mastra/playground-ui/domains/factory';
+import type { BoardStats } from '@mastra/playground-ui/domains/factory';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useNavigate, useSearchParams } from 'react-router';
@@ -6,27 +23,21 @@ import type { IntakeDryRunResponse } from '../../../../../api/types';
 import { useBoardCatalog } from '../../../../../hooks/useBoardCatalog';
 import { useIntakeDryRunQuery } from '../../../../../hooks/useIntakeDryRun';
 import { useIntakeRoutesQuery } from '../../../../../hooks/useIntakeRoutes';
-import { boardIntakePath, INTAKE_ORDER_ANCHOR, readCanvasFocus } from '../../../boardConfig/boardConfigPaths';
+import { HrefLink } from '../../../../ui/HrefLink';
+import {
+  boardConfigPath,
+  boardIntakePath,
+  INTAKE_ORDER_ANCHOR,
+  readCanvasFocus,
+} from '../../../boardConfig/boardConfigPaths';
 import type { CanvasFocus } from '../../../boardConfig/boardConfigPaths';
+import { phaseName } from '../../../boardRules/ruleTargets';
 import type { LinkedRepositoryPayload } from '../../../workspaces/services/github';
-import { CanvasToolbar, TestInput } from '../CanvasBar';
-import { BoardSettingsTabs, CanvasFrame } from '../CanvasChrome';
-import { StackLink } from '../FlowLinks';
-import { UnsavedPill } from '../UnsavedPill';
-import { AddRuleRow } from './AddRuleRow';
-import { BoardStatsRow } from './BoardStatsRow';
-import type { BoardStats } from './BoardStatsRow';
-import { IntakeOrderList } from './IntakeOrderList';
-import { NewRuleRow } from './NewRuleRow';
+import { BoardSettingsTabs } from '../BoardSettingsTabs';
 import { NotRoutedCard } from './NotRoutedCard';
-import { OrderBoardCard } from './OrderBoardCard';
-import { OrderCardHeader } from './OrderCardHeader';
 import { OrderRuleList } from './OrderRuleList';
-import { OrderStatus } from './OrderStatus';
-import { ReorderButtons } from './ReorderButtons';
 import { RerouteNotice } from './RerouteNotice';
 import { RoutingPanel } from './RoutingPanel';
-import { SourceLinks } from './SourceLinks';
 import { SourcesColumn } from './SourcesColumn';
 import { useOrderDraft } from './useOrderDraft';
 import { useOrderLines } from './useOrderLines';
@@ -111,7 +122,7 @@ export function RoutingPage({
           {draft.query.isError && <Notice variant="destructive">The intake order didn’t load.</Notice>}
           {routesQuery.isError && <Notice variant="warning">Rules didn’t load.</Notice>}
           <RerouteNotice factoryId={factoryId} canEdit={canEditRules} boardNames={names} />
-          {order && <OrderStatus order={order} changed={draft.changed} />}
+          {order && <IntakeOrderStatus order={order} changed={draft.changed} />}
           {order && !draft.saved.includes(boardId) && (
             <Notice variant="info">
               Not in the intake order: new issues and pull requests never reach this board.
@@ -135,16 +146,17 @@ export function RoutingPage({
                     dragging={dragging}
                     header={
                       <OrderCardHeader
-                        factoryId={factoryId}
-                        boardKey={boardKey}
                         name={name}
                         current={current}
                         place={index + 1}
                         grip={draft.movable}
                         dragging={dragging}
+                        routingHref={boardIntakePath(factoryId, boardKey)}
+                        rulesHref={boardConfigPath(factoryId, boardKey)}
+                        LinkComponent={HrefLink}
                       >
                         {current && draft.sortable && (
-                          <ReorderButtons
+                          <IntakeReorderButtons
                             earlier={draft.movable && index > 0}
                             later={draft.movable && index < draft.shown.length - 1}
                             onMove={by => draft.move(index, index + by)}
@@ -160,7 +172,9 @@ export function RoutingPage({
                       last={index === draft.shown.length - 1}
                       onOpenRule={routeId => go({ rule: routeId })}
                     >
-                      {newRule && newRuleBoard === boardKey && <NewRuleRow into={newRule.into} board={board} />}
+                      {newRule && newRuleBoard === boardKey && (
+                        <NewRuleRow phase={newRule.into && phaseName(board, newRule.into)} />
+                      )}
                       {current && stats && <BoardStatsRow stats={stats} />}
                       {current && canEditRules && newRuleBoard !== boardKey && (
                         <AddRuleRow onAdd={() => go({ newRule: { board: boardKey } })} />

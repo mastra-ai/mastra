@@ -1,11 +1,11 @@
+import { BoardHeaderSkeleton, CanvasFrame, PhaseFlowSkeleton } from '@mastra/playground-ui/domains/factory';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import type { ReactNode } from 'react';
 
 import { BoardRequestError, useBoardQuery } from '../../hooks/useBoardEditor';
 import { BoardCanvas } from '../domains/boardCanvas/components/BoardCanvas';
-import { BoardSettingsTabs, CanvasFrame } from '../domains/boardCanvas/components/CanvasChrome';
-import { BoardHeaderSkeleton, PhaseFlowSkeleton } from '../domains/boardCanvas/components/CanvasSkeleton';
+import { BoardSettingsTabs } from '../domains/boardCanvas/components/BoardSettingsTabs';
 import { BoardDraftProvider } from '../domains/boardConfig/BoardDraftProvider';
 import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';

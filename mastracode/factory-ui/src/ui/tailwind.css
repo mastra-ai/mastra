@@ -10,20 +10,9 @@
   initial-value: 0;
 }
 
-/* The links between nodes on the board canvas. Light lines on a dark page read brighter than dark ones on a light
- * page, so the dark theme blends its hint color halfway into the page. Solid, so crossing lines don't darken. */
-:root {
-  --canvas-link: color-mix(in oklab, var(--subtle-foreground) 50%, var(--background));
-}
-
-html.light {
-  --canvas-link: var(--subtle-foreground);
-}
-
 /* Keyframes must live inside @theme so Tailwind emits them alongside the
  * `--animate-*` utility that references them. */
 @theme inline {
-  --color-canvas-link: var(--canvas-link);
   --animate-factory-ticket-move: factory-ticket-move 7s ease-in-out infinite;
   --animate-factory-ticket-appear: factory-ticket-appear 7s ease-out infinite;
 

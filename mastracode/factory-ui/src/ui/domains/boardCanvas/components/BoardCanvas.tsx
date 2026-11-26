@@ -1,3 +1,11 @@
+import {
+  CanvasFrame,
+  CanvasToolbar,
+  DraftBar,
+  LeaveDialog,
+  TestInput,
+  usePhoneLayout,
+} from '@mastra/playground-ui/domains/factory';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useBeforeUnload, useBlocker, useNavigate, useSearchParams } from 'react-router';
@@ -20,10 +28,8 @@ import { useCanvasData } from '../useCanvasData';
 import { useUnfinishedFields } from '../useUnfinishedFields';
 import { useBoardActions } from './BoardActions';
 import { BoardHeader } from './BoardHeader';
-import { CanvasToolbar, TestInput } from './CanvasBar';
-import { BoardSettingsTabs, CanvasFrame, usePhoneLayout } from './CanvasChrome';
+import { BoardSettingsTabs } from './BoardSettingsTabs';
 import { CanvasPanel } from './CanvasPanel';
-import { DraftBar, LeaveDialog } from './DraftBar';
 import { OtherBoards } from './OtherBoards';
 import { PhaseFlow } from './PhaseFlow';
 

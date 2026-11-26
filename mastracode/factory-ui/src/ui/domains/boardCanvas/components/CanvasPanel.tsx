@@ -1,12 +1,11 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Link } from 'react-router';
+import { PhaseNotFoundPanel } from '@mastra/playground-ui/domains/factory';
 
 import type { FactorySkillsResponse, StoredBoardInfo, StoredPhaseInfo } from '../../../../api/types';
+import { HrefLink } from '../../../ui/HrefLink';
 import { boardConfigPath } from '../../boardConfig/boardConfigPaths';
 import type { CanvasFocus } from '../../boardConfig/boardConfigPaths';
 import { canRemovePhase, kindLocked } from '../../boardConfig/boardDraft';
 import type { RuleField } from '../../boardConfig/boardDraft';
-import { SidePanel } from './CanvasChrome';
 import { PhasePanel } from './phasePanel/PhasePanel';
 import { RulePanel } from './rulePanel/RulePanel';
 import { TestPanel } from './testPanel/TestPanel';
@@ -113,16 +112,10 @@ export function CanvasPanel({
     );
   }
   return (
-    <SidePanel label="Phase not found">
-      <Txt variant="body-sm" tone="ink" role="alert">
-        {boardTitle} has no such phase.
-      </Txt>
-      <Link
-        to={boardConfigPath(factoryId, boardId)}
-        className="text-body-sm text-muted-foreground hover:text-foreground"
-      >
-        Back to the board
-      </Link>
-    </SidePanel>
+    <PhaseNotFoundPanel
+      boardTitle={boardTitle}
+      boardHref={boardConfigPath(factoryId, boardId)}
+      LinkComponent={HrefLink}
+    />
   );
 }

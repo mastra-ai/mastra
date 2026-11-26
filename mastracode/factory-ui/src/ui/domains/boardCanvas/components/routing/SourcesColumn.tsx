@@ -1,10 +1,7 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconArrowUpRight } from '@mastra/playground-ui/icons/central/IconArrowUpRight';
-import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { Link } from 'react-router';
+import { SourcesColumn as SharedSourcesColumn } from '@mastra/playground-ui/domains/factory';
 
 import { useIntakeBindingsQuery } from '../../../../../hooks/useIntakeConfig';
+import { HrefLink } from '../../../../ui/HrefLink';
 import { INTAKE_PROVIDERS, isIntakeProvider } from '../../../factory/boardSourceFilters';
 import type { IntakeProvider } from '../../../factory/boardSourceFilters';
 import { laneText } from '../../../boardRules/ruleLanes';
@@ -42,78 +39,26 @@ export function SourcesColumn({
     }
   }
 
+  const lanes = ARRIVAL_EVENTS.map(event => ({
+    event,
+    label: laneText(event).label,
+    icon: <LaneIcon event={event} className="text-foreground size-icon-sm" />,
+    filed: filed && (filed.get(event) ?? 0),
+    sources: [...providers]
+      .filter(provider => event !== 'pull_request.opened' || CODE_HOSTS.includes(provider))
+      .map(provider => ({
+        key: provider,
+        name: INTAKE_PROVIDERS[provider],
+        icon: <SettingsIntegrationIcon provider={provider} className="size-icon-xs" />,
+      })),
+  }));
+
   return (
-    <section aria-label="Sources" className="flex w-63 shrink-0 flex-col gap-3 max-sm:w-full">
-      <div className="flex h-5 items-center justify-between">
-        <Txt as="h2" variant="column" tone="muted">
-          Sources
-        </Txt>
-        <Link
-          to={settingsSectionPath(factoryId, 'intake')}
-          className="text-muted-foreground hover:text-foreground flex items-center gap-1"
-        >
-          <Txt as="span" variant="caption">
-            Work Intake
-          </Txt>
-          <IconArrowUpRight className="size-icon-xs" aria-hidden />
-        </Link>
-      </div>
-
-      <ul className="flex flex-col gap-3">
-        {ARRIVAL_EVENTS.map(event => {
-          const from = [...providers].filter(
-            provider => event !== 'pull_request.opened' || CODE_HOSTS.includes(provider),
-          );
-          return (
-            <li
-              key={event}
-              data-link-source
-              aria-label={laneText(event).label}
-              className={cn(raisedSurfaceStyle, 'flex h-17 flex-col gap-1.75 rounded-2xl px-3.25 pt-2.75 pb-3')}
-            >
-              {/* The order cards' title row height, so a link between two titles at one height runs straight. */}
-              <div className="flex min-h-5.5 items-center gap-2">
-                <LaneIcon event={event} className="text-foreground size-icon-sm" />
-                <Txt as="span" variant="card-title-strong" tone="ink" className="flex-1">
-                  {laneText(event).label}
-                </Txt>
-                {filed && (
-                  <Txt as="span" variant="caption" tone="muted" className="tabular-nums">
-                    {filed.get(event) ?? 0}
-                  </Txt>
-                )}
-              </div>
-              <div className="flex items-center gap-3">
-                {from.map(provider => (
-                  <span key={provider} className="flex items-center gap-1.25">
-                    <SettingsIntegrationIcon provider={provider} className="size-icon-xs" />
-                    <Txt as="span" variant="caption" tone="muted">
-                      {INTAKE_PROVIDERS[provider]}
-                    </Txt>
-                  </span>
-                ))}
-                {from.length === 0 && (
-                  <Txt as="span" variant="caption" tone="muted">
-                    No source connected
-                  </Txt>
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-
-      {/* With the old route list still in charge, the order's notice says so instead. */}
-      {!routeList && (
-        <div className="flex flex-col gap-2.5 px-3.25 pt-2">
-          <Txt as="p" variant="caption" tone="muted">
-            A new issue or pull request is offered to the boards in this order. The first rule that matches keeps it.
-          </Txt>
-          <Txt as="p" variant="caption" tone="muted">
-            After that, only its board’s card rules apply.
-          </Txt>
-        </div>
-      )}
-    </section>
+    <SharedSourcesColumn
+      lanes={lanes}
+      routeList={routeList}
+      intakeHref={settingsSectionPath(factoryId, 'intake')}
+      LinkComponent={HrefLink}
+    />
   );
 }

@@ -1,10 +1,8 @@
+import { RuleEditorView } from '@mastra/playground-ui/domains/factory';
+import type { RuleTargetBoard } from '@mastra/playground-ui/domains/factory';
 import { matchesOutsiderPullRequests } from '@mastra/factory/boards/board-events';
 import type { RuleCondition } from '@mastra/factory/rules/rule-group';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Notice } from '@mastra/playground-ui/components/Notice';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconChevronLeftMedium } from '@mastra/playground-ui/icons/central/IconChevronLeftMedium';
 import { useEffect, useRef, useState } from 'react';
 
 import type { InstalledBoardInfo, IntakeRouteInfo } from '../../../../../api/types';
@@ -12,26 +10,25 @@ import { useIntakeDryRunPreview, useIntakeDryRunQuery } from '../../../../../hoo
 import { useIntakeOrderQuery, useSkippedRulesQuery } from '../../../../../hooks/useIntakeOrder';
 import { useSourceSuggestions } from '../../../../../hooks/useSourceSuggestions';
 import type { CanvasFocus } from '../../../boardConfig/boardConfigPaths';
-import { LEGACY_OPENED_EVENT, everythingOn, laneText, placesArrival } from '../../../boardRules/ruleLanes';
+import {
+  LANE_SECTIONS,
+  LEGACY_OPENED_EVENT,
+  everythingOn,
+  isOpenedLane,
+  laneText,
+  placesArrival,
+} from '../../../boardRules/ruleLanes';
 import type { RuleEvent } from '../../../boardRules/ruleLanes';
-import { boardName, phaseOptions } from '../../../boardRules/ruleTargets';
+import { boardName, phaseName, phaseOptions } from '../../../boardRules/ruleTargets';
 import { intakeRouteFacts } from '../../../settings/components/conditionFields';
-import { boardRulesOf, ruleLines } from '../../canvasModel';
+import { boardRulesOf, ruleLines, ruleNotes, triggerFallback } from '../../canvasModel';
 import type { RuleSkips } from '../../canvasModel';
-import { draftRoutes, editOf, newEdit, resolveEdit, withCondition } from '../../ruleDraft';
+import { MAX_RULE_NAME, draftRoutes, editOf, newEdit, resolveEdit, targetPhases, withCondition } from '../../ruleDraft';
 import type { RuleEdit } from '../../ruleDraft';
 import { CHANGED_FIRST, DELETED_FIRST } from '../../useRuleWrites';
 import type { RuleWrites } from '../../useRuleWrites';
-import { GrowIn } from '../CanvasChrome';
 import { ConditionCells } from '../conditions/ConditionCells';
-import { CellRow, FLOW_CELL, Wire } from '../conditions/flowParts';
-import { MoveTo } from './MoveTo';
-import { RetestBox, useRetest } from './Retest';
-import { RuleHeader } from './RuleHeader';
-import { RuleNotes } from './RuleNotes';
-import { RuleStats } from './RuleStats';
-import { TriggerOrder } from './TriggerOrder';
-import { TriggerPicker, triggerText } from './TriggerPicker';
+import { retestInfo, useRetest } from './Retest';
 
 export interface RuleEditorProps {
   factoryId: string;
@@ -175,44 +172,24 @@ export function RuleEditor({
   const own = lines.filter(line => line.rule.id === rule?.id);
   const gated = rule?.outsiderPullRequestsGated === true;
   const outsiders = !gated && matchesOutsiderPullRequests(current.on, current.when);
+  const at = order.data?.boards.findIndex(candidate => candidate.boardKey === board.id) ?? -1;
+  const before = at > 0 && order.data ? order.data.boards.slice(0, at).map(candidate => candidate.name) : [];
 
   return (
-    <>
-      {backTo && (
-        <div className="flex items-center justify-between gap-2">
-          <Button variant="ghost" size="sm" icon={<IconChevronLeftMedium />} onClick={() => onFocus({ test: backTo })}>
-            Back to test
-          </Button>
-          <Txt as="span" variant="caption" tone="muted" className="truncate">
-            {boardName(board)} rule
-          </Txt>
-        </div>
-      )}
-      <RuleHeader
-        rule={rule}
-        board={board}
-        icon={current.on[0] ? laneText(current.on[0]).icon : undefined}
-        name={rule || (resolved.phase && on.length > 0) ? resolved.name : undefined}
-        readOnly={readOnly}
-        pending={writes.pending}
-        onClose={onClose}
-        onRename={name => change({ name })}
-        onToggle={enabled => rule && instant(writes.toggle(rule, enabled))}
-        onDelete={remove}
-      />
-      {conflict && (
-        <Notice variant="warning" role="alert">
-          {conflict}
-        </Notice>
-      )}
-
-      <div className="flex flex-col">
-        <div className={FLOW_CELL}>
-          <CellRow label="When" stacked={triggerText(on).length > 24}>
-            <TriggerPicker value={current.on} disabled={readOnly} onChange={pickEvents} />
-          </CellRow>
-        </div>
-        <Wire />
+    <RuleEditorView
+      board={targetBoardOf(board)}
+      boards={boards.map(targetBoardOf)}
+      rule={rule}
+      onBackToTest={backTo ? () => onFocus({ test: backTo }) : undefined}
+      name={rule || (resolved.phase && on.length > 0) ? resolved.name : undefined}
+      maxNameLength={MAX_RULE_NAME}
+      canEdit={canEdit}
+      pending={writes.pending}
+      conflict={conflict}
+      on={current.on}
+      triggerSections={LANE_SECTIONS}
+      describeTrigger={laneText}
+      conditions={
         <ConditionCells
           key={`${resets}:${current.base?.revision ?? 'new'}`}
           label="Conditions"
@@ -223,106 +200,69 @@ export function RuleEditor({
           everyText={everyTextOf(resolved.placesNew, on)}
           onChange={(when, incomplete) => change({ when, incomplete })}
         />
-        {(outsiders || resolved.problem || on.includes(LEGACY_OPENED_EVENT)) && (
-          <div className="mt-2 flex flex-col gap-2">
-            {outsiders && (
-              <Notice
-                variant="info"
-                action={
-                  !readOnly && (
-                    <Notice.Button onClick={addTrustedCondition}>Add: Pull request trusted is yes</Notice.Button>
-                  )
-                }
-              >
-                Also matches pull requests from outside authors.
-              </Notice>
-            )}
-            {resolved.problem && <Notice variant="warning">{resolved.problem}</Notice>}
-            {on.includes(LEGACY_OPENED_EVENT) && (
-              <Notice variant="info">
-                Also listens on “{laneText(LEGACY_OPENED_EVENT).label}”, which takes new issues and pull requests.
-                Saving keeps it.
-              </Notice>
-            )}
-          </div>
-        )}
-        <Wire />
-        {current.on.length === 0 ? (
-          <div className={FLOW_CELL}>
-            <CellRow label="Move to">
-              <Txt as="span" variant="body-sm" tone="muted">
-                Pick a trigger first
-              </Txt>
-            </CellRow>
-          </div>
-        ) : (
-          <MoveTo
-            board={board}
-            boards={boards}
-            boardKey={current.boardKey}
-            phaseKey={resolved.phase?.id}
-            placesNew={resolved.placesNew}
-            disabled={readOnly}
-            onChange={target => change(target)}
-          />
-        )}
-      </div>
-
-      {canEdit &&
-        dirty && (
-          // Pulled up by the panel's gap and padded back, so the gap grows in with the bar instead of jumping open.
-          <GrowIn className="-mt-4">
-            <div className="flex flex-col gap-2 pt-4">
-              {preview.data?.changed !== undefined && (
-                <Txt as="p" variant="caption" tone="muted" role="status">
-                  {preview.data.changed} of the last {preview.data.sampled} items would now land on a different board or
-                  phase.
-                </Txt>
-              )}
-              <RetestBox now={retest.now} was={retest.was} boards={boards} />
-              {saveError && (
-                <Notice variant="destructive" role="alert">
-                  {saveError}
-                </Notice>
-              )}
-              <div className="flex justify-end gap-2">
-                <Button variant="ghost" size="sm" onClick={rule ? discard : onClose}>
-                  {rule ? 'Discard' : 'Cancel'}
-                </Button>
-                <Button variant="primary" size="sm" disabled={!resolved.draft} loading={writes.pending} onClick={save}>
-                  {rule ? 'Save' : 'Create rule'}
-                </Button>
-              </div>
-            </div>
-          </GrowIn>
-        )}
-
-      {rule && (
-        <>
-          <span className="bg-border h-px shrink-0" aria-hidden />
-          <RuleNotes lines={own} canEdit={canEdit} onUngate={() => instant(writes.ungate(rule))} />
-          {own.map(line => (
-            <TriggerOrder
-              key={line.event}
-              event={line.event}
-              lines={lines.filter(other => other.event === line.event)}
-              rule={rule}
-              board={board}
-              boards={boards}
-              boardRules={boardRules}
-              order={order.data}
-              canEdit={canEdit}
-              pending={writes.pending}
-              onOpen={id => onFocus({ rule: id })}
-              onMove={(from, to) => instant(writes.move(board.id, line.event, from, to))}
-              onAdd={() => onFocus({ newRule: { on: line.event, board: board.id } })}
-            />
-          ))}
-          <RuleStats ruleId={rule.id} dryRun={dryRun.data} />
-        </>
-      )}
-    </>
+      }
+      outsiders={outsiders}
+      problem={resolved.problem}
+      legacyTrigger={on.includes(LEGACY_OPENED_EVENT) ? laneText(LEGACY_OPENED_EVENT).label : undefined}
+      boardKey={current.boardKey}
+      phaseKey={resolved.phase?.id}
+      targetPhaseKeys={targetPhases(
+        boards.find(candidate => candidate.id === current.boardKey),
+        resolved.placesNew,
+      ).map(phase => phase.id)}
+      placesNew={resolved.placesNew}
+      dirty={dirty}
+      preview={preview.data}
+      retest={retestInfo(retest.now, retest.was, boards)}
+      saveError={saveError}
+      canSave={Boolean(resolved.draft)}
+      details={
+        rule && {
+          // Each said once: a rule on two triggers can be hidden on both.
+          notes: [...new Map(own.flatMap(ruleNotes).map(note => [note.text, note])).values()],
+          latestSkip: own.find(line => line.skips)?.skips?.latest,
+          orders: own.map(line => ({
+            event: line.event,
+            label: laneText(line.event).label,
+            after: isOpenedLane(line.event) && order.data?.evaluator === 'intake-order' ? before : [],
+            fallback: triggerFallback(line.event, {
+              boardKey: board.id,
+              boardRules,
+              order: order.data?.boards,
+              evaluator: order.data?.evaluator,
+              phaseName: key => phaseName(board, key ?? null),
+              flow: board.flow,
+            }),
+            lines: lines.filter(other => other.event === line.event),
+          })),
+          dryRun: dryRun.data,
+        }
+      }
+      onClose={onClose}
+      onRename={name => change({ name })}
+      onToggle={enabled => rule && instant(writes.toggle(rule, enabled))}
+      onDelete={remove}
+      onTriggers={pickEvents}
+      onAddTrusted={addTrustedCondition}
+      onTarget={target => change(target)}
+      onDiscard={discard}
+      onSave={save}
+      onUngate={() => rule && instant(writes.ungate(rule))}
+      onOpenRule={id => onFocus({ rule: id })}
+      onMoveRule={(event, from, to) => instant(writes.move(board.id, event, from, to))}
+      onAddRule={event => onFocus({ newRule: { on: event, board: board.id } })}
+    />
   );
+}
+
+/** A board as the rule panel reads it: its name and its phases' names resolved. */
+function targetBoardOf(board: InstalledBoardInfo): RuleTargetBoard {
+  return {
+    id: board.id,
+    name: boardName(board),
+    initialPhase: board.initialPhase,
+    phases: board.phases.map(phase => ({ id: phase.id, name: phase.name ?? phase.title, kind: phase.kind })),
+  };
 }
 
 /** What a rule takes with no conditions: "Every card", or for one that files new items which: "Every new issue". */

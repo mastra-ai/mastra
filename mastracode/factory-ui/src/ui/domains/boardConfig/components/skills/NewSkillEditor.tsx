@@ -1,3 +1,4 @@
+import { InlineText } from '@mastra/playground-ui/domains/factory';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -6,7 +7,6 @@ import { useState } from 'react';
 import { useFactorySkillCreateMutation } from '../../../../../hooks/useFactorySkills';
 import { useLeaveGuard } from '../../hooks/useLeaveGuard';
 import { DiscardChangesDialog } from '../DiscardChangesDialog';
-import { InlineText } from '../InlineText';
 import { SaveBar } from '../SaveBar';
 import { composeSkillMarkdown } from './skillMarkdown';
 import { SkillDescription } from './SkillDescription';

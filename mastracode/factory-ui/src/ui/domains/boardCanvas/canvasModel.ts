@@ -28,9 +28,6 @@ export type BoardFlowParts = NonNullable<InstalledBoardInfo['flow']>;
 type IntakeOrderBoard = IntakeOrderResponse['boards'][number];
 type Evaluator = IntakeOrderResponse['evaluator'];
 
-/** Rules past this many on one phase fold behind "+N more". */
-export const FOLD_AFTER = 5;
-
 /** Triggers new items arrive on come first, so the intake line plugs into the top of a phase's rules. */
 const LANE_ORDER = LANE_SECTIONS.flatMap(section => section.events);
 

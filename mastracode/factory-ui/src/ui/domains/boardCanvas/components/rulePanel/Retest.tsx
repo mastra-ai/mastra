@@ -1,4 +1,4 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { RuleRetestInfo } from '@mastra/playground-ui/domains/factory';
 
 import type { InstalledBoardInfo, IntakeDryRunBody, IntakeTestResponse } from '../../../../../api/types';
 import { testBody, useIntakeTest, useIntakeTestQuery } from '../../../../../hooks/useIntakeDryRun';
@@ -35,29 +35,12 @@ function placed(result: IntakeTestResponse, boards: readonly InstalledBoardInfo[
   return `${boardName(board)} › ${phaseName(board, placement.phase) ?? placement.phase}`;
 }
 
-export function RetestBox({
-  now,
-  was,
-  boards,
-}: {
-  now: IntakeTestResponse | undefined;
-  was: IntakeTestResponse | undefined;
-  boards: readonly InstalledBoardInfo[];
-}) {
-  if (!now) return null;
-  const after = placed(now, boards);
-  const before = was ? placed(was, boards) : undefined;
-
-  return (
-    <div role="status" className="bg-fill-subtle flex flex-col gap-0.5 rounded-[10px] px-3 py-2">
-      <Txt as="p" variant="body-sm" className="truncate">
-        {now.item.title} now goes to {after}
-      </Txt>
-      {before !== undefined && before !== after && (
-        <Txt as="p" variant="caption" tone="muted">
-          Was {before}
-        </Txt>
-      )}
-    </div>
-  );
+/** Where the test's item goes under the unsaved rules, and where the saved ones put it; undefined before a retest. */
+export function retestInfo(
+  now: IntakeTestResponse | undefined,
+  was: IntakeTestResponse | undefined,
+  boards: readonly InstalledBoardInfo[],
+): RuleRetestInfo | undefined {
+  if (!now) return undefined;
+  return { title: now.item.title, after: placed(now, boards), before: was ? placed(was, boards) : undefined };
 }
