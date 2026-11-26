@@ -210,7 +210,7 @@ const results = await store.query({
 
 1. Logical operators:
    - Must contain valid conditions
-   - Can't be empty
+   - Can't be empty in most stores. SQL-backed stores such as PostgreSQL, libSQL, and OracleDB treat an empty `$and` or `$nor` as matching every record and an empty `$or` as matching none
    - Must be nested correctly
    - Can only be used at top level or nested within other logical operators
    - Can't be used at field level or nested inside a field

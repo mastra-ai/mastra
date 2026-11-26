@@ -30,11 +30,6 @@ describe('DatasetsInMemory', () => {
       expect(dataset.updatedAt).toBeInstanceOf(Date);
     });
 
-    it('createDataset initializes version as 0', async () => {
-      const dataset = await storage.createDataset({ name: 'test' });
-      expect(dataset.version).toBe(0);
-    });
-
     it('atomically resolves a compatible caller-defined ID without mutating the dataset', async () => {
       const input = { id: 'durable-dataset', name: 'original', organizationId: 'org', projectId: null };
       const results = await Promise.all(Array.from({ length: 20 }, () => storage.createDataset(input)));

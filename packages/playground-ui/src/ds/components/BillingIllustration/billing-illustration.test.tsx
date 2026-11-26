@@ -53,7 +53,7 @@ describe('BillingIllustration', () => {
     expect(delays).toEqual(['0', '50', '100']);
   });
 
-  it('lights each plan screen and window and windows on hover, in drawing order', () => {
+  it('lights the screens and windows of each plan on hover, in drawing order', () => {
     const delays = (name: BillingIllustrationName) =>
       [...draw(name).matchAll(/\[fill-opacity:0\][^>]*style="transition-delay:(\d+)ms"/g)].map(([, ms]) => Number(ms));
 

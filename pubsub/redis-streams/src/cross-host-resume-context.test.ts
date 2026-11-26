@@ -114,8 +114,9 @@ describe('evented resume claimed by another host', () => {
       // COR-1660: tool execution still uses the starting caller's live context on this host.
       expect(toolExecution).toMatchObject({ user: 'alice', controllerState: 'A', closureResult: 'A' });
 
+      const resumedSteps = resumed.filter(entry => entry.event !== 'tool-execute');
       const initialExecutions = new Set(initial.flatMap(entry => entry.executionIds));
-      for (const entry of resumed.filter(entry => entry.event !== 'tool-execute')) {
+      for (const entry of resumedSteps) {
         expect(entry.user, entry.event).toBe('bob');
         expect(
           entry.executionIds.some(id => initialExecutions.has(id)),
@@ -125,9 +126,7 @@ describe('evented resume claimed by another host', () => {
       // The LLM-step processors see the resume's own values. Finalization restores ordinary keys from the
       // run snapshot by design, so the output processor is only checked for identity above.
       expect(
-        resumed
-          .filter(entry => entry.event === 'input-step' || entry.event === 'llm-request')
-          .map(({ event, marker }) => ({ event, marker })),
+        resumedSteps.filter(entry => entry.event !== 'output-result').map(({ event, marker }) => ({ event, marker })),
       ).toEqual([
         { event: 'input-step', marker: 'B' },
         { event: 'llm-request', marker: 'B' },

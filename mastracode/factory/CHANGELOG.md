@@ -1,5 +1,81 @@
 # @mastra/factory
 
+## 0.32.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`67c1571`](https://github.com/mastra-ai/mastra/commit/67c15714862bbc881bb5191a079abc39ec62c45e)]:
+  - @mastra/core@1.87.0-alpha.2
+  - @mastra/code-sdk@1.22.0-alpha.2
+
+## 0.32.0-alpha.1
+
+### Minor Changes
+
+- Added connection checks, an auth scheme and custom headers for custom OpenAI-compatible endpoints. ([#31567](https://github.com/mastra-ai/mastra/pull/31567))
+
+  **New fields on `POST /web/config/custom-providers`**
+
+  ```json
+  {
+    "name": "Team gateway",
+    "url": "https://llm.example.com/v1",
+    "apiKey": "sk-team",
+    "authScheme": "x-api-key",
+    "headers": [
+      { "name": "X-Tenant", "value": "acme" },
+      { "name": "X-Region", "value": "eu-west", "secret": false }
+    ],
+    "check": true
+  }
+  ```
+
+  - `authScheme` is `bearer` (the default) or `x-api-key`.
+  - `headers` is the full list. A header is secret unless it is sent with `secret: false`, and secret values are never returned. On an edit, leave out `headers` to keep the saved list, or send a header without `value` to keep its saved value.
+  - `check: true` calls `GET {url}/models` first and saves only when the endpoint lists its models. Otherwise the response is 422 `custom_endpoint_check_failed` with the upstream `failure`, and nothing is saved.
+
+  Each provider in `GET /web/config/custom-providers` now has `authScheme`, `headers` (with values for plain headers only) and `lastCheck`. `lastCheck` is absent until a connection test has run, and an edit that changes the URL, key, auth scheme or headers without `check: true` clears it. A save with `check: true` that passes stores a fresh `lastCheck`. It records the connection test only, never a test message.
+
+  **New route `POST /web/config/custom-providers/check`**
+
+  Send the same fields as a save to test a draft without saving it, or only `previousId` to test a saved provider and record the result as its `lastCheck`. A saved organization provider also needs its scope:
+
+  ```json
+  { "previousId": "team-gateway", "scope": "org" }
+  ```
+
+  Add `model` to also send one test message to that model. A failing check is returned in a 200 response, with the HTTP status and the upstream error text. A hosted Factory returns only the upstream error message or page title. Checking an organization provider needs an organization admin, like changing one.
+
+  **New error codes**
+
+  - 400 `header_refused`: a header name or value is not allowed.
+  - 400 `header_value_required`: a header value must be typed again. This happens for a new header, for a secret header made plain, and for a saved secret header when the URL moves to another origin.
+  - 409 `custom_provider_changed`: the provider was edited while a save with `check: true` was testing it. Nothing is saved, and the save can be sent again.
+  - 422 `custom_endpoint_check_failed`: a save with `check: true` failed its connection test.
+
+### Patch Changes
+
+- Organization admins can now change the model and thinking level of a card session the Factory owns, using the Factory's models and organization keys. The choice applies to that session only; the Factory default is unchanged. Before, nobody could change it. The session response now also says why a session can't change owner (a card, a Slack thread, or a side session), so the UI can explain a missing takeover. ([#31576](https://github.com/mastra-ai/mastra/pull/31576))
+
+- Improved Slack replies so Factory uses the same reply mode as any Mastra agent. The reply tool, "Open session ↗" link, typing status and reply reminder work as before. The shared part of the channel prompt is now worded more generally, for example "conversation" instead of "session". ([#31573](https://github.com/mastra-ai/mastra/pull/31573))
+
+- Fixed a saved sandbox setting staying on a value the sandbox no longer accepts. When the environment settings are read, a saved value the sandbox's settings now reject is removed and saved, so the sandbox uses its default for it and the settings page shows that default. ([#31570](https://github.com/mastra-ai/mastra/pull/31570))
+
+- Fixed new sessions starting their own environment build every time a repository changed. A new session now starts from the environment the Factory last built, and still checks out the newest commit. A session that creates a new sandbox asks for a rebuild only when a repository changed since that build, at most once per build debounce window, so the environment keeps up without sessions building on their own. The settings page now calls this setting "Build debounce" and shows it even when rebuilding on push is off. ([#30953](https://github.com/mastra-ai/mastra/pull/30953))
+
+  The default debounce window for new Factories is now 30 minutes, up from 10, so a rebuild is less likely to start while the previous one is still running. Existing Factories keep their setting.
+
+  Repositories in GitLab subgroups (`group/subgroup/repo`) now match their built environment by their full path.
+
+- Fixed GitHub and GitLab pull request events being dropped when the subscribed session was open on a different thread. Delivery now switches the session onto the pull request's thread as the subscribing user, so CI results, reviews and merges reach the session instead of failing with "the request has no authenticated user". ([#31572](https://github.com/mastra-ai/mastra/pull/31572))
+
+- Updated dependencies [[`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`f19b0cf`](https://github.com/mastra-ai/mastra/commit/f19b0cf20c347921358943bb70c14051493088de), [`b47a298`](https://github.com/mastra-ai/mastra/commit/b47a2988caa0d906eb344fe35455200687cb99b3), [`18439ea`](https://github.com/mastra-ai/mastra/commit/18439ea68fd5b009119e80af05cabc5ce5004c2b), [`21aee63`](https://github.com/mastra-ai/mastra/commit/21aee631dbb59e843b265706438865928185d500), [`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`6ae02c2`](https://github.com/mastra-ai/mastra/commit/6ae02c23a7aff35f229f46cc413c661309016e95)]:
+  - @mastra/core@1.87.0-alpha.1
+  - @mastra/platform-workspace@1.14.1-alpha.0
+  - @mastra/slack@1.11.0-alpha.0
+  - @mastra/code-sdk@1.22.0-alpha.1
+  - @mastra/connect@1.6.0-alpha.1
+
 ## 0.32.0-alpha.0
 
 ### Minor Changes

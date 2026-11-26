@@ -109,6 +109,8 @@ function buildApp(
         requestMove: input => {
           engineInputs.push(input);
           return new DispatcherBoardEngine({
+            workItems: seed.workItems,
+            boards: boardRegistry,
             transitionService: new FactoryTransitionService({
               configVersion: 'factory-config-v1',
               storage: seed.workItems,

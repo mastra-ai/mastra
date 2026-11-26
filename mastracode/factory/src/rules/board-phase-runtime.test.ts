@@ -20,6 +20,8 @@ import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { FactoryBoardEngineFactory } from '../board-engine/engine.js';
+import { createWorkflowBoardEngine } from '../board-engine/workflow-engine.js';
 import { defineBoard } from '../boards/index.js';
 import { MastraFactory } from '../factory.js';
 import { GithubIntegration } from '../integrations/github/integration.js';
@@ -180,6 +182,7 @@ async function bootFactory(
   board: ReturnType<typeof defineBoard>,
   skills?: InlineSkill[],
   pubsub?: RedisStreamsPubSub,
+  boardEngine?: FactoryBoardEngineFactory,
 ) {
   const github = new GithubIntegration({
     appId: '123',
@@ -198,6 +201,7 @@ async function bootFactory(
     boards: [board],
     ...(skills ? { skills } : {}),
     configVersion: 'phase-runtime-v1',
+    ...(boardEngine ? { boardEngine } : {}),
     secretEncryption: createFactorySecretEncryption({ primary: { id: 'test', key: Buffer.alloc(32, 7) } }),
   });
   const args = await factory.prepare();
@@ -215,11 +219,17 @@ async function startFactory(
   board: ReturnType<typeof defineBoard>,
   landing: string,
   skills?: InlineSkill[],
-  evented?: { storage: PgFactoryStorage; pubsub: RedisStreamsPubSub },
+  {
+    evented,
+    boardEngine,
+  }: {
+    evented?: { storage: PgFactoryStorage; pubsub: RedisStreamsPubSub };
+    boardEngine?: FactoryBoardEngineFactory;
+  } = {},
 ) {
   vi.stubEnv('OPENAI_API_KEY', 'sk-phase-test');
   const storage = evented?.storage ?? new LibSQLFactoryStorage({ id: 'phase-runtime', url: ':memory:' });
-  const runtime = await bootFactory(storage, board, skills, evented?.pubsub);
+  const runtime = await bootFactory(storage, board, skills, evented?.pubsub, boardEngine);
   const { args, mastra, sourceControl } = runtime;
   const close = async () => {
     await runtime.close();
@@ -361,7 +371,7 @@ it.skipIf(!workerPrefix)(
     try {
       const sessionId = process.env.FACTORY_PHASE_TEST_PARK_SESSION;
       const runtime = sessionId
-        ? await startFactory(release, 'build', [publishSkill], { storage, pubsub })
+        ? await startFactory(release, 'build', [publishSkill], { evented: { storage, pubsub } })
         : await bootFactory(storage, release, [publishSkill], pubsub);
       try {
         if (sessionId && 'send' in runtime) {
@@ -428,7 +438,7 @@ it.skipIf(!postgresUrl || !redisUrl || !!workerPrefix).each([false, true])(
       await model.start();
       vi.stubEnv('OPENAI_BASE_URL', `${model.url.replace(/\/+$/, '')}/v1`);
       vi.stubEnv('MASTRA_WORKERS', split ? 'false' : undefined);
-      const runtime = await startFactory(release, 'build', [publishSkill], { storage, pubsub });
+      const runtime = await startFactory(release, 'build', [publishSkill], { evented: { storage, pubsub } });
       const worker = split ? spawnPhaseWorker(connectionString, keyPrefix, workerStop) : undefined;
       try {
         if (worker) {
@@ -637,11 +647,14 @@ function builder(): (text: string) => ToolCall | undefined {
   };
 }
 
-describe('board phase fields at runtime', () => {
+describe.each([
+  ['dispatcher', undefined],
+  ['workflow', createWorkflowBoardEngine],
+] as const)('board phase fields at runtime (%s engine)', (_engine, boardEngine) => {
   it('starts a phase only for the cards its condition matches, and moves the card on the outcome the agent reports after the exit tool', async () => {
     const requests: string[] = [];
     fakeModel(requests, publisher());
-    const runtime = await startFactory(release, 'build', [publishSkill]);
+    const runtime = await startFactory(release, 'build', [publishSkill], { boardEngine });
     try {
       const { project, workItems, card, read, decisionsFor } = runtime;
       const stagesOf = async (item: Card) => (await read(item)).stages;
@@ -679,7 +692,7 @@ describe('board phase fields at runtime', () => {
   it("starts the next phase's run in the same session when the agent's reported outcome moves its own card within one context", async () => {
     const requests: string[] = [];
     fakeModel(requests, builder());
-    const runtime = await startFactory(delivery, 'planning', deliverySkills);
+    const runtime = await startFactory(delivery, 'planning', deliverySkills, { boardEngine });
     try {
       const { project, workItems, card, read } = runtime;
       const feature = await card('the feature', []);
@@ -736,7 +749,7 @@ describe('board phase fields at runtime', () => {
     async function draftNotes(skills?: InlineSkill[]) {
       const requests: string[] = [];
       fakeModel(requests, writer());
-      const runtime = await startFactory(notes, 'drafting', skills);
+      const runtime = await startFactory(notes, 'drafting', skills, { boardEngine });
       try {
         const item = await runtime.card('v2 notes', []);
         // Capture the start the moment it settles: a missing skill keeps retrying in the background.

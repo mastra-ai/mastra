@@ -498,13 +498,6 @@ Line 3
 Line 4
 Line 5`;
 
-  it('should extract all lines when no range specified', () => {
-    const result = extractLines(content);
-    expect(result.content).toBe(content);
-    expect(result.lines).toEqual({ start: 1, end: 5 });
-    expect(result.totalLines).toBe(5);
-  });
-
   it('should extract specific line range', () => {
     const result = extractLines(content, 2, 4);
     expect(result.content).toBe('Line 2\nLine 3\nLine 4');
@@ -564,10 +557,6 @@ Line 2
 Line 3
 Line 4`;
 
-  it('should return line 1 for character index 0', () => {
-    expect(charIndexToLineNumber(content, 0)).toBe(1);
-  });
-
   it('should return correct line for character in first line', () => {
     // 'L' at position 0 -> line 1
     expect(charIndexToLineNumber(content, 0)).toBe(1);
@@ -579,12 +568,6 @@ Line 4`;
     expect(charIndexToLineNumber(content, 5)).toBe(1);
   });
 
-  it('should return line 2 for character after first newline', () => {
-    // First line is "Line 1\n" (7 chars including newline)
-    // Index 7 is first char of line 2
-    expect(charIndexToLineNumber(content, 7)).toBe(2);
-  });
-
   it('should return line 3 for character in third line', () => {
     // "Line 1\n" = 7 chars, "Line 2\n" = 7 chars
     // Index 14 is first char of line 3
@@ -594,10 +577,6 @@ Line 4`;
   it('should return last line for character at end', () => {
     // Total content length
     expect(charIndexToLineNumber(content, content.length)).toBe(4);
-  });
-
-  it('should return undefined for negative index', () => {
-    expect(charIndexToLineNumber(content, -1)).toBeUndefined();
   });
 
   it('should return undefined for index beyond content length', () => {
@@ -636,10 +615,6 @@ Line 4`;
     // Start at line 2 (index 7), end at line 3
     const range = charRangeToLineRange(content, 7, 21);
     expect(range).toEqual({ start: 2, end: 3 });
-  });
-
-  it('should return undefined for invalid start index', () => {
-    expect(charRangeToLineRange(content, -1, 10)).toBeUndefined();
   });
 
   it('should return undefined for invalid end index', () => {

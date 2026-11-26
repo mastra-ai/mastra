@@ -1,5 +1,45 @@
 # @mastra/code-sdk
 
+## 1.22.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`67c1571`](https://github.com/mastra-ai/mastra/commit/67c15714862bbc881bb5191a079abc39ec62c45e)]:
+  - @mastra/core@1.87.0-alpha.2
+  - @mastra/client-js@1.62.1-alpha.2
+
+## 1.22.0-alpha.1
+
+### Minor Changes
+
+- Added an auth scheme and custom headers to custom OpenAI-compatible providers. Set `authScheme` to `x-api-key` for endpoints that read the key from an `x-api-key` header instead of `Authorization: Bearer`. Headers in `headers` are sent on every call. A header that would replace the key header (`Authorization` for `bearer`, `x-api-key` for `x-api-key`) or one the HTTP client sets, such as `Host` or `Content-Type`, is ignored. ([#31559](https://github.com/mastra-ai/mastra/pull/31559))
+
+  ```json
+  {
+    "customProviders": [
+      {
+        "name": "Acme",
+        "url": "https://llm.acme.example/v1",
+        "apiKey": "acme-key",
+        "authScheme": "x-api-key",
+        "headers": [
+          { "name": "X-Org-Id", "value": "org-1", "secret": false },
+          { "name": "X-Tenant-Token", "value": "tenant-token", "secret": true }
+        ],
+        "models": ["model-x"]
+      }
+    ]
+  }
+  ```
+
+  Added `listCustomProviderModels`, which lists the models an endpoint serves, and `testCustomProviderModel`, which sends one short message to a model. Both are in `@mastra/code-sdk/agents/custom-provider-check` and return the upstream status and error text on failure, with the key and secret header values removed. A reply that repeats the key or a secret header value is redacted the same way.
+
+### Patch Changes
+
+- Updated dependencies [[`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`f19b0cf`](https://github.com/mastra-ai/mastra/commit/f19b0cf20c347921358943bb70c14051493088de), [`18439ea`](https://github.com/mastra-ai/mastra/commit/18439ea68fd5b009119e80af05cabc5ce5004c2b), [`21aee63`](https://github.com/mastra-ai/mastra/commit/21aee631dbb59e843b265706438865928185d500)]:
+  - @mastra/core@1.87.0-alpha.1
+  - @mastra/client-js@1.62.1-alpha.1
+
 ## 1.22.0-alpha.0
 
 ### Minor Changes

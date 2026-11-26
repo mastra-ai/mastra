@@ -509,8 +509,9 @@ The object form can return any combination of these properties:
   content={[
   {
     name: 'model',
-    type: 'LanguageModelV2 | string',
-    description: "Change the model for this step. Can be a model instance or router ID like 'openai/gpt-5.5'.",
+    type: 'LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModel',
+    description:
+      "Change the model for this step. Can be a model instance, a router ID like 'openai/gpt-5.5', or an OpenAI-compatible config.",
     isOptional: true,
   },
   {
@@ -801,9 +802,10 @@ processLLMRequest?(
 
 #### Return value
 
-`processLLMRequest` returns `ProcessLLMRequestResult`, which is `{ prompt?: LanguageModelV2Prompt } | undefined | void`.
+`processLLMRequest` returns `ProcessLLMRequestResult`, which is `{ prompt?: LanguageModelV2Prompt; response?: CachedLLMStepResponse } | undefined | void`.
 
 - Return `{ prompt }` to replace the outbound prompt for the current provider call.
+- Return `{ response }` with cached chunks to skip the model call and emit those chunks instead.
 - Return `undefined` or `void` to forward the original prompt unchanged.
 
 #### Use cases

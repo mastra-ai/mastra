@@ -39,10 +39,18 @@
         "type": "toggle"
       }
     ],
-    "mistralai/Mistral-Medium-3.5-128B": [
+    "zai-org/GLM-5.2": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["high", "max"]
+      }
+    ],
+    "moonshotai/Kimi-K2.6": [
+      {
+        "type": "budget_tokens"
       }
     ],
     "evroc/roc": [
@@ -50,10 +58,9 @@
         "type": "budget_tokens"
       }
     ],
-    "openai/gpt-oss-120b": [
+    "Qwen/Qwen3.6-35B-A3B": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "type": "toggle"
       }
     ],
     "Qwen/Qwen3.8-27B": [
@@ -65,23 +72,16 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "Qwen/Qwen3.6-35B-A3B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "moonshotai/Kimi-K2.6": [
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "zai-org/GLM-5.2": [
-      {
-        "type": "toggle"
-      },
+    "openai/gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["high", "max"]
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "mistralai/Mistral-Medium-3.5-128B": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ]
   }

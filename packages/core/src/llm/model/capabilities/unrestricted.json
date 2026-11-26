@@ -12,18 +12,6 @@
     "qwen3.8-27b-uncensored"
   ],
   "reasoning": {
-    "qwen3.8-27b-uncensored": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "glm-5.3-flash-uncensored": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "deepseek-v4.1-flash-uncensored": [
       {
         "type": "effort",
@@ -34,6 +22,18 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "qwen3.8-27b-uncensored": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "glm-5.3-flash-uncensored": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

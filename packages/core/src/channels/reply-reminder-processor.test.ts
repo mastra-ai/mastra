@@ -1,16 +1,16 @@
-import { MessageList } from '@mastra/core/agent';
-import type { MastraDBMessage } from '@mastra/core/agent';
-import type { ProcessInputStepArgs } from '@mastra/core/processors';
 import { describe, expect, it } from 'vitest';
+import { MessageList } from '../agent/message-list';
+import type { MastraDBMessage } from '../agent/message-list';
+import type { ProcessInputStepArgs } from '../processors';
 
-import { FactoryReplyReminderProcessor } from './reply-reminder-processor.js';
-import { REPLY_TOOL_NAME } from './reply-tool.js';
+import { ChannelReplyReminderProcessor } from './reply-reminder-processor';
+import { REPLY_TOOL_NAME } from './reply-tool';
 
 const MINUTE = 60_000;
 
 function run({ tools = { [REPLY_TOOL_NAME]: {} } as Record<string, unknown> } = {}) {
   let now = 0;
-  const processor = new FactoryReplyReminderProcessor({ afterMs: 5 * MINUTE, now: () => now });
+  const processor = new ChannelReplyReminderProcessor({ afterMs: 5 * MINUTE, now: () => now });
   const messageList = new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' });
   const state: Record<string, unknown> = {};
   const signals: Array<{ type: string; contents: unknown }> = [];
@@ -60,7 +60,7 @@ function run({ tools = { [REPLY_TOOL_NAME]: {} } as Record<string, unknown> } = 
   };
 }
 
-describe('FactoryReplyReminderProcessor', () => {
+describe('ChannelReplyReminderProcessor', () => {
   it('stays out of runs without the reply tool', async () => {
     const r = run({ tools: {} });
     await r.step();

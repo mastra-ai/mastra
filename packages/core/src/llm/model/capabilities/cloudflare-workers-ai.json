@@ -52,16 +52,10 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "@cf/openai/gpt-oss-20b": [
+    "@cf/thinkingmachines/inkling-2-small": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "@cf/openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "minimal", "low", "medium", "high", "max"]
       }
     ],
     "@cf/zai-org/glm-4.7-flash": [
@@ -75,12 +69,6 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "@cf/thinkingmachines/inkling-2-small": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "max"]
-      }
-    ],
     "@cf/qwen/qwen3.8-27b": [
       {
         "type": "toggle"
@@ -88,6 +76,18 @@
       {
         "type": "effort",
         "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "@cf/openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "@cf/openai/gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ]
   }

@@ -190,6 +190,8 @@ async function setup(
     audit: seed.audit,
     boards,
     boardEngine: new DispatcherBoardEngine({
+      workItems: seed.workItems,
+      boards,
       transitionService: new FactoryTransitionService({
         configVersion: 'mcp-test',
         boards,

@@ -11,6 +11,7 @@ import { useAgentControllerThreadMessages } from '../../../../hooks/useAgentCont
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { sessionUnavailableError, useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
+import { isFactoryOwnedSession } from '../../workspaces/services/sessionPresentation';
 import { isSessionNotFound } from '../../workspaces/services/user-sessions';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -31,6 +32,9 @@ import { TranscriptContinuationContext, useTranscriptKey } from './transcriptKey
 
 function modelLockedReason(session: FactoryUserSession | undefined): string | undefined {
   if (session?.capabilities?.switchModel !== false) return undefined;
+  if (isFactoryOwnedSession(session)) {
+    return 'Only an organization admin can change this session’s model or thinking level.';
+  }
   return `Only ${session.owner?.name ?? 'the session owner'} can change this session’s model or thinking level.`;
 }
 

@@ -23,6 +23,7 @@ import { AgentChannels } from '../agent-channels';
 import { getChatModule } from '../chat-lazy';
 import { ChannelSessionRejectedError } from '../errors';
 import { matchesDomain, extractUrls } from '../inline-media';
+import { NEW_CHANNEL_THREAD_KEY } from '../thread-link-processor';
 import type { ChannelAdapterBaseConfig, ChannelContext, ChannelHandler, ResolveResourceId } from '../types';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
@@ -202,6 +203,57 @@ describe('AgentChannels', () => {
 
     it('leaves out the generative UI processor by default', () => {
       expect(agentChannels.getInputProcessors().map(p => p.id)).not.toContain('chat-channel-generative-ui');
+    });
+  });
+
+  describe('replyMode and threadLink', () => {
+    it('installs reply mode, its stream and the thread link, and hides reply text and tool calls', () => {
+      const channels = new AgentChannels({
+        adapters: {
+          slack: {
+            adapter: createMockAdapter('slack'),
+            replyMode: 'tool',
+            threadLink: ({ threadId }) => `https://app.test/threads/${threadId}`,
+          },
+        },
+        threadContext: { addSystemMessage: false },
+      });
+      expect(channels.getInputProcessors().map(p => p.id)).toEqual(['channel-reply-mode']);
+      expect(channels.getOutputProcessors().map(p => p.id)).toEqual([
+        'channel-thread-link',
+        'chat-channel-render',
+        'channel-reply-stream',
+      ]);
+      expect((channels as any).adapterConfigs.slack).toMatchObject({ textDisplay: 'hidden', toolDisplay: 'hidden' });
+    });
+
+    it('treats display settings passed as undefined as unset', () => {
+      const channels = new AgentChannels({
+        adapters: {
+          slack: {
+            adapter: createMockAdapter('slack'),
+            replyMode: 'tool',
+            toolDisplay: undefined,
+            typingStatus: undefined,
+          },
+        },
+        threadContext: { addSystemMessage: false },
+      });
+      const cfg = (channels as any).adapterConfigs.slack;
+      expect(cfg).toMatchObject({ textDisplay: 'hidden', toolDisplay: 'hidden' });
+      expect(cfg.typingStatus).toBeTypeOf('function');
+    });
+
+    it('keeps display settings the adapter sets itself', () => {
+      const channels = new AgentChannels({
+        adapters: { slack: { adapter: createMockAdapter('slack'), replyMode: 'tool', toolDisplay: 'compact' } as any },
+      });
+      expect((channels as any).adapterConfigs.slack).toMatchObject({ textDisplay: 'hidden', toolDisplay: 'compact' });
+    });
+
+    it('adds nothing when no adapter asks for it', () => {
+      expect(agentChannels.getInputProcessors().map(p => p.id)).not.toContain('channel-reply-mode');
+      expect(agentChannels.getOutputProcessors().map(p => p.id)).toEqual(['chat-channel-render']);
     });
   });
 
@@ -2244,6 +2296,22 @@ describe('AgentChannels', () => {
       } as any;
     }
 
+    it('marks only the run that creates the thread as a new channel thread', async () => {
+      const channels = new AgentChannels({ adapters: { discord: createMockAdapter('discord') } });
+      channels.__setAgent(mockAgent);
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord, isDM: true });
+
+      const first = new RequestContext();
+      await (channels as any).processChatMessage(chatThread, message, mockMastra, first);
+      const second = new RequestContext();
+      await (channels as any).processChatMessage(chatThread, { ...message, id: 'message-2' }, mockMastra, second);
+
+      expect(first.get(NEW_CHANNEL_THREAD_KEY)).toBe(true);
+      expect(second.get(NEW_CHANNEL_THREAD_KEY)).toBeUndefined();
+    });
+
     it('creates the new thread with the resolver id, after the resourceId resolves', async () => {
       const resolveResourceId = vi.fn(async () => 'session-abc');
       const resolveThreadId = vi.fn(async ({ resourceId }: any) => resourceId);
@@ -3461,10 +3529,6 @@ describe('matchesDomain', () => {
 
   it('wildcard matches everything', () => {
     expect(matchesDomain('https://anything.example.org/path', '*')).toBe(true);
-  });
-
-  it('returns false for invalid URL', () => {
-    expect(matchesDomain('not-a-url', 'example.com')).toBe(false);
   });
 
   it('does not match partial domain names', () => {

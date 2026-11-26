@@ -1,10 +1,25 @@
-import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '@mastra/core/channels';
-import { RequestContext } from '@mastra/core/request-context';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { RequestContext } from '../request-context';
+import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';
 
-import { markNewChannelSession } from './channel-session-link-processor.js';
-import { createReplyTool, FactoryReplyStreamProcessor, partialStringField, REPLY_TOOL_NAME } from './reply-tool.js';
-import type { ShareFileToolDeps } from './share-file-tool.js';
+import { ChannelReplyStreamProcessor, createChannelReplyTool, partialStringField, REPLY_TOOL_NAME } from './reply-tool';
+import type { ChannelReplyOptions } from './reply-tool';
+import { markNewChannelThread } from './thread-link-processor';
+
+const SESSION_URL = '${SESSION_URL}';
+const link: ChannelReplyOptions['link'] = { label: 'Open session ↗', link: () => SESSION_URL };
+
+/** Rebuilds the thread from the run's thread id, as a host with an attached controller does. */
+function rebuildFrom(
+  buildRenderContextForThread: (threadId: string) => Promise<unknown>,
+): ChannelReplyOptions['resolveRender'] {
+  return async requestContext =>
+    (requestContext.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as never) ??
+    ((await buildRenderContextForThread((requestContext.get('controller') as { threadId: string }).threadId)) as never);
+}
+
+/** The thread the run came in on, nothing else. */
+const stashed = rebuildFrom(async () => undefined);
 
 type ReplyTool = {
   inputSchema: { safeParse: (input: unknown) => { success: boolean } };
@@ -34,21 +49,12 @@ function channelRun({
 }
 
 async function replyTool(requestContext: RequestContext): Promise<ReplyTool> {
-  const tool = (await createReplyTool(requestContext))[REPLY_TOOL_NAME];
+  const tool = createChannelReplyTool(requestContext, { link, resolveRender: stashed })[REPLY_TOOL_NAME];
   expect(tool).toBeDefined();
   return tool as unknown as ReplyTool;
 }
 
 describe('reply_in_thread', () => {
-  const originalPublicUrl = process.env.MASTRACODE_PUBLIC_URL;
-  beforeEach(() => {
-    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
-  });
-  afterEach(() => {
-    if (originalPublicUrl === undefined) delete process.env.MASTRACODE_PUBLIC_URL;
-    else process.env.MASTRACODE_PUBLIC_URL = originalPublicUrl;
-  });
-
   it('posts the text into the thread the run came from', async () => {
     const { requestContext, post } = channelRun();
     const tool = await replyTool(requestContext);
@@ -69,15 +75,14 @@ describe('reply_in_thread', () => {
 
   it('ends the first reply of a new session with the session link, and only the first', async () => {
     const { requestContext, post } = channelRun();
-    markNewChannelSession(requestContext);
+    markNewChannelThread(requestContext);
     const tool = await replyTool(requestContext);
 
     await tool.execute({ text: 'On it.' }, {});
     await tool.execute({ text: 'Done.' }, {});
 
     expect(post).toHaveBeenNthCalledWith(1, {
-      markdown:
-        'On it.\n\n[Open session ↗](https://mc.example.com/factories/factory-1/workspaces/session-1/threads/thread-1)',
+      markdown: `On it.\n\n[Open session ↗](${SESSION_URL})`,
     });
     expect(post).toHaveBeenNthCalledWith(2, { markdown: 'Done.' });
   });
@@ -85,16 +90,57 @@ describe('reply_in_thread', () => {
   it('keeps the session link for the retry when the first post fails', async () => {
     const post = vi.fn().mockRejectedValueOnce(new Error('rate_limited')).mockResolvedValue({});
     const { requestContext } = channelRun({ post });
-    markNewChannelSession(requestContext);
+    markNewChannelThread(requestContext);
     const tool = await replyTool(requestContext);
 
     await expect(tool.execute({ text: 'On it.' }, {})).rejects.toThrow('rate_limited');
     await tool.execute({ text: 'On it.' }, {});
 
     expect(post).toHaveBeenLastCalledWith({
-      markdown:
-        'On it.\n\n[Open session ↗](https://mc.example.com/factories/factory-1/workspaces/session-1/threads/thread-1)',
+      markdown: `On it.\n\n[Open session ↗](${SESSION_URL})`,
     });
+  });
+
+  it('puts the session link on only one of two overlapping first replies', async () => {
+    let land!: () => void;
+    const post = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise(resolve => (land = () => resolve({}))))
+      .mockResolvedValue({});
+    const { requestContext } = channelRun({ post });
+    markNewChannelThread(requestContext);
+    const tool = await replyTool(requestContext);
+
+    const first = tool.execute({ text: 'On it.' }, {});
+    await tool.execute({ text: 'Also checking CI.' }, {});
+    land();
+    await first;
+    await tool.execute({ text: 'Done.' }, {});
+
+    const linked = post.mock.calls.filter(([arg]) => (arg as { markdown: string }).markdown.includes(SESSION_URL));
+    expect(linked).toEqual([[{ markdown: `On it.\n\n[Open session ↗](${SESSION_URL})` }]]);
+  });
+
+  it('hands the session link to the next reply when an overlapping first reply fails', async () => {
+    let fail!: () => void;
+    const post = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise((_, reject) => (fail = () => reject(new Error('rate_limited')))))
+      .mockResolvedValue({});
+    const { requestContext } = channelRun({ post });
+    markNewChannelThread(requestContext);
+    const tool = await replyTool(requestContext);
+
+    const first = tool.execute({ text: 'On it.' }, {});
+    await tool.execute({ text: 'Also checking CI.' }, {});
+    fail();
+    await expect(first).rejects.toThrow('rate_limited');
+    await tool.execute({ text: 'Done.' }, {});
+    await tool.execute({ text: 'Anything else?' }, {});
+
+    expect(post).toHaveBeenNthCalledWith(2, { markdown: 'Also checking CI.' });
+    expect(post).toHaveBeenNthCalledWith(3, { markdown: `Done.\n\n[Open session ↗](${SESSION_URL})` });
+    expect(post).toHaveBeenNthCalledWith(4, { markdown: 'Anything else?' });
   });
 
   it('leaves the link off follow-ups in an existing session', async () => {
@@ -113,9 +159,10 @@ describe('reply_in_thread', () => {
     const buildRenderContextForThread = vi.fn(async (threadId: string) =>
       threadId === 'thread-1' ? { platform: 'slack', textDisplay: 'hidden', chatThread: { post } } : null,
     );
-    const tool = (
-      await createReplyTool(requestContext, { channels: () => ({ buildRenderContextForThread }) as never })
-    )[REPLY_TOOL_NAME] as unknown as ReplyTool;
+    const tool = createChannelReplyTool(requestContext, {
+      link,
+      resolveRender: rebuildFrom(buildRenderContextForThread),
+    })[REPLY_TOOL_NAME] as unknown as ReplyTool;
 
     await tool.execute({ text: 'The build finished: all green.' }, {});
 
@@ -138,15 +185,6 @@ describe('partialStringField', () => {
 });
 
 describe('streaming reply_in_thread into the thread', () => {
-  const originalPublicUrl = process.env.MASTRACODE_PUBLIC_URL;
-  beforeEach(() => {
-    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
-  });
-  afterEach(() => {
-    if (originalPublicUrl === undefined) delete process.env.MASTRACODE_PUBLIC_URL;
-    else process.env.MASTRACODE_PUBLIC_URL = originalPublicUrl;
-  });
-
   /** A Slack thread whose post reads a streamed message chunk by chunk, like chat SDK's native streaming. */
   function streamingThread({ fail = false } = {}) {
     const streamed: string[] = [];
@@ -167,8 +205,12 @@ describe('streaming reply_in_thread into the thread', () => {
     ({ type, runId: 'r', from: 'AGENT', payload }) as any;
   const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 
-  async function feed(requestContext: RequestContext, argsDeltas: string[], deps: ShareFileToolDeps = {}) {
-    const processor = new FactoryReplyStreamProcessor(deps);
+  async function feed(
+    requestContext: RequestContext,
+    argsDeltas: string[],
+    options: Partial<ChannelReplyOptions> = {},
+  ) {
+    const processor = new ChannelReplyStreamProcessor(options.resolveRender ?? stashed);
     const state: Record<string, unknown> = {};
     const run = (part: unknown) => processor.processOutputStream({ part, state, requestContext } as any);
     await run(chunk('tool-call-input-streaming-start', { toolCallId: 'call-1', toolName: REPLY_TOOL_NAME }));
@@ -182,7 +224,7 @@ describe('streaming reply_in_thread into the thread', () => {
   it('shows the text while the model writes it, then finishes the same post with the session link', async () => {
     const thread = streamingThread();
     const { requestContext } = channelRun({ post: thread.post });
-    markNewChannelSession(requestContext);
+    markNewChannelThread(requestContext);
     const tool = await replyTool(requestContext);
 
     await feed(requestContext, ['{"text": "Hello', ' there', ', Caleb', '!"}']);
@@ -193,9 +235,7 @@ describe('streaming reply_in_thread into the thread', () => {
       posted: true,
     });
     expect(thread.post).toHaveBeenCalledTimes(1);
-    expect(thread.streamed.join('')).toBe(
-      'Hello there, Caleb!\n\n[Open session ↗](https://mc.example.com/factories/factory-1/workspaces/session-1/threads/thread-1)',
-    );
+    expect(thread.streamed.join('')).toBe(`Hello there, Caleb!\n\n[Open session ↗](${SESSION_URL})`);
   });
 
   it('streams on a run with no inbound message, like a web prompt or a woken run', async () => {
@@ -207,10 +247,10 @@ describe('streaming reply_in_thread into the thread', () => {
         ? { platform: 'slack', textDisplay: 'hidden', streaming: { enabled: true }, chatThread: { post: thread.post } }
         : null,
     );
-    const deps: ShareFileToolDeps = { channels: () => ({ buildRenderContextForThread }) as never };
-    const tool = (await createReplyTool(requestContext, deps))[REPLY_TOOL_NAME] as unknown as ReplyTool;
+    const options: ChannelReplyOptions = { link, resolveRender: rebuildFrom(buildRenderContextForThread) };
+    const tool = createChannelReplyTool(requestContext, options)[REPLY_TOOL_NAME] as unknown as ReplyTool;
 
-    await feed(requestContext, ['{"text": "Build', ' is green"}'], deps);
+    await feed(requestContext, ['{"text": "Build', ' is green"}'], options);
     expect(thread.streamed.join('')).toBe('Build is green');
 
     await tool.execute({ text: 'Build is green' }, { agent: { toolCallId: 'call-1' } });

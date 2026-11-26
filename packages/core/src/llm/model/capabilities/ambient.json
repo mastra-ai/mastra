@@ -1,9 +1,10 @@
 {
-  "attachment": ["qwen/qwen3.8-27b"],
+  "attachment": ["google/gemma-4-26b-a4b-it", "qwen/qwen3.8-27b"],
   "temperature": [
     "ambient/large",
     "ambient/small",
     "deepseek/deepseek-v4.1-flash-1017",
+    "google/gemma-4-26b-a4b-it",
     "minimax/minimax-m3",
     "qwen/qwen3-30b-a3b-instruct-2507",
     "qwen/qwen3.6-27b",
@@ -16,6 +17,7 @@
   "structuredOutput": [
     "ambient/large",
     "deepseek/deepseek-v4.1-flash-1017",
+    "google/gemma-4-26b-a4b-it",
     "minimax/minimax-m3",
     "qwen/qwen3-30b-a3b-instruct-2507",
     "qwen/qwen3.6-27b",
@@ -25,12 +27,6 @@
     "zai-org/GLM-5.2-FP8"
   ],
   "reasoning": {
-    "ambient/large": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
     "deepseek/deepseek-v4.1-flash-1017": [
       {
         "type": "toggle"
@@ -41,6 +37,17 @@
       }
     ],
     "minimax/minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "ambient/large": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "google/gemma-4-26b-a4b-it": [
       {
         "type": "toggle"
       }
@@ -57,11 +64,6 @@
         "values": ["high", "max"]
       }
     ],
-    "qwen/qwen3.6-27b": [
-      {
-        "type": "toggle"
-      }
-    ],
     "qwen/qwen3.8-27b": [
       {
         "type": "toggle"
@@ -69,6 +71,11 @@
       {
         "type": "effort",
         "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "qwen/qwen3.6-27b": [
+      {
+        "type": "toggle"
       }
     ]
   }
