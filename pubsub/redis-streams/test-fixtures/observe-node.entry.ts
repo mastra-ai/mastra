@@ -192,6 +192,18 @@ async function main() {
       const receipt = await queued.accepted;
       emit({ type: 'queue-receipt', action: receipt.action, runId: 'runId' in receipt ? receipt.runId : undefined });
     },
+    async queueApprovalContinuation(cmd) {
+      const resourceId = 'queue-restart-test';
+      const receipt = await base.sendToolApproval({
+        approved: true,
+        messages: [{ role: 'user', content: cmd.prompt }],
+        threadId: cmd.threadId,
+        resourceId,
+        runId: cmd.runId,
+        onFinish: () => emit({ type: 'queued-finished', runId: cmd.runId }),
+      });
+      emit({ type: 'queue-receipt', ...receipt });
+    },
     async followUpAtFinish(cmd) {
       const releaseLease = redisPubsub.releaseLease.bind(redisPubsub);
       const acquireLease = redisPubsub.acquireLease.bind(redisPubsub);

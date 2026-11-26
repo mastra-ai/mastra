@@ -163,9 +163,14 @@ for (const engine of ['durable', 'evented', 'native-default', 'native-evented'] 
     });
 
     if (engine === 'native-evented') {
-      it.each([false, true])(
-        'characterizes acknowledged next-run input after owner crash=%s (COR-1521)',
-        async crash => {
+      it.each([
+        { cmd: 'queue', crash: false },
+        { cmd: 'queue', crash: true },
+        { cmd: 'queueApprovalContinuation', crash: false },
+        { cmd: 'queueApprovalContinuation', crash: true },
+      ])(
+        'characterizes acknowledged input via $cmd after owner crash=$crash (COR-1521)',
+        async ({ cmd, crash }) => {
           const threadId = randomUUID();
           const queuedRunId = `${threadId}-queued`;
           const queuedPrompt = `queued-next-turn-${threadId}`;
@@ -184,11 +189,14 @@ for (const engine of ['durable', 'evented', 'native-default', 'native-evented'] 
           );
           producer.send({ cmd: 'stream', threadId, prompt: 'Hold the active turn' });
           await producer.next(e => e.type === 'tool-started');
-          producer.send({ cmd: 'queue', threadId, runId: queuedRunId, prompt: queuedPrompt });
-          expect(await producer.next(e => e.type === 'queue-receipt')).toMatchObject({
-            action: 'deliver',
-            runId: queuedRunId,
-          });
+          producer.send({ cmd, threadId, runId: queuedRunId, prompt: queuedPrompt });
+          const receipt = await producer.next(e => e.type === 'queue-receipt');
+          expect(receipt).toMatchObject(
+            cmd === 'queue' ? { action: 'deliver', runId: queuedRunId } : { accepted: true, runId: queuedRunId },
+          );
+          // The original turn is still blocked and the acknowledged input has not reached the model.
+          expect(producer.events.some(e => e.type === 'stream-done')).toBe(false);
+          expect(JSON.stringify(llm.getRequests().map(req => req.body))).not.toContain(queuedPrompt);
           if (!crash) {
             producer.send({ cmd: 'release' });
             await producer.next(e => e.type === 'queued-finished' && e.runId === queuedRunId, 15_000);
