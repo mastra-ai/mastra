@@ -1449,7 +1449,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         maxRetries: 0,
                       },
                       includeRawChunks: execOptions.includeRawChunks,
-                      methodType: 'stream',
+                      methodType: execOptions.modelCallMode ?? 'stream',
                       structuredOutput: structuredOutput as any,
                       onResult: ({ warnings: w, request: r, rawResponse: rr }) => {
                         warnings = w || [];

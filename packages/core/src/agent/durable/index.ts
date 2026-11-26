@@ -86,6 +86,14 @@ export {
 
 // EventedAgent class (extends DurableAgent with fire-and-forget execution)
 export { EventedAgent, isEventedAgentClass, type EventedAgentConfig } from './evented-agent';
+export {
+  commitDurableRunOutcome,
+  readDurableRunOutcome,
+  pruneDurableRunOutcomes,
+  DURABLE_AGENT_OUTCOME_WORKFLOW,
+  DURABLE_AGENT_OUTCOME_RETENTION_MS,
+} from './run-outcome';
+export type { DurableRunOutcome } from './run-outcome';
 
 // Evented Agent factory
 export { createEventedAgent, isEventedAgent, type CreateEventedAgentOptions } from './create-evented-agent';

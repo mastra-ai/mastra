@@ -54,6 +54,7 @@ import type { UntrackedRunLiveness } from './execution-fence';
 import { prepareForDurableExecution } from './preparation';
 import type { PreparationResult } from './preparation';
 import { recordRunSavedMessages } from './run-message-refs';
+import { commitDurableRunOutcome, readDurableRunOutcome } from './run-outcome';
 import {
   deleteRunRegistryEntry,
   endRunSpansWithError,
@@ -216,6 +217,12 @@ const LIST_ACTIVE_RUNS_STORAGE_BATCH_SIZE = 100;
  * Options for DurableAgent.stream()
  */
 export interface DurableAgentStreamOptions<OUTPUT = undefined> {
+  /** Provider method for this run; the caller still receives durable stream events. */
+  modelCallMode?: 'generate' | 'stream';
+  /** Internal: use generate-time tool conversion for an asynchronously observed run. */
+  __methodType?: 'generate';
+  /** Internal: retain an outcome for an asynchronously acknowledged run. */
+  retainOutcome?: boolean;
   /** Signal chunks to hide from this caller's stream. Does not affect generated results. */
   hideSignals?: AgentExecutionOptions<OUTPUT>['hideSignals'];
   /** Custom instructions that override the agent's default instructions for this execution */
@@ -2140,6 +2147,12 @@ export class DurableAgent<
       runId,
       resourceId,
       pubsub: this.fenceRunPubSub(executionFence, entry?.abortController),
+      ...(workflowInput.options.retainOutcome
+        ? {
+            shouldPersistSnapshot: ({ workflowStatus }: { workflowStatus: string }) =>
+              ['pending', 'running', 'paused', 'suspended'].includes(workflowStatus),
+          }
+        : {}),
     });
     // Parent the workflow run under the AGENT_RUN span so the trace exports under it.
     const result = await this.withSuspensionAfterPersist(runId, () =>
@@ -2152,6 +2165,7 @@ export class DurableAgent<
     );
     await this.settleExecution(runId, executionFence, {
       status: result?.status,
+      workflowInput,
       error:
         result?.status === 'failed'
           ? new Error((result as any).error?.message || 'Workflow execution failed')
@@ -2396,9 +2410,9 @@ export class DurableAgent<
   protected async settleExecution(
     runId: string,
     fence: ExecutionFence | undefined,
-    outcome: { status?: string; error?: Error },
+    outcome: { status?: string; error?: Error; workflowInput?: DurableAgenticWorkflowInput },
   ): Promise<void> {
-    const { status, error } = outcome;
+    const { status, error, workflowInput } = outcome;
     const reportError = async (reported: Error) => {
       try {
         await this.emitError(runId, reported, fence?.generation);
@@ -2414,6 +2428,32 @@ export class DurableAgent<
     let wrote = false;
     const writeTerminalState = async () => {
       wrote = true;
+      let input = workflowInput;
+      if (error && !input) {
+        const store = await this.#mastra?.getStorage()?.getStore('workflows');
+        const row = await store?.getWorkflowRunById({ workflowName: DurableStepIds.AGENTIC_LOOP, runId });
+        const snapshot = typeof row?.snapshot === 'string' ? JSON.parse(row.snapshot) : row?.snapshot;
+        input = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
+      }
+      if (error && input?.options.retainOutcome) {
+        try {
+          await commitDurableRunOutcome(this.#mastra, getRunRegistryEntry(runId, this.#mastra)?.requestContext, {
+            version: 1,
+            runId,
+            agentId: input.agentId,
+            resourceId:
+              input.state?.resourceId ??
+              (input.messageListState as { memoryInfo?: { resourceId?: string } })?.memoryInfo?.resourceId,
+            status: 'failed',
+            error: { name: error.name, message: error.message },
+            completedAt: new Date().toISOString(),
+          });
+        } catch (persistError) {
+          this.logger.error(`Failed to retain terminal outcome for run ${runId}`, { error: persistError });
+          await reportError(error);
+          return; // Keep the recoverable snapshot when the answer cannot be retained.
+        }
+      }
       if (error) await reportError(error);
       if (finished) await this.deleteRunSnapshots(runId);
     };
@@ -2666,6 +2706,9 @@ export class DurableAgent<
         requestContext,
         optionsAreResolved: true,
         mastra: this.#mastra,
+        modelCallMode: options?.modelCallMode,
+        methodType: options?.__methodType ?? 'stream',
+        retainOutcome: options?.retainOutcome,
         durableAgentId: this.id,
         durableAgentName: this.name,
       });
@@ -2853,7 +2896,7 @@ export class DurableAgent<
             detachStream();
           }
         })
-        .catch(error => this.settleExecution(runId, executionFence, { error })),
+        .catch(error => this.settleExecution(runId, executionFence, { error, workflowInput })),
     );
     const trackedEntry = getRunRegistryEntry(runId, this.#mastra);
     if (trackedEntry) {
@@ -3427,6 +3470,7 @@ export class DurableAgent<
           }
           await this.settleExecution(runId, executionFence, {
             status: result?.status,
+            workflowInput: coldSnapshot?.context?.input as DurableAgenticWorkflowInput | undefined,
             error:
               result?.status === 'failed'
                 ? new Error((result as any).error?.message || 'Workflow resume failed')
@@ -3444,7 +3488,12 @@ export class DurableAgent<
             detachResumeStream();
           }
         })
-        .catch(error => this.settleExecution(runId, executionFence, { error })),
+        .catch(error =>
+          this.settleExecution(runId, executionFence, {
+            error,
+            workflowInput: coldSnapshot?.context?.input as DurableAgenticWorkflowInput | undefined,
+          }),
+        ),
     );
     const trackedResumeEntry = getRunRegistryEntry(runId, this.#mastra);
     if (trackedResumeEntry) {
@@ -3578,6 +3627,11 @@ export class DurableAgent<
 
     // 1. Validate the persisted durable-agent input before claiming ownership
     //    so obvious caller errors fail fast.
+    // FINISH is published before snapshot cleanup. A crash in that window
+    // leaves a running snapshot, but the retained outcome is authoritative.
+    if ((await readDurableRunOutcome(this.#mastra, runId))?.agentId === this.id) {
+      await this.deleteRunSnapshots(runId);
+    }
     let { workflowInput } = await this.#loadRecoverableSnapshot(workflowsStore, runId);
 
     // A crashed run that was executing a stored version must recover on
@@ -4163,7 +4217,7 @@ export class DurableAgent<
             await stopGoalActivity({ agentId: workflowInput.agentId, runId });
           }
         })
-        .catch(error => this.settleExecution(runId, executionFence, { error })),
+        .catch(error => this.settleExecution(runId, executionFence, { error, workflowInput })),
     );
     const trackedEntry = getRunRegistryEntry(runId, this.#mastra);
     if (trackedEntry) {
@@ -4456,6 +4510,10 @@ export class DurableAgent<
     let failed = 0;
 
     for (const targetRunId of targetRunIds) {
+      if ((await readDurableRunOutcome(this.#mastra, targetRunId))?.agentId === this.id) {
+        await this.deleteRunSnapshots(targetRunId);
+        continue;
+      }
       let runError: Error | undefined;
       let started = false;
       try {

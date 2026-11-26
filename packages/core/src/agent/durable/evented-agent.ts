@@ -186,6 +186,12 @@ export class EventedAgent<
       const run = await workflow.createRun({
         runId,
         resourceId: workflowInput.state?.resourceId ?? memoryInfo?.resourceId,
+        ...(workflowInput.options.retainOutcome
+          ? {
+              shouldPersistSnapshot: ({ workflowStatus }: { workflowStatus: string }) =>
+                ['pending', 'running', 'paused', 'suspended'].includes(workflowStatus),
+            }
+          : {}),
         ...(this.resolveWorkflowEngine() === 'default'
           ? { pubsub: this.fenceRunPubSub(executionFence, entry?.abortController) }
           : {}),
@@ -212,6 +218,7 @@ export class EventedAgent<
           result =>
             this.settleExecution(runId, executionFence, {
               status: result?.status,
+              workflowInput,
               error:
                 result?.status === 'failed'
                   ? new Error((result as any).error?.message || 'Workflow execution failed')
@@ -219,10 +226,10 @@ export class EventedAgent<
             }),
           // settleExecution never rejects: a pubsub already closing during
           // shutdown must not become an unhandledRejection (#23168).
-          error => this.settleExecution(runId, executionFence, { error: toError(error) }),
+          error => this.settleExecution(runId, executionFence, { error: toError(error), workflowInput }),
         );
     } catch (error) {
-      await this.settleExecution(runId, executionFence, { error: toError(error) });
+      await this.settleExecution(runId, executionFence, { error: toError(error), workflowInput });
     }
   }
 }

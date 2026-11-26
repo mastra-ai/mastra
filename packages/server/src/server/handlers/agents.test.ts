@@ -1,6 +1,12 @@
 import { Agent } from '@mastra/core/agent';
-import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, createDurableAgent } from '@mastra/core/agent/durable';
+import {
+  AGENT_STREAM_TOPIC,
+  AgentStreamEventTypes,
+  createDurableAgent,
+  commitDurableRunOutcome,
+} from '@mastra/core/agent/durable';
 import type { DurableAgent } from '@mastra/core/agent/durable';
+import { InMemoryServerCache } from '@mastra/core/cache';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
@@ -13,6 +19,7 @@ import {
   RequestContext,
 } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
+import { createMockModel } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
@@ -33,6 +40,8 @@ import { AGENTS_ROUTES } from '../server-adapter/routes/agents';
 import {
   GET_PROVIDERS_ROUTE,
   GENERATE_AGENT_ROUTE,
+  GET_DURABLE_AGENT_RUN_ROUTE,
+  START_DURABLE_AGENT_RUN_ROUTE,
   GET_AGENT_BY_ID_ROUTE,
   LIST_AGENTS_ROUTE,
   STREAM_GENERATE_ROUTE,
@@ -2285,6 +2294,208 @@ describe('Agent Routes Authorization', () => {
         ['chunk', 'answer'],
         ['finish', undefined],
       ]);
+    });
+  });
+
+  describe('GET_DURABLE_AGENT_RUN_ROUTE', () => {
+    it('rejects agents without an engine-backed durable workflow', async () => {
+      const plain = new Agent({ id: 'plain-agent', model: createMockModel({ mockText: 'Unused' }) });
+      const mastra = new Mastra({ agents: { plain }, storage: new InMemoryStore(), logger: false });
+      try {
+        await expect(
+          START_DURABLE_AGENT_RUN_ROUTE.handler({
+            mastra,
+            agentId: plain.id,
+            messages: 'Hello',
+            requestContext: new RequestContext(),
+          } as any),
+        ).rejects.toMatchObject({ status: 400 });
+      } finally {
+        await mastra.shutdown();
+      }
+    });
+
+    it('reconnects on another instance and keeps running after the first observer disconnects', async () => {
+      let release!: () => void;
+      let entered!: () => void;
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      const providerEntered = new Promise<void>(resolve => {
+        entered = resolve;
+      });
+      const model = createMockModel({ mockText: 'Shared answer' }) as any;
+      const originalGenerate = model.doGenerate.bind(model);
+      model.doGenerate = async (options: unknown) => {
+        entered();
+        await gate;
+        return originalGenerate(options);
+      };
+      const cache = new InMemoryServerCache({ ttlMs: 60_000 });
+      const pubsub = new EventEmitterPubSub();
+      const storage = new InMemoryStore();
+      const firstAgent = createDurableAgent({
+        agent: new Agent({ id: 'reconnect-agent', model }),
+        cache,
+        pubsub,
+      });
+      const secondAgent = createDurableAgent({
+        agent: new Agent({ id: 'reconnect-agent', model: createMockModel({ mockText: 'Unused' }) }),
+        cache,
+        pubsub,
+      });
+      const first = new Mastra({ agents: { agent: firstAgent }, storage, logger: false });
+      const second = new Mastra({ agents: { agent: secondAgent }, storage, logger: false });
+      try {
+        const { runId } = await START_DURABLE_AGENT_RUN_ROUTE.handler({
+          mastra: first,
+          agentId: firstAgent.id,
+          messages: 'Hello',
+          requestContext: new RequestContext(),
+        } as any);
+        await providerEntered;
+        const disconnected = new AbortController();
+        const firstObserver = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+          mastra: second,
+          agentId: secondAgent.id,
+          runId,
+          abortSignal: disconnected.signal,
+          requestContext: new RequestContext(),
+        } as any)) as ReadableStream<any>;
+        disconnected.abort();
+        expect(await firstObserver.getReader().read()).toMatchObject({ done: true });
+        const reconnected = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+          mastra: second,
+          agentId: secondAgent.id,
+          runId,
+          abortSignal: new AbortController().signal,
+          requestContext: new RequestContext(),
+        } as any)) as ReadableStream<any>;
+        release();
+        const events: any[] = [];
+        for await (const event of reconnected as any) events.push(event);
+        expect(events.some(event => event.type === 'finish')).toBe(true);
+        expect(events.some(event => event.data?.payload?.text === 'Shared answer')).toBe(true);
+        await vi.waitFor(async () => {
+          expect(
+            await GET_DURABLE_AGENT_RUN_ROUTE.handler({
+              mastra: second,
+              agentId: secondAgent.id,
+              runId,
+              requestContext: new RequestContext(),
+            } as any),
+          ).toMatchObject({
+            status: 'success',
+            outcome: { result: { text: 'Shared answer' } },
+          });
+        });
+        const replayed = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+          mastra: second,
+          agentId: secondAgent.id,
+          runId,
+          abortSignal: new AbortController().signal,
+          requestContext: new RequestContext(),
+        } as any)) as ReadableStream<any>;
+        const replayedEvents: any[] = [];
+        for await (const event of replayed as any) replayedEvents.push(event);
+        expect(replayedEvents.some(event => event.type === 'finish')).toBe(true);
+      } finally {
+        release?.();
+        await first.shutdown();
+        await second.shutdown();
+        await pubsub.close();
+      }
+    });
+
+    it('issues a server run ID and retains the generated answer after the stream closes', async () => {
+      const agent = createDurableAgent({
+        agent: new Agent({ id: 'async-generate-agent', model: createMockModel({ mockText: 'Generated answer' }) }),
+      });
+      const storage = new InMemoryStore();
+      const mastra = new Mastra({ agents: { agent }, storage, logger: false });
+      const otherAgent = createDurableAgent({
+        agent: new Agent({ id: 'async-generate-agent', model: createMockModel({ mockText: 'Not invoked' }) }),
+      });
+      const otherWorker = new Mastra({ agents: { agent: otherAgent }, storage, logger: false });
+      try {
+        const owner = new RequestContext();
+        owner.set(MASTRA_RESOURCE_ID_KEY, 'owner');
+        const started = await START_DURABLE_AGENT_RUN_ROUTE.handler({
+          mastra,
+          agentId: agent.id,
+          messages: 'Hello',
+          requestContext: owner,
+          runId: 'ignored-client-id',
+        } as any);
+        expect(started.runId).not.toBe('ignored-client-id');
+        await vi.waitFor(async () => {
+          expect(
+            await GET_DURABLE_AGENT_RUN_ROUTE.handler({
+              mastra: otherWorker,
+              agentId: agent.id,
+              runId: started.runId,
+              requestContext: owner,
+            } as any),
+          ).toMatchObject({
+            status: 'success',
+            outcome: { result: { text: 'Generated answer' } },
+          });
+        });
+        const stranger = new RequestContext();
+        stranger.set(MASTRA_RESOURCE_ID_KEY, 'stranger');
+        await expect(
+          GET_DURABLE_AGENT_RUN_ROUTE.handler({
+            mastra: otherWorker,
+            agentId: agent.id,
+            runId: started.runId,
+            requestContext: stranger,
+          } as any),
+        ).rejects.toMatchObject({ status: 403 });
+      } finally {
+        await mastra.shutdown();
+        await otherWorker.shutdown();
+      }
+    });
+
+    it('returns a retained result only to its resource', async () => {
+      const agent = createDurableAgent({
+        agent: new Agent({ id: 'outcome-agent', model: { specificationVersion: 'v2' } as any }),
+      });
+      const storage = new InMemoryStore();
+      const mastra = new Mastra({ agents: { agent }, storage, logger: false });
+      try {
+        await commitDurableRunOutcome(mastra, undefined, {
+          version: 1,
+          runId: 'outcome-run',
+          agentId: agent.id,
+          resourceId: 'owner',
+          status: 'success',
+          result: { text: 'private answer', usage: {}, steps: [], finishReason: 'stop' },
+          completedAt: new Date().toISOString(),
+        });
+        const owner = new RequestContext();
+        owner.set(MASTRA_RESOURCE_ID_KEY, 'owner');
+        expect(
+          await GET_DURABLE_AGENT_RUN_ROUTE.handler({
+            mastra,
+            agentId: agent.id,
+            runId: 'outcome-run',
+            requestContext: owner,
+          } as any),
+        ).toMatchObject({ status: 'success', outcome: { result: { text: 'private answer' } } });
+        const stranger = new RequestContext();
+        stranger.set(MASTRA_RESOURCE_ID_KEY, 'stranger');
+        await expect(
+          GET_DURABLE_AGENT_RUN_ROUTE.handler({
+            mastra,
+            agentId: agent.id,
+            runId: 'outcome-run',
+            requestContext: stranger,
+          } as any),
+        ).rejects.toMatchObject({ status: 403 });
+      } finally {
+        await mastra.shutdown();
+      }
     });
   });
 

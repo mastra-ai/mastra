@@ -170,6 +170,24 @@ Visit the [`createInngestAgent()` reference](/reference/agents/inngest-agent) fo
 
 Durable agents support resumable streams through PubSub and an event cache. When a client disconnects mid-stream, the cache continues storing events. The same client can reconnect by calling `observe()` with the `runId`:
 
+For HTTP callers that need a **server-issued** run ID before waiting for the answer, start an engine-backed durable generation separately from the blocking `/generate` route. These run routes support `createDurableAgent()` and `createEventedAgent()`, not `createInngestAgent()`:
+
+```bash
+curl -X POST http://localhost:4111/api/agents/researcher/runs \
+  -H 'Content-Type: application/json' \
+  -d '{"messages":"Research this topic"}'
+```
+
+The response is `{ "runId": "...", "status": "running" }`. Mastra returns it after a recoverable checkpoint. Keep the ID and reconnect while cached events remain:
+
+```bash
+curl -N -X POST http://localhost:4111/api/agents/researcher/observe \
+  -H 'Content-Type: application/json' \
+  -d '{"runId":"<server-issued-run-id>"}'
+```
+
+Poll `GET /api/agents/researcher/runs/<server-issued-run-id>` for the status and retained terminal `outcome`. The result contains the producer's final text, usage, steps, finish reason, and structured object when available; it isn't a serialized copy of every field in the in-process `FullOutput`. Terminal outcomes are available for 24 hours, even after stream replay is cleared. Use the status endpoint rather than opening a new observer after the run is complete. A lost start response cannot be correlated with certainty because the client doesn't choose the ID. Cross-worker event replay requires a shared cache and PubSub; recovery uses the configured durable-agent recovery policy.
+
 ```typescript title="src/server/reconnect.ts"
 const { output } = await durableResearcher.observe(runId)
 
@@ -284,7 +302,7 @@ await durableAgent.resume(runId, { approved: true })
 
 Durable agents can checkpoint each run's state to storage while it executes. If the server process crashes mid-run, the run remains in `running` status in storage with no automatic retry, and on the next server start you can re-drive these orphaned runs so they pick up where they left off. For orderly shutdowns such as rolling deploys, the generated server can also drain in-flight turns before exiting. See [graceful shutdown and rolling deploys](/docs/deployment/mastra-server#graceful-shutdown-and-rolling-deploys).
 
-Under the default persistence policy, these `running` checkpoints are written when crash recovery is enabled. With `recovery.durableAgents: 'off'` (the default), durable agents persist snapshots for `pending`, `paused`, and `suspended` runs (the artifacts human-in-the-loop resume depends on) and skip the per-step `running` writes until `mastra.shutdown()` starts. A custom `shouldPersistSnapshot` predicate replaces the default policy: one that includes `running` writes those checkpoints at every step, and one that excludes `running` writes none, including during shutdown. See [snapshot persistence](#snapshot-persistence) for the full policy and how to override it.
+Under the default persistence policy, these `running` checkpoints are written when crash recovery is enabled. With `recovery.durableAgents: 'off'` (the default), ordinary durable streams persist snapshots for `pending`, `paused`, and `suspended` runs and skip the per-step `running` writes until `mastra.shutdown()` starts. Runs acknowledged through the HTTP `/runs` route always persist running checkpoints so the issued ID remains recoverable. A custom `shouldPersistSnapshot` predicate replaces the default policy for ordinary runs. See [snapshot persistence](#snapshot-persistence) for the full policy and how to override it.
 
 Durable agent runs are excluded from the generic boot-time restart of active workflow runs. The only automatic recovery path for durable agent runs is `recovery.durableAgents: 'auto'`, which claims each orphaned run and registers its thread runtimes before re-driving it. See [run ownership](#run-ownership).
 

@@ -20,6 +20,7 @@ import { createStep } from '../../../workflows/workflow';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
 import { isExecutionFenceError, isForeignExecutionContext, withExecutionFence } from '../execution-fence';
+import { commitDurableRunOutcome } from '../run-outcome';
 import { getRunRegistryEntry, globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
 import type {
@@ -984,6 +985,40 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               },
               state: state.state,
             };
+
+            if (initData.options?.retainOutcome) {
+              const reason = finalOutput.stepResult.reason;
+              const objectChunk = finishResult.structuredOutputChunks?.findLast(
+                chunk => chunk.type === 'object-result',
+              );
+              await commitDurableRunOutcome(mastra as Mastra | undefined, requestContext, {
+                version: 1,
+                runId: state.runId,
+                agentId: initData.agentId,
+                resourceId:
+                  state.state?.resourceId ??
+                  (initData.messageListState as { memoryInfo?: { resourceId?: string } })?.memoryInfo?.resourceId,
+                status:
+                  reason === 'tripwire'
+                    ? 'tripwire'
+                    : reason === 'abort'
+                      ? 'canceled'
+                      : reason === 'error'
+                        ? 'failed'
+                        : 'success',
+                result: {
+                  ...finalOutput.output,
+                  finishReason: reason,
+                  ...(finishResult.structuredOutputValue !== undefined
+                    ? { object: finishResult.structuredOutputValue }
+                    : objectChunk?.type === 'object-result'
+                      ? { object: objectChunk.object }
+                      : {}),
+                  ...(tripwire ? { tripwire } : {}),
+                },
+                completedAt: new Date().toISOString(),
+              });
+            }
 
             if (pubsub) {
               await emitFinishEvent(pubsub, state.runId, {

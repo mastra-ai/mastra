@@ -12,7 +12,7 @@
  *  - cleanup happens (registry entry removed) on success and on error
  */
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -25,20 +25,11 @@ import { globalRunRegistry } from '../run-registry';
 
 function createTextModel(text: string) {
   return new MockLanguageModelV2({
-    doStream: async () => ({
-      stream: convertArrayToReadableStream([
-        { type: 'stream-start', warnings: [] },
-        { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-        { type: 'text-start', id: 'text-1' },
-        { type: 'text-delta', id: 'text-1', delta: text },
-        { type: 'text-end', id: 'text-1' },
-        {
-          type: 'finish',
-          finishReason: 'stop',
-          usage: { inputTokens: 7, outputTokens: 11, totalTokens: 18 },
-        },
-      ]),
-      rawCall: { rawPrompt: null, rawSettings: {} },
+    doGenerate: async () => ({
+      content: [{ type: 'text', text }],
+      finishReason: 'stop',
+      usage: { inputTokens: 7, outputTokens: 11, totalTokens: 18 },
+      warnings: [],
     }),
   });
 }
@@ -46,44 +37,29 @@ function createTextModel(text: string) {
 function createToolCallThenTextModel(toolName: string, args: Record<string, unknown>, finalText: string) {
   let callCount = 0;
   return new MockLanguageModelV2({
-    doStream: async () => {
+    doGenerate: async () => {
       callCount++;
       if (callCount === 1) {
         return {
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          content: [
             {
-              type: 'tool-call',
-              toolCallType: 'function',
+              type: 'tool-call' as const,
+              toolCallType: 'function' as const,
               toolCallId: 'call-1',
               toolName,
               input: JSON.stringify(args),
-              providerExecuted: false,
             },
-            {
-              type: 'finish',
-              finishReason: 'tool-calls',
-              usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
-            },
-          ]),
-          rawCall: { rawPrompt: null, rawSettings: {} },
+          ],
+          finishReason: 'tool-calls' as const,
+          usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
+          warnings: [],
         };
       }
       return {
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start', warnings: [] },
-          { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
-          { type: 'text-start', id: 'text-1' },
-          { type: 'text-delta', id: 'text-1', delta: finalText },
-          { type: 'text-end', id: 'text-1' },
-          {
-            type: 'finish',
-            finishReason: 'stop',
-            usage: { inputTokens: 10, outputTokens: 9, totalTokens: 19 },
-          },
-        ]),
-        rawCall: { rawPrompt: null, rawSettings: {} },
+        content: [{ type: 'text' as const, text: finalText }],
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 9, totalTokens: 19 },
+        warnings: [],
       };
     },
   });
@@ -138,7 +114,7 @@ describe('DurableAgent.generate()', () => {
 
   it('rethrows MastraModelOutput errors instead of swallowing them on FullOutput.error', async () => {
     const failingModel = new MockLanguageModelV2({
-      doStream: async () => {
+      doGenerate: async () => {
         throw new Error('model exploded');
       },
     });

@@ -44,6 +44,8 @@ export interface DurableFinishSideEffectsResult {
   titleGeneration?: Promise<void>;
   /** Chunks from the `structuredOutput.model` structuring pass, to publish before FINISH. */
   structuredOutputChunks?: ChunkType[];
+  /** Producer-validated object, including direct schema validation without a structuring model. */
+  structuredOutputValue?: unknown;
   /** Set when an output processor aborted in processOutputResult; nothing was persisted. */
   tripwire?: {
     reason: string;
@@ -173,6 +175,7 @@ export async function runDurableFinishSideEffects({
   const liveStructuredOutput = registryEntry?.structuredOutput;
   const structuredOutputSchema = liveStructuredOutput?.schema ?? structuredOutput?.schema;
   let structuredOutputChunks: ChunkType[] | undefined;
+  let structuredOutputValue: unknown;
   // The structuring model reads tool calls and results too, so a tool-only answer still qualifies.
   const structuringParts = structuredOutput?.hasStructuringModel ? responseStreamParts(messageList) : undefined;
   if (structuredOutputSchema && (structuredOutputText.trim() || structuringParts?.length)) {
@@ -216,6 +219,7 @@ export async function runDurableFinishSideEffects({
         : await createOutputHandler({ schema: structuredOutputSchema }).validateAndTransformFinal(structuredOutputText);
       value = result?.success ? result.value : errorStrategy === 'fallback' ? fallbackValue : undefined;
     }
+    structuredOutputValue = value;
     const lastAssistantMessage = messageList.get.response
       .db()
       .findLast(message => message.role === 'assistant' && !message.content?.metadata?.completionResult);
@@ -389,6 +393,7 @@ export async function runDurableFinishSideEffects({
     outputText,
     titleGeneration,
     structuredOutputChunks,
+    structuredOutputValue,
   };
 }
 
