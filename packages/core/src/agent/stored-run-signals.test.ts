@@ -168,14 +168,55 @@ describe('stored run signals', () => {
     await expect(taken).rejects.toThrow('not stored');
   });
 
-  it('clear releases waiting senders', async () => {
+  it('settling a run removes its waiters: a later waiter for the same run is a new one', async () => {
     const signals = createStoredRunSignals<never>();
+    void signals.preRunInsertWaiter('run', 'first');
+    signals.settlePreRunWaiters('run');
+
+    const later = signals.preRunInsertWaiter('run', 'later');
+
+    expect(await isSettled(later)).toBe(false);
+    const waiters = signals.takePreRunWaiters('run');
+    expect(waiters.take('first')).toBeUndefined();
+    expect(waiters.take('later')).toBeDefined();
+  });
+
+  it("the run's remaining waiters are released in the order they were created", async () => {
+    const signals = createStoredRunSignals<never>();
+    const settled: string[] = [];
+    const waiting = ['a', 'b', 'c'].map(id => signals.preRunInsertWaiter('run', id).then(() => settled.push(id)));
+
+    signals.takePreRunWaiters('run').resolveRest();
+    await Promise.all(waiting);
+
+    expect(settled).toEqual(['a', 'b', 'c']);
+  });
+
+  it('clear releases waiting senders and forgets everything else', async () => {
+    const signals = createStoredRunSignals<{ runId: string }>();
+    const at = new Date('2026-01-01T00:00:00.000Z').getTime();
+    const release = gate();
     const waiter = signals.preRunInsertWaiter('run', 'signal');
+    signals.rememberEndedRun(key, { runId: 'ended' }, 'owner');
+    signals.noteRemoteRun('remote', true);
+    const write = signals.runWrite(key, () => release.opened);
+    signals.stampNewRow(key, { createdAt: new Date(at) })();
+    const used = message('used');
+    expect(signals.takeFollowUpInput(key, [used], [used])?.id).toBe('used');
 
     signals.clear();
 
     expect(await isSettled(waiter)).toBe(true);
     await expect(waiter).resolves.toBeUndefined();
+    expect(signals.endedRun(key)).toBeUndefined();
+    expect(signals.writesSettled(key)).toBeUndefined();
+    expect(signals.isRemoteRunStored('remote')).toBe(false);
+    const row = { createdAt: new Date(at) };
+    signals.stampNewRow(key, row);
+    expect(row.createdAt.getTime()).toBe(at);
+    expect(signals.takeFollowUpInput(key, [used], [used])?.id).toBe('used');
+    release.open();
+    await write;
   });
 
   it('a follow-up input skips one already used, forgets ids no longer pending, and returns one given back', () => {
@@ -226,6 +267,39 @@ describe('stored run signals', () => {
     await second;
     expect(order).toEqual(['first started', 'second']);
     expect(errors).toEqual([new Error('check failed')]);
+  });
+
+  it('a check queued after an earlier one finished still waits for the check running before it', async () => {
+    const signals = createStoredRunSignals<never>();
+    const order: string[] = [];
+    const secondStarted = gate();
+    const release = gate();
+    const onError = () => {};
+
+    const first = signals.runEndOfRunCheck(key, async () => {}, onError);
+    const second = signals.runEndOfRunCheck(
+      key,
+      async () => {
+        secondStarted.open();
+        await release.opened;
+        order.push('second ended');
+      },
+      onError,
+    );
+    await first;
+    await secondStarted.opened;
+    const third = signals.runEndOfRunCheck(
+      key,
+      async () => {
+        order.push('third');
+      },
+      onError,
+    );
+
+    release.open();
+    await second;
+    await third;
+    expect(order).toEqual(['second ended', 'third']);
   });
 
   it('a remote run is storage-backed as its latest registration said, until it is forgotten', () => {
