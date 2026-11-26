@@ -343,6 +343,16 @@ export function knowledgeSequenceItemSearchText(
   return parts.join('\n').toLowerCase();
 }
 
+/** Whether `value` survives JSON unchanged: so what's stored, compared and counted is what was given. */
+function isJsonValue(value: unknown): boolean {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (Array.isArray(value)) return value.every(isJsonValue);
+  if (typeof value !== 'object') return false;
+  const proto = Object.getPrototypeOf(value);
+  return (proto === Object.prototype || proto === null) && Object.values(value).every(isJsonValue);
+}
+
 function invalid(field: string, message: string): never {
   throw new KnowledgeSequenceItemInvalidError(field, `A sequence item's ${field} ${message}`);
 }
@@ -380,6 +390,12 @@ export function checkKnowledgeSequenceItemInput(input: UpsertKnowledgeSequenceIt
   }
   if (properties != null) {
     if (typeof properties !== 'object' || Array.isArray(properties)) invalid('properties', 'must be a JSON object.');
+    if (!isJsonValue(properties)) {
+      invalid(
+        'properties',
+        'must hold only JSON values: no undefined, functions, non-finite numbers or class instances.',
+      );
+    }
     if (new TextEncoder().encode(JSON.stringify(properties)).length > MAX_KNOWLEDGE_SEQUENCE_ITEM_PROPERTIES_BYTES) {
       invalid('properties', `are at most ${MAX_KNOWLEDGE_SEQUENCE_ITEM_PROPERTIES_BYTES} bytes as JSON.`);
     }

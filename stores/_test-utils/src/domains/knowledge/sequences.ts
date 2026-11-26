@@ -440,6 +440,33 @@ export function createKnowledgeSequenceTests(createStore: () => Promise<Knowledg
       });
     });
 
+    it('refuses properties that are not plain JSON, so an empty-looking object never stands in for content', async () => {
+      const { sequences, page } = await setup();
+      const put = (properties: Record<string, unknown>) =>
+        sequences.upsertItem({
+          sequenceId: page.id,
+          externalId: 'p',
+          occurredAt: at(1),
+          properties,
+          writtenBy: importer,
+        });
+      for (const properties of [
+        { omitted: undefined },
+        { nested: { omitted: undefined } },
+        { list: [1, undefined] },
+        { n: Number.NaN },
+        { n: Number.POSITIVE_INFINITY },
+        { when: new Date(0) },
+        { fn: () => 1 },
+        { big: 1n },
+      ]) {
+        await expect(put(properties)).rejects.toBeInstanceOf(KnowledgeSequenceItemInvalidError);
+      }
+      expect((await sequences.listItems({ sequenceId: page.id, read: 'all', limit: 10 })).items).toEqual([]);
+      const ok = await put({ a: null, b: [1, 'x', { c: true }] });
+      expect(ok).toMatchObject({ status: 'created', item: { properties: { a: null, b: [1, 'x', { c: true }] } } });
+    });
+
     it('takes a parent only from the same sequence, one level deep, and a deleted parent still counts', async () => {
       const { store, scope, item, sequences, page } = await setup();
       const other = await store.createPage({ parentId: scope.id, key: 'other', name: '#other', provenance: host });
