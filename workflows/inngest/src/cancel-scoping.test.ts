@@ -80,8 +80,13 @@ async function createStoredRun(workflowId: string) {
   return { inngest, run, store: workflowsStore, workflowId };
 }
 
-// `createRun` persists a 'pending' snapshot; overwrite its status to set up the
-// state a late cancel would see.
+// A distinctive payload so an overwrite is visible even if the status happened
+// to survive, e.g. a write that kept the status but dropped the results.
+const SEEDED_VALUE = { step: 'done' };
+const SEEDED_RESULT = { value: 'done' };
+
+// `createRun` persists a 'pending' snapshot; overwrite its status and payload to
+// set up the state a late cancel would see.
 async function seedSnapshot(
   store: MockStore['stores']['workflows'],
   workflowName: string,
@@ -92,7 +97,7 @@ async function seedSnapshot(
   await store.persistWorkflowSnapshot({
     workflowName,
     runId,
-    snapshot: { ...snapshot!, status },
+    snapshot: { ...snapshot!, status, value: SEEDED_VALUE, result: SEEDED_RESULT },
   });
 }
 
@@ -232,24 +237,39 @@ describe('inngest cancel leaves terminal snapshots alone', () => {
     const { inngest, run, store, workflowId } = await createStoredRun(`cancel-terminal-${status}`);
     await seedSnapshot(store, workflowId, run.runId, status);
     const sendSpy = vi.spyOn(inngest, 'send').mockResolvedValue({ ids: ['evt'] } as any);
+    const persistSpy = vi.spyOn(store, 'persistWorkflowSnapshot');
 
     await run.cancel();
 
     const stored = await store.loadWorkflowSnapshot({ workflowName: workflowId, runId: run.runId });
     expect(stored?.status).toBe(status);
+    expect(stored?.value).toEqual(SEEDED_VALUE);
+    expect(stored?.result).toEqual(SEEDED_RESULT);
     expect(sendSpy).not.toHaveBeenCalled();
+    expect(persistSpy).not.toHaveBeenCalled();
   });
 
   it.each(LIVE)('cancels a live %s run', async status => {
     const { inngest, run, store, workflowId } = await createStoredRun(`cancel-live-${status}`);
     await seedSnapshot(store, workflowId, run.runId, status);
     const sendSpy = vi.spyOn(inngest, 'send').mockResolvedValue({ ids: ['evt'] } as any);
+    const persistSpy = vi.spyOn(store, 'persistWorkflowSnapshot');
 
     await run.cancel();
 
     const stored = await store.loadWorkflowSnapshot({ workflowName: workflowId, runId: run.runId });
     expect(stored?.status).toBe('canceled');
     expect(sendSpy).toHaveBeenCalledTimes(1);
+    expect(sendSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ name: `cancel.workflow.${workflowId}`, data: { runId: run.runId } }),
+    );
+    // The write must list every nonterminal status, or cancellation would no-op
+    // for the states it leaves out.
+    expect(persistSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedStatus: expect.arrayContaining(['running', 'pending', 'waiting', 'suspended', 'paused', 'skipped']),
+      }),
+    );
   });
 
   // The run can finish between the terminal-status check and the write. The
@@ -271,8 +291,12 @@ describe('inngest cancel leaves terminal snapshots alone', () => {
     await run.cancel();
 
     expect(persistSpy).toHaveBeenCalledWith(expect.objectContaining({ expectedStatus: expect.any(Array) }));
+    // The guarded write was refused, so the terminal snapshot survives untouched.
+    expect(await persistSpy.mock.results[0]!.value).toBe(false);
     const stored = await realLoad({ workflowName: workflowId, runId: run.runId });
     expect(stored?.status).toBe('success');
+    expect(stored?.value).toEqual(SEEDED_VALUE);
+    expect(stored?.result).toEqual(SEEDED_RESULT);
   });
 });
 
