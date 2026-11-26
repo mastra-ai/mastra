@@ -666,14 +666,14 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
       {applyOnDismiss && (
         <div className="flex items-center justify-between gap-2 border-t border-border py-1 pr-1 pl-[.9em]">
           <ApplyOnDismissHint step={step} />
-          <Button size="sm" variant="ghost" onClick={onCancel}>
+          <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
             Cancel
           </Button>
         </div>
       )}
       {step.isMany && !applyOnDismiss && (
         <div className="flex items-center justify-end gap-1 border-t border-border p-1">
-          <Button size="sm" variant="ghost" onClick={onCancel}>
+          <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
             Cancel
           </Button>
           <Button size="sm" variant="default" onClick={() => step.commitDone()}>

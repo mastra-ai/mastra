@@ -56,10 +56,14 @@ export function useValueStep({
   const [selected, setSelected] = useState<string[]>(() => toStrings(initialValue));
   const initialValueRef = useRef(initialValue);
   initialValueRef.current = initialValue;
+  // The value the editor opened with: the baseline for an unchanged selection.
+  const openedValueRef = useRef<string[]>([]);
 
   // The editor stays mounted across opens: re-seed from the current value each time it opens.
   useEffect(() => {
-    setSelected(enabled ? toStrings(initialValueRef.current) : []);
+    const opened = enabled ? toStrings(initialValueRef.current) : [];
+    openedValueRef.current = opened;
+    setSelected(opened);
   }, [enabled]);
 
   const freeTextOperator = operator?.freeText === true;
@@ -158,7 +162,7 @@ export function useValueStep({
       withTypedText && pendingText !== undefined && !selected.includes(pendingText)
         ? [...selected, pendingText]
         : selected;
-    if (sameValues(values, toStrings(initialValueRef.current))) return false;
+    if (sameValues(values, openedValueRef.current)) return false;
     commit(values);
     return true;
   }

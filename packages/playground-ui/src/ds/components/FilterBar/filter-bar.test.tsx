@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -1826,8 +1827,7 @@ describe('FilterBar applyMultiSelectOnDismiss', () => {
       expect(onChange).not.toHaveBeenCalled();
       expect(screen.getByRole('option', { name: 'Running' }).hasAttribute('data-selected')).toBe(true);
 
-      elsewhere().focus();
-      press(elsewhere());
+      await userEvent.setup().click(elsewhere());
       await waitFor(() => expect(screen.queryByRole('option', { name: 'Running' })).toBeNull());
       expect(onChange).toHaveBeenCalledTimes(1);
       expect(argAt(onChange, 0, 0)).toMatchObject([
@@ -1949,11 +1949,24 @@ describe('FilterBar applyMultiSelectOnDismiss', () => {
       fireEvent.click(screen.getByRole('option', { name: 'Success' }));
       expect(onChange).not.toHaveBeenCalled();
 
-      elsewhere().focus();
-      press(elsewhere());
+      await userEvent.setup().click(elsewhere());
       await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
       expect(argAt(onChange, 0, 0)).toMatchObject([{ id: 's', value: ['running', 'error', 'success'] }]);
       expect(document.activeElement).toBe(elsewhere());
+    });
+
+    it('applies the edited selection once when the user tabs out of the dropdown', async () => {
+      const onChange = vi.fn();
+      render(<OptInHarness initial={initial} onChange={onChange} />);
+      await openValue();
+      fireEvent.click(screen.getByRole('option', { name: 'Error' }));
+      const user = userEvent.setup();
+      // The first Tab lands on Cancel inside the dropdown, which must not apply.
+      await user.tab();
+      expect(onChange).not.toHaveBeenCalled();
+      await user.tab();
+      await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+      expect(argAt(onChange, 0, 0)).toMatchObject([{ id: 's', value: ['running', 'error'] }]);
     });
 
     it('does nothing when the selection ends up unchanged', async () => {

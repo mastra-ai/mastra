@@ -469,7 +469,7 @@ function FilterBarInputImpl({
               {applyOnDismiss && (
                 <div className="flex items-center justify-between gap-2 border-t border-border py-1 pr-1 pl-[.9em]">
                   <ApplyOnDismissHint step={valueStep} />
-                  <Button size="sm" variant="ghost" onMouseDown={e => e.preventDefault()} onClick={close}>
+                  <Button type="button" size="sm" variant="ghost" onMouseDown={e => e.preventDefault()} onClick={close}>
                     Cancel
                   </Button>
                 </div>
