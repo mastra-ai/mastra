@@ -61,10 +61,16 @@ describe('schemas', () => {
     });
 
     describe('invalid names', () => {
-      it('should reject empty name', () => {
-        const result = validateSkillMetadata({ metadata: { name: '', description: validDescription } });
+      it.each([
+        ['should reject empty name', '', 'cannot be empty'],
+        ['should reject uppercase letters', 'MySkill', 'only lowercase letters, numbers, and hyphens'],
+        ['should reject name starting with hyphen', '-myskill', 'must not start or end with a hyphen'],
+        ['should reject name ending with hyphen', 'myskill-', 'must not start or end with a hyphen'],
+        ['should reject consecutive hyphens', 'my--skill', 'must not contain consecutive hyphens'],
+      ] as const)('%s', (_title, name, input) => {
+        const result = validateSkillMetadata({ metadata: { name, description: validDescription } });
         expect(result.valid).toBe(false);
-        expect(result.errors.some(e => e.includes('cannot be empty'))).toBe(true);
+        expect(result.errors.some(e => e.includes(input))).toBe(true);
       });
 
       it('should reject name exceeding max length', () => {
@@ -72,12 +78,6 @@ describe('schemas', () => {
         const result = validateSkillMetadata({ metadata: { name: longName, description: validDescription } });
         expect(result.valid).toBe(false);
         expect(result.errors.some(e => e.includes('64 characters or less'))).toBe(true);
-      });
-
-      it('should reject uppercase letters', () => {
-        const result = validateSkillMetadata({ metadata: { name: 'MySkill', description: validDescription } });
-        expect(result.valid).toBe(false);
-        expect(result.errors.some(e => e.includes('only lowercase letters, numbers, and hyphens'))).toBe(true);
       });
 
       it('should reject special characters', () => {
@@ -88,24 +88,6 @@ describe('schemas', () => {
         expect(result2.valid).toBe(false);
         expect(result3.valid).toBe(false);
         expect(result1.errors.some(e => e.includes('only lowercase letters, numbers, and hyphens'))).toBe(true);
-      });
-
-      it('should reject name starting with hyphen', () => {
-        const result = validateSkillMetadata({ metadata: { name: '-myskill', description: validDescription } });
-        expect(result.valid).toBe(false);
-        expect(result.errors.some(e => e.includes('must not start or end with a hyphen'))).toBe(true);
-      });
-
-      it('should reject name ending with hyphen', () => {
-        const result = validateSkillMetadata({ metadata: { name: 'myskill-', description: validDescription } });
-        expect(result.valid).toBe(false);
-        expect(result.errors.some(e => e.includes('must not start or end with a hyphen'))).toBe(true);
-      });
-
-      it('should reject consecutive hyphens', () => {
-        const result = validateSkillMetadata({ metadata: { name: 'my--skill', description: validDescription } });
-        expect(result.valid).toBe(false);
-        expect(result.errors.some(e => e.includes('must not contain consecutive hyphens'))).toBe(true);
       });
 
       it('should reject name with multiple issues', () => {

@@ -63,20 +63,13 @@ describe('extractGlobBase', () => {
     expect(extractGlobBase('a/b/*.config.js')).toBe('a/b');
   });
 
-  it('should handle brace expansion in path', () => {
-    expect(extractGlobBase('src/{a,b}/index.ts')).toBe('src');
-  });
-
-  it('should handle character classes in path', () => {
-    expect(extractGlobBase('src/[A-Z]*.ts')).toBe('src');
-  });
-
-  it('should handle ? wildcard', () => {
-    expect(extractGlobBase('src/file?.ts')).toBe('src');
-  });
-
-  it('should return workspace root when glob is at top level', () => {
-    expect(extractGlobBase('*.ts')).toBe('.');
+  it.each([
+    ['should handle brace expansion in path', 'src/{a,b}/index.ts', 'src'],
+    ['should handle character classes in path', 'src/[A-Z]*.ts', 'src'],
+    ['should handle ? wildcard', 'src/file?.ts', 'src'],
+    ['should return workspace root when glob is at top level', '*.ts', '.'],
+  ] as const)('%s', (_title, input, expected) => {
+    expect(extractGlobBase(input)).toBe(expected);
   });
 
   it('should extract base from ./ prefixed patterns', () => {
@@ -277,24 +270,19 @@ describe('resolvePathPattern', () => {
   const readdir = createMockReaddir(mockEntries);
 
   describe('plain paths', () => {
-    it('should resolve a plain directory path', async () => {
-      const results = await resolvePathPattern('/content', readdir);
-      expect(results).toEqual([{ path: '/content', type: 'directory' }]);
-    });
-
-    it('should resolve a plain file path', async () => {
-      const results = await resolvePathPattern('/content/faq.md', readdir);
-      expect(results).toEqual([{ path: '/content/faq.md', type: 'file' }]);
-    });
-
-    it('should resolve a non-existent path as file (consumer handles existence)', async () => {
-      const results = await resolvePathPattern('/nonexistent/file.txt', readdir);
-      expect(results).toEqual([{ path: '/nonexistent/file.txt', type: 'file' }]);
-    });
-
-    it('should resolve a trailing-slash directory path same as without slash', async () => {
-      const results = await resolvePathPattern('/content/', readdir);
-      expect(results).toEqual([{ path: '/content', type: 'directory' }]);
+    it.each([
+      ['should resolve a plain directory path', '/content', '/content', 'directory'],
+      ['should resolve a plain file path', '/content/faq.md', '/content/faq.md', 'file'],
+      [
+        'should resolve a non-existent path as file (consumer handles existence)',
+        '/nonexistent/file.txt',
+        '/nonexistent/file.txt',
+        'file',
+      ],
+      ['should resolve a trailing-slash directory path same as without slash', '/content/', '/content', 'directory'],
+    ] as const)('%s', async (_title, input, path, type) => {
+      const results = await resolvePathPattern(input, readdir);
+      expect(results).toEqual([{ path, type }]);
     });
   });
 

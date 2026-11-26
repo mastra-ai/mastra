@@ -650,11 +650,14 @@ describe('AzureOpenAIGateway', () => {
       );
     });
 
-    it('should keep deployment-based URLs by default when apiVersion is v1', async () => {
+    it.each([
+      ['should keep deployment-based URLs by default when apiVersion is v1', 'v1'],
+      ['should keep deployment-based URLs by default when apiVersion is preview', 'preview'],
+    ] as const)('%s', async (_title, apiVersion) => {
       const gateway = new AzureOpenAIGateway({
         resourceName: 'test-resource',
         apiKey: 'test-key',
-        apiVersion: 'v1',
+        apiVersion,
         deployments: ['gpt-5-4-deployment'],
       });
 
@@ -667,30 +670,7 @@ describe('AzureOpenAIGateway', () => {
       expect(model).toBeDefined();
       expect(createAzure).toHaveBeenLastCalledWith(
         expect.objectContaining({
-          apiVersion: 'v1',
-          useDeploymentBasedUrls: true,
-        }),
-      );
-    });
-
-    it('should keep deployment-based URLs by default when apiVersion is preview', async () => {
-      const gateway = new AzureOpenAIGateway({
-        resourceName: 'test-resource',
-        apiKey: 'test-key',
-        apiVersion: 'preview',
-        deployments: ['gpt-5-4-deployment'],
-      });
-
-      const model = await gateway.resolveLanguageModel({
-        modelId: 'gpt-5-4-deployment',
-        providerId: 'azure-openai',
-        apiKey: 'test-key',
-      });
-
-      expect(model).toBeDefined();
-      expect(createAzure).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          apiVersion: 'preview',
+          apiVersion,
           useDeploymentBasedUrls: true,
         }),
       );

@@ -246,24 +246,17 @@ describe('DefaultExecutionEngine — lastPersistedStatus accessors', () => {
 });
 
 describe('persistStepUpdate — durable predicate evaluation', () => {
-  it('enters a durable operation when the snapshot predicate declines', async () => {
+  it.each([
+    ['enters a durable operation when the snapshot predicate declines', 'running', 0],
+    ['enters a durable operation when the snapshot predicate accepts', 'suspended', 1],
+  ] as const)('%s', async (_title, input, expected) => {
     const { engine, store } = makeEngine(({ workflowStatus }) => workflowStatus === 'suspended');
     const wrapSpy = vi.spyOn(engine, 'wrapDurableOperation');
 
-    await persist(engine, 'run-1', 'running');
+    await persist(engine, 'run-1', input);
 
     expect(wrapSpy).toHaveBeenCalledTimes(1);
-    expect(store.calls).toHaveLength(0);
-  });
-
-  it('enters a durable operation when the snapshot predicate accepts', async () => {
-    const { engine, store } = makeEngine(({ workflowStatus }) => workflowStatus === 'suspended');
-    const wrapSpy = vi.spyOn(engine, 'wrapDurableOperation');
-
-    await persist(engine, 'run-1', 'suspended');
-
-    expect(wrapSpy).toHaveBeenCalledTimes(1);
-    expect(store.calls).toHaveLength(1);
+    expect(store.calls).toHaveLength(expected);
   });
 
   it('reuses the memoized predicate verdict during replay', async () => {

@@ -167,29 +167,15 @@ describe('getServersForFile', () => {
     expect(servers.some(s => s.id === 'typescript')).toBe(true);
   });
 
-  it('returns TypeScript server for .tsx files', () => {
-    const servers = getServersForFile('/project/src/App.tsx');
-    expect(servers.some(s => s.id === 'typescript')).toBe(true);
-  });
-
-  it('returns TypeScript server for .js files', () => {
-    const servers = getServersForFile('/project/src/app.js');
-    expect(servers.some(s => s.id === 'typescript')).toBe(true);
-  });
-
-  it('returns Python server for .py files', () => {
-    const servers = getServersForFile('/project/main.py');
-    expect(servers.some(s => s.id === 'python')).toBe(true);
-  });
-
-  it('returns Go server for .go files', () => {
-    const servers = getServersForFile('/project/main.go');
-    expect(servers.some(s => s.id === 'go')).toBe(true);
-  });
-
-  it('returns Rust server for .rs files', () => {
-    const servers = getServersForFile('/project/src/main.rs');
-    expect(servers.some(s => s.id === 'rust')).toBe(true);
+  it.each([
+    ['returns TypeScript server for .tsx files', '/project/src/App.tsx', 'typescript'],
+    ['returns TypeScript server for .js files', '/project/src/app.js', 'typescript'],
+    ['returns Python server for .py files', '/project/main.py', 'python'],
+    ['returns Go server for .go files', '/project/main.go', 'go'],
+    ['returns Rust server for .rs files', '/project/src/main.rs', 'rust'],
+  ] as const)('%s', (_title, input, value) => {
+    const servers = getServersForFile(input);
+    expect(servers.some(s => s.id === value)).toBe(true);
   });
 
   it('returns empty array for files with no matching server', () => {

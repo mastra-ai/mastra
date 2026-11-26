@@ -741,44 +741,18 @@ describe('LSPManager', () => {
   });
 
   describe('severity mapping', () => {
-    it('maps severity 1 to error', async () => {
+    it.each([
+      ['maps severity 1 to error', 1, 'err', 'error'],
+      ['maps severity 2 to warning', 2, 'warn', 'warning'],
+      ['maps severity 3 to info', 3, 'info', 'info'],
+      ['maps severity 4 to hint', 4, 'hint', 'hint'],
+      ['maps unknown severity to warning', 99, 'unknown', 'warning'],
+    ] as const)('%s', async (_title, severity, message, expected) => {
       mockWaitForDiagnostics.mockResolvedValueOnce([
-        { severity: 1, message: 'err', range: { start: { line: 0, character: 0 } } },
+        { severity, message, range: { start: { line: 0, character: 0 } } },
       ]);
       const diagnostics = await manager.getDiagnostics('/project/src/app.ts', 'code');
-      expect(diagnostics[0]!.severity).toBe('error');
-    });
-
-    it('maps severity 2 to warning', async () => {
-      mockWaitForDiagnostics.mockResolvedValueOnce([
-        { severity: 2, message: 'warn', range: { start: { line: 0, character: 0 } } },
-      ]);
-      const diagnostics = await manager.getDiagnostics('/project/src/app.ts', 'code');
-      expect(diagnostics[0]!.severity).toBe('warning');
-    });
-
-    it('maps severity 3 to info', async () => {
-      mockWaitForDiagnostics.mockResolvedValueOnce([
-        { severity: 3, message: 'info', range: { start: { line: 0, character: 0 } } },
-      ]);
-      const diagnostics = await manager.getDiagnostics('/project/src/app.ts', 'code');
-      expect(diagnostics[0]!.severity).toBe('info');
-    });
-
-    it('maps severity 4 to hint', async () => {
-      mockWaitForDiagnostics.mockResolvedValueOnce([
-        { severity: 4, message: 'hint', range: { start: { line: 0, character: 0 } } },
-      ]);
-      const diagnostics = await manager.getDiagnostics('/project/src/app.ts', 'code');
-      expect(diagnostics[0]!.severity).toBe('hint');
-    });
-
-    it('maps unknown severity to warning', async () => {
-      mockWaitForDiagnostics.mockResolvedValueOnce([
-        { severity: 99, message: 'unknown', range: { start: { line: 0, character: 0 } } },
-      ]);
-      const diagnostics = await manager.getDiagnostics('/project/src/app.ts', 'code');
-      expect(diagnostics[0]!.severity).toBe('warning');
+      expect(diagnostics[0]!.severity).toBe(expected);
     });
 
     it('maps undefined severity to warning', async () => {
