@@ -266,7 +266,7 @@ const agent = new Agent({
     isOptional: true,
     defaultValue: "'requester'",
     description:
-      "Who may approve or deny a pending tool call in this adapter's channel. By default, only the user who triggered the call can respond when their identity was recorded; runs without a recorded requester (such as scheduled runs) may allow another channel member to respond. Set `'anyone'` to allow another channel member to respond even when a requester was recorded. Pending-approval and thread-mapping checks still apply.",
+      "Who may approve or deny a pending tool call in this adapter's channel, or select the buttons of a [paused tool card](#paused-tool-cards). By default, only the user who triggered the call can respond when their identity was recorded; runs without a recorded requester (such as scheduled runs) may allow another channel member to respond. Set `'anyone'` to allow another channel member to respond even when a requester was recorded. Pending-approval and thread-mapping checks still apply.",
   },
   {
     name: 'typingStatus',
@@ -431,6 +431,130 @@ const agent = new Agent({
   },
 })
 ```
+
+## Paused tool cards
+
+A tool that pauses with `suspend()` can show a card with buttons in the channel thread. Selecting one of those buttons resumes the paused tool call. Use it for steps that need the user in the thread, such as confirming in two steps or picking an option.
+
+Add a `channelCard` to the suspend payload and build its buttons with `toolResumeButton()`. Selecting a button resumes the call with `{ action }`, where `action` is the button's action name:
+
+```typescript title="src/mastra/tools/deploy.ts"
+import { createTool } from '@mastra/core/tools'
+import { toolResumeButton, type ChannelSuspendPayload } from '@mastra/core/channels'
+import { Actions, Card, CardText } from 'chat'
+import { z } from 'zod'
+
+export const deploy = createTool({
+  id: 'deploy',
+  description: 'Deploy the app after the user confirms',
+  inputSchema: z.object({}),
+  resumeSchema: z.object({ action: z.string() }),
+  execute: async (_input, context) => {
+    const action = context.agent?.resumeData?.action
+
+    if (action === 'deploy') return 'Deployed.'
+    if (action === 'cancel') return 'The user cancelled the deploy.'
+
+    const toolCallId = context.agent!.toolCallId
+    await context.agent!.suspend({
+      channelCard: Card({
+        children: [
+          CardText('Deploy to production?'),
+          Actions([
+            toolResumeButton({ toolCallId, action: 'deploy', label: 'Deploy', style: 'primary' }),
+            toolResumeButton({ toolCallId, action: 'cancel', label: 'Cancel' }),
+          ]),
+        ],
+      }),
+    } satisfies ChannelSuspendPayload)
+  },
+})
+```
+
+When the agent calls the tool, the card replaces the tool's running card. When the user selects a button, Mastra takes the card's buttons off while the tool runs again. The tool can then return, or call `suspend()` again with a new `channelCard`. The new card replaces the previous one in the same message, so the tool can move the user through several steps. In `'cards'` mode the tool's result replaces the card when the call finishes. In `'timeline'`, `'grouped'` and `'hidden'` modes the card stays without its buttons. `'text'` mode has no buttons, so no card is posted.
+
+Only buttons on the card currently shown resume the call. Mastra ignores a second selection, and a late selection on an earlier step's card. After a restart, or on an instance that didn't post the card, Mastra matches the selection against the paused call in history instead, so a tool should still check the `action` it receives.
+
+The same users who may answer an approval card may answer a paused tool card: by default the user who triggered the run, or any member with [`toolApprovers: 'anyone'`](#per-adapter-options). The default `onAction` handler routes the button actions. If you provide your own `onAction`, call `defaultHandler()` for actions you don't handle.
+
+### `toolResumeButton()`
+
+Returns a Chat SDK button whose id is `tool_resume:<toolCallId>:<action>`. The exported `TOOL_RESUME_ACTION_PREFIX` constant is `'tool_resume:'`, for a custom `onAction` handler that needs to recognize these ids before it calls `defaultHandler()`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'toolCallId',
+    type: 'string',
+    description: "The paused tool call's id, from `context.agent.toolCallId` in the tool's `execute` function.",
+  },
+  {
+    name: 'action',
+    type: 'string',
+    description:
+      'What the tool is resumed with, as `{ action }`. Must match `/^[a-z][a-z0-9_-]{0,15}$/`: a lowercase letter followed by up to 15 lowercase letters, digits, `_` or `-`.',
+  },
+  {
+    name: 'label',
+    type: 'string',
+    description: 'The button text.',
+  },
+  {
+    name: 'style',
+    type: "'primary' | 'danger' | 'default'",
+    isOptional: true,
+    description: 'The button style.',
+  },
+]}
+/>
+
+`toolResumeButton()` throws when `toolCallId` is empty, when `action` doesn't match the pattern, or when the id is too long for Telegram. Telegram limits a button's data to 64 bytes, which leaves about 50 bytes for the id. Mastra checks that limit on every platform. A card that passes the check works wherever it's shown. With 30-character tool call ids, such as Anthropic's, keep action names to 8 characters or fewer.
+
+### `getChannelRun()`
+
+`getChannelRun(requestContext)` returns what a tool knows about the channel run it executes in. It returns `undefined` when the run didn't come from a channel message or a channel button. Use it to reply to the user who selected a button, for example with a message only they can see:
+
+```typescript
+import { getChannelRun } from '@mastra/core/channels'
+
+const run = getChannelRun(context.requestContext)
+if (run?.actor) {
+  await run.thread.postEphemeral(run.actor.userId, 'Only you can see this.', { fallbackToDM: true })
+}
+```
+
+The returned `ChannelRun`:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'platform',
+    type: 'string',
+    description: "The adapter's platform name, such as `'slack'`.",
+  },
+  {
+    name: 'thread',
+    type: 'Thread',
+    description: 'The Chat SDK thread the run answers in.',
+  },
+  {
+    name: 'actor',
+    type: '{ userId: string; userName?: string; fullName?: string }',
+    isOptional: true,
+    description:
+      'The author of the message that started the run, or the user who selected the `toolResumeButton()` button that resumed it. Unset on runs resumed by approval buttons.',
+  },
+  {
+    name: 'actorResourceId',
+    type: 'string',
+    isOptional: true,
+    description:
+      "The actor's resource ID: what [`resolveResourceId`](#resource-id-resolution) returns for them, or `${platform}:${userId}` without that hook. Set when a `toolResumeButton()` button resumes the run, unless the hook throws. On a message that continues an existing thread, it's unset when a `resolveResourceId` hook is configured, because the hook only runs for new threads.",
+  },
+]}
+/>
+
+Compare `actorResourceId` with the tool's `resourceId` to check that the user who selected the button owns the conversation. That check only identifies one person when resource IDs are per user. When `resolveResourceId` maps a whole group chat to one resource, every member resolves to the same ID.
 
 ## Generative UI cards
 
@@ -745,6 +869,8 @@ Anything the run reads from its request context can be decided per message this 
 By default a channel thread's memory `resourceId` is `${platform}:${message.author.userId}`. The sender owns the memory, scoped per platform. For apps with a shared identity, such as single sign-on (SSO), this splits memory: the same user gets `feishu:user_123` in a Feishu DM but `user_123` on the web.
 
 Pass `resolveResourceId` to decide memory ownership separately from the sender. It runs only when a new thread is created. Reused threads keep their stored `resourceId` and never call the hook, so existing conversations don't depend on the resolver being available. Return `ctx.defaultResourceId` to fall back to the built-in behavior.
+
+The hook also runs when someone selects a [paused tool card](#paused-tool-cards) button, with a message from that user that has no text. Its result tells the paused tool that user's resource ID through `getChannelRun().actorResourceId`. It never changes the thread's owner.
 
 ```typescript title="src/mastra/agents/sso-agent.ts"
 import { Agent } from '@mastra/core/agent'
