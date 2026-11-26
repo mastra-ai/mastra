@@ -151,7 +151,6 @@ export abstract class MastraMemory extends MastraBase {
    * single owner, so its missing-storage diagnostic omits the agent name.
    */
   #agentNameShared = false;
-  #warnedObservationalMemoryUnsupported = false;
 
   constructor(config: { id?: string; name: string } & SharedMemoryConfig) {
     super({ component: 'MEMORY', name: config.name });
@@ -849,9 +848,9 @@ https://mastra.ai/en/docs/memory/overview`,
   /**
    * Whether observational memory takes over loading and saving message history.
    * Observational memory is requested by config or by a configured `observational-memory`
-   * processor, but it can only run on a memory store that supports it. On any other store,
-   * message history stays on so messages are still saved and recalled, and a warning is
-   * logged once per Memory instance.
+   * processor. It can only run on a memory store that supports it; on any other store this
+   * throws, because message history alone is not an equivalent substitute and silently
+   * dropping or degrading memory is worse than failing loudly.
    */
   protected observationalMemoryHandlesHistory(
     configuredProcessors: (InputProcessorOrWorkflow | OutputProcessorOrWorkflow)[],
@@ -864,15 +863,16 @@ https://mastra.ai/en/docs/memory/overview`,
     if (!requested) return false;
     if (!memoryStore || memoryStore.supportsObservationalMemory) return true;
 
-    if (!this.#warnedObservationalMemoryUnsupported) {
-      this.#warnedObservationalMemoryUnsupported = true;
-      this.logger.warn(
-        `Observational memory is enabled, but the memory store ${this.storage.name ?? memoryStore.constructor.name} does not support it. ` +
-          'Falling back to message history so messages are still saved and recalled. ' +
-          'Use a store that supports observational memory or disable observationalMemory to remove this warning.',
-      );
-    }
-    return false;
+    const storeName = this.storage.name ?? memoryStore.constructor.name;
+    throw new MastraError({
+      id: 'MASTRA_MEMORY_OBSERVATIONAL_MEMORY_UNSUPPORTED_STORE',
+      domain: ErrorDomain.MASTRA_MEMORY,
+      category: 'USER',
+      text:
+        `Observational memory is enabled, but the memory store ${storeName} does not support it. ` +
+        'Use a storage adapter that supports observational memory, or disable observationalMemory in your Memory options.',
+      details: { store: storeName },
+    });
   }
 
   /**
