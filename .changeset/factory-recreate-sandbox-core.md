@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-`factory_recreate_sandbox` is now built on core's recreate tool and `_reset()`. Recovering a session's sandbox works as before.
+Factory agents still recover a sandbox that stopped responding with `factory_recreate_sandbox`. The tool now warns that anything not saved outside the sandbox may be lost, instead of assuming a git checkout.

@@ -342,7 +342,7 @@ Sandboxes returned by a resolver are owned by your application. `workspace.destr
 
 ### Recover a sandbox that stopped responding
 
-An environment can hang: the backend still reports it running, but commands time out. Give the agent `createRecreateSandboxTool()` so it can replace the environment itself. The tool calls the sandbox's [`_reset()`](/reference/workspace/sandbox#_resetoptions), which destroys the environment and leaves the workspace usable; the next command starts a fresh one.
+Sometimes an environment hangs. The backend still reports it running, but commands time out. Give the agent `createRecreateSandboxTool()` so it can replace the environment itself. The tool calls the sandbox's [`_reset()`](/reference/workspace/sandbox#_resetoptions), which destroys the environment and leaves the workspace usable. The next command starts a fresh one.
 
 ```typescript
 import { Agent } from '@mastra/core/agent'
