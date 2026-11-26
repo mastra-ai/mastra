@@ -204,13 +204,13 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     if (!board || !Object.prototype.hasOwnProperty.call(board.phases, request.stage)) return false;
     if (from === request.stage ? request.reenter !== true : !board.allowsTransition(from, request.stage)) return false;
     if (!phaseMayStartRun(board.phaseKind(request.stage)) || !(await runs.inFlight(request))) return false;
-    await runs.stop(request);
+    // A run another process holds isn't stopped from here, so the move is refused as busy at once
+    // instead of after the wait.
+    if (!(await runs.stop(request))) return false;
     const deadline = Date.now() + this.#interruptWaitMs;
     for (let wait = 50; await runs.inFlight(request); wait = Math.min(wait * 2, 1_000)) {
-      if (Date.now() >= deadline) {
-        await runs.abandon(request);
-        break;
-      }
+      // Still going: the run keeps its record and its card, and the move is refused as busy.
+      if (Date.now() >= deadline) return false;
       await new Promise(resolve => setTimeout(resolve, wait));
     }
     return true;

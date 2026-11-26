@@ -3306,29 +3306,20 @@ export class FactoryDecisionDispatcher {
   }
 
   /**
-   * Stops the runs in flight on the card's active seats, as a person's Stop does: the stop is
-   * recorded on each seat first, so its run settles as stopped and isn't run again.
+   * Stops the runs this process holds on the card's active seats, as a person's Stop does: the stop
+   * is recorded on the seat first, so its run settles as stopped and isn't run again. A run another
+   * process holds is left alone. Answers whether any run was stopped.
    */
-  async stopRunsOnCard(card: { orgId: string; factoryProjectId: string; workItemId: string }): Promise<void> {
+  async stopRunsOnCard(card: { orgId: string; factoryProjectId: string; workItemId: string }): Promise<boolean> {
+    let stopped = false;
     for (const binding of await this.#activeBindings(card)) {
+      const session = await this.#controller.getSession(binding.sessionId);
+      if (!session?.stream.isActive()) continue;
       await this.#storage.requestRunBindingStop({ orgId: card.orgId, sessionId: binding.sessionId, at: new Date() });
-      const session = await this.#controller.getSession(binding.sessionId);
-      if (session?.stream.isActive()) session.abort();
+      session.abort();
+      stopped = true;
     }
-  }
-
-  /** Closes the open-run records of the card's active seats as aborted: runs given up on after a stop. */
-  async abandonRunsOnCard(card: { orgId: string; factoryProjectId: string; workItemId: string }): Promise<void> {
-    if (!this.#openRuns) return;
-    for (const binding of await this.#activeBindings(card)) {
-      const session = await this.#controller.getSession(binding.sessionId);
-      if (!session) continue;
-      for (const open of await listThreadOpenRuns(session, this.#openRuns, binding.threadId)) {
-        if (open.bindingId === binding.id) {
-          await this.#openRuns.end(open.kickoffId, { reason: 'aborted', endedAt: Date.now() });
-        }
-      }
-    }
+    return stopped;
   }
 
   async #activeBindings(card: { orgId: string; factoryProjectId: string; workItemId: string }) {
