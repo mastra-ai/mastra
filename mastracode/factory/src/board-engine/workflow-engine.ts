@@ -140,12 +140,15 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
         const run = await this.workflow.createRun({ runId });
         try {
           const result = await run.resume({ step: 'phase', resumeData: { inputId } });
-          if (result.status !== 'suspended') {
-            throw new Error(`The card's board run ended ${result.status} instead of waiting for its next input.`);
-          }
+          // Once the move was applied its answer stands, however the run fared after it.
           if (pending.answer) return;
-          throw new Error("The card's board run did not apply the move.");
+          if (result.status === 'suspended') throw new Error("The card's board run did not apply the move.");
+          // The run this process held ended without taking the move (another process may have
+          // replaced it since); read what the card's run is now.
         } catch (error) {
+          // Applied, then the run could not be saved: another process replaced it meanwhile. The
+          // move committed, and the run holds nothing the card needs.
+          if (pending.answer) return;
           // Another caller resumed the run first; wait for it to suspend again.
           if (!RUN_TAKEN_ERROR_IDS.has((error as { id?: unknown } | null)?.id as string)) throw error;
         }

@@ -316,6 +316,47 @@ describe('the workflow board engine', () => {
     expect((await workflow.getWorkflowRunById(boardRunId(item.id)))?.status).toBe('suspended');
   });
 
+  it('answers a committed move even when another process replaced the run while it was applied', async () => {
+    const { storage, engine, mastra, runsUrl, item } = await setup();
+    await engine.requestMove(await personMove(storage, item.id, 'intake', 'drag-0')());
+    const workflow = mastra.getWorkflow('factory-board');
+    await (await workflow.createRun({ runId: boardRunId(item.id) })).cancel();
+    let entered!: () => void;
+    const inStep = new Promise<void>(resolve => (entered = resolve));
+    let release!: () => void;
+    const released = new Promise<void>(resolve => (release = resolve));
+    const slow = replica(storage, runsUrl, async () => {
+      entered();
+      await released;
+    }).engine;
+    const other = replica(storage, runsUrl).engine;
+    // Both processes read the ended run; the other replaces it after the slow one already did.
+    const ended = await other.workflow.getWorkflowRunById(boardRunId(item.id));
+    vi.spyOn(other.workflow, 'getWorkflowRunById').mockResolvedValueOnce(ended);
+
+    const first = slow.requestMove(await personMove(storage, item.id, 'done', 'drag-1')());
+    await inStep;
+    await other.requestMove(await personMove(storage, item.id, 'no-such-phase', 'drag-2')());
+    release();
+
+    await expect(first).resolves.toMatchObject({ status: 'accepted', stage: 'done' });
+    expect((await storage.get({ orgId: ORG, id: item.id }))!.stages).toEqual(['done']);
+  });
+
+  it('moves the card on the run another process replaced, after this process saw its own end', async () => {
+    const { storage, engine, mastra, runsUrl, item } = await setup();
+    await engine.requestMove(await personMove(storage, item.id, 'intake', 'drag-0')());
+    const workflow = mastra.getWorkflow('factory-board');
+    await (await workflow.createRun({ runId: boardRunId(item.id) })).cancel();
+    const other = replica(storage, runsUrl).engine;
+    await other.requestMove(await personMove(storage, item.id, 'no-such-phase', 'drag-1')());
+
+    await expect(engine.requestMove(await personMove(storage, item.id, 'done', 'drag-2')())).resolves.toMatchObject({
+      status: 'accepted',
+      stage: 'done',
+    });
+  });
+
   it("claims the card's run afresh when asked from work that carries an older claim on it", async () => {
     const { storage, engine, item } = await setup();
     await engine.requestMove(await personMove(storage, item.id, 'intake', 'drag-1')());
