@@ -257,7 +257,17 @@ const buildOutput: LogViewLine[] = [
   },
 ];
 
+const longBuildOutput: LogViewLine[] = [
+  ...Array.from({ length: 60 }, (_, index) => ({
+    message: `#${index + 5} [builder 3/7] RUN pnpm install --frozen-lockfile`,
+    icon: buildIcon,
+  })),
+  ...buildOutput,
+];
+
 const buildIds = new Map(buildOutput.map((line, index) => [line, `build-${index}`]));
+
+const longBuildIds = new Map(longBuildOutput.map((line, index) => [line, `long-build-${index}`]));
 
 export const BuildOutput: Story = {
   render: () => (
@@ -287,4 +297,21 @@ export const FullHeight: Story = {
     ),
   ],
   parameters: describe('height="fill" makes the panel fill its container, for a page that is only logs.'),
+};
+
+export const LongBuildOutput: Story = {
+  render: () => (
+    <LogView>
+      <LogView.Header>
+        <LogView.Title>Build logs</LogView.Title>
+        <LogView.Actions>
+          <LogView.Count count={longBuildOutput.length} />
+        </LogView.Actions>
+      </LogView.Header>
+      <LogView.List logs={longBuildOutput} logIdMap={longBuildIds} order="oldest-first" />
+    </LogView>
+  ),
+  parameters: describe(
+    'Columns keep their width while scrolling, even when only lines without a time or level are on screen.',
+  ),
 };
