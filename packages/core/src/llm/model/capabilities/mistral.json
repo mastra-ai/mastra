@@ -73,10 +73,22 @@
     "zai-glm-5-3-flash"
   ],
   "reasoning": {
-    "deepseek-v4-1-flash-1017": [
+    "mistral-medium-latest": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["none", "high"]
+      }
+    ],
+    "mistral-medium-2604": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "magistral-medium-latest": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "zai-glm-5-3": [
@@ -85,10 +97,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "mistral-medium-latest": [
+    "zai-glm-5-2": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["none", "high", "max"]
       }
     ],
     "mistral-small-latest": [
@@ -97,16 +109,22 @@
         "values": ["none", "high"]
       }
     ],
-    "zai-glm-5-3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "glm-5-2": [
       {
         "type": "effort",
         "values": ["none", "high", "max"]
+      }
+    ],
+    "mistral-large-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "deepseek-v4-1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "mistral-small-2603": [
@@ -121,28 +139,10 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "magistral-medium-latest": [
+    "zai-glm-5-3-flash": [
       {
         "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "zai-glm-5-2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "mistral-large-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "mistral-medium-2604": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
+        "values": ["low", "high", "max"]
       }
     ]
   }

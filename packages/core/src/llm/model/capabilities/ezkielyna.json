@@ -9,6 +9,12 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "step-5-preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "deepseek-v4-pro": [
       {
         "type": "toggle"
@@ -16,12 +22,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "step-5-preview": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ],
     "deepseek-v4.1-flash": [
