@@ -10,7 +10,7 @@ import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import type { FactoryBoardEngine, FactoryCardPlacement } from '../board-engine/engine.js';
-import { DispatcherBoardEngine } from '../board-engine/engine.js';
+import { createDispatcherBoardEngine } from '../board-engine/engine.js';
 import { boardRegistryOf, createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
 import type { BoardPhaseDefinition, BoardRegistry } from '../boards/index.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -5008,15 +5008,22 @@ describe('FactoryDecisionDispatcher', () => {
   });
 
   describe('a run whose session reported its phase outcome', () => {
-    /** The default engine, with the move requests it makes answered by `requestMove`. */
+    /** A host engine wrapping the default one, the way the README shows, seeing every move by `requestMove`. */
     function outcomeEngine(
       transitionService: FactoryTransitionService,
       storage: WorkItemsStorage,
       requestMove: FactoryBoardEngine['requestMove'],
-    ) {
-      const engine = new DispatcherBoardEngine({ transitionService, workItems: storage, boards: autoStartingBoards() });
-      engine.requestMove = requestMove;
-      return engine;
+    ): FactoryBoardEngine {
+      const inner = createDispatcherBoardEngine({
+        transitionService,
+        workItems: storage,
+        boards: autoStartingBoards(),
+      });
+      return {
+        requestMove,
+        requestPlacement: placement => inner.requestPlacement(placement),
+        runEnded: (binding, engine) => inner.runEnded(binding, engine),
+      };
     }
 
     /** What `factory_report_outcome` leaves on the card while the run is still going. */
@@ -5145,11 +5152,12 @@ describe('FactoryDecisionDispatcher', () => {
         emitAgentEndDuringSignal: true,
         agentEndReason: 'complete',
       });
+      const boardEngine: FactoryBoardEngine = { requestMove, requestPlacement: vi.fn(), runEnded };
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
         boards: autoStartingBoards(),
         transitionService,
-        boardEngine: { requestMove, requestPlacement: vi.fn(), runEnded },
+        boardEngine,
         storage,
         ownerId: 'worker-1',
       });
@@ -5157,7 +5165,10 @@ describe('FactoryDecisionDispatcher', () => {
       await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
       await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
 
-      expect(runEnded).toHaveBeenCalledWith(expect.objectContaining({ id: binding.id, workItemId: item.id }));
+      expect(runEnded).toHaveBeenCalledWith(
+        expect.objectContaining({ id: binding.id, workItemId: item.id }),
+        boardEngine,
+      );
       // The engine said the phase ended, so the unchanged card is not a run that did no work.
       const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
       expect(decision).toMatchObject({ status: 'succeeded' });

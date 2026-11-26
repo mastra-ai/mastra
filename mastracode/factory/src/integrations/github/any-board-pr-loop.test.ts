@@ -368,8 +368,10 @@ async function harness(
           { requestContext, agent: { toolCallId: `report-${session}` } },
         ),
       /** The agent's run ends: Factory applies the outcome it reported through the board engine. */
-      runEnds: async () =>
-        new DispatcherBoardEngine({ transitionService, workItems, boards }).runEnded(await binding()),
+      runEnds: async () => {
+        const engine = new DispatcherBoardEngine({ transitionService, workItems, boards });
+        return engine.runEnded(await binding(), engine);
+      },
       verdict: (input: { verdict: 'approve' | 'request changes'; findings?: string }) =>
         verdict!.execute(
           { reviewedHeadSha: SHA, ...input },

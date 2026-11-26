@@ -405,7 +405,24 @@ const factory = new MastraFactory({
 });
 ```
 
-A custom engine implements `requestMove(request)`, which answers with the board's verdict (`accepted` or `rejected`), `requestPlacement(placement)`, which answers `moved`, `unchanged` or `skipped`, and `runEnded(binding)`, which Factory calls when a run of a session bound to a card ends `complete`. `runEnded` decides whether the run's phase ended: the default engine moves the card by the outcome its session reported (or its exit tool's success) and answers `true`, or answers `false` when the card holds no outcome. It can be called twice for one run end and must move the card once. One move can be requested more than once under the same `ingress.identity`, possibly concurrently: an agent's tool result asks right away, and the dispatcher replays the queued decision later. A custom engine must answer every repeat with its first verdict for that identity, except a `stale` refusal. Wrapping `createDispatcherBoardEngine(context)` keeps today's behavior, including this guarantee, while observing every move.
+A custom engine implements `requestMove(request)`, which answers with the board's verdict (`accepted` or `rejected`), `requestPlacement(placement)`, which answers `moved`, `unchanged` or `skipped`, and `runEnded(binding, engine)`, which Factory calls when a run of a session bound to a card ends `complete`. `runEnded` decides whether the run's phase ended: the default engine moves the card by the outcome its session reported (or its exit tool's success) and answers `true`, or answers `false` when the card holds no outcome. It can be called twice for one run end and must move the card once. `engine` is the engine Factory holds; the default engine requests the run's move through it, so an engine that wraps the default one sees that move in its own `requestMove`. One move can be requested more than once under the same `ingress.identity`, possibly concurrently: an agent's tool result asks right away, and the dispatcher replays the queued decision later. A custom engine must answer every repeat with its first verdict for that identity, except a `stale` refusal. Wrapping `createDispatcherBoardEngine(context)` keeps today's behavior, including this guarantee, while observing every move, as long as the wrapper forwards `runEnded` with the engine it was given:
+
+```typescript
+const factory = new MastraFactory({
+  storage,
+  boardEngine: context => {
+    const inner = createDispatcherBoardEngine(context);
+    return {
+      requestMove: request => {
+        audit(request);
+        return inner.requestMove(request);
+      },
+      requestPlacement: placement => inner.requestPlacement(placement),
+      runEnded: (binding, engine) => inner.runEnded(binding, engine),
+    };
+  },
+});
+```
 
 ### Board tool-result rules
 

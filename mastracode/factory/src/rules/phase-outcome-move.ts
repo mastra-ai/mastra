@@ -67,7 +67,7 @@ export function observeSessionPhaseOutcome(
   session: RunEndSession,
   options: {
     binding: () => Promise<FactoryRunEndedBinding | null>;
-    boardEngine: () => Pick<FactoryBoardEngine, 'runEnded'> | undefined;
+    boardEngine: () => Pick<FactoryBoardEngine, 'requestMove' | 'runEnded'> | undefined;
   },
 ): () => void {
   return session.subscribe(event => {
@@ -76,7 +76,7 @@ export function observeSessionPhaseOutcome(
       const boardEngine = options.boardEngine();
       if (!boardEngine) return;
       const binding = await options.binding();
-      if (binding) await boardEngine.runEnded(binding);
+      if (binding) await boardEngine.runEnded(binding, boardEngine);
     })().catch(error => {
       console.warn('[Factory] Unable to apply the outcome a session reported.', error);
     });

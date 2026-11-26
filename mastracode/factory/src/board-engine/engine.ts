@@ -50,8 +50,11 @@ export interface FactoryBoardEngine {
    *
    * It can be told more than once for one run end (the dispatcher watching the run and the session
    * itself both see it), and must move the card once.
+   *
+   * `engine` is the engine Factory holds, which may wrap this one. Request the run's move through
+   * it, so a wrapping engine sees that move like any other.
    */
-  runEnded(binding: FactoryRunEndedBinding): Promise<boolean>;
+  runEnded(binding: FactoryRunEndedBinding, engine: Pick<FactoryBoardEngine, 'requestMove'>): Promise<boolean>;
 }
 
 /** The services an engine is built from; the host's `boardEngine` factory receives them. */
@@ -91,8 +94,8 @@ export class DispatcherBoardEngine implements FactoryBoardEngine {
   }
 
   /** Moves the card by its phase's outcome, as a move request from the agent that worked it. */
-  runEnded(binding: FactoryRunEndedBinding): Promise<boolean> {
-    return applyPhaseOutcome({ storage: this.#workItems, boards: this.#boards, boardEngine: this }, binding);
+  runEnded(binding: FactoryRunEndedBinding, engine: Pick<FactoryBoardEngine, 'requestMove'>): Promise<boolean> {
+    return applyPhaseOutcome({ storage: this.#workItems, boards: this.#boards, boardEngine: engine }, binding);
   }
 }
 

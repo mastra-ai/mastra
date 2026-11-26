@@ -1074,7 +1074,7 @@ describe('FactoryPhaseStateProcessor', () => {
         };
       },
       requestPlacement: placement => defaultEngine.requestPlacement(placement),
-      runEnded: binding => defaultEngine.runEnded(binding),
+      runEnded: (binding, engine) => defaultEngine.runEnded(binding, engine),
     };
     const processor = new FactoryPhaseStateProcessor({
       configVersion: 'rules-v1',
