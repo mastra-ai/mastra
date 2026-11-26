@@ -110,9 +110,17 @@ function connectPromptCard(toolCallId: string, name: string) {
   return connectCard(toolCallId, `Connect **${name}** to continue.`, { action: 'connect', label: `Connect ${name}` });
 }
 
+/** Whether a card the call showed offers this action's button. */
+function offers(card: NonNullable<ChannelSuspendPayload['channelCard']>, toolCallId: string, action: string): boolean {
+  const { id } = toolResumeButton({ toolCallId, action, label: action });
+  return card.children.some(
+    child => child.type === 'actions' && child.children.some(button => 'id' in button && button.id === id),
+  );
+}
+
 /**
- * Sends the sign-in link to the clicker only: a Slack ephemeral, a Teams
- * targeted message, or a DM elsewhere. False when it couldn't be delivered
+ * Sends the sign-in link to the clicker only: an ephemeral message where the
+ * platform has one (Slack), or a DM. False when it couldn't be delivered
  * privately; the link is never posted anywhere else.
  */
 async function sendPrivately(run: ChannelRun, name: string, link: ConnectUrl): Promise<boolean> {
@@ -210,7 +218,9 @@ export function buildConnectPromptTool({
       const agent = context?.agent;
       const resumed = agent?.resumeData as ConnectPromptResume | undefined;
       if (resumed && 'action' in resumed) {
-        const name = payload.providers[0]?.displayName ?? requested?.id ?? input.provider ?? 'The provider';
+        const name = requested
+          ? (payload.providers[0]?.displayName ?? requested.id)
+          : (input.provider ?? 'The provider');
         const failed = (error: string): ConnectPromptPayload => ({
           ...payload,
           message: `${name} could not be connected: ${error}`,
@@ -223,6 +233,15 @@ export function buildConnectPromptTool({
           return payload;
         };
         const run = getChannelRun(context?.requestContext);
+        // After a restart core can't tell a late button from a current one,
+        // so a button the card no longer offers leaves the call as it is.
+        if (previous?.channelCard && !offers(previous.channelCard, toolCallId, resumed.action)) {
+          return pause({
+            connectionId: previous.connectionId,
+            expiresAt: previous.expiresAt,
+            channelCard: previous.channelCard,
+          });
+        }
         const refuse = async () => {
           if (!run?.actor) return;
           await run.thread.postEphemeral(run.actor.userId, NOT_OWNER_NOTICE, { fallbackToDM: false }).catch(() => null);
@@ -333,17 +352,31 @@ export function buildConnectPromptTool({
       // settled provider so the agent continues without a user message.
       // Outside an agent run there is nothing to resume, so return the prompt.
       // In a Slack, Telegram or Teams thread the card's buttons resume it.
-      if (agent?.suspend) {
-        const name = payload.providers[0]!.displayName ?? requested.id;
-        await agent.suspend(
-          getChannelRun(context?.requestContext)
-            ? ({
-                ...payload,
-                channelCard: connectPromptCard(agent.toolCallId, name),
-              } satisfies ChannelConnectPromptPayload)
-            : payload,
-        );
+      if (!agent?.suspend) return payload;
+      if (!getChannelRun(context?.requestContext)) {
+        await agent.suspend(payload);
+        return payload;
       }
+      const name = payload.providers[0]!.displayName ?? requested.id;
+      const fromApp = (reason: string) => {
+        context?.mastra?.getLogger?.()?.warn(`request_connection shows no card in this thread: ${reason}`, {
+          provider: requested.id,
+        });
+        return { ...payload, message: `${name} can't be connected from this conversation. Connect it from the app.` };
+      };
+      // A toolset serving someone other than the conversation's owner could
+      // never start the owner's sign-in, so a Connect button would do nothing.
+      if (resourceId !== (agent.resourceId ?? resourceId)) {
+        return fromApp("the tools serve another resource than this conversation's");
+      }
+      let channelCard: ChannelConnectPromptPayload['channelCard'];
+      try {
+        channelCard = connectPromptCard(agent.toolCallId, name);
+      } catch (error) {
+        // The tool call id is too long for a button id.
+        return fromApp(error instanceof Error ? error.message : String(error));
+      }
+      await agent.suspend({ ...payload, channelCard } satisfies ChannelConnectPromptPayload);
       return payload;
     },
   });

@@ -317,9 +317,14 @@ describe('request_connection under an agent', () => {
       expect(result).not.toHaveProperty('error');
     });
 
-    it.each(['check', 'connect'] as const)(
-      'finishes as failed on %s when the provider left the catalog while paused',
-      async action => {
+    it.each([
+      ['check', []],
+      ['connect', []],
+      // The message names the requested provider, not whichever is left.
+      ['check', ['github']],
+    ] as const)(
+      'finishes as failed on %s when the provider left the catalog while paused (left: %j)',
+      async (action, left) => {
         let catalog = ['linear'];
         const { agent } = await agentWithConnectTools(
           () => [],
@@ -330,7 +335,7 @@ describe('request_connection under an agent', () => {
         for await (const _chunk of stream.fullStream) {
           // drain until the run suspends
         }
-        catalog = [];
+        catalog = [...left];
         const resumed = await agent.resumeStream({ action }, { runId: stream.runId, toolCallId: 'call-1' });
         let result: unknown;
         for await (const chunk of resumed.fullStream) {

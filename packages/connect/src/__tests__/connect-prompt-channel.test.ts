@@ -100,7 +100,7 @@ function fakePlatform(options: { expiresAt?: string; sessionsFail?: boolean } = 
 }
 
 /** Model that calls `request_connection` for Linear, then repeats the tool's message. */
-function connectingModel() {
+function connectingModel(toolCallId = TOOL_CALL_ID) {
   const prompts: unknown[] = [];
   const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
   const model = new MockLanguageModelV2({
@@ -119,7 +119,7 @@ function connectingModel() {
         : [
             {
               type: 'tool-call' as const,
-              toolCallId: TOOL_CALL_ID,
+              toolCallId,
               toolName: 'request_connection',
               input: '{"provider":"linear"}',
               providerExecuted: false,
@@ -201,6 +201,9 @@ async function setup(
     toolApprovers?: 'anyone' | 'requester';
     /** Who starts the thread. */
     author?: typeof alice;
+    toolCallId?: string;
+    /** False when the call is expected to finish without showing a card. */
+    expectCard?: boolean;
   } = {},
 ) {
   const platform = fakePlatform({ expiresAt: options.expiresAt, sessionsFail: options.sessionsFail });
@@ -216,7 +219,7 @@ async function setup(
         },
       })
     : connect({ projectId: PROJECT_ID, client: platform.client, resourceId: 'slack:U-ALICE' });
-  const { model, prompts } = connectingModel();
+  const { model, prompts } = connectingModel(options.toolCallId);
   const agent = new Agent({
     id: 'connect-agent',
     name: 'Bot',
@@ -280,9 +283,13 @@ async function setup(
     author: options.author ?? alice,
     metadata: { dateSent: new Date(), edited: false },
   });
-  await vi.waitFor(() => expect(shownActions()).toEqual(['connect', 'cancel']), { timeout: 5000 });
+  if (options.expectCard === false) {
+    await vi.waitFor(() => expect(replies()).toHaveLength(1), { timeout: 5000 });
+  } else {
+    await vi.waitFor(() => expect(shownActions()).toEqual(['connect', 'cancel']), { timeout: 5000 });
+  }
 
-  return { platform, recorded, resolveTools, prompts, shownActions, replies, click, cards, agent };
+  return { platform, threadId, recorded, resolveTools, prompts, shownActions, replies, click, cards, agent };
 }
 
 /** Every message other members of the thread can see. */
@@ -479,16 +486,50 @@ describe('request_connection in a channel thread', () => {
     expect(t.replies()[0]).toContain('The user cancelled connecting.');
   });
 
-  it("starts no sign-in in someone else's thread with a toolset scoped to another user", async () => {
+  it("shows no Connect button nobody could use in someone else's thread with a toolset scoped to another user", async () => {
     // The toolset serves slack:U-ALICE, but Bob started this conversation.
-    const t = await setup({ author: bob, toolApprovers: 'requester' });
-    await t.click('connect', bob);
+    const t = await setup({ author: bob, toolApprovers: 'requester', expectCard: false });
 
+    expect(t.cards()).toEqual([]);
+    expect(t.replies()[0]).toContain("Linear can't be connected from this conversation. Connect it from the app.");
     expect(t.platform.sessionsCreated()).toBe(0);
-    expect(t.recorded.filter(entry => entry.kind === 'ephemeral')).toEqual([
-      expect.objectContaining({ userId: bob.userId, body: expect.stringContaining('Only the person') }),
-    ]);
-    expect(t.shownActions()).toEqual(['connect', 'cancel']);
+    expect((await t.agent.listSuspendedRuns({})).runs).toEqual([]);
+  });
+
+  it('tells the agent to connect from the app when the tool call id is too long for a button', async () => {
+    const t = await setup({ toolCallId: `call_${'x'.repeat(40)}`, expectCard: false });
+
+    expect(t.recorded.filter(entry => entry.body.includes('tool_resume:'))).toEqual([]);
+    expect(t.replies()[0]).toContain("Linear can't be connected from this conversation. Connect it from the app.");
+    expect((await t.agent.listSuspendedRuns({})).runs).toEqual([]);
+  });
+
+  it('ignores a Connect the card no longer offers, as a late press after a restart would be', async () => {
+    const t = await setup();
+    await t.click('connect');
+    expect(t.shownActions()).toEqual(['check', 'cancel']);
+    const [paused] = (await t.agent.listSuspendedRuns({})).runs;
+    const before = JSON.stringify(paused!.toolCalls);
+
+    // Core only checks buttons against the card it remembers, so after a
+    // restart a late Connect reaches the tool.
+    const resumed = await t.agent.resumeStream(
+      { action: 'connect' },
+      {
+        runId: paused!.runId,
+        toolCallId: TOOL_CALL_ID,
+        memory: { thread: paused!.threadId!, resource: 'slack:U-ALICE' },
+      },
+    );
+    await resumed.consumeStream();
+
+    expect(t.platform.sessionsCreated()).toBe(1);
+    const [still] = (await t.agent.listSuspendedRuns({})).runs;
+    expect(JSON.stringify(still!.toolCalls)).toBe(before);
+    t.platform.settle('active');
+    await t.click('check');
+    await vi.waitFor(() => expect(t.replies()).toHaveLength(1));
+    expect(t.replies()[0]).toContain('Linear connected successfully.');
   });
 
   it("keeps waiting when I've connected is pressed before the sign-in finished", async () => {
