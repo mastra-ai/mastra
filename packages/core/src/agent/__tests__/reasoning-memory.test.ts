@@ -985,7 +985,19 @@ describe('Reasoning Data Spy: Response vs Request Comparison (Issue #12980)', ()
     });
     await resp2.consumeStream();
 
-    const replayedCompaction = spyModel.doStreamCalls[0]!.prompt.filter(message => message.role === 'assistant')
+    const replayPrompt = spyModel.doStreamCalls[0]!.prompt;
+    expect(replayPrompt.map(message => message.role)).toEqual(['system', 'assistant', 'user']);
+
+    const recalledAfterSecondTurn = await mockMemory.recall({ threadId, resourceId });
+    expect(recalledAfterSecondTurn.messages.map(message => message.role)).toEqual([
+      'user',
+      'assistant',
+      'user',
+      'assistant',
+    ]);
+
+    const replayedCompaction = replayPrompt
+      .filter(message => message.role === 'assistant')
       .flatMap(message => message.content)
       .find(isProviderCustomPart);
     expect(replayedCompaction).toEqual({

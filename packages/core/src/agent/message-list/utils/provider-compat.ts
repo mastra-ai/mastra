@@ -121,6 +121,53 @@ export function dropCrossProviderExecutedParts<T extends ModelMessage>(
   return dropped ? result : messages;
 }
 
+/**
+ * Builds the efficient OpenAI Responses continuation input from the latest
+ * compaction checkpoint while leaving the persisted Mastra history untouched.
+ */
+export function pruneOpenAICompactionHistory<T extends ModelMessage>(
+  messages: T[],
+  targetProvider: string | undefined,
+): T[] {
+  if (targetProvider !== 'openai' && targetProvider !== 'openai.responses') return messages;
+
+  let checkpointMessageIndex = -1;
+  let checkpointPartIndex = -1;
+
+  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex--) {
+    const message = messages[messageIndex]!;
+    if (message.role !== 'assistant' || !Array.isArray(message.content)) continue;
+
+    for (let partIndex = message.content.length - 1; partIndex >= 0; partIndex--) {
+      const part = message.content[partIndex] as { type?: string; kind?: string };
+      if (part.type === 'custom' && part.kind === 'openai.compaction') {
+        checkpointMessageIndex = messageIndex;
+        checkpointPartIndex = partIndex;
+        break;
+      }
+    }
+
+    if (checkpointMessageIndex !== -1) break;
+  }
+
+  if (checkpointMessageIndex === -1) return messages;
+
+  const checkpointMessage = messages[checkpointMessageIndex]!;
+  const checkpointContent = Array.isArray(checkpointMessage.content)
+    ? checkpointMessage.content.slice(checkpointPartIndex)
+    : checkpointMessage.content;
+  const systemMessagesBeforeCheckpoint = messages
+    .slice(0, checkpointMessageIndex)
+    .filter(message => message.role === 'system');
+  const continuationMessages = messages.slice(checkpointMessageIndex + 1);
+
+  return [
+    ...systemMessagesBeforeCheckpoint,
+    { ...checkpointMessage, content: checkpointContent } as T,
+    ...continuationMessages,
+  ];
+}
+
 // ============================================================================
 // Anthropic Compatibility
 // ============================================================================
