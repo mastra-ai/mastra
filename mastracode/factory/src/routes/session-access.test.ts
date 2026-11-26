@@ -18,6 +18,8 @@ const FACTORY_ID = '00000000-0000-4000-8000-0000000000f1';
 const OTHER_FACTORY_ID = '00000000-0000-4000-8000-0000000000f2';
 /** A Factory whose lookup fails, standing in for a storage error on one run's resource. */
 const BROKEN_FACTORY_ID = '00000000-0000-4000-8000-0000000000f3';
+/** A card phase session the Factory itself owns. */
+const FACTORY_OWNED_ID = '00000000-0000-4000-8000-0000000000a5';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function row(sessionId: string, visibility: SourceControlSession['visibility']): SourceControlSession {
@@ -29,6 +31,7 @@ const rows = new Map([
   [SHARED_ID, row(SHARED_ID, 'org')],
   [UNMOVED_SHARED_ID, row(UNMOVED_SHARED_ID, 'org')],
   [LEGACY_PRIVATE_ID, row(LEGACY_PRIVATE_ID, 'private')],
+  [FACTORY_OWNED_ID, { ...row(FACTORY_OWNED_ID, 'org'), userId: `factory-project:${FACTORY_ID}` }],
 ]);
 
 // Each session's own thread (thread id === session id) and the resource it sits on.
@@ -37,6 +40,7 @@ const threadResources = new Map([
   [SHARED_ID, FACTORY_ID],
   [UNMOVED_SHARED_ID, 'owner'],
   [LEGACY_PRIVATE_ID, LEGACY_PRIVATE_ID],
+  [FACTORY_OWNED_ID, FACTORY_ID],
   // A thread the owner opened from a session, addressed directly as if it were a session.
   ['owner-side-thread', 'owner'],
 ]);
@@ -64,7 +68,10 @@ function buildApp(user?: { workosId: string; organizationId: string }, options: 
   app.use(
     '*',
     createSessionAccessGuard({
-      auth: fakeRouteAuth({ enabled: options.authEnabled }),
+      auth: fakeRouteAuth({
+        enabled: options.authEnabled,
+        isOrganizationAdmin: async (organizationId, userId) => organizationId === 'org-1' && userId === 'admin',
+      }),
       sessions: { getBySessionId: async id => rows.get(id) ?? null },
       projects: {
         get: async ({ orgId, id }) => {
@@ -115,11 +122,13 @@ function buildApp(user?: { workosId: string; organizationId: string }, options: 
   );
   app.get('/web/config/om', c => c.json({ reached: true }));
   app.post('/web/config/om/:role/model', async c => c.json({ reached: true, body: await adapterBody(c) }));
+  app.put('/web/config/session-model', c => c.json({ reached: true }));
   return app;
 }
 
 const owner = buildApp({ workosId: 'owner', organizationId: 'org-1' });
 const teammate = buildApp({ workosId: 'teammate', organizationId: 'org-1' });
+const admin = buildApp({ workosId: 'admin', organizationId: 'org-1' });
 const outsider = buildApp({ workosId: 'outsider', organizationId: 'org-2' });
 
 const post = (app: Hono, path: string, body: unknown) =>
@@ -197,6 +206,48 @@ describe('createSessionAccessGuard', () => {
     expect((await post(owner, sessionPath(SHARED_ID, 'model'), switchModel)).status).toBe(200);
     expect((await put(owner, sessionPath(SHARED_ID, 'state'), { state: { thinkingLevel: 'high' } })).status).toBe(200);
     expect((await post(teammate, sessionPath('teammate-scratch', 'model'), switchModel)).status).toBe(200);
+  });
+
+  it("403s a teammate choosing a shared session's pack or model, and 404s a stranger", async () => {
+    const choice = {
+      resourceId: FACTORY_ID,
+      sessionId: SHARED_ID,
+      threadId: SHARED_ID,
+      selection: { kind: 'pack', packId: 'review' },
+    };
+    const refused = await put(teammate, '/web/config/session-model', choice);
+    expect(refused.status).toBe(403);
+    await expect(refused.json()).resolves.toEqual({ error: 'Only the session’s owner can change its model' });
+    expect((await put(outsider, '/web/config/session-model', choice)).status).toBe(404);
+    expect((await put(owner, '/web/config/session-model', choice)).status).toBe(200);
+  });
+
+  it('lets an org admin, and only an admin, change the model of a session the Factory owns', async () => {
+    const switchModel = { modelId: 'openai/gpt-5-mini' };
+    const choice = {
+      resourceId: FACTORY_ID,
+      sessionId: FACTORY_OWNED_ID,
+      threadId: FACTORY_OWNED_ID,
+      selection: { kind: 'pack', packId: 'review' },
+    };
+    expect((await post(admin, sessionPath(FACTORY_OWNED_ID, 'model'), switchModel)).status).toBe(200);
+    expect(
+      (await put(admin, sessionPath(FACTORY_OWNED_ID, 'state'), { state: { thinkingLevel: 'high' } })).status,
+    ).toBe(200);
+    expect((await put(admin, '/web/config/session-model', choice)).status).toBe(200);
+
+    const refused = await post(teammate, sessionPath(FACTORY_OWNED_ID, 'model'), switchModel);
+    expect(refused.status).toBe(403);
+    await expect(refused.json()).resolves.toEqual({
+      error: 'Only an organization admin can change the model of a session the Factory owns',
+    });
+    expect((await put(teammate, '/web/config/session-model', choice)).status).toBe(403);
+    expect((await post(teammate, sessionPath(FACTORY_OWNED_ID, 'messages'), { content: 'Ship it' })).status).toBe(200);
+    expect((await post(outsider, sessionPath(FACTORY_OWNED_ID, 'model'), switchModel)).status).toBe(404);
+  });
+
+  it("403s an org admin changing a teammate's shared session model: that session bills its owner", async () => {
+    expect((await post(admin, sessionPath(SHARED_ID, 'model'), { modelId: 'openai/gpt-5-mini' })).status).toBe(403);
   });
 
   it('passes through a session on its own id that no Factory session row claims', async () => {

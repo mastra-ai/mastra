@@ -63,7 +63,15 @@ import { schemaNamePrefix } from '../../../shared/schema-name';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { buildConstraintName } from '../../db/constraint-utils';
-import { assertRunFence, DB_NOW_MS, withRunFence } from '../../db/run-fencing';
+import {
+  assertRunFence,
+  DB_NOW_MS,
+  fencedResultSql,
+  runFenceCte,
+  runFencedStatement,
+  runFenceParams,
+  serializeFenced,
+} from '../../db/run-fencing';
 import type { Queryable } from '../../db/run-fencing';
 import { toPgJson } from '../../db/sanitize-json';
 import { runPrune, resolveTargets } from '../../retention';
@@ -82,10 +90,11 @@ interface RunOwnerRow {
   generation: string | number;
   ownerId: string;
   leaseExpiresAt: string | number | null;
+  updatedAt: string | number;
   nowMs: string | number;
 }
 
-const RUN_OWNER_COLUMNS = `generation, "ownerId", "leaseExpiresAt", ${DB_NOW_MS} AS "nowMs"`;
+const RUN_OWNER_COLUMNS = `generation, "ownerId", "leaseExpiresAt", "updatedAt", ${DB_NOW_MS} AS "nowMs"`;
 
 function toRunOwnershipRecord(runId: string, row: RunOwnerRow): RunOwnershipRecord {
   const leaseExpiresAt = row.leaseExpiresAt === null ? null : Number(row.leaseExpiresAt);
@@ -95,6 +104,7 @@ function toRunOwnershipRecord(runId: string, row: RunOwnerRow): RunOwnershipReco
     ownerId: row.ownerId,
     leaseExpiresAt: leaseExpiresAt === null ? null : new Date(leaseExpiresAt),
     live: leaseExpiresAt !== null && leaseExpiresAt > Number(row.nowMs),
+    updatedAt: new Date(Number(row.updatedAt)),
   };
 }
 
@@ -1194,17 +1204,19 @@ export class WorkflowsPG extends WorkflowsStorage {
    * `startStateSeq` is the new `lastSeq`; an append keeps the stored one unless given `$17`. The
    * header's row lock is held until commit, so the writes to one run commit in `seq` order. With
    * `expectedParam` (a text array of statuses), a stored run whose status isn't in it is left as
-   * is and nothing is returned.
+   * is and nothing is returned. With `fenced`, nothing is written unless the statement's `claim`
+   * CTE ({@link runFenceCte}) has a row.
    */
-  #upsertHeaderSql(checkpoint: boolean, expectedParam?: string): string {
+  #upsertHeaderSql(checkpoint: boolean, expectedParam?: string, fenced?: boolean): string {
     const startStateSeq = checkpoint
       ? { insert: '$7::int', update: 'r."lastSeq" + EXCLUDED."lastSeq"' }
       : { insert: 'COALESCE($17::int, 0)', update: 'COALESCE($17::int, r."startStateSeq")' };
+    const row = `$1, $2, $3, $4, $5, $6::jsonb, $7::int, ${startStateSeq.insert}, false,
+          ${stateColumnsValues('$7::int', UPSERT_STATE_PARAMS)}, $16, $8, $9, $10, $11`;
     return `INSERT INTO ${this.#runsTable()} AS r
          (workflow_name, run_id, "resourceId", "threadId", status, header, "lastSeq", "startStateSeq", "stateShared",
           ${STATE_COLUMNS}, "runToken", "createdAt", "updatedAt", "createdAtZ", "updatedAtZ")
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::int, ${startStateSeq.insert}, false,
-          ${stateColumnsValues('$7::int', UPSERT_STATE_PARAMS)}, $16, $8, $9, $10, $11)
+       ${fenced ? `SELECT ${row} WHERE EXISTS (SELECT 1 FROM claim)` : `VALUES (${row})`}
        ON CONFLICT (workflow_name, run_id) DO UPDATE
        SET "resourceId" = COALESCE(EXCLUDED."resourceId", r."resourceId"), "threadId" = EXCLUDED."threadId",
            status = EXCLUDED.status, header = EXCLUDED.header, "lastSeq" = r."lastSeq" + EXCLUDED."lastSeq",
@@ -1361,19 +1373,35 @@ export class WorkflowsPG extends WorkflowsStorage {
           threadId: args.threadId,
           header: args.header,
         };
-        return await withRunFence(this.#db.client, this.#runOwnersTable(), fence, 'appendWorkflowRunEntries', q =>
-          // When `expectedStatus` rejects the write, `h` has no row, so neither has the insert.
-          q.oneOrNone<{ lastSeq: number; runToken: string }>(
-            `WITH h AS (${this.#upsertHeaderSql(false, expected ? '$19' : undefined)}),
-             ${appendEntriesSql(this.#entriesTable(), '$7', '$18')}
+        const values = await serializeFenced(
+          this.#db.client,
+          this.#runOwnersTable(),
+          fence,
+          'appendWorkflowRunEntries',
+          () => [
+            ...this.#headerParams(run, entries.length, write),
+            startStateSeq ?? null,
+            toPgJson(entries),
+            ...(expected ? [expected] : []),
+          ],
+        );
+        // When `expectedStatus` or the fence rejects the write, `h` has no row, so neither has the insert.
+        const ctes = `h AS (${this.#upsertHeaderSql(false, expected ? '$19' : undefined, !!fence)}),
+             ${appendEntriesSql(this.#entriesTable(), '$7', '$18')}`;
+        if (!fence) {
+          return await this.#db.client.oneOrNone<{ lastSeq: number; runToken: string }>(
+            `WITH ${ctes}
              SELECT "lastSeq", "runToken" FROM h`,
-            [
-              ...this.#headerParams(run, entries.length, write),
-              startStateSeq ?? null,
-              toPgJson(entries),
-              ...(expected ? [expected] : []),
-            ],
-          ),
+            values,
+          );
+        }
+        return await runFencedStatement<{ lastSeq: number; runToken: string }>(
+          this.#db.client,
+          fence,
+          'appendWorkflowRunEntries',
+          `WITH ${runFenceCte(this.#runOwnersTable(), values.length + 1)}, ${ctes}
+           ${fencedResultSql('h', 'h."lastSeq", h."runToken"')}`,
+          [...values, ...runFenceParams(fence)],
         );
       }
       row = guarded
@@ -1381,17 +1409,16 @@ export class WorkflowsPG extends WorkflowsStorage {
             if (fence) await assertRunFence(t, this.#runOwnersTable(), fence, 'appendWorkflowRunEntries');
             return this.#appendGuarded(t, { ...args, expected });
           })
-        : await withRunFence(this.#db.client, this.#runOwnersTable(), fence, 'appendWorkflowRunEntries', q =>
-            this.#appendWithoutHeader(q, {
-              workflowName,
-              runId,
-              entries,
-              write,
-              requestContext: args.requestContext,
-              startStateSeq,
-              expected,
-            }),
-          );
+        : await this.#appendWithoutHeader(this.#db.client, {
+            workflowName,
+            runId,
+            entries,
+            write,
+            requestContext: args.requestContext,
+            startStateSeq,
+            expected,
+            fence,
+          });
     } catch (error) {
       if (isRunFenceConflictError(error) || isWorkflowStepConflictError(error)) throw error;
       throw this.#runError('APPEND_WORKFLOW_RUN_ENTRIES', workflowName, runId, error);
@@ -1510,9 +1537,9 @@ export class WorkflowsPG extends WorkflowsStorage {
    * A header-less append (`WorkflowRunAppendHeader`) in one statement: adds the entries after the
    * run's `lastSeq`, merges `requestContext` into the header's, and applies `write` to the state
    * columns. The row lock orders concurrent appends. Null when the run isn't stored, or when its
-   * status isn't one of `expected`.
+   * status isn't one of `expected`. With `fence`, the fence check runs in the same statement.
    */
-  #appendWithoutHeader(
+  async #appendWithoutHeader(
     q: Queryable,
     {
       workflowName,
@@ -1522,6 +1549,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       requestContext,
       startStateSeq,
       expected,
+      fence,
     }: {
       workflowName: string;
       runId: string;
@@ -1530,12 +1558,24 @@ export class WorkflowsPG extends WorkflowsStorage {
       requestContext?: Record<string, any>;
       startStateSeq?: number;
       expected?: WorkflowRunStatus[];
+      fence?: RunFence;
     },
   ): Promise<AppendedRow | null> {
     const now = new Date();
+    const values = await serializeFenced(q, this.#runOwnersTable(), fence, 'appendWorkflowRunEntries', () => [
+      workflowName,
+      runId,
+      entries.length,
+      requestContext === undefined ? null : toPgJson(requestContext),
+      startStateSeq ?? null,
+      ...stateColumnsParams(write),
+      now,
+      now,
+      toPgJson(entries),
+      expected ?? null,
+    ]);
     // `||` is a shallow merge, like spreading; a requestContext that isn't an object counts as `{}`.
-    return q.oneOrNone<AppendedRow>(
-      `WITH h AS (
+    const ctes = `h AS (
          UPDATE ${this.#runsTable()} AS r
          SET "lastSeq" = r."lastSeq" + $3::int,
              header = CASE WHEN $4::jsonb IS NULL THEN r.header ELSE jsonb_set(r.header, '{requestContext}',
@@ -1544,23 +1584,18 @@ export class WorkflowsPG extends WorkflowsStorage {
              "startStateSeq" = COALESCE($5::int, r."startStateSeq"),
              ${stateColumnsSet('r."lastSeq" + $3::int', ['$6', '$7', '$8', '$9'])},
              "updatedAt" = $10, "updatedAtZ" = $11
-         WHERE r.workflow_name = $1 AND r.run_id = $2 AND ($13::text[] IS NULL OR r.status = ANY($13::text[]))
+         WHERE r.workflow_name = $1 AND r.run_id = $2 AND ($13::text[] IS NULL OR r.status = ANY($13::text[]))${fence ? ' AND EXISTS (SELECT 1 FROM claim)' : ''}
          RETURNING "lastSeq", "runToken", ${STATE_COLUMNS}
        ),
-       ${appendEntriesSql(this.#entriesTable(), '$3', '$12')}
-       SELECT * FROM h`,
-      [
-        workflowName,
-        runId,
-        entries.length,
-        requestContext === undefined ? null : toPgJson(requestContext),
-        startStateSeq ?? null,
-        ...stateColumnsParams(write),
-        now,
-        now,
-        toPgJson(entries),
-        expected ?? null,
-      ],
+       ${appendEntriesSql(this.#entriesTable(), '$3', '$12')}`;
+    if (!fence) return q.oneOrNone<AppendedRow>(`WITH ${ctes} SELECT * FROM h`, values);
+    return runFencedStatement<AppendedRow>(
+      q,
+      fence,
+      'appendWorkflowRunEntries',
+      `WITH ${runFenceCte(this.#runOwnersTable(), values.length + 1)}, ${ctes}
+       ${fencedResultSql('h')}`,
+      [...values, ...runFenceParams(fence)],
     );
   }
 
@@ -1688,25 +1723,33 @@ export class WorkflowsPG extends WorkflowsStorage {
         ? { state: args.state }
         : { on: args.on.draft ? { seq: args.on.seq, draft: true } : { seq: args.on.seq }, ops: args.ops };
     let row: { seq: number } | null;
+    const fence = resolveRunFence(this, undefined, runId);
+    const update = `h AS (
+               UPDATE ${this.#runsTable()} SET "lastSeq" = "lastSeq" + 1, "stateShared" = true
+               WHERE workflow_name = $1 AND run_id = $2${fence ? ' AND EXISTS (SELECT 1 FROM claim)' : ''}
+               RETURNING "lastSeq"
+             )`;
+    const insert = `INSERT INTO ${this.#entriesTable()} (workflow_name, run_id, seq, kind, step_id, payload)
+             SELECT $1, $2, h."lastSeq", 'state-draft', NULL, $3::jsonb FROM h
+             RETURNING seq`;
     try {
-      row = await withRunFence(
+      const values = await serializeFenced(
         this.#db.client,
         this.#runOwnersTable(),
-        resolveRunFence(this, undefined, runId),
+        fence,
         'appendWorkflowRunStateDraft',
-        q =>
-          q.oneOrNone<{ seq: number }>(
-            `WITH h AS (
-               UPDATE ${this.#runsTable()} SET "lastSeq" = "lastSeq" + 1, "stateShared" = true
-               WHERE workflow_name = $1 AND run_id = $2
-               RETURNING "lastSeq"
-             )
-             INSERT INTO ${this.#entriesTable()} (workflow_name, run_id, seq, kind, step_id, payload)
-             SELECT $1, $2, h."lastSeq", 'state-draft', NULL, $3::jsonb FROM h
-             RETURNING seq`,
-            [workflowName, runId, toPgJson(payload)],
-          ),
+        () => [workflowName, runId, toPgJson(payload)],
       );
+      row = fence
+        ? await runFencedStatement<{ seq: number }>(
+            this.#db.client,
+            fence,
+            'appendWorkflowRunStateDraft',
+            `WITH ${runFenceCte(this.#runOwnersTable(), values.length + 1)}, ${update}, w AS (${insert})
+             ${fencedResultSql('w')}`,
+            [...values, ...runFenceParams(fence)],
+          )
+        : await this.#db.client.oneOrNone<{ seq: number }>(`WITH ${update} ${insert}`, values);
     } catch (error) {
       if (isRunFenceConflictError(error)) throw error;
       throw this.#runError('APPEND_WORKFLOW_RUN_STATE_DRAFT', workflowName, runId, error);
@@ -2162,33 +2205,36 @@ export class WorkflowsPG extends WorkflowsStorage {
       // between the check and the write. An empty list matches no status.
       const guard =
         expectedStatus === undefined ? '' : ` WHERE ${await this.#statusExpression('t.snapshot')} = ANY($9::text[])`;
-      const written = await withRunFence(
-        this.#db.client,
-        this.#runOwnersTable(),
-        resolveRunFence(this, fence, runId),
-        'persistWorkflowSnapshot',
-        q =>
-          q.oneOrNone<{ written: number }>(
-            `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} AS t
+      const values = [
+        workflowName,
+        runId,
+        resourceId,
+        sanitizedSnapshot,
+        createdAtValue,
+        updatedAtValue,
+        createdAtValue,
+        updatedAtValue,
+        ...(expectedStatus === undefined ? [] : [Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus]]),
+      ];
+      const resolvedFence = resolveRunFence(this, fence, runId);
+      const upsert = (rows: string) =>
+        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} AS t
                  (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt", "createdAtZ", "updatedAtZ")
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                 ${rows}
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
                  SET "resourceId" = COALESCE($3, t."resourceId"), snapshot = $4, "updatedAt" = $6, "updatedAtZ" = $8${guard}
-                 RETURNING 1 AS written`,
-            [
-              workflowName,
-              runId,
-              resourceId,
-              sanitizedSnapshot,
-              createdAtValue,
-              updatedAtValue,
-              createdAtValue,
-              updatedAtValue,
-              ...(expectedStatus === undefined
-                ? []
-                : [Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus]]),
-            ],
-          ),
+                 RETURNING 1 AS written`;
+      if (!resolvedFence) {
+        return (await this.#db.client.oneOrNone(upsert('VALUES ($1, $2, $3, $4, $5, $6, $7, $8)'), values)) !== null;
+      }
+      const written = await runFencedStatement(
+        this.#db.client,
+        resolvedFence,
+        'persistWorkflowSnapshot',
+        `WITH ${runFenceCte(this.#runOwnersTable(), values.length + 1)},
+         w AS (${upsert('SELECT $1, $2, $3, $4, $5, $6, $7, $8 WHERE EXISTS (SELECT 1 FROM claim)')})
+         ${fencedResultSql('w', '')}`,
+        [...values, ...runFenceParams(resolvedFence)],
       );
       return written !== null;
     } catch (error) {
@@ -2345,11 +2391,19 @@ export class WorkflowsPG extends WorkflowsStorage {
     const resolvedFence = resolveRunFence(this, fence, runId);
     try {
       if (storageVersion === 1) {
-        await withRunFence(this.#db.client, this.#runOwnersTable(), resolvedFence, 'deleteWorkflowRunById', q =>
-          q.none(
-            `DELETE FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} WHERE run_id = $1 AND workflow_name = $2`,
-            [runId, workflowName],
-          ),
+        const del = `DELETE FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} WHERE run_id = $1 AND workflow_name = $2`;
+        if (!resolvedFence) {
+          await this.#db.client.none(del, [runId, workflowName]);
+          return;
+        }
+        await runFencedStatement(
+          this.#db.client,
+          resolvedFence,
+          'deleteWorkflowRunById',
+          `WITH ${runFenceCte(this.#runOwnersTable(), 3)},
+           w AS (${del} AND EXISTS (SELECT 1 FROM claim) RETURNING 1)
+           ${fencedResultSql('w', '')}`,
+          [runId, workflowName, ...runFenceParams(resolvedFence)],
         );
         return;
       }

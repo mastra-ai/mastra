@@ -213,6 +213,8 @@ export class CustomEditor extends Editor {
   private lastCursorRow = -1;
   private lastRenderedRowCount = 0;
   private lastAutocompleteStartRow = -1;
+  /** Rows of the last render taken by the suggestions and the blank row above them. */
+  suggestionRows = 0;
   /** Autocomplete list row under the mouse pointer, so hover follows the pointer when the list scrolls. */
   private hoveredAutocompleteRow: number | undefined;
   private inputLayout: InputLayout | undefined;
@@ -360,6 +362,8 @@ export class CustomEditor extends Editor {
     const contentLines: string[] = [];
     const scrollIndicators: string[] = [];
     let isTop = true;
+    // Lines after the bottom border are the autocomplete suggestions.
+    let suggestionsStart = -1;
     for (const line of editorLines) {
       const stripped = line.replace(ANSI_STRIP_RE, '');
       if (stripped.length > 0 && stripped[0] === '─') {
@@ -371,10 +375,12 @@ export class CustomEditor extends Editor {
           scrollIndicators.push(b(stripped));
           continue;
         }
+        suggestionsStart = contentLines.length;
         continue;
       }
       contentLines.push(line);
     }
+    const hasSuggestions = suggestionsStart > 0 && suggestionsStart < contentLines.length;
 
     const autocompleteList = this.visibleAutocompleteList();
     const paddingX = Math.min(this.getPaddingX(), Math.max(0, Math.floor((contentWidth - 1) / 2)));
@@ -409,10 +415,14 @@ export class CustomEditor extends Editor {
       }
     }
 
+    // Suggestions use the menus' columns (cursor under the prompt glyph), one blank row below the input.
     const rows = contentLines.map((content, i) => {
       const line = `${textColorOpen}${content}${textColorClose}`;
-      return i === 0 ? ` ${prompt} ${line}` : `${' '.repeat(promptWidth)}${line}`;
+      if (i === 0) return ` ${prompt} ${line}`;
+      return hasSuggestions && i >= suggestionsStart ? ` ${line}` : `${' '.repeat(promptWidth)}${line}`;
     });
+    if (hasSuggestions) rows.splice(suggestionsStart, 0, '');
+    this.suggestionRows = hasSuggestions ? rows.length - suggestionsStart : 0;
     // The shade fades to the terminal background on the right, starting a little darker than the
     // sent-message panel (step 2).
     result.push(...fadePanel(rows, width, 1.5));
@@ -423,7 +433,7 @@ export class CustomEditor extends Editor {
     }
 
     // fadePanel adds one edge row above the content; autocomplete rows trail the content.
-    this.lastAutocompleteStartRow = autocompleteList ? 1 + contentLines.length - autocompleteList.renderedRowCount : -1;
+    this.lastAutocompleteStartRow = autocompleteList ? 1 + rows.length - autocompleteList.renderedRowCount : -1;
     this.lastCursorRow = result.findIndex(line => line.includes(CURSOR_MARKER));
     this.lastRenderedRowCount = result.length;
 

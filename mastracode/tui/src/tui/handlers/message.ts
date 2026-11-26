@@ -9,8 +9,8 @@
  * therefore delegated to `addUserMessage` / `renderSignalMessage`; this file
  * only drives the streaming assistant component and its tool boundaries.
  */
-import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
-import type { PendingModelFallback } from '@mastra/code-sdk/auth/account-rotation-processor';
+import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/model-fallback';
+import type { PendingModelFallback } from '@mastra/code-sdk/model-fallback';
 import {
   loadSettings,
   resolveDefaultThinkingLevel,

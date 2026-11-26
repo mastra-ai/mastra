@@ -75,6 +75,21 @@ describe('AgentController ↔ Mastra registration', () => {
     expect(agent).toBeDefined();
   });
 
+  it('keeps backing agents off the parent Mastra when registerAgents is false', async () => {
+    const storage = new InMemoryStore();
+    const agent = createTestAgent();
+    const controller = createTestController({ agent, storage, registerAgents: false });
+    const mastra = new Mastra({ logger: false, storage, agentControllers: { code: controller } });
+
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await session.thread.create();
+
+    expect(mastra.listAgents()).toEqual({});
+    expect(() => mastra.getAgentById('test-agent')).toThrow();
+    expect(agent.getMastraInstance()).toBe(mastra);
+  });
+
   it("keeps an application's agent on the application's pubsub when a standalone controller takes it", async () => {
     const agent = createTestAgent();
     const app = new Mastra({ logger: false, agents: { agent }, pubsub: new EventEmitterPubSub() });

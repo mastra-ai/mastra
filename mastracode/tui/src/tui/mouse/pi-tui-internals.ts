@@ -11,8 +11,6 @@ import type {
   OverlayOptions,
   SelectItem,
   SelectList,
-  SettingItem,
-  SettingsList,
   TUI,
 } from '@earendil-works/pi-tui';
 
@@ -27,6 +25,10 @@ interface TuiInternals {
   previousLines: string[];
   /** Frame line the hardware cursor is on. */
   hardwareCursorRow: number;
+  /** Frame line at the top of the screen at the last render, and the screen size it was drawn for. */
+  previousViewportTop: number;
+  previousWidth: number;
+  previousHeight: number;
   getTopmostVisibleOverlay(): OverlayEntry | undefined;
   resolveOverlayLayout(
     options: OverlayOptions | undefined,
@@ -45,17 +47,6 @@ interface SelectListInternals {
   filteredItems: SelectItem[];
   selectedIndex: number;
   maxVisible: number;
-}
-
-interface SettingsListInternals {
-  items: SettingItem[];
-  filteredItems: SettingItem[];
-  selectedIndex: number;
-  maxVisible: number;
-  searchEnabled: boolean;
-  searchInput: Input | undefined;
-  submenuComponent: Component | null;
-  activateItem(): void;
 }
 
 /** One wrapped row of the editor's layout: a slice of a logical line. */
@@ -99,10 +90,6 @@ export function boxPadding(box: Box): BoxInternals {
 
 export function selectListInternals(list: SelectList): SelectListInternals {
   return list as unknown as SelectListInternals;
-}
-
-export function settingsListInternals(list: SettingsList): SettingsListInternals {
-  return list as unknown as SettingsListInternals;
 }
 
 export function editorInternals(editor: Editor): EditorInternals {

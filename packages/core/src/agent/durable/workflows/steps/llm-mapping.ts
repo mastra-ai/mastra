@@ -20,7 +20,7 @@ import { DurableStepIds } from '../../constants';
 import { assertExecutionOwned, isExecutionFenceError } from '../../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
 import { getRunRegistryEntry } from '../../run-registry';
-import { segmentOwnsStep, segmentSpanData } from '../../segment-spans';
+import { liveSegmentSpan, segmentOwnsStep, segmentSpanData } from '../../segment-spans';
 import type {
   DurableLLMStepOutput,
   DurableToolCallOutput,
@@ -231,10 +231,12 @@ export function createDurableLLMMappingStep() {
       if (llmOutput.stepSpanData) {
         try {
           const initData = getInitData() as DurableAgenticWorkflowInput;
-          const segment = segmentSpanData(requestContext, _runId, initData, getRunRegistryEntry(_runId, mastra));
+          const reg = getRunRegistryEntry(_runId, mastra);
+          const segment = segmentSpanData(requestContext, _runId, initData, reg);
           if (segmentOwnsStep(segment, llmOutput.stepSpanData)) {
             const observability = mastra?.observability?.getSelectedInstance({ requestContext });
-            stepSpan = observability?.rebuildSpan(llmOutput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>);
+            const stepSpanData = llmOutput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>;
+            stepSpan = liveSegmentSpan(stepSpanData, reg?.openStepSpan) ?? observability?.rebuildSpan(stepSpanData);
           } else {
             // A suspension ended the step. It reported no usage when the tool calls ran side by side.
             suspensionReportedUsage = !toolCallsRunSideBySide({

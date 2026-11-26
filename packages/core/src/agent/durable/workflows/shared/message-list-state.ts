@@ -8,7 +8,7 @@ import type { DehydratedMessageListState, StoredMessageLoader } from '../../../m
 import { createStoredMessageLoader, isMemoryMessageRef } from '../../../message-list/memory-message-refs';
 import type { SerializedMessageListState } from '../../../message-list/state';
 import { getRunMessageRefs, peekRunMessageRefs, releaseRunMessageRefs } from '../../run-message-refs';
-import { getRunRegistryEntry } from '../../run-registry';
+import { getLiveRunRequestContext, getRunRegistryEntry } from '../../run-registry';
 import type { SerializableDurableState } from '../../types';
 import { restoreRequestContext } from '../../utils/resolve-runtime';
 
@@ -255,10 +255,16 @@ function runTranscriptRefs(params: RunParams) {
 
 /** The run's memory: the live instance in this process, else re-resolved from the agent. */
 async function runMemory(params: RunParams, run: RunIdentity): Promise<MastraMemory | undefined> {
-  const memory = run.runId ? getRunRegistryEntry(run.runId, params.mastra)?.memory : undefined;
-  if (memory || !params.mastra || !run.agentId) return memory;
+  const entry = run.runId ? getRunRegistryEntry(run.runId, params.mastra) : undefined;
+  if (entry?.memory || !params.mastra || !run.agentId) return entry?.memory;
   const agent = params.mastra.getAgentById(run.agentId);
-  return agent.getMemory({ requestContext: restoreRequestContext(run.requestContextEntries, params.requestContext) });
+  return agent.getMemory({
+    requestContext: restoreRequestContext(
+      run.requestContextEntries,
+      params.requestContext,
+      getLiveRunRequestContext(entry, run.runId, params.requestContext),
+    ),
+  });
 }
 
 /** The most recent transcript in a snapshot: workflow state, else the last step output carrying one. */

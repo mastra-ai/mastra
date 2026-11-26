@@ -109,7 +109,7 @@ describe('Board configuration', () => {
     expect(screen.getByRole('button', { name: 'Back to Release Preview: Board settings' })).toBeInTheDocument();
   });
 
-  it('opens settings for the board in view from the Boards header, then switches to another board', async () => {
+  it('opens intake for the board in view from the Boards header, then switches to another board', async () => {
     stubFactory();
     serveCatalog();
     serveBoard(releaseBoard(), RELEASE_URL);
@@ -117,7 +117,7 @@ describe('Board configuration', () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole('link', { name: 'Board settings' }));
-    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/boards/release/config`);
+    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/boards/release/intake`);
 
     serveBoard(storedWorkBoard());
     await user.click(await configNav().findByRole('button', { name: 'Board: Release Preview' }));

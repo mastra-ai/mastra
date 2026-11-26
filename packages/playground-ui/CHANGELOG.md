@@ -1,5 +1,278 @@
 # @mastra/playground-ui
 
+## 72.0.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`d8c3485`](https://github.com/mastra-ai/mastra/commit/d8c348506b260c0e86956056724124feba33bf9e), [`67c1571`](https://github.com/mastra-ai/mastra/commit/67c15714862bbc881bb5191a079abc39ec62c45e)]:
+  - @mastra/ai-sdk@1.12.2-alpha.1
+  - @mastra/core@1.87.0-alpha.2
+  - @mastra/client-js@1.62.1-alpha.2
+  - @mastra/react@1.17.0-alpha.2
+
+## 72.0.0-alpha.2
+
+### Patch Changes
+
+- Fixed the chat's connect-account card leaving the agent stuck when the user doesn't want to connect. The card now has an X in its top-right corner: it closes any open connect window and lets the agent continue, telling it the user cancelled. ([#31597](https://github.com/mastra-ai/mastra/pull/31597))
+
+## 72.0.0-alpha.1
+
+### Patch Changes
+
+- Fixed the multiple-select `Combobox` so `allowCustomValue` and `onInputValueChange` work as they do on the single select. Typed text is offered as an option and becomes a chip when picked. A selected value that `options` does not list now keeps its chip and stays in the value when another option is picked, with or without `allowCustomValue`. Such a value is also shown in the popup, where it can be unticked. With `allowCustomValue`, typing the exact value of an option whose label differs now offers that option, on single and multiple selects. ([#31555](https://github.com/mastra-ai/mastra/pull/31555))
+
+  ```tsx
+  const [selected, setSelected] = useState<string[]>([]);
+
+  <Combobox multiple allowCustomValue options={models} value={selected} onValueChange={setSelected} />;
+  ```
+
+- Updated dependencies [[`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`f19b0cf`](https://github.com/mastra-ai/mastra/commit/f19b0cf20c347921358943bb70c14051493088de), [`18439ea`](https://github.com/mastra-ai/mastra/commit/18439ea68fd5b009119e80af05cabc5ce5004c2b), [`21aee63`](https://github.com/mastra-ai/mastra/commit/21aee631dbb59e843b265706438865928185d500)]:
+  - @mastra/core@1.87.0-alpha.1
+  - @mastra/client-js@1.62.1-alpha.1
+  - @mastra/react@1.17.0-alpha.1
+
+## 72.0.0-alpha.0
+
+### Minor Changes
+
+- Added the chat session transcript (reducer, message and tool rows, `TranscriptEntries`) under `@mastra/playground-ui/domains/chat/transcript`. Host-specific rows plug in through `TranscriptSlotsProvider`: ([#31437](https://github.com/mastra-ai/mastra/pull/31437))
+
+  ```tsx
+  import { TranscriptEntries, TranscriptSlotsProvider } from '@mastra/playground-ui/domains/chat/transcript';
+
+  <TranscriptSlotsProvider slots={{ SubmitPlan: PlanCard }}>
+    <TranscriptEntries entries={transcript.entries} onApprove={approve} onRespond={respond} />
+  </TranscriptSlotsProvider>;
+  ```
+
+  A host that leaves a slot out gets:
+
+  - `RunError`: an error notice with the provider's message.
+  - `Notification` and `NotificationSummary`: a notice with the message, without links.
+  - `Approval`: a working approve/decline card.
+  - `Suspension`: a read-only row naming what the agent is waiting on, marked "Waiting for input", with no way to answer it. A paused call inside a message that asks a question keeps its inline answer form.
+  - `Subagent`: nothing, because the tool call that started the subagent already names it.
+  - `SubmitPlan`: the generic tool row, with no way to approve or revise the plan.
+  - `DataPart`: nothing, so every `data-*` part stays hidden. Pass `{ draws, Component }` to draw your own: a part `draws` accepts renders with `Component`, and the activity line splits around it.
+
+- Moved the art in `EmptyState`'s `split` layout to the right of the text, and the text first in the DOM. In a narrow container the art still sits above the text. ([#31406](https://github.com/mastra-ai/mastra/pull/31406))
+
+- Added Factory board cards, list rows, filters, view controls, card activity and the run queue menu under `@mastra/playground-ui/domains/factory`. ([#31434](https://github.com/mastra-ai/mastra/pull/31434))
+
+  ```tsx
+  import { BoardCard, CardActivity } from '@mastra/playground-ui/domains/factory';
+
+  <BoardCard title={card.title} href={`/cards/${card.id}`} dragPayload={dragPayload} LinkComponent={RouterLink}>
+    <span>{card.title}</span>
+    <CardActivity worker={{ name: card.lastWorker }} entries={activityEntries} />
+  </BoardCard>;
+  ```
+
+- Added Factory board layout components (stages, columns, list, drag and drop, virtual scrolling, skeletons, inline card composer) under `@mastra/playground-ui/domains/factory` so hosts other than Factory can render a board. ([#31433](https://github.com/mastra-ai/mastra/pull/31433))
+
+  ```tsx
+  import { BoardStages, stageTone } from '@mastra/playground-ui/domains/factory';
+  import { Badge } from '@mastra/playground-ui/components/Badge';
+
+  <BoardStages
+    layout="board"
+    stages={stages.map(stage => ({
+      stage: { id: stage.id, label: stage.name },
+      taskCount: stage.cards.length,
+      loading: false,
+      collapsed: false,
+      groupOpen: true,
+      onGroupOpenChange: open => toggleStage(stage.id, open),
+      cards: stage.cards.map(card => <MyCard key={card.id} card={card} />),
+    }))}
+    totalTaskCount={totalCards}
+    onDrop={(payload, toStage) => moveCard(payload.id, toStage)}
+    toolbar={<MyToolbar />}
+  />
+
+  <Badge variant={stageTone(stage.id)}>{stage.name}</Badge>
+  ```
+
+  `stageTone(stage)` gives a phase's badge colour, matching its column tint, so a host's stage badges and board columns agree.
+
+- Added Factory board settings components (phase walkthrough, starts toggle, phase run fields, board map, board settings navigation) under `@mastra/playground-ui/domains/factory`. ([#31435](https://github.com/mastra-ai/mastra/pull/31435))
+
+  ```tsx
+  import { PhaseRunFields, phaseRunFieldsValid } from '@mastra/playground-ui/domains/factory';
+
+  <PhaseRunFields
+    phaseName={phase.name}
+    instructions={phase.instructions}
+    goal={phase.goal}
+    onInstructionsChange={instructions => updatePhase({ instructions })}
+    onGoalChange={goal => updatePhase({ goal })}
+  />
+  <Button disabled={!phaseRunFieldsValid(phase.instructions, phase.goal)}>Save</Button>
+  ```
+
+- Added `FactoryBoardsNav` and `FactorySessionsNav` sidebar sections under `@mastra/playground-ui/domains/factory`, so a host other than Factory can render Factory's Boards and Sessions lists with its own router. ([#31436](https://github.com/mastra-ai/mastra/pull/31436))
+
+  ```tsx
+  import { FactoryBoardsNav, FactorySessionsNav } from '@mastra/playground-ui/domains/factory';
+
+  <FactoryBoardsNav
+    boards={boards?.map(board => ({ id: board.id, title: board.name, href: `/boards/${board.id}` }))}
+    isActive={href => pathname === href}
+    onNavigate={closeMobileSidebar}
+  />
+  <FactorySessionsNav
+    sessions={sessions?.map(session => ({ id: session.id, name: session.title, href: `/sessions/${session.id}` }))}
+    error={isError}
+    onRetry={refetch}
+    isActive={href => pathname === href}
+    onNavigate={closeMobileSidebar}
+  />
+  ```
+
+  - They show the same states as Factory's sidebar: icon-and-label placeholder rows while loading, a note when the list is empty, and a load error with an optional Retry. These are exported as `SidebarNavigationSkeleton`, `SidebarEmptyNote` and `SidebarLoadError` for other sidebar lists.
+  - `onNavigate` runs only when one of the section's own links is followed, so a board action such as a menu doesn't close a mobile sidebar.
+  - `sessionBeltLabel` names a session's activity the way Factory does, for example "Fix login waiting on you".
+
+- Reduced how long the workspace file viewer blocks the browser on large or minified files, and added a formatted view for JSON files. ([#31486](https://github.com/mastra-ai/mastra/pull/31486))
+
+  - JSON files open indented, with **Formatted** and **Raw** tabs. Formatting only changes whitespace, so values, key order and large numbers stay exactly as stored. **Raw** shows the file as stored, and the copy button copies the view you are looking at.
+  - JSON files longer than 50,000 characters open in a read-only editor that keeps syntax colors and draws only the lines on screen, instead of one element per syntax token for the whole file.
+  - Other code blocks longer than 50,000 characters render as plain text instead of one element per syntax token. This cuts the main-thread work when a large file opens; very large files can still cause a short pause.
+  - Binary files, such as audio, show "No preview available" instead of their raw bytes.
+
+- `LogView` and `LogStream` now show deploy and build output as well as structured logs. ([#31502](https://github.com/mastra-ai/mastra/pull/31502))
+
+  - A line needs only a `message`. Lines without a time or level keep their columns, with a neutral bar.
+  - Terminal color and bold codes render with theme colors; other escape codes are dropped.
+  - An optional `icon` (`{ element, label }`) puts a muted icon before the message, such as build or runtime, named on hover and for screen readers.
+  - `LogView.List` takes a `ref` with `scrollToLog(id)`, to bring a line such as a deploy error into view.
+  - `LogView.Count` and `LogView.Copy` show the line count and copy every line, grouped with `LogView.Refresh` in `LogView.Actions`.
+  - `height="fill"` makes the panel fill its container.
+  - Hovering a log time shows it in your zone and in UTC, styled like `RelativeTimestamp`. `timeFractionDigits` sets how many digits follow the seconds (2 by default).
+
+  `formatTimestampPrecise` takes `fractionDigits` and `timeZone`.
+
+  ```tsx
+  <LogView height="fill">
+    <LogView.Header>
+      <LogView.Title>Build logs</LogView.Title>
+      <LogView.Actions>
+        <LogView.Count count={lines.length} />
+        <LogView.Copy content={raw} />
+      </LogView.Actions>
+    </LogView.Header>
+    <LogView.List ref={list} logs={lines} logIdMap={ids} order="oldest-first" />
+  </LogView>
+  ```
+
+- Added `TraceDatasetItemDialog` and `useTraceAsItemData`, so a host can read a trace from one server and save it as a dataset item on another. The dialog takes the trace's root span and trajectory as props and saves through the Mastra client in context. `useTraceAsItemData` loads them through whichever client it runs under. ([#31385](https://github.com/mastra-ai/mastra/pull/31385))
+
+  ```tsx
+  import { TraceDatasetItemDialog } from '@mastra/playground-ui/domains/observability/components/trace-dataset-item-dialog';
+  import { useTraceAsItemData } from '@mastra/playground-ui/domains/observability/hooks/use-trace-as-item-data';
+
+  // Under the client that serves traces
+  const data = useTraceAsItemData({ traceId, rootSpanId, enabled: isOpen });
+
+  // Under the client that serves datasets
+  <TraceDatasetItemDialog {...data} traceId={traceId} isOpen={isOpen} onClose={onClose} />;
+  ```
+
+  **Deprecated:** `TraceAsItemDialog`. It keeps its props and behavior, and reads the trace through the same client it saves with. Use `TraceDatasetItemDialog` with `useTraceAsItemData` instead.
+
+- Added `EnvironmentBuildStatus` and `EnvironmentBuildHistory` (from `@mastra/playground-ui/components/EnvironmentBuild`) to show an environment's last build status with a Build now action, and its build history with each build's error and logs. ([#31430](https://github.com/mastra-ai/mastra/pull/31430))
+
+- `ModelPicker` takes `customModel`, which turns the search text into a "Use provider/model" option for a model the list doesn't have, and `chevron={false}` to drop the trigger's chevron when the whole row is the trigger. The picker shows whatever `customModel` returns, so return `undefined` for an empty provider or model and for models already listed. ([#31232](https://github.com/mastra-ai/mastra/pull/31232))
+
+  ```tsx
+  <ModelPicker
+    providers={providers}
+    value={value}
+    onValueChange={setValue}
+    customModel={query => {
+      const slash = query.indexOf('/');
+      if (slash <= 0 || slash === query.length - 1) return undefined;
+      return { provider: query.slice(0, slash), model: query.slice(slash + 1) };
+    }}
+    chevron={false}
+  />
+  ```
+
+- Added a shared `ActivityLine` to the session transcript so any host can show what a running agent is doing (running tool, thinking, saving memory) from transcript entries and a busy flag. Factory's activity line now renders through it. ([#31450](https://github.com/mastra-ai/mastra/pull/31450))
+
+  ```tsx
+  import { ActivityLine } from '@mastra/playground-ui/domains/chat/transcript';
+
+  <ActivityLine entries={transcript.entries} busy={busy} runsStarted={runsStarted} stretchLive={false} />;
+  ```
+
+- Added `SessionSurface` and `SessionComposer` so any host can render a Factory-style session page: transcript, task panel, loading veil and docked composer. The host passes the conversation as children, so its error notice can replace the older-history loader (`TranscriptHistoryLoader`), the empty state and the transcript together. Factory now renders its session page through them, with no change in behavior. ([#31450](https://github.com/mastra-ai/mastra/pull/31450))
+
+  ```tsx
+  import { SessionComposer, SessionSurface, TranscriptEntries } from '@mastra/playground-ui/domains/chat/transcript';
+
+  <SessionSurface
+    busy={busy}
+    preparing={loadingFirstPage}
+    tasks={tasks}
+    loadMore={{ hasMore, isLoading, load: loadOlder }}
+    composerLabel="Message composer"
+    composer={
+      <SessionComposer
+        onSubmit={send}
+        busy={busy}
+        images={images}
+        onRemoveImage={removeImage}
+        input={{ value: draft, onChange: event => setDraft(event.target.value) }}
+        showAbort={busy}
+        sendDisabled={!draft.trim()}
+        onAbort={abort}
+      />
+    }
+  >
+    <TranscriptEntries entries={transcript.entries} onApprove={approve} onRespond={respond} />
+  </SessionSurface>;
+  ```
+
+  Annotations are opt-in. Inside a `ChatAnnotationsProvider`, add `<TranscriptAnnotations />` to the children and pass `annotations={<ComposerAnnotations />}` to `SessionComposer`.
+
+### Patch Changes
+
+- Fixed **Add to dataset** in the trace drawer saving an empty item when clicked before the trace loaded. The button now waits for the trace, like **Score trace**. ([#31385](https://github.com/mastra-ai/mastra/pull/31385))
+
+- Fixed two dashboard rendering issues with trace and span data. ([#31517](https://github.com/mastra-ai/mastra/pull/31517))
+
+  **Average, rate and percentile lines no longer drop to 0 where nothing happened.** A time bucket with no spans used to read 0 for every measure, so a P95 latency line fell to 0ms wherever an agent had no runs. Counts, sums and distinct counts still read 0 there; averages, rates and percentiles now leave the bucket without a value.
+
+  **Multi-view table, KPI and score cards no longer show a blank gap under their tabs.** When such a card sat beside a taller card in its row, the view tabs stretched to fill the spare height. The spare height now falls below the card's body.
+
+- Loading placeholders in the Factory board, sidebar, session transcript, settings and Knowledge components now match the size and layout of the content they stand in for, so less of the page moves when the data arrives. ([#31561](https://github.com/mastra-ai/mastra/pull/31561))
+
+  `SettingsSkeleton` takes an optional `placeholder` that it repeats for each row, so a section can show rows shaped like its real ones:
+
+  ```tsx
+  <SettingsSkeleton
+    label="Loading versions"
+    placeholder={<SettingsItem title={<SkeletonText line="text-label" className="w-40" />} />}
+  />
+  ```
+
+- Added MCP Server to the Primitive type filter on the Traces, Logs and Metrics pages. ([#31460](https://github.com/mastra-ai/mastra/pull/31460))
+
+- Fixed dashboard chart series over grouped Traces and Spans queries. A series now reads only the groups it picks (or every group but those it leaves out), named like metrics series: the query's `groupBy` values joined by `|`, with `''` for a missing value. Before, every group's rows were added into one line whatever the series picked. ([#31490](https://github.com/mastra-ai/mastra/pull/31490))
+
+  Charts also now report a series that adds up every group of a measure that can't be added up (averages, percentiles, minimums, maximums, error rates, distinct counts), as they already did for metrics; pick one group instead.
+
+- Fixed dashboard charts on Traces and Spans failing to load over windows longer than about four days. A bucketed trace or span query with no limit of its own now asks for as many groups as fit the server's 10 000-row cap (an hourly week keeps 59 groups instead of failing), and still uses the server's default of 100 where that fits. Queries that set their own limit are sent unchanged. ([#31479](https://github.com/mastra-ai/mastra/pull/31479))
+
+- Updated dependencies [[`0aec008`](https://github.com/mastra-ai/mastra/commit/0aec008954c873153e6037f1d11b26d1a3156d87), [`bd6e62f`](https://github.com/mastra-ai/mastra/commit/bd6e62fe098784b149d7d04948bc66ca68108d0b), [`dc78e49`](https://github.com/mastra-ai/mastra/commit/dc78e49845d7e5bfc2aa826b24e9a104f9428c33), [`9a6be2d`](https://github.com/mastra-ai/mastra/commit/9a6be2d940906b37b573bbf14fdd6ee7633e4c5e), [`7e1eab0`](https://github.com/mastra-ai/mastra/commit/7e1eab088a61f88cd7875bf50118ff3223b5efd7), [`c2b28d4`](https://github.com/mastra-ai/mastra/commit/c2b28d49a7ba6e0339b694e22607869f75b1dd04), [`a5b8a78`](https://github.com/mastra-ai/mastra/commit/a5b8a782708b1bbb1c5b132a2f8de8c0b0145415), [`4fb02e4`](https://github.com/mastra-ai/mastra/commit/4fb02e4f6205d7ee6f1335279ac09841d2482d13), [`d6f54c1`](https://github.com/mastra-ai/mastra/commit/d6f54c1a148edc2d605b3a4c9194d30a85929320), [`a5b8a78`](https://github.com/mastra-ai/mastra/commit/a5b8a782708b1bbb1c5b132a2f8de8c0b0145415), [`d24e94e`](https://github.com/mastra-ai/mastra/commit/d24e94e13bce7ec2b69f2e3d070a7daa8bf86ec7), [`dd23914`](https://github.com/mastra-ai/mastra/commit/dd239141c545248a4581981256d6a01d81022a72), [`2fa9b3e`](https://github.com/mastra-ai/mastra/commit/2fa9b3e0396ccadc359eb562c32588d7dfad88b4), [`d24e94e`](https://github.com/mastra-ai/mastra/commit/d24e94e13bce7ec2b69f2e3d070a7daa8bf86ec7), [`8d97b8e`](https://github.com/mastra-ai/mastra/commit/8d97b8e1144ecd3ede78bb81b9285e01ee8ca0d7), [`b15af8b`](https://github.com/mastra-ai/mastra/commit/b15af8be275465422d016ebba2882ee5252a69e2), [`ab3f19d`](https://github.com/mastra-ai/mastra/commit/ab3f19dad1e65ad176c97e71ffacad5d5b5fd773), [`17cfd26`](https://github.com/mastra-ai/mastra/commit/17cfd2613995be04e9f3ab8a1b91d4d0a26ae800), [`04b03dd`](https://github.com/mastra-ai/mastra/commit/04b03dd6a50a60cc900f255485f8993ade206a35), [`2d35c78`](https://github.com/mastra-ai/mastra/commit/2d35c78da97db7d3ce5570882cac441a51f4386a), [`ab30ac2`](https://github.com/mastra-ai/mastra/commit/ab30ac2b5ff3bbd6c00bd1623bac1c2d517bbcd1), [`b6df61e`](https://github.com/mastra-ai/mastra/commit/b6df61eec51f6352696c7eca45beadf00f794230), [`0e27198`](https://github.com/mastra-ai/mastra/commit/0e27198791549ae6a4d4e64e24ba8c2b56afde46), [`ad02b1c`](https://github.com/mastra-ai/mastra/commit/ad02b1c61743b71d32728947a2d7c0ab1700d1b5), [`127897c`](https://github.com/mastra-ai/mastra/commit/127897c8573c62cdedad921b4ad33138b25f181c), [`da66164`](https://github.com/mastra-ai/mastra/commit/da66164f2827ee6cee59d1691a2c78e58601cf2f), [`3a325bb`](https://github.com/mastra-ai/mastra/commit/3a325bb29be1bf6f64dd06b3c129a64a2b706069), [`7a3b196`](https://github.com/mastra-ai/mastra/commit/7a3b1968272b9689cb2c760efed87d53cba39259), [`178e12f`](https://github.com/mastra-ai/mastra/commit/178e12fbeabbe096418e63a9eab4a1153cc61d89), [`9de2483`](https://github.com/mastra-ai/mastra/commit/9de24839be8a44477b56c61a9878282781b12c84), [`cbcf337`](https://github.com/mastra-ai/mastra/commit/cbcf337aabfc0a0f8ea9387d5b06bd893021ff6f), [`9100eb8`](https://github.com/mastra-ai/mastra/commit/9100eb8a78c79046d0001541734fc769254f7119), [`3f526af`](https://github.com/mastra-ai/mastra/commit/3f526aff4a2d59f1dc4bb778e7181cdedd954ec0), [`cbcf337`](https://github.com/mastra-ai/mastra/commit/cbcf337aabfc0a0f8ea9387d5b06bd893021ff6f), [`f7471e5`](https://github.com/mastra-ai/mastra/commit/f7471e5a0bcaf260b66476a4bb9a01be71b03738), [`4af262e`](https://github.com/mastra-ai/mastra/commit/4af262e9c0c47e414cfe0cbc9e0c61275a7441bc), [`d66b3f1`](https://github.com/mastra-ai/mastra/commit/d66b3f151be25128500d1d1acd1d9701b191b623)]:
+  - @mastra/core@1.87.0-alpha.0
+  - @mastra/client-js@1.62.1-alpha.0
+  - @mastra/react@1.17.0-alpha.0
+  - @mastra/ai-sdk@1.12.2-alpha.0
+
 ## 71.0.0
 
 ### Minor Changes

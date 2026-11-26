@@ -1,15 +1,9 @@
-import { Box, Editor, SelectList, SettingsList, Text, TUI } from '@earendil-works/pi-tui';
+import { Box, Editor, SelectList, Text, TUI } from '@earendil-works/pi-tui';
 import type { Terminal } from '@earendil-works/pi-tui';
 import { describe, expect, it } from 'vitest';
 
-import { getEditorTheme, getSelectListTheme, getSettingsListTheme } from '../theme.js';
-import {
-  boxPadding,
-  editorInternals,
-  selectListInternals,
-  settingsListInternals,
-  tuiInternals,
-} from './pi-tui-internals.js';
+import { getEditorTheme, getSelectListTheme } from '../theme.js';
+import { boxPadding, editorInternals, selectListInternals, tuiInternals } from './pi-tui-internals.js';
 
 /**
  * Upgrade guard: mouse support reads pi-tui private state. These run against the real pinned pi-tui
@@ -148,6 +142,9 @@ describe('pi-tui internals used by mouse support', () => {
     internals.doRender();
     expect(internals.previousLines.some(line => line.includes('frame'))).toBe(true);
     expect(typeof internals.hardwareCursorRow).toBe('number');
+    expect(internals.previousViewportTop).toBe(0);
+    expect(internals.previousWidth).toBe(80);
+    expect(internals.previousHeight).toBe(24);
     expect(internals.getTopmostVisibleOverlay()).toBeUndefined();
 
     const overlay = new Text('modal', 0, 0);
@@ -159,7 +156,7 @@ describe('pi-tui internals used by mouse support', () => {
     expect(typeof layout.col).toBe('number');
   });
 
-  it('Box, SelectList and SettingsList expose the fields used for hit-testing', () => {
+  it('Box and SelectList expose the fields used for hit-testing', () => {
     expect(boxPadding(new Box(4, 2))).toMatchObject({ paddingX: 4, paddingY: 2 });
 
     const items = [
@@ -168,20 +165,5 @@ describe('pi-tui internals used by mouse support', () => {
     ];
     const list = selectListInternals(new SelectList(items, 7, getSelectListTheme()));
     expect(list).toMatchObject({ filteredItems: items, selectedIndex: 0, maxVisible: 7 });
-
-    const settings = settingsListInternals(
-      new SettingsList(
-        [{ id: 'mode', label: 'Mode', currentValue: 'x', values: ['x', 'y'] }],
-        5,
-        getSettingsListTheme(),
-        () => {},
-        () => {},
-      ),
-    );
-    expect(settings).toMatchObject({ selectedIndex: 0, maxVisible: 5, searchEnabled: false, submenuComponent: null });
-    expect(settings.items).toHaveLength(1);
-    expect(settings.filteredItems).toHaveLength(1);
-    settings.activateItem();
-    expect(settings.items[0]!.currentValue).toBe('y');
   });
 });

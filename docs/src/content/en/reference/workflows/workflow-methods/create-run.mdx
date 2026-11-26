@@ -38,6 +38,13 @@ await workflow.createRun()
     description: 'Optional flag to disable scorers for this workflow run',
     isOptional: true,
   },
+  {
+    name: 'leaseTtlMs',
+    type: 'number',
+    description:
+      "Overrides the workflow's leaseTtlMs option for this run, in milliseconds. Values under 1000 are raised to 1000. It isn't saved with the run, so another instance that restarts the run uses the workflow's value. A later createRun() for the same run ID in this process can change it before the run starts. See [steps that block the event loop](/docs/workflows/overview#steps-that-block-the-event-loop).",
+    isOptional: true,
+  },
 ]}
 />
 

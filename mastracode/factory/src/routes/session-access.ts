@@ -3,6 +3,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { Context, MiddlewareHandler } from 'hono';
 
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
+import { isFactoryPrincipalId } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import { UUID_PATTERN } from './contracts.js';
@@ -29,12 +30,20 @@ export function canViewSourceControlSession(
   return session.visibility !== 'private' || session.userId === viewer.userId;
 }
 
-/** A teammate steers a shared session; only its owner changes the model and thinking level its turns run on. */
-export function canSwitchSessionModel(
-  session: Pick<SourceControlSession, 'userId'>,
+/**
+ * A teammate steers a shared session; only its owner changes the model and thinking level its turns run on.
+ * A session the Factory owns has no person to ask, so an org admin, who already sets the Factory's
+ * default model, changes it instead. The choice stays on that session's thread.
+ */
+export async function canSwitchSessionModel(
+  c: Context,
+  auth: Pick<RouteAuth, 'isOrganizationAdmin'>,
+  session: Pick<SourceControlSession, 'orgId' | 'userId'>,
   viewer: { userId: string },
-): boolean {
-  return session.userId === viewer.userId;
+): Promise<boolean> {
+  if (session.userId === viewer.userId) return true;
+  if (!isFactoryPrincipalId(session.userId)) return false;
+  return auth.isOrganizationAdmin(c, session.orgId);
 }
 
 /** The controller reads the guard needs to find which resource a session runs on. */
@@ -55,6 +64,7 @@ const MEMORY_PATH = /^\/api\/memory(\/|$)/;
 const ACTIVE_RUNS_PATH = /\/agent-controller\/[^/]+\/active-runs\/?$/;
 const SWITCH_MODEL_PATH = /\/agent-controller\/[^/]+\/sessions\/[^/]+\/model\/?$/;
 const SET_STATE_PATH = /\/agent-controller\/[^/]+\/sessions\/[^/]+\/state\/?$/;
+const SESSION_MODEL_PATH = /^\/web\/config\/session-model\/?$/;
 
 /** A form field as the server adapter reads it: JSON when it parses, else the raw text. */
 function parseFormField(value: string): unknown {
@@ -91,6 +101,7 @@ async function bodyField(c: Context, field: string): Promise<string | undefined>
 async function switchesModel(c: Context): Promise<boolean> {
   const { method, path } = c.req;
   if (method === 'POST' && SWITCH_MODEL_PATH.test(path)) return true;
+  if (method === 'PUT' && SESSION_MODEL_PATH.test(path)) return true;
   if (method !== 'PUT' || !SET_STATE_PATH.test(path)) return false;
   const state = await bodyValue(c, 'state');
   return typeof state === 'object' && state !== null && 'thinkingLevel' in state;
@@ -123,7 +134,7 @@ async function addressed(c: Context): Promise<{ sessionIds: string[]; resourceId
     const target = method === 'POST' && SET_RESOURCE_PATH.test(path) ? await bodyField(c, 'newResourceId') : undefined;
     return { sessionIds: [sessionId], resourceIds: target ? [target] : [] };
   }
-  if (method === 'POST' && CREATE_SESSION_PATH.test(path)) {
+  if ((method === 'POST' && CREATE_SESSION_PATH.test(path)) || (method === 'PUT' && SESSION_MODEL_PATH.test(path))) {
     // Get-or-create: without a `sessionId` the session is addressed by its resourceId.
     const [sessionId, resourceId] = await Promise.all([bodyField(c, 'sessionId'), bodyField(c, 'resourceId')]);
     const id = sessionId ?? resourceId;
@@ -157,7 +168,8 @@ async function addressed(c: Context): Promise<{ sessionIds: string[]; resourceId
  * the authorized resource, or the caller's own user id when none is named. The
  * controller-wide active-runs list drops runs on unreachable resources.
  * Denials answer 404 so ids do not leak existence. A teammate who can see a
- * session but tries to change its model or thinking level gets 403. With auth
+ * session but tries to change its model or thinking level gets 403, unless the
+ * Factory owns it and they are an org admin. With auth
  * disabled there is no tenant to protect and everything passes through.
  */
 export function createSessionAccessGuard({
@@ -219,8 +231,11 @@ export function createSessionAccessGuard({
     if (await switchesModel(ctx)) {
       for (const sessionId of target.sessionIds) {
         const session = await sessions.getBySessionId(sessionId);
-        if (session && !canSwitchSessionModel(session, viewer)) {
-          return c.json({ error: 'Only the session’s owner can change its model' }, 403);
+        if (session && !(await canSwitchSessionModel(ctx, auth, session, viewer))) {
+          const error = isFactoryPrincipalId(session.userId)
+            ? 'Only an organization admin can change the model of a session the Factory owns'
+            : 'Only the session’s owner can change its model';
+          return c.json({ error }, 403);
         }
       }
     }
