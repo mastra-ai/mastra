@@ -1,4 +1,3 @@
-import type { LanguageModelV2CallOptions } from '@ai-sdk/provider-v5';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { WebSearchProviderToolId } from '../../tools/builtin/web-search';
 
@@ -12,20 +11,7 @@ const NATIVE_WEB_SEARCH_TOOL_IDS: Record<WebSearchProviderToolId, true> = {
   'xai.web_search': true,
 };
 
-/**
- * True for a `mastra/...` model id, the ids served by the Mastra gateway. A custom gateway that
- * forwards those models keeps the id under its own prefix (`<gatewayId>/mastra/...`).
- */
-export function isMastraGatewayModelId(routerId: string, gatewayId: string): boolean {
-  return routerId.startsWith('mastra/') || routerId.startsWith(`${gatewayId}/mastra/`);
-}
-
-/** True for the gateway's OpenRouter chat models, false for its native Anthropic OAuth models. */
-export function isOpenRouterModel(model: { provider?: unknown }): boolean {
-  return (
-    typeof model.provider === 'string' && (model.provider === 'openrouter' || model.provider.startsWith('openrouter.'))
-  );
-}
+type GatewayTool = { type: string; id?: string; args?: Record<string, unknown> };
 
 /**
  * The Mastra gateway's chat endpoint only runs `openrouter:*` server tools. Another provider's
@@ -35,12 +21,10 @@ export function isOpenRouterModel(model: { provider?: unknown }): boolean {
  * A native web search tool with no arguments is swapped for the gateway's web search, which works
  * for every tool-calling model. Any other native tool fails here with an actionable message.
  */
-export function prepareToolsForMastraGateway(
-  options: LanguageModelV2CallOptions,
-  routerId: string,
-): LanguageModelV2CallOptions {
+export function prepareToolsForMastraGateway<T extends { tools?: GatewayTool[] }>(options: T, routerId: string): T {
   // Tools normally arrive as `provider-defined`; `provider` is the AI SDK 6 spelling of the same tool.
-  const isProviderTool = (tool: { type: string }) => tool.type === 'provider-defined' || tool.type === 'provider';
+  const isProviderTool = (tool: GatewayTool): tool is GatewayTool & { id: string } =>
+    tool.type === 'provider-defined' || tool.type === 'provider';
 
   if (!options.tools?.some(isProviderTool)) {
     return options;
@@ -50,7 +34,7 @@ export function prepareToolsForMastraGateway(
     if (!isProviderTool(tool)) {
       return tool;
     }
-    const { id, args } = tool as { id: string; args?: Record<string, unknown> };
+    const { id, args } = tool;
     if (id.startsWith('openrouter.')) {
       return tool;
     }
@@ -73,5 +57,5 @@ export function prepareToolsForMastraGateway(
     });
   });
 
-  return { ...options, tools: tools as LanguageModelV2CallOptions['tools'] };
+  return { ...options, tools };
 }
