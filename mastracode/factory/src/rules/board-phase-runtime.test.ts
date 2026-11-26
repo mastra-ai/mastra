@@ -546,6 +546,7 @@ it.skipIf(!postgresUrl || !redisUrl || !!workerPrefix).each([false, true])(
           expect(owner.processHandle.kill('SIGKILL')).toBe(true);
           expect((await owner.closed)[1]).toBe('SIGKILL');
           const thread = (await memory.getThreadById({ threadId: sessionId }))!;
+          vi.stubEnv('OPENAI_API_KEY', 'sk-phase-test');
           replacement = await bootFactory(storage, release, [publishSkill], pubsub);
           const [controller] = Object.values(replacement.mastra.listAgentControllers());
           const requestContext = phaseUserContext();
