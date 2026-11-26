@@ -47,7 +47,7 @@ export class SentenceTransformer extends TextTransformer {
       if (this.sentenceEnders.includes(char)) {
         const remainingText = text.slice(i + 1);
 
-        if (this.isRealSentenceBoundary(currentSentence, remainingText)) {
+        if (this.isRealSentenceBoundary(currentSentence, remainingText, char)) {
           sentences.push(currentSentence.trim());
           currentSentence = '';
         }
@@ -62,28 +62,51 @@ export class SentenceTransformer extends TextTransformer {
     return sentences.filter(s => s.length > 0);
   }
 
-  private isRealSentenceBoundary(currentSentence: string, remainingText: string): boolean {
+  private isRealSentenceBoundary(currentSentence: string, remainingText: string, ender: string): boolean {
     if (!remainingText.trim()) {
       return true;
     }
 
-    if (!/^\s+[A-Z]/.test(remainingText)) {
+    // ASCII enders only end a sentence when the next sentence starts with an uppercase
+    // or caseless letter after whitespace. Configured non-ASCII enders (CJK, Indic, ...)
+    // do not require that whitespace, so the gap is optional for them.
+    const gap = this.isAsciiEnder(ender) ? '\\s+' : '\\s*';
+    if (!new RegExp(`^${gap}[\\p{Lu}\\p{Lt}\\p{Lo}]`, 'u').test(remainingText)) {
       return false;
     }
 
-    const words = currentSentence.trim().split(/\s+/);
+    // Question and exclamation marks (and configured Unicode enders) are unambiguous
+    // boundaries. Only periods are ambiguous with abbreviations, initials and list markers.
+    if (ender !== '.') {
+      return true;
+    }
+
+    const trimmed = currentSentence.trim();
+    const words = trimmed.split(/\s+/);
     const lastWord = words[words.length - 1] || '';
-
     const baseWord = lastWord.slice(0, -1);
+    const previous = words.length >= 2 ? words[words.length - 2] : undefined;
+    // Text before the final word, used to spot an earlier numbered-list marker.
+    const prefix = lastWord ? trimmed.slice(0, trimmed.length - lastWord.length) : trimmed;
 
-    if (this.isCommonAbbreviation(baseWord)) {
-      return false;
-    }
+    // A bare integer ending in a period is a numbered-list marker, not a sentence-final
+    // number, when it opens the sentence, follows a configured ender, starts a line, or
+    // has an earlier bare-number marker in the same sentence (e.g. `1. First 2. Second`).
+    const isListMarker =
+      /^\d+$/.test(baseWord) &&
+      (!previous ||
+        this.sentenceEnders.includes(previous.slice(-1)) ||
+        /(^|\n)\s*$/.test(prefix) ||
+        /(?:^|\s)\d+\.\s/.test(prefix));
 
-    return true;
+    return !this.isCommonAbbreviation(baseWord, isListMarker);
   }
 
-  private isCommonAbbreviation(word: string): boolean {
+  private isAsciiEnder(ender: string): boolean {
+    return ender.length === 1 && ender.charCodeAt(0) < 128;
+  }
+
+  private isCommonAbbreviation(word: string, isListMarker = false): boolean {
     // Common titles
     const titles = ['Dr', 'Mr', 'Mrs', 'Ms', 'Prof', 'Sr', 'Jr'];
     if (titles.includes(word)) {
@@ -100,9 +123,10 @@ export class SentenceTransformer extends TextTransformer {
       return true;
     }
 
-    // Numbers (versions, decimals)
+    // Numbers (versions, decimals): a bare integer is only an abbreviation in a numbered
+    // list context, so sentence-final numbers can end a sentence.
     if (/^\d+$/.test(word)) {
-      return true;
+      return isListMarker;
     }
 
     // Time abbreviations
