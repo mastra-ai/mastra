@@ -34,15 +34,15 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Pro-0813": [
-      {
-        "type": "toggle"
-      }
-    ],
     "deepseek-ai/DeepSeek-V4-Flash-0731": [
       {
         "type": "effort",
         "values": ["none", "low", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Pro-0813": [
+      {
+        "type": "toggle"
       }
     ],
     "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16": [
@@ -62,11 +62,6 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "ornith-ai/Ornith-1.5-35B-A3B": [
-      {
-        "type": "toggle"
-      }
-    ],
     "Qwen/Qwen3.8-27B": [
       {
         "type": "effort",
@@ -77,6 +72,11 @@
       {
         "type": "effort",
         "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "ornith-ai/Ornith-1.5-35B-A3B": [
+      {
+        "type": "toggle"
       }
     ]
   }
