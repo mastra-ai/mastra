@@ -17,7 +17,10 @@ export type ToolResultWithInput = ToolResultPart & {
 // ============================================================================
 
 /**
- * Removes provider-executed tool parts that a *different* provider produced.
+ * Removes provider-owned parts that the target provider cannot consume.
+ *
+ * Provider-executed tool payloads are removed when a different provider produced them.
+ * OpenAI Responses compaction state is removed unless the target supports that input shape.
  *
  * A provider-executed tool result is the provider's own payload, in the provider's
  * own shape, and each provider validates it against its own schema on the way back
@@ -73,10 +76,12 @@ export function dropCrossProviderExecutedParts<T extends ModelMessage>(
     }
   }
 
-  if (foreign.size === 0) return messages;
-
+  const targetSupportsOpenAICompaction = targetProvider === 'openai' || targetProvider === 'openai.responses';
   const isForeign = (part: unknown): boolean => {
-    const candidate = part as { type?: string; toolCallId?: string };
+    const candidate = part as { type?: string; toolCallId?: string; kind?: string };
+    if (candidate.type === 'custom' && candidate.kind === 'openai.compaction') {
+      return !targetSupportsOpenAICompaction;
+    }
     return (
       (candidate.type === 'tool-call' || candidate.type === 'tool-result') &&
       typeof candidate.toolCallId === 'string' &&
@@ -84,7 +89,7 @@ export function dropCrossProviderExecutedParts<T extends ModelMessage>(
     );
   };
 
-  // Warn only for parts actually present in this prompt: `dbMessages` routinely holds
+  // Warn only for tool parts actually present in this prompt: `dbMessages` routinely holds
   // more history than recall selected, so warning per stored entry would report drops
   // that never happened.
   const warned = new Set<string>();
@@ -106,7 +111,8 @@ export function dropCrossProviderExecutedParts<T extends ModelMessage>(
       ...message,
       content: message.content.filter(part => {
         if (!isForeign(part)) return true;
-        warnOnce((part as { toolCallId: string }).toolCallId);
+        const toolCallId = (part as { toolCallId?: unknown }).toolCallId;
+        if (typeof toolCallId === 'string' && foreign.has(toolCallId)) warnOnce(toolCallId);
         return false;
       }),
     } as T;

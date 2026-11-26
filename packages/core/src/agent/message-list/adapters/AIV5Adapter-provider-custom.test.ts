@@ -41,18 +41,45 @@ describe('AIV5Adapter provider custom parts', () => {
     expect(AIV5Adapter.toUIMessage(message).parts).toEqual(message.content.parts);
   });
 
-  it('preserves provider custom parts from non-streamed model output', () => {
-    const modelMessage = {
-      role: 'assistant' as const,
-      content: [
+  it.each(['providerMetadata', 'providerOptions'] as const)(
+    'preserves provider custom parts from non-streamed model output using %s',
+    metadataKey => {
+      const modelMessage = {
+        role: 'assistant' as const,
+        content: [
+          {
+            type: 'custom' as const,
+            kind: 'openai.compaction',
+            [metadataKey]: providerMetadata,
+          },
+        ],
+      };
+      const message = AIV5Adapter.fromModelMessage(modelMessage);
+
+      expect(message.content.parts).toEqual([
         {
-          type: 'custom' as const,
+          type: 'custom',
           kind: 'openai.compaction',
           providerMetadata,
         },
+      ]);
+      expect(message.content.content).toBeUndefined();
+    },
+  );
+
+  it('prefers provider metadata when custom model output contains both metadata representations', () => {
+    const message = AIV5Adapter.fromModelMessage({
+      role: 'assistant',
+      content: [
+        {
+          type: 'custom',
+          kind: 'openai.compaction',
+          providerMetadata,
+          providerOptions: { openai: { encryptedContent: 'stale-state' } },
+        },
       ],
-    };
-    const message = AIV5Adapter.fromModelMessage(modelMessage);
+      // AI SDK v5's ModelMessage type predates provider custom parts.
+    } as unknown as Parameters<typeof AIV5Adapter.fromModelMessage>[0]);
 
     expect(message.content.parts).toEqual([
       {
@@ -61,7 +88,6 @@ describe('AIV5Adapter provider custom parts', () => {
         providerMetadata,
       },
     ]);
-    expect(message.content.content).toBeUndefined();
   });
 
   it('ignores malformed provider custom parts from non-streamed model output', () => {

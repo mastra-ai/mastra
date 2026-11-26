@@ -423,6 +423,23 @@ describe('dropCrossProviderExecutedParts', () => {
     } as ModelMessage,
   ];
 
+  const promptWithCustomParts = (): ModelMessage[] =>
+    [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'summary' },
+          {
+            type: 'custom',
+            kind: 'openai.compaction',
+            providerOptions: { openai: { encryptedContent: 'opaque-state' } },
+          },
+          { type: 'custom', kind: 'other-provider.state', providerOptions: { other: { state: 'keep-me' } } },
+        ],
+      },
+      // AI SDK v5's ModelMessage type predates provider custom parts.
+    ] as unknown as ModelMessage[];
+
   it('drops a provider-executed part produced by a different provider', () => {
     const messages = promptWithSearch('ws_1');
     const result = dropCrossProviderExecutedParts(
@@ -465,6 +482,28 @@ describe('dropCrossProviderExecutedParts', () => {
     );
 
     expect(result).toEqual(messages);
+  });
+
+  it('drops OpenAI compaction state when the target is not an OpenAI provider', () => {
+    const result = dropCrossProviderExecutedParts(promptWithCustomParts(), [], ANTHROPIC);
+    const content = result[0]?.content;
+
+    expect(Array.isArray(content) ? content : []).toEqual([
+      { type: 'text', text: 'summary' },
+      { type: 'custom', kind: 'other-provider.state', providerOptions: { other: { state: 'keep-me' } } },
+    ]);
+  });
+
+  it.each(['openai', 'openai.responses'])('keeps OpenAI compaction state for the %s provider', targetProvider => {
+    const messages = promptWithCustomParts();
+
+    expect(dropCrossProviderExecutedParts(messages, [], targetProvider)).toBe(messages);
+  });
+
+  it('keeps custom provider state when the target provider is unknown', () => {
+    const messages = promptWithCustomParts();
+
+    expect(dropCrossProviderExecutedParts(messages, [], undefined)).toBe(messages);
   });
 
   it('returns the input array by identity when the target provider is unknown', () => {

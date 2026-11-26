@@ -948,6 +948,7 @@ describe('Reasoning Data Spy: Response vs Request Comparison (Issue #12980)', ()
       }),
     });
     const spyModel = createSimpleMockModel();
+    Object.defineProperty(spyModel, 'provider', { value: 'openai.responses' });
     const mockMemory = new MockMemory();
 
     const agent1 = new Agent({
@@ -1037,6 +1038,7 @@ describe('Reasoning Data Spy: Response vs Request Comparison (Issue #12980)', ()
         };
       },
     });
+    Object.defineProperty(model, 'provider', { value: 'openai.responses' });
     const agent = new Agent({
       id: 'openai-compaction-tool-loop',
       name: 'OpenAI Compaction Tool Loop',

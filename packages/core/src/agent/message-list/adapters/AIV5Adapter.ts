@@ -35,6 +35,7 @@ type ProviderCustomModelPart = {
   type: 'custom';
   kind: string;
   providerMetadata?: AIV5Type.ProviderMetadata;
+  providerOptions?: AIV5Type.ProviderMetadata;
 };
 
 type ProviderCustomAssistantModelMessage = Omit<AIV5AssistantModelMessage, 'content'> & {
@@ -1156,7 +1157,7 @@ export class AIV5Adapter {
         mastraDBParts.push({
           type: 'custom',
           kind: providerCustomPart.kind,
-          providerMetadata: providerCustomPart.providerMetadata,
+          providerMetadata: providerCustomPart.providerMetadata ?? providerCustomPart.providerOptions,
         });
       } else if (part.type === 'image') {
         const imagePart = part;
