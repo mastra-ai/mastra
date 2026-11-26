@@ -5404,18 +5404,6 @@ export class AgentThreadStreamRuntime {
     return written;
   }
 
-  /** Cancel pending rows behind this process's earlier writes for the thread. Resolves the ids deleted. */
-  #cancelStoredSignals(
-    state: AgentThreadRuntimeState,
-    key: string,
-    store: ThreadSignalsStore,
-    ids: string[],
-  ): Promise<string[]> {
-    return this.#writeStoredSignals(state, key, () =>
-      store.store.cancelPendingSignals({ threadId: store.threadId, ids }),
-    );
-  }
-
   /**
    * The store of the thread's signals as far as this process knows: the
    * decision of the run it registered there, or, when it holds none, the
@@ -6664,25 +6652,48 @@ export class AgentThreadStreamRuntime {
               ? await this.#runSignalsStore(state, previousRun.agent, winnerRunId, key)
               : undefined;
             if (!winnerRunId || winnerStore?.store === store.store) return;
-            // A winner that doesn't read this store gets, through its holder, the rows this check can still cancel.
-            const cancelled = await this.#cancelStoredSignals(
-              state,
-              key,
-              store,
-              leftovers.map(leftover => leftover.id),
-            );
-            const ids = state.locallyQueuedSignalIdsByThread.get(key);
-            for (const leftover of leftovers.filter(({ id }) => cancelled.includes(id))) {
-              // Echoes of the original send stay suppressed, but this forward must be taken if this runtime later
-              // holds that run.
-              if (ids?.has(leftover.id)) ids.set(leftover.id, winnerRunId);
-              await this.#publishAndWait(pubsub, key, {
-                type: 'signal-enqueued',
-                runId: winnerRunId,
-                signal: this.#serializeSignal(leftover),
-                sourceId: this.#getSourceId(),
-              }).catch(() => {});
-            }
+            // A winner that doesn't read this store gets, through its holder, the rows still pending here, in order.
+            // A row is deleted only once its forward was published. From the first forward that fails, the rows
+            // stay pending for the thread's next run that reads this store.
+            await this.#writeStoredSignals(state, key, async () => {
+              const pending = new Set(
+                (await store.store.listPendingSignals({ threadId: store.threadId })).map(row => row.id),
+              );
+              const ids = state.locallyQueuedSignalIdsByThread.get(key);
+              for (const leftover of leftovers.filter(({ id }) => pending.has(id))) {
+                // Echoes of the original send stay suppressed, but this forward must be taken if this runtime later
+                // holds that run.
+                if (ids?.has(leftover.id)) ids.set(leftover.id, winnerRunId);
+                try {
+                  await this.#publishAndWait(pubsub, key, {
+                    type: 'signal-enqueued',
+                    runId: winnerRunId,
+                    signal: this.#serializeSignal(leftover),
+                    sourceId: this.#getSourceId(),
+                  });
+                } catch (error) {
+                  previousRun.agent
+                    .__getLogger?.()
+                    ?.warn?.(
+                      'Could not hand the signals an ended run left to the run holding the thread; they stay pending',
+                      { runId: previousRun.runId, winnerRunId, signalId: leftover.id, error },
+                    );
+                  return;
+                }
+                try {
+                  await store.store.cancelPendingSignals({ threadId: store.threadId, ids: [leftover.id] });
+                } catch (error) {
+                  previousRun.agent
+                    .__getLogger?.()
+                    ?.warn?.('Could not delete a signal handed to the run holding the thread; it stays pending', {
+                      runId: previousRun.runId,
+                      winnerRunId,
+                      signalId: leftover.id,
+                      error,
+                    });
+                }
+              }
+            });
             return;
           }
           return this.#drainStoredLeftovers(
