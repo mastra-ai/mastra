@@ -28,6 +28,12 @@ export type FactoryRunEndedBinding = Pick<
    * carries the same name, so an engine that counts run ends counts it once.
    */
   runEnd?: string;
+  /**
+   * Set by a teller that runs the phase again when the run ended without an outcome, as the
+   * dispatcher does. Only such an end is a probe; any other (a person's chat turn with the card's
+   * session, a resumed run nobody watches) is followed by no second run.
+   */
+  runsAgain?: boolean;
 };
 
 /**

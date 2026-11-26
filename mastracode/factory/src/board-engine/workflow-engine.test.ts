@@ -8,7 +8,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
 
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
-import { createBoardRegistry } from '../boards/index.js';
+import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import { PHASE_EXIT_METADATA_KEY } from '../boards/phase-automation.js';
 import { FactoryRuleRejectedError } from '../rules/dispatch-errors.js';
 import { observeSessionPhaseOutcome } from '../rules/phase-outcome-move.js';
@@ -68,7 +68,8 @@ async function setup() {
     kickoffMessage: null,
   });
   await storage.update({ orgId: ORG, id: prepared.item.id, userId: 'user-1', patch: { stages: ['planning'] } });
-  return { storage, engine, mastra, runsUrl, ...prepared };
+  // Told as the dispatcher tells it: a run that ended without an outcome is run once more.
+  return { storage, engine, mastra, runsUrl, ...prepared, binding: { ...prepared.binding, runsAgain: true } };
 }
 
 function personMove(storage: WorkItemsStorage, id: string, stage: string, identity: string) {
@@ -190,6 +191,98 @@ describe('the workflow board engine', () => {
       phase: 'execute',
       probes: 0,
       lastOutcome: 'advance',
+    });
+  });
+
+  it("counts no probe for a run end nobody follows with another run, like a person's chat turn", async () => {
+    const { engine, item, binding } = await setup();
+    const chat = { ...binding, runsAgain: undefined };
+    await engine.runEnded({ ...binding, runEnd: 'run-1' }, engine);
+    const probing = { state: 'probing', phase: 'planning', probes: 1 };
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual(probing);
+
+    await expect(engine.runEnded({ ...chat, runEnd: 'run-2' }, engine)).resolves.toBe(false);
+    await expect(engine.runEnded({ ...chat, runEnd: 'run-3' }, engine)).resolves.toBe(false);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual(probing);
+
+    // The dispatcher's telling still counts for a run the session's own telling came first for.
+    await expect(engine.runEnded({ ...binding, runEnd: 'run-3' }, engine)).resolves.toBe(false);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({
+      state: 'needs_attention',
+      probes: 2,
+    });
+  });
+
+  it("starts the record over when the card moves to another board's phase of the same name", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const dir = mkdtempSync(join(tmpdir(), 'factory-board-runs-'));
+    onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
+    // A board whose Planning is where cards rest; Work's Planning runs the planning agent.
+    const parked = defineBoard({
+      id: 'parked',
+      name: 'Parked',
+      initialPhase: 'planning',
+      phases: {
+        planning: { name: 'Planning', kind: 'resting', nextPhases: ['done'] },
+        done: { name: 'Done', kind: 'terminal' },
+      },
+    });
+    const boards = createBoardRegistry({ boards: [parked] });
+    const engine = new WorkflowBoardEngine({
+      transitionService: new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards }),
+      workItems: storage,
+      boards,
+    });
+    const mastra = new Mastra({
+      storage: new LibSQLStore({ id: `board-runs-${randomUUID()}`, url: `file:${join(dir, 'runs.db')}` }),
+      workflows: engine.workflows,
+      logger: false,
+    });
+    onTestFinished(() => mastra.shutdown().catch(() => undefined));
+    const { item, binding } = await storage.prepareRunStart({
+      orgId: ORG,
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Factory item',
+          stages: ['intake'],
+          sessions: {},
+          metadata: { authorTrusted: true },
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'session-1', branch: 'factory/item', threadId: 'thread-1' },
+      resourceId: 'resource-1',
+      kickoffKey: 'kickoff-1',
+      kickoffMessage: null,
+    });
+    await storage.update({ orgId: ORG, id: item.id, userId: 'user-1', patch: { stages: ['planning'] } });
+    await engine.runEnded({ ...binding, runEnd: 'run-1', runsAgain: true }, engine);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'probing', probes: 1 });
+
+    const move = await personMove(storage, item.id, 'planning', 'drag-1')();
+    await expect(engine.requestMove({ ...move, board: 'parked' })).resolves.toMatchObject({ status: 'accepted' });
+
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'resting',
+      phase: 'planning',
+      probes: 0,
+    });
+  });
+
+  it('counts nothing for a run end told again after a later run ended', async () => {
+    const { engine, item, binding } = await setup();
+
+    await engine.runEnded({ ...binding, runEnd: 'run-1' }, engine);
+    await engine.runEnded({ ...binding, runEnd: 'run-2' }, engine);
+    await engine.runEnded({ ...binding, runEnd: 'run-1' }, engine);
+    await engine.runEnded({ ...binding, runEnd: 'run-2' }, engine);
+
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({
+      state: 'needs_attention',
+      probes: 2,
     });
   });
 

@@ -2010,7 +2010,7 @@ export class FactoryDecisionDispatcher {
                     await this.#boardEngine.runEnded(
                       // The ledger's row names the run for every worker; without a ledger only this
                       // process tells of the end.
-                      { ...binding, runEnd: this.#openRuns ? deliveryId : latestRunEnd(session) },
+                      { ...binding, runEnd: this.#openRuns ? deliveryId : latestRunEnd(session), runsAgain: true },
                       this.#boardEngine,
                     )
                   )
