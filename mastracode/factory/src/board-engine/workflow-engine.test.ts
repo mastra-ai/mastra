@@ -126,9 +126,22 @@ describe('the workflow board engine', () => {
     expect((await storage.get({ orgId: ORG, id: item.id }))!.stages).toEqual(['intake']);
     const stored = await workflow.getWorkflowRunById(boardRunId(item.id));
     expect(JSON.stringify(stored)).not.toContain('user-1');
+    expect(JSON.stringify(stored)).not.toContain(ORG);
     await expect(engine.requestMove(await personMove(storage, item.id, 'done', 'drag-2')())).resolves.toMatchObject({
       status: 'accepted',
       stage: 'done',
+    });
+  });
+
+  it("still moves the card when its run was started through Mastra's workflow API with input of its own", async () => {
+    const { storage, engine, mastra, item } = await setup();
+    const workflow = mastra.getWorkflow('factory-board');
+    const seeded = await workflow.createRun({ runId: boardRunId(item.id) });
+    await seeded.start({ inputData: { orgId: 'org-2', factoryProjectId: 'other', workItemId: 'other-card' } as never });
+
+    await expect(engine.requestMove(await personMove(storage, item.id, 'intake', 'drag-1')())).resolves.toMatchObject({
+      status: 'accepted',
+      stage: 'intake',
     });
   });
 

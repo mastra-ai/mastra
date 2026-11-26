@@ -435,7 +435,7 @@ const factory = new MastraFactory({
 });
 ```
 
-A resume of a card's run carries only an input id. The move itself and its answer stay in the process that asked for it, so the run's snapshot holds only the card's ids, and a resume made through Mastra's workflow API, which the engine didn't ask for, moves nothing. The process that asks for a move applies it, so this engine runs workflows on the default engine only. A move must not wait on another move of the same card, since that card's inputs are applied one at a time.
+A card's run takes its card from its run id, and a resume carries only an input id. The move itself and its answer stay in the process that asked for it, so the run stores nothing but its id, and a run started or resumed through Mastra's workflow API, which the engine didn't ask for, moves nothing. The process that asks for a move applies it, so this engine runs workflows on the default engine only. A move must not wait on another move of the same card, since that card's inputs are applied one at a time.
 
 A custom engine that runs on workflows of its own lists them under `workflows`, and `MastraFactory` registers them the same way.
 

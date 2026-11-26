@@ -5,7 +5,7 @@ import { applyPhaseOutcome } from '../rules/phase-outcome-move.js';
 import type { FactoryTransitionRequest } from '../rules/transition-service.js';
 import type { FactoryTransitionResult } from '../rules/types.js';
 import { boardRunId, createFactoryBoardWorkflow, FACTORY_BOARD_WORKFLOW_ID } from './board-workflow.js';
-import type { FactoryBoardRunCard, FactoryBoardWorkflow } from './board-workflow.js';
+import type { FactoryBoardWorkflow } from './board-workflow.js';
 import type {
   FactoryBoardEngine,
   FactoryBoardEngineContext,
@@ -33,13 +33,7 @@ interface PendingInput {
   answer?: { result: FactoryTransitionResult } | { error: unknown };
 }
 
-function sameCard(request: FactoryTransitionRequest, card: FactoryBoardRunCard): boolean {
-  return (
-    request.orgId === card.orgId &&
-    request.factoryProjectId === card.factoryProjectId &&
-    request.workItemId === card.workItemId
-  );
-}
+type CardRef = Pick<FactoryTransitionRequest, 'workItemId'>;
 
 /**
  * A board engine where each card has one `factory-board` workflow run that applies everything
@@ -64,9 +58,9 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
   constructor(context: FactoryBoardEngineContext) {
     this.#context = context;
     this.workflow = createFactoryBoardWorkflow({
-      apply: async (inputId, card) => {
+      apply: async (inputId, workItemId) => {
         const pending = this.#pending.get(inputId);
-        if (!pending || pending.answer || !sameCard(pending.request, card)) return;
+        if (!pending || pending.answer || pending.request.workItemId !== workItemId) return;
         try {
           pending.answer = { result: await context.transitionService.transition(pending.request) };
         } catch (error) {
@@ -112,7 +106,7 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     );
   }
 
-  #ask(card: FactoryBoardRunCard, inputId: string, pending: PendingInput): Promise<void> {
+  #ask(card: CardRef, inputId: string, pending: PendingInput): Promise<void> {
     const previous = this.#queues.get(card.workItemId) ?? Promise.resolve();
     // A run end can be told from work a step of this same run started (the phase's session), which
     // still carries the claim that step held. The input is new work on the run: it claims it afresh.
@@ -128,7 +122,7 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     return next;
   }
 
-  async #resume(card: FactoryBoardRunCard, inputId: string, pending: PendingInput): Promise<void> {
+  async #resume(card: CardRef, inputId: string, pending: PendingInput): Promise<void> {
     if (!this.workflow.mastra) {
       throw new Error('The board workflow is not registered with Mastra, so cards have no runs to move them.');
     }
@@ -139,7 +133,7 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
       if (!stored || ENDED_RUN_STATUSES.has(stored.status)) {
         // An ended run keeps nothing the card needs; its next input runs a new one under the same id.
         if (stored) await this.workflow.deleteWorkflowRunById(runId);
-        await this.#start(card, runId);
+        await this.#start(runId);
         continue;
       }
       if (stored.status === 'suspended') {
@@ -168,12 +162,10 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
   }
 
   /** Starts the card's run, which waits for its first input; a start another process won is left to it. */
-  async #start(card: FactoryBoardRunCard, runId: string): Promise<void> {
+  async #start(runId: string): Promise<void> {
     const run = await this.workflow.createRun({ runId });
     try {
-      const result = await run.start({
-        inputData: { orgId: card.orgId, factoryProjectId: card.factoryProjectId, workItemId: card.workItemId },
-      });
+      const result = await run.start({ inputData: {} });
       if (result.status !== 'suspended') {
         throw new Error(`The card's board run ended ${result.status} instead of waiting for its first input.`);
       }
