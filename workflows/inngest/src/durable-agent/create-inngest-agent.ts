@@ -2121,10 +2121,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
       // A warm resume reuses the tools built for the first request, which close
       // over that request's request context and tool hooks (#25960). Rebuild them
-      // for this call and swap in only entries still holding a request-built tool,
-      // so tools a processor added or replaced are kept, and rebuild
-      // processor-added tools for this call's request context (matches core
-      // DurableAgent.resume). Runs after loadSuspendedIteration, which can reject,
+      // for this call (matches core DurableAgent.resume). Runs after loadSuspendedIteration, which can reject,
       // so a rejected resume leaves the parked run's tools untouched.
       if (
         existingRegistryEntry &&
@@ -2155,29 +2152,28 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             backgroundTaskPolicy: execOptions.backgroundTaskPolicy,
             model: existingRegistryEntry.model,
           });
-          const previous = existingRegistryEntry.requestTools;
-          const refresh = (current: Record<string, CoreTool>) => {
-            const next = { ...current };
-            for (const [name, tool] of Object.entries(requestTools)) {
-              // A name missing from current but present in previous was withheld by a processor.
-              const configured =
-                name in current ? current[name] === previous?.[name] : !previous || !(name in previous);
-              if (configured) next[name] = tool;
-            }
-            return next;
-          };
-          existingRegistryEntry.tools = rebindProcessorTools(
-            refresh(existingRegistryEntry.tools ?? {}),
-            resumeRequestContext,
+          // Same rule as core's refreshStepToolsForCaller, inlined for older core peers: processor-added
+          // tools are rebuilt for this caller (#27544), every other tool is replaced by this caller's
+          // same-named tool or dropped, and the starting call's toolset tools are kept when this
+          // resume passes none.
+          const keep = new Set(execOptions.toolsets ? [] : (existingRegistryEntry.callToolsetToolNames ?? []));
+          const current = existingRegistryEntry.tools ?? {};
+          const rebound = rebindProcessorTools(current, resumeRequestContext);
+          const next: Record<string, CoreTool> = {};
+          for (const [name, tool] of Object.entries(rebound)) {
+            if (tool !== current[name]) next[name] = tool;
+            else if (requestTools[name]) next[name] = requestTools[name];
+            else if (keep.has(name)) next[name] = tool;
+          }
+          existingRegistryEntry.tools = next;
+          // Later steps start from this caller's build; input processors run again every step.
+          const keptToolsets = Object.fromEntries(
+            [...keep].flatMap(name => {
+              const tool = existingRegistryEntry.baseTools?.[name];
+              return tool && !(name in requestTools) ? [[name, tool] as const] : [];
+            }),
           );
-          if (existingRegistryEntry.baseTools)
-            existingRegistryEntry.baseTools = rebindProcessorTools(
-              refresh(existingRegistryEntry.baseTools),
-              resumeRequestContext,
-            );
-          // Tools this rebuild did not produce still hold their earlier build, so
-          // keep that as their baseline; otherwise a later resume can never refresh them.
-          existingRegistryEntry.requestTools = { ...previous, ...requestTools };
+          existingRegistryEntry.baseTools = { ...keptToolsets, ...requestTools };
         } catch (error) {
           mastra?.getLogger?.()?.warn?.(`[InngestAgent] resume(${runId}) tool resolution failed: ${error}`);
         }
