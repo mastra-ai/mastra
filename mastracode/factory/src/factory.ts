@@ -1625,7 +1625,11 @@ export class MastraFactory {
         })
       : undefined;
     const boardEngine = transitionService
-      ? (this.#config.boardEngine ?? createDispatcherBoardEngine)({ transitionService })
+      ? (this.#config.boardEngine ?? createDispatcherBoardEngine)({
+          transitionService,
+          workItems: workItemsStorage,
+          boards,
+        })
       : undefined;
     // Set once the API routes mount with the live controller; tools and processors read parked runs through it.
     let liveSessions: LiveSessions | undefined;
@@ -2655,9 +2659,9 @@ export class MastraFactory {
       });
       observeSessionRunEnd(session, { audit: auditDomain, openRuns: openRunsStorage });
       // A run the dispatcher no longer watches (a plan approved after its run parked) still ends
-      // its phase: the outcome its session reported moves the card when that run ends.
+      // its phase: the board engine hears of every run end of a bound session.
       observeSessionPhaseOutcome(session, {
-        deps: () => (boardEngine ? { storage: workItemsStorage, boards, boardEngine } : undefined),
+        boardEngine: () => boardEngine,
         binding: async () => {
           const row = await sourceControlSessions.getBySessionId(session.identity.getId());
           if (!row?.factoryProjectId) return null;
