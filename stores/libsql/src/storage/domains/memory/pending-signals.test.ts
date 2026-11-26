@@ -687,6 +687,30 @@ describe('LibSQL pending signals', () => {
     }
   });
 
+  it('orders rows with the same createdAt by id in code unit order, not by UTF-8 bytes', async () => {
+    const url = tempDbUrl();
+    const { store, memory } = await openMemory(url);
+    try {
+      const thread = await newThread(memory);
+      const runId = `run-${randomUUID()}`;
+      await memory.setSignalRun({ threadId: thread.id, runId });
+      const createdAt = new Date('2025-04-01T00:00:00.000Z');
+      // U+1F600 is the surrogate pair D83D DE00, below U+FFFD in code units and above it in UTF-8 bytes.
+      const prefix = `signal-${randomUUID()}-`;
+      const sorted = [`${prefix}\u{1F600}`, `${prefix}\uFFFD`];
+      for (const id of [...sorted].reverse()) {
+        await memory.enqueuePendingSignal({ message: { ...signalFor(thread, id), createdAt } });
+      }
+
+      expect((await memory.listPendingSignals({ threadId: thread.id })).map(message => message.id)).toEqual(sorted);
+      expect(
+        (await memory.claimPendingSignals({ threadId: thread.id, runId, consumedIds: [] })).map(message => message.id),
+      ).toEqual(sorted);
+    } finally {
+      await store.close();
+    }
+  });
+
   it('keeps rows, claims and the signal run when the database is closed and reopened', async () => {
     const url = tempDbUrl();
     const runId = `run-${randomUUID()}`;
