@@ -1,5 +1,49 @@
 # @mastra/core
 
+## 1.87.0-alpha.1
+
+### Minor Changes
+
+- Added `createChannelAttachFileTool()` to `@mastra/core/channels`: an `attach_file` tool that uploads a file from the run's workspace into its chat thread, including on runs that did not start there when `channels` is passed. Files over 50 MB are refused, and a Slack app missing `files:write` gets an error naming the scope. ([#31573](https://github.com/mastra-ai/mastra/pull/31573))
+
+- Added two channel adapter options, `replyMode` and `threadLink`. ([#31573](https://github.com/mastra-ai/mastra/pull/31573))
+
+  `replyMode: 'tool'` has the agent post only through a `reply_in_thread` tool, which Mastra installs. Reply text and tool calls stay out of the thread, the typing status names the agent's current step, the reply streams into the thread as it is written when the adapter sets `streaming: true`, the prompt tells the agent to open long work with one line and finish with the outcome, and the agent is reminded to post after five quiet minutes. Pass `{ instructions, reminderAfterMs }` instead of `'tool'` to add your own prompt lines or change the reminder. Reply mode has only been tested with Slack.
+
+  `threadLink` ends the first reply in a new thread with a link to your web UI. The link is kept out of saved memory.
+
+  ```ts
+  channels: {
+    adapters: {
+      slack: {
+        adapter: createSlackAdapter(),
+        replyMode: 'tool',
+        threadLink: ({ threadId }) => `https://app.example.com/threads/${threadId}`,
+      },
+    },
+  },
+  ```
+
+  `ChannelThreadLinkProcessor` is also exported for hosts that add processors themselves. `AgentChannels` marks runs that create a thread; hosts that decide this themselves can call `markNewChannelThread(requestContext)`.
+
+- Added `resolveChannelRenderContext(requestContext, channels)`, which finds the chat thread a run posts into: the one the message came in on, or, for runs started elsewhere (web UI, schedule, signal wake), the chat thread the run's memory thread is linked to. Reply mode uses the same lookup, so tools of your own can post to the same thread. ([#31573](https://github.com/mastra-ai/mastra/pull/31573))
+
+- Added `ChannelToolAnnouncementProcessor` to `@mastra/core/channels`. It posts into a run's chat thread when a tool call succeeds and the host's `announce` function returns markdown, such as a link to a pull request the agent just opened. Pass `channels` so runs that did not start in the channel announce too. ([#31573](https://github.com/mastra-ai/mastra/pull/31573))
+
+### Patch Changes
+
+- Fixed durable agent resumes approved from another server running with the original caller's request context and user. The resumed run now uses the context of the caller who resumed it. ([#31560](https://github.com/mastra-ai/mastra/pull/31560))
+
+- Fixed experiments ignoring stored scorers (scorers created in Studio or through the editor) when they were selected for the whole experiment (including workflow step scorers) or set on the dataset. Previously these scorers only ran if something in the same process had already loaded them, so durable experiments running on a worker usually finished without scores. Stored scorers are now loaded on demand at every level. ([#31549](https://github.com/mastra-ai/mastra/pull/31549))
+
+  Starting or creating an experiment with a scorer id that does not exist now fails immediately with `EXPERIMENT_SCORER_NOT_FOUND`, before the experiment is created, instead of failing later during the run.
+
+  If a scorer disappears after the experiment has started (for example, a stored scorer is deleted mid-run) or a dataset's scorer id can't be found, only the items that use it fail, with `EXPERIMENT_ITEM_SCORER_NOT_FOUND` recorded on the result. Other items keep running and the experiment completes.
+
+  A scorer lookup that fails for another reason, such as storage being unavailable, now surfaces that error instead of being reported as an unknown scorer id.
+
+- Fixed an issue where a temporary Redis pause could cancel an evented agent run even though its workflow storage was still available. ([#31523](https://github.com/mastra-ai/mastra/pull/31523))
+
 ## 1.87.0-alpha.0
 
 ### Minor Changes
