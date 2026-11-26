@@ -25,6 +25,7 @@ import type { IMastraEditor } from '../editor';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { MastraScorer } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
+import { canHandleLocalWorkflowEvent, pinLocalWorkflowEvent } from '../events/local-workflow-affinity';
 import type { PubSub } from '../events/pubsub';
 import { isRunLocalTopic } from '../events/topics';
 import type { Event, EventCallback } from '../events/types';
@@ -1371,7 +1372,9 @@ export class Mastra<
                 if (isOwnedHere()) {
                   if (topic === 'workflows' && !isOwnedHere(true)) {
                     return Promise.resolve(self.getStorage()?.getStore('workflows')).then(store =>
-                      target.publish(topic, event, { localOnly: !store?.supportsWorkflowStepGuards() }),
+                      store?.supportsWorkflowStepGuards()
+                        ? target.publish(topic, event, { localOnly: false })
+                        : target.publish(topic, pinLocalWorkflowEvent(event, self), { localOnly: true }),
                     );
                   }
                   // A local-only start in a process that consumes no workflow
@@ -1391,7 +1394,9 @@ export class Mastra<
                           `Start workers in this process (mastra.startWorkers()) to run it.`,
                       );
                   }
-                  return target.publish(topic, event, { localOnly: true });
+                  return target.publish(topic, topic === 'workflows' ? pinLocalWorkflowEvent(event, self) : event, {
+                    localOnly: true,
+                  });
                 }
               } else if (isRunLocalTopic(topic)) {
                 // Per-run watch stream events. Only the publishing process
@@ -8262,7 +8267,10 @@ export class Mastra<
           if (nack) track(nack().catch(err => this.#logger.error('Error nacking workflow event', err)));
           return;
         }
-        if (wfId && rId && !this.#ownsWorkflow(wfId, rId, data?.parentWorkflow)) {
+        if (
+          !canHandleLocalWorkflowEvent(event, this) ||
+          (wfId && rId && !this.#ownsWorkflow(wfId, rId, data?.parentWorkflow))
+        ) {
           if (ack) {
             track(ack().catch(err => this.#logger?.error?.('Error acking skipped workflow event', err)));
           }

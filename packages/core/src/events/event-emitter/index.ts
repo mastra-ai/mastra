@@ -1,5 +1,6 @@
 import EventEmitter from 'node:events';
 import type { IMastraLogger } from '../../logger';
+import { canDeliverLocalWorkflowEvent } from '../local-workflow-affinity';
 import { PubSub } from '../pubsub';
 import type { LeaseProvider, PubSubDeliveryMode } from '../pubsub';
 import type { Event, EventCallback, SubscribeOptions } from '../types';
@@ -358,7 +359,10 @@ export class EventEmitterPubSub extends PubSub implements LeaseProvider {
   }
 
   private deliverToGroup(topic: string, group: string, listenerKey: string, event: Event): void {
-    const currentMembers = this.groups.get(group)?.get(topic);
+    const currentMembers = this.groups
+      .get(group)
+      ?.get(topic)
+      ?.filter(cb => canDeliverLocalWorkflowEvent(event, cb));
     if (!currentMembers || currentMembers.length === 0) return;
 
     const counter = this.groupCounters.get(listenerKey) ?? 0;

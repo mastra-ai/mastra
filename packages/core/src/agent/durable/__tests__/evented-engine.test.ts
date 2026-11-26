@@ -10,8 +10,13 @@
  * execution must still complete and clean up its run records.
  */
 
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createTextStreamModel } from '@internal/test-utils';
 import { describe, expect, it, vi } from 'vitest';
+import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { UnixSocketPubSub } from '../../../events/unix-socket-pubsub';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
 import { Agent } from '../../agent';
@@ -54,6 +59,46 @@ describe('EventedAgent evented engine', () => {
 
     cleanup();
   }, 30_000);
+
+  it.each(['EventEmitter', 'Unix socket'])(
+    'completes with the originating agent when two workers share a %s pubsub (COR-1652)',
+    async transport => {
+      const directory = transport === 'Unix socket' ? await mkdtemp(join(tmpdir(), 'mastra-affinity-')) : undefined;
+      const pubsub = directory ? new UnixSocketPubSub(join(directory, 'bus.sock')) : new EventEmitterPubSub();
+      const makeInstance = (answer: string) => {
+        const agent = createEventedAgent({
+          agent: new Agent({
+            id: 'shared-agent',
+            name: 'Shared Agent',
+            instructions: 'Answer the prompt.',
+            model: createTextStreamModel(answer),
+          }),
+        });
+        const mastra = new Mastra({ agents: { agent }, pubsub, storage: new InMemoryStore(), logger: false });
+        return { agent, mastra };
+      };
+      const sibling = makeInstance('Wrong worker');
+      const owner = makeInstance('Owner answer');
+      try {
+        // The first subscriber gets the first unscoped delivery in the group.
+        await sibling.mastra.startWorkers();
+        await owner.mastra.startWorkers();
+
+        const { output, cleanup } = await owner.agent.stream('Hi');
+        try {
+          await output.consumeStream();
+          expect(await output.text).toBe('Owner answer');
+        } finally {
+          cleanup();
+        }
+      } finally {
+        await Promise.all([owner.mastra.stopWorkers(), sibling.mastra.stopWorkers()]);
+        await pubsub.close();
+        if (directory) await rm(directory, { recursive: true, force: true });
+      }
+    },
+    10_000,
+  );
 
   it('completes execution and cleans up run records with a custom agent pubsub split from mastra.pubsub', async () => {
     const { EventEmitterPubSub } = await import('../../../events/event-emitter');

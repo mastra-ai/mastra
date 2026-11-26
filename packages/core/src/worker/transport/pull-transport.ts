@@ -1,3 +1,4 @@
+import { canHandleLocalWorkflowEvent, registerLocalWorkflowWorker } from '../../events/local-workflow-affinity';
 import type { PubSub } from '../../events/pubsub';
 import type { EventCallback } from '../../events/types';
 import type { IMastraLogger } from '../../logger';
@@ -41,12 +42,13 @@ export class PullTransport implements WorkerTransport {
     this.#drainTimeout = assertDrainTimeout(drainTimeout ?? waitMs(DEFAULT_DRAIN_TIMEOUT_MS, 50), 'PullTransport');
   }
 
-  async start(router: EventRouter): Promise<void> {
+  async start(router: EventRouter, workflowOwner?: object): Promise<void> {
     if (this.#callbacks.length > 0) {
       this.#logger?.debug('[PullTransport] start() called while already subscribed; ignoring duplicate call');
       return;
     }
     const cb: EventCallback = (event, ack, nack, extend) => {
+      if (workflowOwner && !canHandleLocalWorkflowEvent(event, workflowOwner)) return ack?.();
       // route() is async; surface unexpected rejections as a nack instead
       // of an unhandledRejection. The router's own try/catch already turns
       // expected processing errors into nack — this guard only catches
@@ -64,6 +66,7 @@ export class PullTransport implements WorkerTransport {
       this.#inFlight.add(inFlight);
       void inFlight.finally(() => this.#inFlight.delete(inFlight));
     };
+    if (workflowOwner) registerLocalWorkflowWorker(cb, workflowOwner);
     await this.#pubsub.subscribe(this.#topic, cb, { group: this.#group });
     this.#callbacks.push({ topic: this.#topic, cb });
   }

@@ -5,6 +5,7 @@ import net from 'node:net';
 import { basename, dirname, join, sep } from 'node:path';
 
 import { decode, encode } from './codec';
+import { canDeliverLocalWorkflowEvent } from './local-workflow-affinity';
 import { PublisherQueueLimitError } from './publisher-queue-limit-error';
 import { PubSub } from './pubsub';
 import type { LeaseProvider, PubSubDeliveryMode } from './pubsub';
@@ -1748,7 +1749,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
 
   #deliverLocalGroup(topic: string, group: string, event: Event) {
     const members = [...(this.#subscriptions.get(topic)?.values() ?? [])].filter(
-      subscription => subscription.group === group,
+      subscription => subscription.group === group && canDeliverLocalWorkflowEvent(event, subscription.callback),
     );
     if (members.length === 0) return;
     const key = membershipKey(topic, group);

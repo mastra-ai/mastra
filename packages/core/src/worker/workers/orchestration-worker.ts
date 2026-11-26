@@ -2,7 +2,6 @@ import type { Event } from '../../events/types';
 import { WorkflowEventProcessor } from '../../workflows/evented/workflow-event-processor';
 import { HttpRemoteStrategy } from '../strategies/http-remote-strategy';
 import { PullTransport } from '../transport/pull-transport';
-import type { WorkerTransport } from '../transport/transport';
 import type { StepExecutionStrategy } from '../types';
 import { MastraWorker } from '../worker';
 import type { WorkerDeps, WorkerStopOptions } from '../worker';
@@ -33,7 +32,7 @@ export class OrchestrationWorker extends MastraWorker {
   readonly name = 'orchestration';
 
   #config: OrchestrationWorkerConfig;
-  #transport?: WorkerTransport;
+  #transport?: PullTransport;
   #processor?: WorkflowEventProcessor;
   #strategy?: StepExecutionStrategy;
   #running = false;
@@ -90,9 +89,10 @@ export class OrchestrationWorker extends MastraWorker {
     const group = this.#config.group ?? DEFAULT_GROUP;
     this.#transport = new PullTransport({ pubsub: this.deps.pubsub, group, logger: this.deps.logger });
 
-    await this.#transport.start({
-      route: (event, ack, nack, extend) => this.#processEvent(event, ack, nack, extend),
-    });
+    await this.#transport.start(
+      { route: (event, ack, nack, extend) => this.#processEvent(event, ack, nack, extend) },
+      this.deps.mastra,
+    );
 
     this.#running = true;
   }
