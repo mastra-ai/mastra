@@ -17,6 +17,7 @@ import type { FactoryTransitionRequest } from '../rules/transition-service.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { boardRunId } from './board-workflow.js';
+import { DispatcherBoardEngine } from './engine.js';
 import type { FactoryBoardEngine, FactoryCardRuns } from './engine.js';
 import { WorkflowBoardEngine } from './workflow-engine.js';
 
@@ -139,31 +140,37 @@ describe('the workflow board engine', () => {
     expect(kept).not.toContain('interruptedRun');
   });
 
-  it("refuses a busy card's move that only claims its run was stopped", async () => {
-    const { storage, runsUrl, item } = await setup();
-    // This engine can't stop runs, and the transition service sees one going.
-    const boards = createBoardRegistry();
-    const transitionService = new FactoryTransitionService({
-      storage,
-      configVersion: 'rules-v1',
-      boards,
-      runInFlight: async () => true,
-    });
-    const engine = new WorkflowBoardEngine({ transitionService, workItems: storage, boards });
-    const mastra = new Mastra({
-      storage: new LibSQLStore({ id: `board-runs-${randomUUID()}`, url: runsUrl }),
-      workflows: engine.workflows,
-      logger: false,
-    });
-    onTestFinished(() => mastra.shutdown().catch(() => undefined));
+  it.each(['workflow', 'dispatcher'] as const)(
+    "refuses a busy card's move that only claims its run was stopped (%s engine)",
+    async kind => {
+      const { storage, runsUrl, item } = await setup();
+      // Neither engine can stop runs here, and the transition service sees one going.
+      const boards = createBoardRegistry();
+      const transitionService = new FactoryTransitionService({
+        storage,
+        configVersion: 'rules-v1',
+        boards,
+        runInFlight: async () => true,
+      });
+      const context = { transitionService, workItems: storage, boards };
+      const workflow = new WorkflowBoardEngine(context);
+      const mastra = new Mastra({
+        storage: new LibSQLStore({ id: `board-runs-${randomUUID()}`, url: runsUrl }),
+        workflows: workflow.workflows,
+        logger: false,
+      });
+      onTestFinished(() => mastra.shutdown().catch(() => undefined));
+      const engine = kind === 'workflow' ? workflow : new DispatcherBoardEngine(context);
 
-    const result = await engine.requestMove({
-      ...(await personMove(storage, item.id, 'execute', 'drag-1')()),
-      interruptedRun: true,
-    });
+      // Whatever a caller writes on the request, the card's run was not stopped for it.
+      const result = await engine.requestMove({
+        ...(await personMove(storage, item.id, 'execute', 'drag-1')()),
+        interruptedRun: true,
+      } as FactoryTransitionRequest);
 
-    expect(result).toMatchObject({ status: 'rejected', code: 'card_busy' });
-  });
+      expect(result).toMatchObject({ status: 'rejected', code: 'card_busy' });
+    },
+  );
 
   it("ends a deleted card's run, after the inputs asked before the delete", async () => {
     const { storage, engine, mastra, item } = await setup();

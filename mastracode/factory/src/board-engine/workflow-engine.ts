@@ -7,6 +7,7 @@ import { pendingPhaseOutcome } from '../boards/phase-outcomes.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import { moveCardToBoard } from '../boards/relocate.js';
 import { applyPhaseOutcome } from '../rules/phase-outcome-move.js';
+import { markRunInterrupted } from '../rules/transition-service.js';
 import type { FactoryTransitionRequest } from '../rules/transition-service.js';
 import type { FactoryTransitionResult } from '../rules/types.js';
 import {
@@ -147,12 +148,9 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     return { [FACTORY_BOARD_WORKFLOW_ID]: this.workflow };
   }
 
-  async requestMove({
-    interruptedRun: _claimed,
-    ...asked
-  }: FactoryTransitionRequest): Promise<FactoryTransitionResult> {
-    // Only a run this engine stopped itself lets a person's move past the busy card.
-    const request = (await this.#interrupts(asked)) ? { ...asked, interruptedRun: true as const } : asked;
+  async requestMove(asked: FactoryTransitionRequest): Promise<FactoryTransitionResult> {
+    // A copy, so the mark stays on the request this engine hands the transition service.
+    const request = (await this.#interrupts(asked)) ? markRunInterrupted({ ...asked }) : asked;
     const pending = { request } satisfies PendingInput as Extract<PendingInput, { request: unknown }>;
     await this.#ask(request, pending);
     if (!pending.answer) throw new Error("The card's board run did not apply the move.");
