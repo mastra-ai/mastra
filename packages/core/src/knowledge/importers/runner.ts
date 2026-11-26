@@ -340,15 +340,16 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
       bufferBytes += bytes;
     }
     buffer.push(op);
-    if (sending) await sending;
-    if (buffer.length >= bufferSize) await flush();
-    // Queued behind any flush in flight, like every flush. A failure halts the run, which the
-    // importer sees on its next call.
-    else if (!flushTimer) {
+    // Armed before waiting on a split's flush, so the ops left in the buffer wait flushAfterMs from
+    // now, not from that flush's ack. Queued behind any flush in flight, like every flush. A failure
+    // halts the run, which the importer sees on its next call.
+    if (!flushTimer && buffer.length < bufferSize) {
       flushTimer = setTimeout(() => flush().catch(() => {}), flushAfterMs);
       // A pending timed flush doesn't keep the process alive; the run's own awaits do.
       flushTimer.unref?.();
     }
+    if (sending) await sending;
+    if (buffer.length >= bufferSize) await flush();
   };
 
   const finish = async (request: Omit<KnowledgeImporterFinishRequest, 'runId' | 'generation' | 'lastSeq'>) => {

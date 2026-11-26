@@ -1055,6 +1055,46 @@ describe('runKnowledgeImport', () => {
       expect(result).toMatchObject({ outcome: 'succeeded', lastSeq: 2 });
     });
 
+    it('starts the timer for ops left behind by a byte split while the split flush waits for its ack', async () => {
+      const ack = gate();
+      class SlowAckHost extends RecordingHost {
+        override async flush(flush: KnowledgeImporterFlush) {
+          const receipt = await super.flush(flush);
+          if (flush.seq === 1) await ack.opened;
+          return receipt;
+        }
+      }
+      const host = new SlowAckHost();
+      const done = gate();
+      let pushed = 0;
+      const run = runKnowledgeImport({
+        importers: [
+          importer(async ctx => {
+            await ctx.items.upsert({ ...item(1), body: 'a'.repeat(6_000) });
+            pushed++;
+            await ctx.items.upsert({ ...item(2), body: 'b'.repeat(6_000) });
+            pushed++;
+            await done.opened;
+          }),
+        ],
+        host,
+        bindingId: 'b1',
+        maxFlushBytes: 10_000,
+        flushAfterMs: 30_000,
+        hostCallTimeoutMs: 120_000,
+      });
+      await until(() => host.flushes.length === 1);
+      // Item 2 waits in the buffer from the split on; the split's ack comes 45s later.
+      await vi.advanceTimersByTimeAsync(45_000);
+      ack.open();
+      await until(() => pushed === 2);
+      // Item 2 has waited past flushAfterMs, so it goes as soon as the ack is in, not 30s after it.
+      await until(() => host.flushes.length === 2);
+      expect(host.flushes.map(f => f.ops.map(op => op.op === 'upsert' && op.item.sourceId))).toEqual([['e1'], ['e2']]);
+      done.open();
+      expect(await run).toMatchObject({ outcome: 'succeeded' });
+    });
+
     it('starts the timer over after a size flush', async () => {
       const host = new RecordingHost();
       const [rest, done] = [gate(), gate()];
