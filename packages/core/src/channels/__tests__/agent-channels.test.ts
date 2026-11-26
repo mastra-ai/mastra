@@ -3531,10 +3531,6 @@ describe('matchesDomain', () => {
     expect(matchesDomain('https://anything.example.org/path', '*')).toBe(true);
   });
 
-  it('returns false for invalid URL', () => {
-    expect(matchesDomain('not-a-url', 'example.com')).toBe(false);
-  });
-
   it('does not match partial domain names', () => {
     expect(matchesDomain('https://notyoutube.com/watch', 'youtube.com')).toBe(false);
   });

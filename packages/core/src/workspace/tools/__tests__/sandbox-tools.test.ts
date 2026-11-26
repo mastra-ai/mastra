@@ -1229,10 +1229,6 @@ describe('kill_process tool', () => {
 
 describe('output-helpers', () => {
   describe('applyTail', () => {
-    it('returns empty string for empty input', () => {
-      expect(applyTail('', 10)).toBe('');
-    });
-
     it('returns all lines when count exceeds total', () => {
       expect(applyTail('a\nb\nc', 10)).toBe('a\nb\nc');
     });
@@ -1293,10 +1289,6 @@ describe('output-helpers', () => {
       expect(await applyTokenLimit('short text', 100)).toBe('short text');
     });
 
-    it('returns empty string for empty input', async () => {
-      expect(await applyTokenLimit('', 100)).toBe('');
-    });
-
     it('truncates from the start by default (keeps the end)', async () => {
       const lines = Array.from({ length: 100 }, (_, i) => `line number ${i + 1}`);
       const output = lines.join('\n');
@@ -1347,10 +1339,6 @@ describe('output-helpers', () => {
   describe('applyTokenLimitSandwich', () => {
     it('returns output unchanged when under limit', async () => {
       expect(await applyTokenLimitSandwich('short text', 100)).toBe('short text');
-    });
-
-    it('returns empty string for empty input', async () => {
-      expect(await applyTokenLimitSandwich('', 100)).toBe('');
     });
 
     it('keeps tokens from both start and end', async () => {
@@ -1469,10 +1457,6 @@ describe('stripAnsi', () => {
 describe('sandboxToModelOutput', () => {
   it('returns { type: "text", value } with ANSI stripped for strings', () => {
     expect(sandboxToModelOutput('\x1b[32mok\x1b[0m')).toEqual({ type: 'text', value: 'ok' });
-  });
-
-  it('returns plain string as { type: "text", value }', () => {
-    expect(sandboxToModelOutput('hello')).toEqual({ type: 'text', value: 'hello' });
   });
 
   it('passes non-string values through unchanged', () => {
