@@ -371,31 +371,9 @@ export class SessionRetirementCoordinator {
     const sandbox = peekSessionSandbox(session.id)?.sandbox;
     if (!sandbox) return 'not-here';
 
-    // The provider's own destroy, not the lifecycle wrapper: the wrapper marks
-    // the instance destroyed for good. Bounded, so a VM that won't answer
-    // can't hold the session lock.
-    const destroy = async () => {
-      if (!(await this.#settledWithin(this.#destroyDirectly(sandbox)))) {
-        throw new Error('Timed out destroying the sandbox. Try again.');
-      }
-    };
-    // Destroyed before waiting on a start in flight, so a start hung on the
-    // dead VM can't block recovery; its commands fail fast once the VM is gone.
-    await destroy();
-    const starting = (sandbox as { _startPromise?: Promise<unknown> })._startPromise;
-    if (starting) {
-      const settled = await this.#settledWithin(
-        starting.then(
-          () => {},
-          () => {},
-        ),
-      );
-      if (!settled) throw new Error('The old sandbox is still starting. Try again.');
-      // That start may have found the old VM gone and provisioned another.
-      await destroy();
-    }
-
-    sandbox.status = 'stopped';
+    const resettable = sandbox as { _reset?: (options?: { timeoutMs?: number }) => Promise<void> };
+    if (!resettable._reset) return 'not-here';
+    await resettable._reset({ timeoutMs: this.#destroyTimeoutMs });
     // The new VM runs setup from scratch, including commands that failed on the old one.
     clearFailedSetupCommands(session.id);
     // Re-read: a start that settled while this reset waited may have stored a newer workdir.
