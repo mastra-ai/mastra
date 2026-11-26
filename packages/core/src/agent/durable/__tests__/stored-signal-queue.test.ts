@@ -62,6 +62,12 @@ class ObservedMemory extends InMemoryMemory {
   failClaimOf?: string;
   /** Runs before each marker write, as preparation makes before the run starts. */
   beforeSetSignalRun?: () => Promise<void>;
+  /** Runs before each cancel reaches the store. */
+  beforeCancel?: (ids: string[]) => Promise<void>;
+  /** Runs after each cancel deleted its rows, before its answer reaches the caller. */
+  afterCancel?: (ids: string[]) => Promise<void>;
+  /** Runs before each list of the thread's pending rows reaches the store. */
+  beforeList?: () => Promise<void>;
 
   constructor() {
     super({ db: new InMemoryDB() });
@@ -101,6 +107,18 @@ class ObservedMemory extends InMemoryMemory {
   override async setSignalRun(args: { threadId: string; runId: string }) {
     await this.beforeSetSignalRun?.();
     return super.setSignalRun(args);
+  }
+
+  override async cancelPendingSignals(args: { threadId: string; ids: string[] }) {
+    await this.beforeCancel?.(args.ids);
+    const deleted = await super.cancelPendingSignals(args);
+    await this.afterCancel?.(args.ids);
+    return deleted;
+  }
+
+  override async listPendingSignals(args: { threadId: string }) {
+    await this.beforeList?.();
+    return super.listPendingSignals(args);
   }
 
   claimsOf(id: string) {
@@ -173,13 +191,23 @@ class LeaseTakenElsewherePubSub extends EventEmitterPubSub {
   readonly remoteRunId = `remote-run-${crypto.randomUUID()}`;
   /** The thread whose lease the remote run takes. */
   takeLeaseOf?: string;
-  failForwards = false;
+  /** How many of the next forwards to the remote run fail. */
+  failForwards = 0;
+  /** Runs before each forward to the remote run is published. */
+  beforeForward?: () => Promise<void>;
   readonly forwarded: string[] = [];
   readonly forwardAttempted = gate();
+  /** The lease key the remote run took. */
+  takenKey?: string;
+  /** Run ids a `run-failed` event was published for. */
+  readonly failedRunIds: string[] = [];
+  /** Released at the first `run-failed` event. */
+  readonly runFailed = gate();
 
   async #take(key: string) {
     if (!this.takeLeaseOf || !key.includes(this.takeLeaseOf)) return;
     this.takeLeaseOf = undefined;
+    this.takenKey = key;
     const current = await super.getLeaseOwner(key);
     if (current) await super.releaseLease(key, current);
     await super.acquireLease(key, this.remoteRunId, 60_000);
@@ -197,9 +225,17 @@ class LeaseTakenElsewherePubSub extends EventEmitterPubSub {
 
   override async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>, options?: { localOnly?: boolean }) {
     const data = event.data as { type?: string; runId?: string; signal?: { id: string } } | undefined;
+    if (data?.type === 'run-failed' && data.runId) {
+      this.failedRunIds.push(data.runId);
+      this.runFailed.release();
+    }
     if (data?.type === 'signal-enqueued' && data.runId === this.remoteRunId) {
+      await this.beforeForward?.();
       this.forwardAttempted.release();
-      if (this.failForwards) throw new Error('broker unavailable');
+      if (this.failForwards > 0) {
+        this.failForwards--;
+        throw new Error('broker unavailable');
+      }
       this.forwarded.push(data.signal!.id);
     }
     return super.publish(topic, event, options);
@@ -681,8 +717,8 @@ describe('signals of a running evented agent kept in memory storage', () => {
   });
 
   it.each([
-    ['deletes its row once the forward was published', false],
-    ['keeps its row pending when the forward cannot be published', true],
+    ['deletes its row before the forward is published', 0],
+    ['puts its row back as pending when the forward cannot be published', 1],
   ] as const)(
     'hands a signal the run left to a run of another process that took the thread, and %s',
     async (_case, failForwards) => {
@@ -697,6 +733,10 @@ describe('signals of a running evented agent kept in memory storage', () => {
       // The run's end-of-run check finds the thread taken by a run whose memory storage this process can't resolve.
       pubsub.failForwards = failForwards;
       pubsub.takeLeaseOf = scope.threadId;
+      let pendingAtForward: string[] | undefined;
+      pubsub.beforeForward = async () => {
+        pendingAtForward = (await memoryStore.listPendingSignals({ threadId: scope.threadId })).map(row => row.id);
+      };
       toolGate.release();
       await done;
       await pubsub.forwardAttempted.promise;
@@ -704,6 +744,7 @@ describe('signals of a running evented agent kept in memory storage', () => {
 
       expect(prompts).toHaveLength(2);
       expect(prompts.some(prompt => textOf(prompt).includes('LEFT_BY_THE_RUN'))).toBe(false);
+      expect(pendingAtForward).toEqual([]);
       const pending = (await memoryStore.listPendingSignals({ threadId: scope.threadId })).map(row => row.id);
       if (failForwards) {
         expect(pubsub.forwarded).toEqual([]);
@@ -714,6 +755,144 @@ describe('signals of a running evented agent kept in memory storage', () => {
       }
     },
   );
+
+  it('stops handing the signals the run left over at the first forward that fails, and keeps them pending in order', async () => {
+    const memoryStore = new ObservedMemory();
+    const pubsub = new LeaseTakenElsewherePubSub();
+    const { agent, scope, prompts, toolGate, start } = setup({ memoryStore, pubsub });
+    const { stream, done } = await start();
+    // The executing process closed the run before these sends were stored, so they are left for the thread's next run.
+    await memoryStore.closeSignalRun({ threadId: scope.threadId, runId: stream.runId, consumedIds: [] });
+    const first = agent.sendSignal({ type: 'user', contents: 'FIRST_LEFT_BY_THE_RUN' }, scope);
+    await expect(first.accepted).resolves.toEqual({ action: 'deliver', runId: stream.runId });
+    const second = agent.sendSignal({ type: 'user', contents: 'SECOND_LEFT_BY_THE_RUN' }, scope);
+    await expect(second.accepted).resolves.toEqual({ action: 'deliver', runId: stream.runId });
+    // Only the first forward fails; a broker that is back for the second must not get it.
+    pubsub.failForwards = 1;
+    pubsub.takeLeaseOf = scope.threadId;
+    toolGate.release();
+    await done;
+    await pubsub.forwardAttempted.promise;
+    await agentThreadStreamRuntime.storedSignalWritesSettled({ store: memoryStore, ...scope }, agent.getPubSub());
+
+    expect(prompts).toHaveLength(2);
+    expect(pubsub.forwarded).toEqual([]);
+    expect((await memoryStore.listPendingSignals({ threadId: scope.threadId })).map(row => row.id)).toEqual([
+      first.signal.id,
+      second.signal.id,
+    ]);
+  });
+
+  it.each([
+    ['fails without deleting it', false],
+    ['deletes it and then fails', true],
+  ] as const)(
+    'keeps every signal the run left pending, in order, when the delete of the first one it hands over %s',
+    async (_case, afterWrite) => {
+      const memoryStore = new ObservedMemory();
+      const pubsub = new LeaseTakenElsewherePubSub();
+      const { agent, scope, prompts, toolGate, start } = setup({ memoryStore, pubsub });
+      const { stream, done } = await start();
+      // The executing process closed the run before these sends were stored, so they are left for the thread's next
+      // run.
+      await memoryStore.closeSignalRun({ threadId: scope.threadId, runId: stream.runId, consumedIds: [] });
+      const first = agent.sendSignal({ type: 'user', contents: 'FIRST_LEFT_BY_THE_RUN' }, scope);
+      await expect(first.accepted).resolves.toEqual({ action: 'deliver', runId: stream.runId });
+      const second = agent.sendSignal({ type: 'user', contents: 'SECOND_LEFT_BY_THE_RUN' }, scope);
+      await expect(second.accepted).resolves.toEqual({ action: 'deliver', runId: stream.runId });
+      // The delete of the first row fails, before its write or after it, as a store whose answer was lost does.
+      const failed = gate();
+      const fail = async (ids: string[]) => {
+        if (!ids.includes(first.signal.id)) return;
+        memoryStore.beforeCancel = undefined;
+        memoryStore.afterCancel = undefined;
+        failed.release();
+        throw new Error('memory storage unavailable');
+      };
+      if (afterWrite) memoryStore.afterCancel = fail;
+      else memoryStore.beforeCancel = fail;
+      pubsub.takeLeaseOf = scope.threadId;
+      toolGate.release();
+      await done;
+      await failed.promise;
+      await agentThreadStreamRuntime.storedSignalWritesSettled({ store: memoryStore, ...scope }, agent.getPubSub());
+
+      expect(prompts).toHaveLength(2);
+      expect(pubsub.forwarded).toEqual([]);
+      expect((await memoryStore.listPendingSignals({ threadId: scope.threadId })).map(row => row.id)).toEqual([
+        first.signal.id,
+        second.signal.id,
+      ]);
+    },
+  );
+
+  it('keeps the signals the run left pending when the hand-off to the run that took the thread fails, and reports no follow-up as failed', async () => {
+    const memoryStore = new ObservedMemory();
+    const pubsub = new LeaseTakenElsewherePubSub();
+    const { agent, scope, prompts, toolGate, start } = setup({ memoryStore, pubsub });
+    const { stream, done } = await start();
+    // The executing process closed the run before this send was stored, so it is left for the thread's next run.
+    await memoryStore.closeSignalRun({ threadId: scope.threadId, runId: stream.runId, consumedIds: [] });
+    const left = agent.sendSignal({ type: 'user', contents: 'LEFT_BY_THE_RUN' }, scope);
+    await expect(left.accepted).resolves.toEqual({ action: 'deliver', runId: stream.runId });
+    // Once the run of another process took the thread, the hand-off's read of the rows fails.
+    memoryStore.beforeList = async () => {
+      if (!pubsub.takenKey) return;
+      memoryStore.beforeList = undefined;
+      throw new Error('memory storage unavailable');
+    };
+    // The hand-off ends with its warning, or with a failure published for the follow-up that never started.
+    const handOffEnded = gate();
+    vi.spyOn(agent.__getLogger(), 'warn').mockImplementation((message: string) => {
+      if (message.startsWith('Could not hand the signals')) handOffEnded.release();
+    });
+    void pubsub.runFailed.promise.then(handOffEnded.release);
+    pubsub.takeLeaseOf = scope.threadId;
+    toolGate.release();
+    await done;
+    await handOffEnded.promise;
+
+    expect(pubsub.failedRunIds).toEqual([]);
+    expect(prompts).toHaveLength(2);
+    expect((await memoryStore.listPendingSignals({ threadId: scope.threadId })).map(row => row.id)).toEqual([
+      left.signal.id,
+    ]);
+    expect(await pubsub.getLeaseOwner(pubsub.takenKey!)).toBe(pubsub.remoteRunId);
+  });
+
+  it('does not hand over a signal the run left that a run claimed before the hand-off deleted it', async () => {
+    const memoryStore = new ObservedMemory();
+    const pubsub = new LeaseTakenElsewherePubSub();
+    const { agent, scope, prompts, toolGate, start } = setup({ memoryStore, pubsub });
+    const { stream, done } = await start();
+    // The executing process closed the run before this send was stored, so it is left for the thread's next run.
+    await memoryStore.closeSignalRun({ threadId: scope.threadId, runId: stream.runId, consumedIds: [] });
+    const left = agent.sendSignal({ type: 'user', contents: 'CLAIMED_BEFORE_THE_HAND_OFF' }, scope);
+    await expect(left.accepted).resolves.toEqual({ action: 'deliver', runId: stream.runId });
+    // The run that took the thread claims the row after the hand-off listed it and before it deletes it.
+    const deleting = gate();
+    let claimed: MastraDBMessage[] = [];
+    memoryStore.beforeCancel = async () => {
+      memoryStore.beforeCancel = undefined;
+      await memoryStore.setSignalRun({ threadId: scope.threadId, runId: pubsub.remoteRunId });
+      claimed = await memoryStore.claimPendingSignals({
+        threadId: scope.threadId,
+        runId: pubsub.remoteRunId,
+        consumedIds: [],
+      });
+      deleting.release();
+    };
+    pubsub.takeLeaseOf = scope.threadId;
+    toolGate.release();
+    await done;
+    await deleting.promise;
+    await agentThreadStreamRuntime.storedSignalWritesSettled({ store: memoryStore, ...scope }, agent.getPubSub());
+
+    expect(prompts).toHaveLength(2);
+    expect(claimed.map(row => row.id)).toEqual([left.signal.id]);
+    expect(pubsub.forwarded).toEqual([]);
+    expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
+  });
 
   it.each(['sent in this process', 'forwarded by another process'] as const)(
     "does not report a signal stored for a run to the thread's next run when its insert answered after that run started (%s)",

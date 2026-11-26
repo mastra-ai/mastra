@@ -33,6 +33,12 @@ function gate() {
 class SharedMemory extends InMemoryMemory {
   /** Runs before each claim reaches the store. */
   beforeClaim?: (runId: string) => Promise<void>;
+  /** Runs after each insert of a pending signal, before its answer reaches the caller. */
+  afterEnqueue?: (id: string, toRunId: string | undefined) => void;
+  /** Runs before each cancel reaches the store. */
+  beforeCancel?: (ids: string[]) => Promise<void>;
+  /** Runs after each cancel, before its answer reaches the caller. */
+  afterCancel?: (ids: string[]) => void;
 
   constructor() {
     super({ db: new InMemoryDB() });
@@ -45,6 +51,19 @@ class SharedMemory extends InMemoryMemory {
   override async claimPendingSignals(args: { threadId: string; runId: string; consumedIds: string[] }) {
     await this.beforeClaim?.(args.runId);
     return super.claimPendingSignals(args);
+  }
+
+  override async enqueuePendingSignal(args: Parameters<InMemoryMemory['enqueuePendingSignal']>[0]) {
+    const written = await super.enqueuePendingSignal(args);
+    this.afterEnqueue?.(args.message.id, args.toRunId);
+    return written;
+  }
+
+  override async cancelPendingSignals(args: { threadId: string; ids: string[] }) {
+    await this.beforeCancel?.(args.ids);
+    const deleted = await super.cancelPendingSignals(args);
+    this.afterCancel?.(args.ids);
+    return deleted;
   }
 }
 
@@ -113,11 +132,19 @@ class ReplicaPubSub extends EventEmitterPubSub {
   releaseOf?: { key: string; released: ReturnType<typeof gate> };
   /** Signals this replica forwarded to a run: the run and the signal id. */
   readonly forwarded: Array<{ runId: string; signalId: string }> = [];
+  /** Set to hold this replica's announcement that `runId` registered until the test releases it. */
+  heldRegistration?: { runId: string; reached: ReturnType<typeof gate>; release: ReturnType<typeof gate> };
 
   override async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>, options?: { localOnly?: boolean }) {
     const data = event.data as { type?: string; runId?: string; signal?: { id: string } } | undefined;
     if (data?.type === 'signal-enqueued' && data.runId && data.signal) {
       this.forwarded.push({ runId: data.runId, signalId: data.signal.id });
+    }
+    const held = this.heldRegistration;
+    if (data?.type === 'run-registered' && held?.runId === data.runId) {
+      this.heldRegistration = undefined;
+      held.reached.release();
+      await held.release.promise;
     }
     return super.publish(topic, event, options);
   }
@@ -557,6 +584,78 @@ describe('the end of a run whose thread a storage-backed run of another replica 
     expect(prompts).toHaveLength(3);
     expect(occurrences(prompts[1], 'LEFT_FOR_THE_WINNER')).toBe(0);
     expect(occurrences(prompts[2], 'LEFT_FOR_THE_WINNER')).toBe(1);
+    expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
+  });
+
+  it('hands a signal it left to a run it has not seen announce itself, on the same store, and the run receives it once', async () => {
+    const storage = new InMemoryStore();
+    const memoryStore = new SharedMemory();
+    storage.stores.memory = memoryStore;
+    const { scope, leaseKey, prompts, toolGate, replica, startRun } = replicas(storage);
+    const memory = new MockMemory({ storage });
+    const holder = replica({ memory });
+    // Runs no workers: the replicas share one emitter without competing consumers, and the in-memory workflows store
+    // has no step guards, so two replicas running workers would both execute each step.
+    const winner = replica({ memory, workers: false });
+    const { runId, done } = await startRun(holder);
+    // The executing process closed the run before this send was stored, so it is left for the thread's next run.
+    await memoryStore.closeSignalRun({ threadId: scope.threadId, runId, consumedIds: [] });
+    const left = holder.agent.sendSignal({ type: 'user-message', contents: 'HANDED_TO_THE_WINNER' }, scope);
+    await expect(left.accepted).resolves.toEqual({ action: 'deliver', runId });
+
+    // The run's end-of-run check waits to take the lease over until the other replica's run holds the thread.
+    const transfer = { key: leaseKey, requested: gate(), release: gate(), answered: gate() };
+    const release = { key: leaseKey, released: gate() };
+    holder.pubsub.heldTransfer = transfer;
+    holder.pubsub.releaseOf = release;
+    toolGate.release();
+    await done;
+    await transfer.requested.promise;
+    await release.released.promise;
+
+    const winnerRunId = `winner-run-${crypto.randomUUID()}`;
+    // The winner's holder stores the forward in the same store. A delete of the row that runs after the forward was
+    // published waits until that insert answered, so the insert finds the row the hand-off has not deleted yet.
+    const forwardStored = gate();
+    const rowDeleted = gate();
+    memoryStore.afterEnqueue = (id, toRunId) => {
+      if (id === left.signal.id && toRunId === winnerRunId) forwardStored.release();
+    };
+    memoryStore.beforeCancel = async ids => {
+      const forwarded = holder.pubsub.forwarded.some(
+        forward => forward.runId === winnerRunId && forward.signalId === left.signal.id,
+      );
+      if (ids.includes(left.signal.id) && forwarded) await forwardStored.promise;
+    };
+    memoryStore.afterCancel = ids => {
+      if (ids.includes(left.signal.id)) rowDeleted.release();
+    };
+    // The winning run claims once the hand-off settled the row both ways.
+    memoryStore.beforeClaim = async claiming => {
+      if (claiming === winnerRunId) await Promise.all([forwardStored.promise, rowDeleted.promise]);
+    };
+    // The winning run holds the lease and the thread's marker, and its announcement waits, so the holder's check
+    // decides without knowing that the run keeps its signals in this store.
+    const registration = { runId: winnerRunId, reached: gate(), release: gate() };
+    winner.pubsub.heldRegistration = registration;
+    const winning = winner.agent.stream('Second', {
+      runId: winnerRunId,
+      memory: { thread: scope.threadId, resource: scope.resourceId },
+      maxSteps: 4,
+    });
+    await registration.reached.promise;
+    transfer.release.release();
+    await transfer.answered.promise;
+    await Promise.all([forwardStored.promise, rowDeleted.promise]);
+    registration.release.release();
+    for await (const _chunk of (await winning).fullStream);
+
+    expect(holder.pubsub.forwarded.filter(forward => forward.runId === winnerRunId)).toEqual([
+      { runId: winnerRunId, signalId: left.signal.id },
+    ]);
+    expect(prompts).toHaveLength(3);
+    expect(occurrences(prompts[1], 'HANDED_TO_THE_WINNER')).toBe(0);
+    expect(occurrences(prompts[2], 'HANDED_TO_THE_WINNER')).toBe(1);
     expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
   });
 });
