@@ -43895,8 +43895,8 @@
     },
     "packages/core/src/knowledge/importers/__tests__/runner.test.ts": {
       "tier": "in",
-      "since": "2026-11-25",
-      "last_failure": "2026-11-25",
+      "since": "2026-11-26",
+      "last_failure": "2026-11-26",
       "reason": "versioning-fail"
     },
     "packages/core/src/knowledge/importers/conformance.test.ts": {
