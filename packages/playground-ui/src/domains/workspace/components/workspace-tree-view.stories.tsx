@@ -93,7 +93,7 @@ const files = new Map<string, StoryFile>([
     'README.md',
     {
       content:
-        '# Mastra news\n\nDaily digests land in `cache/slack`.\n\n![Remote badge](https://img.shields.io/badge/status-live-green)\n\n![Relative image](./assets/gradient.png)\n\n```ts\nconst digest = await agent.generate(prompt);\n```\n',
+        '# Mastra news\n\nDaily digests land in `cache/slack`.\n\n![Remote badge](https://img.shields.io/badge/status-live-green)\n\n![Relative image](./assets/gradient.png)\n\n![Broken link](./100%zz.png)\n\n```ts\nconst digest = await agent.generate(prompt);\n```\n',
     },
   ],
   ['src/digest.ts', { content: largeSource }],

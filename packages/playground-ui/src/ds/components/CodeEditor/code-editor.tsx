@@ -1,6 +1,7 @@
 import { jsonLanguage } from '@codemirror/lang-json';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { syntaxHighlighting } from '@codemirror/language';
+import type { Language } from '@codemirror/language';
 import { EditorState } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
@@ -33,6 +34,17 @@ import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 
 export type CodeEditorLanguage = HighlightLanguage | 'text';
+
+const editorLanguages = new Map<HighlightLanguage, Promise<Language | undefined>>();
+
+function loadEditorLanguage(language: HighlightLanguage) {
+  let loaded = editorLanguages.get(language);
+  if (!loaded) {
+    loaded = loadLanguage(language).catch(() => undefined);
+    editorLanguages.set(language, loaded);
+  }
+  return loaded;
+}
 
 // eslint-disable-next-line react-refresh/only-export-components -- shared hook intentionally co-located with the editor it themes
 export const useCodemirrorTheme = (font: CodemirrorFont = 'mono'): Extension => {
@@ -120,7 +132,9 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     );
     const theme = useCodemirrorTheme(font);
     const loadedLanguage =
-      language === 'json' || language === 'markdown' || language === 'text' ? undefined : use(loadLanguage(language));
+      language === 'json' || language === 'markdown' || language === 'text'
+        ? undefined
+        : use(loadEditorLanguage(language));
     const formattedCode = data ? JSON.stringify(data, null, 2) : (value ?? '');
     const canFormat = showFormatButton && language === 'json' && editable !== false && Boolean(onChange);
 

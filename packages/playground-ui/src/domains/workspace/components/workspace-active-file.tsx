@@ -11,6 +11,7 @@ import { WorkspaceCode } from './workspace-code';
 import { WorkspaceError } from './workspace-error';
 import { WorkspaceFileSkeleton } from './workspace-file-skeleton';
 import { WorkspaceJsonPreview } from './workspace-json-preview';
+import { WorkspaceMarkdownImage } from './workspace-markdown-image';
 import { WorkspaceMarkdownPreview } from './workspace-markdown-preview';
 import { languageForPath } from '@/ds/components/CodeEditor/highlight';
 import { EmptyState } from '@/ds/components/EmptyState';
@@ -69,7 +70,7 @@ function DefaultPreview({ path, content, mimeType }: WorkspaceFilePreview) {
     );
   }
   if (isMarkdownFile(path)) {
-    return <WorkspaceMarkdownPreview content={content} />;
+    return <WorkspaceMarkdownPreview content={content} image={WorkspaceMarkdownImage} />;
   }
   const lang = languageForPath(path);
   if (lang === 'json') return <WorkspaceJsonPreview key={path} path={path} content={content} />;
