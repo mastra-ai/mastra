@@ -33,12 +33,6 @@ function gate() {
 class SharedMemory extends InMemoryMemory {
   /** Runs before each claim reaches the store. */
   beforeClaim?: (runId: string) => Promise<void>;
-  /** Runs after each insert of a pending signal, before its answer reaches the caller. */
-  afterEnqueue?: (id: string, toRunId: string | undefined) => void;
-  /** Runs before each cancel reaches the store. */
-  beforeCancel?: (ids: string[]) => Promise<void>;
-  /** Runs after each cancel, before its answer reaches the caller. */
-  afterCancel?: (ids: string[]) => void;
 
   constructor() {
     super({ db: new InMemoryDB() });
@@ -52,28 +46,21 @@ class SharedMemory extends InMemoryMemory {
     await this.beforeClaim?.(args.runId);
     return super.claimPendingSignals(args);
   }
-
-  override async enqueuePendingSignal(args: Parameters<InMemoryMemory['enqueuePendingSignal']>[0]) {
-    const written = await super.enqueuePendingSignal(args);
-    this.afterEnqueue?.(args.message.id, args.toRunId);
-    return written;
-  }
-
-  override async cancelPendingSignals(args: { threadId: string; ids: string[] }) {
-    await this.beforeCancel?.(args.ids);
-    const deleted = await super.cancelPendingSignals(args);
-    this.afterCancel?.(args.ids);
-    return deleted;
-  }
 }
 
-/** The shared memory storage, recording the id of every insert of a pending signal that reached it. */
+/** The shared memory storage, recording the ids of every insert and every cancel of pending signals that reached it. */
 class RecordingSharedMemory extends SharedMemory {
   readonly enqueued: string[] = [];
+  readonly cancelled: string[] = [];
 
   override async enqueuePendingSignal(args: Parameters<InMemoryMemory['enqueuePendingSignal']>[0]) {
     this.enqueued.push(args.message.id);
     return super.enqueuePendingSignal(args);
+  }
+
+  override async cancelPendingSignals(args: { threadId: string; ids: string[] }) {
+    this.cancelled.push(...args.ids);
+    return super.cancelPendingSignals(args);
   }
 }
 
@@ -132,6 +119,8 @@ class ReplicaPubSub extends EventEmitterPubSub {
   releaseOf?: { key: string; released: ReturnType<typeof gate> };
   /** Signals this replica forwarded to a run: the run and the signal id. */
   readonly forwarded: Array<{ runId: string; signalId: string }> = [];
+  /** Run ids this replica published a `run-failed` event for. */
+  readonly failedRunIds: string[] = [];
   /** Set to hold this replica's announcement that `runId` registered until the test releases it. */
   heldRegistration?: { runId: string; reached: ReturnType<typeof gate>; release: ReturnType<typeof gate> };
   /** Released once this replica unsubscribed from `topic`. */
@@ -142,6 +131,7 @@ class ReplicaPubSub extends EventEmitterPubSub {
     if (data?.type === 'signal-enqueued' && data.runId && data.signal) {
       this.forwarded.push({ runId: data.runId, signalId: data.signal.id });
     }
+    if (data?.type === 'run-failed' && data.runId) this.failedRunIds.push(data.runId);
     const held = this.heldRegistration;
     if (data?.type === 'run-registered' && held?.runId === data.runId) {
       this.heldRegistration = undefined;
@@ -166,6 +156,32 @@ function occurrences(prompt: unknown, text: string): number {
   return textOf(prompt).split(text).length - 1;
 }
 
+/** The error chunks of a run's stream, once it ended. */
+async function errorsOf(stream: Promise<{ fullStream: AsyncIterable<unknown> }>) {
+  const errors: unknown[] = [];
+  for await (const chunk of (await stream).fullStream) {
+    if ((chunk as { type?: string }).type === 'error') errors.push(chunk);
+  }
+  return errors;
+}
+
+/**
+ * The end-of-run check of the replica whose run left `signalId` lost the thread to `winnerRunId` and did nothing with
+ * the row: no forward, no follow-up reported as failed, the row neither deleted nor inserted again. Its only inserts
+ * are the send's, refused for the closed run, then stored for the thread's next run.
+ */
+function expectLeftInStore(
+  holder: { pubsub: ReplicaPubSub },
+  memoryStore: RecordingSharedMemory,
+  signalId: string,
+  winnerRunId: string,
+) {
+  expect(holder.pubsub.forwarded.filter(forward => forward.runId === winnerRunId)).toEqual([]);
+  expect(holder.pubsub.failedRunIds).toEqual([]);
+  expect(memoryStore.cancelled).toEqual([]);
+  expect(memoryStore.enqueued.filter(id => id === signalId)).toHaveLength(2);
+}
+
 const AGENT_ID = 'replicated-agent';
 const BARRIER = 'BARRIER_QUEUED_AFTER_THE_RUN';
 
@@ -182,11 +198,23 @@ function replicas(storage: InMemoryStore) {
   const toolReached = gate();
   const toolGate = gate();
   const barrierReached = gate();
+  let heldCall: { call: number; reached: ReturnType<typeof gate>; release: ReturnType<typeof gate> } | undefined;
+  /** Holds the model call numbered `call`, counted from 1, until the test releases it. */
+  const holdCall = (call: number) => {
+    heldCall = { call, reached: gate(), release: gate() };
+    return heldCall;
+  };
   const model = new MockLanguageModelV2({
     doStream: async ({ prompt }) => {
       prompts.push(prompt);
       const call = prompts.length;
       if (textOf(prompt).includes(BARRIER)) barrierReached.release();
+      const held = heldCall?.call === call ? heldCall : undefined;
+      if (held) {
+        heldCall = undefined;
+        held.reached.release();
+        await held.release.promise;
+      }
       return {
         warnings: [],
         stream: convertArrayToReadableStream(
@@ -315,6 +343,7 @@ function replicas(storage: InMemoryStore) {
     leaseKey,
     prompts,
     toolGate,
+    holdCall,
     replica,
     startRun,
     admittedBy,
@@ -533,10 +562,10 @@ describe('a signal a replica that does not hold the run stores itself', () => {
   });
 });
 
-describe('the end of a run whose thread a storage-backed run of another replica took', () => {
+describe('the end of a run whose thread a run of another replica took', () => {
   it('leaves a signal it left pending for that run when the memory is a function of the request context, and the run receives it once', async () => {
     const storage = new InMemoryStore();
-    const memoryStore = new SharedMemory();
+    const memoryStore = new RecordingSharedMemory();
     storage.stores.memory = memoryStore;
     const { scope, leaseKey, prompts, toolGate, replica, startRun } = replicas(storage);
     const memory = new MockMemory({ storage });
@@ -585,9 +614,9 @@ describe('the end of a run whose thread a storage-backed run of another replica 
     await observerGone.done.promise;
     holder.pubsub.unsubscribedFrom = checkEnded;
     transfer.release.release();
-    for await (const _chunk of (await winning).fullStream);
+    expect(await errorsOf(winning)).toEqual([]);
 
-    expect(holder.pubsub.forwarded.filter(forward => forward.runId === winnerRunId)).toEqual([]);
+    expectLeftInStore(holder, memoryStore, left.signal.id, winnerRunId);
     expect(prompts).toHaveLength(3);
     expect(occurrences(prompts[1], 'LEFT_FOR_THE_WINNER')).toBe(0);
     expect(occurrences(prompts[2], 'LEFT_FOR_THE_WINNER')).toBe(1);
@@ -596,7 +625,7 @@ describe('the end of a run whose thread a storage-backed run of another replica 
 
   it('leaves a signal it left pending for that run when the memory is a fixed instance on the same store, and the run receives it once', async () => {
     const storage = new InMemoryStore();
-    const memoryStore = new SharedMemory();
+    const memoryStore = new RecordingSharedMemory();
     storage.stores.memory = memoryStore;
     const { scope, leaseKey, prompts, toolGate, replica, startRun } = replicas(storage);
     const memory = new MockMemory({ storage });
@@ -645,18 +674,18 @@ describe('the end of a run whose thread a storage-backed run of another replica 
     await observerGone.done.promise;
     holder.pubsub.unsubscribedFrom = checkEnded;
     transfer.release.release();
-    for await (const _chunk of (await winning).fullStream);
+    expect(await errorsOf(winning)).toEqual([]);
 
-    expect(holder.pubsub.forwarded.filter(forward => forward.runId === winnerRunId)).toEqual([]);
+    expectLeftInStore(holder, memoryStore, left.signal.id, winnerRunId);
     expect(prompts).toHaveLength(3);
     expect(occurrences(prompts[1], 'LEFT_FOR_THE_WINNER')).toBe(0);
     expect(occurrences(prompts[2], 'LEFT_FOR_THE_WINNER')).toBe(1);
     expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
   });
 
-  it('hands a signal it left to a run it has not seen announce itself, on the same store, and the run receives it once', async () => {
+  it('leaves a signal it left pending for a run it has not seen announce itself, on the same store, and the run receives it once', async () => {
     const storage = new InMemoryStore();
-    const memoryStore = new SharedMemory();
+    const memoryStore = new RecordingSharedMemory();
     storage.stores.memory = memoryStore;
     const { scope, leaseKey, prompts, toolGate, replica, startRun } = replicas(storage);
     const memory = new MockMemory({ storage });
@@ -667,7 +696,7 @@ describe('the end of a run whose thread a storage-backed run of another replica 
     const { runId, done } = await startRun(holder);
     // The executing process closed the run before this send was stored, so it is left for the thread's next run.
     await memoryStore.closeSignalRun({ threadId: scope.threadId, runId, consumedIds: [] });
-    const left = holder.agent.sendSignal({ type: 'user-message', contents: 'HANDED_TO_THE_WINNER' }, scope);
+    const left = holder.agent.sendSignal({ type: 'user-message', contents: 'LEFT_FOR_THE_WINNER' }, scope);
     await expect(left.accepted).resolves.toEqual({ action: 'deliver', runId });
 
     // The run's end-of-run check waits to take the lease over until the other replica's run holds the thread.
@@ -681,25 +710,9 @@ describe('the end of a run whose thread a storage-backed run of another replica 
     await release.released.promise;
 
     const winnerRunId = `winner-run-${crypto.randomUUID()}`;
-    // The winner's holder stores the forward in the same store. A delete of the row that runs after the forward was
-    // published waits until that insert answered, so the insert finds the row the hand-off has not deleted yet.
-    const forwardStored = gate();
-    const rowDeleted = gate();
-    memoryStore.afterEnqueue = (id, toRunId) => {
-      if (id === left.signal.id && toRunId === winnerRunId) forwardStored.release();
-    };
-    memoryStore.beforeCancel = async ids => {
-      const forwarded = holder.pubsub.forwarded.some(
-        forward => forward.runId === winnerRunId && forward.signalId === left.signal.id,
-      );
-      if (ids.includes(left.signal.id) && forwarded) await forwardStored.promise;
-    };
-    memoryStore.afterCancel = ids => {
-      if (ids.includes(left.signal.id)) rowDeleted.release();
-    };
-    // The winning run claims once the hand-off settled the row both ways.
+    // The winning run claims only after the holder's check lost the lease to it.
     memoryStore.beforeClaim = async claiming => {
-      if (claiming === winnerRunId) await Promise.all([forwardStored.promise, rowDeleted.promise]);
+      if (claiming === winnerRunId) await transfer.answered.promise;
     };
     // The winning run holds the lease and the thread's marker, and its announcement waits, so the holder's check
     // decides without knowing that the run keeps its signals in this store.
@@ -713,16 +726,69 @@ describe('the end of a run whose thread a storage-backed run of another replica 
     await registration.reached.promise;
     transfer.release.release();
     await transfer.answered.promise;
-    await Promise.all([forwardStored.promise, rowDeleted.promise]);
     registration.release.release();
-    for await (const _chunk of (await winning).fullStream);
+    expect(await errorsOf(winning)).toEqual([]);
 
-    expect(holder.pubsub.forwarded.filter(forward => forward.runId === winnerRunId)).toEqual([
-      { runId: winnerRunId, signalId: left.signal.id },
-    ]);
+    expectLeftInStore(holder, memoryStore, left.signal.id, winnerRunId);
     expect(prompts).toHaveLength(3);
-    expect(occurrences(prompts[1], 'HANDED_TO_THE_WINNER')).toBe(0);
-    expect(occurrences(prompts[2], 'HANDED_TO_THE_WINNER')).toBe(1);
+    expect(occurrences(prompts[1], 'LEFT_FOR_THE_WINNER')).toBe(0);
+    expect(occurrences(prompts[2], 'LEFT_FOR_THE_WINNER')).toBe(1);
+    expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
+  });
+
+  it("leaves a signal it left pending when the winning run keeps its signals in its own process, for the thread's next run that reads the store", async () => {
+    const storage = new InMemoryStore();
+    const memoryStore = new RecordingSharedMemory();
+    storage.stores.memory = memoryStore;
+    const { scope, leaseKey, prompts, toolGate, replica, startRun, holdCall } = replicas(storage);
+    const memory = new MockMemory({ storage });
+    const holder = replica({ memory });
+    // The default engine keeps a run's signals in the process that runs it, and never reads them from storage.
+    const winner = replica({ memory, evented: false, workers: false });
+    const { runId, done } = await startRun(holder);
+    // The executing process closed the run before this send was stored, so it is left for the thread's next run.
+    await memoryStore.closeSignalRun({ threadId: scope.threadId, runId, consumedIds: [] });
+    const left = holder.agent.sendSignal({ type: 'user-message', contents: 'LEFT_FOR_THE_WINNER' }, scope);
+    await expect(left.accepted).resolves.toEqual({ action: 'deliver', runId });
+
+    // The run's end-of-run check waits to take the lease over until the other replica's run holds the thread.
+    const transfer = { key: leaseKey, requested: gate(), release: gate(), answered: gate() };
+    const release = { key: leaseKey, released: gate() };
+    holder.pubsub.heldTransfer = transfer;
+    holder.pubsub.releaseOf = release;
+    toolGate.release();
+    await done;
+    await transfer.requested.promise;
+    await release.released.promise;
+
+    // The winning run holds the thread in its model call until the holder's check lost the lease to it.
+    const winnerCall = holdCall(3);
+    const winnerRunId = `winner-run-${crypto.randomUUID()}`;
+    const winning = winner.agent.stream('Second', {
+      runId: winnerRunId,
+      memory: { thread: scope.threadId, resource: scope.resourceId },
+      maxSteps: 4,
+    });
+    await winnerCall.reached.promise;
+    transfer.release.release();
+    await transfer.answered.promise;
+    winnerCall.release.release();
+    expect(await errorsOf(winning)).toEqual([]);
+
+    expect((await memoryStore.listPendingSignals({ threadId: scope.threadId })).map(row => row.id)).toEqual([
+      left.signal.id,
+    ]);
+    const next = await holder.agent.stream('Third', {
+      runId: `next-run-${crypto.randomUUID()}`,
+      memory: { thread: scope.threadId, resource: scope.resourceId },
+      maxSteps: 4,
+    });
+    expect(await errorsOf(Promise.resolve(next))).toEqual([]);
+
+    expectLeftInStore(holder, memoryStore, left.signal.id, winnerRunId);
+    expect(prompts).toHaveLength(4);
+    expect(prompts.slice(0, 3).some(prompt => occurrences(prompt, 'LEFT_FOR_THE_WINNER') > 0)).toBe(false);
+    expect(occurrences(prompts[3], 'LEFT_FOR_THE_WINNER')).toBe(1);
     expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
   });
 });
