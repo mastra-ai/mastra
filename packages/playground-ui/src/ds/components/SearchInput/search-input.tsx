@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Ref } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
 import type { InputGroupInputProps, InputGroupProps } from '@/ds/components/InputGroup';
@@ -21,6 +21,8 @@ type SearchInputBaseProps = Omit<
   /** Shows a Close button that clears the text and calls this, e.g. to collapse the search. */
   onClose?: () => void;
   size?: InputGroupProps['size'];
+  /** A control at the end of the field that narrows the search, such as a filter menu. Pass an `InputGroupButton`. */
+  action?: ReactNode;
   className?: string;
   ref?: Ref<HTMLInputElement>;
 };
@@ -61,6 +63,7 @@ export function SearchInput({
   shortcut = false,
   onClose,
   size,
+  action,
   className,
   ref,
   ...inputProps
@@ -150,6 +153,7 @@ export function SearchInput({
           <IconCrossMedium />
         </InputGroupButton>
       </InputGroupAddon>
+      {action ? <InputGroupAddon align="inline-end">{action}</InputGroupAddon> : null}
     </InputGroup>
   );
 }
