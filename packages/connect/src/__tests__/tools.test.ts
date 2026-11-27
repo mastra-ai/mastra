@@ -259,18 +259,24 @@ describe('connect', () => {
     expect(warnSpy).not.toHaveBeenCalled();
   });
 
-  it('skips a directed connection that needs re-auth', async () => {
+  it.each([
+    ['skips a directed connection that needs re-auth', 'c_stale', 'needs_reauth', 'needs re-auth'],
+    [
+      'skips a directed connection in a non-active state',
+      'c_err',
+      'error',
+      "connection c_err is not active (status 'error')",
+    ],
+  ] as const)('%s', async (_title, id, status, input) => {
     installProvider();
-    const fetchMock = platformFetch(
-      Response.json({ connections: [makeConnection({ id: 'c_stale', status: 'needs_reauth' })] }),
-    );
+    const fetchMock = platformFetch(Response.json({ connections: [makeConnection({ id, status })] }));
     const tools = await connect({
       projectId: 'proj_1',
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
-      providers: { linear: { connectionId: 'c_stale' } },
+      providers: { linear: { connectionId: id } },
     })();
     expect(tools).toEqual({});
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('needs re-auth'));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(input));
   });
 
   it('skips a directed connection id that is not attached to the project', async () => {
@@ -285,18 +291,6 @@ describe('connect', () => {
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('pinned connection c_absent is not attached to this project'),
     );
-  });
-
-  it('skips a directed connection in a non-active state', async () => {
-    installProvider();
-    const fetchMock = platformFetch(Response.json({ connections: [makeConnection({ id: 'c_err', status: 'error' })] }));
-    const tools = await connect({
-      projectId: 'proj_1',
-      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
-      providers: { linear: { connectionId: 'c_err' } },
-    })();
-    expect(tools).toEqual({});
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("connection c_err is not active (status 'error')"));
   });
 
   it('wraps tools with connection_name when multiple active connections exist without a pin', async () => {

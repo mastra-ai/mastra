@@ -8,8 +8,9 @@ import type {
 } from '../storage/domains/boards/base.js';
 import { REVIEW_CONTEXT } from './define-board.js';
 import type { FactoryPhaseTool } from './define-board.js';
+import { boardDefinitionOf } from './stored-board.js';
 import { workSeedWithTriage } from './work-seeds.js';
-import { OWN_CARD_HAND_OFF, workBoard } from './work.js';
+import { BUILD_OBJECTIVE, OWN_CARD_HAND_OFF, workBoard } from './work.js';
 
 const MIGRATED_FIELDS = ['runner', 'exitTool', 'tools', 'autoStart', 'autoStartWhen', 'nextPhases'] as const;
 type MigratedField = (typeof MIGRATED_FIELDS)[number];
@@ -60,12 +61,48 @@ const OLD_WORK_SEED: Readonly<Record<string, Readonly<Record<MigratedField, read
 const SELF_REVIEW_BUILD_OBJECTIVE =
   'Build the plan approved in Planning for this work item. Done when every step of that plan is implemented on ' +
   "the work branch; the plan's verification gates (the tests, typecheck and lint it names, else the narrowest " +
-  'relevant ones) were run on the final head and passed; the branch is pushed; and the card was moved on with ' +
-  "factory_transition_work_item out of Building (to Review or PR review as the builder's hand-off says, or back to " +
-  "Planning if the plan proved wrong); the builder's latest message names the move and the pushed head. " +
+  'relevant ones) were run on the final head and passed; the branch is pushed; and the builder reported its ' +
+  "outcome with factory_report_outcome (review or pr-review as the builder's hand-off says, or planning if the " +
+  "plan proved wrong); the builder's latest message names the outcome and the pushed head. Factory moves the " +
+  'card once the run ends. ' +
   OWN_CARD_HAND_OFF +
   ' Continue while any of that is missing. Waiting only when the agent asked a person a question it cannot ' +
   'answer from the repository.';
+
+/** The hand-off clause Building's goals ended with while builders moved the card themselves. */
+const MOVE_TOOL_OWN_CARD_HAND_OFF =
+  'Also done, with the card left in Building, when the change request was opened but is tracked on its own card ' +
+  "and the builder's latest message posts its link and says a person should confirm it is reviewed there.";
+
+/**
+ * Building's goals as Factory stored them while builders moved the card with
+ * factory_transition_work_item, and the goal each became once builders report an outcome. Frozen:
+ * a stored objective equal to one of these is text only Factory wrote, so the migration may replace it.
+ */
+const MOVE_TOOL_BUILD_OBJECTIVES: ReadonlyMap<string, string> = new Map([
+  [
+    'Build the plan approved in Planning for this work item. Done when every step of that plan is implemented on ' +
+      "the work branch; the plan's verification gates (the tests, typecheck and lint it names, else the narrowest " +
+      'relevant ones) were run on the final head and passed; the branch is pushed; and the card was moved on with ' +
+      'factory_transition_work_item out of Building (to Review after opening the change request, or back to ' +
+      "Planning if the plan proved wrong); the builder's latest message names the move and the pushed head. " +
+      MOVE_TOOL_OWN_CARD_HAND_OFF +
+      ' Continue while any of that is missing. Waiting only when the agent asked a person a question it cannot ' +
+      'answer from the repository.',
+    BUILD_OBJECTIVE,
+  ],
+  [
+    'Build the plan approved in Planning for this work item. Done when every step of that plan is implemented on ' +
+      "the work branch; the plan's verification gates (the tests, typecheck and lint it names, else the narrowest " +
+      'relevant ones) were run on the final head and passed; the branch is pushed; and the card was moved on with ' +
+      "factory_transition_work_item out of Building (to Review or PR review as the builder's hand-off says, or back to " +
+      "Planning if the plan proved wrong); the builder's latest message names the move and the pushed head. " +
+      MOVE_TOOL_OWN_CARD_HAND_OFF +
+      ' Continue while any of that is missing. Waiting only when the agent asked a person a question it cannot ' +
+      'answer from the repository.',
+    SELF_REVIEW_BUILD_OBJECTIVE,
+  ],
+]);
 
 /**
  * The Work seed this migration fills from: Work as it was while it had its self-review phase and
@@ -78,9 +115,12 @@ export function workSeedWithSelfReview(): StoredBoardInput {
   const phases = seed.phases.flatMap((phase): StoredPhaseInput[] => {
     if (phase.key !== 'execute') return [phase];
     const goal = phase.runner?.goal && { ...phase.runner.goal, objective: SELF_REVIEW_BUILD_OBJECTIVE };
+    // Building's outcomes send the change request straight to PR review; with self-review its
+    // session reports one outcome per next phase instead.
+    const { outcomes: _outcomes, ...building } = phase;
     return [
       {
-        ...phase,
+        ...building,
         runner: { ...phase.runner, ...(goal ? { goal } : {}) },
         nextPhases: ['review', 'pr-review', 'planning', 'done', 'canceled'],
       },
@@ -338,9 +378,59 @@ export const AUTO_RUN_MIGRATION: StoredBoardMigration = {
   migrate: migrateAutoRunSwitch,
 };
 
+/**
+ * Moves a project's stored Work board from builders moving the card to sessions reporting outcomes:
+ * Building's goal, while it is still text Factory wrote, asks for an outcome instead of a move, and
+ * Planning and Building get the seed's outcomes when they list none and every outcome's phase is
+ * still one of their moves. Anything a person wrote stays; a phase without outcomes reports one
+ * per next phase.
+ */
+export function migrateWorkPhaseOutcomes(
+  board: StoredBoardRecord,
+): { board: { name: string; description: string | null; phases: StoredPhaseInput[] }; filled: string[] } | undefined {
+  const seed = boardDefinitionOf(workBoard);
+  const filled: string[] = [];
+  const phases = board.phases.map(record => {
+    const phase = toInput(record);
+    if (phase.kind !== 'working') return phase;
+    const next: StoredPhaseInput = { ...phase };
+    const objective = phase.runner?.goal?.objective;
+    const replacement = objective === undefined ? undefined : MOVE_TOOL_BUILD_OBJECTIVES.get(objective);
+    if (replacement && next.runner?.goal) {
+      next.runner = { ...next.runner, goal: { ...next.runner.goal, objective: replacement } };
+      filled.push(`${phase.key}.runner.goal.objective`);
+    }
+    const target = seed.phases.find(candidate => candidate.key === phase.key);
+    const moves = phase.nextPhases ?? board.phases.filter(other => other.key !== phase.key).map(other => other.key);
+    // Building gets them only while it still has the seed's moves: one that also moves into a
+    // self-review phase keeps one outcome per next phase, which its goal names. Planning gets them
+    // whenever it can make every seed move, so submit_plan keeps reporting `advance` in a project
+    // that still has Triage (its planner no longer sends cards back there; a person can).
+    const seedMoves = target?.nextPhases ?? [];
+    const fits =
+      phase.key === 'execute'
+        ? moves.length === seedMoves.length && seedMoves.every(key => moves.includes(key))
+        : (target?.outcomes ?? []).every(outcome => moves.includes(outcome.to));
+    if (!phase.outcomes?.length && target?.kind === 'working' && target.outcomes?.length && fits) {
+      next.outcomes = target.outcomes.map(outcome => ({ ...outcome }));
+      filled.push(`${phase.key}.outcomes`);
+    }
+    return next;
+  });
+  if (filled.length === 0) return undefined;
+  return { board: { name: board.name, description: board.description, phases }, filled };
+}
+
+export const WORK_PHASE_OUTCOMES_MIGRATION: StoredBoardMigration = {
+  key: 'work-phase-outcomes-v1',
+  boardKey: workBoard.id,
+  migrate: board => migrateWorkPhaseOutcomes(board),
+};
+
 /** The board migrations each project gets once, in order. */
 export const BOARD_MIGRATIONS: readonly StoredBoardMigration[] = [
   WORK_PHASE_RUNNERS_MIGRATION,
   SELF_REVIEW_MIGRATION,
   AUTO_RUN_MIGRATION,
+  WORK_PHASE_OUTCOMES_MIGRATION,
 ];

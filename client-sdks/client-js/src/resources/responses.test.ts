@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MastraClient } from '../client';
-import type { ResponsesStreamEvent } from '../types';
+import type {
+  ResponsesCompletedEvent,
+  ResponsesOutputTextDeltaEvent,
+  ResponsesResponse,
+  ResponsesStreamEvent,
+} from '../types';
 
 global.fetch = vi.fn();
 
@@ -12,29 +17,85 @@ const clientOptions = {
 };
 
 function mockJsonResponse(data: unknown) {
-  const response = new Response(undefined, {
+  const response = new Response(JSON.stringify(data), {
     status: 200,
     statusText: 'OK',
     headers: new Headers({
       'Content-Type': 'application/json',
     }),
   });
-
-  response.json = () => Promise.resolve(data);
   (global.fetch as any).mockResolvedValueOnce(response);
 }
 
-function mockSseResponse(events: unknown[]) {
-  const encoder = new TextEncoder();
-  const body = new ReadableStream<Uint8Array>({
+/** Wire shape of a `response.completed` event: `output_text` is derived client-side, not sent. */
+type WireCompletedEvent = Omit<ResponsesCompletedEvent, 'response'> & {
+  response: Omit<ResponsesResponse, 'output_text'>;
+};
+
+const textDeltaEvent: ResponsesOutputTextDeltaEvent = {
+  type: 'response.output_text.delta',
+  sequence_number: 1,
+  output_index: 0,
+  content_index: 0,
+  item_id: 'msg_123',
+  delta: 'Hello',
+};
+
+function buildCompletedEvent(): WireCompletedEvent {
+  return {
+    type: 'response.completed',
+    sequence_number: 2,
+    response: {
+      id: 'resp_123',
+      object: 'response',
+      created_at: 1234567890,
+      model: 'support-agent',
+      status: 'completed',
+      output: [
+        {
+          id: 'msg_123',
+          type: 'message',
+          role: 'assistant',
+          status: 'completed',
+          content: [{ type: 'output_text', text: 'Hello world' }],
+        },
+      ],
+      usage: null,
+      instructions: null,
+      previous_response_id: null,
+      store: false,
+    },
+  };
+}
+
+type SseMockOptions = {
+  /** Blank-line event separator placed between `data:` records. Defaults to LF (`\n\n`). */
+  delimiter?: string;
+  /** When set, the wire payload is enqueued in fixed-size byte slices instead of one chunk. */
+  chunkSize?: number;
+};
+
+function encodeSsePayload(events: unknown[], delimiter = '\n\n'): Uint8Array {
+  const payload = events.map(event => `data: ${JSON.stringify(event)}`).join(delimiter) + delimiter;
+  return new TextEncoder().encode(payload);
+}
+
+function streamFromBytes(bytes: Uint8Array, chunkSize?: number): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
     start(controller) {
-      for (const event of events) {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+      if (chunkSize && chunkSize > 0) {
+        for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+          controller.enqueue(bytes.slice(offset, offset + chunkSize));
+        }
+      } else {
+        controller.enqueue(bytes);
       }
       controller.close();
     },
   });
+}
 
+function mockStreamResponse(body: ReadableStream<Uint8Array>) {
   (global.fetch as any).mockResolvedValueOnce(
     new Response(body, {
       status: 200,
@@ -44,6 +105,48 @@ function mockSseResponse(events: unknown[]) {
       }),
     }),
   );
+}
+
+function mockSseResponse(events: unknown[], options: SseMockOptions = {}) {
+  const { delimiter = '\n\n', chunkSize } = options;
+  mockStreamResponse(streamFromBytes(encodeSsePayload(events, delimiter), chunkSize));
+}
+
+/** Mocks a stream with a hand-built wire payload, for mixed delimiters and multi-line `data:`. */
+function mockRawSseResponse(payload: string, options: { chunkSize?: number } = {}) {
+  const bytes = new TextEncoder().encode(payload);
+  mockStreamResponse(streamFromBytes(bytes, options.chunkSize));
+}
+
+/** Mocks an open SSE stream and returns its controller so a test can enqueue after a pending read. */
+function mockOpenSseStream() {
+  let controller!: ReadableStreamDefaultController<Uint8Array>;
+  const body = new ReadableStream<Uint8Array>({
+    start(c) {
+      controller = c;
+    },
+  });
+  mockStreamResponse(body);
+  return controller;
+}
+
+/** Bounds a stream read so an unfixed parser fails with a clear message instead of hanging the suite. */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`Timed out after ${ms}ms waiting for ${label}`)), ms);
+    }),
+  ]).finally(() => clearTimeout(timer)) as Promise<T>;
+}
+
+async function collectEvents(stream: AsyncIterable<ResponsesStreamEvent>): Promise<ResponsesStreamEvent[]> {
+  const events: ResponsesStreamEvent[] = [];
+  for await (const event of stream) {
+    events.push(event);
+  }
+  return events;
 }
 
 describe('Responses Resource', () => {
@@ -673,6 +776,260 @@ describe('Responses Resource', () => {
         arguments: '{"city":"Lagos"}',
       },
     ]);
+  });
+
+  describe('SSE frame boundaries', () => {
+    const delimiters: Array<{ name: string; delimiter: string }> = [
+      { name: 'LF', delimiter: '\n\n' },
+      { name: 'CRLF', delimiter: '\r\n\r\n' },
+      { name: 'CR', delimiter: '\r\r' },
+    ];
+
+    // Technical: blank-line framing in `\r\n\r\n`, `\n\n`, or `\r\r` must yield each event
+    // separately instead of merging frames until EOF. (#31000)
+    it.each(delimiters)('emits separate events for $name framing', async ({ delimiter }) => {
+      mockSseResponse([textDeltaEvent, buildCompletedEvent()], { delimiter });
+
+      const stream = await client.responses.create({
+        model: 'openai/gpt-5',
+        agent_id: 'support-agent',
+        input: 'Say hello',
+        stream: true,
+      });
+
+      const events = await collectEvents(stream);
+
+      expect(events).toHaveLength(2);
+      expect(events[0]).toMatchObject({
+        type: 'response.output_text.delta',
+        sequence_number: 1,
+        delta: 'Hello',
+      });
+      expect(events[1]).toMatchObject({
+        type: 'response.completed',
+        sequence_number: 2,
+        response: { output_text: 'Hello world' },
+      });
+    });
+
+    // A CRLF, LF or CR ending may sit next to any other, so `\n\r\n`, `\n\r` and `\r\n\r` are
+    // also valid blank-line frame breaks. (#31000)
+    const mixedDelimiters: Array<{ name: string; delimiter: string }> = [
+      { name: 'LF then CRLF', delimiter: '\n\r\n' },
+      { name: 'LF then CR', delimiter: '\n\r' },
+      { name: 'CRLF then CR', delimiter: '\r\n\r' },
+    ];
+
+    function mixedDelimiterPayload(delimiter: string): string {
+      return `data: ${JSON.stringify(textDeltaEvent)}${delimiter}data: ${JSON.stringify(buildCompletedEvent())}`;
+    }
+
+    it.each(mixedDelimiters)('parses $name framing in coalesced chunks', async ({ delimiter }) => {
+      mockRawSseResponse(mixedDelimiterPayload(delimiter));
+
+      const stream = await client.responses.create({
+        model: 'openai/gpt-5',
+        agent_id: 'support-agent',
+        input: 'Say hello',
+        stream: true,
+      });
+
+      const events = await collectEvents(stream);
+
+      expect(events.map(event => event.type)).toEqual(['response.output_text.delta', 'response.completed']);
+      expect(events[0]).toMatchObject({ delta: 'Hello' });
+      expect(events[1]).toMatchObject({ response: { output_text: 'Hello world' } });
+    });
+
+    it.each(mixedDelimiters)('parses $name framing one byte at a time', async ({ delimiter }) => {
+      mockRawSseResponse(mixedDelimiterPayload(delimiter), { chunkSize: 1 });
+
+      const stream = await client.responses.create({
+        model: 'openai/gpt-5',
+        agent_id: 'support-agent',
+        input: 'Say hello',
+        stream: true,
+      });
+
+      const events = await collectEvents(stream);
+
+      expect(events.map(event => event.type)).toEqual(['response.output_text.delta', 'response.completed']);
+      expect(events[0]).toMatchObject({ delta: 'Hello' });
+      expect(events[1]).toMatchObject({ response: { output_text: 'Hello world' } });
+    });
+
+    it('chooses the earliest boundary when delimiters are mixed', async () => {
+      // Three events framed CRLF, then CR, then LF. Any parser that prefers one delimiter
+      // form globally merges the earlier frames into one `JSON.parse` and fails. (#31000)
+      mockRawSseResponse(
+        `data: ${JSON.stringify(textDeltaEvent)}\r\n\r\ndata: ${JSON.stringify(buildCompletedEvent())}\r\r`,
+      );
+
+      const stream = await client.responses.create({
+        model: 'openai/gpt-5',
+        agent_id: 'support-agent',
+        input: 'Say hello',
+        stream: true,
+      });
+
+      const events = await collectEvents(stream);
+
+      expect(events.map(event => event.type)).toEqual(['response.output_text.delta', 'response.completed']);
+      expect(events[0]).toMatchObject({ delta: 'Hello' });
+      expect(events[1]).toMatchObject({ response: { output_text: 'Hello world' } });
+    });
+
+    it('parses CRLF-framed events that arrive one byte at a time', async () => {
+      // The issue: CR and LF arrive in separate reads, so a partial CRLF must not be
+      // consumed as a complete boundary. (#31000)
+      mockSseResponse([textDeltaEvent, buildCompletedEvent()], { delimiter: '\r\n\r\n', chunkSize: 1 });
+
+      const stream = await client.responses.create({
+        model: 'openai/gpt-5',
+        agent_id: 'support-agent',
+        input: 'Say hello',
+        stream: true,
+      });
+
+      const events = await collectEvents(stream);
+
+      expect(events).toHaveLength(2);
+      expect(events[0]).toMatchObject({ type: 'response.output_text.delta', delta: 'Hello' });
+      expect(events[1]).toMatchObject({ type: 'response.completed', response: { output_text: 'Hello world' } });
+    });
+
+    it('joins multi-line data within a CRLF-framed event', async () => {
+      const firstLine = `{"type":"response.output_text.delta","sequence_number":1,"output_index":0,`;
+      const secondLine = `"content_index":0,"item_id":"msg_123","delta":"Hello"}`;
+      mockRawSseResponse(
+        `data: ${firstLine}\r\ndata: ${secondLine}\r\n\r\ndata: ${JSON.stringify(buildCompletedEvent())}\r\n\r\n`,
+      );
+
+      const stream = await client.responses.create({
+        model: 'openai/gpt-5',
+        agent_id: 'support-agent',
+        input: 'Say hello',
+        stream: true,
+      });
+
+      const events = await collectEvents(stream);
+
+      expect(events).toHaveLength(2);
+      expect(events[0]).toMatchObject({ type: 'response.output_text.delta', delta: 'Hello' });
+      expect(events[1]).toMatchObject({ type: 'response.completed', response: { output_text: 'Hello world' } });
+    });
+
+    it('parses a final event that arrives without a trailing delimiter at EOF', async () => {
+      mockRawSseResponse(
+        `data: ${JSON.stringify(textDeltaEvent)}\r\n\r\ndata: ${JSON.stringify(buildCompletedEvent())}`,
+      );
+
+      const stream = await client.responses.create({
+        model: 'openai/gpt-5',
+        agent_id: 'support-agent',
+        input: 'Say hello',
+        stream: true,
+      });
+
+      const events = await collectEvents(stream);
+
+      expect(events).toHaveLength(2);
+      expect(events[0]).toMatchObject({ type: 'response.output_text.delta', delta: 'Hello' });
+      expect(events[1]).toMatchObject({ type: 'response.completed', response: { output_text: 'Hello world' } });
+    });
+
+    it('emits a complete CRLF event before the stream ends', async () => {
+      const controller = mockOpenSseStream();
+      const encoder = new TextEncoder();
+
+      const stream = await client.responses.create({
+        model: 'openai/gpt-5',
+        agent_id: 'support-agent',
+        input: 'Say hello',
+        stream: true,
+      });
+      const iterator = stream[Symbol.asyncIterator]();
+
+      try {
+        const first = iterator.next();
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(textDeltaEvent)}\r\n\r\n`));
+
+        const firstResult = await withTimeout(first, 2000, 'first stream event');
+        expect(firstResult.done).toBe(false);
+        expect(firstResult.value).toMatchObject({
+          type: 'response.output_text.delta',
+          sequence_number: 1,
+          delta: 'Hello',
+        });
+
+        const second = iterator.next();
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(buildCompletedEvent())}\r\n\r\n`));
+        controller.close();
+
+        const secondResult = await withTimeout(second, 2000, 'second stream event');
+        expect(secondResult.done).toBe(false);
+        expect(secondResult.value).toMatchObject({
+          type: 'response.completed',
+          response: { output_text: 'Hello world' },
+        });
+
+        const done = await withTimeout(iterator.next(), 2000, 'stream completion');
+        expect(done.done).toBe(true);
+      } finally {
+        try {
+          controller.close();
+        } catch {
+          // Already closed.
+        }
+        await iterator.return?.();
+      }
+    });
+
+    it('emits a complete CR-framed event before the stream ends', async () => {
+      // A blank line of two bare carriage returns must be emitted as soon as the second CR
+      // arrives; holding it back in case that CR becomes a CRLF stalls a quiet CR-framed
+      // stream indefinitely. (#31000)
+      const controller = mockOpenSseStream();
+      const encoder = new TextEncoder();
+
+      const stream = await client.responses.create({
+        model: 'openai/gpt-5',
+        agent_id: 'support-agent',
+        input: 'Say hello',
+        stream: true,
+      });
+      const iterator = stream[Symbol.asyncIterator]();
+
+      try {
+        const first = iterator.next();
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(textDeltaEvent)}\r\r`));
+
+        const firstResult = await withTimeout(first, 2000, 'first CR-framed stream event');
+        expect(firstResult.done).toBe(false);
+        expect(firstResult.value).toMatchObject({
+          type: 'response.output_text.delta',
+          sequence_number: 1,
+          delta: 'Hello',
+        });
+
+        const second = iterator.next();
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(buildCompletedEvent())}\r\r`));
+
+        const secondResult = await withTimeout(second, 2000, 'second CR-framed stream event');
+        expect(secondResult.done).toBe(false);
+        expect(secondResult.value).toMatchObject({
+          type: 'response.completed',
+          response: { output_text: 'Hello world' },
+        });
+      } finally {
+        try {
+          controller.close();
+        } catch {
+          // Already closed.
+        }
+        await iterator.return?.();
+      }
+    });
   });
 
   it('retrieves a stored response', async () => {

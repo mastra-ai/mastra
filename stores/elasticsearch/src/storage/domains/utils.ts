@@ -33,11 +33,15 @@ export function processRecord(tableName: TABLE_NAMES, record: Record<string, unk
   if (tableName === TABLE_MESSAGES) {
     key = getKey(tableName, { threadId: record.threadId, id: record.id });
   } else if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
+    // Workflow snapshots are keyed by run, not by resource: a single run must map
+    // to exactly one document so readers, updaters and deleters all agree. The
+    // `resourceId` stays in the record itself for filtering. Older versions
+    // appended `:resourceId:<id>` here, and those legacy documents are still read
+    // through the fallback lookup in the workflows domain.
     key = getKey(tableName, {
       namespace: record.namespace || 'workflows',
       workflow_name: record.workflow_name,
       run_id: record.run_id,
-      ...(record.resourceId ? { resourceId: record.resourceId } : {}),
     });
   } else {
     key = getKey(tableName, { id: record.id });

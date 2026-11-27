@@ -22,6 +22,8 @@ import { getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
 import { REVIEW_CONTEXT } from './boards/define-board.js';
 import type { RepositoryAccess, VersionControl } from './capabilities/version-control.js';
 import { redactCredentials } from './environment/build.js';
+import { recordedHeadResolver } from './environment/heads.js';
+import type { EnvironmentHeads } from './environment/heads.js';
 import { groupRepositoryIds, groupedRepositoryAccess } from './environment/repository-access.js';
 import { environmentSandboxContext, resolveProjectEnvironment } from './environment/session-environment.js';
 import type { SessionEnvironment, SessionEnvironmentRepo } from './environment/session-environment.js';
@@ -548,6 +550,12 @@ export interface CreateWorkspaceFactoryOptions {
   workItems?: Pick<WorkItemsStorage, 'findActiveRunBindingForSession' | 'hasRunBindingForSession'>;
   /** Projects storage used to resolve a session's project environment. */
   projects?: Pick<FactoryProjectsStorage, 'get'>;
+  /**
+   * Called when a new sandbox is created from the project's built template
+   * (not when an existing one is reattached), so the host can rebuild a
+   * template that fell behind. Must not throw.
+   */
+  onSandboxCreated?: (project: FactoryProject) => void;
   /** The Factory's sandbox environment variables, applied to each session sandbox. */
   sandboxEnvs?: Pick<SandboxEnvStore, 'resolve' | 'revisions'>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
@@ -641,16 +649,30 @@ export type { SessionEnvironment, SessionEnvironmentRepo } from './environment/s
  * sandbox of its own link, still booted with the project's settings. A link
  * whose repository row is missing is skipped with a warning rather than
  * failing every start of the session.
+ *
+ * `templateHeads` are the commits the project's active template was built
+ * from, absent before the first build. A session that asks for those commits
+ * boots the template the project already built; one that asks for the newest
+ * commits names a template nobody built yet, so every session start after a
+ * push would start its own build, outside the debounce. The session's
+ * checkout fetches the newest commit either way, and its start asks for a
+ * debounced rebuild through `onSandboxCreated`, so the template keeps up.
  */
 async function resolveSessionEnvironment(
   projects: Pick<FactoryProjectsStorage, 'get'> | undefined,
   storage: SourceControlStorageHandle,
   session: SourceControlSession,
-): Promise<SessionEnvironment | undefined> {
+): Promise<
+  { environment: SessionEnvironment; templateHeads: EnvironmentHeads | undefined; project: FactoryProject } | undefined
+> {
   if (!projects || !session.factoryProjectId) return undefined;
   const project = await projects.get({ orgId: session.orgId, id: session.factoryProjectId });
   if (!project) return undefined;
-  return resolveProjectEnvironment(storage, project);
+  return {
+    environment: await resolveProjectEnvironment(storage, project),
+    templateHeads: project.activeTemplateHeads ?? undefined,
+    project,
+  };
 }
 
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
@@ -763,7 +785,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // factory in position order, with the project's settings. Absent when the
     // session predates `factoryProjectId`; the settings apply to every boot of
     // a factory session, list form or single repository.
-    const resolvedEnvironment = await resolveSessionEnvironment(projects, storage, session);
+    const sessionEnvironment = await resolveSessionEnvironment(projects, storage, session);
+    const resolvedEnvironment = sessionEnvironment?.environment;
+    const templateHeads = sessionEnvironment?.templateHeads;
     const sandboxSettings = resolvedEnvironment?.settings ?? {};
     // The Factory's variables, read before construction (which is synchronous).
     const envScope =
@@ -1020,6 +1044,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
                   ? environmentSandboxContext(environment, {
                       orgId: session.orgId,
                       getRepositoryAccess: args => repositoryAccess(args.repositoryId),
+                      ...(templateHeads ? { resolveHead: recordedHeadResolver(templateHeads) } : {}),
                     })
                   : {
                       // Stored nullable; the context speaks `undefined` for absent.
@@ -1075,6 +1100,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           // callback installed itself expects a prepared workspace.
           sandbox.setOnStart(previous => async args => {
             recordSandboxAcquired(args.sandbox, args.outcome);
+            if (args.outcome === 'created' && templateHeads && sessionEnvironment) {
+              options.onSandboxCreated?.(sessionEnvironment.project);
+            }
             try {
               await timedPhase(`workspace.onStart(${args.outcome})`, async () => {
                 await setupHook(args);
@@ -1570,6 +1598,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // would wedge the session — the agent could never get a shell to fix
         // the problem. Clone and checkout above still ran, so the tree is
         // real; the agent (or an edited setup command) takes it from here.
+        // The same goes for a command the environment build already ran and
+        // saw fail: running it again here would fail the same way.
+        if (gate.failedInBuild) {
+          console.warn('[Mastra Factory] Skipping setup command that failed in the environment build', {
+            orgId: session.orgId,
+            sessionId: session.sessionId,
+            projectRepositoryId: session.projectRepositoryId,
+          });
+          return;
+        }
         if (hasFailedSetupCommand(session.id, projectRepository.setupCommand)) {
           console.warn('[Mastra Factory] Skipping setup command that already failed this session', {
             orgId: session.orgId,
@@ -1673,7 +1711,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           try {
             await runSessionSetup(target, primaryDir, entry.gate);
             state.branch = session.branch;
-            if (repo.setupCommand && hasFailedSetupCommand(session.id, repo.setupCommand)) {
+            if (
+              repo.setupCommand &&
+              (entry.gate.failedInBuild || hasFailedSetupCommand(session.id, repo.setupCommand))
+            ) {
               state.setupStatus = 'failed';
               repeated.add(repo.slug);
             }
@@ -1737,7 +1778,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         });
         for (const { repo, entry, state, synced } of secondaries) {
           if (!synced || !repo.setupCommand || entry.gate.setupDone) continue;
-          if (hasFailedSetupCommand(session.id, `${repo.slug}:${repo.setupCommand}`)) {
+          if (entry.gate.failedInBuild || hasFailedSetupCommand(session.id, `${repo.slug}:${repo.setupCommand}`)) {
             state.setupStatus = 'failed';
             repeated.add(repo.slug);
             continue;

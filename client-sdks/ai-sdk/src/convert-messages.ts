@@ -17,14 +17,51 @@ function isSystemReminderUIMessage(message: {
     return false;
   }
 
-  // Fall back to text inspection for backward compatibility
+  // Fall back to text inspection for legacy reminders stored without metadata. Core emits those with the first text
+  // part being one whole <system-reminder> element (paired, or self-closing when the reminder carries only files);
+  // user text that merely quotes the tag is not a reminder.
   if (Array.isArray(message.parts)) {
-    return message.parts.some(
-      part => part.type === 'text' && typeof part.text === 'string' && part.text.includes('<system-reminder'),
-    );
+    const firstTextPart = message.parts.find(part => part.type === 'text');
+    return isSystemReminderElement(firstTextPart?.text);
   }
 
-  return typeof message.content === 'string' && message.content.includes('<system-reminder');
+  return isSystemReminderElement(message.content);
+}
+
+// Recognizes exactly the shapes core's signalToXmlMarkup emits for a reminder: `<system-reminder{attrs} />`, or
+// `<system-reminder{attrs}>{contents}</system-reminder>` with non-empty contents. Each attribute is ` name="value"`
+// with a unique name and `&`, `<`, `>` and `"` escaped in the value, and contents have every
+// `</system-reminder\s*>` escaped. The opening tag is read one attribute at a time, then the self-closing and paired
+// forms are checked separately, so one form cannot match as the other.
+const SYSTEM_REMINDER_OPEN = '<system-reminder';
+const SYSTEM_REMINDER_ATTRIBUTE = / ([A-Za-z_][A-Za-z0-9_.-]*)="(?:[^"<>&]|&(?:amp|lt|gt|quot);)*"/y;
+const SYSTEM_REMINDER_SELF_CLOSE = ' />';
+const SYSTEM_REMINDER_CLOSE = '</system-reminder>';
+const SYSTEM_REMINDER_CLOSING_TAG = /<\/system-reminder\s*>/i;
+
+function isSystemReminderElement(text: unknown) {
+  if (typeof text !== 'string') return false;
+  const trimmed = text.trim();
+  if (!trimmed.startsWith(SYSTEM_REMINDER_OPEN)) return false;
+
+  const names = new Set<string>();
+  let index = SYSTEM_REMINDER_OPEN.length;
+  for (;;) {
+    SYSTEM_REMINDER_ATTRIBUTE.lastIndex = index;
+    const attribute = SYSTEM_REMINDER_ATTRIBUTE.exec(trimmed);
+    if (!attribute) break;
+    if (names.has(attribute[1]!)) return false;
+    names.add(attribute[1]!);
+    index = SYSTEM_REMINDER_ATTRIBUTE.lastIndex;
+  }
+
+  if (trimmed.startsWith(SYSTEM_REMINDER_SELF_CLOSE, index)) {
+    return index + SYSTEM_REMINDER_SELF_CLOSE.length === trimmed.length;
+  }
+  if (trimmed[index] !== '>') return false;
+
+  const body = trimmed.slice(index + 1, -SYSTEM_REMINDER_CLOSE.length);
+  return body.length > 0 && trimmed.endsWith(SYSTEM_REMINDER_CLOSE) && !SYSTEM_REMINDER_CLOSING_TAG.test(body);
 }
 
 function filterSystemReminderUIMessages<

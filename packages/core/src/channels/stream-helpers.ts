@@ -404,3 +404,31 @@ export function chunkToFallbackMessage(chunk: StreamChunk): string | null {
   }
   return null;
 }
+
+/** Whitespace plus the meaningful joiners ZWNJ (U+200C) and ZWJ (U+200D). */
+const EDGE_PADDING = /[\s\u200C\u200D]/;
+
+/**
+ * Sanitize a buffered channel reply before posting.
+ *
+ * Zero-width space (U+200B) and the byte-order mark (U+FEFF) are invisible
+ * padding and are removed everywhere. Whitespace and the joiners ZWNJ
+ * (U+200C) / ZWJ (U+200D) are trimmed only at the edges, so internal joiners
+ * in compound emoji (🏄🏼‍♂️, 👨‍👩‍👧) and scripts such as Persian (می‌خواهم)
+ * survive — the bug behind #31205. Invisible-only input collapses to '' so
+ * callers skip posting it entirely.
+ *
+ * The edge trim is a single-pass scan rather than
+ * `.replace(/^[\s\u200C\u200D]+|[\s\u200C\u200D]+$/g, '')`: that anchored
+ * alternation backtracks quadratically over a long interior run of the class
+ * (a 300k-character run of model-controlled output took ~80s), while this
+ * scan is O(n).
+ */
+export function cleanBufferedText(input: string): string {
+  const stripped = input.replace(/[\u200B\uFEFF]/g, '');
+  let start = 0;
+  let end = stripped.length;
+  while (start < end && EDGE_PADDING.test(stripped.charAt(start))) start++;
+  while (end > start && EDGE_PADDING.test(stripped.charAt(end - 1))) end--;
+  return start === 0 && end === stripped.length ? stripped : stripped.slice(start, end);
+}

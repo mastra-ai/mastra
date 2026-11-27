@@ -24,24 +24,17 @@ afterEach(() => {
 });
 
 describe('getToken', () => {
-  it('returns MASTRA_API_TOKEN from env when set', async () => {
-    process.env.MASTRA_API_TOKEN = 'env-token-789';
+  it.each([
+    ['returns MASTRA_API_TOKEN from env when set', 'env-token-789'],
+    ['prefers env token over file credentials', 'from-env'],
+  ] as const)('%s', async (_title, value) => {
+    process.env.MASTRA_API_TOKEN = value;
     vi.resetModules();
 
     const { getToken } = await import('./credentials.js');
     const token = await getToken();
 
-    expect(token).toBe('env-token-789');
-  });
-
-  it('prefers env token over file credentials', async () => {
-    process.env.MASTRA_API_TOKEN = 'from-env';
-    vi.resetModules();
-
-    const { getToken } = await import('./credentials.js');
-    const token = await getToken();
-
-    expect(token).toBe('from-env');
+    expect(token).toBe(value);
   });
 });
 

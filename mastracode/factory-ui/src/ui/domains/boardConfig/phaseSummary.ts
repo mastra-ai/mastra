@@ -1,7 +1,3 @@
-import type { BoardPhaseKind } from '@mastra/factory/boards';
-import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
-import { IconHand5Finger } from '@mastra/playground-ui/icons/central/IconHand5Finger';
-
 import type { InstalledPhaseInfo } from '../../../api/types';
 import { describeRule } from '../settings/components/conditionFields';
 import { PHASE_TOOLS } from './boardDraft';
@@ -26,11 +22,4 @@ export function approvalText(exitTool: ExitTool): string {
 
 export function toolLabel(id: string): string {
   return PHASE_TOOLS.find(tool => tool.id === id)?.label ?? id;
-}
-
-/** Who works a card in a phase no agent runs: nobody on a terminal phase, a person elsewhere. */
-export function unattended(kind: BoardPhaseKind) {
-  return kind === 'terminal'
-    ? { text: 'Finished', icon: IconCircleCheck }
-    : { text: 'Waits for someone', icon: IconHand5Finger };
 }

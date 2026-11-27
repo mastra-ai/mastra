@@ -97,9 +97,10 @@ export function WorkspaceAsideHeader({ children, actions }: WorkspaceAsideHeader
 /** Shows the file tree, or search results while the search is open. */
 export function WorkspaceTree() {
   const { isSearching } = useWorkspaceContext();
+  if (!isSearching) return <TreeBody />;
   return (
     <ScrollArea className="min-h-0 flex-1 px-2 py-1">
-      {isSearching ? <WorkspaceSearchResults /> : <TreeBody />}
+      <WorkspaceSearchResults />
     </ScrollArea>
   );
 }

@@ -4,6 +4,18 @@ import type { Components, ExtraProps } from 'react-markdown';
 
 import { bodyHeadings } from '../lib/bodyHeadings';
 import { scopeTitle } from '../lib/pageAddress';
+import {
+  KNOWLEDGE_NOTE,
+  KNOWLEDGE_PAGE_ARTICLE,
+  KNOWLEDGE_PAGE_ASIDE,
+  KNOWLEDGE_PAGE_BADGES,
+  KNOWLEDGE_PAGE_BODY,
+  KNOWLEDGE_PAGE_HEADER,
+  KNOWLEDGE_PAGE_MAIN,
+  KNOWLEDGE_PEEK_BODY,
+  KNOWLEDGE_PEEK_COUNTS,
+  KNOWLEDGE_PEEK_PREVIEW,
+} from '../lib/pageLayout';
 import { bodyLinkRefs, knowledgePageRefIndex, noteMentionTarget } from '../lib/pageRefs';
 import type { KnowledgePageRefIndex } from '../lib/pageRefs';
 import { KnowledgePagesByRef } from '../lib/pagesByRefContext';
@@ -138,7 +150,7 @@ function linkedPages(page: KnowledgePagePayload, index: KnowledgePageRefIndex) {
   return [...counts.values()];
 }
 
-function PeekCount({ label, value }: { label: string; value: number | string }) {
+export function PeekCount({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex flex-col gap-0.5 px-3 py-2">
       <dt>
@@ -244,7 +256,7 @@ export function KnowledgeNoteItem({
     <li
       ref={itemRef}
       data-highlighted={highlighted || undefined}
-      className={`flex gap-3 rounded-lg border border-border bg-card ${compact ? 'p-2' : 'p-3'}`}
+      className={KNOWLEDGE_NOTE[compact ? 'compact' : 'full']}
       style={highlighted ? { borderColor: 'var(--chart-blue)', boxShadow: '0 0 0 1px var(--chart-blue)' } : undefined}
     >
       {compact ? null : <AuthorMark author={note.provenance.author} />}
@@ -500,18 +512,8 @@ export function KnowledgePageDetail({
     ) : null;
 
   return (
-    <article
-      key={page.id}
-      aria-label={page.name}
-      className="@container flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain"
-    >
-      <header
-        className={
-          compact
-            ? 'flex flex-col gap-3 border-b border-surface-rim px-4 pt-3 pb-4'
-            : 'flex flex-col gap-3 border-b border-border bg-fill-subtle px-6 pt-5 pb-4'
-        }
-      >
+    <article key={page.id} aria-label={page.name} className={KNOWLEDGE_PAGE_ARTICLE}>
+      <header className={KNOWLEDGE_PAGE_HEADER[compact ? 'compact' : 'full']}>
         <Breadcrumb label="Breadcrumb" className="ml-[-.9em] min-w-0" listClassName="overflow-hidden">
           {ancestors.map(ancestor => (
             <Crumb key={ancestor.id} as="button" onClick={() => onPageClick(ancestor)}>
@@ -541,7 +543,7 @@ export function KnowledgePageDetail({
               {page.description}
             </Txt>
           ) : null}
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <div className={KNOWLEDGE_PAGE_BADGES}>
             <Badge variant={page.isScope ? 'info' : 'neutral'} size="sm">
               {kind}
             </Badge>
@@ -570,17 +572,14 @@ export function KnowledgePageDetail({
       </header>
 
       {compact ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-6 p-4">
-          <dl
-            aria-label="Links and notes"
-            className="grid grid-cols-3 divide-x divide-border rounded-lg border border-border"
-          >
+        <div className={KNOWLEDGE_PEEK_BODY}>
+          <dl aria-label="Links and notes" className={KNOWLEDGE_PEEK_COUNTS}>
             <PeekCount label="Links in" value={linksIn} />
             <PeekCount label="Links out" value={linksTo.length} />
             <PeekCount label="Notes" value={notesMore ? `${notes.length}+` : notes.length} />
           </dl>
           {/* The preview takes the panel's free height: a long body scrolls inside it, down to 12rem. */}
-          <KnowledgeDetailSection label="Preview" className="min-h-48 flex-1">
+          <KnowledgeDetailSection label="Preview" className={KNOWLEDGE_PEEK_PREVIEW}>
             {page.body ? (
               <ScrollArea className="min-h-0">
                 <div data-testid="knowledge-page-body">{body}</div>
@@ -602,8 +601,8 @@ export function KnowledgePageDetail({
           ) : null}
         </div>
       ) : (
-        <div className="flex flex-col gap-8 p-6 @3xl:flex-row">
-          <div className="flex min-w-0 flex-col gap-8 @3xl:flex-1">
+        <div className={KNOWLEDGE_PAGE_BODY}>
+          <div className={KNOWLEDGE_PAGE_MAIN}>
             {page.body ? (
               <div ref={bodyRef} data-testid="knowledge-page-body" className="max-w-3xl">
                 {body}
@@ -620,7 +619,7 @@ export function KnowledgePageDetail({
             ) : null}
           </div>
 
-          <aside className="flex min-w-0 flex-col divide-y divide-border border-t border-border *:py-6 *:last:pb-0 @3xl:w-72 @3xl:shrink-0 @3xl:border-t-0 @3xl:border-l @3xl:pl-8 @3xl:*:first:pt-0">
+          <aside className={KNOWLEDGE_PAGE_ASIDE}>
             {headings.length > 1 ? (
               <KnowledgeDetailSection label="On this page">
                 <ol className="flex flex-col gap-1.5 border-l border-border">

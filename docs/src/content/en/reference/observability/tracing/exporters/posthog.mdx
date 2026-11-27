@@ -201,4 +201,4 @@ Feedback events map to these PostHog properties:
 | `metadata.sessionId` | `$ai_session_id` |
 | `metadata` (other keys) | custom properties |
 
-Feedback without a `traceId` is dropped because PostHog anchors feedback to a trace through `$ai_trace_id`. The event's distinct ID resolves from `feedbackUserId`, then `metadata.userId`, then `defaultDistinctId`, then `anonymous`.
+Feedback without a `traceId` is dropped because PostHog anchors feedback to a trace through `$ai_trace_id`. The event's distinct ID resolves from `feedbackUserId`, then `userId`, then `metadata.userId`, then `defaultDistinctId`, then `anonymous`.

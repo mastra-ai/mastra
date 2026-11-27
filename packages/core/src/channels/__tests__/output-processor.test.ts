@@ -322,6 +322,144 @@ describe('ChatChannelOutputProcessor', () => {
     });
   });
 
+  describe('Unicode joiners (ZWNJ/ZWJ) in buffered replies', () => {
+    // Content matrix — each entry carries a meaningful internal U+200C (ZWNJ)
+    // or U+200D (ZWJ) that must survive the buffered cleanup.
+    const SURFER = '\u{1F3C4}\u{1F3FC}\u200D\u2642\uFE0F'; // 🏄🏼‍♂️ surfer + skin tone + ZWJ + male sign
+    const FAMILY = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}'; // 👨‍👩‍👧 man + ZWJ + woman + ZWJ + girl
+    const HEART_ON_FIRE = '\u2764\uFE0F\u200D\u{1F525}'; // ❤️‍🔥 heart + VS16 + ZWJ + fire
+    const RAINBOW_FLAG = '\u{1F3F3}\uFE0F\u200D\u{1F308}'; // 🏳️‍🌈 flag + VS16 + ZWJ + rainbow
+    const PERSIAN = 'می\u200Cخواهم'; // internal ZWNJ
+    const COMPOUND = SURFER + FAMILY + HEART_ON_FIRE + RAINBOW_FLAG + PERSIAN;
+
+    // The surfer's ZWJ arrives in its own delta, so a joiner split across
+    // chunks is exercised by both buffered paths.
+    const COMPOUND_DELTAS = [
+      '\u{1F3C4}\u{1F3FC}', // surfer + skin tone
+      '\u200D', // ZWJ alone
+      '\u2642\uFE0F', // male sign + VS16
+      FAMILY,
+      HEART_ON_FIRE,
+      RAINBOW_FLAG,
+      PERSIAN,
+    ];
+
+    const deltas = (...pieces: string[]) => pieces.map(text => ({ type: 'text-delta', payload: { text } }));
+    const stepFinish = { type: 'step-finish', payload: {} };
+    const finish = { type: 'finish', payload: {} };
+    const formats: Array<{ label: string; textFormat: 'markdown' | 'plain' | undefined }> = [
+      { label: 'markdown', textFormat: undefined },
+      { label: 'plain', textFormat: 'plain' },
+    ];
+    const expectedPost = (cleaned: string, textFormat: 'markdown' | 'plain' | undefined) =>
+      textFormat === 'plain' ? cleaned : { markdown: cleaned };
+    const onlyPosts = (calls: Call[]) => calls.filter(c => c.kind === 'post');
+
+    // Make the initial StreamingPlan post reject so the buffered fallback runs.
+    const rejectStreamingPost = async (chatThread: any, calls: Call[]) => {
+      const { StreamingPlan } = await getChatModule();
+      chatThread.post.mockImplementation(async (content: unknown) => {
+        if (content instanceof StreamingPlan) throw new Error('streaming unsupported');
+        calls.push({ kind: 'post', arg: content });
+        return { id: 'fallback-1', text: '' };
+      });
+    };
+
+    it.each(formats)('static buffered reply preserves internal ZWJ/ZWNJ ($label)', async ({ textFormat }) => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false, textFormat });
+      await drive(channels, [...deltas(...COMPOUND_DELTAS), stepFinish, finish], chatThread);
+
+      expect(onlyPosts(calls)).toEqual([{ kind: 'post', arg: expectedPost(COMPOUND, textFormat) }]);
+    });
+
+    it.each(formats)(
+      'static buffered reply trims edge ZWNJ/ZWJ but keeps internal ones ($label)',
+      async ({ textFormat }) => {
+        const { channels, calls, chatThread } = makeChannels({ streaming: false, textFormat });
+        await drive(
+          channels,
+          [...deltas('\u200D\u200C', 'Hello\u200D ', '\u200Cworld', '\u200C\u200D'), stepFinish, finish],
+          chatThread,
+        );
+
+        expect(onlyPosts(calls)).toEqual([{ kind: 'post', arg: expectedPost('Hello\u200D \u200Cworld', textFormat) }]);
+      },
+    );
+
+    it.each(formats)('static buffered reply still removes U+200B/U+FEFF padding ($label)', async ({ textFormat }) => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false, textFormat });
+      await drive(channels, [...deltas('\u200BHi', '\uFEFF there', '\u200B'), stepFinish, finish], chatThread);
+
+      expect(onlyPosts(calls)).toEqual([{ kind: 'post', arg: expectedPost('Hi there', textFormat) }]);
+    });
+
+    it.each(formats)(
+      'static buffered reply trims whitespace around a single-codepoint emoji ($label)',
+      async ({ textFormat }) => {
+        const { channels, calls, chatThread } = makeChannels({ streaming: false, textFormat });
+        await drive(channels, [...deltas('  \u{1F600}  '), stepFinish, finish], chatThread);
+
+        expect(onlyPosts(calls)).toEqual([{ kind: 'post', arg: expectedPost('\u{1F600}', textFormat) }]);
+      },
+    );
+
+    it.each(formats)(
+      'static buffered reply posts nothing for joiner/zero-width-only input ($label)',
+      async ({ textFormat }) => {
+        const { channels, calls, chatThread } = makeChannels({ streaming: false, textFormat });
+        await drive(channels, [...deltas('\u200B', '\u200C\u200D \n ', '\uFEFF'), stepFinish, finish], chatThread);
+
+        expect(onlyPosts(calls)).toEqual([]);
+      },
+    );
+
+    it.each(formats)('failed-stream buffered fallback preserves internal ZWJ/ZWNJ ($label)', async ({ textFormat }) => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, textFormat });
+      await rejectStreamingPost(chatThread, calls);
+      await drive(channels, [...deltas(...COMPOUND_DELTAS), stepFinish, finish], chatThread);
+
+      expect(onlyPosts(calls)).toEqual([{ kind: 'post', arg: expectedPost(COMPOUND, textFormat) }]);
+    });
+
+    it.each(formats)(
+      'failed-stream buffered fallback trims edge ZWNJ/ZWJ but keeps internal ones ($label)',
+      async ({ textFormat }) => {
+        const { channels, calls, chatThread } = makeChannels({ streaming: true, textFormat });
+        await rejectStreamingPost(chatThread, calls);
+        await drive(
+          channels,
+          [...deltas('\u200D\u200C', 'Hello\u200D ', '\u200Cworld', '\u200C\u200D'), stepFinish, finish],
+          chatThread,
+        );
+
+        expect(onlyPosts(calls)).toEqual([{ kind: 'post', arg: expectedPost('Hello\u200D \u200Cworld', textFormat) }]);
+      },
+    );
+
+    it('live streaming forwards compound-emoji deltas unchanged', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: true });
+      await drive(channels, [...deltas(...COMPOUND_DELTAS), stepFinish, finish], chatThread);
+
+      const posts = onlyPosts(calls);
+      expect(posts).toHaveLength(1);
+      const plan = (posts[0] as Extract<Call, { kind: 'post' }>).arg as any;
+      expect(plan).toBeInstanceOf((await getChatModule()).StreamingPlan);
+      expect(await drainStreamingPlan(plan)).toEqual(COMPOUND_DELTAS);
+    });
+
+    // Guard: the buffered cleanup must stay linear. An anchored-alternation
+    // edge trim backtracks quadratically over a long interior run of the
+    // padding class, so a 200k-char interior run would take tens of seconds and
+    // blow this timeout; the single-pass scan completes in well under a second.
+    it('static buffered cleanup stays linear over a long interior run', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
+      const text = `a${' '.repeat(200_000)}b`;
+      await drive(channels, [...deltas(text), stepFinish, finish], chatThread);
+
+      expect(onlyPosts(calls)).toEqual([{ kind: 'post', arg: { markdown: text } }]);
+    }, 3000);
+  });
+
   describe("textDisplay: 'hidden'", () => {
     const reply = [
       { type: 'text-start', payload: { id: 'x' } },
@@ -1430,11 +1568,14 @@ describe('ChatChannelOutputProcessor', () => {
       expect(posts).toHaveLength(1);
     });
 
-    it('toolDisplay fn returning empty { markdown } posts nothing (empty-markdown guard)', async () => {
+    it.each([
+      ['toolDisplay fn returning empty { markdown } posts nothing (empty-markdown guard)', ''],
+      ['toolDisplay fn returning whitespace-only { markdown } posts nothing', '  \n\t '],
+    ] as const)('%s', async (_title, markdown) => {
       const { channels, calls, chatThread } = makeChannels({
         streaming: false,
         toolDisplay: event => {
-          if (event.kind === 'result') return { kind: 'post', message: { markdown: '' } };
+          if (event.kind === 'result') return { kind: 'post', message: { markdown } };
           return undefined;
         },
       });
@@ -1454,60 +1595,14 @@ describe('ChatChannelOutputProcessor', () => {
       expect(calls.filter(c => c.kind === 'post')).toHaveLength(0);
     });
 
-    it('toolDisplay fn returning whitespace-only { markdown } posts nothing', async () => {
-      const { channels, calls, chatThread } = makeChannels({
-        streaming: false,
-        toolDisplay: event => {
-          if (event.kind === 'result') return { kind: 'post', message: { markdown: '  \n\t ' } };
-          return undefined;
-        },
-      });
-      await drive(
-        channels,
-        [
-          { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
-          {
-            type: 'tool-result',
-            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
-          },
-          { type: 'finish', payload: {} },
-        ],
-        chatThread,
-      );
-
-      expect(calls.filter(c => c.kind === 'post')).toHaveLength(0);
-    });
-
-    it('streaming toolDisplay fn returning empty { markdown } posts nothing', async () => {
+    it.each([
+      ['streaming toolDisplay fn returning empty { markdown } posts nothing', ''],
+      ['streaming toolDisplay fn returning whitespace-only { markdown } posts nothing', '  \n\t '],
+    ] as const)('%s', async (_title, markdown) => {
       const { channels, calls, chatThread } = makeChannels({
         streaming: true,
         toolDisplay: event => {
-          if (event.kind === 'result') return { kind: 'post', message: { markdown: '' } };
-          return undefined;
-        },
-      });
-      await drive(
-        channels,
-        [
-          { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
-          {
-            type: 'tool-result',
-            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
-          },
-          { type: 'finish', payload: {} },
-        ],
-        chatThread,
-      );
-
-      expect(calls.filter(c => c.kind === 'post')).toHaveLength(0);
-      expect(calls.filter(c => c.kind === 'editMessage')).toHaveLength(0);
-    });
-
-    it('streaming toolDisplay fn returning whitespace-only { markdown } posts nothing', async () => {
-      const { channels, calls, chatThread } = makeChannels({
-        streaming: true,
-        toolDisplay: event => {
-          if (event.kind === 'result') return { kind: 'post', message: { markdown: '  \n\t ' } };
+          if (event.kind === 'result') return { kind: 'post', message: { markdown } };
           return undefined;
         },
       });
@@ -1819,11 +1914,15 @@ describe('ChatChannelOutputProcessor', () => {
       expect(typingStatuses).toEqual(['is typing…', '', 'is typing…', '']);
     });
 
-    it('does not emit a clear when the run never set a status', async () => {
+    it('clears a status set before the run even when the run sets none itself', async () => {
+      // A channel handler may pin a status (e.g. an early "is thinking..."
+      // acknowledgement) before dispatching. A run whose stream never maps to
+      // a status must still clear it, or it stays on the thread indefinitely.
       const { channels, calls, chatThread } = makeChannels({
         streaming: false,
         typingStatus: () => undefined,
       });
+      await chatThread.startTyping('is thinking...');
       await drive(
         channels,
         [
@@ -1832,7 +1931,27 @@ describe('ChatChannelOutputProcessor', () => {
         ],
         chatThread,
       );
-      expect(calls.filter(c => c.kind === 'startTyping')).toEqual([]);
+      await drive(channels, [{ type: 'finish', payload: {} }], chatThread);
+      const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
+      expect(typingStatuses).toEqual(['is thinking...', '', '']);
+    });
+
+    it('leaves a status set before the run to the streaming post while the streaming gate is active', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, typingStatus: () => undefined });
+      await chatThread.startTyping('is thinking...');
+      // A streaming post still in flight when the run ends owns the clear.
+      async function* chunks() {
+        yield { type: 'text-delta', payload: { text: 'hi' } };
+        yield { type: 'finish', payload: {} };
+      }
+      const adapterConfig = { typingStatus: () => undefined };
+      for await (const _ of (channels as any).withTypingStatus(chunks(), chatThread, 'test', adapterConfig, {
+        active: true,
+      })) {
+        // drain
+      }
+      const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
+      expect(typingStatuses).toEqual(['is thinking...']);
     });
 
     it('typingStatus function exceptions are swallowed and stream continues', async () => {
@@ -1852,7 +1971,8 @@ describe('ChatChannelOutputProcessor', () => {
           chatThread,
         ),
       ).resolves.not.toThrow();
-      expect(calls.filter(c => c.kind === 'startTyping')).toEqual([]);
+      // No status from the throwing function; only the run-end clear.
+      expect(calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status)).toEqual(['']);
     });
   });
 

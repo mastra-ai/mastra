@@ -79,7 +79,7 @@ The scorer evaluates keyword coverage by matching keywords with the following fe
    - Counts successful matches
    - Computes coverage ratio
 
-Final score: `(matched_keywords / total_keywords) * scale`
+Final score: `matched_keywords / total_keywords`
 
 ### Score interpretation
 
@@ -95,7 +95,8 @@ A coverage score between 0 and 1:
 
 The scorer handles several special cases:
 
-- Empty input/output: Returns score of 1.0 if both empty, 0.0 if only one is empty
+- No keywords in the input (including empty input): Returns 1.0
+- Empty output with keywords in the input: Returns 0.0
 - Single word: Treated as a single keyword
 - Technical terms: Preserves compound technical terms (e.g., "React.js", "machine learning")
 - Case differences: "JavaScript" matches "javascript"

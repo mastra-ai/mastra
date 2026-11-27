@@ -120,6 +120,7 @@ export {
 export { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
 
 // Lets shared test suites simulate a process crash
+export { DURABLE_CONTEXT_SEGMENT_KEY } from './run-registry';
 export { __resetExecutionFencesForTests } from './execution-fence';
 
 // Shared thread-stream runtime, so durable-agent integrations outside core
@@ -277,6 +278,13 @@ export { pruneAgentLoopSnapshot } from '../../loop/workflows/prune-snapshot';
 // Shared runtime outcome classification for external durable engines.
 export { endRunSpansWithError } from './run-registry';
 /** @internal The span pair a resumed or recovered execution reports under, shared with external durable engines. */
-export { carrySegmentSpans, liveSegmentSpan, segmentSpanData, type SegmentSpanData } from './segment-spans';
+export {
+  carrySegmentSpans,
+  endFailedSegmentSpans,
+  liveSegmentSpan,
+  segmentEndedBySuspension,
+  segmentSpanData,
+  type SegmentSpanData,
+} from './segment-spans';
 /** @internal Runtime instrumentation helpers. */
 export { agentLoopTermination, executionFailureTermination } from '../../loop/shared/execution-outcome';

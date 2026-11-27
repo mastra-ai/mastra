@@ -100,6 +100,7 @@ type StreamChunk =
   | StreamDataChunk<'data-om-activation'>
   | StreamDataChunk<'data-om-thread-update'>
   | StreamDataChunk<'data-mastracode-tool-progress'>
+  | StreamDataChunk<'data-mastracode-model-fallback'>
   | StreamDataChunk<'data-sandbox-stdout'>
   | StreamDataChunk<'data-sandbox-stderr'>
   | StreamDataChunk<'data-sandbox-exit'>;
@@ -247,6 +248,8 @@ type StreamState = {
   /** Response ids offered by `step-start` — an id binds to at most one display message. */
   offeredResponseIds: Set<string>;
   completedToolPrelude: boolean;
+  /** Model-fallback parts saved under the next response's id, held until its `step-start` binds that id. */
+  pendingModelFallbackParts: MastraMessagePart[];
   /**
    * Set when a stream ends on a non-success finish reason (e.g. `content-filter`,
    * `error`, `length`). Carries the user-facing message so the run finalizes
@@ -398,6 +401,13 @@ export class SessionRunEngine {
     state.completedToolPrelude = false;
   }
 
+  private emitPendingModelFallbacks(state: StreamState): void {
+    for (const part of state.pendingModelFallbackParts.splice(0)) {
+      const index = state.currentMessage.content.parts.push(part) - 1;
+      this.emitMessagePart(state, index);
+    }
+  }
+
   createStreamState(
     threadId = this.#session.thread.getId() ?? undefined,
     resourceId = this.#session.identity.getResourceId(),
@@ -415,6 +425,7 @@ export class SessionRunEngine {
       toolPartById: new Map<string, number>(),
       offeredResponseIds: new Set<string>(),
       completedToolPrelude: false,
+      pendingModelFallbackParts: [],
     };
   }
 
@@ -693,7 +704,10 @@ export class SessionRunEngine {
         const messageId = getString(payload.messageId);
         if (!messageId) break;
         if (state.offeredResponseIds.has(messageId)) {
-          if (messageId === state.currentMessage.id) this.stampResponseModel(state.currentMessage, payload);
+          if (messageId === state.currentMessage.id) {
+            this.stampResponseModel(state.currentMessage, payload);
+            this.emitPendingModelFallbacks(state);
+          }
           break;
         }
         // A resumed tool can finish before the first model step starts. Seal
@@ -713,6 +727,7 @@ export class SessionRunEngine {
           state.currentMessage.id = messageId;
         }
         this.stampResponseModel(state.currentMessage, payload);
+        if (state.currentMessage.id === messageId) this.emitPendingModelFallbacks(state);
         break;
       }
 
@@ -1161,13 +1176,17 @@ export class SessionRunEngine {
               threadId: suspThreadId,
               resourceId: suspResourceId,
             });
-            this.#session.suspensions.register({
-              toolCallId: suspToolCallId,
-              runId: suspRunId,
-              toolName: suspToolName,
-              threadId: suspThreadId,
-              resourceId: suspResourceId,
-            });
+            this.#session.__registerStreamSuspension(
+              {
+                toolCallId: suspToolCallId,
+                runId: suspRunId,
+                toolName: suspToolName,
+                threadId: suspThreadId,
+                resourceId: suspResourceId,
+              },
+              // The thread subscription can replay a suspension from another mode's agent.
+              runScope?.get(SUSPENDED_RUN_AGENT_KEY),
+            );
           }
         }
         state.isSuspended = true;
@@ -1590,6 +1609,10 @@ export class SessionRunEngine {
         }
         break;
       }
+
+      case 'data-mastracode-model-fallback':
+        state.pendingModelFallbackParts.push({ type: chunk.type, data: chunk.data });
+        break;
 
       // Sandbox streaming data chunks (from workspace execute_command tool)
       case 'data-sandbox-stdout': {

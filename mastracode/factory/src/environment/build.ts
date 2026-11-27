@@ -22,7 +22,7 @@ import { environmentSandboxContext, resolveProjectEnvironment } from './session-
 import type { SessionEnvironment } from './session-environment.js';
 
 /** `settings`: a saved change to the environment; builds only when the template inputs changed. */
-export const ENVIRONMENT_BUILD_TRIGGERS = ['manual', 'schedule', 'push', 'settings'] as const;
+export const ENVIRONMENT_BUILD_TRIGGERS = ['manual', 'schedule', 'push', 'session', 'settings'] as const;
 export type EnvironmentBuildTrigger = (typeof ENVIRONMENT_BUILD_TRIGGERS)[number];
 
 export interface EnvironmentBuildSourceControl {
@@ -210,6 +210,17 @@ export const UNRESOLVED_BUILD_START_TIMEOUT_MS = MAX_BUILD_WAIT_MS;
 /** Tries at recording a started build before the run leaves its lease to lapse. */
 const RECORD_ATTEMPTS = 5;
 
+/** Whether a push or session build already started inside the project's debounce window. */
+export function environmentBuildDebounced(
+  project: Pick<FactoryProject, 'lastPushBuildAt' | 'buildPushDebounceMinutes'>,
+  at: Date,
+): boolean {
+  return (
+    project.lastPushBuildAt !== null &&
+    at.getTime() - project.lastPushBuildAt.getTime() < project.buildPushDebounceMinutes * 60_000
+  );
+}
+
 /**
  * Start a build for `projectId` when `trigger` calls for one. Every trigger
  * takes the project's build-start lease before reading build state and renews
@@ -220,7 +231,9 @@ const RECORD_ATTEMPTS = 5;
  * build is ready and neither a head nor any other template input changed;
  * `manual` otherwise always builds. A `push` that would build then takes the
  * leading-edge debounce claim, so only a push that starts a build opens the
- * window. `settings` (a saved environment change) builds only once the
+ * window. `session` (a session's sandbox started from the built template)
+ * follows the same rules as `push` and shares its window. `settings` (a
+ * saved environment change) builds only once the
  * project has a template and the template inputs differ from the last
  * build's, whatever the heads; it skips as `no_template` before the first
  * build, and saving the same inputs twice skips as `unchanged`.
@@ -254,10 +267,10 @@ export async function runEnvironmentBuild(
   const now = deps.now ?? (() => new Date());
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)));
 
-  const pushDebounced = (project: FactoryProject, at: Date) =>
-    project.lastPushBuildAt !== null &&
-    at.getTime() - project.lastPushBuildAt.getTime() < project.buildPushDebounceMinutes * 60_000;
-  if (input.trigger === 'push' && pushDebounced(initial, now())) return { outcome: 'skipped', reason: 'debounced' };
+  // A started session asks like a push does: it builds only when a head moved,
+  // and it shares the push debounce window.
+  const debounces = input.trigger === 'push' || input.trigger === 'session';
+  if (debounces && environmentBuildDebounced(initial, now())) return { outcome: 'skipped', reason: 'debounced' };
 
   const readInputs = async (project: FactoryProject) => {
     const environment = await resolveProjectEnvironment(sourceControl.storage, project);
@@ -393,7 +406,7 @@ export async function runEnvironmentBuild(
           if (pinned) pinnedHeads = project.lastBuildHeads;
         }
         if (
-          (input.trigger === 'schedule' || input.trigger === 'push') &&
+          (input.trigger === 'schedule' || debounces) &&
           last.status === 'ready' &&
           !headsChanged(pinnedHeads, heads) &&
           project.lastBuildInputs === buildInputs
@@ -409,7 +422,7 @@ export async function runEnvironmentBuild(
     // A run that lost its lease while reading must not start beside its successor.
     if (!held) return { outcome: 'skipped', reason: 'starting' };
 
-    if (input.trigger === 'push') {
+    if (debounces) {
       // Claimed only now, so a push that skipped above never closes the window.
       let claimed: boolean;
       try {

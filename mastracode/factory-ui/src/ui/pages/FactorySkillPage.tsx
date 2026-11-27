@@ -2,51 +2,43 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useLocation, useNavigate, useParams } from 'react-router';
 
 import { useFactorySkillsQuery } from '../../hooks/useFactorySkills';
-import { boardSkillPath, boardSkillsPath } from '../domains/boardConfig/boardConfigPaths';
 import { NewSkillEditor } from '../domains/boardConfig/components/skills/NewSkillEditor';
 import { SkillEditor } from '../domains/boardConfig/components/skills/SkillEditor';
-import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
+import { SkillEditorSkeleton } from '../domains/boardConfig/components/skills/SkillEditorSkeleton';
+import { SettingsHrefLink } from '../domains/settings/components/SettingsHrefLink';
+import { settingsSectionPath, skillPath } from '../domains/settings/settingsSections';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
-import { HrefLink } from '../ui/HrefLink';
 import { LoadErrorState } from '../ui/LoadErrorState';
 
+/** A skill's page or the new skill form, under Settings › Skills. */
 export function FactorySkillPage() {
   const factory = useActiveFactory();
-  const boardId = useBoardConfigRoute()?.boardId ?? '';
   const { skillName } = useParams<{ skillName: string }>();
-  const skillsPath = boardSkillsPath(factory.id, boardId);
 
   return (
     <PageLayout
       variant="form"
-      backHref={skillsPath}
+      backHref={settingsSectionPath(factory.id, 'skills')}
       backLabel="Skills"
       title={skillName ?? 'New skill'}
-      LinkComponent={HrefLink}
+      LinkComponent={SettingsHrefLink}
     >
-      <SkillPageBody factoryId={factory.id} boardId={boardId} skillName={skillName} />
+      <SkillPageBody factoryId={factory.id} skillName={skillName} />
     </PageLayout>
   );
 }
 
-function SkillPageBody({ factoryId, boardId, skillName }: { factoryId: string; boardId: string; skillName?: string }) {
+function SkillPageBody({ factoryId, skillName }: { factoryId: string; skillName?: string }) {
   const navigate = useNavigate();
+  // Moving within Settings keeps the page Settings was opened from, for Back to app.
+  const { state } = useLocation();
   const skills = useFactorySkillsQuery(factoryId);
-  const skillsPath = boardSkillsPath(factoryId, boardId);
+  const skillsPath = settingsSectionPath(factoryId, 'skills');
 
-  if (skills.isPending) {
-    return (
-      <div role="status" aria-label="Loading skill" className="flex flex-col gap-4">
-        <Skeleton className="h-9 w-2/3" />
-        <Skeleton className="h-5 w-full" />
-        <Skeleton className="h-40 w-full" />
-      </div>
-    );
-  }
+  if (skills.isPending) return <SkillEditorSkeleton />;
   if (skills.isLoadingError) {
     return (
       <LoadErrorState
@@ -67,7 +59,7 @@ function SkillPageBody({ factoryId, boardId, skillName }: { factoryId: string; b
       <NewSkillEditor
         key={factoryId}
         factoryId={factoryId}
-        onCreated={name => void navigate(boardSkillPath(factoryId, boardId, name), { replace: true })}
+        onCreated={name => void navigate(skillPath(factoryId, name), { replace: true, state })}
       />
     );
   }
@@ -77,7 +69,7 @@ function SkillPageBody({ factoryId, boardId, skillName }: { factoryId: string; b
       <EmptyState
         variant="fill"
         titleSlot={<span role="alert">This factory has no {skillName} skill.</span>}
-        actionSlot={<Button render={<Link to={skillsPath} />}>Back to skills</Button>}
+        actionSlot={<Button render={<Link to={skillsPath} state={state} />}>Back to skills</Button>}
       />
     );
   }
@@ -87,7 +79,7 @@ function SkillPageBody({ factoryId, boardId, skillName }: { factoryId: string; b
       factoryId={factoryId}
       skill={skill}
       canEdit={canEdit}
-      onDeleted={() => void navigate(skillsPath, { replace: true })}
+      onDeleted={() => void navigate(skillsPath, { replace: true, state })}
     />
   );
 }

@@ -1,59 +1,17 @@
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
-import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
-import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
-import { Link } from 'react-router';
 
-import { useBoardQuery } from '../../hooks/useBoardEditor';
-import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
-import { boardConfigPath } from '../domains/boardConfig/boardConfigPaths';
+import { RoutingPage } from '../domains/boardCanvas/components/routing/RoutingPage';
 import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
-import { IntakeOrderSection } from '../domains/settings/components/IntakeOrderSection';
-import { settingsSectionPath } from '../domains/settings/settingsSections';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 
 /** Which board takes new work: the order boards are offered a new issue or pull request, and the ones no board took. */
 export function BoardIntakePage() {
   const factory = useActiveFactory();
   const boardId = useBoardConfigRoute()?.boardId ?? '';
-  const { isMobile, desktopState } = useSidebar();
-  const sidebarHidden = isMobile || desktopState === 'collapsed';
-  const board = useBoardQuery(factory.id, boardId).data?.board;
-
-  const slots = useSidebarHeaderSlots({
-    breadcrumbs:
-      sidebarHidden && board ? (
-        <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden">
-          <Crumb as={Link} to={boardConfigPath(factory.id, boardId)}>
-            {board.name}
-          </Crumb>
-          <Crumb as="span" isCurrent>
-            Routing
-          </Crumb>
-        </Breadcrumb>
-      ) : undefined,
-  });
 
   return (
-    <PageLayout
-      variant="settings"
-      header={
-        <PageHeader>
-          <PageHeader.Title>Routing</PageHeader.Title>
-          <PageHeader.Description>
-            <span>
-              The order boards are offered new issues and pull requests. What comes in is chosen in{' '}
-              <Link to={settingsSectionPath(factory.id, 'intake')} className="underline">
-                Settings → Work Intake
-              </Link>
-              .
-            </span>
-          </PageHeader.Description>
-        </PageHeader>
-      }
-      {...slots}
-    >
-      <IntakeOrderSection factoryId={factory.id} />
+    <PageLayout variant="page" body="fixed">
+      <RoutingPage key={factory.id} factoryId={factory.id} boardId={boardId} repositories={factory.repositories} />
     </PageLayout>
   );
 }

@@ -1,0 +1,44 @@
+{
+  "name": "template-knowledge-support-agent",
+  "version": "1.0.0",
+  "description": "A support agent template powered by Mastra Knowledge.",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": "^22.19.0 || >=24.11.0"
+  },
+  "scripts": {
+    "build": "mastra build && node scripts/package-knowledge-datasets.ts",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "dev": "node --env-file-if-exists=.env scripts/dev.ts",
+    "knowledge:seed": "node --env-file-if-exists=.env scripts/seed-knowledge.ts",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "node --test tests/unit/*.test.ts",
+    "test:integration": "node --test --test-concurrency=1 tests/integration/*.test.ts",
+    "test:hosted": "node tests/hosted/verify.mjs"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.18.0",
+    "@mastra/auth-studio": "latest",
+    "@mastra/core": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
+    "@mastra/pg": "latest",
+    "@mastra/server": "latest",
+    "mdast-util-from-markdown": "^2.1.0",
+    "mdast-util-gfm-autolink-literal": "^2.1.2",
+    "micromark-extension-gfm-autolink-literal": "^2.1.0",
+    "pg": "^8.23.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.3",
+    "@types/pg": "^8.23.1",
+    "mastra": "latest",
+    "oxfmt": "0.80.0",
+    "typescript": "^7.0.2"
+  }
+}

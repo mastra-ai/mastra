@@ -1,4 +1,4 @@
-import { Box, SelectList, SettingsList, Text, TUI } from '@earendil-works/pi-tui';
+import { Box, SelectList, Text, TUI } from '@earendil-works/pi-tui';
 import type { Component, SelectItem, SettingItem, Terminal } from '@earendil-works/pi-tui';
 import type { AgentControllerThread } from '@mastra/core/agent-controller';
 import xterm from '@xterm/headless';
@@ -10,10 +10,12 @@ import { GithubPRPickerDialog } from '../components/github-pr-picker.js';
 import { LoginAccountManagerComponent } from '../components/login-account-manager.js';
 import { LoginModeSelectorComponent } from '../components/login-mode-selector.js';
 import { McpSelectorComponent } from '../components/mcp-selector.js';
+import { MenuList } from '../components/menu-list.js';
+import { SettingsMenu } from '../components/settings-menu.js';
 import { ThreadSelectorComponent } from '../components/thread-selector.js';
 import { WrappingSelectList } from '../components/wrapping-select-list.js';
 import { showModalOverlay } from '../overlay.js';
-import { getEditorTheme, getSelectListTheme, getSettingsListTheme } from '../theme.js';
+import { getEditorTheme, getSelectListTheme } from '../theme.js';
 import { MouseController } from './controller.js';
 import { tuiInternals } from './pi-tui-internals.js';
 
@@ -438,7 +440,7 @@ describe('shared list components', () => {
     expect(confirmed).toEqual([['charlie']]);
   });
 
-  it('SettingsList rows cycle values or open submenus, and submenu rows are clickable', async () => {
+  it('settings rows cycle values or open submenus, and submenu rows are clickable', async () => {
     harness = createHarness();
     const changes: Array<[string, string]> = [];
     const items: SettingItem[] = [
@@ -448,25 +450,17 @@ describe('shared list components', () => {
         label: 'Color',
         currentValue: 'red',
         submenu: (_current, done) => {
-          const submenu = new SelectList(
-            ['red', 'green', 'blue'].map(value => ({ value, label: `shade-${value}` })),
-            5,
-            getSelectListTheme(),
-          );
+          const submenu = new MenuList(['red', 'green', 'blue'].map(value => ({ value, label: `shade-${value}` })));
           submenu.onSelect = item => done(item.value);
           return submenu;
         },
       },
     ];
-    const list = new SettingsList(
+    const list = new SettingsMenu(
       items,
       10,
-      getSettingsListTheme(),
       (id, value) => changes.push([id, value]),
       () => {},
-      {
-        enableSearch: true,
-      },
     );
     modalWith(harness.ui, list);
     await harness.render();
@@ -489,7 +483,7 @@ describe('shared list components', () => {
   });
 });
 
-describe('hand-drawn pickers on PickerList', () => {
+describe('pickers', () => {
   function thread(index: number, title: string): AgentControllerThread {
     const updatedAt = new Date(Date.now() - index * 60_000);
     return {
@@ -646,15 +640,15 @@ describe('hand-drawn pickers on PickerList', () => {
     showModalOverlay(harness.ui, selector);
     await harness.render();
 
-    const alpha = harness.find('alpha [http]');
+    const alpha = harness.find('alpha ');
     await harness.click(alpha.row, alpha.col);
     await harness.render();
-    expect(harness.find('View tools').row).toBe(harness.find('alpha [http]').row + 1);
+    expect(harness.find('View tools').row).toBe(harness.find('alpha ').row + 1);
 
-    const beta = harness.find('beta [http]');
+    const beta = harness.find('beta ');
     await harness.click(beta.row, beta.col);
     await harness.render();
-    expect(harness.find('View tools').row).toBe(harness.find('beta [http]').row + 1);
+    expect(harness.find('View tools').row).toBe(harness.find('beta ').row + 1);
 
     const reconnect = harness.find('Reconnect');
     await harness.hover(reconnect.row, reconnect.col);

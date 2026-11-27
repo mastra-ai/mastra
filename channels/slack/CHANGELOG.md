@@ -1,5 +1,23 @@
 # @mastra/slack
 
+## 1.11.0-alpha.0
+
+### Minor Changes
+
+- Added `replyMode` and `threadLink` to `SlackProvider` and Slack adapter configs. With `replyMode` set, tool calls are hidden by default instead of grouped. ([#31573](https://github.com/mastra-ai/mastra/pull/31573))
+
+  ```typescript
+  new SlackProvider({
+    replyMode: 'tool',
+    threadLink: ({ threadId }) => `https://app.example.com/threads/${threadId}`,
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`f19b0cf`](https://github.com/mastra-ai/mastra/commit/f19b0cf20c347921358943bb70c14051493088de), [`18439ea`](https://github.com/mastra-ai/mastra/commit/18439ea68fd5b009119e80af05cabc5ce5004c2b), [`21aee63`](https://github.com/mastra-ai/mastra/commit/21aee631dbb59e843b265706438865928185d500)]:
+  - @mastra/core@1.87.0-alpha.1
+
 ## 1.10.0
 
 ### Minor Changes

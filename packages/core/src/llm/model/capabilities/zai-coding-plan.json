@@ -20,38 +20,7 @@
     "glm-5.4"
   ],
   "reasoning": {
-    "glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "glm-5.2": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "glm-5-turbo": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "glm-4.7": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-5.3-highspeed": [
+    "glm-5.4": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -66,10 +35,41 @@
         "values": ["high", "max"]
       }
     ],
-    "glm-5.4": [
+    "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5.2": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "glm-5.3-highspeed": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-4.7": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5-turbo": [
+      {
+        "type": "toggle"
       }
     ]
   }

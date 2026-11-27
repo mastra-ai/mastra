@@ -3,6 +3,9 @@ title: Deployment
 description: Run your coding agents beyond localhost. Deploy Mastra Factory to Mastra platform or self-host with your own authentication, storage, and sandboxes.
 ---
 
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
 # Deployment
 
 Deploy the Factory Server to [Mastra platform](#deploy) or [self-host](#self-host) it in your own environment. Both options use the Factory Server project created in [Get started](/).
@@ -125,11 +128,44 @@ The installer copies `.env.example` to `.env` without adding platform credential
 
 1. Install dependencies and build from the Factory Server directory:
 
-   ```bash npm2yarn
-   npm ci --include=dev
-   npm run check
-   npm run build
-   ```
+   <Tabs groupId="npm2yarn">
+     <TabItem value="npm" label="npm">
+
+     ```bash
+     npm ci --include=dev
+     npm run check
+     npm run build
+     ```
+
+     </TabItem>
+     <TabItem value="pnpm" label="pnpm">
+
+     ```bash
+     NODE_ENV=development pnpm install --frozen-lockfile
+     pnpm run check
+     pnpm run build
+     ```
+
+     </TabItem>
+     <TabItem value="yarn" label="Yarn">
+
+     ```bash
+     NODE_ENV=development yarn install --frozen-lockfile
+     yarn run check
+     yarn run build
+     ```
+
+     </TabItem>
+     <TabItem value="bun" label="Bun">
+
+     ```bash
+     NODE_ENV=development bun install --frozen-lockfile
+     bun run check
+     bun run build
+     ```
+
+     </TabItem>
+   </Tabs>
 
 1. Use `npm run start` as the service's start command. This uses the generated project's Mastra CLI and `varlock` dependencies, so retain them in the runtime environment. Configure automatic restarts and route HTTPS traffic to the server's listening port.
 

@@ -31,28 +31,15 @@ import {
 // ---------------------------------------------------------------------------
 
 describe('stripToolPrefix', () => {
-  it('strips the mastra_workspace_ prefix', () => {
-    expect(stripToolPrefix('mastra_workspace_search')).toBe('search');
-  });
-
-  it('strips only the first matching prefix', () => {
-    expect(stripToolPrefix('mastra_workspace_mastra_workspace_nested')).toBe('mastra_workspace_nested');
-  });
-
-  it('returns the name unchanged when no prefix matches', () => {
-    expect(stripToolPrefix('my_custom_tool')).toBe('my_custom_tool');
-  });
-
-  it('returns an empty string unchanged', () => {
-    expect(stripToolPrefix('')).toBe('');
-  });
-
-  it('does not strip partial prefix matches', () => {
-    expect(stripToolPrefix('mastra_work')).toBe('mastra_work');
-  });
-
-  it('handles a name that is exactly the prefix', () => {
-    expect(stripToolPrefix('mastra_workspace_')).toBe('');
+  it.each([
+    ['strips the mastra_workspace_ prefix', 'mastra_workspace_search', 'search'],
+    ['strips only the first matching prefix', 'mastra_workspace_mastra_workspace_nested', 'mastra_workspace_nested'],
+    ['returns the name unchanged when no prefix matches', 'my_custom_tool', 'my_custom_tool'],
+    ['returns an empty string unchanged', '', ''],
+    ['does not strip partial prefix matches', 'mastra_work', 'mastra_work'],
+    ['handles a name that is exactly the prefix', 'mastra_workspace_', ''],
+  ] as const)('%s', (_title, input, expected) => {
+    expect(stripToolPrefix(input)).toBe(expected);
   });
 });
 
@@ -88,18 +75,12 @@ describe('formatArgsSummary', () => {
     expect(result).toBe('visible');
   });
 
-  it('skips null values', () => {
-    const result = formatArgsSummary({ a: null, b: 'shown' });
-    expect(result).toBe('shown');
-  });
-
-  it('skips false values', () => {
-    const result = formatArgsSummary({ a: false, b: 'shown' });
-    expect(result).toBe('shown');
-  });
-
-  it('skips empty string values', () => {
-    const result = formatArgsSummary({ a: '', b: 'shown' });
+  it.each([
+    ['skips null values', null],
+    ['skips false values', false],
+    ['skips empty string values', ''],
+  ] as const)('%s', (_title, a) => {
+    const result = formatArgsSummary({ a, b: 'shown' });
     expect(result).toBe('shown');
   });
 
@@ -191,8 +172,14 @@ describe('formatTaskTitle', () => {
 // ---------------------------------------------------------------------------
 
 describe('formatResult', () => {
-  it('returns the string value directly', () => {
-    expect(formatResult('hello')).toBe('hello');
+  it.each([
+    ['returns the string value directly', 'hello', 'hello'],
+    ['returns "(no output)" for null', null, '(no output)'],
+    ['returns "(no output)" for undefined', undefined, '(no output)'],
+    ['trims leading and trailing whitespace from the output', '  trimmed  ', 'trimmed'],
+    ['returns a number serialised as a string', 42, '42'],
+  ] as const)('%s', (_title, input, expected) => {
+    expect(formatResult(input)).toBe(expected);
   });
 
   it('serialises non-string values as formatted JSON', () => {
@@ -211,28 +198,12 @@ describe('formatResult', () => {
     expect(formatResult(exact)).toBe(exact);
   });
 
-  it('returns "(no output)" for null', () => {
-    expect(formatResult(null)).toBe('(no output)');
-  });
-
-  it('returns "(no output)" for undefined', () => {
-    expect(formatResult(undefined)).toBe('(no output)');
-  });
-
   it('prepends "Error: " when isError is true', () => {
     expect(formatResult('timeout', true)).toBe('Error: timeout');
   });
 
   it('prepends "Error: " to "(no output)" when isError is true and value is null', () => {
     expect(formatResult(null, true)).toBe('Error: (no output)');
-  });
-
-  it('trims leading and trailing whitespace from the output', () => {
-    expect(formatResult('  trimmed  ')).toBe('trimmed');
-  });
-
-  it('returns a number serialised as a string', () => {
-    expect(formatResult(42)).toBe('42');
   });
 });
 

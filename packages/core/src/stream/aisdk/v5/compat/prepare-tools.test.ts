@@ -204,10 +204,18 @@ describe('prepareToolsAndToolChoice', () => {
       });
     });
 
-    it('should pass strict through for v3 function tools', () => {
+    it.each([
+      ['should pass strict through for v3 function tools', 'strict-tool', 'A strict test tool', 'v3'],
+      [
+        'should preserve strict in prepared v2 function tools for downstream router handoff',
+        'strict-tool-v2',
+        'A strict test tool for v2',
+        'v2',
+      ],
+    ] as const)('%s', (_title, id, description, targetVersion) => {
       const strictTool = createTool({
-        id: 'strict-tool',
-        description: 'A strict test tool',
+        id,
+        description,
         strict: true,
         inputSchema: z.object({
           query: z.string(),
@@ -219,32 +227,7 @@ describe('prepareToolsAndToolChoice', () => {
         tools: { strictTool: strictTool as any },
         toolChoice: undefined,
         activeTools: undefined,
-        targetVersion: 'v3',
-      });
-
-      expect(result.tools![0]).toMatchObject({
-        type: 'function',
-        name: 'strictTool',
-        strict: true,
-      });
-    });
-
-    it('should preserve strict in prepared v2 function tools for downstream router handoff', () => {
-      const strictTool = createTool({
-        id: 'strict-tool-v2',
-        description: 'A strict test tool for v2',
-        strict: true,
-        inputSchema: z.object({
-          query: z.string(),
-        }),
-        execute: async ({ query }) => `Result for: ${query}`,
-      });
-
-      const result = prepareToolsAndToolChoice({
-        tools: { strictTool: strictTool as any },
-        toolChoice: undefined,
-        activeTools: undefined,
-        targetVersion: 'v2',
+        targetVersion,
       });
 
       expect(result.tools![0]).toMatchObject({
@@ -363,28 +346,19 @@ describe('prepareToolsAndToolChoice', () => {
   });
 
   describe('toolChoice handling', () => {
-    it('should default to auto when toolChoice is undefined but tools exist', () => {
+    it.each([
+      ['should default to auto when toolChoice is undefined but tools exist', undefined, 'auto'],
+      ['should handle string toolChoice values', 'required', 'required'],
+    ] as const)('%s', (_title, toolChoice, type) => {
       const providerTool = { id: 'openai.web_search', type: 'provider-defined', args: {} };
 
       const result = prepareToolsAndToolChoice({
         tools: { search: providerTool as any },
-        toolChoice: undefined,
+        toolChoice,
         activeTools: undefined,
       });
 
-      expect(result.toolChoice).toEqual({ type: 'auto' });
-    });
-
-    it('should handle string toolChoice values', () => {
-      const providerTool = { id: 'openai.web_search', type: 'provider-defined', args: {} };
-
-      const result = prepareToolsAndToolChoice({
-        tools: { search: providerTool as any },
-        toolChoice: 'required',
-        activeTools: undefined,
-      });
-
-      expect(result.toolChoice).toEqual({ type: 'required' });
+      expect(result.toolChoice).toEqual({ type });
     });
 
     it('should handle specific tool choice', () => {

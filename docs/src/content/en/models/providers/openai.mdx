@@ -7,7 +7,7 @@ description: "Browse OpenAI model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/openai.svg" alt="OpenAI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenAI
 
-Access 42 OpenAI models through Mastra's model router. Authentication is handled automatically using the `OPENAI_API_KEY` environment variable.
+Access 46 OpenAI models through Mastra's model router. Authentication is handled automatically using the `OPENAI_API_KEY` environment variable.
 
 Learn more in the [OpenAI documentation](https://platform.openai.com/docs/models).
 
@@ -184,6 +184,18 @@ for await (const chunk of stream) {
     "outputCost": 50
   },
   {
+    "model": "openai/gpt-6-astra-healthcare",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 10,
+    "outputCost": 50
+  },
+  {
     "model": "openai/gpt-6-luna",
     "imageInput": true,
     "audioInput": false,
@@ -220,6 +232,18 @@ for await (const chunk of stream) {
     "outputCost": 10
   },
   {
+    "model": "openai/gpt-6.1-sol-healthcare",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
     "model": "openai/gpt-6.1-terra",
     "imageInput": true,
     "audioInput": false,
@@ -244,7 +268,31 @@ for await (const chunk of stream) {
     "outputCost": 40
   },
   {
+    "model": "openai/gpt-6.2-astra-healthcare",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 8,
+    "outputCost": 40
+  },
+  {
     "model": "openai/gpt-6.2-sol",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
+    "model": "openai/gpt-6.2-sol-healthcare",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -383,7 +431,13 @@ const response = await agent.generate("Hello!", {
     },
     {
         "name": "include",
-        "type": "(\"web_search_call.results\" | \"file_search_call.results\" | \"message.output_text.logprobs\" | \"reasoning.encrypted_content\")[] | null | undefined",
+        "type": "(\"reasoning.encrypted_content\" | \"file_search_call.results\" | \"web_search_call.results\" | \"message.output_text.logprobs\")[] | null | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "includeWebSearchSources",
+        "type": "boolean | undefined",
         "description": "",
         "isOptional": true
     },
@@ -431,7 +485,7 @@ const response = await agent.generate("Hello!", {
     },
     {
         "name": "promptCacheOptions",
-        "type": "{ mode?: \"explicit\" | \"implicit\" | undefined; ttl?: \"30m\" | \"12h\" | undefined; prewarm?: boolean | undefined; } | undefined",
+        "type": "{ mode?: \"implicit\" | \"explicit\" | undefined; ttl?: \"30m\" | \"12h\" | undefined; prewarm?: boolean | undefined; } | undefined",
         "description": "",
         "isOptional": true
     },
@@ -449,7 +503,7 @@ const response = await agent.generate("Hello!", {
     },
     {
         "name": "reasoningEffortUpdate",
-        "type": "\"low\" | \"medium\" | \"high\" | \"xhigh\" | \"max\" | undefined",
+        "type": "\"none\" | \"low\" | \"medium\" | \"high\" | \"xhigh\" | \"max\" | undefined",
         "description": "",
         "isOptional": true
     },
@@ -521,12 +575,24 @@ const response = await agent.generate("Hello!", {
     },
     {
         "name": "systemMessageMode",
-        "type": "\"remove\" | \"system\" | \"developer\" | undefined",
+        "type": "\"developer\" | \"system\" | \"remove\" | undefined",
         "description": "",
         "isOptional": true
     },
     {
         "name": "forceReasoning",
+        "type": "boolean | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "contextManagement",
+        "type": "{ type: \"compaction\"; compactThreshold: number; }[] | null | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "compactionTrigger",
         "type": "boolean | undefined",
         "description": "",
         "isOptional": true

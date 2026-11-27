@@ -13,9 +13,9 @@
 import { isSessionStartupCancelledError } from '@mastra/core/agent-controller';
 import type { AgentControllerEvent, Session } from '@mastra/core/agent-controller';
 
-import { MODEL_FALLBACK_STATE_KEY } from '../auth/account-rotation-processor.js';
 import { GoalManager } from '../goal-manager.js';
 import { createGoalReminderSignal } from '../goal-signal.js';
+import { MODEL_FALLBACK_STATE_KEY } from '../model-fallback.js';
 import { THREAD_ACTIVE_MODEL_PACK_ID_KEY } from '../onboarding/settings.js';
 import { parseCodexModelSelection } from '../providers/model-ids.js';
 

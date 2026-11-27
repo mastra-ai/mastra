@@ -148,21 +148,15 @@ describe('listProjectConnections', () => {
     expect(init.headers.authorization).toBe(`Bearer ${TOKEN}`);
   });
 
-  it('maps a platform 401 to unauthorized', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(Response.json({ error: 'bad token' }, { status: 401 }));
+  it.each([
+    ['maps a platform 401 to unauthorized', 'bad token', 401, 'unauthorized'],
+    ['maps a platform 404 to connection_not_found', 'no project', 404, 'connection_not_found'],
+  ] as const)('%s', async (_title, error, status, code) => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ error }, { status }));
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
     await expect(listProjectConnections(client, 'proj_1')).rejects.toMatchObject({
-      code: 'unauthorized',
-      status: 401,
-    });
-  });
-
-  it('maps a platform 404 to connection_not_found', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(Response.json({ error: 'no project' }, { status: 404 }));
-    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
-    await expect(listProjectConnections(client, 'proj_1')).rejects.toMatchObject({
-      code: 'connection_not_found',
-      status: 404,
+      code,
+      status,
     });
   });
 
@@ -510,12 +504,15 @@ describe('proxyRequest', () => {
     );
   });
 
-  it('keeps a provider 404 as proxy_error (never connection_not_found)', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(Response.json({ message: 'page not found' }, { status: 404 }));
+  it.each([
+    ['keeps a provider 404 as proxy_error (never connection_not_found)', 'page not found', 404, 'pages/x'],
+    ['keeps a provider 401 as proxy_error', 'expired token', 401, 'me'],
+  ] as const)('%s', async (_title, message, status, path) => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ message }, { status }));
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
-    await expect(proxyRequest(client, 'c_1', { method: 'GET', path: 'pages/x' })).rejects.toMatchObject({
+    await expect(proxyRequest(client, 'c_1', { method: 'GET', path })).rejects.toMatchObject({
       code: 'proxy_error',
-      status: 404,
+      status,
     });
   });
 
@@ -592,15 +589,6 @@ describe('proxyRequest', () => {
       status: 401,
       detail: 'UnknownError',
       message: 'Provider request failed (401): UnknownError',
-    });
-  });
-
-  it('keeps a provider 401 as proxy_error', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(Response.json({ message: 'expired token' }, { status: 401 }));
-    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
-    await expect(proxyRequest(client, 'c_1', { method: 'GET', path: 'me' })).rejects.toMatchObject({
-      code: 'proxy_error',
-      status: 401,
     });
   });
 

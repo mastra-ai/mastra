@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
+import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
+import { SettingsContainer, SettingsItem, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 import { Fragment } from 'react';
@@ -20,6 +21,7 @@ import { JiraIntakeSection } from './JiraIntakeSection';
 import { LinearIntakeSection } from './LinearIntakeSection';
 import { SettingsSubsection } from './SettingsSubsection';
 import { useVantaStatusQuery, VantaIntakeSection } from './VantaIntakeSection';
+import { SkeletonRows } from '../../../ui/SkeletonRows';
 
 type SourceListing = 'connected' | 'unavailable' | 'available';
 
@@ -29,11 +31,26 @@ function sourceListing(connected: boolean, unavailable: boolean): SourceListing 
   return 'available';
 }
 
+const SOURCES_DESCRIPTION =
+  "The services that bring work into your organization's boards, and what each one brings in. A service with nothing selected brings in nothing.";
+
 function IntakeSkeleton() {
   return (
-    <SettingsContainer>
-      <SettingsSkeleton label="Loading intake sources" variant="item" rows={4} />
-    </SettingsContainer>
+    <SettingsSubsection scope="org" title="Sources" description={SOURCES_DESCRIPTION}>
+      <SkeletonRows label="Loading intake sources" rows={4} className="gap-3">
+        <SettingsContainer aria-hidden>
+          <SettingsItem
+            media={<Skeleton className="size-avatar-md shrink-0 rounded-lg motion-reduce:before:animate-none" />}
+            title={<SkeletonText line="text-label" className="w-24 motion-reduce:before:animate-none" />}
+            description={
+              <SkeletonText line="text-caption" className="w-48 max-w-full motion-reduce:before:animate-none" />
+            }
+          >
+            <Skeleton className="h-control-sm w-24 rounded-full motion-reduce:before:animate-none" />
+          </SettingsItem>
+        </SettingsContainer>
+      </SkeletonRows>
+    </SettingsSubsection>
   );
 }
 
@@ -94,7 +111,12 @@ export function IntakeSection() {
   const linearListing = sourceListing(
     Boolean(
       linear.data?.enabled &&
-      (linear.data.connected || linear.data.workspaces?.length || props.config.linear.sourceIds?.length),
+      (linear.data.connected ||
+        linear.data.workspaces?.length ||
+        props.config.linear.sourceIds?.length ||
+        linear.data.migration?.required ||
+        linear.data.requiresFreshConnect?.length ||
+        linear.data.unidentified?.length),
     ),
     linear.isError || linear.data?.reason === 'unavailable',
   );
@@ -164,11 +186,7 @@ export function IntakeSection() {
   ];
 
   return (
-    <SettingsSubsection
-      scope="org"
-      title="Sources"
-      description="The services that bring work into your organization's boards, and what each one brings in. A service with nothing selected brings in nothing."
-    >
+    <SettingsSubsection scope="org" title="Sources" description={SOURCES_DESCRIPTION}>
       <div className="flex flex-col gap-3">
         {sources.flatMap(source =>
           source.listing === undefined

@@ -71,6 +71,24 @@ describe('transformRequest', () => {
     });
   });
 
+  it('normalizes OpenAI Responses assistant text across provider versions', () => {
+    const url = 'https://api.openai.com/v1/responses';
+    const legacy = transformRequest({
+      url,
+      body: {
+        input: [{ role: 'assistant', content: [{ type: 'output_text', text: 'Hello' }] }],
+      },
+    });
+    const current = transformRequest({
+      url,
+      body: {
+        input: [{ role: 'assistant', content: 'Hello' }],
+      },
+    });
+
+    expect(current).toEqual(legacy);
+  });
+
   it('only applies Google normalization to the Google API hostname', () => {
     const body = {
       contents: [{ role: 'model', parts: [{ functionCall: { id: 'call-1', name: 'get_weather', args: {} } }] }],

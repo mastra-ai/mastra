@@ -138,6 +138,7 @@ const sidebars = {
         { type: 'doc', id: 'channels/slack-provider', label: 'SlackProvider' },
         { type: 'doc', id: 'channels/teams-provider', label: 'TeamsProvider' },
         { type: 'doc', id: 'channels/telegram-provider', label: 'TelegramProvider' },
+        { type: 'doc', id: 'channels/thread-link', label: 'threadLink' },
       ],
     },
     {
@@ -185,6 +186,11 @@ const sidebars = {
           type: 'doc',
           id: 'code-sdk/mount-agent-controller',
           label: 'mountAgentControllerOnMastra()',
+        },
+        {
+          type: 'doc',
+          id: 'code-sdk/mount-restricted-agent-controller',
+          label: 'mountRestrictedAgentControllerOnMastra()',
         },
       ],
     },
@@ -238,6 +244,7 @@ const sidebars = {
         { type: 'doc', id: 'core/getToolById', label: '.getToolById()' },
         { type: 'doc', id: 'core/getVector', label: '.getVector()' },
         { type: 'doc', id: 'core/getWorkflow', label: '.getWorkflow()' },
+        { type: 'doc', id: 'core/getWorkspaceById', label: '.getWorkspaceById()' },
         { type: 'doc', id: 'core/listAgents', label: '.listAgents()' },
         { type: 'doc', id: 'core/listClassifiers', label: '.listClassifiers()' },
         { type: 'doc', id: 'core/listGateways', label: '.listGateways()' },

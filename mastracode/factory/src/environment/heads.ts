@@ -12,7 +12,7 @@ import { groupedRepositoryAccess } from './repository-access.js';
 
 export type EnvironmentHeads = Record<string, string>;
 
-/** `owner/repo` from a clone URL in any common spelling, lower-cased, `.git` stripped; undefined when unparseable. */
+/** The repository path from a clone URL in any common spelling (`owner/repo`, or `group/subgroup/repo`), lower-cased, `.git` stripped; undefined when unparseable. */
 export function cloneUrlSlug(cloneUrl: string): string | undefined {
   let path: string;
   const scp = /^[^@/]+@[^:/]+:(.+)$/.exec(cloneUrl.trim());
@@ -30,13 +30,15 @@ export function cloneUrlSlug(cloneUrl: string): string | undefined {
     .split('/')
     .filter(Boolean);
   if (parts.length < 2) return undefined;
-  return `${parts[parts.length - 2]}/${parts[parts.length - 1]}`.toLowerCase();
+  return parts.join('/').toLowerCase();
 }
 
 /** The environment slug a clone URL names, in the environment's own spelling; undefined when none matches. */
 export function matchEnvironmentSlug(cloneUrl: string, slugs: Iterable<string>): string | undefined {
   const wanted = cloneUrlSlug(cloneUrl);
   if (!wanted) return undefined;
+  // Only the whole path names the repository: a slug that is merely the tail
+  // of a longer path (`platform/app` against `acme/platform/app`) is another one.
   for (const slug of slugs) {
     if (slug.toLowerCase() === wanted) return slug;
   }

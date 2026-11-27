@@ -127,7 +127,7 @@ function stubThreadRoute(workItems: unknown[], subscriptions: unknown[]) {
       HttpResponse.json({ project: { id: FACTORY_ID, name: 'Mastra Factory', defaultModelId: 'openai/gpt-4o-mini' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-      HttpResponse.json({ modelId: null, thinkingLevel: null }),
+      HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
     ),
     http.get(
       `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/feed-events`,

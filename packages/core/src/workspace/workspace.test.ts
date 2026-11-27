@@ -3461,13 +3461,6 @@ Line 3 conclusion`;
   // LSP Initialization
   // ===========================================================================
   describe('LSP initialization', () => {
-    it('creates LSPManager when lsp:true and sandbox has processes', async () => {
-      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
-      const workspace = new Workspace({ sandbox, lsp: true });
-
-      expect(workspace.lsp).toBeInstanceOf(LSPManager);
-    });
-
     it('keeps the LSP manager usable after stop()', async () => {
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       const workspace = new Workspace({ sandbox, lsp: true });

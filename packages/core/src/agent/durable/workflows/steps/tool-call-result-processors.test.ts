@@ -23,6 +23,7 @@
  *      step before the gated tool-result chunk is emitted.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { RequestContext } from '../../../../request-context';
 import { ChunkFrom } from '../../../../stream/types';
 import type { MastraToolInvocationOptions } from '../../../../tools/types';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
@@ -134,16 +135,20 @@ afterEach(() => {
 });
 
 describe('durable tool-call: processToolResult hook (Option B)', () => {
-  it.each(['placeholder', 'empty', 'persistence-only'] as const)(
+  it.each(['placeholder without context', 'placeholder with caller context', 'empty', 'persistence-only'] as const)(
     'rehydrates output processors before emitting a tool result from a %s registry',
     async registryState => {
+      const callerContext =
+        registryState === 'placeholder with caller context'
+          ? new RequestContext([['tenantId', 'resumed-tenant']])
+          : undefined;
       const seen: string[] = [];
       const outputProcessor = {
         id: 'resumed-tool-result-watcher',
         name: 'resumed-tool-result-watcher',
         processOutputStream: async ({ part, requestContext }: any) => {
           seen.push(part.type);
-          expect(requestContext?.get('tenantId')).toBe('redacted-tenant');
+          expect(requestContext?.get('tenantId')).toBe(callerContext ? 'resumed-tenant' : 'redacted-tenant');
           return { ...part, payload: { ...part.payload, result: REDACTED_RESULT } };
         },
       };
@@ -157,12 +162,11 @@ describe('durable tool-call: processToolResult hook (Option B)', () => {
         __resolveRunErrorProcessors: vi.fn().mockResolvedValue({ errorProcessors: [] }),
         __listLLMRequestProcessors: vi.fn().mockResolvedValue([]),
       };
-      if (registryState === 'placeholder') {
+      if (registryState.startsWith('placeholder')) {
         globalRunRegistry.set(RUN_ID, {
           isPlaceholder: true,
           tools: {},
-          model: undefined as any,
-          requestContext: new Map(),
+          requestContext: callerContext,
         } as any);
       }
 

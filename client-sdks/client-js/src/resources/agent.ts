@@ -72,7 +72,7 @@ import type {
 import { parsePartialJson, processDataStream } from '../utils/ai-sdk-v4';
 import { getClientToolModelOutput } from '../utils/client-tool-model-output';
 import { processClientTools } from '../utils/process-client-tools';
-import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
+import { isHandlerFailure, processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
 import { createSseEventSplitter } from '../utils/sse-event-splitter';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { BaseResource } from './base';
@@ -1001,6 +1001,10 @@ export class Agent extends BaseResource {
           } catch (error) {
             agent.deleteLatestSignalRuntimeOptions({ resourceId, threadId });
             console.error('Error running client-tool continuation:', error);
+            // Surface the failure to the caller instead of swallowing it, so a
+            // rejected continuation rejects processDataStream with the original
+            // error rather than reconnecting or resolving as if it succeeded.
+            throw error;
           } finally {
             agent.deleteSignalRuntimeOptions(runId);
           }
@@ -2377,8 +2381,15 @@ export class Agent extends BaseResource {
     const detachSignal = signal;
     signal = mergeAbortSignals(detachSignal, transportAbort.signal);
     let cancellationTimer: ReturnType<typeof setTimeout> | undefined;
-    const stopCancellation = () => cancellationAbort.abort();
+    let cancelling = false;
+    // A consumer detach ends the retry; the SDK's own cancel after an onChunk failure must not end
+    // a cancellation the caller already started, which keeps running until acknowledged or the cap.
+    const keepCancelling = () => cancelling && isHandlerFailure(detachSignal?.reason);
+    const stopCancellation = () => {
+      if (!keepCancelling()) cancellationAbort.abort();
+    };
     const cancelExecution = () => {
+      cancelling = true;
       cancellationTimer = setTimeout(
         () => cancellationAbort.abort(new Error('Agent run cancellation was not acknowledged')),
         10_000,
@@ -2422,6 +2433,8 @@ export class Agent extends BaseResource {
     const cleanupCancellation = () => {
       callerSignal?.removeEventListener('abort', cancelExecution);
       detachSignal?.removeEventListener('abort', stopCancellation);
+      // The in-flight retry clears its own cap when it ends.
+      if (keepCancelling()) return;
       clearTimeout(cancellationTimer);
       stopCancellation();
     };

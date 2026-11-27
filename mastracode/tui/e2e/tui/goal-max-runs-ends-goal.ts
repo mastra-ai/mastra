@@ -58,6 +58,8 @@ export const goalMaxRunsEndsGoalScenario: McE2eScenario = {
     };
     restartApp = async () => {
       await currentStop?.();
+      // Take the old app's frame off screen, so waiting for the banner waits for the new app.
+      console.info('\x1b[2J\x1b[H');
       await start();
     };
     await start();

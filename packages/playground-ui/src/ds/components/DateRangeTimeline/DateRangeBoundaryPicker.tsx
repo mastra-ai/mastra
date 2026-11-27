@@ -7,6 +7,7 @@ import { DatePicker } from '@/ds/components/DateTimePicker';
 import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover/popover';
 import { Txt } from '@/ds/components/Txt/Txt';
 import { IconCalendarDays } from '@/ds/icons/central/IconCalendarDays';
+import { formatDate } from '@/utils/date-format';
 
 interface DateRangeBoundaryPickerProps {
   boundary: DateBoundary;
@@ -23,7 +24,7 @@ export function DateRangeBoundaryPicker({ boundary, value, min, max, onSelect }:
   const selectedDate = parseDate(value);
   const firstDate = parseDate(min) ?? selectedDate;
   const lastDate = parseDate(max) ?? selectedDate;
-  const formattedDate = selectedDate ? format(selectedDate, 'MMM d, yyyy') : value;
+  const formattedDate = selectedDate ? formatDate(selectedDate, 'date-year') : value;
 
   function handleSelect(date?: Date) {
     if (!date) return;

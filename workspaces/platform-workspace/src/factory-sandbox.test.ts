@@ -90,6 +90,19 @@ describe('PlatformFactorySandbox', () => {
     expect((await schema['~standard'].validate({ memoryMb: 16384 })).issues).toBeDefined();
   });
 
+  it('offers one vCPU or an even count up to 8 and rejects an odd count above one', async () => {
+    const sandbox = new PlatformFactorySandbox();
+    const cpu = describeFactorySandbox(sandbox).settingsSchema.properties?.cpuCount as { oneOf?: unknown };
+    expect(cpu.oneOf).toEqual([{ const: 1 }, { const: 2 }, { const: 4 }, { const: 6 }, { const: 8 }]);
+    const schema = normalizeFactorySandboxSettings(sandbox);
+    for (const cpuCount of [1, 2, 8]) {
+      expect((await schema['~standard'].validate({ cpuCount })).issues).toBeUndefined();
+    }
+    for (const cpuCount of [0, 3, 7, 10]) {
+      expect((await schema['~standard'].validate({ cpuCount })).issues).toBeDefined();
+    }
+  });
+
   it('advertises the effective defaults: built-in values overridden by the defaults option', () => {
     const defaults = (sandbox: PlatformFactorySandbox) =>
       Object.fromEntries(
@@ -175,6 +188,44 @@ describe('PlatformFactorySandbox', () => {
     const explicit = await identity(createRepoTemplate({ ...ctx, cpuCount: 2, memoryMB: 8192 }));
     expect(withSetting.definition).toEqual(explicit.definition);
     expect(withSetting.definition).not.toEqual(withDefaults.definition);
+  });
+
+  it('advertises the CPU default it will use when the configured default is not offered', () => {
+    const cpu = describeFactorySandbox(new PlatformFactorySandbox({ defaults: { cpuCount: 3 } })).settingsSchema
+      .properties?.cpuCount as { default: number };
+    expect(cpu.default).toBe(2);
+  });
+
+  it('advertises the built-in CPU default when the configured default is undefined', () => {
+    const cpu = describeFactorySandbox(new PlatformFactorySandbox({ defaults: { cpuCount: undefined } })).settingsSchema
+      .properties?.cpuCount as { default: number };
+    expect(cpu.default).toBe(2);
+  });
+
+  it.each([
+    [3, 2],
+    [7, 2],
+    [12, 2],
+    [64, 2],
+  ])('builds a saved CPU count of %i, which is not offered, with the default %i', async (saved, used) => {
+    const ctx = listContext();
+    const sandbox = new PlatformFactorySandbox();
+    const fromSetting = await identity(sandbox.template(ctx, { cpuCount: saved }));
+    const fromDefault = await identity(new PlatformFactorySandbox({ defaults: { cpuCount: saved } }).template(ctx, {}));
+    const explicit = await identity(createRepoTemplate({ ...ctx, cpuCount: used, memoryMB: 1024 }));
+    expect(fromSetting.definition).toEqual(explicit.definition);
+    expect(fromDefault.definition).toEqual(explicit.definition);
+  });
+
+  it('builds a saved CPU count that is not offered with the configured default, as once Factory drops it', async () => {
+    const ctx = listContext();
+    const sandbox = new PlatformFactorySandbox({ defaults: { cpuCount: 4 } });
+    const saved = await identity(sandbox.template(ctx, { cpuCount: 7 }));
+    const dropped = await identity(sandbox.template(ctx, {}));
+    expect(saved.definition).toEqual(dropped.definition);
+    expect(dropped.definition).toEqual(
+      (await identity(createRepoTemplate({ ...ctx, cpuCount: 4, memoryMB: 1024 }))).definition,
+    );
   });
 
   it('adds a docker operation only when the docker setting is on', async () => {

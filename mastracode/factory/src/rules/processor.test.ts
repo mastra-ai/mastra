@@ -519,7 +519,7 @@ describe('FactoryPhaseStateProcessor', () => {
           configVersion: 'rules-v1',
           boards,
           storage,
-          boardEngine: new DispatcherBoardEngine({ transitionService }),
+          boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
         });
         await processor.processInputStep(inputArgs(requestContext(), [c.message]));
         // The tool's result never moves the card by itself.
@@ -591,7 +591,7 @@ describe('FactoryPhaseStateProcessor', () => {
         configVersion: 'rules-v1',
         boards,
         storage,
-        boardEngine: new DispatcherBoardEngine({ transitionService }),
+        boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
       });
       await processor.processInputStep(inputArgs(requestContext(), [approved()]));
       // A person sends the card to Building and back; the old result is read again from the thread.
@@ -638,7 +638,7 @@ describe('FactoryPhaseStateProcessor', () => {
         configVersion: 'rules-v1',
         boards,
         storage,
-        boardEngine: new DispatcherBoardEngine({ transitionService }),
+        boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
       });
       await processor.processInputStep(inputArgs(requestContext(), [approved()]));
       const card = await storage.get({ orgId: 'org-1', id: prepared.item.id });
@@ -670,7 +670,7 @@ describe('FactoryPhaseStateProcessor', () => {
           configVersion: 'rules-v1',
           boards,
           storage,
-          boardEngine: new DispatcherBoardEngine({ transitionService }),
+          boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
         });
         await processor.processInputStep(inputArgs(requestContext(), [approved()]));
         expect(await stageOf(storage, prepared.item.id)).toEqual([board.stage]);
@@ -711,7 +711,7 @@ describe('FactoryPhaseStateProcessor', () => {
           configVersion: 'rules-v1',
           boards,
           storage,
-          boardEngine: new DispatcherBoardEngine({ transitionService }),
+          boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
         });
         await processor.processInputStep(inputArgs(requestContext(), [c.message]));
         const card = await storage.get({ orgId: 'org-1', id: prepared.item.id });
@@ -798,7 +798,7 @@ describe('FactoryPhaseStateProcessor', () => {
           configVersion: 'rules-v1',
           boards,
           storage,
-          boardEngine: new DispatcherBoardEngine({ transitionService }),
+          boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
         });
         return { storage, prepared, transitionService, processor };
       };
@@ -838,7 +838,7 @@ describe('FactoryPhaseStateProcessor', () => {
         configVersion: 'rules-v1',
         boards,
         storage,
-        boardEngine: new DispatcherBoardEngine({ transitionService }),
+        boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
       });
       await processor.processInputStep(inputArgs(requestContext(), [approved()]));
       expect(await stageOf(storage, prepared.item.id)).toEqual(['planning']);
@@ -855,7 +855,7 @@ describe('FactoryPhaseStateProcessor', () => {
       configVersion: 'rules-v1',
       boards,
       storage,
-      boardEngine: new DispatcherBoardEngine({ transitionService }),
+      boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
     });
 
     await processor.processInputStep(
@@ -864,7 +864,7 @@ describe('FactoryPhaseStateProcessor', () => {
       ]),
     );
 
-    // The approval stamp bumps the revision; the planner moves the card itself.
+    // The approval stamp bumps the revision; it is the phase's outcome, which Factory applies once the run ends.
     await expect(storage.get({ orgId: 'org-1', id: prepared.item.id })).resolves.toMatchObject({
       revision: 2,
       stages: ['planning'],
@@ -875,7 +875,7 @@ describe('FactoryPhaseStateProcessor', () => {
       attributes: { board: 'work', stage: 'planning', role: 'plan', revision: 2 },
     });
     expect(signal?.contents).toContain('Factory work phase: Planning (planning)');
-    expect(signal?.contents).toContain('Then move the card with factory_transition_work_item to one of:');
+    expect(signal?.contents).toContain('Reported outcome: advance (Plan approved) → Building.');
   });
 
   it('still records an approved plan when an unrelated write to the card lands first', async () => {
@@ -887,7 +887,7 @@ describe('FactoryPhaseStateProcessor', () => {
       configVersion: 'rules-v1',
       boards,
       storage,
-      boardEngine: new DispatcherBoardEngine({ transitionService }),
+      boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
     });
     const update = storage.update.bind(storage);
     let raced = false;
@@ -996,7 +996,7 @@ describe('FactoryPhaseStateProcessor', () => {
       configVersion: 'rules-v1',
       storage,
       boards,
-      boardEngine: new DispatcherBoardEngine({ transitionService }),
+      boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
       messageReader: reader as never,
     });
 
@@ -1058,7 +1058,7 @@ describe('FactoryPhaseStateProcessor', () => {
       listMessages: vi.fn(async () => ({ messages: [toolMessage({ toolName: 'finish' })], hasMore: false })),
     };
     const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
-    const defaultEngine = new DispatcherBoardEngine({ transitionService });
+    const defaultEngine = new DispatcherBoardEngine({ transitionService, workItems: storage, boards });
     const asked: string[] = [];
     // A host engine that refuses a move an agent's tool result asks for, but would take the same move from a rule.
     const boardEngine: FactoryBoardEngine = {
@@ -1074,6 +1074,7 @@ describe('FactoryPhaseStateProcessor', () => {
         };
       },
       requestPlacement: placement => defaultEngine.requestPlacement(placement),
+      runEnded: (binding, engine) => defaultEngine.runEnded(binding, engine),
     };
     const processor = new FactoryPhaseStateProcessor({
       configVersion: 'rules-v1',
@@ -1356,7 +1357,7 @@ describe('FactoryPhaseStateProcessor', () => {
       configVersion: 'rules-v1',
       boards,
       storage,
-      boardEngine: new DispatcherBoardEngine({ transitionService }),
+      boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
     });
     const context = requestContext();
 
@@ -1396,7 +1397,8 @@ describe('FactoryPhaseStateProcessor', () => {
     const resting = await processor.computeStateSignal(stateArgs(requestContext()));
     expect(resting?.contents).toContain('Factory work phase: Intake (intake)');
     expect(resting?.contents).toContain('rests in Intake');
-    expect(resting?.contents).toContain('request the transition into the working stage first');
+    expect(resting?.contents).toContain('a person moves it on from the Factory board when the work should resume');
+    expect(resting?.contents).not.toContain('Outcomes:');
   });
 
   it("names each phase by its part in the loop, from the card's own board, so skills never assume Work's keys", async () => {
@@ -1544,7 +1546,7 @@ describe('FactoryPhaseStateProcessor', () => {
     );
   });
 
-  it('tells the planner Planning holds the card until the plan is approved, and then to move it', async () => {
+  it('tells the planner Planning holds the card until the plan is approved, and that approval is its outcome', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepare(storage, 'plan', 'issue', { id: 'work', stage: 'planning' });
     const boards = createTriageWorkRegistry();
@@ -1554,8 +1556,12 @@ describe('FactoryPhaseStateProcessor', () => {
       storage,
     }).computeStateSignal(stateArgs(requestContext()));
     expect(signal?.contents).toContain(
-      'This phase ends when submit_plan succeeds with an approved plan; until then the card stays here. Then move the card with factory_transition_work_item to one of: execute, triage, intake, done, canceled.',
+      'This phase ends when submit_plan succeeds with an approved plan; until then the card stays here. Its success reports advance (Plan approved); Factory moves the card to Building once your run ends.',
     );
+    expect(signal?.contents).toContain(
+      'Outcomes: advance: Plan approved → Building; rest: Needs a person before planning can go on → Intake; done: Already done; nothing to build → Done; cancel: Not worth doing → Canceled',
+    );
+    expect(signal?.contents).not.toContain('factory_transition_work_item');
     expect(signal?.contents).not.toContain('Its result moves the card on.');
   });
 
@@ -1567,7 +1573,7 @@ describe('FactoryPhaseStateProcessor', () => {
     const context = requestContext();
     const first = await processor.computeStateSignal(stateArgs(context));
     expect(first).toMatchObject({ id: 'factory-phase', mode: 'snapshot', attributes: { status: 'active' } });
-    expect(first?.contents).toContain('expectedRevision 1');
+    expect(first?.contents).toContain('Revision: 1');
 
     const lastSnapshot = { metadata: { value: first?.metadata?.value } };
     await expect(

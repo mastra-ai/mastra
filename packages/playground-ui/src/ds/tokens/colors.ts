@@ -259,6 +259,7 @@ export const Colors = {
   background: 'var(--background)',
   sidebar: 'var(--sidebar)',
   card: 'var(--card)',
+  'canvas-link': 'var(--canvas-link)',
   nested: 'var(--nested)',
   row: 'var(--row)',
   field: 'var(--field)',

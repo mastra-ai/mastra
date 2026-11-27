@@ -1,6 +1,6 @@
-import type { StreamParser } from '@codemirror/language';
+import type { Language, StreamParser } from '@codemirror/language';
 import { TreeFragment } from '@lezer/common';
-import type { Parser, Tree } from '@lezer/common';
+import type { Tree } from '@lezer/common';
 import { highlightTree, tagHighlighter, tags as t } from '@lezer/highlight';
 import type { Tag } from '@lezer/highlight';
 
@@ -24,82 +24,84 @@ export interface HighlightResult {
  * (markdown fences, chat output) also carry python, yaml, diff, css, html, xml
  * and sql.
  */
-const langAliases: Record<string, Lang> = {
-  js: 'javascript',
-  javascript: 'javascript',
-  mjs: 'javascript',
-  cjs: 'javascript',
-  node: 'javascript',
-  ts: 'typescript',
-  typescript: 'typescript',
-  mts: 'typescript',
-  cts: 'typescript',
-  tsx: 'tsx',
-  jsx: 'jsx',
-  json: 'json',
-  json5: 'json',
-  md: 'markdown',
-  markdown: 'markdown',
-  py: 'python',
-  python: 'python',
-  sh: 'bash',
-  bash: 'bash',
-  shell: 'bash',
-  zsh: 'bash',
-  yml: 'yaml',
-  yaml: 'yaml',
-  diff: 'diff',
-  patch: 'diff',
-  css: 'css',
-  scss: 'css',
-  html: 'html',
-  htm: 'html',
-  xml: 'xml',
-  svg: 'xml',
-  sql: 'sql',
-};
+const langAliases = new Map(
+  Object.entries({
+    js: 'javascript',
+    javascript: 'javascript',
+    mjs: 'javascript',
+    cjs: 'javascript',
+    node: 'javascript',
+    ts: 'typescript',
+    typescript: 'typescript',
+    mts: 'typescript',
+    cts: 'typescript',
+    tsx: 'tsx',
+    jsx: 'jsx',
+    json: 'json',
+    json5: 'json',
+    md: 'markdown',
+    markdown: 'markdown',
+    py: 'python',
+    python: 'python',
+    sh: 'bash',
+    bash: 'bash',
+    shell: 'bash',
+    zsh: 'bash',
+    yml: 'yaml',
+    yaml: 'yaml',
+    diff: 'diff',
+    patch: 'diff',
+    css: 'css',
+    scss: 'css',
+    html: 'html',
+    htm: 'html',
+    xml: 'xml',
+    svg: 'xml',
+    sql: 'sql',
+  } satisfies Record<string, HighlightLanguage>),
+);
 
-async function streamParser(mode: Promise<StreamParser<unknown>>): Promise<Parser> {
+async function streamLanguage(mode: Promise<StreamParser<unknown>>): Promise<Language> {
   const [{ StreamLanguage }, parser] = await Promise.all([import('@codemirror/language'), mode]);
-  return StreamLanguage.define(parser).parser;
+  return StreamLanguage.define(parser);
 }
 
-async function jsParser(options: { jsx?: boolean; typescript?: boolean }): Promise<Parser> {
+async function jsLanguage(options: { jsx?: boolean; typescript?: boolean }): Promise<Language> {
   const { javascript } = await import('@codemirror/lang-javascript');
-  return javascript(options).language.parser;
+  return javascript(options).language;
 }
 
 // Dynamic imports keep each grammar in its own lazily-loaded chunk.
 const loaders = {
-  javascript: () => jsParser({}),
-  jsx: () => jsParser({ jsx: true }),
-  typescript: () => jsParser({ typescript: true }),
-  tsx: () => jsParser({ jsx: true, typescript: true }),
-  json: () => import('@codemirror/lang-json').then(m => m.jsonLanguage.parser),
-  markdown: () => import('@codemirror/lang-markdown').then(m => m.markdownLanguage.parser),
-  bash: () => streamParser(import('@codemirror/legacy-modes/mode/shell').then(m => m.shell)),
-  python: () => streamParser(import('@codemirror/legacy-modes/mode/python').then(m => m.python)),
-  yaml: () => streamParser(import('@codemirror/legacy-modes/mode/yaml').then(m => m.yaml)),
-  diff: () => streamParser(import('@codemirror/legacy-modes/mode/diff').then(m => m.diff)),
-  css: () => streamParser(import('@codemirror/legacy-modes/mode/css').then(m => m.css)),
-  html: () => streamParser(import('@codemirror/legacy-modes/mode/xml').then(m => m.html)),
-  xml: () => streamParser(import('@codemirror/legacy-modes/mode/xml').then(m => m.xml)),
-  sql: () => streamParser(import('@codemirror/legacy-modes/mode/sql').then(m => m.standardSQL)),
-} satisfies Record<string, () => Promise<Parser>>;
+  javascript: () => jsLanguage({}),
+  jsx: () => jsLanguage({ jsx: true }),
+  typescript: () => jsLanguage({ typescript: true }),
+  tsx: () => jsLanguage({ jsx: true, typescript: true }),
+  json: () => import('@codemirror/lang-json').then(m => m.jsonLanguage),
+  markdown: () => import('@codemirror/lang-markdown').then(m => m.markdownLanguage),
+  bash: () => streamLanguage(import('@codemirror/legacy-modes/mode/shell').then(m => m.shell)),
+  python: () => streamLanguage(import('@codemirror/legacy-modes/mode/python').then(m => m.python)),
+  yaml: () => streamLanguage(import('@codemirror/legacy-modes/mode/yaml').then(m => m.yaml)),
+  diff: () => streamLanguage(import('@codemirror/legacy-modes/mode/diff').then(m => m.diff)),
+  css: () => streamLanguage(import('@codemirror/legacy-modes/mode/css').then(m => m.css)),
+  html: () => streamLanguage(import('@codemirror/legacy-modes/mode/xml').then(m => m.html)),
+  xml: () => streamLanguage(import('@codemirror/legacy-modes/mode/xml').then(m => m.xml)),
+  sql: () => streamLanguage(import('@codemirror/legacy-modes/mode/sql').then(m => m.standardSQL)),
+} satisfies Record<string, () => Promise<Language>>;
 
-type Lang = keyof typeof loaders;
+export type HighlightLanguage = keyof typeof loaders;
 
-const parsers = new Map<Lang, Promise<Parser>>();
+const languages = new Map<HighlightLanguage, Promise<Language>>();
 
-function getParser(lang: Lang): Promise<Parser> {
-  let parser = parsers.get(lang);
-  if (!parser) {
-    parser = loaders[lang]();
+export function loadLanguage(lang: HighlightLanguage): Promise<Language> {
+  let language = languages.get(lang);
+  if (!language) {
+    language = loaders[lang]();
     // Let a failed chunk load be retried on the next highlight pass.
-    parser.catch(() => parsers.delete(lang));
-    parsers.set(lang, parser);
+    language.catch(() => languages.delete(lang));
+    languages.set(lang, language);
   }
-  return parser;
+  return language;
 }
 
 /**
@@ -136,6 +138,8 @@ function reusableFragments(code: string, previous: HighlightResult | undefined) 
   ]);
 }
 
+export const MAX_HIGHLIGHT_LENGTH = 50_000;
+
 /**
  * Tokenizes `code` into lines of tokens. Joining every token's content with
  * `\n` between lines reproduces `code` exactly. Returns `null` for languages
@@ -146,10 +150,10 @@ export async function highlight(
   language: string,
   previous?: HighlightResult,
 ): Promise<HighlightResult | null> {
-  const lang = langAliases[language?.toLowerCase()];
-  if (!lang) return null;
+  const lang = langAliases.get(language?.toLowerCase());
+  if (!lang || code.length > MAX_HIGHLIGHT_LENGTH) return null;
 
-  const parser = await getParser(lang);
+  const { parser } = await loadLanguage(lang);
   const tree = parser.parse(code, reusableFragments(code, previous));
   let line: HighlightToken[] = [];
   const lines = [line];
@@ -172,7 +176,7 @@ export async function highlight(
   return { code, tokens: lines, tree };
 }
 
-export function languageForPath(path: string | undefined): string | undefined {
+export function languageForPath(path: string | undefined): HighlightLanguage | undefined {
   const extension = path?.split('.').pop()?.toLowerCase();
-  return extension ? langAliases[extension] : undefined;
+  return extension ? langAliases.get(extension) : undefined;
 }

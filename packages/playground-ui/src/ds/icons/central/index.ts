@@ -211,6 +211,7 @@ export { IconPlay } from './IconPlay';
 export { IconPlayCircle } from './IconPlayCircle';
 export { IconPlugin1 } from './IconPlugin1';
 export { IconPlusMedium } from './IconPlusMedium';
+export { IconPromptSuggestion } from './IconPromptSuggestion';
 export { IconPullRequest } from './IconPullRequest';
 export { IconPullRequestClosedSimple } from './IconPullRequestClosedSimple';
 export { IconPuzzle } from './IconPuzzle';

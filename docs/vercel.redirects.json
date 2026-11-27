@@ -2501,6 +2501,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/mastra-platform/alerts",
+      "destination": "/docs/mastra-platform/observability/alerts",
+      "permanent": true
+    },
+    {
       "source": "/docs/agents/workspace",
       "destination": "/docs/sandbox/overview",
       "permanent": true

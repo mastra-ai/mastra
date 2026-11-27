@@ -1,3 +1,4 @@
+import '@/test/english-locale';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   bucketCountRows,

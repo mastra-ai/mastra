@@ -35,6 +35,12 @@ export type KnowledgeImporterRunStart =
        * trusts only what the host returns here; the runner picks the importer from it.
        */
       binding?: KnowledgeImporterRunBinding;
+      /**
+       * The largest flush request the host takes, in bytes of the request encoded as JSON. The
+       * runner keeps under the lower of this and its own `maxFlushBytes`. Ignored unless a positive
+       * whole number.
+       */
+      maxFlushBytes?: number;
     }
   /** Another run of the binding is going; the host recorded this one as skipped. */
   | { status: 'skipped'; runId: string };
@@ -126,6 +132,7 @@ export const KNOWLEDGE_IMPORTER_ERROR_CODES = [
   'credential_missing',
   'importer_missing_from_deploy',
   'importer_error',
+  'flush_too_large',
   'stopped',
   'lease_expired',
   'deadline_exceeded',
