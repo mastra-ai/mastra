@@ -782,7 +782,7 @@ export const mastra = new Mastra({
 **Type:** `string[]`\
 **Default:** `[]`
 
-List of packages whose source code Mastra transpiles and bundles in `mastra dev` and `mastra build`, instead of leaving them as external dependencies. Use this for installed dependencies that ship uncompiled TypeScript.
+List of packages whose source code Mastra transpiles and bundles in `mastra dev` and `mastra build`, instead of leaving them as external dependencies. Use this for installed dependencies that contain uncompiled TypeScript.
 
 You only need this option if you're importing uncompiled source code directly. If your packages are already compiled to CommonJS or ESM, they don't need to be listed here.
 

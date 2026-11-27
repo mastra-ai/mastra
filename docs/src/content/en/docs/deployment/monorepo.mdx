@@ -152,7 +152,7 @@ If Mastra can't resolve a workspace package, ensure:
 
 ### TypeScript errors from installed packages
 
-If Node reports `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` for a package outside your workspace, the package ships uncompiled TypeScript. Either:
+If Node reports `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` for a package outside your workspace, the package contains uncompiled TypeScript. Either:
 
 - Build the package first (recommended for faster Mastra builds)
 - Add the package to [`transpilePackages`](/reference/configuration#bundlertranspilepackages) in your Mastra config
