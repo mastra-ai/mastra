@@ -13784,15 +13784,19 @@ export interface GetKnowledgeKnowledgeKeyActivity_RouteContract {
 export type GetKnowledgeKnowledgeKeyPagesPageIdSequence_PathParams = GetKnowledgeKnowledgeKeyPagesPageId_PathParams;
 
 export type GetKnowledgeKnowledgeKeyPagesPageIdSequence_QueryParams = {
-  /** Items that happened at or after this ISO 8601 date-time */
+  /** Items that happened at or after this ISO 8601 date-time; timeline sequences only */
   since?: string | undefined;
-  /** Items that happened before this ISO 8601 date-time */
+  /** Items that happened before this ISO 8601 date-time; timeline sequences only */
   until?: string | undefined;
-  /** Newest first (default) or oldest first */
+  /** Along the sequence order: newest first on a timeline and first position first on a position sequence by default */
   order?: ('desc' | 'asc') | undefined;
-  /** One thread: its root item's externalId */
-  thread?: string | undefined;
-  /** Keywords to match in item bodies; results are ranked, not paged */
+  /** One parent item's externalId: that item and the items under it */
+  parent?: string | undefined;
+  /** Only items of these types; repeat the param for each, at most 20 */
+  type?: (string | string[]) | undefined;
+  /** Only untyped items, or with type also the untyped ones */
+  untyped?: ('true' | 'false') | undefined;
+  /** Keywords to match in item titles, bodies, link titles and property values; results are ranked, not paged */
   q?: string | undefined;
   cursor?: string | undefined;
   limit?: number | undefined;

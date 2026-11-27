@@ -40,19 +40,53 @@ export const knowledgeSearchQuerySchema = z.object({
 });
 
 const sequenceTime = z.iso.datetime({ offset: true });
+const sequenceItemType = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/);
 
 export const knowledgeSequenceQuerySchema = z.object({
-  since: sequenceTime.optional().describe('Items that happened at or after this ISO 8601 date-time'),
-  until: sequenceTime.optional().describe('Items that happened before this ISO 8601 date-time'),
-  order: z.enum(['desc', 'asc']).optional().describe('Newest first (default) or oldest first'),
-  thread: z.string().min(1).max(512).optional().describe("One thread: its root item's externalId"),
-  q: z.string().min(1).max(200).optional().describe('Keywords to match in item bodies; results are ranked, not paged'),
+  since: sequenceTime
+    .optional()
+    .describe('Items that happened at or after this ISO 8601 date-time; timeline sequences only'),
+  until: sequenceTime
+    .optional()
+    .describe('Items that happened before this ISO 8601 date-time; timeline sequences only'),
+  order: z
+    .enum(['desc', 'asc'])
+    .optional()
+    .describe(
+      'Along the sequence order: newest first on a timeline and first position first on a position sequence by default',
+    ),
+  parent: z
+    .string()
+    .min(1)
+    .max(512)
+    .optional()
+    .describe("One parent item's externalId: that item and the items under it"),
+  type: z
+    .union([sequenceItemType, z.array(sequenceItemType)])
+    .transform(value => (Array.isArray(value) ? value : [value]))
+    .pipe(z.array(sequenceItemType).min(1).max(20))
+    .optional()
+    .describe('Only items of these types; repeat the param for each, at most 20'),
+  untyped: z
+    .enum(['true', 'false'])
+    .transform(value => value === 'true')
+    .optional()
+    .describe('Only untyped items, or with type also the untyped ones'),
+  q: z
+    .string()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe(
+      'Keywords to match in item titles, bodies, link titles and property values; results are ranked, not paged',
+    ),
   cursor: z
     .string()
     .refine(value => {
       // Reject malformed cursors at the HTTP boundary without requiring a newer Core value export.
-      const match = /^t(-?\d+)_(.+)$/.exec(value);
-      return match !== null && Number.isSafeInteger(Number(match[1]));
+      const time = /^t(-?\d+)_(.+)$/.exec(value);
+      if (time) return Number.isSafeInteger(Number(time[1]));
+      return /^p[0-9a-z]+_.+$/.test(value);
     }, 'Invalid sequence cursor')
     .optional(),
   limit,

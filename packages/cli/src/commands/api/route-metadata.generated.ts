@@ -3263,10 +3263,12 @@ export const API_ROUTE_METADATA = {
       "cursor",
       "limit",
       "order",
+      "parent",
       "q",
       "since",
-      "thread",
-      "until"
+      "type",
+      "until",
+      "untyped"
     ],
     "bodyParams": [],
     "hasQuery": true,

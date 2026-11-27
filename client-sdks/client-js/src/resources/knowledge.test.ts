@@ -44,7 +44,7 @@ describe('Knowledge resource', () => {
     expect(url(fetchMock, 1)).toBe('http://localhost:4111/api/knowledge/kb/activity?pageId=p1&cursor=c1&limit=10');
   });
 
-  it("reads a sequence page's items by range, thread and keywords", async () => {
+  it("reads a sequence page's items by range, parent, types and keywords", async () => {
     const fetchMock = mockFetch({ items: [], nextCursor: null });
     const kb = client.getKnowledge('kb');
     await kb.sequence('p/1');
@@ -55,13 +55,13 @@ describe('Knowledge resource', () => {
       cursor: 'c1',
       limit: 10,
     });
-    await kb.sequence('p/1', { thread: '1700000000.000100' });
-    await kb.sequence('p/1', { q: 'deploy' });
+    await kb.sequence('p/1', { parent: '1700000000.000100' });
+    await kb.sequence('p/1', { q: 'deploy', types: ['deploy', 'incident'], untyped: true });
     expect(fetchMock.mock.calls.map(call => call[0])).toEqual([
       'http://localhost:4111/api/knowledge/kb/pages/p%2F1/sequence',
       'http://localhost:4111/api/knowledge/kb/pages/p%2F1/sequence?since=2026-11-01T00%3A00%3A00.000Z&until=2026-11-02T00%3A00%3A00.000Z&order=asc&cursor=c1&limit=10',
-      'http://localhost:4111/api/knowledge/kb/pages/p%2F1/sequence?thread=1700000000.000100',
-      'http://localhost:4111/api/knowledge/kb/pages/p%2F1/sequence?q=deploy',
+      'http://localhost:4111/api/knowledge/kb/pages/p%2F1/sequence?parent=1700000000.000100',
+      'http://localhost:4111/api/knowledge/kb/pages/p%2F1/sequence?q=deploy&type=deploy&type=incident&untyped=true',
     ]);
   });
 

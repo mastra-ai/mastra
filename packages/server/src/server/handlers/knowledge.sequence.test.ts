@@ -82,7 +82,7 @@ describe('Knowledge sequence route', () => {
       order: 'asc',
     });
     expect(ids(range)).toEqual(['m2', 'm3']);
-    const thread = await call(GET_KNOWLEDGE_SEQUENCE_ROUTE, { ...args, thread: 'm1', order: 'asc' });
+    const thread = await call(GET_KNOWLEDGE_SEQUENCE_ROUTE, { ...args, parent: 'm1', order: 'asc' });
     expect(ids(thread)).toEqual(['m1', 'm2', 'm3']);
   });
 
@@ -100,7 +100,10 @@ describe('Knowledge sequence route', () => {
     for (const cursor of ['bad', 'tNaN_id', 't9007199254740992_id', 't0_']) {
       expect(knowledgeSequenceQuerySchema.safeParse({ cursor }).success).toBe(false);
     }
-    for (const cursor of ['t0_id', 't-1_item:with_underscores', 't9007199254740991_id']) {
+    for (const cursor of ['bad', 'p_id', 'pA_id', 'p1_']) {
+      expect(knowledgeSequenceQuerySchema.safeParse({ cursor }).success).toBe(false);
+    }
+    for (const cursor of ['t0_id', 't-1_item:with_underscores', 't9007199254740991_id', 'p1_id', 'pa0z_x_y']) {
       expect(knowledgeSequenceQuerySchema.safeParse({ cursor }).success).toBe(true);
     }
   });
@@ -111,9 +114,115 @@ describe('Knowledge sequence route', () => {
     await store.sequences!.removeItem({ sequenceId: channel.id, externalId: 'm2', writtenBy });
     const result = await call(GET_KNOWLEDGE_SEQUENCE_ROUTE, { mastra, knowledgeKey: 'main', pageId: channel.id });
     expect(result.items.find((item: { externalId: string }) => item.externalId === 'm2')).toMatchObject({
-      body: '',
+      body: null,
       deletedAt: expect.any(Date),
     });
+  });
+
+  it("returns each item's title, type, links and properties, and the sequence's declaration", async () => {
+    const { mastra, knowledge, channel } = await setup();
+    const sequences = (await knowledge.getStorage()).sequences!;
+    const itemTypes = {
+      deploy: { label: 'Deploy', propertiesSchema: { type: 'object', properties: { env: { type: 'string' } } } },
+    } as const;
+    await sequences.markSequence({ pageId: channel.id, itemTypes });
+    await sequences.upsertItem({
+      sequenceId: channel.id,
+      externalId: 'd1',
+      occurredAt: new Date(Date.UTC(2026, 10, 5, 12)),
+      type: 'deploy',
+      title: 'Deploy 1.84',
+      links: [{ url: 'https://example.com/run/1', title: 'Run 1' }],
+      properties: { env: 'prod' },
+      writtenBy,
+    });
+    const result = await call(GET_KNOWLEDGE_SEQUENCE_ROUTE, { mastra, knowledgeKey: 'main', pageId: channel.id });
+    expect(result.items[0]).toMatchObject({
+      externalId: 'd1',
+      type: 'deploy',
+      title: 'Deploy 1.84',
+      body: null,
+      links: [{ url: 'https://example.com/run/1', title: 'Run 1' }],
+      properties: { env: 'prod' },
+    });
+    const page = await call(GET_KNOWLEDGE_PAGE_ROUTE, { mastra, knowledgeKey: 'main', pageId: channel.id });
+    expect(page.sequence).toEqual({ orderBy: 'timeline', propertiesSchema: null, itemTypes });
+  });
+
+  it('filters by type and untyped, for reads and searches', async () => {
+    const { mastra, knowledge, channel } = await setup();
+    const sequences = (await knowledge.getStorage()).sequences!;
+    const typed = (externalId: string, type: string, day: number) =>
+      sequences.upsertItem({
+        sequenceId: channel.id,
+        externalId,
+        occurredAt: new Date(Date.UTC(2026, 10, day, 13)),
+        type,
+        body: `refund ${type}`,
+        writtenBy,
+      });
+    await typed('d1', 'deploy', 5);
+    await typed('i1', 'incident', 6);
+    const args = { mastra, knowledgeKey: 'main', pageId: channel.id };
+    expect(ids(await call(GET_KNOWLEDGE_SEQUENCE_ROUTE, { ...args, type: ['deploy'] }))).toEqual(['d1']);
+    expect(ids(await call(GET_KNOWLEDGE_SEQUENCE_ROUTE, { ...args, type: ['deploy', 'incident'] }))).toEqual([
+      'i1',
+      'd1',
+    ]);
+    expect(ids(await call(GET_KNOWLEDGE_SEQUENCE_ROUTE, { ...args, untyped: true }))).toEqual(['m4', 'm3', 'm2', 'm1']);
+    expect(ids(await call(GET_KNOWLEDGE_SEQUENCE_ROUTE, { ...args, q: 'refund', type: ['incident'] }))).toEqual(['i1']);
+    expect(ids(await call(GET_KNOWLEDGE_SEQUENCE_ROUTE, { ...args, q: 'refund', untyped: true }))).toEqual([
+      'm3',
+      'm1',
+    ]);
+    expect(knowledgeSequenceQuerySchema.parse({ type: 'deploy', untyped: 'true' })).toMatchObject({
+      type: ['deploy'],
+      untyped: true,
+    });
+    expect(knowledgeSequenceQuerySchema.safeParse({ type: 'Deploy' }).success).toBe(false);
+    expect(knowledgeSequenceQuerySchema.safeParse({ untyped: 'yes' }).success).toBe(false);
+  });
+
+  it('reads a position sequence in position order and 400s a date range or a timeline cursor', async () => {
+    const { mastra, knowledge, refunds } = await setup();
+    const store = await knowledge.getStorage();
+    const sequences = store.sequences!;
+    await sequences.markSequence({ pageId: refunds.id, orderBy: 'position' });
+    for (const [externalId, title] of [
+      ['s1', 'Check the order'],
+      ['s2', 'Issue the refund'],
+      ['s3', 'Email the customer'],
+    ] as const) {
+      await sequences.upsertItem({ sequenceId: refunds.id, externalId, title, writtenBy });
+    }
+    const args = { mastra, knowledgeKey: 'main', pageId: refunds.id };
+    const first = await call(GET_KNOWLEDGE_SEQUENCE_ROUTE, { ...args, limit: 2 });
+    expect(ids(first)).toEqual(['s1', 's2']);
+    expect(first.nextCursor).toMatch(/^p/);
+    expect(ids(await call(GET_KNOWLEDGE_SEQUENCE_ROUTE, { ...args, cursor: first.nextCursor }))).toEqual(['s3']);
+    await expect(call(GET_KNOWLEDGE_SEQUENCE_ROUTE, { ...args, since: '2026-11-02T00:00:00Z' })).rejects.toMatchObject({
+      status: 400,
+    });
+    await expect(call(GET_KNOWLEDGE_SEQUENCE_ROUTE, { ...args, cursor: 't0_id' })).rejects.toMatchObject({
+      status: 400,
+    });
+  });
+
+  it("lists child pages as items that carry the page's id and current name", async () => {
+    const { mastra, knowledge, refunds } = await setup();
+    const store = await knowledge.getStorage();
+    await store.sequences!.markSequence({ pageId: refunds.id, orderBy: 'position' });
+    const step = await store.createPage({ parentId: refunds.id, name: 'Approve the refund', provenance });
+    await store.updatePage({
+      id: step.id,
+      expectedVersion: step.version,
+      name: 'Approve or deny the refund',
+      provenance,
+    });
+    const result = await call(GET_KNOWLEDGE_SEQUENCE_ROUTE, { mastra, knowledgeKey: 'main', pageId: refunds.id });
+    expect(result.items).toEqual([
+      expect.objectContaining({ externalId: `page:${step.id}`, pageId: step.id, title: 'Approve or deny the refund' }),
+    ]);
   });
 
   it('404s a page that is not a sequence, and an unknown page', async () => {
@@ -130,7 +239,11 @@ describe('Knowledge sequence route', () => {
   it('marks sequence pages on the page route', async () => {
     const { mastra, channel, refunds } = await setup();
     const args = { mastra, knowledgeKey: 'main' };
-    expect((await call(GET_KNOWLEDGE_PAGE_ROUTE, { ...args, pageId: channel.id })).sequence).toBe(true);
+    expect((await call(GET_KNOWLEDGE_PAGE_ROUTE, { ...args, pageId: channel.id })).sequence).toEqual({
+      orderBy: 'timeline',
+      propertiesSchema: null,
+      itemTypes: null,
+    });
     expect((await call(GET_KNOWLEDGE_PAGE_ROUTE, { ...args, pageId: refunds.id })).sequence).toBeUndefined();
   });
 
@@ -156,6 +269,9 @@ describe('Knowledge sequence route', () => {
     expect(knowledgeSequenceQuerySchema.safeParse({ limit: '101' }).success).toBe(false);
     expect(knowledgeSequenceQuerySchema.safeParse({ since: 'yesterday' }).success).toBe(false);
     expect(knowledgeSequenceQuerySchema.safeParse({ order: 'sideways' }).success).toBe(false);
+    expect(
+      knowledgeSequenceQuerySchema.safeParse({ type: Array.from({ length: 21 }, (_, i) => `t${i}`) }).success,
+    ).toBe(false);
     expect(knowledgeSequenceQuerySchema.parse({ limit: '5', since: '2026-11-02T00:00:00Z' })).toMatchObject({
       limit: 5,
     });

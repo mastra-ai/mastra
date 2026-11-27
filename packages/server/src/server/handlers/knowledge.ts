@@ -274,8 +274,11 @@ export const GET_KNOWLEDGE_PAGE_ROUTE = createRoute({
       const view = await readers.readKnowledgePage(store, { pageId, read, noteCursor, noteLimit });
       if (!view) throw new HTTPException(404, { message: 'Knowledge page not found' });
       const label = <T extends { isScope: boolean; declaration?: string }>(page: T) => withDisplayLabel(instance, page);
-      // Stores without sequences (and older cores) send no flag, and the explorer shows a plain page.
-      const sequence = (await store.sequences?.listSequenceIds({ pageIds: [view.page.id] }))?.length ? true : undefined;
+      // Stores without sequences (and older cores) send none, and the explorer shows a plain page.
+      const record = await store.sequences?.getSequence({ pageId: view.page.id });
+      const sequence = record
+        ? { orderBy: record.orderBy, propertiesSchema: record.propertiesSchema, itemTypes: record.itemTypes }
+        : undefined;
       return {
         ...view,
         ...(sequence ? { sequence } : {}),
@@ -418,40 +421,62 @@ export const GET_KNOWLEDGE_SEQUENCE_ROUTE = createRoute({
   responseSchema: knowledgeSequenceResponseSchema,
   summary: "Read a sequence page's items",
   description:
-    "Returns a sequence page's items, newest first by default, paged with cursor, within a since/until range or one thread. With q, returns the items matching those keywords instead, best first and not paged. 404 when the page is not a sequence the caller can read; 501 when the store has no sequences.",
+    "Returns a sequence page's items in the sequence's order (newest first on a timeline, first position first on a position sequence), paged with cursor, narrowed to a since/until range (timeline sequences only), one parent item, or item types. With q, returns the items matching those keywords instead, best first and not paged. 400 for a date range on a position sequence or a cursor of the other order; 404 when the page is not a sequence the caller can read; 501 when the store has no sequences.",
   tags: ['Knowledge'],
   requiresAuth: true,
-  handler: async ({ mastra, requestContext, knowledgeKey, pageId, since, until, order, thread, q, cursor, limit }) => {
+  handler: async ({
+    mastra,
+    requestContext,
+    knowledgeKey,
+    pageId,
+    since,
+    until,
+    order,
+    parent,
+    type,
+    untyped,
+    q,
+    cursor,
+    limit,
+  }) => {
     try {
       const { store, read } = await resolveStore(mastra, requestContext, knowledgeKey);
       const sequences = store.sequences;
       if (!sequences) throw new HTTPException(501, { message: 'This Knowledge store has no sequences.' });
       const page = await store.getPage({ id: pageId, read });
-      if (!page || !(await sequences.listSequenceIds({ pageIds: [page.id] })).length) {
-        throw new HTTPException(404, { message: 'Knowledge sequence not found' });
+      const sequence = page ? await sequences.getSequence({ pageId: page.id }) : null;
+      if (!page || !sequence) throw new HTTPException(404, { message: 'Knowledge sequence not found' });
+      if (sequence.orderBy === 'position' && (since || until)) {
+        throw new HTTPException(400, { message: 'A position sequence has no date range; leave out since and until.' });
+      }
+      if (cursor && (cursor[0] === 'p') !== (sequence.orderBy === 'position')) {
+        throw new HTTPException(400, { message: 'Invalid sequence cursor' });
       }
       const range = { since: since ? new Date(since) : undefined, until: until ? new Date(until) : undefined };
+      const filter = { types: type, untyped };
       if (q) {
         const items = await sequences.searchItems({
           query: q,
           read,
           sequenceIds: [page.id],
           ...range,
+          ...filter,
           limit: limit ?? 20,
         });
         return { items: items.map(item => ({ ...item })), nextCursor: null };
       }
-      const items = await sequences.listItems({
+      const result = await sequences.listItems({
         sequenceId: page.id,
         read,
         ...range,
+        ...filter,
         order,
-        externalParentId: thread,
+        externalParentId: parent,
         cursor: cursor || undefined,
         includeDeleted: true,
         limit: limit ?? 50,
       });
-      return { ...items, items: items.items.map(item => ({ ...item })) };
+      return { items: result.items.map(item => ({ ...item })), nextCursor: result.nextCursor };
     } catch (error) {
       return handleError(error, 'Error reading Knowledge sequence');
     }

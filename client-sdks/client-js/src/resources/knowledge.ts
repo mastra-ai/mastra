@@ -8,6 +8,7 @@ import type {
   KnowledgePageActivityEvent,
   KnowledgePageSearchHit,
   KnowledgeSequenceItemRecord,
+  KnowledgeSequenceRecord,
 } from '@mastra/core/storage';
 import type { ClientOptions, Serialized } from '../types';
 import { createSseJsonTransform } from '../utils/stream-transforms';
@@ -16,8 +17,11 @@ import { BaseResource } from './base';
 
 export type KnowledgeTreeResponse = Serialized<KnowledgeTreeChildren>;
 export type KnowledgePageResponse = Serialized<KnowledgePageView> & {
-  /** True when the page is a sequence; read its items with `sequence()`. Absent from older servers. */
-  sequence?: boolean;
+  /**
+   * Set when the page is a sequence: how it orders its items and the property schemas it declares.
+   * Read its items with `sequence()`. Absent from older servers.
+   */
+  sequence?: Omit<KnowledgeSequenceRecord, 'pageId'>;
 };
 export type KnowledgeGraphResponse = Serialized<KnowledgePageGraph> & {
   /** Declared access grants onto the scopes shown; absent from servers on an older core. */
@@ -128,9 +132,11 @@ export class Knowledge extends BaseResource {
   }
 
   /**
-   * A sequence page's items: newest first by default, paged with `cursor`, within `since`/`until` (ISO date-times)
-   * or one `thread`. With `q`, the items matching those keywords instead, best first and not paged. Rejects with
-   * 404 when the page is not a sequence, and 501 where the store has no sequences.
+   * A sequence page's items in the sequence's order (newest first on a timeline, first position first on a
+   * position sequence), paged with `cursor`, narrowed to `since`/`until` (ISO date-times, timeline sequences
+   * only), one `parent` item, or item `types` and `untyped`. With `q`, the items matching those keywords
+   * instead, best first and not paged. Rejects with 400 for a date range on a position sequence, 404 when the
+   * page is not a sequence, and 501 where the store has no sequences.
    */
   sequence(
     pageId: string,
@@ -138,13 +144,17 @@ export class Knowledge extends BaseResource {
       since?: string;
       until?: string;
       order?: 'desc' | 'asc';
-      thread?: string;
+      parent?: string;
+      types?: string[];
+      untyped?: boolean;
       q?: string;
       cursor?: string;
       limit?: number;
     } = {},
   ): Promise<KnowledgeSequenceResponse> {
-    return this.request(`${this.base}/pages/${encodeURIComponent(pageId)}/sequence${query(params)}`);
+    const { types, untyped, ...rest } = params;
+    const search = query({ ...rest, type: types, untyped: untyped === undefined ? undefined : String(untyped) });
+    return this.request(`${this.base}/pages/${encodeURIComponent(pageId)}/sequence${search}`);
   }
 
   /**

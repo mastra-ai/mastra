@@ -89,8 +89,8 @@ export interface KnowledgeExplorerPageDetail {
   related: KnowledgePagePayload[];
   /** Notes on other pages that mention this one. */
   mentionedBy?: KnowledgeNotePayload[];
-  /** Set when the page is a sequence; the explorer then lists its items through `useSequence`. */
-  sequence?: boolean;
+  /** Set when the page is a sequence: its order and declared schemas. The explorer then lists its items through `useSequence`. */
+  sequence?: KnowledgeExplorerSequenceInfo;
 }
 
 /** One item of a sequence page, as the server sends it (times are ISO strings). */
@@ -98,15 +98,48 @@ export interface KnowledgeExplorerSequenceItem {
   id: string;
   sequenceId: string;
   externalId: string;
-  occurredAt: string;
+  /** Null on an undated item of a position sequence. */
+  occurredAt: string | null;
+  /** Its order key on a position sequence; null on a timeline. */
+  position: string | null;
   writtenAt: string;
   editedAt: string | null;
   deletedAt: string | null;
   author: { sourceId: string; name?: string } | null;
+  /** The `externalId` of the item this one sits under. */
   externalParentId: string | null;
-  body: string;
+  type: string | null;
+  title: string | null;
+  body: string | null;
+  links: Array<{ url: string; title?: string }>;
+  properties: Record<string, unknown> | null;
+  /** Set on a child page's item: the page it places in the sequence. */
+  pageId: string | null;
   version: number;
   writtenBy: string;
+}
+
+/** One property of a sequence's properties schema. */
+export interface KnowledgeExplorerSequenceProperty {
+  type: 'string' | 'number' | 'boolean' | 'date' | 'array';
+  description?: string;
+}
+
+export interface KnowledgeExplorerSequencePropertiesSchema {
+  type: 'object';
+  properties: Record<string, KnowledgeExplorerSequenceProperty>;
+  required?: string[];
+}
+
+/** How a sequence orders its items, and the schemas it declares. */
+export interface KnowledgeExplorerSequenceInfo {
+  orderBy: 'timeline' | 'position';
+  /** The schema for untyped items. */
+  propertiesSchema: KnowledgeExplorerSequencePropertiesSchema | null;
+  itemTypes: Record<
+    string,
+    { label?: string; description?: string; propertiesSchema?: KnowledgeExplorerSequencePropertiesSchema }
+  > | null;
 }
 
 export interface KnowledgeExplorerSequence {
@@ -114,12 +147,17 @@ export interface KnowledgeExplorerSequence {
   nextCursor: string | null;
 }
 
-/** One read of a sequence's items. With `q` the host returns keyword matches, best first, unpaged. */
+/**
+ * One read of a sequence's items. Without `order` the host reads in the sequence's own order. With
+ * `q` the host returns keyword matches, best first, unpaged.
+ */
 export interface KnowledgeExplorerSequenceRequest {
-  order: 'desc' | 'asc';
+  order?: 'desc' | 'asc';
   since?: string;
   until?: string;
-  thread?: string;
+  parent?: string;
+  types?: string[];
+  untyped?: boolean;
   q?: string;
   cursor?: string;
 }
@@ -761,7 +799,13 @@ function SelectedPage({
       activity={activity.data?.events}
       sequence={
         detail.data.sequence && source.useSequence ? (
-          <KnowledgeSequenceItems key={pageId} pageId={pageId} useSequence={source.useSequence} />
+          <KnowledgeSequenceItems
+            key={pageId}
+            pageId={pageId}
+            info={detail.data.sequence}
+            useSequence={source.useSequence}
+            onOpenPage={onSelect}
+          />
         ) : undefined
       }
       childPages={

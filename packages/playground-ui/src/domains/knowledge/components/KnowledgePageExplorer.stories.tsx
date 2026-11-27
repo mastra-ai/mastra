@@ -5,6 +5,7 @@ import type {
   KnowledgeExplorerPageDetail,
   KnowledgeExplorerQueryState,
   KnowledgeExplorerSource,
+  KnowledgeExplorerSequenceInfo,
   KnowledgeExplorerSequenceItem,
   KnowledgeExplorerSequenceRequest,
   KnowledgeExplorerView,
@@ -100,12 +101,18 @@ function item(
     sequenceId: 'general',
     externalId,
     occurredAt: HOURS_AGO(hoursAgo),
+    position: null,
     writtenAt: HOURS_AGO(hoursAgo),
     editedAt: null,
     deletedAt: null,
     author: { sourceId: `U-${name}`, name },
     externalParentId: null,
+    type: null,
+    title: null,
     body,
+    links: [],
+    properties: null,
+    pageId: null,
     version: 1,
     writtenBy: SLACK,
     ...extra,
@@ -119,18 +126,48 @@ const ITEMS = [
     editedAt: HOURS_AGO(1.5),
     version: 2,
   }),
-  item('1700000200.000300', 3, 'Cleo', '', { deletedAt: HOURS_AGO(2.5), externalParentId: '1700000100.000100' }),
+  item('deploy-184', 2.5, 'CI', '', {
+    type: 'deploy',
+    title: 'Deployed 1.84 to production',
+    body: null,
+    links: [{ url: 'https://github.com/mastra-ai/mastra/actions', title: 'Release workflow' }],
+    properties: { env: 'production', durationSeconds: 412, commit: 'b056717e' },
+    writtenBy: 'importer:ci',
+  }),
+  item('1700000200.000300', 3, 'Cleo', '', {
+    body: null,
+    deletedAt: HOURS_AGO(2.5),
+    externalParentId: '1700000100.000100',
+  }),
   item('1700000100.000100', 5, 'Ana', 'Thread for 1.84 release notes review.'),
   item('1699990000.000100', 30, 'Dev', 'CI is green again after the lease TTL flake fix.'),
 ];
 
+const SEQUENCE: KnowledgeExplorerSequenceInfo = {
+  orderBy: 'timeline',
+  propertiesSchema: null,
+  itemTypes: {
+    deploy: {
+      label: 'Deploy',
+      propertiesSchema: {
+        type: 'object',
+        properties: { env: { type: 'string' }, durationSeconds: { type: 'number' } },
+      },
+    },
+  },
+};
+
 function sequenceFor(request: KnowledgeExplorerSequenceRequest) {
   let items = ITEMS.filter(
     item =>
-      (!request.thread || item.externalParentId === request.thread || item.externalId === request.thread) &&
-      (!request.since || item.occurredAt >= request.since) &&
-      (!request.until || item.occurredAt < request.until) &&
-      (!request.q || item.body.toLowerCase().includes(request.q.toLowerCase())),
+      (!request.parent || item.externalParentId === request.parent || item.externalId === request.parent) &&
+      (!request.since || (item.occurredAt ?? '') >= request.since) &&
+      (!request.until || (item.occurredAt ?? '') < request.until) &&
+      (!request.types ||
+        (item.type !== null && request.types.includes(item.type)) ||
+        (request.untyped && !item.type)) &&
+      (!request.untyped || request.types || !item.type) &&
+      (!request.q || `${item.title ?? ''} ${item.body ?? ''}`.toLowerCase().includes(request.q.toLowerCase())),
   );
   if (request.order === 'asc') items = [...items].reverse();
   if (request.q) return { items, nextCursor: null };
@@ -173,7 +210,7 @@ function detail(target: KnowledgePagePayload): KnowledgeExplorerPageDetail {
     notes: target.id === 'launch' ? notes : [],
     ancestors,
     related: pages,
-    sequence: target.id === 'general' || undefined,
+    sequence: target.id === 'general' ? SEQUENCE : undefined,
   };
 }
 
