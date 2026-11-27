@@ -371,6 +371,68 @@ describe('AgentController cloneThread', () => {
       expect(copied.every(m => m.threadId === cloned.id)).toBe(true);
     });
 
+    it.each([
+      ['an empty filter', { messageFilter: {} }],
+      ['a limit', { messageLimit: 1 }],
+    ])('clone refuses fullThread with %s before anything is copied', async (_, selection) => {
+      const { memoryStore, session } = await setup();
+      await memoryStore.saveThread({
+        thread: { id: 'src', resourceId: 'controller-resource', createdAt: old, updatedAt: old },
+      });
+      await memoryStore.saveMessages({ messages: [message('m1', 'src', 'controller-resource')] });
+      const copy = vi.spyOn(memoryStore, 'cloneThread');
+
+      await expect(
+        session.thread.clone({ sourceThreadId: 'src', options: { fullThread: true, ...selection } }),
+      ).rejects.toThrow(/fullThread/);
+
+      expect(copy).not.toHaveBeenCalled();
+      expect((await memoryStore.listThreads({ filter: { resourceId: 'controller-resource' } })).threads).toHaveLength(
+        1,
+      );
+    });
+
+    it('cloneToCurrentResource refuses fullThread with a filter before anything is copied', async () => {
+      const { memoryStore, session } = await setup();
+      await memoryStore.saveThread({
+        thread: {
+          id: 'other',
+          resourceId: 'other-resource',
+          createdAt: old,
+          updatedAt: old,
+          metadata: { projectPath: '/old/home' },
+        },
+      });
+      const copy = vi.spyOn(memoryStore, 'cloneThread');
+
+      await expect(
+        session.thread.cloneToCurrentResource({
+          threadId: 'other',
+          expectedResourceId: 'other-resource',
+          expectedProjectPath: '/old/home',
+          options: { fullThread: true, messageFilter: { startDate: old } },
+        }),
+      ).rejects.toThrow(/fullThread/);
+
+      expect(copy).not.toHaveBeenCalled();
+    });
+
+    it('clone through raw storage copies every message for fullThread and keeps it out of the storage call', async () => {
+      const { memoryStore, session } = await setup();
+      await memoryStore.saveThread({
+        thread: { id: 'src', resourceId: 'controller-resource', createdAt: old, updatedAt: old },
+      });
+      await memoryStore.saveMessages({
+        messages: [message('m1', 'src', 'controller-resource'), message('m2', 'src', 'controller-resource')],
+      });
+      const copy = vi.spyOn(memoryStore, 'cloneThread');
+
+      const cloned = await session.thread.clone({ sourceThreadId: 'src', options: { fullThread: true } });
+
+      expect(copy.mock.calls[0]![0].options).toEqual({});
+      expect((await memoryStore.listMessages({ threadId: cloned.id })).messages).toHaveLength(2);
+    });
+
     it('cloneToCurrentResource uses the given metadata instead of the source thread’s and filters messages', async () => {
       const { memoryStore, session } = await setup();
       await memoryStore.saveThread({

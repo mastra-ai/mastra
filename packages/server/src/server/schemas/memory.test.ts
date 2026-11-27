@@ -601,4 +601,26 @@ describe('cloneThreadBodySchema', () => {
   it('rejects a fullThread that is not a boolean', () => {
     expect(cloneThreadBodySchema.safeParse({ options: { fullThread: 'yes' } }).success).toBe(false);
   });
+
+  it.each([
+    ['an empty filter', { messageFilter: {} }],
+    ['a date filter', { messageFilter: { startDate: '2026-01-01T00:00:00.000Z' } }],
+    ['a limit', { messageLimit: 1 }],
+    ['a zero limit', { messageLimit: 0 }],
+  ])('rejects fullThread together with %s, on options.fullThread', (_, selection) => {
+    const result = cloneThreadBodySchema.safeParse({ options: { fullThread: true, ...selection } });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map(issue => issue.path.join('.'))).toEqual(['options.fullThread']);
+  });
+
+  it.each([
+    ['fullThread alone', { fullThread: true }],
+    ['fullThread false with a filter', { fullThread: false, messageFilter: { messageIds: ['m1'] } }],
+    ['fullThread false with a limit', { fullThread: false, messageLimit: 1 }],
+    ['a filter and a limit', { messageFilter: {}, messageLimit: 2 }],
+    ['no selection', {}],
+  ])('accepts %s', (_, options) => {
+    expect(cloneThreadBodySchema.safeParse({ options }).success).toBe(true);
+  });
 });
