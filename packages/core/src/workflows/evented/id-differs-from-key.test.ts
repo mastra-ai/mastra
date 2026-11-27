@@ -105,38 +105,31 @@ describe('evented workflow registered under a key that differs from its id (#293
 
   it('restarts a run left running by another process', async () => {
     const storage = new MockStore();
-    let releaseFirstProcess!: () => void;
-    const firstProcessParked = new Promise<void>(resolve => (releaseFirstProcess = resolve));
     let firstProcessEntered = false;
 
-    // The first process parks inside `prepare`, as if it died mid-step. Both
-    // processes auto-approve so the restarted run can finish on its own.
+    // The first process parks inside `prepare` for good, as if it died mid-step.
+    // Both processes auto-approve so the restarted run can finish on its own.
     const firstProcess = await startMastra(
       storage,
       createApprovalWorkflow({
         autoApprove: true,
         onPrepare: async () => {
           firstProcessEntered = true;
-          await firstProcessParked;
+          await new Promise<never>(() => {});
         },
       }),
     );
     const firstRun = await firstProcess.getWorkflow(REGISTRATION_KEY).createRun();
-    const firstResult = firstRun.start({ inputData: { amount: 5 } });
+    firstRun.start({ inputData: { amount: 5 } }).catch(() => undefined);
     await vi.waitFor(() => expect(firstProcessEntered).toBe(true));
 
     const secondProcess = await startMastra(storage, createApprovalWorkflow({ autoApprove: true }));
     const secondRun = await secondProcess.getWorkflow(REGISTRATION_KEY).createRun({ runId: firstRun.runId });
 
-    try {
-      const restarted = await secondRun.restart();
-      expect(restarted.status).toBe('success');
-      expect(restarted.status === 'success' && restarted.result).toEqual({ amount: 10, decision: 'auto-approved' });
-      const stored = await secondProcess.getWorkflow(REGISTRATION_KEY).getWorkflowRunById(firstRun.runId);
-      expect(stored?.status).toBe('success');
-    } finally {
-      releaseFirstProcess();
-      await firstResult.catch(() => undefined);
-    }
+    const restarted = await secondRun.restart();
+    expect(restarted.status).toBe('success');
+    expect(restarted.status === 'success' && restarted.result).toEqual({ amount: 10, decision: 'auto-approved' });
+    const stored = await secondProcess.getWorkflow(REGISTRATION_KEY).getWorkflowRunById(firstRun.runId);
+    expect(stored?.status).toBe('success');
   });
 });
