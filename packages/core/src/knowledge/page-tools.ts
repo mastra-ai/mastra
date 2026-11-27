@@ -218,10 +218,10 @@ async function noteSummaries(run: KnowledgeRun, notes: KnowledgeNote[], cache: M
 }
 
 /** What a run can do in a scope it holds: contributors and up can write, viewers only read. */
-type HeldScopeAccess = 'write' | 'read' | 'none';
+export type HeldScopeAccess = 'write' | 'read' | 'none';
 
 /** A scope the run holds, whether or not it has a scope page yet. */
-type HeldScope = { address: string; page?: KnowledgePage; role: KnowledgeRole | null; can: HeldScopeAccess };
+export type HeldScope = { address: string; page?: KnowledgePage; role: KnowledgeRole | null; can: HeldScopeAccess };
 
 /**
  * Every scope the run holds, in principal order, with its role and what it can do there. A held scope
@@ -229,7 +229,7 @@ type HeldScope = { address: string; page?: KnowledgePage; role: KnowledgeRole | 
  * that write would link it under: without it a model sees no scopes on its first turn and concludes it
  * has nowhere to write. A stored scope it can't read keeps only its address.
  */
-async function heldScopes(run: KnowledgeRun): Promise<HeldScope[]> {
+export async function heldScopes(run: KnowledgeRun): Promise<HeldScope[]> {
   const stored = await run.storage.getScopesByAddress(run.principals);
   return Promise.all(
     run.principals.map(async address => {

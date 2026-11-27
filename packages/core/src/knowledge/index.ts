@@ -16,6 +16,7 @@ import type {
   KnowledgeScopeDeclaration as ScopeDeclaration,
   KnowledgeScopeDeclarationInfo,
 } from './declarations';
+import type { HeldScopeEntry } from './held-scopes-state-processor';
 import {
   addKnowledgeNote,
   moveKnowledgePage,
@@ -49,7 +50,7 @@ let hostWriterOf: (knowledge: Knowledge) => KnowledgeHostWriter;
 import { buildKnowledgeInstructions } from './instructions';
 import type { KnowledgeInstructionsOption } from './instructions';
 import { reindexKnowledgeLinks } from './links';
-import { buildKnowledgePageTools } from './page-tools';
+import { buildKnowledgePageTools, heldScopes } from './page-tools';
 import { DEFAULT_MAX_PINS, DEFAULT_PINNED_MAX_TOKENS, knowledgeDeliveredPins } from './pinned';
 import type { PinBudget, PinEntry } from './pinned';
 import { PINNED_READ_MEMO_KEY } from './pinned-state-processor';
@@ -471,6 +472,12 @@ export class Knowledge extends MastraBase {
     if (!budget) return [];
     const run = await KnowledgeRun.start(this.#runtime, await this.getStorage(), context);
     return knowledgeDeliveredPins(run, budget, this.#groups().read);
+  }
+
+  /** The scopes a run holds this turn, with its role and what it can do in each. @internal */
+  async __heldScopes(context: KnowledgeRunContext): Promise<HeldScopeEntry[]> {
+    const run = await KnowledgeRun.start(this.#runtime, await this.getStorage(), context);
+    return (await heldScopes(run)).map(({ address, role, can }) => ({ address, ...(role ? { role } : {}), can }));
   }
 
   /** @internal */

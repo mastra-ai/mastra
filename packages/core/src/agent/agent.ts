@@ -29,6 +29,7 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import { reachesOtherProcesses } from '../events/reach';
 import type { Knowledge } from '../knowledge';
+import { HELD_SCOPES_STATE_ID, HeldScopesStateProcessor } from '../knowledge/held-scopes-state-processor';
 import { KNOWLEDGE_INSTRUCTIONS_PROCESSOR_ID, KnowledgeInstructionsProcessor } from '../knowledge/instructions';
 import { PINNED_KNOWLEDGE_STATE_ID } from '../knowledge/pinned';
 import { PinnedStateProcessor } from '../knowledge/pinned-state-processor';
@@ -2529,6 +2530,16 @@ export class Agent<
     const instructions = knowledge.getInstructions();
     if (instructions && !configuredIds.has(KNOWLEDGE_INSTRUCTIONS_PROCESSOR_ID)) {
       processors.push(new KnowledgeInstructionsProcessor(instructions));
+    }
+    // Held scopes ride a Memory state signal too, and only matter to an agent with Knowledge tools.
+    const toolGroups = knowledge.__toolGroups;
+    if (hasMemory && (toolGroups.read || toolGroups.write) && !configuredIds.has(HELD_SCOPES_STATE_ID)) {
+      processors.push(
+        new HeldScopesStateProcessor({
+          principalsKey: context => knowledge.__principalsKey(context),
+          readHeldScopes: context => knowledge.__heldScopes(context),
+        }),
+      );
     }
     if (knowledge.pinnedContextEnabled && !configuredIds.has(PINNED_KNOWLEDGE_STATE_ID)) {
       // Pins ride a Memory state signal; without Memory there is no thread to carry them.

@@ -300,6 +300,26 @@ describe('Knowledge attached to an Agent without Memory', () => {
     expect(JSON.stringify(prompts[0])).toContain('Answer in French.');
   });
 
+  // r479: the agent learns which scopes it holds, and what it can do there, before it calls any tool.
+  it('tells an agent with Memory and Knowledge tools every scope it holds on its first turn', async () => {
+    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'held' }), scopes, tools: true });
+    const prompts: unknown[][] = [];
+    const agent = new Agent({
+      id: 'held',
+      name: 'held',
+      instructions: 'x',
+      model: scriptedModel([], prompts),
+      knowledge,
+      memory: new MockMemory(),
+      scopes: ['org:acme'],
+    });
+    await agent.generate('hello', { maxSteps: 1, memory: { thread: 'thread-9', resource: 'user-1' } });
+    const prompt = JSON.stringify(prompts[0]);
+    expect(prompt).toContain('<knowledge-scopes count=');
+    expect(prompt).toContain('thread:thread-9: write (owner)');
+    expect(prompt).toContain('resource:user-1: write (owner)');
+  });
+
   it('warns and delivers no pins to an agent without Memory', async () => {
     const knowledge = new Knowledge({
       storage: new InMemoryStore({ id: 'no-mem' }),
