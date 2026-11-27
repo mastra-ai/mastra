@@ -1,4 +1,12 @@
-import { ACTIVITY_EVENTS, CLOSE_REASONS, isUpdateEvent, STATUS_EVENTS } from '@internal/factory-contract';
+import {
+  ACTIVITY_EVENTS,
+  BOARD_IDENTIFIER_RE,
+  IDENTIFIER_RE,
+  MAX_BOARD_IDENTIFIER_LENGTH,
+  CLOSE_REASONS,
+  isUpdateEvent,
+  STATUS_EVENTS,
+} from '@internal/factory-contract';
 import type {
   BoardEventFacts,
   FactoryCommitDecision,
@@ -30,14 +38,11 @@ const MAX_METADATA_JSON_LENGTH = 16_384;
 const MAX_JSON_DEPTH = 8;
 const MAX_JSON_COLLECTION_SIZE = 100;
 
-export const MAX_BOARD_IDENTIFIER_LENGTH = 128;
 /** A source reference such as `acme/app#12` or `group/sub/project#3`. */
 const SOURCE_REFERENCE_RE = /^[a-z0-9_][a-z0-9_.\/-]*#\d+$/i;
 /** A provider login such as `octocat`, `dependabot[bot]`, `jane.doe` or GitLab's `_jane`. */
 const LOGIN_RE = /^[a-z0-9_][a-z0-9_.-]*(\[bot\])?$/i;
 const MAX_LOGIN_LENGTH = 100;
-export const IDENTIFIER_RE = /^[a-z0-9][a-z0-9_-]*$/i;
-export const BOARD_IDENTIFIER_RE = IDENTIFIER_RE;
 export const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const SENSITIVE_KEY_RE = /(?:authorization|cookie|credential|password|secret|token)/i;
 const WORK_ITEM_SOURCES: readonly WorkItemSource[] = [

@@ -13,8 +13,8 @@
  * still reaches the Mastra server — same pattern as the shared API client.
  */
 
+import type { ModelPack } from '@internal/factory-contract';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
-import type { ModelPack } from '@mastra/factory/model-packs';
 import type { FACTORY_ROUTE_CONTRACTS, ProjectListRepository } from '@mastra/factory/routes/contracts';
 import type { z } from 'zod';
 

@@ -1,33 +1,3 @@
-import type {
-  BoardPhasesFilter,
-  BoardPhasesResponse,
-  CardChangeRequest,
-  RunQueueResponse,
-  WorkItemFilterOptionsResponse,
-} from '@internal/factory-contract';
-import {
-  BOARD_PHASES_SORTS,
-  boardPhasesResponseSchema,
-  cardSchema,
-  cardStampSchema,
-  decisionListResponseSchema,
-  entitySchema,
-  runQueueResponseSchema,
-  workItemActivityResponseSchema,
-  workItemFilterOptionsResponseSchema,
-  workItemListResponseSchema,
-  workItemSessionRepositoryResponseSchema,
-  workItemStartersResponseSchema,
-  cardRuleGroupSchema,
-  CLOSE_REASONS,
-  INTAKE_ROUTE_RULE_FIELDS,
-  PULL_REQUEST_STATUSES,
-  ROUTE_EVENTS,
-  routeEventsProblem,
-  ruleGroupSchema,
-  STATUS_EVENTS,
-} from '@internal/factory-contract';
-
 export {
   BOARD_PHASES_SORTS,
   boardPhasesResponseSchema,
@@ -38,16 +8,27 @@ export {
   workItemStartersResponseSchema,
 };
 export type { BoardPhasesResponse, RunQueueResponse, WorkItemFilterOptionsResponse };
-import { THINKING_LEVEL_VALUES } from '@mastra/code-sdk/thinking';
-import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
-
-import { validateSkillContent } from '@mastra/core/skills';
-import { z } from 'zod';
-import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
-import { MODEL_PACK_MODELS_MAX, MODEL_PACK_NAME_MAX, MODEL_PACKS_MAX, modelIdSchema } from '../model-packs.js';
-import type { ModelPackSet } from '../model-packs.js';
-import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import {
+  BOARD_IDENTIFIER_RE,
+  BOARD_PHASES_SORTS,
+  boardPhasesResponseSchema,
+  cardRuleGroupSchema,
+  cardSchema,
+  cardStampSchema,
+  CLOSE_REASONS,
+  decisionListResponseSchema,
+  entitySchema,
+  INTAKE_ROUTE_RULE_FIELDS,
+  MAX_BOARD_IDENTIFIER_LENGTH,
+  MODEL_PACK_MODELS_MAX,
+  MODEL_PACK_NAME_MAX,
+  MODEL_PACKS_MAX,
+  modelIdSchema,
+  PULL_REQUEST_STATUSES,
+  ROUTE_EVENTS,
+  routeEventsProblem,
+  ruleGroupSchema,
+  runQueueResponseSchema,
   SESSION_ROW_ALL_OWNERS,
   SESSION_ROW_GROUP_BYS,
   SESSION_ROW_PINS_MAX,
@@ -58,7 +39,27 @@ import {
   SESSION_ROW_WINDOWS_MAX,
   sessionRowOwnerSchema,
   sessionRowSourceSchema,
-} from '../session/session-row-query.js';
+  STATUS_EVENTS,
+  workItemActivityResponseSchema,
+  workItemFilterOptionsResponseSchema,
+  workItemListResponseSchema,
+  workItemSessionRepositoryResponseSchema,
+  workItemStartersResponseSchema,
+} from '@internal/factory-contract';
+import type {
+  BoardPhasesFilter,
+  BoardPhasesResponse,
+  CardChangeRequest,
+  ModelPackSet,
+  RunQueueResponse,
+  WorkItemFilterOptionsResponse,
+} from '@internal/factory-contract';
+import { THINKING_LEVEL_VALUES } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+
+import { validateSkillContent } from '@mastra/core/skills';
+import { z } from 'zod';
+import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
 import { MAX_INTAKE_ROUTES_PER_BOARD } from '../storage/domains/boards/base.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
 import {

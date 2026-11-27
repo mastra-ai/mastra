@@ -1,4 +1,11 @@
-import { SLACK_SESSION_BRANCH_PREFIX } from '@internal/factory-contract';
+import {
+  SESSION_ROW_ALL_OWNERS,
+  SLACK_SESSION_BRANCH_PREFIX,
+  SESSION_ROW_MY_SESSIONS,
+  SESSION_ROW_WINDOW,
+  sessionRowGroupKeys,
+  sessionRowOwnerKey,
+} from '@internal/factory-contract';
 import type {
   SessionActivityResponse,
   SessionRow,
@@ -6,13 +13,6 @@ import type {
   SessionRowsResponse,
 } from '../routes/contracts.js';
 import type { Card } from '../storage/domains/work-items/base.js';
-import {
-  SESSION_ROW_ALL_OWNERS,
-  SESSION_ROW_MY_SESSIONS,
-  SESSION_ROW_WINDOW,
-  sessionRowGroupKeys,
-  sessionRowOwnerKey,
-} from './session-row-query.js';
 import { isInFlight } from './session-rows.js';
 import type { CardSessionStatus, RowSession } from './session-rows.js';
 

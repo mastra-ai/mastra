@@ -1,8 +1,4 @@
-import {
-  SESSION_ROW_GROUP_BYS,
-  SESSION_ROW_STATUSES,
-  sessionRowGroupKeys,
-} from '@mastra/factory/session/session-row-query';
+import { SESSION_ROW_GROUP_BYS, SESSION_ROW_STATUSES, sessionRowGroupKeys } from '@internal/factory-contract';
 import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/DropdownMenu';
 
 import type { InstalledBoardInfo } from '../../../../api/types';

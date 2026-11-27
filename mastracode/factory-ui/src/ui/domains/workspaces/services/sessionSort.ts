@@ -1,4 +1,4 @@
-import { SESSION_ROW_SORTS } from '@mastra/factory/session/session-row-query';
+import { SESSION_ROW_SORTS } from '@internal/factory-contract';
 import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/DropdownMenu';
 
 export type SessionSort = (typeof SESSION_ROW_SORTS)[number];

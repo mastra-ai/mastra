@@ -1,15 +1,15 @@
-import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
-import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
-import type { RequestContext } from '@mastra/core/request-context';
-
-import { DEFAULT_THINKING_LEVEL } from '../default-thinking-level.js';
 import {
   EMPTY_MODEL_PACK_SET,
   FACTORY_MODEL_SELECTION_SETTING,
   parseStoredModelSelection,
   resolveModelSelection,
-} from '../model-packs.js';
-import type { ModelPackModel, ModelPackSet, StoredModelSelection } from '../model-packs.js';
+} from '@internal/factory-contract';
+import type { ModelPackModel, ModelPackSet, StoredModelSelection } from '@internal/factory-contract';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
+import type { RequestContext } from '@mastra/core/request-context';
+
+import { DEFAULT_THINKING_LEVEL } from '../default-thinking-level.js';
 import { UUID_PATTERN } from '../routes/contracts.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import { resolveFactoryModelPolicy, routedPersonalDefaults } from './credential-policy.js';

@@ -1,4 +1,4 @@
-import type { ModelPackSet } from '@mastra/factory/model-packs';
+import type { ModelPackSet } from '@internal/factory-contract';
 import type { PersonalModelDefaultsResponse } from '@mastra/factory/routes/config';
 import { waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';

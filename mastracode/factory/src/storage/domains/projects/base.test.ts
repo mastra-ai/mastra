@@ -1,6 +1,6 @@
+import type { ModelPack } from '@internal/factory-contract';
 import { describe, expect, it } from 'vitest';
 
-import type { ModelPack } from '../../../model-packs.js';
 import { createFactoryStorageForTests } from '../../test-utils.js';
 import type { UpdateFactoryProjectInput } from './base.js';
 

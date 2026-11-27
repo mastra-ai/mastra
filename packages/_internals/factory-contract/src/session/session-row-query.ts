@@ -1,3 +1,4 @@
+// Browser-safe: part of @internal/factory-contract, which Factory's server and UIs share.
 import { z } from 'zod';
 
 export const SESSION_ROW_WINDOW = 5;

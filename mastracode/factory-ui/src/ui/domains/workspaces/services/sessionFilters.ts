@@ -4,8 +4,8 @@ import {
   SESSION_ROW_MY_SESSIONS,
   SESSION_ROW_STATUSES,
   sessionRowOwnerKey,
-} from '@mastra/factory/session/session-row-query';
-import type { SESSION_ROW_UPDATED_WITHIN } from '@mastra/factory/session/session-row-query';
+} from '@internal/factory-contract';
+import type { SESSION_ROW_UPDATED_WITHIN } from '@internal/factory-contract';
 import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/DropdownMenu';
 
 import type { SessionGroupHeading } from './sessionGroups';

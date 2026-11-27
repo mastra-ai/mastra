@@ -1,4 +1,4 @@
-import { SESSION_ROW_WINDOW } from '@mastra/factory/session/session-row-query';
+import { SESSION_ROW_WINDOW } from '@internal/factory-contract';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar, useMaybeSidebarState } from '@mastra/playground-ui/components/Sidebar';

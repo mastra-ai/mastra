@@ -1,4 +1,4 @@
-import type { ModelSelectionRequest, ResolvedModelSelection } from '@mastra/factory/model-packs';
+import type { ModelSelectionRequest, ResolvedModelSelection } from '@internal/factory-contract';
 import { useMutation, useMutationState, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';

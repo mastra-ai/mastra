@@ -1,8 +1,8 @@
+import { legacyModelPackSet } from '@internal/factory-contract';
+import type { ModelPack, ModelPackSet, StoredModelSelection } from '@internal/factory-contract';
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { legacyModelPackSet } from '../model-packs.js';
-import type { ModelPack, ModelPackSet, StoredModelSelection } from '../model-packs.js';
 import type { FactoryModelScope } from '../storage/domains/projects/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { createSourceControlSessionLookup } from './factory-session.js';

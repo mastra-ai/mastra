@@ -1,5 +1,4 @@
-import { cardRuleGroupSchema } from '@internal/factory-contract';
-import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '@mastra/factory/rules/validation';
+import { BOARD_IDENTIFIER_RE, cardRuleGroupSchema, MAX_BOARD_IDENTIFIER_LENGTH } from '@internal/factory-contract';
 import { phaseRunFieldsValid } from '@mastra/playground-ui/domains/factory';
 
 import type { StoredBoardInfo, StoredPhaseInfo } from '../../../api/types';

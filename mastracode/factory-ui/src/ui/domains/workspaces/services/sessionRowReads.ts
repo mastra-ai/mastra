@@ -3,8 +3,7 @@ import {
   SESSION_ROW_PINS_MAX,
   SESSION_ROW_WINDOW_MAX,
   SESSION_ROW_WINDOWS_MAX,
-} from '@mastra/factory/session/session-row-query';
-
+} from '@internal/factory-contract';
 import type { SessionActivity, SessionRowsRequest, SessionRowsResponse } from '../../../../api/types';
 import { requestJson } from '../../factory/services/request';
 import type { SessionFiltersState } from './sessionFilters';

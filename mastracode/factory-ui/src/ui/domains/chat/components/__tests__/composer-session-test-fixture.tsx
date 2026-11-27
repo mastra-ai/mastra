@@ -1,5 +1,5 @@
+import type { ModelSelectionRequest } from '@internal/factory-contract';
 import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
-import type { ModelSelectionRequest } from '@mastra/factory/model-packs';
 import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import type { QueryClient } from '@tanstack/react-query';
 import { screen, waitFor } from '@testing-library/react';

@@ -1,6 +1,9 @@
-import { THINKING_LEVEL_VALUES } from '@mastra/code-sdk/thinking';
-import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+// Browser-safe: part of @internal/factory-contract, which Factory's server and UIs share.
 import { z } from 'zod';
+
+/** Mirrors code-sdk's THINKING_LEVEL_VALUES; Factory's model-thinking-levels test keeps them equal. */
+export const MODEL_THINKING_LEVELS = ['off', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type ModelThinkingLevel = (typeof MODEL_THINKING_LEVELS)[number];
 
 export const MODEL_PACK_MODELS_MAX = 4;
 export const MODEL_PACKS_MAX = 8;
@@ -16,7 +19,7 @@ export const modelIdSchema = z
 
 export interface ModelPackModel {
   modelId: string;
-  thinkingLevel: ThinkingLevelSetting;
+  thinkingLevel: ModelThinkingLevel;
 }
 
 export interface ModelPack {
@@ -47,7 +50,7 @@ export type StoredModelSelection = z.infer<typeof storedModelSelectionSchema>;
 export const modelSelectionRequestSchema = z.discriminatedUnion('kind', [
   defaultSelectionSchema,
   packSelectionSchema,
-  modelSelectionSchema.extend({ modelId: modelIdSchema, thinkingLevel: z.enum(THINKING_LEVEL_VALUES).optional() }),
+  modelSelectionSchema.extend({ modelId: modelIdSchema, thinkingLevel: z.enum(MODEL_THINKING_LEVELS).optional() }),
 ]);
 
 export type ModelSelectionRequest = z.infer<typeof modelSelectionRequestSchema>;
@@ -78,7 +81,7 @@ export function resolveModelSelection(
   return set.modelPacks.find(pack => pack.id === stored.packId) ?? defaultPack;
 }
 
-export function legacyModelPackSet(modelId: string | null, thinkingLevel: ThinkingLevelSetting): ModelPackSet {
+export function legacyModelPackSet(modelId: string | null, thinkingLevel: ModelThinkingLevel): ModelPackSet {
   if (!modelId) return { modelPacks: [], defaultModelPackId: null };
   return {
     modelPacks: [{ id: LEGACY_MODEL_PACK_ID, name: LEGACY_MODEL_PACK_NAME, models: [{ modelId, thinkingLevel }] }],
@@ -89,7 +92,7 @@ export function legacyModelPackSet(modelId: string | null, thinkingLevel: Thinki
 export function withDefaultModel(
   set: ModelPackSet,
   modelId: string,
-  newPackThinkingLevel: ThinkingLevelSetting,
+  newPackThinkingLevel: ModelThinkingLevel,
 ): ModelPackSet {
   const pack = defaultModelPack(set);
   if (!pack) return legacyModelPackSet(modelId, newPackThinkingLevel);

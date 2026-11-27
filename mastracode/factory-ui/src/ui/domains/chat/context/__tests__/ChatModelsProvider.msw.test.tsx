@@ -1,4 +1,4 @@
-import type { ModelPack } from '@mastra/factory/model-packs';
+import type { ModelPack } from '@internal/factory-contract';
 import { screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';

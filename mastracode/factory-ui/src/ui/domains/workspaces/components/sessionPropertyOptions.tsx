@@ -1,8 +1,4 @@
-import {
-  SESSION_ROW_ALL_OWNERS,
-  SESSION_ROW_ALL_SOURCES,
-  SESSION_ROW_MY_SESSIONS,
-} from '@mastra/factory/session/session-row-query';
+import { SESSION_ROW_ALL_OWNERS, SESSION_ROW_ALL_SOURCES, SESSION_ROW_MY_SESSIONS } from '@internal/factory-contract';
 import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/DropdownMenu';
 import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 import type { LucideIcon } from 'lucide-react';

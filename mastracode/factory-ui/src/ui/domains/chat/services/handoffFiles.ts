@@ -1,5 +1,4 @@
-import type { ModelSelectionRequest } from '@mastra/factory/model-packs';
-
+import type { ModelSelectionRequest } from '@internal/factory-contract';
 import type { PendingImage } from '../context/ComposerImagesContext';
 import { DEFAULT_MODEL_SELECTION, readModelSelection } from './modelSelection';
 

@@ -1,11 +1,11 @@
+import { defaultModelPack, legacyModelPackSet, withDefaultModel } from '@internal/factory-contract';
+import type { ModelPack, ModelPackSet } from '@internal/factory-contract';
 import { isThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { FactoryStorageDomain } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
 import { DEFAULT_THINKING_LEVEL } from '../../../default-thinking-level.js';
-import { defaultModelPack, legacyModelPackSet, withDefaultModel } from '../../../model-packs.js';
-import type { ModelPack, ModelPackSet } from '../../../model-packs.js';
 import { stampNewProjectIntake } from '../boards/base.js';
 import { FACTORY_INTAKE_ROUTE_LOCKS_SCHEMA } from '../boards/schemas.js';
 

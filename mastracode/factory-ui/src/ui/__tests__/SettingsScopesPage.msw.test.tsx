@@ -1,9 +1,9 @@
+import type { ModelPackSet } from '@internal/factory-contract';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { ModelPackSet } from '@mastra/factory/model-packs';
 import type { PersonalModelDefaultsResponse } from '@mastra/factory/routes/config';
 
 import { server } from '../../../e2e/ui/msw-server';

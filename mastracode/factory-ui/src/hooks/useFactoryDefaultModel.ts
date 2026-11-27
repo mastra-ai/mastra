@@ -1,4 +1,4 @@
-import type { ModelPackSet } from '@mastra/factory/model-packs';
+import type { ModelPackSet } from '@internal/factory-contract';
 import {
   queryOptions,
   skipToken,

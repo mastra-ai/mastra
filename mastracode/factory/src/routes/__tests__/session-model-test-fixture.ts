@@ -1,7 +1,7 @@
+import type { ModelPack } from '@internal/factory-contract';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 
-import type { ModelPack } from '../../model-packs.js';
 import { createSourceControlSessionLookup } from '../../session/factory-session.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { ConfigRoutes } from '../config.js';

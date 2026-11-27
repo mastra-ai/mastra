@@ -1,5 +1,5 @@
-import { defaultModelPack } from '@mastra/factory/model-packs';
-import type { ModelPackSet, ModelSelectionRequest } from '@mastra/factory/model-packs';
+import { defaultModelPack } from '@internal/factory-contract';
+import type { ModelPackSet, ModelSelectionRequest } from '@internal/factory-contract';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 

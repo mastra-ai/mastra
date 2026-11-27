@@ -1,4 +1,4 @@
-import type { ModelPack, ModelPackSet } from '@mastra/factory/model-packs';
+import type { ModelPack, ModelPackSet } from '@internal/factory-contract';
 import type { PersonalModelDefaultsResponse } from '@mastra/factory/routes/config';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';

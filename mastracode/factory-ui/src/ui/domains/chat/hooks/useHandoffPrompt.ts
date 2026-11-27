@@ -1,4 +1,4 @@
-import type { ModelSelectionRequest } from '@mastra/factory/model-packs';
+import type { ModelSelectionRequest } from '@internal/factory-contract';
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
