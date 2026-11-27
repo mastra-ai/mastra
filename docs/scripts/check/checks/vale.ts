@@ -1,5 +1,6 @@
 import { execFile } from 'child_process'
 import fs from 'fs/promises'
+import os from 'os'
 import path from 'path'
 import { promisify } from 'util'
 import { toPosix, walkMdx } from '../content'
@@ -130,20 +131,37 @@ export const valeCheck: Check = {
         : [],
     )
 
-    let stdout: string
-    try {
-      ;({ stdout } = await execFileAsync(vale, ['--output=JSON', '--minAlertLevel=warning', ...files], {
-        cwd: ctx.rootDir,
-        maxBuffer: 64 * 1024 * 1024,
-      }))
-    } catch (error) {
-      // Vale exits 1 when it reports errors; the JSON is still on stdout.
-      const err = error as { code?: number; stdout?: string; stderr?: string }
-      if (err.code !== 1 || !err.stdout) {
-        return unavailable(`Vale failed to run: ${(err.stderr || String(error)).trim().split('\n')[0]}`)
-      }
-      stdout = err.stdout
-    }
-    return { findings: [...(await versionFinding), ...valeFindings(ctx.rootDir, JSON.parse(stdout || '{}'))] }
+    // Vale lints files named on the command line one after another (it only parallelizes a directory walk), so
+    // split them across processes. On a full run this takes Vale from ~12s to ~2.5s.
+    const chunkCount = Math.min(VALE_PROCESSES, Math.ceil(files.length / MIN_FILES_PER_PROCESS))
+    const chunks = Array.from({ length: chunkCount }, (_, i) => files.filter((_, j) => j % chunkCount === i))
+    const runs = await Promise.all(chunks.map(chunk => runVale(vale, ctx.rootDir, chunk)))
+    const failed = runs.find(run => 'error' in run)
+    if (failed && 'error' in failed) return unavailable(`Vale failed to run: ${failed.error}`)
+    const output = Object.assign({}, ...runs.map(run => ('output' in run ? run.output : {})))
+    return { findings: [...(await versionFinding), ...valeFindings(ctx.rootDir, output)] }
   },
+}
+
+const VALE_PROCESSES = Math.max(1, Math.min(8, os.availableParallelism()))
+const MIN_FILES_PER_PROCESS = 25
+
+async function runVale(
+  vale: string,
+  cwd: string,
+  files: string[],
+): Promise<{ output: Record<string, ValeAlert[]> } | { error: string }> {
+  let stdout: string
+  try {
+    ;({ stdout } = await execFileAsync(vale, ['--output=JSON', '--minAlertLevel=warning', ...files], {
+      cwd,
+      maxBuffer: 64 * 1024 * 1024,
+    }))
+  } catch (error) {
+    // Vale exits 1 when it reports errors; the JSON is still on stdout.
+    const err = error as { code?: number; stdout?: string; stderr?: string }
+    if (err.code !== 1 || !err.stdout) return { error: (err.stderr || String(error)).trim().split('\n')[0] }
+    stdout = err.stdout
+  }
+  return { output: JSON.parse(stdout || '{}') }
 }

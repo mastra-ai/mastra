@@ -35,36 +35,6 @@
     "gpt-oss-120b"
   ],
   "reasoning": {
-    "DeepSeek-V4.1-flash-1017": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "GLM-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "DeepSeek-V4-pro": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "GLM-5.3-Flash": [
       {
         "type": "effort",
@@ -80,7 +50,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "DeepSeek-V4-flash": [
+    "DeepSeek-V4.1-flash-1017": [
       {
         "type": "toggle"
       },
@@ -89,10 +59,19 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "Kimi-K3": [
+    "GLM-5.2": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "DeepSeek-V4-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "GLM-5.2-Fast": [
@@ -113,16 +92,37 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "GLM-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
     "MiniMax-M2.7": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "DeepSeek-V4-pro": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "Kimi-K3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ]
   }

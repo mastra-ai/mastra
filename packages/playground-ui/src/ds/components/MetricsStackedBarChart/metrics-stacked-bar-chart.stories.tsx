@@ -176,7 +176,7 @@ const quietWeek = (busy: number[], missing: number[] = []) =>
     const at = new Date(2026, 9, 1, i * 6);
     const tokens = busy.includes(i) ? { input: 8_200, cacheRead: 34_000, output: 12_000 } : undefined;
     return {
-      time: at.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      time: at.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
       tsMs: at.getTime(),
       ...(missing.includes(i) ? {} : { input: 0, cacheRead: 0, output: 0, ...tokens }),
     };

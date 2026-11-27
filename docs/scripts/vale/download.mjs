@@ -36,7 +36,7 @@ function getPlatform() {
 function getReleaseUrl() {
   const platform = getPlatform()
   const ext = isWindows ? '.zip' : '.tar.gz'
-  return `https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_${platform}${ext}`
+  return `https://github.com/vale-cli/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_${platform}${ext}`
 }
 
 function getInstalledVersion() {

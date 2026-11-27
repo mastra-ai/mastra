@@ -13,13 +13,13 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "kimi-k3": [
+    "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3-flash": [
+    "kimi-k3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
