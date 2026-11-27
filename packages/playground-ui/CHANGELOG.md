@@ -1,5 +1,76 @@
 # @mastra/playground-ui
 
+## 72.0.0-alpha.6
+
+### Minor Changes
+
+- Added Factory's activity band to `@mastra/playground-ui/domains/factory`: `ActivityBand`, `RecapButton`, the chart pieces (`ActivityChart`, `ActivityField`, `ActivitySlotCard`, `ActivityTotals`, `ActivityPeriodMenu`, `ActivityReveal`), the activity types and labels, and `traySurface`. The band takes plain data, so any app can show what came in, ran and shipped. ([#31775](https://github.com/mastra-ai/mastra/pull/31775))
+
+  ```tsx
+  import { ActivityBand, ACTIVITY_RECAPS, RecapButton } from '@mastra/playground-ui/domains/factory';
+
+  <ActivityBand
+    period={period}
+    onPeriodChange={setPeriod}
+    activity={activity}
+    runs={{ status: 'success', complete: true }}
+    live={[{ count: 2, label: 'Working' }]}
+    recap={<RecapButton label={ACTIVITY_RECAPS[period].label} onClick={() => send(ACTIVITY_RECAPS[period].prompt)} />}
+  />;
+  ```
+
+- Added Factory's board leaves to `@mastra/playground-ui/domains/factory`: `RelatedItemLink`, `RelatedCardLink`, `UpstreamLinks`, `BoardLoadingSkeleton`, the list row cells (`ListRowTitle`, `ListRowLinks`, `ListRowLabels`, `ListRowStatus`) and `RELATED_ITEM_LINK_CLASS`. They take plain props, so any app can render Factory's board rows with its own data. ([#31773](https://github.com/mastra-ai/mastra/pull/31773))
+
+  ```tsx
+  import { RelatedItemLink, BoardLoadingSkeleton } from '@mastra/playground-ui/domains/factory';
+
+  <RelatedItemLink href="/cards/12" icon={mark} label="#12" ariaLabel="Open #12" tooltip={['Blocks']} LinkComponent={AppLink} />
+  <BoardLoadingSkeleton layout="list" />
+  ```
+
+- Added Factory's card overview to `@mastra/playground-ui/domains/factory`: `CardOverview` (card, workspace and activity sections as slots), `CardDescription` (clamped description with "Show more"), `DescriptionMarkdown`, `OverviewSkeleton`, `SectionLoadError` and `overviewSectionClass`. Hosts pass in their own source row, change requests and moves graph. ([#31689](https://github.com/mastra-ai/mastra/pull/31689))
+
+- Added Factory's card source presentation to `@mastra/playground-ui/domains/factory`: `CARD_SOURCES` (label, link label and mark for every place a card can come from), `cardSourceOf`, `CardSourceIcon`, `CardSourceRow`, `SourceStateBadge`, `outboundArrowClass`, and the GitLab, Jira and incident.io brand marks. ([#31687](https://github.com/mastra-ai/mastra/pull/31687))
+
+  ```tsx
+  import { CardSourceIcon, CardSourceRow, cardSourceOf } from '@mastra/playground-ui/domains/factory';
+
+  const source = cardSourceOf(card.externalSource); // e.g. 'github-issue'
+
+  <CardSourceIcon source={source} />
+  <CardSourceRow reference="#117" url={card.externalSource.url} state="open" />
+  ```
+
+- Added Factory's session panel frame, panel toggle and board card rows to `@mastra/playground-ui/domains/factory`: `PanelFrame`, `SessionPanelToggle`, `overviewClass` and `BoardCardRows`. They take their content as props, so any host can lay out a card and its session panel the way Factory does. ([#31751](https://github.com/mastra-ai/mastra/pull/31751))
+
+- Added Factory's column-header phase setup to `@mastra/playground-ui/domains/factory`: `PhaseSetup` (the rules, agent, auto-start and exit-tool icons that link to a phase's settings) and `PhaseSetupHoverCard` (the one hover card every header shares). ([#31777](https://github.com/mastra-ai/mastra/pull/31777))
+
+  ```tsx
+  const handle = createHoverCardHandle<string>();
+
+  <PhaseSetup handle={handle} phaseId="build" href="/config/build" summary="Build runs coding." arriving={2} agent autoStart={false} exitTool={false} LinkComponent={Link} />
+  <PhaseSetupHoverCard handle={handle}>{phaseId => <PhaseSetupCard {...cardProps(phaseId)} />}</PhaseSetupHoverCard>
+  ```
+
+- Added Factory's card stage bar, moves graph and panel rows to `@mastra/playground-ui/domains/factory`: `CardStageBar`, `CardStageSummary`, `MovesGraph` with its `movesGraph` layout model, `PanelHeading`, `PanelSubject`, `headerCapsuleClass` and `elapsedLabel`. All take plain props; hosts pass their own phases and, optionally, their own time labels. ([#31689](https://github.com/mastra-ai/mastra/pull/31689))
+
+  ```tsx
+  import { CardStageBar, MovesGraph } from '@mastra/playground-ui/domains/factory';
+
+  <CardStageBar current={phase} track={track} stop={stop} next={next} enteredAt={enteredAt} onMove={move} />
+  <MovesGraph history={card.stageHistory} phases={phases} now={Date.now()} />
+  ```
+
+### Patch Changes
+
+- Fixed `LogView.List` sometimes needing a second scroll to load the next page. Rows that render taller than expected, such as stack traces, could push the loading row out of view just as the scroll reached the end. The list now starts loading the next page when its end is within one screen of view. ([#31792](https://github.com/mastra-ai/mastra/pull/31792))
+
+- Updated dependencies [[`b712b6a`](https://github.com/mastra-ai/mastra/commit/b712b6a7cc0d7018ffbfad70712554cadf1079fa), [`4e762e3`](https://github.com/mastra-ai/mastra/commit/4e762e39efee28c70efec215363adaa5aecb8b3d), [`44e6a17`](https://github.com/mastra-ai/mastra/commit/44e6a1769ed96ad489a5cd2cd9afb22d739be16e), [`5efd2d3`](https://github.com/mastra-ai/mastra/commit/5efd2d32d1d1ebe88e6e29332830dbde1068d4eb), [`0a31d4d`](https://github.com/mastra-ai/mastra/commit/0a31d4d07d94ced97d5e06c6e8abc722d50f266a), [`0a31d4d`](https://github.com/mastra-ai/mastra/commit/0a31d4d07d94ced97d5e06c6e8abc722d50f266a), [`4e762e3`](https://github.com/mastra-ai/mastra/commit/4e762e39efee28c70efec215363adaa5aecb8b3d), [`f62d4fe`](https://github.com/mastra-ai/mastra/commit/f62d4fea8a8e9e182248e007cf1d5023e2fd0481)]:
+  - @mastra/core@1.87.0-alpha.5
+  - @mastra/client-js@1.63.0-alpha.5
+  - @mastra/react@1.17.0-alpha.5
+  - @mastra/ai-sdk@1.12.2-alpha.1
+
 ## 72.0.0-alpha.5
 
 ### Minor Changes

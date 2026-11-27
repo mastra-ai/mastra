@@ -1,5 +1,58 @@
 # @mastra/core
 
+## 1.87.0-alpha.5
+
+### Minor Changes
+
+- Importer flushes now read an item's link targets in batches instead of one storage call per link: one read before the target pages are rendered, and one after to check that another importer has not taken a target over meanwhile. Pages with many links cost fewer database round trips. PostgreSQL and LibSQL read the nodes with one query. ([#31748](https://github.com/mastra-ai/mastra/pull/31748))
+
+  Knowledge importer storage gets a new optional `getNodes(bindingId, sourceIds)` method. Adapters that leave it out keep compiling and working: the importer then reads one `getNode` per link, as before.
+
+  ```ts
+  class MyImportersStorage extends KnowledgeImportersStorage {
+    // ...existing methods, getNode included...
+
+    // Optional: return the binding's nodes for these source IDs in one round trip.
+    async getNodes(bindingId: string, sourceIds: string[]) {
+      return db.importerNodes.findMany({ where: { bindingId, sourceId: { in: sourceIds } } });
+    }
+  }
+  ```
+
+- Importer flushes and link refreshes now read a page's parents in one storage call instead of one per level, so deep pages cost fewer database round trips. PostgreSQL and LibSQL answer it with one recursive query. ([#31747](https://github.com/mastra-ai/mastra/pull/31747))
+
+  Knowledge storage adapters get a new `getPageParents({ parentId, read })` method. It returns the parent and its ancestors, nearest first, up to the scope page. The base class implements it with one `getPage` per level, so adapters that do not override it keep working unchanged.
+
+  ```ts
+  const knowledge = await storage.getStore('knowledge');
+  if (page.parentId) {
+    // Nearest first: [parent, grandparent, ..., scope page]. Deleted parents are included, and the
+    // list ends early at a parent that is missing or outside `read`.
+    const parents = await knowledge!.getPageParents({ parentId: page.parentId, read: 'all' });
+    const breadcrumb = parents.reverse().map(parent => parent.name);
+  }
+  ```
+
+- Experiments now pin the version of every stored scorer they use (scorers created in Studio or through the editor). Each item is scored by the version that was current when the experiment was created, even if someone edits the scorer while the experiment is running. ([#31550](https://github.com/mastra-ai/mastra/pull/31550))
+
+  The pinned versions are saved on the experiment as `scorerVersions` (scorer id → version id), and each score row saved to the scores store records the `versionId` that produced it in its `scorer` field. Code scorers are not pinned. Experiments created before this change keep using each scorer's current version.
+
+  ```ts
+  const { experimentId } = await dataset.createExperiment({
+    targetType: 'agent',
+    targetId: 'support-agent',
+    scorers: ['helpfulness'],
+  });
+  const experiment = await dataset.getExperiment({ experimentId });
+  experiment?.scorerVersions; // { helpfulness: '<version id>' }
+  ```
+
+### Patch Changes
+
+- Fixed Evented Agent Controller runs that execute on a separate worker. The worker rebuilds the controller context and configured tools so Factory sessions can complete their turns. ([#31638](https://github.com/mastra-ai/mastra/pull/31638))
+
+- Agents now see every Knowledge scope they hold before anything has been written there. Calling `knowledge_read` or `knowledge_list` without a target lists each held scope with the agent's `role` there and what it `can` do (`write`, `read` or `none`), and marks scopes with no page the agent can read yet as `empty`. Before, a scope such as the run's own `resource:`/`thread:` scope only appeared after something had written to it, so on its first turn an agent concluded it had nowhere to read or write. A held scope the agent cannot read shows only its address. ([#31308](https://github.com/mastra-ai/mastra/pull/31308))
+
 ## 1.87.0-alpha.4
 
 ### Minor Changes
