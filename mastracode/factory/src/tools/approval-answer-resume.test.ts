@@ -20,6 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { createBoardRegistry } from '../boards/index.js';
+import { createProjectSessionsReader } from '../routes/project-sessions.js';
 import { buildSourceControlSessionRoutes } from '../routes/source-control-sessions.js';
 import {
   registerTenantCredentialResolver,
@@ -135,10 +136,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           models: { activeModelPackId: null, modeDefaults: { build: `openai/${MODEL}`, plan: `openai/${MODEL}` } },
         }),
       );
-      const plansDir = path.join(directory, 'plans');
-      mkdirSync(plansDir, { recursive: true });
+      // Same shape the SDK actually uses: `plansDir` is workspace-relative, so
+      // it is read against the session's project path (`cwd` here).
+      const plansDir = 'plans';
+      mkdirSync(path.join(directory, plansDir), { recursive: true });
       const planPath = path.join(plansDir, 'fix.md');
-      writeFileSync(planPath, '# Fix\n\n1. Do it.\n');
+      writeFileSync(path.join(directory, planPath), '# Fix\n\n1. Do it.\n');
       const toolArguments = {
         plan: { path: planPath },
         release: { version: '1.2.0' },
@@ -205,9 +208,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         orgId: ORG,
         connectionId: connection.id,
         repositoryId: repository.id,
-        createdByUserId: OWNER,
-        sandboxProvider: 'local',
-        sandboxWorkdir: '/sandbox/mastra',
       });
       // A phase nobody started is the Factory's own; one a person started is theirs.
       const owner = options?.ownedByFactory ? factoryPrincipalId(project.id) : OWNER;
@@ -281,8 +281,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         const workItemTools = createFactoryWorkItemTools(scope, {
           workItems: seeded.workItems,
           boards: createBoardRegistry(),
-          transitionService: {
-            transition: async request => ({
+          boardEngine: {
+            requestMove: async request => ({
               status: 'accepted',
               transitionId: randomUUID(),
               itemId: request.workItemId,
@@ -378,6 +378,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         ).execute({ sessionId: phase.sessionId, toolCallId: parked.toolCallId, decision }, {});
       /** The web app, signed in as `viewer`. */
       const web = (viewer: string) => {
+        const users = {
+          getUser: async (userId: string) => {
+            profileLookups.push(userId);
+            return { id: userId, name: `Person ${userId}` };
+          },
+        } as never;
         const app = new Hono();
         app.use('*', async (context, next) => {
           context.set('factoryAuthUser' as never, { workosId: viewer, organizationId: ORG } as never);
@@ -390,12 +396,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             sourceControls: [sourceControl],
             projects: seeded.projects,
             memorySettings: seeded.memorySettings,
-            users: {
-              getUser: async (userId: string) => {
-                profileLookups.push(userId);
-                return { id: userId, name: `Person ${userId}` };
-              },
-            } as never,
+            users,
+            projectSessions: createProjectSessionsReader({
+              sourceControls: [sourceControl],
+              users,
+              workItems: seeded.workItems,
+            }),
             controller: code.controller as never,
             audit: { record: (event: { actorId: string }) => audit.push(event) } as never,
             workItems: seeded.workItems,
@@ -426,25 +432,30 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         waitingOn,
         shipped,
         sourceControl,
+        workItems: seeded.workItems,
       };
     }
 
     // Technical: the resumed run takes the request context the answer hands it. It must name
     // the phase session's owner, so the run keeps one identity from kickoff to finish and never
     // runs with no user ("the request has no authenticated user" on a Factory server).
-    it("carries on as the phase session's owner, and records who approved", async () => {
-      const { answer, errors, audit } = await parkedPhaseSession();
-      const requestsBefore = mock.getRequests().length;
-      resolved = [];
+    it.each(backend === 'postgres' ? ['configured engine', 'evented opt-in'] : ['configured engine'])(
+      "carries on as the phase session's owner, and records who approved (%s)",
+      async engine => {
+        if (engine === 'evented opt-in') vi.stubEnv('MASTRACODE_EXPERIMENTAL_AGENT', 'evented');
+        const { answer, errors, audit } = await parkedPhaseSession();
+        const requestsBefore = mock.getRequests().length;
+        resolved = [];
 
-      await answer('approve');
+        await answer('approve');
 
-      await vi.waitFor(() => expect(mock.getRequests().length).toBeGreaterThan(requestsBefore), { timeout: 30_000 });
-      expect(errors).toEqual([]);
-      expect(resolved.length).toBeGreaterThan(0);
-      expect([...new Set(resolved.map(tenant => tenant?.userId))]).toEqual([OWNER]);
-      expect(audit.map(event => event.actorId)).toEqual([REQUESTER]);
-    });
+        await vi.waitFor(() => expect(mock.getRequests().length).toBeGreaterThan(requestsBefore), { timeout: 30_000 });
+        expect(errors).toEqual([]);
+        expect(resolved.length).toBeGreaterThan(0);
+        expect([...new Set(resolved.map(tenant => tenant?.userId))]).toEqual([OWNER]);
+        expect(audit.map(event => event.actorId)).toEqual([REQUESTER]);
+      },
+    );
 
     it('lets the person who asked approve the plan on the web, and the run carries on as its owner', async () => {
       const { answerOnWeb, errors, audit } = await parkedPhaseSession();
@@ -513,7 +524,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
     });
 
     it("tells a following session when a tool in the Factory's phase session waits for a person to allow it", async () => {
-      const { signals, phase, requesterSessionId } = await parkedPhaseSession({
+      const { signals, phase, project, requesterSessionId, workItems } = await parkedPhaseSession({
         ownedByFactory: true,
         movedFromOwnSession: true,
         parkedOn: 'release',
@@ -524,6 +535,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(signals[0]!.summary).toContain(
         `Answer it with factory_answer_approval (sessionId "${phase.sessionId}", toolCallId "call_release")`,
       );
+      // The notice goes straight to the following session. Nothing waits on the
+      // run queue, so it arrives even while automated runs hold every slot.
+      expect(await workItems.listDeferredDecisions(ORG, project.id)).toEqual([]);
     });
 
     it('names the Factory as the owner of its own session, without looking it up as a person', async () => {

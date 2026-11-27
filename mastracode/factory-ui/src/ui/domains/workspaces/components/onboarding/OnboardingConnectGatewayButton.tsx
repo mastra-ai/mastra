@@ -1,5 +1,4 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useId } from 'react';
 
@@ -40,15 +39,9 @@ export function OnboardingConnectGatewayButton({
           connection.chooseGateway();
           preview();
         }}
+        loading={connection.connectingGateway}
       >
-        {connection.connectingGateway ? (
-          <>
-            <Spinner size="sm" aria-hidden="true" />
-            Connecting…
-          </>
-        ) : (
-          `${verb} Mastra Gateway`
-        )}
+        {`${verb} Mastra Gateway`}
       </Button>
       {!allowed && (
         <Txt id={reasonId} variant="meta" tone="muted">

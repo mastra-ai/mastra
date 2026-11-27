@@ -13,10 +13,11 @@
 import { isSessionStartupCancelledError } from '@mastra/core/agent-controller';
 import type { AgentControllerEvent, Session } from '@mastra/core/agent-controller';
 
-import { MODEL_FALLBACK_STATE_KEY } from '../auth/account-rotation-processor.js';
 import { GoalManager } from '../goal-manager.js';
 import { createGoalReminderSignal } from '../goal-signal.js';
+import { MODEL_FALLBACK_STATE_KEY } from '../model-fallback.js';
 import { THREAD_ACTIVE_MODEL_PACK_ID_KEY } from '../onboarding/settings.js';
+import { parseCodexModelSelection } from '../providers/model-ids.js';
 
 import { autoApprovePolicy } from './policy.js';
 import type { MCRun, ResolutionPolicy, RunMCOptions, RunMCResult, RunMCStatus } from './types.js';
@@ -410,7 +411,8 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
 
       if (modelIdToApply) {
         const available = await controller.listAvailableModels();
-        const match = available.find(model => model.id === modelIdToApply);
+        const { modelId } = parseCodexModelSelection(modelIdToApply);
+        const match = available.find(model => model.id === modelId);
         if (!match) {
           if (modelSource === 'flag') return fail(`Unknown model: "${modelIdToApply}"`);
           return fail(`Unknown model "${modelIdToApply}" configured for mode "${modeIdForModel}"`);
@@ -469,7 +471,8 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
           return fail(`Model pack "${options.pack.id}" has no model for ${packModeId} mode`);
         }
         const available = await controller.listAvailableModels();
-        const match = available.find(model => model.id === packSelection.modelId);
+        const { modelId } = parseCodexModelSelection(packSelection.modelId);
+        const match = available.find(model => model.id === modelId);
         if (!match) {
           return fail(`Unknown model "${packSelection.modelId}" from pack "${options.pack.id}"`);
         }

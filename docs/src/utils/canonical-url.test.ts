@@ -9,6 +9,6 @@ describe('normalizeSiteSectionRoot', () => {
 
   it('leaves nested routes and unrelated roots unchanged', () => {
     expect(normalizeSiteSectionRoot('/docs/agents/')).toBe('/docs/agents/')
-    expect(normalizeSiteSectionRoot('/learn/')).toBe('/learn/')
+    expect(normalizeSiteSectionRoot('/blog/')).toBe('/blog/')
   })
 })

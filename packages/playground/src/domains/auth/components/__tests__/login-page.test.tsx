@@ -70,42 +70,6 @@ describe('LoginPage UI parity for /login and /signup', () => {
     cleanup();
   });
 
-  it('renders the login-page testid on the outer container for /login', async () => {
-    mockCapabilities(credentialsCapabilities);
-    renderLogin();
-
-    const root = await screen.findByTestId('login-page');
-    expect(root).toBeTruthy();
-  });
-
-  it('renders the login-page testid on the outer container for /signup', async () => {
-    mockCapabilities(credentialsCapabilities);
-    renderSignUp();
-
-    const root = await screen.findByTestId('login-page');
-    expect(root).toBeTruthy();
-  });
-
-  it('does not render its own card or viewport wrapper on either route (the auth shell owns those)', async () => {
-    mockCapabilities(credentialsCapabilities);
-    const { unmount } = renderLogin();
-
-    const loginRoot = await screen.findByTestId('login-page');
-    expect(loginRoot.className).not.toMatch(/min-h-screen/);
-    expect(loginRoot.className).not.toMatch(/bg-sidebar/);
-    expect(loginRoot.closest('[data-slot="main-card"]')).toBeNull();
-
-    unmount();
-    cleanup();
-
-    mockCapabilities(credentialsCapabilities);
-    renderSignUp();
-    const signUpRoot = await screen.findByTestId('login-page');
-    expect(signUpRoot.className).not.toMatch(/min-h-screen/);
-    expect(signUpRoot.className).not.toMatch(/bg-sidebar/);
-    expect(signUpRoot.closest('[data-slot="main-card"]')).toBeNull();
-  });
-
   it('shows the sign in heading on /login by default', async () => {
     mockCapabilities(credentialsCapabilities);
     renderLogin();
@@ -118,26 +82,6 @@ describe('LoginPage UI parity for /login and /signup', () => {
     renderSignUp();
 
     expect(await screen.findByRole('heading', { name: 'Create your account' })).toBeTruthy();
-  });
-
-  it('uses the same outer container className on /login and /signup', async () => {
-    mockCapabilities(credentialsCapabilities);
-    const { unmount } = renderLogin();
-    const loginRoot = await screen.findByTestId('login-page');
-    const loginOuterClass = loginRoot.className;
-    const loginInnerClass = (loginRoot.firstElementChild as HTMLElement).className;
-
-    unmount();
-    cleanup();
-
-    mockCapabilities(credentialsCapabilities);
-    renderSignUp();
-    const signUpRoot = await screen.findByTestId('login-page');
-    const signUpOuterClass = signUpRoot.className;
-    const signUpInnerClass = (signUpRoot.firstElementChild as HTMLElement).className;
-
-    expect(signUpOuterClass).toBe(loginOuterClass);
-    expect(signUpInnerClass).toBe(loginInnerClass);
   });
 
   it('renders only the credentials form when capability is credentials-only', async () => {

@@ -72,7 +72,7 @@ describe('JiraIntegration workers', () => {
     expect(workers.map(worker => worker.name)).toEqual(['jira-issue-reconcile']);
   });
 
-  it('registers no worker when reconciliation is disabled', () => {
+  it('keeps sweeping on a server that still sets the old off switch', () => {
     vi.stubEnv('MASTRACODE_JIRA_RECONCILE_ENABLED', 'false');
     try {
       const workers = integration().workers({
@@ -80,7 +80,7 @@ describe('JiraIntegration workers', () => {
         runtime: { configVersion: 'test-v1', workItems: {}, boards: createBoardRegistry() },
       } as never);
 
-      expect(workers).toEqual([]);
+      expect(workers.map(worker => worker.name)).toEqual(['jira-issue-reconcile']);
     } finally {
       vi.unstubAllEnvs();
     }

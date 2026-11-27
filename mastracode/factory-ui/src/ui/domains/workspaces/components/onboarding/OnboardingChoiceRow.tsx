@@ -1,9 +1,19 @@
 import { RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check } from 'lucide-react';
 import { useId } from 'react';
 import type { ReactNode } from 'react';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+
+export const ONBOARDING_CHOICE_ROW = 'flex min-w-0 items-start gap-3 rounded-lg p-3';
+
+export function OnboardingChoiceIcon({ children }: { children: ReactNode }) {
+  return (
+    <span className="text-muted-foreground [&_svg]:size-icon-md flex size-5 shrink-0 items-center justify-center">
+      {children}
+    </span>
+  );
+}
 
 /**
  * One row of an onboarding radio group. The radio stays for keyboard and screen readers but is visually
@@ -32,7 +42,8 @@ export function OnboardingChoiceRow({
   return (
     <label
       className={cn(
-        'flex min-w-0 items-start gap-3 rounded-lg p-3 has-[[role=radio]:focus-visible]:outline-1 has-[[role=radio]:focus-visible]:-outline-offset-1 has-[[role=radio]:focus-visible]:outline-solid has-[[role=radio]:focus-visible]:outline-border-focus',
+        ONBOARDING_CHOICE_ROW,
+        'has-[[role=radio]:focus-visible]:outline-1 has-[[role=radio]:focus-visible]:-outline-offset-1 has-[[role=radio]:focus-visible]:outline-solid has-[[role=radio]:focus-visible]:outline-border-focus',
         selected && 'onboarding-card bg-card',
         !selected && !disabled && 'hover:bg-fill-subtle',
         disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
@@ -45,9 +56,7 @@ export function OnboardingChoiceRow({
         aria-describedby={meta ? metaId : undefined}
         className="sr-only"
       />
-      <span className="text-muted-foreground flex size-5 shrink-0 items-center justify-center [&_svg]:size-4">
-        {icon}
-      </span>
+      <OnboardingChoiceIcon>{icon}</OnboardingChoiceIcon>
       <span className="flex min-w-0 flex-1 flex-col">
         <Txt as="span" id={titleId} variant="label" className="flex min-h-5 items-center">
           {title}
@@ -64,7 +73,7 @@ export function OnboardingChoiceRow({
       </span>
       {selected && (
         <span className="onboarding-enter flex h-5 shrink-0 items-center">
-          <Check aria-hidden="true" className="size-4" />
+          <IconCheckmark2Medium aria-hidden="true" className="size-icon-md" />
         </span>
       )}
     </label>

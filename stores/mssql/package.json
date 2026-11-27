@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mssql",
-  "version": "1.11.1",
+  "version": "1.12.1",
   "description": "MSSQL provider for Mastra - db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -32,9 +32,10 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "mssql": "^12.7.11"
+    "mssql": "^12.7.14"
   },
   "devDependencies": {
+    "@internal/core": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
@@ -52,7 +53,8 @@
     "@mastra/core": ">=1.76.0-0 <2.0.0-0"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

@@ -1,5 +1,10 @@
 import { Agent } from '@mastra/core/agent';
-import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '@mastra/core/channels';
+import {
+  CHAT_CHANNEL_RENDER_CONTEXT_KEY,
+  ChannelThreadLinkProcessor,
+  markNewChannelThread,
+  NEW_CHANNEL_THREAD_KEY,
+} from '@mastra/core/channels';
 import { MockMemory } from '@mastra/core/memory';
 import { ProcessorRunner } from '@mastra/core/processors';
 import type { Processor } from '@mastra/core/processors';
@@ -8,11 +13,14 @@ import type { ChunkType } from '@mastra/core/stream';
 import { createMockModel } from '@mastra/core/test-utils/llm-mock';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import {
-  FactoryChannelSessionLinkProcessor,
-  markNewChannelSession,
-  NEW_CHANNEL_SESSION_KEY,
-} from './channel-session-link-processor.js';
+import { SESSION_LINK_LABEL } from './channel-reply-processor.js';
+import { sessionLinkFromRequest } from './channel-session-link-processor.js';
+
+const factorySessionLinkProcessor = () =>
+  new ChannelThreadLinkProcessor({
+    label: SESSION_LINK_LABEL,
+    link: ({ requestContext }) => sessionLinkFromRequest(requestContext),
+  });
 
 const LINK = 'https://mc.example.com/factories/fp-1/workspaces/us-42/threads/uuid-thread-1';
 // Own paragraph, so it closes the message rather than tailing the last sentence.
@@ -30,7 +38,7 @@ function newSessionContext({
     resourceId,
     getState: () => (factoryProjectId === null ? {} : { factoryProjectId }),
   });
-  markNewChannelSession(requestContext);
+  markNewChannelThread(requestContext);
   return requestContext;
 }
 
@@ -65,7 +73,7 @@ const silentLogger = { debug() {}, info() {}, warn() {}, error() {} } as any;
 async function render(requestContext: RequestContext, chunks: ChunkType[], downstream: Processor[] = []) {
   const runner = new ProcessorRunner({
     inputProcessors: [],
-    outputProcessors: [new FactoryChannelSessionLinkProcessor(), ...downstream],
+    outputProcessors: [factorySessionLinkProcessor(), ...downstream],
     logger: silentLogger,
     agentName: 'factory',
   });
@@ -100,7 +108,7 @@ function texts(out: ChunkType[]): string[] {
   return posts;
 }
 
-describe('FactoryChannelSessionLinkProcessor', () => {
+describe('factorySessionLinkProcessor', () => {
   const originalPublicUrl = process.env.MASTRACODE_PUBLIC_URL;
   beforeEach(() => {
     process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
@@ -151,7 +159,7 @@ describe('FactoryChannelSessionLinkProcessor', () => {
     expect(out.map(c => c.type)).toEqual(['text-delta', 'text-end', 'text-delta', 'step-finish']);
     // Its own part id, so the saved message carries the link as a separate
     // text part that processOutputStep can drop whole.
-    expect((out[2] as any).payload).toEqual({ id: 'factory-session-link', text: LINK_SUFFIX });
+    expect((out[2] as any).payload).toEqual({ id: 'mastra-channel-thread-link', text: LINK_SUFFIX });
     // The stashed boundary is re-driven through the whole chain, not just
     // emitted — guards the mirrored REPROCESS_PART_KEY against a core rename.
     expect(seen).toEqual(['text-delta', 'text-end', 'text-delta', 'step-finish']);
@@ -159,8 +167,8 @@ describe('FactoryChannelSessionLinkProcessor', () => {
 
   it('is marked by the channel handler under a stable key', () => {
     const requestContext = new RequestContext();
-    markNewChannelSession(requestContext);
-    expect(requestContext.get(NEW_CHANNEL_SESSION_KEY)).toBe(true);
+    markNewChannelThread(requestContext);
+    expect(requestContext.get(NEW_CHANNEL_THREAD_KEY)).toBe(true);
   });
 
   it('a chat-only thread links with its resource in the query', async () => {
@@ -218,7 +226,7 @@ describe('FactoryChannelSessionLinkProcessor', () => {
         instructions: 'reply',
         model: createMockModel({ mockText: 'On it.' }),
         memory,
-        outputProcessors: [new FactoryChannelSessionLinkProcessor()],
+        outputProcessors: [factorySessionLinkProcessor()],
       });
       const stream = await agent.stream('go', {
         memory: { thread: 'uuid-thread-1', resource: 'us-42' },

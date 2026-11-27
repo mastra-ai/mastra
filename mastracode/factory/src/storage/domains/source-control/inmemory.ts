@@ -22,6 +22,7 @@ import type {
   UpsertSourceControlInstallationInput,
   UpsertSourceControlRepositoryInput,
 } from './base.js';
+import { isSeenBy } from './base.js';
 
 /** In-memory provider-scoped source-control handle for route tests. */
 export class SourceControlStorageInMemory implements SourceControlStorageHandle {
@@ -50,6 +51,22 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
 
   #linkedRepositoriesChanged(): void {
     for (const listener of this.#linkedRepositoryListeners) listener();
+  }
+
+  #linkedProjectSessions(orgId: string, factoryProjectId: string): SourceControlSession[] {
+    const connectionIds = new Set(
+      this.connectionsRows.filter(row => row.factoryProjectId === factoryProjectId).map(row => row.id),
+    );
+    const linkIds = new Set(
+      this.projectRepositoriesRows.filter(row => connectionIds.has(row.connectionId)).map(row => row.id),
+    );
+    return this.sessionsRows.filter(
+      row =>
+        row.factoryProjectId === factoryProjectId &&
+        row.orgId === orgId &&
+        row.projectRepositoryId !== null &&
+        linkIds.has(row.projectRepositoryId),
+    );
   }
 
   readonly installations = {
@@ -364,17 +381,13 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         id: globalThis.crypto.randomUUID(),
         connectionId: input.connectionId,
         repositoryId: input.repositoryId,
-        createdByUserId: input.createdByUserId,
         branch: input.branch ?? null,
-        sandboxProvider: input.sandboxProvider,
-        sandboxWorkdir: input.sandboxWorkdir,
         setupCommand: input.setupCommand ?? null,
         teardownCommand: input.teardownCommand ?? null,
         position,
         inEnvironment,
         lastBuildStatus: 'unbuilt',
         lastBuildError: null,
-        lastBuiltAt: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -401,14 +414,12 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       id,
       status,
       error,
-      builtAt,
     }: SetProjectRepositoryBuildStatusInput): Promise<ProjectRepository | null> => {
       const row = await this.projectRepositories.get({ orgId, id });
       if (!row) return null;
       Object.assign(row, {
         lastBuildStatus: status,
         lastBuildError: error ?? null,
-        lastBuiltAt: builtAt ?? null,
         updatedAt: new Date(),
       });
       return row;
@@ -443,6 +454,8 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       ),
     listByProjectRepository: async ({ projectRepositoryId }: { projectRepositoryId: string }) =>
       this.sessionsRows.filter(row => row.projectRepositoryId === projectRepositoryId),
+    listSharedByProject: async ({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }) =>
+      Object.freeze(this.#linkedProjectSessions(orgId, factoryProjectId)),
     listByProject: async ({
       orgId,
       factoryProjectId,
@@ -451,22 +464,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       orgId: string;
       factoryProjectId: string;
       viewerUserId: string;
-    }) => {
-      const connectionIds = new Set(
-        this.connectionsRows.filter(row => row.factoryProjectId === factoryProjectId).map(row => row.id),
-      );
-      const linkIds = new Set(
-        this.projectRepositoriesRows.filter(row => connectionIds.has(row.connectionId)).map(row => row.id),
-      );
-      return this.sessionsRows.filter(
-        row =>
-          row.factoryProjectId === factoryProjectId &&
-          row.orgId === orgId &&
-          row.projectRepositoryId !== null &&
-          linkIds.has(row.projectRepositoryId) &&
-          (row.visibility !== 'private' || row.userId === viewerUserId),
-      );
-    },
+    }) => this.#linkedProjectSessions(orgId, factoryProjectId).filter(row => isSeenBy(row, viewerUserId)),
     getBySessionId: async (sessionId: string): Promise<SourceControlSession | null> => {
       const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
       if (!row) return null;

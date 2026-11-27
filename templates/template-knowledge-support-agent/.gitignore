@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.mastra/
+coverage/
+.env
+.env.*
+!.env.example
+*.db
+*.db-*
+*.writer.sqlite
+*.writer.sqlite-*
+
+!/package-lock.json
+.local/

@@ -14,6 +14,7 @@ export type {
   BoardPhase,
   BoardPhaseDefinition,
   BoardPhaseExitTool,
+  BoardPhaseOutcome,
   BoardPhaseKind,
   BoardPhaseGoal,
   BoardPhaseRunner,
@@ -35,16 +36,11 @@ export {
   eventBoardId,
   cardOwnsBranch,
   hasPullRequest,
-  isPullRequestCard,
   isPullRequestReviewPhase,
   isTerminalWorkItem,
-  newestOpenPullRequestNumber,
   newestOwnedOpenPullRequestNumber,
-  pullRequestSourceNumber,
-  pullRequestSources,
   resolveBoardClosure,
   reviewedChangeRequest,
-  reviewedPullRequest,
   sourceExternalId,
   reviewsPullRequest,
   resolveBoardToolRule,
@@ -58,6 +54,17 @@ export {
   workItemPhaseSemantics,
 } from './semantics.js';
 export type { PhaseSemantics, ReviewedChangeRequest } from './semantics.js';
+export {
+  isOpenPullRequestSource,
+  isPullRequestCard,
+  pullRequestSourceNumber,
+  pullRequestSources,
+  pullRequestTrustKey,
+  reviewedPullRequest,
+  trustedPullRequestSource,
+  UNTRUSTED_PULL_REQUESTS_KEY,
+  workingPullRequest,
+} from '../work-items/change-requests.js';
 export type {
   BoardTransitionPolicy,
   BoardTransitionPolicyContext,

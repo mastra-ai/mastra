@@ -1,19 +1,14 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Trash2 } from 'lucide-react';
 import { useParams } from 'react-router';
 
 import { useDeleteFactoryMutation, useFactoryQuery } from '../../../../hooks/useFactories';
-import {
-  SettingsContainer,
-  SettingsNoticeRow,
-  SettingsRow,
-  SettingsSkeleton,
-} from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsNoticeRow, SettingsRow } from '@mastra/playground-ui/new/settings';
 
-import { EnvironmentSection } from './EnvironmentSection';
+import { EnvironmentSection, EnvironmentSkeleton } from './EnvironmentSection';
 import { SettingsSubsection } from './SettingsSubsection';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 export function FactoryManagementSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -27,15 +22,7 @@ export function FactoryManagementSection() {
   if (factoryQuery.isError && !factory) {
     return <Notice variant="destructive">{factoryQuery.error.message}</Notice>;
   }
-  if (!factory) {
-    return (
-      <SettingsSubsection scope="factory" title="Environment">
-        <SettingsContainer>
-          <SettingsSkeleton label="Loading Factory settings" rows={3} />
-        </SettingsContainer>
-      </SettingsSubsection>
-    );
-  }
+  if (!factory) return <EnvironmentSkeleton label="Loading Factory settings" />;
 
   return (
     <>
@@ -49,10 +36,10 @@ export function FactoryManagementSection() {
                   <Button
                     size="sm"
                     variant="destructive-ghost"
-                    disabled={deleteMutation.isPending}
+                    icon={<TrashIcon />}
+                    loading={deleteMutation.isPending}
                     aria-label={`Delete ${factory.name}`}
                   >
-                    <Trash2 size={14} />
                     Delete
                   </Button>
                 }

@@ -3,11 +3,22 @@ import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 import { SpanType } from '@mastra/core/observability';
 import { RequestContext } from '@mastra/core/request-context';
+import { SimpleAuth } from '@mastra/core/server';
 import type { ServerMCPConfig } from '@mastra/core/server';
 import { InMemoryStore, MastraCompositeStore, ObservabilityStorage } from '@mastra/core/storage';
 import type { MastraStorage } from '@mastra/core/storage';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
+import { Memory } from '../../../../memory/src/index';
+import {
+  MASTRA_AUTH_MODE_KEY,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+  MASTRA_USER_KEY,
+  MASTRA_USER_PERMISSIONS_KEY,
+} from '../constants';
+import { GET_RESOURCE_WORKING_MEMORY_ROUTE } from '../handlers/memory';
+import { createTestServerContext } from '../handlers/test-utils';
 import { buildBuiltinMCPTools } from './catalogue';
 import { resolveBuiltinMCPConfig } from './config';
 import { MAX_RESULT_CHARS } from './result-size';
@@ -20,11 +31,17 @@ function setup({
   memory = true,
   agentIds = ['helper'],
   store = new InMemoryStore(),
+  requestContext = new RequestContext(),
+  workingMemory = false,
+  server = {},
 }: {
   mcp?: ServerMCPConfig;
   memory?: boolean;
   agentIds?: string[];
   store?: MastraStorage;
+  requestContext?: RequestContext;
+  workingMemory?: boolean;
+  server?: ReturnType<Mastra['getServer']>;
 }) {
   const agent = (id: string) =>
     new Agent({
@@ -32,24 +49,124 @@ function setup({
       name: id,
       instructions: 'test',
       model: 'openai/gpt-4o-mini',
-      ...(memory ? { memory: new MockMemory({ storage: store as InMemoryStore }) } : {}),
+      ...(memory
+        ? { memory: new MockMemory({ storage: store as InMemoryStore, enableWorkingMemory: workingMemory }) }
+        : {}),
     });
   const mastra = new Mastra({
     logger: false,
     storage: store,
     agents: Object.fromEntries(agentIds.map(id => [id, agent(id)])),
-    server: { mcp },
+    server: { ...server, mcp },
   });
   return (query = '') =>
     buildBuiltinMCPTools(
       {
         mastra,
-        requestContext: new RequestContext(),
+        requestContext,
         abortSignal: new AbortController().signal,
         mcpRoute: BUILTIN_MCP_HTTP_ROUTE,
+        routePrefix: '/api',
+        request: new Request('http://localhost/api/mcp', { headers: { Authorization: 'Bearer test-token' } }),
       },
       resolveBuiltinMCPConfig(mastra, new Request(`http://localhost/api/mcp${query}`)),
     );
+}
+
+async function workingMemoryAccess({
+  scope = 'resource',
+  serverFga,
+  studioFga,
+  authMode,
+  pinnedThread,
+}: {
+  scope?: 'resource' | 'thread';
+  serverFga?: NonNullable<ReturnType<Mastra['getServer']>>['fga'];
+  studioFga?: NonNullable<ReturnType<Mastra['getServer']>>['fga'];
+  authMode?: 'server' | 'studio';
+  pinnedThread?: string;
+} = {}) {
+  const withRequire = (provider: NonNullable<NonNullable<ReturnType<Mastra['getServer']>>['fga']>) => ({
+    ...provider,
+    require: async (...args: Parameters<typeof provider.check>) => {
+      if (!(await provider.check(...args))) throw new Error('403 FGA policy denied access');
+    },
+  });
+  const store = new InMemoryStore();
+  const memory = new Memory({ storage: store, options: { workingMemory: { enabled: true, scope } } });
+  const user = { id: 'u1', role: 'admin' };
+  const mastra = new Mastra({
+    logger: false,
+    storage: store,
+    agents: {
+      helper: new Agent({ id: 'helper', name: 'helper', instructions: 'test', model: 'openai/gpt-4o-mini', memory }),
+    },
+    server: {
+      auth: new SimpleAuth({ tokens: { 'test-token': user } }),
+      rbac: { getRoles: async () => [], getPermissions: async () => ['*'] },
+      mcp: { toolsets: ['memory'] },
+      ...(serverFga ? { fga: withRequire(serverFga) } : {}),
+    },
+    ...(studioFga ? { studio: { fga: withRequire(studioFga) } } : {}),
+  });
+  const context = new RequestContext();
+  context.set(MASTRA_RESOURCE_ID_KEY, 'r1');
+  context.set(MASTRA_USER_KEY, user);
+  context.set('user', user);
+  context.set(MASTRA_USER_PERMISSIONS_KEY, ['mcp:execute', 'memory:read', 'agents:read']);
+  if (authMode) context.set(MASTRA_AUTH_MODE_KEY, authMode);
+  if (pinnedThread) context.set(MASTRA_THREAD_ID_KEY, pinnedThread);
+  const db = (await store.getStore('memory'))!;
+  const now = new Date('2026-01-01T00:00:00Z');
+  await db.saveResource({ resource: { id: 'r1', workingMemory: 'RESOURCE MEMO', createdAt: now, updatedAt: now } });
+  await db.saveResource({ resource: { id: 'r2', workingMemory: 'OTHER OWNER', createdAt: now, updatedAt: now } });
+  await db.saveThread({
+    thread: {
+      id: 't1',
+      resourceId: 'r1',
+      title: '',
+      metadata: { workingMemory: 'THREAD MEMO' },
+      createdAt: now,
+      updatedAt: now,
+    },
+  });
+  await db.saveThread({
+    thread: {
+      id: 't2',
+      resourceId: 'r2',
+      title: '',
+      metadata: { workingMemory: 'OTHER THREAD' },
+      createdAt: now,
+      updatedAt: now,
+    },
+  });
+  const tools = await buildBuiltinMCPTools(
+    {
+      mastra,
+      requestContext: context,
+      abortSignal: new AbortController().signal,
+      mcpRoute: BUILTIN_MCP_HTTP_ROUTE,
+      routePrefix: '/api',
+      request: new Request('http://localhost/api/mcp', { headers: { Authorization: 'Bearer test-token' } }),
+    },
+    resolveBuiltinMCPConfig(mastra, new Request('http://localhost/api/mcp?readonly=1')),
+  );
+  return {
+    db,
+    memory,
+    context,
+    user,
+    read: (args: Record<string, unknown> = {}) =>
+      tools.get_working_memory!.execute!({ agentId: 'helper', ...args }, {} as any),
+    handlerRead: (args: { resourceId?: string; requestContext?: RequestContext } = {}) =>
+      GET_RESOURCE_WORKING_MEMORY_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'helper',
+        requestContext: context,
+        resourceId: 'r1',
+        ...args,
+      }),
+  };
 }
 
 const names = (tools: Record<string, unknown>) => Object.keys(tools).sort();
@@ -57,6 +174,113 @@ const jsonSchemaOf = (tool: { inputSchema?: unknown }) => {
   const input = tool.inputSchema as any;
   return input?.jsonSchema ?? input?.['~standard']?.jsonSchema?.input?.({ target: 'draft-07' }) ?? input;
 };
+
+describe('working-memory inspection authorization', () => {
+  it('does not let resource-only reads bypass a thread FGA denial', async () => {
+    const access = await workingMemoryAccess({ serverFga: { check: async () => false } });
+    await expect(access.read({ threadId: 't1' })).rejects.toThrow(/403/);
+    await expect(access.read()).rejects.toThrow(/403/);
+  });
+
+  it('reports missing memory storage instead of an empty resource', async () => {
+    const access = await workingMemoryAccess({});
+    vi.spyOn(access.memory.storage, 'getStore').mockResolvedValue(undefined as any);
+    await expect(access.handlerRead()).rejects.toMatchObject({
+      status: 400,
+      message: 'Memory storage is not initialized',
+    });
+  });
+
+  it('authorizes the context-owned resource, not the caller-supplied resource or a thread grant', async () => {
+    const access = await workingMemoryAccess({
+      serverFga: {
+        check: async (_user, { resource, permission }) =>
+          resource.type === 'resource' && resource.id === 'r1' && permission === 'memory:read',
+      },
+    });
+    const before = await access.db.getResourceById({ resourceId: 'r1' });
+    expect(await access.read({ resourceId: 'r2' })).toMatchObject({
+      workingMemory: 'RESOURCE MEMO',
+      source: 'resource',
+    });
+    expect(await access.handlerRead({ resourceId: 'r2' })).toMatchObject({
+      workingMemory: 'RESOURCE MEMO',
+      source: 'resource',
+    });
+    expect(await access.db.getResourceById({ resourceId: 'r1' })).toEqual(before);
+    expect((await access.db.listThreads({ perPage: false })).threads).toHaveLength(2);
+  });
+
+  it('passes the same request context to the handler check as route-level FGA', async () => {
+    const access = await workingMemoryAccess({
+      serverFga: {
+        check: async (_user, { resource, context }) =>
+          resource.type === 'resource' &&
+          context?.resourceId === resource.id &&
+          context?.requestContext instanceof RequestContext,
+      },
+    });
+    expect(await access.handlerRead()).toMatchObject({ workingMemory: 'RESOURCE MEMO' });
+    expect(await access.read()).toMatchObject({ workingMemory: 'RESOURCE MEMO' });
+  });
+
+  it('does not treat a thread grant as a resource grant', async () => {
+    const access = await workingMemoryAccess({
+      serverFga: { check: async (_user, { resource }) => resource.type === 'thread' },
+    });
+    expect(await access.read({ threadId: 't1' })).toMatchObject({ workingMemory: 'RESOURCE MEMO' });
+    await expect(access.read()).rejects.toThrow(/403/);
+  });
+
+  it('honors a resource policy denial even if the spoofed query identity would be allowed', async () => {
+    const access = await workingMemoryAccess({
+      serverFga: { check: async (_user, { resource }) => resource.id === 'r2' },
+    });
+    await expect(access.read({ resourceId: 'r2' })).rejects.toThrow(/403/);
+    await expect(access.handlerRead({ resourceId: 'r2' })).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('fails closed without an authenticated user when FGA is configured', async () => {
+    const access = await workingMemoryAccess({ serverFga: { check: async () => true } });
+    const context = new RequestContext();
+    context.set(MASTRA_RESOURCE_ID_KEY, 'r1');
+    await expect(access.handlerRead({ requestContext: context })).rejects.toThrow(/authenticated user is required/);
+  });
+
+  it.each([
+    { mode: 'studio' as const, server: false, studio: true, allowed: true },
+    { mode: 'studio' as const, server: true, studio: false, allowed: false },
+    { mode: 'server' as const, server: true, studio: false, allowed: true },
+    { mode: 'server' as const, server: false, studio: true, allowed: false },
+    { mode: 'studio' as const, server: true, studio: undefined, allowed: true },
+    { mode: 'server' as const, server: undefined, studio: true, allowed: false },
+  ])(
+    'selects the applicable FGA provider: $mode auth, server=$server, studio=$studio',
+    async ({ mode, server, studio, allowed }) => {
+      const access = await workingMemoryAccess({
+        serverFga: server === undefined ? undefined : { check: async () => server },
+        studioFga: studio === undefined ? undefined : { check: async () => studio },
+        authMode: mode,
+      });
+      // Exercise the public handler after auth mode is set, without MCP's server-auth handshake changing it.
+      if (allowed) expect(await access.handlerRead()).toMatchObject({ workingMemory: 'RESOURCE MEMO' });
+      else await expect(access.handlerRead()).rejects.toMatchObject({ status: 403 });
+    },
+  );
+
+  it.each([undefined, 't2'])('uses the context thread before dispatch when the argument is %s', async threadId => {
+    const access = await workingMemoryAccess({ scope: 'thread', pinnedThread: 't1' });
+    expect(await access.read({ threadId })).toMatchObject({ workingMemory: 'THREAD MEMO', source: 'thread' });
+  });
+
+  it('retains explicit thread reads and true resource-only reads without a context thread', async () => {
+    const resource = await workingMemoryAccess();
+    expect(await resource.read()).toMatchObject({ workingMemory: 'RESOURCE MEMO', source: 'resource' });
+    const thread = await workingMemoryAccess({ scope: 'thread' });
+    expect(await thread.read({ threadId: 't1' })).toMatchObject({ workingMemory: 'THREAD MEMO', source: 'thread' });
+    await expect(thread.read()).rejects.toThrow(/threadId is required/);
+  });
+});
 
 describe('built-in MCP memory and observability toolsets', () => {
   it('offers exactly the planned memory tools', async () => {
@@ -67,13 +291,93 @@ describe('built-in MCP memory and observability toolsets', () => {
       'get_memory_status',
       'get_observations',
       'get_thread',
+      'get_working_memory',
       'list_messages',
       'list_threads',
-      'save_messages',
-      'search_memory',
       'update_thread',
     ]);
     expect(Object.keys(jsonSchemaOf(tools.get_observations!).properties)).toContain('waitForPending');
+  });
+
+  it('inspects resource working memory in read-only mode without changing stored state', async () => {
+    const store = new InMemoryStore();
+    const storage = (await store.getStore('memory'))!;
+    const now = new Date('2026-01-01T00:00:00Z');
+    const own = { id: 'r1', workingMemory: 'Favorite color: blue', createdAt: now, updatedAt: now };
+    await storage.saveResource({ resource: own });
+    await storage.saveResource({ resource: { ...own, id: 'r2', workingMemory: 'Private document' } });
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'r1');
+    const tools = await setup({ store, requestContext, workingMemory: true, mcp: { toolsets: ['memory'] } })(
+      '?readonly=1',
+    );
+    const result = await tools.get_working_memory!.execute!({ agentId: 'helper', resourceId: 'r2' }, {} as any);
+    expect(result).toMatchObject({ workingMemory: 'Favorite color: blue', source: 'resource' });
+    expect(tools.get_working_memory!.mcp?.annotations?.readOnlyHint).toBe(true);
+    expect(await storage.getResourceById({ resourceId: 'r1' })).toEqual(own);
+    expect(await storage.listThreads({ filter: { resourceId: 'r1' }, perPage: false })).toMatchObject({ threads: [] });
+  });
+
+  it("rejects another owner's thread through working-memory inspection", async () => {
+    const store = new InMemoryStore();
+    const storage = (await store.getStore('memory'))!;
+    const now = new Date();
+    await storage.saveThread({
+      thread: { id: 'secret-thread', resourceId: 'r2', title: '', metadata: {}, createdAt: now, updatedAt: now },
+    });
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'r1');
+    const tools = await setup({ store, requestContext, workingMemory: true, mcp: { toolsets: ['memory'] } })();
+    await expect(
+      tools.get_working_memory!.execute!({ agentId: 'helper', threadId: 'secret-thread' }, {} as any),
+    ).rejects.toThrow(/403/);
+  });
+
+  it('reads working memory through an owned thread and returns null for a missing resource without creating it', async () => {
+    const store = new InMemoryStore();
+    const storage = (await store.getStore('memory'))!;
+    const now = new Date();
+    const thread = { id: 'own-thread', resourceId: 'r1', title: '', metadata: {}, createdAt: now, updatedAt: now };
+    await storage.saveThread({ thread });
+    await storage.saveResource({ resource: { id: 'r1', workingMemory: 'Likes tea', createdAt: now, updatedAt: now } });
+    const tools = await setup({ store, workingMemory: true, mcp: { toolsets: ['memory'] } })('?readonly=1');
+    expect(
+      await tools.get_working_memory!.execute!({ agentId: 'helper', threadId: thread.id, resourceId: 'r1' }, {} as any),
+    ).toMatchObject({ workingMemory: 'Likes tea', source: 'resource', threadExists: true });
+    expect(
+      await tools.get_working_memory!.execute!({ agentId: 'helper', resourceId: 'missing' }, {} as any),
+    ).toMatchObject({ workingMemory: null, source: 'resource' });
+    expect(await storage.getResourceById({ resourceId: 'missing' })).toBeNull();
+    expect(await storage.getThreadById({ threadId: thread.id })).toEqual(thread);
+  });
+
+  it('requires memory:read when listing and calling working-memory inspection', async () => {
+    const requestContext = new RequestContext();
+    const user = { id: 'u1' };
+    requestContext.set(MASTRA_USER_KEY, user);
+    requestContext.set(MASTRA_USER_PERMISSIONS_KEY, ['mcp:execute']);
+    const build = setup({
+      requestContext,
+      workingMemory: true,
+      mcp: { toolsets: ['memory'] },
+      server: {
+        auth: new SimpleAuth({ tokens: { 'test-token': user } }),
+        rbac: {
+          getRoles: async () => [],
+          getPermissions: async () => requestContext.get(MASTRA_USER_PERMISSIONS_KEY) as string[],
+        },
+      },
+    });
+    expect((await build()).get_working_memory).toBeUndefined();
+    requestContext.set(MASTRA_USER_PERMISSIONS_KEY, ['mcp:execute', 'memory:read']);
+    const tools = await build();
+    expect(
+      await tools.get_working_memory!.execute!({ agentId: 'helper', resourceId: 'missing' }, {} as any),
+    ).toMatchObject({ workingMemory: null });
+    requestContext.set(MASTRA_USER_PERMISSIONS_KEY, ['mcp:execute']);
+    await expect(
+      tools.get_working_memory!.execute!({ agentId: 'helper', resourceId: 'missing' }, {} as any),
+    ).rejects.toThrow(/403/);
   });
 
   it('offers list_traces (not query_traces) and the analytics the in-memory store supports', async () => {
@@ -156,7 +460,7 @@ describe('built-in MCP memory and observability toolsets', () => {
         ['list_messages', { agentId: 'secret', threadId: thread.id }],
         ['get_observations', { agentId: 'secret', resourceId: 'r1' }],
         ['get_memory_status', { agentId: 'secret', resourceId: 'r1' }],
-        ['save_messages', { agentId: 'secret', messages: [] }],
+        ['get_working_memory', { agentId: 'secret', resourceId: 'r1' }],
       ];
       for (const [name, args] of calls) {
         const run = tools[name]!.execute!(args as any, {} as any);

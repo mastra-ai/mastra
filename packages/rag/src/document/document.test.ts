@@ -187,25 +187,6 @@ describe('MDocument', () => {
       expect(doc.getText().join(' ')).toBe('Hello world How are you');
     });
 
-    it('should keep separator when specified', async () => {
-      const text = 'Hello\n\nWorld';
-
-      const doc = MDocument.fromText(text, { meta: 'data' });
-
-      await doc.chunk({
-        strategy: 'character',
-        separator: '\n\n',
-        isSeparatorRegex: false,
-        maxSize: 50,
-        overlap: 5,
-        separatorPosition: 'end',
-      });
-      const chunks = doc.getText();
-
-      expect(chunks[0]).toBe('Hello\n\n');
-      expect(chunks[1]).toBe('World');
-    });
-
     describe('separator handling', () => {
       it('should keep separator at end when specified', async () => {
         const text = 'Hello\n\nWorld';
@@ -2072,6 +2053,114 @@ describe('MDocument', () => {
       ).toBe(value);
     });
 
+    describe('long field names and escaped values (#30405)', () => {
+      it('keeps string content when the field name exceeds the fixed split overhead', async () => {
+        const key = 'a_long_document_field_name_that_exceeds_the_fixed_overhead';
+        const value = 'ordinary'.repeat(10);
+        const doc = MDocument.fromJSON(JSON.stringify({ [key]: value }));
+
+        await doc.chunk({
+          strategy: 'json',
+          maxSize: 90,
+          minSize: 1,
+          ensureAscii: false,
+        });
+
+        const chunks = doc.getText();
+        expect(chunks.length).toBeGreaterThan(0);
+        expect(chunks.map(chunk => JSON.parse(chunk)[key]).join('')).toBe(value);
+        chunks.forEach(chunk => {
+          expect(chunk.length).toBeLessThanOrEqual(90);
+        });
+      });
+
+      it.each([12, 13, 14, 20, 40])('keeps every character for a %i-character field name', async keyLength => {
+        const key = 'k'.repeat(keyLength);
+        const value = 'x'.repeat(3000);
+        const doc = MDocument.fromJSON(JSON.stringify({ [key]: value }));
+
+        await doc.chunk({ strategy: 'json', maxSize: 500 });
+
+        const chunks = doc.getText();
+        expect(chunks.map(chunk => JSON.parse(chunk)[key]).join('')).toBe(value);
+        chunks.forEach(chunk => {
+          expect(chunk.length).toBeLessThanOrEqual(500);
+        });
+      });
+
+      it('keeps string content when JSON escaping expands the value', async () => {
+        const value = '"'.repeat(300);
+        const doc = MDocument.fromJSON(JSON.stringify({ text: value }));
+
+        await doc.chunk({ strategy: 'json', maxSize: 60, ensureAscii: false });
+
+        const chunks = doc.getText();
+        expect(chunks.map(chunk => JSON.parse(chunk).text).join('')).toBe(value);
+        chunks.forEach(chunk => {
+          expect(chunk.length).toBeLessThanOrEqual(60);
+        });
+      });
+
+      it('never splits a surrogate pair', async () => {
+        const value = '🌍'.repeat(50);
+        const doc = MDocument.fromJSON(JSON.stringify({ text: value }));
+
+        await doc.chunk({ strategy: 'json', maxSize: 25, ensureAscii: false });
+
+        const chunks = doc.getText();
+        const pieces = chunks.map(chunk => JSON.parse(chunk).text as string);
+        expect(pieces.join('')).toBe(value);
+        pieces.forEach(piece => {
+          expect(piece.isWellFormed()).toBe(true);
+        });
+        chunks.forEach(chunk => {
+          expect(chunk.length).toBeLessThanOrEqual(25);
+        });
+      });
+
+      it('keeps a non-string primitive when the field path exceeds maxSize', async () => {
+        const key = 'k'.repeat(60);
+        const doc = MDocument.fromJSON(JSON.stringify({ [key]: 12345 }));
+
+        await doc.chunk({ strategy: 'json', maxSize: 30 });
+
+        const chunks = doc.getText();
+        expect(chunks.length).toBeGreaterThan(0);
+        expect(chunks.map(chunk => JSON.parse(chunk)[key])).toContain(12345);
+      });
+
+      it('keeps the remainder as an oversized chunk when the field path leaves no room', async () => {
+        const key = 'k'.repeat(40);
+        const value = 'y'.repeat(200);
+        const doc = MDocument.fromJSON(JSON.stringify({ [key]: value }));
+
+        await doc.chunk({ strategy: 'json', maxSize: 21 });
+
+        const chunks = doc.getText();
+        expect(chunks.length).toBeGreaterThan(0);
+        expect(chunks.map(chunk => JSON.parse(chunk)[key]).join('')).toBe(value);
+      });
+
+      it('chunks a very large string in roughly linear time (#30405)', async () => {
+        const value = 'x'.repeat(1_000_000);
+        const doc = MDocument.fromJSON(JSON.stringify({ text: value }));
+
+        const started = performance.now();
+        await doc.chunk({ strategy: 'json', maxSize: 500 });
+        const elapsed = performance.now() - started;
+
+        const chunks = doc.getText();
+        expect(chunks.map(chunk => JSON.parse(chunk).text).join('')).toBe(value);
+        chunks.forEach(chunk => {
+          expect(chunk.length).toBeLessThanOrEqual(500);
+        });
+        // Each piece must search only within maxSize. Searching the whole
+        // remaining value makes this input take seconds instead of tens of
+        // milliseconds.
+        expect(elapsed).toBeLessThan(1000);
+      });
+    });
+
     describe('Unicode handling', () => {
       it('should handle Unicode characters correctly', async () => {
         const input = {
@@ -3679,6 +3768,80 @@ describe('MDocument', () => {
       // Should not break on decimals or version numbers
       expect(allText).not.toContain('2 '); // No broken version number
       expect(allText).not.toContain('3 '); // No broken decimal
+    });
+
+    it.each([
+      {
+        name: 'an ordinary ASCII pair',
+        text: 'The project is complete. It shipped on time.',
+        expected: ['The project is complete.', 'It shipped on time.'],
+      },
+      {
+        name: 'an integer year',
+        text: 'It was built in 2020. Then it grew.',
+        expected: ['It was built in 2020.', 'Then it grew.'],
+      },
+      {
+        name: 'a number followed by a question mark',
+        text: 'Do you need 5? Yes, I do.',
+        expected: ['Do you need 5?', 'Yes, I do.'],
+      },
+      {
+        name: 'an initial followed by a question mark',
+        text: 'What about vitamin C? It helps.',
+        expected: ['What about vitamin C?', 'It helps.'],
+      },
+      {
+        name: 'an accented uppercase next start',
+        text: 'Le projet est fini. Été arrive bientôt.',
+        expected: ['Le projet est fini.', 'Été arrive bientôt.'],
+      },
+      {
+        name: 'a Cyrillic uppercase next start',
+        text: 'Компания была основана давно. Она привлекла деньги позже.',
+        expected: ['Компания была основана давно.', 'Она привлекла деньги позже.'],
+      },
+      {
+        name: 'a custom Hindi ender',
+        text: 'कंपनी की स्थापना हुई थी। बाद में उसने पैसा जुटाया।',
+        sentenceEnders: ['।'],
+        expected: ['कंपनी की स्थापना हुई थी।', 'बाद में उसने पैसा जुटाया।'],
+      },
+      {
+        name: 'a no-space CJK ender',
+        text: '第一句话。第二句话。',
+        sentenceEnders: ['。'],
+        expected: ['第一句话。', '第二句话。'],
+      },
+    ])('should split $name through the public MDocument API', async ({ text, sentenceEnders, expected }) => {
+      const doc = MDocument.fromText(text);
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        maxSize: 200,
+        minSize: 1,
+        targetSize: 1,
+        overlap: 0,
+        ...(sentenceEnders ? { sentenceEnders } : {}),
+      });
+
+      expect(chunks.map(chunk => chunk.text)).toEqual(expected);
+    });
+
+    it('should keep sentence boundaries instead of falling back to word splits for numeric sentences', async () => {
+      const text = 'The company was founded in 2019. It raised money in 2021. It went public in 2024.';
+
+      const doc = MDocument.fromText(text);
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        maxSize: 60,
+        minSize: 1,
+        overlap: 0,
+      });
+
+      expect(chunks.map(chunk => chunk.text)).toEqual([
+        'The company was founded in 2019. It raised money in 2021.',
+        'It went public in 2024.',
+      ]);
     });
   });
 

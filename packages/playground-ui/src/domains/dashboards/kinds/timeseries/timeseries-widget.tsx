@@ -77,8 +77,8 @@ function TimeseriesView({ widget, view, heading: own, page, onDrilldown, alert, 
       view.queries,
       results.map(r => r?.data),
     ),
+    queries: view.queries,
     window: page.window,
-    hasTraceQueries,
   });
   const format = FORMATTERS[options.format];
   const lines: MetricsLineChartSeries[] = shaped.series.map(s => ({
@@ -110,9 +110,11 @@ function TimeseriesView({ widget, view, heading: own, page, onDrilldown, alert, 
     // failed, so no total sits beside the error.
     total: !withRangeTotals || failed.length ? undefined : rangeTotals.length ? rangeTotals : format.value(0),
     isLoading,
-    toolbar: lines.length > 0 && (
+    // The view tabs on the left, the legend on the right: one row, so the plot starts where its neighbours' do.
+    toolbar: (heading.toolbar || lines.length > 0) && (
       <MetricsCard.Toolbar>
-        <MetricsLineChartLegend series={lines} />
+        {heading.toolbar}
+        {lines.length > 0 && <MetricsLineChartLegend series={lines} />}
       </MetricsCard.Toolbar>
     ),
   };

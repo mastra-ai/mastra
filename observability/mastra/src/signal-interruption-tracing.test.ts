@@ -27,6 +27,7 @@ describe('signal interruption tracing', () => {
             stream: new ReadableStream({
               start(controller) {
                 controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue({ type: 'response-metadata', id: 'resp-stale', modelId: 'mock-model-id' });
                 controller.enqueue({ type: 'reasoning-start', id: 'stale' });
                 controller.enqueue({ type: 'reasoning-delta', id: 'stale', delta: 'STALE_REASONING' });
                 abortSignal?.addEventListener('abort', () => controller.error(abortSignal.reason), { once: true });
@@ -39,6 +40,7 @@ describe('signal interruption tracing', () => {
           warnings: [],
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'resp-answer', modelId: 'mock-model-id' },
             { type: 'text-start', id: 'text-1' },
             { type: 'text-delta', id: 'text-1', delta: 'replacement answer' },
             { type: 'text-end', id: 'text-1' },
@@ -86,6 +88,7 @@ describe('signal interruption tracing', () => {
     expect(inferences).toHaveLength(2);
     expect(inferences.map(span => span.parentSpanId)).toEqual([steps[0]!.id, steps[0]!.id]);
     expect(inferences.map(span => span.attributes?.finishReason)).toEqual(['interrupted', 'stop']);
+    expect(inferences.map(span => span.attributes?.responseId)).toEqual(['resp-stale', 'resp-answer']);
     const chunkParents = (text: string) =>
       ended
         .filter(span => span.type === SpanType.MODEL_CHUNK && JSON.stringify(span.output).includes(text))
@@ -97,6 +100,44 @@ describe('signal interruption tracing', () => {
     expect(new Date(replacement.attributes?.completionStartTime as Date).getTime()).toBeGreaterThanOrEqual(
       new Date(replacement.startTime).getTime(),
     );
+    expect(exporter.getIncompleteSpans()).toEqual([]);
+  });
+
+  it('keeps the provider response id on a model request cut off by a run abort', async () => {
+    const model = new MockLanguageModelV2({
+      doStream: async ({ abortSignal }) => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({ type: 'response-metadata', id: 'resp-aborted', modelId: 'mock-model-id' });
+            controller.enqueue({ type: 'reasoning-start', id: 'r' });
+            controller.enqueue({ type: 'reasoning-delta', id: 'r', delta: 'thinking' });
+            abortSignal?.addEventListener('abort', () => controller.error(abortSignal.reason), { once: true });
+          },
+        }),
+      }),
+    });
+    const exporter = new TestExporter();
+    const agent = new Agent({ id: 'abort-agent', name: 'Abort Agent', instructions: 'Test', model });
+    observability = new Observability({
+      configs: { default: { serviceName: 'signal-interruption-tracing', exporters: [exporter] } },
+    });
+    const mastra = new Mastra({ logger: false, agents: { agent }, observability });
+    const abort = new AbortController();
+
+    const output = await mastra.getAgent('agent').stream('question', { abortSignal: abort.signal });
+    for await (const chunk of output.fullStream) {
+      if (chunk.type === 'reasoning-delta') abort.abort();
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const inferences = exporter
+      .getByEventType(TracingEventType.SPAN_ENDED)
+      .map(event => event.exportedSpan)
+      .filter(span => span.type === SpanType.MODEL_INFERENCE);
+    expect(inferences.map(span => span.attributes?.responseId)).toEqual(['resp-aborted']);
     expect(exporter.getIncompleteSpans()).toEqual([]);
   });
 });

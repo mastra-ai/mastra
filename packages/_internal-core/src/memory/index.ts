@@ -161,3 +161,45 @@ export function isAppendOnlySince(storedObservations: string, snapshotObservatio
   const snapshot = snapshotObservations ?? '';
   return stored === snapshot || stored.startsWith(snapshot);
 }
+
+/** The buffered-reflection fields a `swapBufferedReflectionToActive` caller read, and the stored ones. */
+export interface BufferedReflectionState {
+  bufferedReflection?: string | null;
+  reflectedObservationLineCount?: number | null;
+}
+
+/**
+ * Whether the stored buffered reflection and reflected line count are still the ones in
+ * `snapshot`, so a buffered-reflection swap activates exactly the buffer the caller read.
+ *
+ * Another writer can extend the buffer (`updateBufferedReflection` appends and moves the line
+ * count) after the caller's read. The activated text alone cannot tell the two apart: an
+ * extension that repeats the unreflected tail and moves the cut past it produces the same text.
+ * A snapshot without a buffered reflection (callers that never read one) is not checked.
+ */
+export function isBufferedReflectionUnchangedSince(
+  stored: BufferedReflectionState,
+  snapshot: BufferedReflectionState,
+): boolean {
+  if (snapshot.bufferedReflection === undefined || snapshot.bufferedReflection === null) return true;
+  if ((stored.bufferedReflection ?? '') !== snapshot.bufferedReflection) return false;
+  if (snapshot.reflectedObservationLineCount === undefined || snapshot.reflectedObservationLineCount === null) {
+    return true;
+  }
+  return (stored.reflectedObservationLineCount ?? 0) === snapshot.reflectedObservationLineCount;
+}
+
+/**
+ * The generation a buffered-reflection swap just created, marked with
+ * `bufferedReflectionVerified: true` when the swap checked the caller's buffered reflection with
+ * `isBufferedReflectionUnchangedSince` in the same atomic step. A snapshot without a buffered
+ * reflection was not checked, so its successor is returned unmarked. Always returns a new object,
+ * so a store's own record is never handed out or mutated.
+ */
+export function withBufferedReflectionVerified<T extends object>(
+  successor: T,
+  snapshot: BufferedReflectionState,
+): T & { bufferedReflectionVerified?: true } {
+  if (snapshot.bufferedReflection === undefined || snapshot.bufferedReflection === null) return { ...successor };
+  return { ...successor, bufferedReflectionVerified: true };
+}

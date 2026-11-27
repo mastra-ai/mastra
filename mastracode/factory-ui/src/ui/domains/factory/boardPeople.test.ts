@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 
-import { issueCandidate } from './boardCandidates';
 import { boardFiltersFromParams } from './boardFilters';
 import { boardParticipants, boardPersonIdentity, withPeopleFolded, withPeopleUnfolded } from './boardPeople';
 import type { AuditEventPage } from './services/audit';
@@ -60,10 +59,9 @@ describe('board person filters', () => {
     expect([...stored.author]).toEqual(['factory:user-octo']);
   });
 
-  it('offers Review requested only on boards holding pull requests and ignores the retired relevance parameter', () => {
+  it('offers Review requested only on boards holding pull requests', () => {
     const params: [string, string][] = [
       ['reviewer', 'github:monalisa'],
-      ['relevance', 'assigned'],
       ['teammate', 'github:octocat'],
     ];
 
@@ -71,22 +69,9 @@ describe('board person filters', () => {
     expect(picks(params, true).reviewer).toEqual(new Set(['github:monalisa']));
   });
 
-  it('names the signed-in user, the humans who acted, and the people cards and unfiled issues name', () => {
-    const unfiled = issueCandidate({
-      number: 7,
-      title: 'Fix login bug',
-      url: 'https://github.com/acme/app/issues/7',
-      author: 'torvalds',
-      assignee: 'hubot',
-      labels: [],
-      comments: 0,
-      createdAt: '2026-08-01T09:00:00.000Z',
-      updatedAt: '2026-08-01T09:00:00.000Z',
-    });
-
+  it('names the signed-in user, the humans who acted, and the people cards name', () => {
     const participants = boardParticipants({
       people,
-      candidates: [unfiled],
       activityPage,
       currentUser: { userId: 'user-current', name: 'Katherine Johnson' },
       personId: asIs,
@@ -99,10 +84,9 @@ describe('board person filters', () => {
       'factory:user-current',
       'github:monalisa',
       'github:octocat',
-      'github:torvalds',
     ]);
-    expect(participants.find(participant => participant.id === 'github:octocat')?.avatarUrl).toContain(
-      'github.com/octocat.png',
+    expect(participants.find(participant => participant.id === 'github:octocat')?.avatarUrl).toBe(
+      'https://avatars.githubusercontent.com/octocat?s=64',
     );
     expect(participants.some(participant => participant.name === 'user-current')).toBe(false);
   });
@@ -110,7 +94,6 @@ describe('board person filters', () => {
   it('lists the signed-in user once, with their GitHub avatar, instead of beside their GitHub login', () => {
     const participants = boardParticipants({
       people,
-      candidates: [],
       activityPage,
       currentUser: { userId: 'user-octo', name: 'Octo Cat' },
       personId: boardPersonIdentity('user-octo', 'octocat'),
@@ -119,6 +102,6 @@ describe('board person filters', () => {
     expect(participants.map(participant => participant.id)).not.toContain('github:octocat');
     const you = participants.find(participant => participant.id === 'factory:user-octo');
     expect(you?.name).toBe('Octo Cat');
-    expect(you?.avatarUrl).toContain('github.com/octocat.png');
+    expect(you?.avatarUrl).toBe('https://avatars.githubusercontent.com/octocat?s=64');
   });
 });

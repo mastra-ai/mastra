@@ -1,9 +1,10 @@
+import type { Components } from 'react-markdown';
 import { splitFrontmatter } from './frontmatter';
 import { CodeBlock } from '@/ds/components/CodeBlock';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 
 /** Renders a markdown file, showing any leading YAML frontmatter as a code block above the body. */
-export function WorkspaceMarkdownPreview({ content }: { content: string }) {
+export function WorkspaceMarkdownPreview({ content, image }: { content: string; image?: Components['img'] }) {
   const { frontmatter, body } = splitFrontmatter(content);
 
   return (
@@ -19,7 +20,7 @@ export function WorkspaceMarkdownPreview({ content }: { content: string }) {
         </div>
       )}
       <div className="p-4">
-        <MarkdownRenderer>{body}</MarkdownRenderer>
+        <MarkdownRenderer components={image ? { img: image } : undefined}>{body}</MarkdownRenderer>
       </div>
     </>
   );

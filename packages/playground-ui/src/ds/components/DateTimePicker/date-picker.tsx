@@ -1,7 +1,8 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import * as React from 'react';
 import { DayPicker, getDefaultClassNames } from 'react-day-picker';
 import type { ChevronProps, DayButton } from 'react-day-picker';
+import { IconChevronLeftMedium } from '@/ds/icons/central/IconChevronLeftMedium';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
 import { cn } from '@/lib/utils';
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>;
@@ -80,7 +81,7 @@ const navButton = cn(
 );
 
 function CalendarChevron({ orientation, className }: ChevronProps) {
-  const Icon = orientation === 'left' ? ChevronLeft : ChevronRight;
+  const Icon = orientation === 'left' ? IconChevronLeftMedium : IconChevronRightMedium;
   return <Icon className={cn('size-4', className)} />;
 }
 
@@ -104,10 +105,10 @@ function CalendarDayButton({ className, day: _day, modifiers, ...props }: React.
         'not-disabled:hover:bg-fill-hover',
         // Today: a dot under the number, so it never competes with a selection.
         'data-today:after:absolute data-today:after:bottom-1 data-today:after:size-1 data-today:after:rounded-full data-today:after:bg-current',
-        modifiers.outside && 'text-muted-foreground/60',
+        modifiers.outside && 'text-subtle-foreground',
         isSolid &&
           'bg-fill-inverse font-medium text-background not-disabled:hover:bg-fill-inverse-hover data-today:after:bg-background',
-        modifiers.disabled && 'cursor-not-allowed text-muted-foreground/40',
+        modifiers.disabled && 'cursor-not-allowed text-subtle-foreground',
         className,
       )}
       {...props}

@@ -26,7 +26,7 @@ export { agentLoopTermination } from '../loop/shared/execution-outcome';
 export { compactStopReasonContext } from './outcome-schema';
 
 /** @internal Preserve observed model usage when an incomplete provider call ends a durable run. */
-export { calculateObservedUsage, isUsageIncomplete } from './usage';
+export { calculateObservedUsage, isUsageIncomplete, subtractReportedUsage } from './usage';
 
 /** @internal Origin accounting shared with independently upgraded observability packages. */
 export { claimSpanError, getSpanErrorOrigin, setSpanErrorOrigin } from './error-count';

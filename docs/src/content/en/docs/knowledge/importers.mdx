@@ -1,0 +1,204 @@
+---
+title: "Importers"
+description: "Write a Knowledge importer that keeps pages in sync with another system, and run it from your app."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/pg"
+---
+
+# Importers
+
+An importer keeps part of Knowledge in sync with another system, such as a help desk or a ticket tracker. You write a class that reads the source and hands Knowledge one item per document. Knowledge decides where each item goes, writes it as a page, and remembers which page came from which item. The next run then updates those pages instead of adding new ones.
+
+Use an importer when content lives somewhere else and changes there. To load content once from your own code, [write pages directly](/docs/knowledge/load-your-content) instead.
+
+:::alpha
+
+Knowledge importers are experimental. Their API may change between releases.
+
+:::
+
+## How an import run works
+
+Each importer instance is one configured source, called a binding. It has an `id` and a `target`, the place in Knowledge its pages go, written `<scope>#<path>`. A run of a binding:
+
+1. Calls your importer's `import(ctx)` method.
+1. Collects the items it writes with `ctx.items`, and applies them to Knowledge in numbered batches. Each batch is applied in one storage transaction, together with the cursor you saved with `ctx.state`. Accepted writes and cursor state commit together. A cursor can advance past refused items. Resend those items explicitly.
+1. Ends with a result that counts what was created, updated, left unchanged, moved, removed or refused.
+
+Items name things by `sourceId`, the source's own stable ID. Your importer never names pages or paths. An item with `parent` set is placed under the page of that parent item. An item without one is placed directly under the target.
+
+Importers need a Knowledge store that supports transactions: `@mastra/libsql`, `@mastra/pg` or the in-memory store.
+
+## Write an importer
+
+This importer reads articles from a help desk's REST API. It declares a settings schema for the help desk URL and a credential slot for its API key, and saves the last article update time as its cursor so each run only reads what changed:
+
+```typescript title="src/mastra/importers/help-desk.ts"
+import { KnowledgeImporter, KnowledgeImporterSourceError } from '@mastra/core/knowledge'
+import type { KnowledgeImporterContext } from '@mastra/core/knowledge'
+import { z } from 'zod'
+
+const settings = z.object({
+  baseUrl: z.string().url(),
+  folder: z.string().optional(),
+})
+
+type Article = {
+  id: number
+  folderId: number | null
+  title: string
+  html: string
+  updatedAt: string
+  archived: boolean
+}
+
+export class HelpDeskImporter extends KnowledgeImporter({
+  id: 'help-desk',
+  label: 'Help desk',
+  description: 'Imports help desk articles and folders.',
+  settings,
+  credentials: {
+    apiKey: { description: 'Help desk API key' },
+  },
+}) {
+  async import(ctx: KnowledgeImporterContext<z.infer<typeof settings>, 'apiKey'>) {
+    const since = (await ctx.state.get('updatedSince')) ?? '1970-01-01T00:00:00Z'
+    let page = 1
+
+    while (!ctx.signal.aborted) {
+      const url = new URL('/api/articles', ctx.settings.baseUrl)
+      url.searchParams.set('updatedSince', since)
+      url.searchParams.set('page', String(page))
+
+      const response = await ctx.fetch(url, {
+        headers: { authorization: `Bearer ${ctx.credentials.apiKey}` },
+      })
+      if (!response.ok) {
+        throw new KnowledgeImporterSourceError('Help desk request failed', response.status)
+      }
+      const { articles, hasMore } = (await response.json()) as {
+        articles: Article[]
+        hasMore: boolean
+      }
+
+      for (const article of articles) {
+        if (article.archived) {
+          await ctx.items.remove(String(article.id))
+          continue
+        }
+        await ctx.items.upsert({
+          sourceId: String(article.id),
+          parent: article.folderId === null ? null : `folder-${article.folderId}`,
+          title: article.title,
+          body: htmlToMarkdown(article.html),
+        })
+      }
+
+      const last = articles.at(-1)
+      if (last) await ctx.state.set('updatedSince', last.updatedAt)
+      if (!hasMore) break
+      page++
+    }
+  }
+}
+```
+
+`htmlToMarkdown()` stands in for your own conversion. A few things the example relies on:
+
+- **Await every `ctx.items` call.** Items are buffered and sent in batches, so a call can wait for the previous batch to land. A batch is sent when 200 items are waiting, when you call `ctx.state.set()`, when `import` returns, or once the oldest waiting item has waited 30 seconds, so items from a slow source still land during the run. A batch sent on the timer carries only items: the cursor moves only with `ctx.state.set()`. If the run ends early, the next run resends those items from the saved cursor, and writing the same `sourceId` again is safe. If the host can't take a batch (an item with an empty `sourceId`, say), the run fails there and saves no cursor after it, even if you catch the error.
+- **`ctx.state.set()` saves the cursor with the items before it.** Call it after the items it covers, never before.
+- **Use `ctx.fetch` and watch `ctx.signal`.** The signal fires when the run is canceled or reaches its time limit. `ctx.fetch` always uses that signal. If you pass your own `signal`, for example `AbortSignal.timeout()`, it's combined with the run's: either one aborts the fetch, so a run that's canceled or out of time never leaves a fetch running. `ctx.fetch` doesn't retry, so handle rate limits and server errors yourself, for example by waiting for the source's `Retry-After` header before trying again.
+- **Throw `KnowledgeImporterSourceError` with the HTTP status** when the source fails. The run ends with a fixed error code, such as `source_auth_failed` for 401 or 403 and `source_rate_limited` for 429, and your error text stays in your own logs.
+
+## Place items in a tree
+
+Set `parent` to another item's `sourceId` to nest pages. You can send a child before its parent. Until the parent is imported, the child waits directly under the target. After the parent is written, Knowledge moves waiting children under it in bounded batches, in the same run or a later one.
+
+To put a folder in the tree before you have its content, declare it. A declared item that creates its page gets a title and an empty body. Declaring an item whose page already exists keeps that page's body. An upsert of the item supplies or replaces the body:
+
+```typescript title="src/mastra/importers/help-desk.ts"
+await ctx.items.declare({ sourceId: `folder-${folder.id}`, title: folder.name })
+```
+
+Upsert the same `sourceId` later to give it a body. Items can also link to each other with `links: [{ sourceId: '42' }]`. Each link becomes a page link after the item it points to is imported, and it follows that page when an import moves it. When a person moves the page, the link keeps its old path until the linking item is imported again. Knowledge writes these links in a `Links:` section it adds after the item's body, and only ever rewrites that section, so the body your importer sent stays as it is. Knowledge repairs links in the same bounded batches as moves.
+
+## Remove items
+
+Call `ctx.items.remove(sourceId)` only when the source says an item is gone, for example archived or deleted. An item that's missing from one run's results is left alone, so a partial read never deletes pages. If someone deletes an imported page by hand while the source still has the item, the next time your importer sends that item it's written again. To keep it gone, remove it in the source.
+
+When a removed item's page still has pages nested under it, Knowledge keeps it as a stub whose body says the item was removed from the source. Its children keep their place. A page your importer took over is never deleted. If the takeover saved its earlier body, the page gets that body back. Otherwise it becomes a stub. No body is saved for a page that was another importer's item when your importer took it over. A page that's another binding's folder is also kept as a stub, with its ID and notes, so that binding keeps writing under it.
+
+## Register and run the importer
+
+Pass each configured source as an importer instance in `importers`. Declare the target's scope type like any other scope:
+
+```typescript title="src/mastra/knowledge.ts"
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge'
+import { LibSQLStore } from '@mastra/libsql'
+import { HelpDeskImporter } from './importers/help-desk'
+
+export const knowledge = new Knowledge({
+  id: 'company',
+  storage: new LibSQLStore({ id: 'knowledge', url: 'file:./knowledge.db' }),
+  scopes: {
+    ...knowledgeMemoryScopes(),
+    'support:$orgId': {
+      description: 'Help desk articles',
+      belongsTo: 'org:$orgId',
+      access: [{ principal: 'org:$orgId', role: 'viewer' }],
+    },
+  },
+  importers: [
+    new HelpDeskImporter({
+      id: 'acme-help-desk',
+      target: 'support:acme#help-desk',
+      settings: { baseUrl: 'https://help.acme.example' },
+      credentials: { apiKey: process.env.HELP_DESK_API_KEY! },
+    }),
+  ],
+})
+```
+
+Keep a binding's `id` when you edit its settings: Knowledge tracks which pages each binding owns by that id. Targets of different bindings may overlap or nest. When an app deletes a binding, call `retireBinding(id)` on the host: Knowledge forgets that binding's tracking, cursor and runs, and its pages stay in place as ordinary pages. A binding that later takes one of them over keeps its old imported body in a note like any earlier body, and puts that body back when the source removes the item. Nothing reserves its target, so another binding can write there and take those pages over.
+
+Run a binding with `knowledge.importers.run()`:
+
+```typescript title="src/sync-help-desk.ts"
+import { knowledge } from './mastra/knowledge'
+
+const result = await knowledge.importers!.run('acme-help-desk')
+
+if ('outcome' in result) {
+  console.log(result.outcome, result.counts)
+} else if (result.status === 'skipped') {
+  console.log('Another run of this binding is still going')
+} else {
+  console.log('The run ended, but Knowledge could not confirm its result')
+}
+```
+
+The first run prints `succeeded` with every article counted as `created`. Run it again with nothing changed in the help desk and every count is `0`: the saved cursor means no article is read again. An item your importer does send again without changes is counted as `unchanged` and its page isn't rewritten. When someone has edited an imported page in Knowledge, the source still wins: the next time your importer sends that item, its fields replace the edit and the item is counted as `updated`.
+
+Knowledge doesn't schedule runs. Call `run()` from your own scheduler, such as a cron job or a scheduled workflow. Only one run of a binding goes at a time. A second call while one is going returns `skipped`.
+
+### Read the run result
+
+A finished run has an `outcome` of `succeeded`, `failed` or `canceled`, and `counts` of what changed. `succeeded` means the run processed everything your importer sent. It doesn't mean the source and Knowledge are in sync: items can still be refused. Check `counts.refused`, and `refused` for each refused item's `sourceId` and reason. When a run fails, `error.code` says why and `error.retryable` says whether running it again may help. When a run returns `status: 'unfinished'`, it ended but the runner couldn't confirm that Knowledge recorded its result, for example because a reply was lost. Errors from Knowledge that retrying can't fix are thrown from `run()`.
+
+A succeeded run sets `chain` to `true` to recommend another run right away. That happens when the importer still had more to read when it reached its pass or time limit, or when moving waiting pages made progress but didn't finish. A failed or canceled run never sets `chain`.
+
+Use `ctx.reportBacklog()` in your importer when it stops early on purpose, for example after a fixed number of pages. The run then calls `import` again while it has time, and sets `chain` when it doesn't.
+
+## Pages your importer doesn't own
+
+When a page already sits at the binding's target, it becomes the importer's folder: its body and the pages under it are kept, and items are added under it. Folders are shared: if that page is another binding's folder or item, it stays that too, and both bindings keep writing and removing their own items under it. When the source removes an item whose page is another binding's folder, the page is kept as a stub, so that binding's folder keeps its ID. When an item's place is already taken by a page, your importer takes that page over, whoever wrote it. The page keeps its ID and anything nested under it, and the item's title and description replace its own. Its body replaces the page's body when the item sends one. A declare sends none. The page keeps its body until an upsert sends one. Unless the page was another importer's item, the body it had before the import is kept in a note on the page. From then on the importer updates it like a page it created. When the source removes the item, the page is never deleted: it gets that saved body back, or becomes a stub when no body was saved. Each takeover saves the body the page has at that moment and replaces the note an earlier takeover left, so edits made after a removal are what the next removal gives back. A page whose body is empty at that moment keeps no note, and its next removal leaves a stub. That includes the item coming back from the source after a removal. If someone deletes the note, the page becomes a stub instead, until a later takeover saves a new one.
+
+Importers write where they're configured. When an item of your importer takes over a page another binding imported as an item, that binding stops tracking it, and its next run writes its item again. When two bindings write the same page, the one that ran last owns it. When a binding moves its pages, pages other bindings imported under them move too, and those bindings' links to them are fixed on their next run, even one that sends nothing. Each run takes the page back and rewrites it, so give bindings separate targets unless you want that. When someone moves an imported page elsewhere in the same scope, it stays where they put it and keeps getting the item's updates. If the source then removes the item, the page is deleted where they put it. When someone moves it into another scope, it stays there as an ordinary page and the next run writes the item again at the target. People can add their own pages under imported pages. Those move along with their parent.
+
+An item is refused when it can't be written, for example when someone changes the page at the same moment. A binding whose folder was deleted still removes the items it tracks. Its next write makes the folder again. Refused items are counted in `counts.refused`, and the run result lists them in `refused`, each with its `sourceId` and a `reason`. The list holds the first 100. Send the item again. An importer that reads from a cursor may already have saved a cursor past the refused item, so a normal next run doesn't always send it. Reset that cursor, or have your importer send the item again some other way.
+
+## Next steps
+
+To check what an import wrote, [open Knowledge in Studio](/docs/studio/knowledge). For the methods importers use, see the [`Knowledge` class reference](/reference/knowledge/knowledge-class).

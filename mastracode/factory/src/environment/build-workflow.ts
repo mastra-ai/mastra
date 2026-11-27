@@ -10,7 +10,6 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { maskSandboxEnvValues } from '../sandbox/sandbox-env.js';
-import { resolveProjectEnvironment } from '../workspace.js';
 import {
   ENVIRONMENT_BUILD_TRIGGERS,
   environmentBuildContextWithEnv,
@@ -20,6 +19,7 @@ import {
   runEnvironmentBuild,
 } from './build.js';
 import type { EnvironmentBuildDeps, EnvironmentBuildOutcome } from './build.js';
+import { resolveProjectEnvironment } from './session-environment.js';
 
 export const ENVIRONMENT_BUILD_WORKFLOW_ID = 'factory-environment-build';
 export const DEFAULT_BUILD_POLL_MS = 15_000;

@@ -662,37 +662,20 @@ describe('jsonSchemaToZod', () => {
       expect(result).toContain('"John"');
     });
 
-    it('should add .default() for string with default', () => {
+    it.each([
+      ['should add .default() for string with default', 'string', 'hello', '"hello"'],
+      ['should add .default() for number with default', 'number', 42, '42'],
+      ['should add .default() for boolean with default', 'boolean', true, 'true'],
+      ['should handle default: null', 'string', null, 'null'],
+    ] as const)('%s', (_title, type, defaultValue, expected) => {
       const schema: JsonSchema = {
-        type: 'string',
-        default: 'hello',
+        type,
+        default: defaultValue,
       };
 
       const result = jsonSchemaToZod(schema);
       expect(result).toContain('.default(');
-      expect(result).toContain('"hello"');
-    });
-
-    it('should add .default() for number with default', () => {
-      const schema: JsonSchema = {
-        type: 'number',
-        default: 42,
-      };
-
-      const result = jsonSchemaToZod(schema);
-      expect(result).toContain('.default(');
-      expect(result).toContain('42');
-    });
-
-    it('should add .default() for boolean with default', () => {
-      const schema: JsonSchema = {
-        type: 'boolean',
-        default: true,
-      };
-
-      const result = jsonSchemaToZod(schema);
-      expect(result).toContain('.default(');
-      expect(result).toContain('true');
+      expect(result).toContain(expected);
     });
 
     it('should handle withoutDefaults option', () => {
@@ -703,17 +686,6 @@ describe('jsonSchemaToZod', () => {
 
       const result = jsonSchemaToZod(schema, { withoutDefaults: true });
       expect(result).not.toContain('.default(');
-    });
-
-    it('should handle default: null', () => {
-      const schema: JsonSchema = {
-        type: 'string',
-        default: null,
-      };
-
-      const result = jsonSchemaToZod(schema);
-      expect(result).toContain('.default(');
-      expect(result).toContain('null');
     });
   });
 

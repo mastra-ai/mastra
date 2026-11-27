@@ -14,46 +14,32 @@ describe('evaluateRuleGroup', () => {
   });
 
   describe('equals / not_equals', () => {
-    it('should pass for equals match', () => {
+    it.each([
+      ['should pass for equals match', 'equals', 'admin', true],
+      ['should fail for equals mismatch', 'equals', 'user', false],
+      ['should pass for not_equals mismatch', 'not_equals', 'user', true],
+      ['should fail for not_equals match', 'not_equals', 'admin', false],
+    ] as const)('%s', (_title, operator, role, expected) => {
       const group: RuleGroup = {
         operator: 'AND',
-        conditions: [{ field: 'role', operator: 'equals', value: 'admin' }],
+        conditions: [{ field: 'role', operator, value: 'admin' }],
       };
-      expect(evaluateRuleGroup(group, { role: 'admin' })).toBe(true);
-    });
-
-    it('should fail for equals mismatch', () => {
-      const group: RuleGroup = {
-        operator: 'AND',
-        conditions: [{ field: 'role', operator: 'equals', value: 'admin' }],
-      };
-      expect(evaluateRuleGroup(group, { role: 'user' })).toBe(false);
-    });
-
-    it('should pass for not_equals mismatch', () => {
-      const group: RuleGroup = {
-        operator: 'AND',
-        conditions: [{ field: 'role', operator: 'not_equals', value: 'admin' }],
-      };
-      expect(evaluateRuleGroup(group, { role: 'user' })).toBe(true);
-    });
-
-    it('should fail for not_equals match', () => {
-      const group: RuleGroup = {
-        operator: 'AND',
-        conditions: [{ field: 'role', operator: 'not_equals', value: 'admin' }],
-      };
-      expect(evaluateRuleGroup(group, { role: 'admin' })).toBe(false);
+      expect(evaluateRuleGroup(group, { role })).toBe(expected);
     });
   });
 
   describe('contains / not_contains', () => {
-    it('should pass for string contains', () => {
+    it.each([
+      ['should pass for string contains', 'contains', 'lic', true],
+      ['should fail for string not containing', 'contains', 'xyz', false],
+      ['should pass for not_contains when absent from string', 'not_contains', 'xyz', true],
+      ['should fail for not_contains when present', 'not_contains', 'lic', false],
+    ] as const)('%s', (_title, operator, value, expected) => {
       const group: RuleGroup = {
         operator: 'AND',
-        conditions: [{ field: 'name', operator: 'contains', value: 'lic' }],
+        conditions: [{ field: 'name', operator, value }],
       };
-      expect(evaluateRuleGroup(group, { name: 'Alice' })).toBe(true);
+      expect(evaluateRuleGroup(group, { name: 'Alice' })).toBe(expected);
     });
 
     it('should pass for array contains', () => {
@@ -64,44 +50,15 @@ describe('evaluateRuleGroup', () => {
       expect(evaluateRuleGroup(group, { tags: ['vip', 'active'] })).toBe(true);
     });
 
-    it('should fail for string not containing', () => {
+    it.each([
+      ['should return false for contains on non-string/non-array', 'contains', false],
+      ['should return true for not_contains on non-string/non-array', 'not_contains', true],
+    ] as const)('%s', (_title, operator, expected) => {
       const group: RuleGroup = {
         operator: 'AND',
-        conditions: [{ field: 'name', operator: 'contains', value: 'xyz' }],
+        conditions: [{ field: 'count', operator, value: 1 }],
       };
-      expect(evaluateRuleGroup(group, { name: 'Alice' })).toBe(false);
-    });
-
-    it('should pass for not_contains when absent from string', () => {
-      const group: RuleGroup = {
-        operator: 'AND',
-        conditions: [{ field: 'name', operator: 'not_contains', value: 'xyz' }],
-      };
-      expect(evaluateRuleGroup(group, { name: 'Alice' })).toBe(true);
-    });
-
-    it('should fail for not_contains when present', () => {
-      const group: RuleGroup = {
-        operator: 'AND',
-        conditions: [{ field: 'name', operator: 'not_contains', value: 'lic' }],
-      };
-      expect(evaluateRuleGroup(group, { name: 'Alice' })).toBe(false);
-    });
-
-    it('should return false for contains on non-string/non-array', () => {
-      const group: RuleGroup = {
-        operator: 'AND',
-        conditions: [{ field: 'count', operator: 'contains', value: 1 }],
-      };
-      expect(evaluateRuleGroup(group, { count: 42 })).toBe(false);
-    });
-
-    it('should return true for not_contains on non-string/non-array', () => {
-      const group: RuleGroup = {
-        operator: 'AND',
-        conditions: [{ field: 'count', operator: 'not_contains', value: 1 }],
-      };
-      expect(evaluateRuleGroup(group, { count: 42 })).toBe(true);
+      expect(evaluateRuleGroup(group, { count: 42 })).toBe(expected);
     });
   });
 
@@ -156,70 +113,41 @@ describe('evaluateRuleGroup', () => {
   });
 
   describe('in / not_in', () => {
-    it('should pass when value is in array', () => {
+    it.each([
+      ['should pass when value is in array', 'in', 'admin', true],
+      ['should fail when value is not in array', 'in', 'viewer', false],
+      ['should pass not_in when value absent', 'not_in', 'viewer', true],
+      ['should fail not_in when value present', 'not_in', 'admin', false],
+    ] as const)('%s', (_title, operator, role, expected) => {
       const group: RuleGroup = {
         operator: 'AND',
-        conditions: [{ field: 'role', operator: 'in', value: ['admin', 'editor'] }],
+        conditions: [{ field: 'role', operator, value: ['admin', 'editor'] }],
       };
-      expect(evaluateRuleGroup(group, { role: 'admin' })).toBe(true);
-    });
-
-    it('should fail when value is not in array', () => {
-      const group: RuleGroup = {
-        operator: 'AND',
-        conditions: [{ field: 'role', operator: 'in', value: ['admin', 'editor'] }],
-      };
-      expect(evaluateRuleGroup(group, { role: 'viewer' })).toBe(false);
-    });
-
-    it('should pass not_in when value absent', () => {
-      const group: RuleGroup = {
-        operator: 'AND',
-        conditions: [{ field: 'role', operator: 'not_in', value: ['admin', 'editor'] }],
-      };
-      expect(evaluateRuleGroup(group, { role: 'viewer' })).toBe(true);
-    });
-
-    it('should fail not_in when value present', () => {
-      const group: RuleGroup = {
-        operator: 'AND',
-        conditions: [{ field: 'role', operator: 'not_in', value: ['admin', 'editor'] }],
-      };
-      expect(evaluateRuleGroup(group, { role: 'admin' })).toBe(false);
+      expect(evaluateRuleGroup(group, { role })).toBe(expected);
     });
   });
 
   describe('exists / not_exists', () => {
-    it('should pass exists when field has a value', () => {
+    it.each([
+      ['should pass exists when field has a value', 'Alice', true],
+      ['should fail exists when field is null', null, false],
+    ] as const)('%s', (_title, name, expected) => {
       const group: RuleGroup = {
         operator: 'AND',
         conditions: [{ field: 'name', operator: 'exists', value: null }],
       };
-      expect(evaluateRuleGroup(group, { name: 'Alice' })).toBe(true);
+      expect(evaluateRuleGroup(group, { name })).toBe(expected);
     });
 
-    it('should fail exists when field is undefined', () => {
+    it.each([
+      ['should fail exists when field is undefined', 'exists', false],
+      ['should pass not_exists when field is undefined', 'not_exists', true],
+    ] as const)('%s', (_title, operator, expected) => {
       const group: RuleGroup = {
         operator: 'AND',
-        conditions: [{ field: 'name', operator: 'exists', value: null }],
+        conditions: [{ field: 'name', operator, value: null }],
       };
-      expect(evaluateRuleGroup(group, {})).toBe(false);
-    });
-
-    it('should fail exists when field is null', () => {
-      const group: RuleGroup = {
-        operator: 'AND',
-        conditions: [{ field: 'name', operator: 'exists', value: null }],
-      };
-      expect(evaluateRuleGroup(group, { name: null })).toBe(false);
-    });
-
-    it('should pass not_exists when field is undefined', () => {
-      const group: RuleGroup = {
-        operator: 'AND',
-        conditions: [{ field: 'name', operator: 'not_exists', value: null }],
-      };
-      expect(evaluateRuleGroup(group, {})).toBe(true);
+      expect(evaluateRuleGroup(group, {})).toBe(expected);
     });
   });
 
@@ -242,7 +170,10 @@ describe('evaluateRuleGroup', () => {
   });
 
   describe('AND grouping', () => {
-    it('should pass when all conditions pass', () => {
+    it.each([
+      ['should pass when all conditions pass', true],
+      ['should fail when one condition fails', false],
+    ] as const)('%s', (_title, active) => {
       const group: RuleGroup = {
         operator: 'AND',
         conditions: [
@@ -250,23 +181,15 @@ describe('evaluateRuleGroup', () => {
           { field: 'active', operator: 'equals', value: true },
         ],
       };
-      expect(evaluateRuleGroup(group, { role: 'admin', active: true })).toBe(true);
-    });
-
-    it('should fail when one condition fails', () => {
-      const group: RuleGroup = {
-        operator: 'AND',
-        conditions: [
-          { field: 'role', operator: 'equals', value: 'admin' },
-          { field: 'active', operator: 'equals', value: true },
-        ],
-      };
-      expect(evaluateRuleGroup(group, { role: 'admin', active: false })).toBe(false);
+      expect(evaluateRuleGroup(group, { role: 'admin', active })).toBe(active);
     });
   });
 
   describe('OR grouping', () => {
-    it('should pass when at least one condition passes', () => {
+    it.each([
+      ['should pass when at least one condition passes', 'editor', true],
+      ['should fail when no conditions pass', 'viewer', false],
+    ] as const)('%s', (_title, role, expected) => {
       const group: RuleGroup = {
         operator: 'OR',
         conditions: [
@@ -274,18 +197,7 @@ describe('evaluateRuleGroup', () => {
           { field: 'role', operator: 'equals', value: 'editor' },
         ],
       };
-      expect(evaluateRuleGroup(group, { role: 'editor' })).toBe(true);
-    });
-
-    it('should fail when no conditions pass', () => {
-      const group: RuleGroup = {
-        operator: 'OR',
-        conditions: [
-          { field: 'role', operator: 'equals', value: 'admin' },
-          { field: 'role', operator: 'equals', value: 'editor' },
-        ],
-      };
-      expect(evaluateRuleGroup(group, { role: 'viewer' })).toBe(false);
+      expect(evaluateRuleGroup(group, { role })).toBe(expected);
     });
   });
 

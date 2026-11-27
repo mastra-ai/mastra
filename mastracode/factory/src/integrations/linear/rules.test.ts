@@ -218,6 +218,38 @@ describe('LinearRules', () => {
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
 
+  it("never evaluates an issue against another issue's card that shares its identifier", async () => {
+    const { project, service, workItems } = await setup();
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'linear',
+          type: 'issue',
+          externalId: `linear:${issue.identifier}`,
+          url: issue.url,
+        },
+        title: `${issue.identifier}: Another workspace's issue`,
+        stages: ['intake'],
+        sessions: {},
+        metadata: { linearIssueId: 'issue-in-another-workspace' },
+      },
+    });
+    const evaluate = vi.spyOn(workItems, 'commitRuleEvaluation');
+
+    await service.ingest({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      issues: [{ ...issue, stateType: 'completed' }],
+    });
+
+    // Closed with no card of its own: nothing is evaluated, least of all the other issue's card.
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+
   // A card finished while claims were enforced, the issue moved teams and reopened, and a second
   // live card was filed under the new identifier with the same stable issue id.
   it.each([
@@ -431,7 +463,7 @@ describe('LinearRules', () => {
     expect(seen).toEqual([card.id]);
   });
 
-  it.each(['completed', 'canceled'])('closes linked issues in state %s with shared audit metadata', async stateType => {
+  it.each(['completed', 'canceled'])('closes linked issues in state %s', async stateType => {
     const { project, service, workItems } = await setup();
     await workItems.upsert({
       orgId: 'org-1',
@@ -453,8 +485,7 @@ describe('LinearRules', () => {
     });
     expect(commit).toHaveBeenCalledWith(
       expect.objectContaining({
-        configVersion: 'factory-config-v1',
-        ingress: { identity: `linear:${issue.id}:${issue.updatedAt}`, triggerType: 'linear.issueObserved' },
+        ingress: { identity: `linear:${issue.id}:${issue.updatedAt}` },
       }),
     );
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
@@ -814,7 +845,7 @@ describe('Linear board events', () => {
     await ingest('canceled', '2026-07-05T00:00:00Z');
 
     expect(seen).toEqual([
-      { event: 'issueObserved', boardEvent: { type: 'work_item.created' } },
+      { event: 'issueObserved', boardEvent: { type: 'work_item.opened' } },
       // A later sighting of an open Linear issue is not a status change.
       { event: 'issueObserved', boardEvent: undefined },
       { event: 'issueClosed', boardEvent: { type: 'work_item.closed', reason: 'completed' } },

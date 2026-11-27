@@ -224,7 +224,9 @@ describe('Dialog confirmation', () => {
     it('disables both actions', () => {
       render(<ConfirmationFixture pending />);
       expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Cancel' }).disabled).toBe(true);
-      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Delete workspace' }).disabled).toBe(true);
+      const action = screen.getByRole('button', { name: 'Delete workspace' });
+      expect(action.getAttribute('aria-disabled')).toBe('true');
+      expect(action.getAttribute('aria-busy')).toBe('true');
     });
   });
 });
@@ -285,6 +287,63 @@ describe('Dialog hold cancellation', () => {
       unmount();
       act(() => vi.advanceTimersByTime(1600));
       expect(onConfirm).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the confirmation it holds for is pending', () => {
+    it('keeps the same focused button', () => {
+      const { rerender } = render(<ConfirmationFixture hold />);
+      const button = screen.getByRole('button', { name: 'Delete workspace' });
+      button.focus();
+      rerender(<ConfirmationFixture hold pending />);
+      expect(screen.getByRole('button', { name: 'Delete workspace', busy: true })).toBe(button);
+      expect(document.activeElement).toBe(button);
+    });
+  });
+
+  describe('when another action of the dialog is the one in progress', () => {
+    it('cannot be held', () => {
+      vi.useFakeTimers();
+      const onConfirm = vi.fn();
+      render(
+        <Dialog defaultOpen pending>
+          <DialogContent>
+            <DialogTitle>Delete workspace?</DialogTitle>
+            <DialogAction confirmation="hold" loading={false} onConfirm={onConfirm}>
+              Delete workspace
+            </DialogAction>
+          </DialogContent>
+        </Dialog>,
+      );
+      fireEvent.keyDown(screen.getByRole('button', { name: 'Delete workspace' }), { key: ' ' });
+      act(() => vi.advanceTimersByTime(1600));
+      expect(onConfirm).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when loading starts while the action is armed', () => {
+    it('needs two activations again once the arming has expired', () => {
+      vi.useFakeTimers();
+      const onConfirm = vi.fn();
+      const { rerender } = render(<ConfirmationFixture onConfirm={onConfirm} hold />);
+      fireEvent.click(screen.getByRole('button', { name: 'Delete workspace' }), { detail: 0 });
+      rerender(<ConfirmationFixture onConfirm={onConfirm} hold pending />);
+      act(() => vi.advanceTimersByTime(5000));
+      rerender(<ConfirmationFixture onConfirm={onConfirm} hold />);
+      fireEvent.click(screen.getByRole('button', { name: 'Delete workspace' }), { detail: 0 });
+      expect(onConfirm).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when a held key is released while loading', () => {
+    it('is not holding once loading ends', () => {
+      const { rerender } = render(<ConfirmationFixture hold />);
+      const button = screen.getByRole('button', { name: 'Delete workspace' });
+      fireEvent.keyDown(button, { key: ' ' });
+      rerender(<ConfirmationFixture hold pending />);
+      fireEvent.keyUp(button, { key: ' ' });
+      rerender(<ConfirmationFixture hold />);
+      expect(button.hasAttribute('data-holding')).toBe(false);
     });
   });
 
@@ -490,7 +549,7 @@ describe('Dialog submit action', () => {
   describe('when the dialog is pending', () => {
     it('disables the submit action', () => {
       render(<SubmitFixture onSubmit={vi.fn()} pending />);
-      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Save' }).disabled).toBe(true);
+      expect(screen.getByRole('button', { name: 'Save' }).getAttribute('aria-disabled')).toBe('true');
     });
   });
 });
@@ -602,16 +661,5 @@ describe('Dialog on a phone viewport', () => {
     setPhoneViewport(false);
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
     expect(screen.getByRole('dialog', { name: 'Edit agent' })).toBeDefined();
-  });
-
-  it('stays open when the viewport grows past the phone breakpoint', () => {
-    render(<EditFixture />);
-    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
-    expect(isDrawer()).toBe(true);
-
-    act(() => setPhoneViewport(false));
-
-    expect(screen.getByRole('dialog', { name: 'Edit agent' })).toBeDefined();
-    expect(isDrawer()).toBe(false);
   });
 });

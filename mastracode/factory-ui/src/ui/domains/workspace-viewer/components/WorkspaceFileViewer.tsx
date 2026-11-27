@@ -1,13 +1,13 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Code } from '@mastra/playground-ui/components/Code';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ArrowLeft, RefreshCw } from 'lucide-react';
 
+import { WorkspaceFileCode } from './WorkspaceFileCode';
 import type { WorkspaceFilePreview } from './workspace-file-preview';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 
 function formatBytes(size: number) {
   if (size < 1024) return `${size} B`;
@@ -22,7 +22,6 @@ interface WorkspaceFileViewerProps {
   isRefreshing: boolean;
   error?: Error;
   onRefresh: () => void;
-  onBack: () => void;
 }
 
 export function WorkspaceFileViewer({
@@ -32,7 +31,6 @@ export function WorkspaceFileViewer({
   isRefreshing,
   error,
   onRefresh,
-  onBack,
 }: WorkspaceFileViewerProps) {
   const content = file?.content ?? '';
   const isMarkdown = file?.language === 'markdown';
@@ -40,15 +38,6 @@ export function WorkspaceFileViewer({
   return (
     <section className="flex min-h-0 min-w-0 grow flex-col" aria-label="Workspace file viewer">
       <div className="border-border flex shrink-0 items-center gap-2 border-b p-1.5">
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          className="shrink-0"
-          onClick={onBack}
-          aria-label="Back to workspace files"
-        >
-          <ArrowLeft />
-        </Button>
         <Txt tone="ink" variant="column" className="min-w-0 flex-1 truncate">
           {file?.name ?? filePath}
         </Txt>
@@ -56,14 +45,8 @@ export function WorkspaceFileViewer({
           {file?.contentType === 'text' ? (
             <CopyButton content={content} size="icon-sm" variant="ghost" tooltip="Copy file contents" />
           ) : null}
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            onClick={onRefresh}
-            disabled={isRefreshing}
-            aria-label={isRefreshing ? 'Refreshing file' : 'Refresh file'}
-          >
-            {isRefreshing ? <Spinner size="sm" /> : <RefreshCw />}
+          <Button size="icon-sm" variant="ghost" onClick={onRefresh} aria-label="Refresh file" loading={isRefreshing}>
+            <IconArrowRotateClockwise />
           </Button>
         </div>
       </div>
@@ -79,12 +62,13 @@ export function WorkspaceFileViewer({
           <Txt tone="muted" as="span" variant="caption" className="shrink-0">
             {new Date(file.updatedAt).toLocaleString()}
           </Txt>
-          {file.truncated ? (
-            <Txt tone="muted" as="span" variant="caption" className="shrink-0">
-              Truncated
-            </Txt>
-          ) : null}
         </div>
+      ) : null}
+
+      {file?.truncated ? (
+        <Txt as="p" variant="caption" tone="muted" className="border-border shrink-0 border-b px-3 py-2">
+          Too large to show in full: this is the start of the file.
+        </Txt>
       ) : null}
 
       {isLoading ? (
@@ -107,11 +91,7 @@ export function WorkspaceFileViewer({
             ) : null}
             {file?.contentType === 'text' && isMarkdown ? <MarkdownRenderer>{content}</MarkdownRenderer> : null}
             {file?.contentType === 'text' && !isMarkdown ? (
-              <Code
-                code={content}
-                lang={file.language}
-                className="border-border bg-background text-caption text-foreground m-0 rounded-md border p-3 font-mono"
-              />
+              <WorkspaceFileCode path={file.path} content={content} language={file.language} />
             ) : null}
           </div>
         </ScrollArea>

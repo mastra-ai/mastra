@@ -8,6 +8,7 @@ import {
   assertKnowledgeNoteTextWithinBound,
   assertKnowledgePageDescriptionWithinBound,
   canonicalKnowledgeName,
+  KnowledgeInvalidCursorError,
   KnowledgeMoveTooLargeError,
   KnowledgePageDepthError,
   KnowledgePageHasChildrenError,
@@ -49,8 +50,10 @@ function pageSize(limit: number | undefined): number {
 }
 
 function paginate<T>(items: T[], cursor: string | undefined, limit: number | undefined) {
+  // The store issues plain decimal offsets; reject anything else (`0x10`, `1e3`, ` 5`) rather than coerce it.
+  if (cursor !== undefined && !/^(0|[1-9]\d*)$/.test(cursor)) throw new KnowledgeInvalidCursorError(cursor);
   const start = cursor === undefined ? 0 : Number(cursor);
-  if (!Number.isInteger(start) || start < 0) throw new RangeError(`Invalid Knowledge cursor: ${cursor}`);
+  if (!Number.isSafeInteger(start)) throw new KnowledgeInvalidCursorError(String(cursor));
   const size = pageSize(limit);
   const slice = items.slice(start, start + size);
   return { items: slice, nextCursor: start + size < items.length ? String(start + size) : undefined };
@@ -64,6 +67,15 @@ const byName = (a: KnowledgePage, b: KnowledgePage) =>
   a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 const newestFirst = <T extends { createdAt: Date; id: string }>(a: T, b: T) =>
   b.createdAt.getTime() - a.createdAt.getTime() || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
+/** An oldest-first position: the event's insertion counter as plain decimal text. */
+function activityPosition(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const n = /^(0|[1-9]\d*)$/.test(value) ? Number(value) : NaN;
+  if (!Number.isSafeInteger(n))
+    throw new RangeError(`Knowledge activity position is not one this store issued: ${value}`);
+  return n;
+}
+
 const oldestFirst = <T extends { createdAt: Date; id: string }>(a: T, b: T) => newestFirst(b, a);
 
 const clone = <T>(value: T): T => structuredClone(value);
@@ -77,6 +89,14 @@ const pinKey = (pageId: string, kind: KnowledgePinKind) => `${kind}:${pageId}`;
  *
  * @experimental
  */
+export interface InMemoryKnowledgePageSnapshot {
+  pages: Map<string, KnowledgePage>;
+  notes: Map<string, KnowledgeNote>;
+  pins: Map<string, KnowledgePin>;
+  activity: KnowledgePageActivityEvent[];
+  bodyLinks: Map<string, KnowledgePageBodyLink[]>;
+}
+
 export class InMemoryKnowledgePageStore implements KnowledgePageStore {
   #pages = new Map<string, KnowledgePage>();
   #notes = new Map<string, KnowledgeNote>();
@@ -84,6 +104,40 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
   #activity: KnowledgePageActivityEvent[] = [];
   #bodyLinks = new Map<string, KnowledgePageBodyLink[]>();
   #clock = 0;
+  /** Insertion counter behind each event's `position`; never reset, so a held position can't be reused. */
+  #activitySeq = 0;
+
+  /** A deep copy of every page, note, pin, body link and event, for {@link restore}. */
+  snapshot(): InMemoryKnowledgePageSnapshot {
+    return structuredClone({
+      pages: this.#pages,
+      notes: this.#notes,
+      pins: this.#pins,
+      activity: this.#activity,
+      bodyLinks: this.#bodyLinks,
+    });
+  }
+
+  /** Puts back what {@link snapshot} copied. */
+  restore(snapshot: InMemoryKnowledgePageSnapshot): void {
+    const copy = structuredClone(snapshot);
+    this.#pages = copy.pages;
+    this.#notes = copy.notes;
+    this.#pins = copy.pins;
+    this.#activity = copy.activity;
+    this.#bodyLinks = copy.bodyLinks;
+    // A snapshot where any event lacks a position (taken before positions existed) gets every event
+    // renumbered in stored order, past every position issued so far: a held position then rereads
+    // events instead of skipping them, and the feed's order matches the stored order.
+    const positioned = (event: KnowledgePageActivityEvent) =>
+      Number.isSafeInteger(event.position === undefined ? NaN : Number(event.position));
+    for (const event of this.#activity) {
+      if (positioned(event)) this.#activitySeq = Math.max(this.#activitySeq, Number(event.position));
+    }
+    if (!this.#activity.every(positioned)) {
+      for (const event of this.#activity) event.position = String(++this.#activitySeq);
+    }
+  }
 
   /** Drops every page, note, pin, body link and event. */
   clear(): void {
@@ -114,6 +168,7 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
       ...(noteId ? { noteId } : {}),
       provenance: clone(provenance),
       createdAt: this.#now(),
+      position: String(++this.#activitySeq),
     });
   }
 
@@ -865,21 +920,61 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
   }
 
   async listPageActivity(input: Parameters<Store['listPageActivity']>[0]) {
+    if (input.before !== undefined && input.cursor !== undefined) {
+      throw new RangeError('Knowledge activity takes either a cursor or a before position, not both');
+    }
+    if (input.after !== undefined && input.order !== 'asc') {
+      throw new RangeError('Knowledge activity takes an after position only with order asc');
+    }
+    if (input.after !== undefined && input.cursor !== undefined) {
+      throw new RangeError('Knowledge activity takes either a cursor or an after position, not both');
+    }
+    if (input.before !== undefined && input.order === 'asc') {
+      throw new RangeError('Knowledge activity takes a before position only newest first; use after with order asc');
+    }
+    const ascending = input.order === 'asc';
+    if (ascending) {
+      // Writes here are synchronous, so insertion order is commit order.
+      const after = activityPosition(input.after ?? input.cursor);
+      if (after !== undefined && after > this.#activitySeq) {
+        throw new RangeError(`Knowledge activity position is ahead of this feed: ${after}`);
+      }
+      const size = pageSize(input.limit);
+      const matched = this.#activity.filter(
+        event => this.#activityMatches(event, input) && (after === undefined || Number(event.position) > after),
+      );
+      const items = matched.slice(0, size);
+      const last = items[items.length - 1];
+      return {
+        events: items.map(clone),
+        ...(matched.length > size && last ? { nextCursor: last.position! } : {}),
+      };
+    }
     const events = this.#activity
-      .filter(event => {
-        const page = this.#pages.get(event.pageId);
-        if (!page || !this.#pageReadable(page, input.read)) return false;
-        if (input.pageId !== undefined && event.pageId !== input.pageId) return false;
-        if (input.scopeId !== undefined && page.scopeId !== input.scopeId) return false;
-        if (event.noteId !== undefined) {
-          const note = this.#notes.get(event.noteId);
-          if (!note || !this.#noteVisible(note, input.read)) return false;
-        }
-        return true;
-      })
+      .filter(
+        event =>
+          this.#activityMatches(event, input) && (input.before === undefined || newestFirst(event, input.before) > 0),
+      )
       .sort(newestFirst);
     const { items, nextCursor } = paginate(events, input.cursor, input.limit);
-    return { events: items.map(clone), ...(nextCursor ? { nextCursor } : {}) };
+    return {
+      events: items.map(({ position: _position, ...event }) => clone(event)),
+      ...(nextCursor ? { nextCursor } : {}),
+    };
+  }
+
+  #activityMatches(event: KnowledgePageActivityEvent, input: Parameters<Store['listPageActivity']>[0]): boolean {
+    const page = this.#pages.get(event.pageId);
+    if (!page || !this.#pageReadable(page, input.read)) return false;
+    if (input.pageId !== undefined && event.pageId !== input.pageId) return false;
+    if (input.scopeId !== undefined && page.scopeId !== input.scopeId) return false;
+    if (event.noteId !== undefined) {
+      const note = this.#notes.get(event.noteId);
+      if (!note || !this.#noteVisible(note, input.read)) return false;
+    }
+    if (input.since !== undefined && event.createdAt.getTime() < input.since.getTime()) return false;
+    if (input.until !== undefined && event.createdAt.getTime() >= input.until.getTime()) return false;
+    return true;
   }
 
   // Pins

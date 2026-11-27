@@ -1,3 +1,4 @@
+import { isUsageIncomplete } from '../../../../observability/usage';
 import type { LanguageModelUsage, StepTripwireData } from '../../../../stream/types';
 import type { DurableAgenticExecutionOutput, RunRegistryEntry } from '../../types';
 import type { AccumulatedUsage, BaseIterationState } from './schemas';
@@ -10,17 +11,22 @@ interface SpanClocks {
 /**
  * The first-chunk clocks for spans rebuilt from a run-start snapshot. A
  * resumed segment keeps them on the run registry beside its fresh spans; the
- * originals keep them in the loop state. Undefined when none was captured yet.
+ * originals keep them in the loop state. Undefined when none was captured yet,
+ * and for a carried segment this process holds no live spans of: the loop
+ * state's clocks belong to the run's first pair.
  */
 export function carriedSpanClocks(
   registry:
-    | Pick<RunRegistryEntry, 'resumeModelSpanData' | 'resumeCompletionStartTime' | 'resumeTimeToFirstTokenMs'>
+    | Pick<RunRegistryEntry, 'resumeModelSpan' | 'resumeCompletionStartTime' | 'resumeTimeToFirstTokenMs'>
     | undefined,
   state: SpanClocks,
+  carried = false,
 ): { completionStartTime?: Date; timeToFirstTokenMs?: number } | undefined {
-  const clocks: SpanClocks = registry?.resumeModelSpanData
+  const clocks: SpanClocks = registry?.resumeModelSpan
     ? { completionStartTime: registry.resumeCompletionStartTime, timeToFirstTokenMs: registry.resumeTimeToFirstTokenMs }
-    : state;
+    : carried
+      ? {}
+      : state;
   const attributes = {
     ...(clocks.completionStartTime ? { completionStartTime: new Date(clocks.completionStartTime) } : {}),
     ...(clocks.timeToFirstTokenMs !== undefined ? { timeToFirstTokenMs: clocks.timeToFirstTokenMs } : {}),
@@ -101,7 +107,13 @@ export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput):
     toolCalls: executionOutput.output.toolCalls,
     // Tracing facts stay off the step records, which `stream.steps` and the finish payload expose.
     toolResults: executionOutput.toolResults?.map(
-      ({ stepSpanData: _stepSpanData, tracingDelegationFailure: _tracingDelegationFailure, ...result }) => result,
+      ({
+        stepSpanData: _stepSpanData,
+        tracingDelegationFailure: _tracingDelegationFailure,
+        response: _response,
+        sideBySide: _sideBySide,
+        ...result
+      }) => result,
     ),
     usage: executionOutput.output.usage,
     finishReason: executionOutput.stepResult.reason,
@@ -209,6 +221,14 @@ export function createBaseIterationStateUpdate(
         ],
     accumulatedUsage: newUsage,
     usageAggregationVersion: signalPreempted ? currentState.usageAggregationVersion : 1,
+    // The suspension that ended this step reported the run total so far on its MODEL_GENERATION,
+    // unless the provider left part of that total unknown: then it reported nothing.
+    ...(currentState.generationReportedUsage && executionOutput.suspensionReportedUsage && !isUsageIncomplete(newUsage)
+      ? { generationReportedUsage: newUsage, generationReportedSteps: previousSteps.length + 1 }
+      : {
+          generationReportedUsage: currentState.generationReportedUsage,
+          generationReportedSteps: currentState.generationReportedSteps,
+        }),
     lastStepResult,
     deferredStepFinishChunk: executionOutput.deferredStepFinishChunk,
     backgroundTaskPending: executionOutput.backgroundTaskPending,
@@ -237,6 +257,14 @@ export function createBaseIterationStateUpdate(
     // The latest iteration's response, even when it has none, as in the main loop: a run
     // whose final step is aborted or rejected mid-stream ends with no response on the span.
     lastResponse: signalPreempted ? currentState.lastResponse : executionOutput.response,
+    // A run that started before this field keeps a blank for each earlier step, so a later cost is
+    // never taken for the whole run.
+    reportedCosts: signalPreempted
+      ? currentState.reportedCosts
+      : [
+          ...previousSteps.map((_, index) => currentState.reportedCosts?.[index] ?? null),
+          executionOutput.response?.reportedCost ?? null,
+        ],
     // Both belong to the iteration whose lastStepResult the final step classifies.
     tracingTermination: executionOutput.tracingTermination,
     tracingDelegationFailure: executionOutput.tracingDelegationFailure,

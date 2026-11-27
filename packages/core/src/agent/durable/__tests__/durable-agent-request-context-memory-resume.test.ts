@@ -150,22 +150,12 @@ async function expectResumedAgainstTenantMemory(
 }
 
 describe('approving a durable agent whose memory is chosen from the request context', () => {
-  it('resumes against the run memory when approved in a fresh process without the request context', async () => {
-    const run = await setup('per-tenant');
-    const durableAgent = startProcess(run.stores, 'per-tenant', run.prompts);
-
-    const resumed = await durableAgent.approveToolCall({
-      runId: run.runId,
-      toolCallId: run.toolCallId,
-      memory: memoryOption,
-    });
-
-    await expectResumedAgainstTenantMemory(run, resumed);
-  });
-
-  it('resumes in a fresh process when the memory function returns nothing without the request context', async () => {
-    const run = await setup('tenant-only');
-    const durableAgent = startProcess(run.stores, 'tenant-only', run.prompts);
+  it.each([
+    ['resumes against the run memory when approved in a fresh process without the request context', 'per-tenant'],
+    ['resumes in a fresh process when the memory function returns nothing without the request context', 'tenant-only'],
+  ] as const)('%s', async (_title, input) => {
+    const run = await setup(input);
+    const durableAgent = startProcess(run.stores, input, run.prompts);
 
     const resumed = await durableAgent.approveToolCall({
       runId: run.runId,

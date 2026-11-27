@@ -1,6 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { defineConfig } from 'vitest/config';
+import {
+  countDurableAgents,
+  durableTestsWithoutDurableAgent,
+  otherStorageVersion,
+} from './vitest.durable-storage-version';
 import { isolatedTestFiles } from './vitest.isolated-tests';
 
 const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8'));
@@ -34,12 +39,19 @@ export default defineConfig({
             '@internal/workflow-test-utils': path.resolve(__dirname, '../../workflows/_test-utils/src'),
           },
         },
+        plugins: [countDurableAgents],
         test: {
           name: 'unit:packages/core',
           environment: 'node',
           include: ['src/**/*.test.ts'],
           exclude: ['src/**/*.e2e.test.ts', ...isolatedTestFiles],
-          setupFiles: ['@internal/test-utils/setup', path.resolve(__dirname, 'vitest.no-isolate-setup.ts')],
+          globalSetup: [path.resolve(__dirname, 'vitest.registry-guard-global.ts')],
+          setupFiles: [
+            '@internal/test-utils/setup',
+            path.resolve(__dirname, 'vitest.no-isolate-setup.ts'),
+            path.resolve(__dirname, 'vitest.registry-guard-setup.ts'),
+            path.resolve(__dirname, 'vitest.durable-storage-version-setup.ts'),
+          ],
           // Files share their worker's module cache, which removes most of the import cost.
           // Files that touch process-wide state run in the isolated project below; see the header of
           // vitest.isolated-tests.ts before adding a test that mocks modules or sets env at import.
@@ -59,11 +71,17 @@ export default defineConfig({
             '@internal/workflow-test-utils': path.resolve(__dirname, '../../workflows/_test-utils/src'),
           },
         },
+        plugins: [countDurableAgents],
         test: {
           name: 'unit:packages/core-isolated',
           environment: 'node',
           include: isolatedTestFiles,
-          setupFiles: ['@internal/test-utils/setup'],
+          globalSetup: [path.resolve(__dirname, 'vitest.registry-guard-global.ts')],
+          setupFiles: [
+            '@internal/test-utils/setup',
+            path.resolve(__dirname, 'vitest.registry-guard-setup.ts'),
+            path.resolve(__dirname, 'vitest.durable-storage-version-setup.ts'),
+          ],
           testTimeout: 120000,
           env: unitEnv,
         },
@@ -77,26 +95,13 @@ export default defineConfig({
             '@internal/workflow-test-utils': path.resolve(__dirname, '../../workflows/_test-utils/src'),
           },
         },
-        // Runs the durable agent tests with new DurableAgent runs stored in the workflow
-        // storage version it doesn't use by default. Rewritten at load rather than mocked,
-        // so tests that reset modules to stand in for a restarted process get it too.
-        plugins: [
-          {
-            name: 'durable-agent-other-storage-version',
-            enforce: 'pre',
-            transform(code, id) {
-              if (!id.endsWith('/src/agent/durable/durable-agent.ts')) return;
-              const getter = /(get storesRunsInJournal\(\): boolean \{\s*return )(true|false);/;
-              if (!getter.test(code)) throw new Error('DurableAgent.storesRunsInJournal is no longer a literal');
-              return code.replace(getter, (_, head, value) => `${head}${value === 'true' ? 'false' : 'true'};`);
-            },
-          },
-        ],
+        // The second durable agent pass; see vitest.durable-storage-version.ts.
+        plugins: [otherStorageVersion],
         test: {
           name: 'unit:packages/core:durable-other-storage-version',
           environment: 'node',
           include: ['src/agent/durable/**/*.test.ts'],
-          exclude: ['src/**/*.e2e.test.ts'],
+          exclude: ['src/**/*.e2e.test.ts', ...durableTestsWithoutDurableAgent],
           setupFiles: ['@internal/test-utils/setup'],
           testTimeout: 120000,
           env: {

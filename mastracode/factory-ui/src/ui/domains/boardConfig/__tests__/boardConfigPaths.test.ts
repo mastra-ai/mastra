@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { boardCardMovesPath, boardConfigPath, boardSkillsPath, parseBoardConfigPath } from '../boardConfigPaths';
+import {
+  boardConfigPath,
+  boardIntakePath,
+  INTAKE_ORDER_ANCHOR,
+  parseBoardConfigPath,
+  readCanvasFocus,
+} from '../boardConfigPaths';
+import type { CanvasFocus } from '../boardConfigPaths';
+
+const focusOf = (path: string) => readCanvasFocus(new URL(path, 'http://localhost').searchParams);
 
 describe('board config paths', () => {
   it('nests a board configuration under the board it configures', () => {
@@ -26,45 +35,38 @@ describe('board config paths', () => {
     }
   });
 
-  it("keeps the factory skills page beside a board's settings, apart from a phase named skills", () => {
-    expect(parseBoardConfigPath(boardSkillsPath('fp-1', 'review'))).toEqual({
-      factoryId: 'fp-1',
-      boardId: 'review',
-      skills: true,
-    });
-    expect(parseBoardConfigPath(boardSkillsPath('fp-1', 'release notes'))).toEqual({
+  it('reads back the rule, new rule or test the side panel has open', () => {
+    const focuses: CanvasFocus[] = [
+      { rule: 'r-1', test: undefined },
+      { rule: 'r-1', test: 'https://github.com/acme/app/issues/7' },
+      { newRule: { on: undefined, into: undefined, board: undefined } },
+      { newRule: { on: 'pull_request.opened', into: 'review', board: 'release notes' } },
+      { test: 'd-1' },
+    ];
+    for (const focus of focuses) {
+      expect(focusOf(boardConfigPath('fp-1', 'work', undefined, focus))).toEqual(focus);
+      expect(focusOf(boardIntakePath('fp-1', 'work', { focus }))).toEqual(focus);
+    }
+    expect(focusOf(boardConfigPath('fp-1', 'work'))).toBeUndefined();
+  });
+
+  it('keeps the routing page apart from the canvas, with its anchors', () => {
+    expect(boardIntakePath('fp-1', 'work', { anchor: INTAKE_ORDER_ANCHOR })).toBe(
+      '/factories/fp-1/work/intake#intake-order',
+    );
+    expect(parseBoardConfigPath(boardIntakePath('fp-1', 'release notes'))).toEqual({
       factoryId: 'fp-1',
       boardId: 'release notes',
-      skills: true,
-    });
-    expect(parseBoardConfigPath(boardConfigPath('fp-1', 'work', 'skills'))).toEqual({
-      factoryId: 'fp-1',
-      boardId: 'work',
-      phaseKey: 'skills',
+      intake: true,
     });
   });
 
-  it("keeps a board's card moves beside its settings, apart from a phase named moves", () => {
-    expect(boardCardMovesPath('fp-1', 'work')).toBe('/factories/fp-1/work/moves');
-    expect(parseBoardConfigPath(boardCardMovesPath('fp-1', 'release notes'))).toEqual({
-      factoryId: 'fp-1',
-      boardId: 'release notes',
-      moves: true,
-    });
-    expect(parseBoardConfigPath(boardConfigPath('fp-1', 'work', 'moves'))).toEqual({
-      factoryId: 'fp-1',
-      boardId: 'work',
-      phaseKey: 'moves',
-    });
-  });
-
-  it('ignores the board itself and other pages', () => {
+  it('ignores the board itself, the old rules pages and other pages', () => {
     expect(parseBoardConfigPath('/factories/fp-1/work')).toBeUndefined();
     expect(parseBoardConfigPath('/factories/fp-1/boards/release')).toBeUndefined();
     expect(parseBoardConfigPath('/factories/fp-1/settings/board')).toBeUndefined();
     expect(parseBoardConfigPath('/factories/fp-1/work/config/planning/extra')).toBeUndefined();
-    expect(parseBoardConfigPath('/factories/fp-1/work/skills/extra')).toBeUndefined();
-    expect(parseBoardConfigPath('/factories/fp-1/work/moves/extra')).toBeUndefined();
+    expect(parseBoardConfigPath('/factories/fp-1/work/rules')).toBeUndefined();
     expect(parseBoardConfigPath('/factories/fp-1/review/config')).toBeUndefined();
   });
 

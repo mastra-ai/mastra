@@ -14,6 +14,7 @@ export type {
   BoardPhase,
   BoardPhaseDefinition,
   BoardPhaseExitTool,
+  BoardPhaseOutcome,
   BoardPhaseRunner,
   BoardRegistry,
   BoardSourceClosed,
@@ -30,7 +31,6 @@ export { workSeedWithTriage } from './boards/work-seeds.js';
 export type { StoredBoardInput, StoredBoardScope, StoredPhaseInput } from './storage/domains/boards/base.js';
 export type { RuleCondition, RuleGroup, RuleOperator } from './rules/rule-group.js';
 export { MastraFactory } from './factory.js';
-export { waitForPendingFilesystemCapture } from './session/filesystem-capture.js';
 export type {
   FactoryTools,
   MastraArgs,
@@ -39,6 +39,19 @@ export type {
   MastraFactorySandboxOption,
   FactorySandboxStart,
 } from './factory.js';
+export { DispatcherBoardEngine, createDispatcherBoardEngine } from './board-engine/engine.js';
+export { WorkflowBoardEngine, createWorkflowBoardEngine } from './board-engine/workflow-engine.js';
+export { FACTORY_BOARD_WORKFLOW_ID, FACTORY_CARD_STEP_STATES, boardRunId } from './board-engine/board-workflow.js';
+export type { FactoryCardRunState } from './board-engine/board-workflow.js';
+export type {
+  FactoryBoardEngine,
+  FactoryBoardEngineContext,
+  FactoryBoardEngineFactory,
+  FactorySubmittedMove,
+} from './board-engine/engine.js';
+export type { FactoryTransitionRequest } from './rules/transition-service.js';
+export type { FactoryTransitionResult } from './rules/types.js';
+export type { FactoryMetricsOptions, MetricGroup } from './metrics/index.js';
 export { LocalFactorySandbox, type LocalFactorySandboxOptions } from './sandbox/local-factory-sandbox.js';
 // The option type for `MastraFactoryConfig.github.rules`, so callers can
 // annotate a custom handler without importing the deep integration subpath.

@@ -1,9 +1,9 @@
 import { isHumanActorId } from '@mastra/factory/storage/domains/audit/actors';
-import { BOARD_PERSON_FIELDS, factoryParticipantId, providerPeople } from '@mastra/factory/work-items/card-people';
+import { BOARD_PERSON_FIELDS, factoryParticipantId } from '@mastra/factory/work-items/card-people';
 import type { ProviderPerson } from '@mastra/factory/work-items/card-people';
 
-import type { BoardCandidate } from './boardCandidates';
 import type { BoardFilterFieldId, BoardFilterState } from './boardFilters';
+import { githubAvatarUrl } from './githubAvatar';
 import type { AuditActorProfile, AuditEventPage } from './services/audit';
 
 export interface BoardParticipant extends AuditActorProfile {
@@ -51,23 +51,21 @@ export function withPeopleUnfolded(filters: BoardFilterState, personId: PersonId
 
 function providerParticipant(person: ProviderPerson): BoardParticipant {
   if (person.source !== 'github') return person;
-  return { ...person, avatarUrl: `https://github.com/${encodeURIComponent(person.name)}.png?size=64` };
+  return { ...person, avatarUrl: githubAvatarUrl(person.name) };
 }
 
 /**
  * The people a person filter offers: the signed-in user, everyone who acted on the project's
- * cards, and everyone a card or an issue not filed yet names.
+ * cards, and everyone a card names.
  */
 export function boardParticipants({
   people,
-  candidates,
   activityPage,
   currentUser,
   personId,
 }: {
   /** The people the project's cards name, as the server lists them. */
   people: readonly ProviderPerson[];
-  candidates: readonly BoardCandidate[];
   activityPage: AuditEventPage | undefined;
   currentUser?: { userId?: string; name?: string; email?: string };
   personId: PersonIdentity;
@@ -101,11 +99,6 @@ export function boardParticipants({
   }
 
   for (const person of people) add(providerParticipant(person));
-  for (const candidate of candidates) {
-    for (const named of Object.values(providerPeople(candidate))) {
-      for (const person of named) add(providerParticipant(person));
-    }
-  }
 
   return [...participants.values()].sort((left, right) => left.name.localeCompare(right.name));
 }

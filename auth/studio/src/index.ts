@@ -172,6 +172,11 @@ export class MastraAuthStudio
   private sharedApiUrl: string;
   private organizationId: string | undefined;
   private useProductionCookies: boolean;
+
+  /** The organization this deployment is pinned to: only its members can sign in. */
+  get pinnedOrganizationId(): string | undefined {
+    return this.organizationId;
+  }
   private cookieDomain: string | undefined;
   /** Browser cookie name this provider issues. */
   private sessionCookieName: string;
@@ -876,6 +881,9 @@ export class MastraAuthStudio
     if (!sessionCookie) return null;
     const headers = new Headers(init.headers);
     headers.set('Cookie', `${COOKIE_NAME}=${sessionCookie}`);
+    // The shared API refuses a cookie-authenticated write that names no trusted origin, so pass on the browser's.
+    const origin = request.headers.get('origin');
+    if (origin && !headers.has('Origin')) headers.set('Origin', origin);
     const res = await fetch(`${this.sharedApiUrl}${path}`, {
       ...init,
       headers,

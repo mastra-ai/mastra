@@ -49,8 +49,11 @@ describe('Memory Schema Query Parsing', () => {
        *
        * Example URL: /memory/threads/abc/messages?orderBy={"field":"createdAt","direction":"ASC"}
        */
-      it('should parse orderBy when passed as a JSON string (from URL query params)', () => {
-        const jsonString = JSON.stringify({ field: 'createdAt', direction: 'ASC' });
+      it.each([
+        ['should parse orderBy when passed as a JSON string (from URL query params)', 'ASC'],
+        ['should handle createdAt field in orderBy as JSON string (messages only support createdAt)', 'DESC'],
+      ] as const)('%s', (_title, direction) => {
+        const jsonString = JSON.stringify({ field: 'createdAt', direction });
 
         const result = listMessagesQuerySchema.safeParse({
           threadId: 'test-thread',
@@ -61,23 +64,7 @@ describe('Memory Schema Query Parsing', () => {
 
         expect(result.success).toBe(true);
         if (result.success) {
-          expect(result.data.orderBy).toEqual({ field: 'createdAt', direction: 'ASC' });
-        }
-      });
-
-      it('should handle createdAt field in orderBy as JSON string (messages only support createdAt)', () => {
-        const jsonString = JSON.stringify({ field: 'createdAt', direction: 'DESC' });
-
-        const result = listMessagesQuerySchema.safeParse({
-          threadId: 'test-thread',
-          page: 0,
-          perPage: 100,
-          orderBy: jsonString,
-        });
-
-        expect(result.success).toBe(true);
-        if (result.success) {
-          expect(result.data.orderBy).toEqual({ field: 'createdAt', direction: 'DESC' });
+          expect(result.data.orderBy).toEqual({ field: 'createdAt', direction });
         }
       });
     });
@@ -180,37 +167,17 @@ describe('Memory Schema Query Parsing', () => {
         expect(listMessagesQuerySchema.safeParse({ filter: filterObj }).success).toBe(false);
       });
 
-      it('should reject malformed JSON in include parameter', () => {
+      it.each([
+        ['should reject malformed JSON in include parameter', '{invalid}'],
+        ['should reject incomplete JSON in include parameter', '[incomplete'],
+        ['should reject empty string in include parameter', ''],
+      ] as const)('%s', (_title, include) => {
         const result = listMessagesQuerySchema.safeParse({
           threadId: 'test-thread',
           resourceId: 'test-resource',
           page: 0,
           perPage: 10,
-          include: '{invalid}',
-        });
-
-        expect(result.success).toBe(false);
-      });
-
-      it('should reject incomplete JSON in include parameter', () => {
-        const result = listMessagesQuerySchema.safeParse({
-          threadId: 'test-thread',
-          resourceId: 'test-resource',
-          page: 0,
-          perPage: 10,
-          include: '[incomplete',
-        });
-
-        expect(result.success).toBe(false);
-      });
-
-      it('should reject empty string in include parameter', () => {
-        const result = listMessagesQuerySchema.safeParse({
-          threadId: 'test-thread',
-          resourceId: 'test-resource',
-          page: 0,
-          perPage: 10,
-          include: '',
+          include,
         });
 
         expect(result.success).toBe(false);
@@ -310,8 +277,11 @@ describe('Memory Schema Query Parsing', () => {
       /**
        * Regression test: Same as listMessagesQuerySchema - orderBy JSON strings must be parsed.
        */
-      it('should parse orderBy when passed as a JSON string (from URL query params)', () => {
-        const jsonString = JSON.stringify({ field: 'updatedAt', direction: 'DESC' });
+      it.each([
+        ['should parse orderBy when passed as a JSON string (from URL query params)', 'updatedAt', 'DESC'],
+        ['should handle createdAt field in orderBy as JSON string', 'createdAt', 'ASC'],
+      ] as const)('%s', (_title, field, direction) => {
+        const jsonString = JSON.stringify({ field, direction });
 
         const result = listThreadsQuerySchema.safeParse({
           resourceId: 'test-resource',
@@ -322,23 +292,7 @@ describe('Memory Schema Query Parsing', () => {
 
         expect(result.success).toBe(true);
         if (result.success) {
-          expect(result.data.orderBy).toEqual({ field: 'updatedAt', direction: 'DESC' });
-        }
-      });
-
-      it('should handle createdAt field in orderBy as JSON string', () => {
-        const jsonString = JSON.stringify({ field: 'createdAt', direction: 'ASC' });
-
-        const result = listThreadsQuerySchema.safeParse({
-          resourceId: 'test-resource',
-          page: 0,
-          perPage: 100,
-          orderBy: jsonString,
-        });
-
-        expect(result.success).toBe(true);
-        if (result.success) {
-          expect(result.data.orderBy).toEqual({ field: 'createdAt', direction: 'ASC' });
+          expect(result.data.orderBy).toEqual({ field, direction });
         }
       });
     });
@@ -416,31 +370,15 @@ describe('Memory Schema Query Parsing', () => {
     });
 
     describe('metadata parameter parsing (negative cases)', () => {
-      it('should reject malformed JSON in metadata parameter', () => {
+      it.each([
+        ['should reject malformed JSON in metadata parameter', '{invalid}'],
+        ['should reject incomplete JSON in metadata parameter', '{"key":incomplete'],
+        ['should reject empty string in metadata parameter', ''],
+      ] as const)('%s', (_title, metadata) => {
         const result = listThreadsQuerySchema.safeParse({
           page: 0,
           perPage: 100,
-          metadata: '{invalid}',
-        });
-
-        expect(result.success).toBe(false);
-      });
-
-      it('should reject incomplete JSON in metadata parameter', () => {
-        const result = listThreadsQuerySchema.safeParse({
-          page: 0,
-          perPage: 100,
-          metadata: '{"key":incomplete',
-        });
-
-        expect(result.success).toBe(false);
-      });
-
-      it('should reject empty string in metadata parameter', () => {
-        const result = listThreadsQuerySchema.safeParse({
-          page: 0,
-          perPage: 100,
-          metadata: '',
+          metadata,
         });
 
         expect(result.success).toBe(false);

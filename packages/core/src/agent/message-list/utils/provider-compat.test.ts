@@ -1,8 +1,16 @@
 import type { ModelMessage } from '@internal/ai-sdk-v5';
 import { describe, expect, it, vi } from 'vitest';
 import type { IMastraLogger } from '../../../logger';
+import { StepContentExtractor } from '../conversion/step-content';
 import type { MastraDBMessage } from '../state/types';
-import { dropCrossProviderExecutedParts, pairOrphanedToolCalls, sanitizeOrphanedToolPairs } from './provider-compat';
+import {
+  dropCrossProviderExecutedParts,
+  ensureAnthropicCompatibleMessages,
+  findToolCallArgs,
+  pairOrphanedToolCalls,
+  pruneOpenAICompactionHistory,
+  sanitizeOrphanedToolPairs,
+} from './provider-compat';
 
 const assistantWithToolCalls = (...callIds: string[]): ModelMessage => ({
   role: 'assistant',
@@ -22,6 +30,90 @@ const toolMessageWithResults = (...callIds: string[]): ModelMessage => ({
     toolName: 'fetch',
     output: { type: 'text', value: `result-${toolCallId}` },
   })),
+});
+
+describe.each([
+  [
+    'Anthropic history',
+    (message: ModelMessage, history: MastraDBMessage[]) =>
+      ensureAnthropicCompatibleMessages([message], history)[0]!.content,
+  ],
+  [
+    'step content',
+    (message: ModelMessage, history: MastraDBMessage[]) =>
+      StepContentExtractor.convertToStepContent(message, history, () => undefined),
+  ],
+] as const)('%s tool inputs', (_name, convert) => {
+  const invocation = (toolCallId: string, args: Record<string, unknown> | undefined) => ({
+    type: 'tool-invocation' as const,
+    toolInvocation: { state: 'call' as const, toolName: 'fetch', toolCallId, args },
+  });
+  const row = (id: string, parts: MastraDBMessage['content']['parts']): MastraDBMessage => ({
+    id,
+    role: 'assistant',
+    createdAt: new Date(0),
+    content: { format: 2, parts },
+  });
+
+  it('recovers a large tool batch with one history scan', () => {
+    let reads = 0;
+    const ids = Array.from({ length: 100 }, (_, i) => `call-${i}`);
+    const history = ids.map((id, i) => {
+      const parts = [invocation(id, { index: i })];
+      const message = row(id, parts);
+      Object.defineProperty(message.content, 'parts', {
+        get: () => {
+          reads++;
+          return parts;
+        },
+      });
+      return message;
+    });
+    expect(convert(toolMessageWithResults(...ids), history)).toMatchObject(
+      ids.map((_, i) => ({ type: 'tool-result', input: { index: i } })),
+    );
+    expect(reads).toBeLessThanOrEqual(history.length * 3);
+  });
+
+  it('preserves newest-message, first-match and legacy fallback selection without stale reuse', () => {
+    const older = row('older', [
+      invocation('latest', { old: true }),
+      invocation('duplicate', { old: true }),
+      invocation('legacy', { old: true }),
+      invocation('missing-args', { old: true }),
+    ]);
+    const newer = row('newer', [
+      invocation('latest', { latest: true }),
+      invocation('duplicate', undefined),
+      invocation('duplicate', { wrongSecondMatch: true }),
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolName: 'fetch',
+          toolCallId: 'missing-args',
+          args: undefined,
+          result: 'done',
+        },
+      },
+    ]);
+    newer.content.toolInvocations = [
+      { state: 'call', toolName: 'fetch', toolCallId: 'legacy', args: { legacy: true } },
+      { state: 'call', toolName: 'fetch', toolCallId: 'duplicate', args: {} },
+      { state: 'call', toolName: 'fetch', toolCallId: 'duplicate', args: { wrongSecondLegacy: true } },
+    ];
+    const decoy = { ...row('decoy', [invocation('latest', { wrongRole: true })]), role: 'user' as const };
+    const history = [older, newer, decoy];
+    const ids = ['latest', 'duplicate', 'legacy', 'missing-args', 'absent'];
+    const prompt = toolMessageWithResults(...ids);
+    expect(convert(prompt, history)).toMatchObject(ids.map(id => ({ input: findToolCallArgs(history, id) })));
+    const first = newer.content.parts[0]!;
+    if (first.type !== 'tool-invocation') throw new Error('Invalid test fixture');
+    first.toolInvocation.args = { edited: true };
+    expect(convert(prompt, history)).toMatchObject(ids.map(id => ({ input: findToolCallArgs(history, id) })));
+    first.toolInvocation.args.edited = false;
+    expect(convert(prompt, history)).toMatchObject(ids.map(id => ({ input: findToolCallArgs(history, id) })));
+  });
 });
 
 describe('sanitizeOrphanedToolPairs', () => {
@@ -332,6 +424,23 @@ describe('dropCrossProviderExecutedParts', () => {
     } as ModelMessage,
   ];
 
+  const promptWithCustomParts = (): ModelMessage[] =>
+    [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'summary' },
+          {
+            type: 'custom',
+            kind: 'openai.compaction',
+            providerOptions: { openai: { encryptedContent: 'opaque-state' } },
+          },
+          { type: 'custom', kind: 'other-provider.state', providerOptions: { other: { state: 'keep-me' } } },
+        ],
+      },
+      // AI SDK v5's ModelMessage type predates provider custom parts.
+    ] as unknown as ModelMessage[];
+
   it('drops a provider-executed part produced by a different provider', () => {
     const messages = promptWithSearch('ws_1');
     const result = dropCrossProviderExecutedParts(
@@ -374,6 +483,28 @@ describe('dropCrossProviderExecutedParts', () => {
     );
 
     expect(result).toEqual(messages);
+  });
+
+  it('drops OpenAI compaction state when the target is not an OpenAI provider', () => {
+    const result = dropCrossProviderExecutedParts(promptWithCustomParts(), [], ANTHROPIC);
+    const content = result[0]?.content;
+
+    expect(Array.isArray(content) ? content : []).toEqual([
+      { type: 'text', text: 'summary' },
+      { type: 'custom', kind: 'other-provider.state', providerOptions: { other: { state: 'keep-me' } } },
+    ]);
+  });
+
+  it.each(['openai', 'openai.responses'])('keeps OpenAI compaction state for the %s provider', targetProvider => {
+    const messages = promptWithCustomParts();
+
+    expect(dropCrossProviderExecutedParts(messages, [], targetProvider)).toBe(messages);
+  });
+
+  it('keeps custom provider state when the target provider is unknown', () => {
+    const messages = promptWithCustomParts();
+
+    expect(dropCrossProviderExecutedParts(messages, [], undefined)).toBe(messages);
   });
 
   it('returns the input array by identity when the target provider is unknown', () => {
@@ -498,5 +629,70 @@ describe('dropCrossProviderExecutedParts', () => {
     );
 
     expect(messages).toEqual(snapshot);
+  });
+});
+
+describe('pruneOpenAICompactionHistory', () => {
+  const compactionPart = (id: string) => ({
+    type: 'custom',
+    kind: 'openai.compaction',
+    providerOptions: { openai: { itemId: id, encryptedContent: `encrypted-${id}` } },
+  });
+
+  it('sends only the latest checkpoint and subsequent messages to OpenAI Responses', () => {
+    const messages = [
+      { role: 'system', content: 'instructions' },
+      { role: 'user', content: 'old question' },
+      {
+        role: 'assistant',
+        content: [compactionPart('cmp_old'), { type: 'text', text: 'old answer' }],
+      },
+      { role: 'user', content: 'newer question' },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'discarded pre-checkpoint output' },
+          compactionPart('cmp_latest'),
+          { type: 'text', text: 'kept post-checkpoint output' },
+        ],
+      },
+      { role: 'system', content: 'later instructions' },
+      { role: 'user', content: 'continue' },
+    ] as unknown as ModelMessage[];
+    const snapshot = structuredClone(messages);
+
+    const result = pruneOpenAICompactionHistory(messages, 'openai.responses');
+
+    expect(result).toEqual([
+      { role: 'system', content: 'instructions' },
+      {
+        role: 'assistant',
+        content: [compactionPart('cmp_latest'), { type: 'text', text: 'kept post-checkpoint output' }],
+      },
+      { role: 'system', content: 'later instructions' },
+      { role: 'user', content: 'continue' },
+    ]);
+    expect(messages).toEqual(snapshot);
+  });
+
+  it.each([undefined, 'anthropic.messages', 'openai.chat'])(
+    'leaves history unchanged for the %s target provider',
+    targetProvider => {
+      const messages = [
+        { role: 'user', content: 'question' },
+        { role: 'assistant', content: [compactionPart('cmp_1')] },
+      ] as unknown as ModelMessage[];
+
+      expect(pruneOpenAICompactionHistory(messages, targetProvider)).toBe(messages);
+    },
+  );
+
+  it('leaves OpenAI history unchanged when it has no compaction checkpoint', () => {
+    const messages: ModelMessage[] = [
+      { role: 'user', content: 'question' },
+      { role: 'assistant', content: 'answer' },
+    ];
+
+    expect(pruneOpenAICompactionHistory(messages, 'openai.responses')).toBe(messages);
   });
 });

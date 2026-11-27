@@ -65,9 +65,6 @@ async function seedProject(seed: FactoryStorageTestSeed) {
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    createdByUserId: 'user-1',
-    sandboxProvider: 'platform',
-    sandboxWorkdir: '/workspace/acme/api',
   });
   return project;
 }
@@ -214,6 +211,22 @@ describe('factory-environment-build workflow', () => {
       reason: 'boom',
     });
     expect((await seed.projects.getById({ id: project.id }))?.activeTemplateId).toBeNull();
+  });
+
+  it('starts no run for a session that starts inside the debounce window', async () => {
+    const project = await seedProject(seed);
+    const sandbox = new BuildingSandbox();
+    let mastra: Mastra | undefined;
+    const runner = new EnvironmentBuildRunner(depsFor(seed, sandbox), { getMastra: () => mastra });
+    mastra = bootMastra(runner);
+    const start = vi.spyOn(runner, 'start');
+
+    runner.onSandboxCreated({ id: project.id, lastPushBuildAt: new Date(), buildPushDebounceMinutes: 60 });
+    expect(start).not.toHaveBeenCalled();
+
+    runner.onSandboxCreated({ id: project.id, lastPushBuildAt: null, buildPushDebounceMinutes: 60 });
+    expect(start).toHaveBeenCalledWith(project.id, 'session');
+    await start.mock.results[0]!.value;
   });
 
   it('redacts credentials in a failed build before returning or logging it', async () => {

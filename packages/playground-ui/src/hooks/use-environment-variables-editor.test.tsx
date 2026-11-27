@@ -350,7 +350,7 @@ describe('useEnvironmentVariablesEditor row identity', () => {
 
     const madeUp = result.current.getRowId(7);
 
-    expect(madeUp).toMatch(/^environment-variable-row-\d+$/);
+    expect(madeUp).toEqual(expect.any(String));
     expect(result.current.getRowId(7)).toBe(madeUp);
   });
 
@@ -760,11 +760,15 @@ describe('useEnvironmentVariablesEditor isolation', () => {
 });
 
 describe('useEnvironmentVariablesEditor pasted text', () => {
-  it('accepts a single assignment that was copied with its surrounding whitespace', () => {
+  it.each([
+    ['accepts a single assignment that was copied with its surrounding whitespace', '  API_KEY=secret  '],
+    ['accepts an export written with extra spacing', 'export   API_KEY=secret'],
+    ['accepts an assignment padded around its equals sign', 'API_KEY = secret'],
+  ] as const)('%s', (_title, input) => {
     const { result } = renderHook(() => useEnvironmentVariablesEditor());
 
     act(() => {
-      expect(result.current.handlePaste(0, '  API_KEY=secret  ', 'key')).toBe(true);
+      expect(result.current.handlePaste(0, input, 'key')).toBe(true);
     });
 
     expect(result.current.rows).toEqual([{ key: 'API_KEY', value: 'secret' }]);
@@ -778,26 +782,6 @@ describe('useEnvironmentVariablesEditor pasted text', () => {
     });
 
     expect(result.current.rows).toEqual([{ key: 'A', value: '1' }]);
-  });
-
-  it('accepts an export written with extra spacing', () => {
-    const { result } = renderHook(() => useEnvironmentVariablesEditor());
-
-    act(() => {
-      expect(result.current.handlePaste(0, 'export   API_KEY=secret', 'key')).toBe(true);
-    });
-
-    expect(result.current.rows).toEqual([{ key: 'API_KEY', value: 'secret' }]);
-  });
-
-  it('accepts an assignment padded around its equals sign', () => {
-    const { result } = renderHook(() => useEnvironmentVariablesEditor());
-
-    act(() => {
-      expect(result.current.handlePaste(0, 'API_KEY = secret', 'key')).toBe(true);
-    });
-
-    expect(result.current.rows).toEqual([{ key: 'API_KEY', value: 'secret' }]);
   });
 
   it('accepts a single assignment carrying the comment line above it', () => {

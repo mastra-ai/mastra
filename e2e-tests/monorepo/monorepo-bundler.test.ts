@@ -1,7 +1,7 @@
 import { it, describe, expect, beforeAll, inject } from 'vitest';
 import { join } from 'path';
 import { setupMonorepo } from './prepare';
-import { chmod, mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'fs/promises';
+import { chmod, mkdtemp, mkdir, readdir, readFile, realpath, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
@@ -328,6 +328,38 @@ assert.equal(subpathOnlyValue, 'c');`,
     );
 
     it(
+      'should pack workspace packages when the project path contains shell metacharacters',
+      async () => {
+        const parentDir = await mkdtemp(join(tmpdir(), `mastra-monorepo-shell-path-${pkgManager}-`));
+        const fixturePath = join(parentDir, 'app dir;touch pwned;$(touch pwned2)');
+        try {
+          await setupMonorepo(fixturePath, pkgManager);
+
+          const appDir = join(fixturePath, 'apps', 'custom');
+          const outputDir = join(appDir, '.mastra', 'output');
+          // Run the CLI entry with node: the pinned pnpm writes .bin shims that embed
+          // the project path unquoted, which would run the injected command itself.
+          const buildResult = await execaNode(join(appDir, 'node_modules', 'mastra', 'dist', 'index.js'), ['build'], {
+            cwd: appDir,
+            reject: false,
+            env: process.env,
+          });
+          expect(buildResult.exitCode, `${buildResult.stdout}\n${buildResult.stderr}`).toBe(0);
+          expect(await readdir(join(outputDir, 'workspace-module'))).toContain('inner-subpath-only-1.0.0.tgz');
+
+          for (const dir of [parentDir, fixturePath, appDir, outputDir]) {
+            const entries = await readdir(dir);
+            expect(entries).not.toContain('pwned');
+            expect(entries).not.toContain('pwned2');
+          }
+        } finally {
+          await rm(parentDir, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+
+    it(
       'should not analyze dependencies listed in bundler externals',
       async () => {
         const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-analysis-external-${pkgManager}-`));
@@ -506,6 +538,51 @@ assert.equal(subpathOnlyValue, 'c');`,
 
           expect(buildResult.exitCode, output).toBe(1);
           expect(output).toContain('Missing "./missing" specifier in "@inner/subpath-only" package');
+        } finally {
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+  });
+
+  describe('lazily loaded externals', { concurrent: false }, () => {
+    it(
+      'should declare @libsql/client when @mastra/libsql is bundled (#28201)',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-libsql-client-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          const appDir = join(isolatedFixturePath, 'apps', 'custom');
+          // `externals: false` bundles @mastra/libsql, which loads @libsql/client through createRequire.
+          await writeFile(
+            join(appDir, 'src', 'mastra', 'index.ts'),
+            `import { Mastra } from '@mastra/core/mastra';
+import { LibSQLStore } from '@mastra/libsql';
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({ id: 'libsql-e2e', url: ':memory:' }),
+  bundler: { externals: false, pnpmWorkspaceSettings: { blockExoticSubdeps: false } },
+});
+`,
+          );
+
+          const buildResult = await execa(pkgManager, ['build'], { cwd: appDir, reject: false, env: process.env });
+          expect(buildResult.exitCode, `${buildResult.stdout}\n${buildResult.stderr}`).toBe(0);
+
+          const outputDir = join(appDir, '.mastra', 'output');
+          const outputPackageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
+          expect(outputPackageJson.dependencies).not.toHaveProperty('@mastra/libsql');
+          expect(outputPackageJson.dependencies).toHaveProperty('@libsql/client');
+
+          const requireResult = await execa(
+            'node',
+            ['-p', "require('@libsql/client'); require.resolve('@libsql/client')"],
+            { cwd: outputDir, reject: false },
+          );
+          expect(requireResult.exitCode, `${requireResult.stdout}\n${requireResult.stderr}`).toBe(0);
+          expect(requireResult.stdout.startsWith(join(await realpath(outputDir), 'node_modules'))).toBe(true);
         } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }

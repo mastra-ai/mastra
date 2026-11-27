@@ -1,6 +1,6 @@
 import type { KnowledgeReadScope, KnowledgeStorage } from '@mastra/core/storage';
 import { knowledgePositionBetween, MAX_KNOWLEDGE_MOVE_PAGES, MAX_KNOWLEDGE_PAGE_DEPTH } from '@mastra/core/storage';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const host = { author: 'host' };
 const alex = { author: 'agent:alex', sourceThreadId: 't1' };
@@ -638,6 +638,17 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
     });
 
     describe('pages', () => {
+      it('rejects a list cursor it cannot decode with KnowledgeInvalidCursorError', async () => {
+        const acme = await scope('org:acme', ORG);
+        const invalid = { name: 'KnowledgeInvalidCursorError' };
+        // `0x10` is a number to `Number()` and 400 nines is `Infinity`; no store issues either.
+        for (const cursor of ['not-a-cursor', '0x10', '9'.repeat(400)]) {
+          await expect(store.listChildPages({ parentId: acme.id, read: 'all', cursor })).rejects.toMatchObject(invalid);
+          await expect(store.listPages({ read: 'all', cursor })).rejects.toMatchObject(invalid);
+          await expect(store.listPageActivity({ read: 'all', cursor })).rejects.toMatchObject(invalid);
+        }
+      });
+
       it('creates pages in their home scope, ordered by position, with name order for listPages', async () => {
         const acme = await scope('org:acme', ORG);
         const b = await page(acme.id, 'beta');
@@ -1170,6 +1181,9 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         const label = (hit: Awaited<ReturnType<typeof store.searchPages>>[number]) =>
           hit.type === 'page' ? hit.page.name : hit.note.text;
         const r = read(['org:acme']);
+        // Compatibility (r397): a body-only hit carries the page body, which knowledge_search snippets are cut from.
+        const giraffeHit = (await store.searchPages({ query: 'grazes', read: r })).find(hit => hit.type === 'page');
+        expect(giraffeHit?.page.body).toBe('A giraffe grazes.');
         // Words matched first, then points, then newest. Safari matches 2 words (zebra, giraffe), the others 1:
         // Zebra care 3 points, Stripes 2, Savanna 1. Two body words beat one name word.
         expect((await store.searchPages({ query: 'zebra giraffe lion', read: r })).map(label)).toEqual([
@@ -1260,6 +1274,277 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         // "off" also matches 'Discount 500 off', but 50% (literal) and off both match only the first.
         expect((await ids('off 50%'))[0]).toBe(percent.id);
         expect(await ids('off 50%')).toHaveLength(2);
+      });
+
+      describe('activity date range (stores reporting supportsActivityDateRange)', () => {
+        const dated = () => store.getCapabilities().supportsActivityDateRange === true;
+        /** Writes each event at a chosen wall-clock time; ULIDs stay monotonic, so a step back puts id order against createdAt order. */
+        async function at<T>(ms: number, write: () => Promise<T>): Promise<T> {
+          vi.useFakeTimers({ toFake: ['Date'] });
+          vi.setSystemTime(ms);
+          try {
+            return await write();
+          } finally {
+            vi.useRealTimers();
+          }
+        }
+        // Every test runs at its own, later base time: the reference store's clock never steps back, and
+        // scopes are created just before the base so only the test's own events fall in range.
+        let base = Date.UTC(2030, 0, 1);
+        let T0 = base;
+        beforeEach(() => {
+          base += 10_000_000;
+          T0 = base;
+        });
+        const scopeAt = (address: string) =>
+          at(T0 - 60_000, () => scope(address, address.startsWith('resource:') ? RESOURCE : ORG));
+        const keyed = (events: Array<{ createdAt: Date; id: string }>) =>
+          events.map(event => `${event.createdAt.toISOString()}|${event.id}`);
+        const datedOrder = <E extends { createdAt: Date; id: string }>(events: E[]) =>
+          [...events].sort(
+            (a, b) => b.createdAt.getTime() - a.createdAt.getTime() || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0),
+          );
+
+        it('is inclusive at since and exclusive at until, either bound alone', async () => {
+          if (!dated()) return;
+          const acme = await scopeAt('org:acme');
+          const r = read(['org:acme']);
+          // The reference store may stamp the activity row a millisecond after the page, so keep a gap.
+          const before = await at(T0 - 1000, () => page(acme.id, 'before'));
+          const atSince = await at(T0, () => page(acme.id, 'at since'));
+          const inside = await at(T0 + 1000, () => page(acme.id, 'inside'));
+          const atUntil = await at(T0 + 2000, () => page(acme.id, 'at until'));
+          const pages = async (input: { since?: Date; until?: Date }) =>
+            (await store.listPageActivity({ read: r, ...input })).events.map(event => event.pageId);
+          expect(await pages({ since: new Date(T0), until: new Date(T0 + 2000) })).toEqual([inside.id, atSince.id]);
+          expect(await pages({ since: new Date(T0) })).toEqual([atUntil.id, inside.id, atSince.id]);
+          // The scope itself was created before the base.
+          expect(await pages({ until: new Date(T0) })).toEqual([before.id, acme.id]);
+        });
+
+        it('orders dated reads by createdAt then id, and keyset pages through ties and out-of-order ids', async () => {
+          if (!dated()) return;
+          const acme = await scopeAt('org:acme');
+          const r = read(['org:acme']);
+          await at(T0 + 5000, () => page(acme.id, 'late'));
+          // Same millisecond: tied createdAt, increasing ids.
+          await at(T0 + 3000, async () => {
+            await page(acme.id, 'tie a');
+            await page(acme.id, 'tie b');
+            await page(acme.id, 'tie c');
+          });
+          // A clock stepped back: the next id sorts after every earlier id but createdAt is older.
+          await at(T0 + 1000, () => page(acme.id, 'stepped back'));
+          await at(T0 + 4000, () => page(acme.id, 'middle'));
+          const since = new Date(T0);
+          const whole = (await store.listPageActivity({ read: r, since, limit: 100 })).events;
+          expect(whole).toHaveLength(6);
+          const stepped = whole.find(event => event.createdAt.getTime() === T0 + 1000);
+          if (stepped) {
+            // The store kept the stepped-back time: its id sorts after every tied id but its createdAt is
+            // older, so id order and dated order really disagree here.
+            const ties = whole.filter(event => event.createdAt.getTime() === T0 + 3000);
+            expect(ties).toHaveLength(3);
+            expect(ties.every(tie => tie.id < stepped.id)).toBe(true);
+          }
+          expect(keyed(whole)).toEqual(keyed(datedOrder(whole)));
+
+          for (const limit of [1, 2, 4]) {
+            const walked: typeof whole = [];
+            let position: { createdAt: Date; id: string } | undefined;
+            for (let guard = 0; guard < 20; guard++) {
+              const { events } = await store.listPageActivity({ read: r, since, limit, before: position });
+              walked.push(...events);
+              if (events.length < limit) break;
+              const last = events[events.length - 1]!;
+              position = { createdAt: last.createdAt, id: last.id };
+            }
+            expect(keyed(walked)).toEqual(keyed(whole));
+          }
+
+          // The store's own cursor works in dated mode too.
+          const firstPage = await store.listPageActivity({ read: r, since, limit: 4 });
+          const secondPage = await store.listPageActivity({ read: r, since, limit: 4, cursor: firstPage.nextCursor });
+          expect(keyed([...firstPage.events, ...secondPage.events])).toEqual(keyed(whole));
+        });
+
+        it('never spends the limit on hidden or out-of-range events', async () => {
+          if (!dated()) return;
+          const acme = await scopeAt('org:acme');
+          const secret = await scopeAt('org:secret');
+          const user = await scopeAt('resource:u1');
+          const visible = await at(T0 + 1000, () => page(acme.id, 'visible'));
+          await at(T0 + 2000, () => page(secret.id, 'hidden page'));
+          await at(T0 + 3000, () =>
+            store.addNote({
+              pageId: visible.id,
+              text: 'private',
+              stampScopeIds: [user.id],
+              mentions: [],
+              provenance: alex,
+            }),
+          );
+          await at(T0 + 4000, () => page(acme.id, 'after until'));
+          const { events } = await store.listPageActivity({
+            read: read(['org:acme']),
+            since: new Date(T0),
+            until: new Date(T0 + 4000),
+            limit: 1,
+          });
+          expect(events.map(event => [event.action, event.pageId])).toEqual([['page-created', visible.id]]);
+        });
+
+        it('refuses a keyset position together with a cursor', async () => {
+          if (!dated()) return;
+          await expect(
+            store.listPageActivity({
+              read: 'all',
+              since: new Date(T0),
+              cursor: 'x',
+              before: { createdAt: new Date(T0), id: 'x' },
+            }),
+          ).rejects.toThrow();
+        });
+
+        describe('oldest first (stores reporting supportsActivityAscending)', () => {
+          const ascending = () => store.getCapabilities().supportsActivityAscending === true;
+          const names = async (events: Array<{ pageId: string }>) =>
+            Promise.all(events.map(async event => (await store.getPage({ id: event.pageId, read: 'all' }))?.name));
+
+          it('refuses order asc and after on a store that does not report it, instead of answering newest first', async () => {
+            if (ascending()) return;
+            await expect(store.listPageActivity({ read: 'all', order: 'asc' })).rejects.toThrow(RangeError);
+            await expect(store.listPageActivity({ read: 'all', order: 'asc', after: '1' })).rejects.toThrow(RangeError);
+          });
+
+          it('lists one-after-another writes in the order they were made, not createdAt order, and pages with after positions without skipping or repeating', async () => {
+            if (!ascending()) return;
+            const acme = await scopeAt('org:acme');
+            const r = read(['org:acme']);
+            // Written one after another, so every store's feed order is this order, whatever the clocks said.
+            await at(T0 + 5000, () => page(acme.id, 'late clock'));
+            await at(T0 + 3000, async () => {
+              await page(acme.id, 'tie a');
+              await page(acme.id, 'tie b');
+              await page(acme.id, 'tie c');
+            });
+            await at(T0 + 1000, () => page(acme.id, 'stepped back'));
+            await at(T0 + 4000, () => page(acme.id, 'middle'));
+            const since = new Date(T0);
+            const whole = (await store.listPageActivity({ read: r, since, order: 'asc', limit: 100 })).events;
+            expect(await names(whole)).toEqual(['late clock', 'tie a', 'tie b', 'tie c', 'stepped back', 'middle']);
+            expect(whole.every(event => typeof event.position === 'string' && event.position.length > 0)).toBe(true);
+            expect(new Set(whole.map(event => event.position)).size).toBe(whole.length);
+
+            for (const limit of [1, 2, 4]) {
+              const walked: typeof whole = [];
+              let after: string | undefined;
+              for (let guard = 0; guard < 20; guard++) {
+                const { events } = await store.listPageActivity({ read: r, since, order: 'asc', limit, after });
+                walked.push(...events);
+                if (events.length < limit) break;
+                after = events[events.length - 1]!.position;
+              }
+              expect(walked.map(event => event.id)).toEqual(whole.map(event => event.id));
+            }
+
+            // after is exclusive: continuing from the last event returns nothing new.
+            const tail = await store.listPageActivity({ read: r, since, order: 'asc', after: whole[5]!.position });
+            expect(tail.events).toEqual([]);
+
+            // The store's own cursor pages oldest first too.
+            const first = await store.listPageActivity({ read: r, since, order: 'asc', limit: 4 });
+            const second = await store.listPageActivity({
+              read: r,
+              since,
+              order: 'asc',
+              limit: 4,
+              cursor: first.nextCursor,
+            });
+            expect([...first.events, ...second.events].map(event => event.id)).toEqual(whole.map(event => event.id));
+          });
+
+          it('picks up an event written after the reader stopped, from where it stopped', async () => {
+            if (!ascending()) return;
+            const acme = await scopeAt('org:acme');
+            const r = read(['org:acme']);
+            await at(T0 + 1000, () => page(acme.id, 'one'));
+            await at(T0 + 2000, () => page(acme.id, 'two'));
+            const seen = (await store.listPageActivity({ read: r, since: new Date(T0), order: 'asc' })).events;
+            // A clock behind the events already read: still after them in the feed.
+            const later = await at(T0 + 500, () => page(acme.id, 'three'));
+            const next = await store.listPageActivity({
+              read: r,
+              order: 'asc',
+              after: seen[seen.length - 1]!.position,
+            });
+            expect(next.events.map(event => event.pageId)).toEqual([later.id]);
+          });
+
+          it("reads only the page's current scope with a scope filter, and keeps hiding unreadable and moved-out pages", async () => {
+            if (!ascending()) return;
+            const acme = await scopeAt('org:acme');
+            const globex = await scopeAt('org:globex');
+            const secret = await scopeAt('org:secret');
+            const r = read(['org:acme', 'org:globex']);
+            const stays = await at(T0 + 1000, () => page(acme.id, 'stays'));
+            await at(T0 + 2000, () => page(globex.id, 'other scope'));
+            await at(T0 + 3000, () => page(secret.id, 'hidden'));
+            const leaves = await at(T0 + 4000, () => page(acme.id, 'leaves'));
+            await at(T0 + 5000, () =>
+              store.movePage({ id: leaves.id, expectedVersion: 1, parentId: secret.id, provenance: host }),
+            );
+            const scoped = await store.listPageActivity({
+              read: r,
+              scopeId: acme.id,
+              since: new Date(T0),
+              order: 'asc',
+            });
+            expect(scoped.events.map(event => [event.action, event.pageId])).toEqual([['page-created', stays.id]]);
+            const all = await store.listPageActivity({ read: r, since: new Date(T0), order: 'asc', limit: 1 });
+            expect(all.events.map(event => event.pageId)).toEqual([stays.id]);
+          });
+
+          it('refuses after without order asc, after with a cursor, before with order asc, and a position it did not issue', async () => {
+            if (!ascending()) return;
+            const acme = await scopeAt('org:acme');
+            await at(T0 + 1000, () => page(acme.id, 'one'));
+            const [event] = (await store.listPageActivity({ read: 'all', since: new Date(T0), order: 'asc' })).events;
+            const position = event!.position!;
+            await expect(store.listPageActivity({ read: 'all', after: position })).rejects.toThrow(RangeError);
+            await expect(
+              store.listPageActivity({ read: 'all', order: 'asc', after: position, cursor: position }),
+            ).rejects.toThrow(RangeError);
+            await expect(
+              store.listPageActivity({ read: 'all', order: 'asc', before: { createdAt: new Date(T0), id: 'x' } }),
+            ).rejects.toThrow(RangeError);
+            for (const bad of ['', 'not a position', '-1', '1.5', '99999999999999999999999999']) {
+              await expect(store.listPageActivity({ read: 'all', order: 'asc', after: bad })).rejects.toThrow(
+                RangeError,
+              );
+            }
+            // Well-formed but past anything this feed has handed out: every number in it a billion higher.
+            const ahead = position
+              .split(':')
+              .map(part => (/^\d+$/.test(part) ? String(Number(part) + 1_000_000_000) : part))
+              .join(':');
+            await expect(store.listPageActivity({ read: 'all', order: 'asc', after: ahead })).rejects.toThrow(
+              /ahead of this feed/,
+            );
+          });
+
+          it('leaves the default order newest first', async () => {
+            if (!ascending()) return;
+            const acme = await scopeAt('org:acme');
+            const r = read(['org:acme']);
+            await at(T0 + 1000, () => page(acme.id, 'older'));
+            await at(T0 + 2000, () => page(acme.id, 'newer'));
+            const desc = (await store.listPageActivity({ read: r, since: new Date(T0) })).events;
+            const asc = (await store.listPageActivity({ read: r, since: new Date(T0), order: 'asc' })).events;
+            expect(keyed(desc)).toEqual(keyed(datedOrder(desc)));
+            expect(asc.map(event => event.id)).toEqual([...desc].reverse().map(event => event.id));
+          });
+        });
       });
 
       it('moves merged source history to the target scope, without retaining source-scope visibility', async () => {

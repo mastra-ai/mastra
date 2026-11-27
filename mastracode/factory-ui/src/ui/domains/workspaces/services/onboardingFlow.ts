@@ -1,9 +1,7 @@
 /**
  * Session-scoped markers for the `/onboarding` page (`EmptyFactoryState`).
  * The draft and open section survive full-page OAuth redirects
- * (GitHub/Linear) so the flow can resume where it left off. The
- * create-Factory wizard uses separate keys (`useCreateFactoryFlow`) so
- * the two flows never collide.
+ * (GitHub/Linear) so the flow can resume where it left off.
  *
  * Every write also stamps `updated-at`: resumability is time-bound so a stale
  * tab (or markers written by an older version of the flow) can never trap the
@@ -39,8 +37,6 @@ const repositoryFields = {
   owner: z.string(),
   defaultBranch: z.string(),
   private: z.boolean(),
-  sandboxProvider: z.string(),
-  sandboxWorkdir: z.string(),
 };
 const repositorySchema: z.ZodType<SourceControlRepository> = z.union([
   z.object({ ...repositoryFields, id: z.number(), installationId: z.number(), installationStorageId: z.string() }),
@@ -60,6 +56,11 @@ const draftSchema = z.object({
   repository: repositorySchema.optional(),
   /** Set once the user leaves Work by Continue or Skip. */
   workConfirmed: z.boolean().optional(),
+  /**
+   * Whether the codebase step's repository feeds issues into this Factory. Only an explicit
+   * `false` turns it off, so an older draft without the field keeps the on-by-default behaviour.
+   */
+  codeHostSync: z.boolean().optional(),
   modelScope: z.enum(['factory', 'user', 'hybrid']).optional(),
   model: draftModelSchema.optional(),
   personal: draftModelSchema.optional().catch(undefined),

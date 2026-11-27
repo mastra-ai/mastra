@@ -22,8 +22,13 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LLMock } from '@copilotkit/aimock';
+import { serve as honoServe } from '@hono/node-server';
+import { getRunRegistryEntry } from '@mastra/core/agent/durable';
+import { RequestContext } from '@mastra/core/request-context';
+import { Hono } from 'hono';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { serve as inngestServe } from '../index';
 import { INNGEST_PORT, startServeInngestDevServer, stopInngestDevServer } from './durable-agent.test.utils';
 import { DEADLINE_TOOL_MS, buildDeadlineCrossWorkerAgent } from './fixtures/deadline-cross-worker-agent';
 
@@ -35,13 +40,17 @@ const DB_URL = `file:${DB_PATH}`;
 const OUT_DIR = mkdtempSync(path.join(tmpdir(), 'deadline-cross-worker-out-'));
 const EVENTS = path.join(OUT_DIR, 'events.jsonl');
 const WORKER = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'deadline-cross-worker-worker.ts');
+const APPROVER = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'cross-host-resume-approver.ts');
 const DEADLINE_MS = 4_000;
 
 type ToolEvent = {
   worker: string;
-  event: 'tool-started' | 'tool-aborted' | 'output-pass';
+  event: 'tool-started' | 'tool-aborted' | 'output-pass' | 'resume-context' | 'llm-request-context';
   reason?: string;
   finishReason?: string;
+  marker?: string;
+  user?: string;
+  value?: string;
 };
 
 let mock: LLMock;
@@ -212,6 +221,141 @@ describe('Inngest durable agent total deadline across workers (real Inngest dev 
     await mock?.stop();
     rmSync(OUT_DIR, { recursive: true, force: true });
     rmSync(DB_PATH, { force: true });
+  });
+
+  it('preserves the live caller context when a cold resume rebuilds tools on the caller process', async () => {
+    routing.targets = [ports.a];
+    mock.clearFixtures();
+    mock.on(
+      { endpoint: 'chat', predicate: req => !JSON.stringify(req.messages).includes('call-approve') },
+      { toolCalls: [{ id: 'call-approve', name: 'approve', arguments: '{}' }] },
+    );
+    mock.on(
+      { endpoint: 'chat', predicate: req => JSON.stringify(req.messages).includes('call-approve') },
+      { content: 'Approved.' },
+    );
+    const initial = await driver.durableAgent.stream([{ role: 'user', content: 'Approve the action.' }], {
+      closeOnSuspend: true,
+      memory: { thread: crypto.randomUUID(), resource: 'probe' },
+      requestContext: new RequestContext([['probe-marker', 'initial']]),
+    });
+    expect((await drain(initial)).map(c => c.type)).toContain('tool-call-approval');
+    await vi.waitFor(() => expect(getRunRegistryEntry(initial.runId, driver.mastra)).toBeUndefined());
+    const resumedDriver = buildDeadlineCrossWorkerAgent({
+      dbUrl: DB_URL,
+      agentId: AGENT_ID,
+      inngestPort: INNGEST_PORT,
+      mockUrl: mock.url,
+      outDir: OUT_DIR,
+      workerName: 'resume-owner',
+    });
+    const handler = inngestServe({ mastra: resumedDriver.mastra, inngest: resumedDriver.inngest });
+    const app = new Hono();
+    app.on(['GET', 'POST', 'PUT'], '/inngest/api', c => handler(c));
+    const port = await freePort();
+    const server = await new Promise<ReturnType<typeof honoServe>>(resolve => {
+      const listener = honoServe({ fetch: app.fetch, port }, () => resolve(listener));
+    });
+    try {
+      routing.targets = [port];
+      const context = new RequestContext();
+      context.set('probe-marker', 'resumed');
+      context.set('probe-controller', { getState: () => 'live-controller' });
+      const resume = await resumedDriver.durableAgent.resume(
+        initial.runId,
+        { approved: true },
+        { toolCallId: 'call-approve', requestContext: context },
+      );
+      expect((await drain(resume)).map(chunk => chunk.type)).toContain('finish');
+      expect(toolEvents()).toContainEqual({
+        worker: 'resume-owner',
+        event: 'resume-context',
+        marker: 'resumed',
+        value: 'live-controller',
+      });
+    } finally {
+      server.close();
+      server.closeAllConnections?.();
+    }
+  });
+
+  it('runs a resume approved from another host as the approving caller on the starting host', async () => {
+    mock.clearFixtures();
+    mock.on(
+      { endpoint: 'chat', predicate: req => !JSON.stringify(req.messages).includes('call-approve') },
+      { toolCalls: [{ id: 'call-approve', name: 'approve', arguments: '{}' }] },
+    );
+    mock.on(
+      { endpoint: 'chat', predicate: req => JSON.stringify(req.messages).includes('call-approve') },
+      { content: 'Approved.' },
+    );
+    // The driver starts the run and is the only host serving its steps.
+    const handler = inngestServe({ mastra: driver.mastra, inngest: driver.inngest });
+    const app = new Hono();
+    app.on(['GET', 'POST', 'PUT'], '/inngest/api', c => handler(c));
+    const port = await freePort();
+    const server = await new Promise<ReturnType<typeof honoServe>>(resolve => {
+      const listener = honoServe({ fetch: app.fetch, port }, () => resolve(listener));
+    });
+    routing.targets = [port];
+    try {
+      const initial = await driver.durableAgent.stream([{ role: 'user', content: 'Approve the action.' }], {
+        memory: { thread: crypto.randomUUID(), resource: 'probe' },
+        requestContext: new RequestContext<unknown>([
+          ['probe-marker', 'A'],
+          ['mastra__user', { id: 'alice' }],
+        ]),
+      });
+      // Keep the stream attached so the parked run keeps the starting caller's live context here.
+      const reader = (initial.fullStream as ReadableStream<{ type: string }>).getReader();
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done || value?.type === 'tool-call-approval') break;
+      }
+      void (async () => {
+        try {
+          while (!(await reader.read()).done);
+        } catch {
+          // The stream ends with the run.
+        }
+      })();
+      await vi.waitFor(() =>
+        expect(getRunRegistryEntry(initial.runId, driver.mastra)?.requestContext?.get('probe-marker')).toBe('A'),
+      );
+      const parked = toolEvents().length;
+
+      const output = await new Promise<string>((resolve, reject) => {
+        const proc = spawn(
+          'npx',
+          ['tsx', APPROVER, DB_URL, AGENT_ID, String(INNGEST_PORT), mock.url, OUT_DIR, initial.runId],
+          {
+            stdio: ['ignore', 'pipe', 'pipe'],
+            env: { ...process.env, INNGEST_DEV: '1', INNGEST_BASE_URL: `http://localhost:${INNGEST_PORT}` },
+          },
+        );
+        let out = '';
+        proc.stdout?.on('data', d => (out += d));
+        proc.stderr?.on('data', d => (out += d));
+        const timer = setTimeout(() => {
+          proc.kill('SIGKILL');
+          reject(new Error(`approver timed out:\n${out}`));
+        }, 90_000);
+        proc.on('exit', () => {
+          clearTimeout(timer);
+          resolve(out);
+        });
+      });
+      expect(output).toContain('[approver] finished');
+
+      const resumed = toolEvents()
+        .slice(parked)
+        .filter(e => e.event === 'resume-context' || e.event === 'llm-request-context');
+      expect(resumed.map(e => e.event).sort()).toEqual(['llm-request-context', 'resume-context']);
+      for (const event of resumed) expect(event).toMatchObject({ worker: 'driver', marker: 'B', user: 'bob' });
+    } finally {
+      server.close();
+      server.closeAllConnections?.();
+    }
   });
 
   it('stops a tool on another worker at the deadline and reports one timeout', async () => {

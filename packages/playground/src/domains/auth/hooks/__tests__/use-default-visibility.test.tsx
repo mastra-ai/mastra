@@ -38,20 +38,15 @@ describe('useDefaultVisibility', () => {
     vi.restoreAllMocks();
   });
 
-  it('returns private when auth is enabled', async () => {
-    mockFetch.mockResolvedValue(createMockResponse({ enabled: true, capabilities: {} }));
+  it.each([
+    ['returns private when auth is enabled', true, 'private'],
+    ['returns public when auth is disabled', false, 'public'],
+  ] as const)('%s', async (_title, enabled, expected) => {
+    mockFetch.mockResolvedValue(createMockResponse({ enabled, capabilities: {} }));
 
     const { result } = renderHook(() => useDefaultVisibility(), { wrapper: wrapper() });
 
-    await waitFor(() => expect(result.current).toBe('private'));
-  });
-
-  it('returns public when auth is disabled', async () => {
-    mockFetch.mockResolvedValue(createMockResponse({ enabled: false, capabilities: {} }));
-
-    const { result } = renderHook(() => useDefaultVisibility(), { wrapper: wrapper() });
-
-    await waitFor(() => expect(result.current).toBe('public'));
+    await waitFor(() => expect(result.current).toBe(expected));
   });
 
   it('falls back to public while loading', () => {

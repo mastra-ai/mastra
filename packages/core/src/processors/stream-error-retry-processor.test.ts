@@ -677,41 +677,24 @@ describe('StreamErrorRetryProcessor', () => {
       await expect(promise).resolves.toEqual({ retry: true });
     });
 
-    it('uses configured exponential backoff when it is longer than Retry-After', async () => {
+    it.each([
+      ['uses configured exponential backoff when it is longer than Retry-After', '1', 2, 3_999],
+      ['uses Retry-After when it is longer than configured exponential backoff', '5', 1, 4_999],
+    ] as const)('%s', async (_title, value, retryCountValue, input) => {
       vi.useFakeTimers();
       const processor = new StreamErrorRetryProcessor({
         maxRetries: 5,
         delayMs: ({ retryCount }) => 1_000 * 2 ** retryCount,
       });
       const promise = processor.processAPIError(
-        makeArgs({ error: makeRetryableError({ 'retry-after': '1' }), retryCount: 2 }),
+        makeArgs({ error: makeRetryableError({ 'retry-after': value }), retryCount: retryCountValue }),
       );
       let resolved = false;
       void promise.then(() => {
         resolved = true;
       });
 
-      await vi.advanceTimersByTimeAsync(3_999);
-      expect(resolved).toBe(false);
-      await vi.advanceTimersByTimeAsync(1);
-      await expect(promise).resolves.toEqual({ retry: true });
-    });
-
-    it('uses Retry-After when it is longer than configured exponential backoff', async () => {
-      vi.useFakeTimers();
-      const processor = new StreamErrorRetryProcessor({
-        maxRetries: 5,
-        delayMs: ({ retryCount }) => 1_000 * 2 ** retryCount,
-      });
-      const promise = processor.processAPIError(
-        makeArgs({ error: makeRetryableError({ 'retry-after': '5' }), retryCount: 1 }),
-      );
-      let resolved = false;
-      void promise.then(() => {
-        resolved = true;
-      });
-
-      await vi.advanceTimersByTimeAsync(4_999);
+      await vi.advanceTimersByTimeAsync(input);
       expect(resolved).toBe(false);
       await vi.advanceTimersByTimeAsync(1);
       await expect(promise).resolves.toEqual({ retry: true });

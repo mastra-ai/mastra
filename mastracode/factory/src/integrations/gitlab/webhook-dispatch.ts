@@ -307,9 +307,13 @@ export async function dispatchGitLabWebhook(
         rejected = true;
         continue;
       }
+      let pendingRunContext: ReturnType<typeof subscriptionRunContext> | undefined;
+      const runContextOnce = () =>
+        (pendingRunContext ??= subscriptionRunContext(subscription, dependencies.gitlab?.sourceControlStorage));
       const session = await resolveSubscriptionSession(dependencies.controller, subscription, {
         label: 'GitLab',
         sourceControl: dependencies.gitlab?.sourceControlStorage,
+        runContext: runContextOnce,
       });
       // No session means this deployment does not hold the subscribed thread.
       // Not a delivery failure: leave the subscription for wherever it lives.
@@ -318,7 +322,7 @@ export async function dispatchGitLabWebhook(
         dependencies.onTargetSkipped?.(subscription);
         continue;
       }
-      const runContext = await subscriptionRunContext(subscription, dependencies.gitlab?.sourceControlStorage);
+      const runContext = await runContextOnce();
       // Without a tenant the woken run would fail closed after the terminal
       // subscription had already been retired, so count it as a failed delivery.
       if (!runContext) {

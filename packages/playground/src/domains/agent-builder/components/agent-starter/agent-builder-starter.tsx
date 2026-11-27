@@ -1,12 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Form } from '@mastra/playground-ui/components/Form';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconArrowUp } from '@mastra/playground-ui/icons/central/IconArrowUp';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useStoredAgentMutations } from '@mastra/react/hooks/agents';
 import { useAuthCapabilities } from '@mastra/react/hooks/auth';
-import { ArrowUpIcon } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -112,14 +111,9 @@ export const AgentBuilderStarter = () => {
               tooltip="Start building"
               disabled={isSubmitBlocked}
               data-testid="agent-builder-starter-submit"
+              loading={isCreating}
             >
-              {isCreating ? (
-                <span data-testid="agent-builder-starter-submit-spinner">
-                  <Spinner />
-                </span>
-              ) : (
-                <ArrowUpIcon />
-              )}
+              <IconArrowUp />
             </Button>
           </div>
         </Form>

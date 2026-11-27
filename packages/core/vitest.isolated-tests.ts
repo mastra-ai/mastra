@@ -44,6 +44,7 @@ export const isolatedTestFiles = [
   'src/agent/__tests__/thread-stream-initial-history.test.ts', // timers
   'src/agent/__tests__/thread-stream-late-generation.test.ts', // env
   'src/agent/__tests__/thread-stream-save-listener.test.ts', // vi.mock
+  'src/agent/__tests__/workflow-tool-background-marker.test.ts', // vi.mock
   'src/agent/durable/__tests__/agreement-memory.test.ts', // reset-modules
   'src/agent/durable/__tests__/durable-agent-background-tasks.test.ts', // lease
   'src/agent/durable/__tests__/durable-agent-background-transform.test.ts', // vi.mock
@@ -52,6 +53,7 @@ export const isolatedTestFiles = [
   'src/agent/durable/__tests__/durable-agent-memory-message-refs.test.ts', // reset-modules
   'src/agent/durable/__tests__/durable-agent-model-list-settings-recovery.test.ts', // reset-modules
   'src/agent/durable/__tests__/durable-agent-parallel-tool-restart.test.ts', // reset-modules
+  'src/agent/durable/__tests__/durable-agent-recover-processor-failure.test.ts', // reset-modules
   'src/agent/durable/__tests__/durable-agent-step-budget-recovery.test.ts', // reset-modules
   'src/agent/durable/__tests__/durable-agent-usage-detail-counters.test.ts', // reset-modules
   'src/agent/durable/__tests__/evented-background-tools-redelivery.test.ts', // timers
@@ -101,6 +103,7 @@ export const isolatedTestFiles = [
   'src/events/unix-socket-pubsub-lease-recovery.test.ts', // vi.mock
   'src/events/unix-socket-pubsub.test.ts', // heap
   'src/hooks/index.test.ts', // global
+  'src/knowledge/importers/__tests__/runner.test.ts', // vi.mock
   'src/llm/model/cloudflare-workers-ai-url.test.ts', // vi.mock,env
   'src/llm/model/gateways/azure.test.ts', // vi.mock,global
   'src/llm/model/gateways/custom-gateway.test.ts', // env
@@ -127,6 +130,9 @@ export const isolatedTestFiles = [
   'src/mastra/custom-gateway-integration.test.ts', // env
   'src/mastra/environment.test.ts', // env
   'src/mastra/internal-workflow-registry.test.ts', // env
+  'src/mastra/recovery-loop.test.ts', // env
+  'src/mastra/restart-active-runs-exit.test.ts', // env
+  'src/mastra/restart-active-runs-rule.test.ts', // env
   'src/mastra/scheduler-integration.test.ts', // env
   'src/mastra/workers-filter.test.ts', // env
   'src/processors/stream-error-retry-processor.test.ts', // vi.mock
@@ -139,6 +145,7 @@ export const isolatedTestFiles = [
   'src/telemetry/model-usage-telemetry.test.ts', // vi.mock,env
   'src/telemetry/posthog.test.ts', // vi.mock,env
   'src/telemetry/usage-telemetry.test.ts', // vi.mock,env
+  'src/tools/builtin/web-fetch.server.test.ts', // global (node:dns, node:http spies)
   'src/tools/builtin/web-fetch.test.ts', // vi.mock
   'src/utils.test.ts', // vi.mock,env,global
   'src/utils/fetchWithRetry.test.ts', // vi.mock,global

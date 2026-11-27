@@ -13,6 +13,7 @@ import type { DefaultExecutionEngine } from '../default';
 import { workflowChildTermination as workflowTermination } from '../execution-outcome';
 import { isFrameworkCondition } from '../framework-condition';
 import { buildStepResultAccessors } from '../run-journal';
+import { isOwnRunFenceConflict } from '../run-ownership';
 import type { ConditionFunction, InnerOutput, LoopConditionFunction } from '../step';
 import { getEntryId } from '../step-entry';
 import type {
@@ -33,6 +34,7 @@ import type {
 import {
   createDeprecationProxy,
   defineLazyWriter,
+  defineStateAccessors,
   runCountDeprecationMessage,
   getResumeLabelsByStepId,
   getSingleStepEntryId,
@@ -457,27 +459,31 @@ export async function executeConditional(
         const conditionCallId = globalThis.crypto.randomUUID();
         const context = createDeprecationProxy(
           defineLazyWriter(
-            {
-              runId,
-              workflowId,
-              mastra: engine.mastra!,
-              requestContext,
-              actor,
-              inputData: prevOutput,
-              state: executionContext.state,
-              retryCount: -1,
-              ...createObservabilityContext({ currentSpan: evalSpan }),
-              getInitData: () => stepResults?.input as any,
-              ...buildStepResultAccessors(engine, runId, stepResults),
-              bail: (() => {}) as () => InnerOutput,
-              abort: () => {
-                abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
+            defineStateAccessors(
+              {
+                runId,
+                workflowId,
+                mastra: engine.mastra!,
+                requestContext,
+                actor,
+                inputData: prevOutput,
+                state: executionContext.state,
+                retryCount: -1,
+                ...createObservabilityContext({ currentSpan: evalSpan }),
+                getInitData: () => stepResults?.input as any,
+                ...buildStepResultAccessors(engine, runId, stepResults),
+                bail: (() => {}) as () => InnerOutput,
+                abort: () => {
+                  abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
+                },
+                [PUBSUB_SYMBOL]: pubsub,
+                [STREAM_FORMAT_SYMBOL]: executionContext.format,
+                engine: engine.getEngineContext(),
+                abortSignal: abortController?.signal,
               },
-              [PUBSUB_SYMBOL]: pubsub,
-              [STREAM_FORMAT_SYMBOL]: executionContext.format,
-              engine: engine.getEngineContext(),
-              abortSignal: abortController?.signal,
-            },
+              () => executionContext.state,
+              !!engine.getRunJournal(runId),
+            ),
             () =>
               new ToolStream(
                 {
@@ -901,28 +907,32 @@ export async function executeLoop(
       isTrue = await condition(
         createDeprecationProxy(
           defineLazyWriter(
-            {
-              workflowId,
-              runId,
-              mastra: engine.mastra!,
-              requestContext,
-              actor,
-              inputData: result.output,
-              state: executionContext.state,
-              retryCount: -1,
-              ...createObservabilityContext({ currentSpan: evalSpan }),
-              iterationCount: iteration + 1,
-              getInitData: () => stepResults?.input as any,
-              ...buildStepResultAccessors(engine, runId, stepResults),
-              bail: (() => {}) as () => InnerOutput,
-              abort: () => {
-                abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
+            defineStateAccessors(
+              {
+                workflowId,
+                runId,
+                mastra: engine.mastra!,
+                requestContext,
+                actor,
+                inputData: result.output,
+                state: executionContext.state,
+                retryCount: -1,
+                ...createObservabilityContext({ currentSpan: evalSpan }),
+                iterationCount: iteration + 1,
+                getInitData: () => stepResults?.input as any,
+                ...buildStepResultAccessors(engine, runId, stepResults),
+                bail: (() => {}) as () => InnerOutput,
+                abort: () => {
+                  abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
+                },
+                [PUBSUB_SYMBOL]: pubsub,
+                [STREAM_FORMAT_SYMBOL]: executionContext.format,
+                engine: engine.getEngineContext(),
+                abortSignal: abortController?.signal,
               },
-              [PUBSUB_SYMBOL]: pubsub,
-              [STREAM_FORMAT_SYMBOL]: executionContext.format,
-              engine: engine.getEngineContext(),
-              abortSignal: abortController?.signal,
-            },
+              () => executionContext.state,
+              !!engine.getRunJournal(runId),
+            ),
             () =>
               new ToolStream(
                 {
@@ -1259,7 +1269,16 @@ export async function executeForeach(
           });
         } catch (err) {
           checkpointError = err instanceof Error ? err : new Error(String(err));
-          engine.getLogger()?.error('Failed to checkpoint foreach progress', { stepId, runId, error: checkpointError });
+          // A refused checkpoint means another process took the run over; its claim logged that.
+          if (isOwnRunFenceConflict(err)) {
+            // Start no more items: their results can never be stored, and the new owner runs them.
+            killQueue();
+            if (inFlight === 0) resolveCompletion?.();
+          } else {
+            engine
+              .getLogger()
+              ?.error('Failed to checkpoint foreach progress', { stepId, runId, error: checkpointError });
+          }
           checkpointClosed = true;
         }
       }

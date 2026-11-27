@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
-import { RotateCcw } from 'lucide-react';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 
 import { IntegrationItem } from '../IntegrationItem';
 import type { IntegrationProvider } from '../IntegrationItem';
@@ -24,7 +24,7 @@ export function RetryRow({
   onRetry: () => void;
 }) {
   const retry = (
-    <Button size="sm" icon={<RotateCcw />} onClick={onRetry}>
+    <Button size="sm" icon={<IconArrowRotateCounterClockwise />} onClick={onRetry}>
       Retry
     </Button>
   );

@@ -1,0 +1,159 @@
+---
+title: Troubleshooting
+description: Diagnose login callbacks, missing repositories, empty intake, provider credentials, sandbox failures, and blocked work.
+---
+
+# Troubleshooting
+
+Each section starts from a symptom you can see, then lists what to check in the order most likely to resolve it. Find your symptom in the headings, or use search for an error message.
+
+## Installation fails
+
+If the installer reports a missing command or an unsupported Node.js version, check your local tools:
+
+```bash
+node --version
+npm --version
+git --version
+```
+
+Use a Node.js version that meets the requirement reported by the installer. Install or update [Node.js](https://nodejs.org/en/download) if Node.js or npm is missing, and install Git if its command isn't available. Reopen your terminal after installation and retry the Factory command.
+
+Keep the generated lockfile when reporting a setup problem.
+
+## Project creation is denied
+
+Confirm that you're signed in to the intended [Mastra platform](https://projects.mastra.ai) organization. If you can't create projects there, ask an organization administrator to update your access.
+
+## Login returns to another application
+
+**Symptom:** sign-in ends in an application error or a different app on localhost.
+
+Factory normally uses port 4111. If another service occupies that port, the development server can select another port while the authentication callback still points to 4111.
+
+Check the local URL printed in the terminal against `MASTRACODE_PUBLIC_URL`. To use a different port, choose an available one and set both `PORT` and `MASTRACODE_PUBLIC_URL` in the generated `.env`, preserving its other values. For example, use 4112:
+
+```dotenv title=".env"
+PORT=4112
+MASTRACODE_PUBLIC_URL=http://localhost:4112
+```
+
+Use the same port in both values. Restart Factory, open its local URL, and begin a fresh login. Don't reuse an old callback URL. If using a self-managed auth provider, also verify the callback registered with that provider.
+
+## A GitHub repository is missing
+
+In the codebase picker, use **Manage GitHub connection**. Confirm the App is installed for the correct account or organization and has access to the intended repository. Return to Factory and reopen the picker after changing access.
+
+Choose the codebase agents should edit. The separate repository containing the Factory Server project may also be listed. See [GitHub configuration](/configure/github).
+
+If checkout or pull request creation fails, confirm the target repository has an initial commit and that the GitHub App connection can create branches and pull requests. Ask a repository administrator to update access if needed.
+
+## `gh` commands fail in a sandbox
+
+**Symptom:** `gh` returns `Resource not accessible by integration`.
+
+App installation tokens can't authorize the `gh` CLI, even when the App has every permission the command needs. Save a classic personal access token under **Settings → Repositories → GitHub CLI tokens**. Factory injects it as the sandbox `GH_TOKEN`, and the token's account needs access to the linked repositories. See [repository permissions](/configure/github#repository-permissions) for the App's own permissions.
+
+## Intake is empty
+
+For GitHub issues, check the connection in this order:
+
+1. Confirm the issue is open in the intended repository.
+1. Confirm the GitHub App installation includes that repository.
+1. Confirm the repository is linked to the intended Factory in **Settings → Repositories**.
+1. In **Settings → Work Intake → GitHub issues**, confirm **Sync GitHub issues** is on and the repository is selected.
+1. Read any source error, reconnect if requested, and allow synchronization to complete.
+
+App access and repository linking alone don't select an issue source.
+
+For Linear, confirm the issue is active in the intended project or team. Check workspace authorization, the project or team selection, and each source's destination Factory in **Settings → Work Intake**. A source with **Not routed** selected won't supply issues to a Factory. See [Linear troubleshooting](#linear-connection-or-intake-fails) for source errors or expired authorization.
+
+After correcting the settings, create a new issue to verify that new issues sync. Match its title, number, and source link in Factory.
+
+With [health metrics](/configure/metrics#intake) on, `mastra_factory_intake_events_total{outcome=error}` shows events that reached Factory and failed, and `mastra_factory_intake_replayed_total` shows GitHub pull request events that only arrived through reconciliation.
+
+## Linear connection or intake fails
+
+| Symptom | Check |
+| - | - |
+| Linear isn't configured | Confirm the server has a Platform integration credential or both `LINEAR_CLIENT_ID` and `LINEAR_CLIENT_SECRET`. |
+| Authorization expired | Select **Reconnect Linear**, authorize again, and verify the workspace. |
+| The project is missing | Confirm the connected workspace and your access to the project. |
+| The issue is missing | Check active issue state, the project or team selection, synchronization, and source routing. |
+| The issue is routed to the wrong Factory | Check the source's destination in **Settings → Work Intake**. |
+
+For setup instructions, see [Linear configuration](/configure/linear).
+
+## A provider works for one teammate only
+
+Connect a model provider through a supported sign-in flow or API key in **Settings → Models**. Confirm that the connected account can use the selected model.
+
+Check whether the credential is personal or organization-scoped. A Factory default model can reference a provider that a teammate hasn't connected. Have that teammate connect their own account, or ask an authorized administrator to configure access for the organization. See [Models](/configure/models).
+
+If credentials stopped working after a restart, check the preserved [encryption key](/troubleshooting#stored-credentials-stop-working) before replacing provider connections.
+
+## Stored credentials stop working
+
+If stored credentials become unreadable after a restart or deployment, compare the key identifier and secret configuration with the previous deployment. Restore the correct key before reconnecting accounts.
+
+A database backup without the matching key doesn't restore encrypted credentials. If the key is lost, the affected credentials must be replaced or their services reauthorized through the supported settings flow. Changing the key to a new random value doesn't decrypt existing data.
+
+## Sandbox startup fails
+
+Read the first failed setup or command result in the session and the corresponding server logs. Confirm the selected provider before changing configuration.
+
+| Provider or step | Check |
+| - | - |
+| Platform | Access token, project ID, environment ID, and permission to use the sandbox service. |
+| Direct E2B | API key and whether the complete Platform configuration took precedence. |
+| LocalSandbox | Writable local root, required local tools, and per-session checkout. |
+| Repository checkout | App access and the repository referenced by the session. |
+| Setup command | Correct working directory, available dependencies, network access, and the actual command error. |
+
+Check the sandbox startup logs for repository checkout or setup failures. See [Sandboxes](/configure/sandboxes#check-the-selected-provider) to check which provider is configured. If the sandbox no longer responds, recreate it as described in [Recover a broken sandbox](/configure/sandboxes#recover-a-broken-sandbox).
+
+With [health metrics](/configure/metrics#sandboxes) on, compare `mastra_factory_sandbox_start_failures_total` with `mastra_factory_sandbox_phase_ms{outcome=error}`. Failures at start point at the provider, and failed phases point at the repository's checkout or setup.
+
+## Work is waiting or failed
+
+| State | Next action |
+| - | - |
+| A proposed run is waiting | Start it from the card, or set the phase to start its runs on its own. See [Boards and rules](/configure/boards-and-rules#configure-a-working-phase). |
+| A feature request needs acceptance | Read the investigation and use **Accept** or the appropriate acceptance action in the card menu. |
+| A plan is waiting | Open the session, revise or approve the plan. |
+| A command failed | Inspect the tool output, fix its prerequisite, and continue with a concrete instruction. |
+| A run reports a transition failure | Check the latest card and session state before retrying. A prior action may have completed. |
+| A rule effect failed | Open **[Rules](/configure/boards-and-rules#rule-decisions)** from the Factory search, filter to **Failed**, fix the cause, then select **Retry**. |
+| A PR merged but Work is still in Review | The Work item has another PR open. It moves to Done when that PR merges. |
+
+Open **Overview** to find work waiting for a decision. Avoid starting a second run while the first is still active. See [Work items](/using/work-and-approvals).
+
+## Test and troubleshoot Slack
+
+Send the app a test message:
+
+```text
+Inspect the README and summarize the documented setup steps. Do not change files.
+```
+
+Confirm a reply, the selected Factory, and the corresponding session in the web app. Reply in the same thread and confirm the conversation continues. A Slack thread continues its session. It doesn't add a card to the board.
+
+| Symptom | Check |
+| - | - |
+| Slack isn't configured | The signing secret is set and Factory was restarted. |
+| Connect Slack is unavailable | Client ID, client secret, and HTTPS channels origin are configured. |
+| Slack rejects the redirect | Its registered redirect URL exactly matches the channels origin and callback path. |
+| No events arrive | Request URL verification, event subscriptions, app membership in the channel, and tunnel reachability. |
+| Factory receives events but can't reply | Bot token validity and installed permissions. |
+| The app asks you to choose a Factory | Link your Slack identity and select its **Default factory**. |
+| The session fails after routing | Provider access and sandbox startup, then the session's tool error. |
+
+Disconnect a personal account from the Slack connection page when it should no longer route your messages.
+
+For setup instructions, see [Slack configuration](/configure/slack).
+
+## Report a reproducible problem
+
+Record the Factory and CLI versions, deployment mode, expected result, actual result, and the shortest reproduction. Include the issue or session identifier when appropriate and relevant redacted logs.
+
+Exclude credentials, database URLs, and the full query strings from authentication callbacks. Report the problem in the [Mastra issue tracker](https://github.com/mastra-ai/mastra/issues/new?template=bug_report.yml).

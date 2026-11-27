@@ -174,6 +174,15 @@ function resolveEstimatorId(): string {
   return 'tokenx';
 }
 
+const ATTACHMENT_CONTENT_PART_TYPES = new Set(['image', 'image-data', 'media', 'audio', 'file-data']);
+
+/** Mirrors the parts countMultimodalToolResultContent counts as attachments. */
+function isAttachmentContentPart(item: unknown): boolean {
+  if (!item || typeof item !== 'object') return false;
+  const contentPart = item as Record<string, unknown>;
+  return ATTACHMENT_CONTENT_PART_TYPES.has(contentPart.type as string) && typeof contentPart.data === 'string';
+}
+
 function isTokenEstimateEntry(value: unknown): value is TokenEstimateCacheEntry {
   if (!value || typeof value !== 'object') return false;
   const entry = value as Partial<TokenEstimateCacheEntry>;
@@ -225,9 +234,31 @@ function getPartCacheEntry(part: CacheablePart, key: string): TokenEstimateCache
   return getCacheEntry(getPartMastraMetadata(part)?.tokenEstimate, key);
 }
 
+/**
+ * Parts this process gave a new stored count. A part loaded from storage with its count is never in here,
+ * so a message holding one of these parts has a count storage does not have yet.
+ */
+const partsWithUnsavedCount = new WeakSet<object>();
+
+/** Whether `part` gained a stored count in this process that has not been handed to a save yet. */
+export function hasUnsavedTokenEstimate(part: unknown): boolean {
+  return typeof part === 'object' && part !== null && partsWithUnsavedCount.has(part);
+}
+
+/** Note that `part`'s count is on its way to storage, so later steps do not save it again. */
+export function markTokenEstimateSaved(part: unknown): void {
+  if (typeof part === 'object' && part !== null) partsWithUnsavedCount.delete(part);
+}
+
+const partCountMemo = new WeakMap<
+  object,
+  Map<string, { owner: TokenCounter; refs: readonly unknown[]; tokens: number }>
+>();
+
 function setPartCacheEntry(part: CacheablePart, key: string, entry: TokenEstimateCacheEntry): void {
   const mastraMetadata = ensurePartMastraMetadata(part);
   mastraMetadata.tokenEstimate = mergeCacheEntry(mastraMetadata.tokenEstimate, key, entry);
+  partsWithUnsavedCount.add(part);
 }
 
 /**
@@ -1230,7 +1261,15 @@ async function fetchGoogleAttachmentTokenEstimate(modelId: string, part: Cacheab
  * undercounted as generic JSON blobs.
  */
 export class TokenCounter {
-  private readonly cacheSource: string;
+  /**
+   * Stored counts belong to the stock estimator. A subclass or instance that overrides `countString`
+   * reads and writes its own namespace, so it never reuses a count the stock estimator saved.
+   */
+  private get cacheSource(): string {
+    return this.countString === TokenCounter.prototype.countString
+      ? `v${TOKEN_ESTIMATE_CACHE_VERSION}:${resolveEstimatorId()}`
+      : `v${TOKEN_ESTIMATE_CACHE_VERSION}:custom`;
+  }
   private readonly defaultModelContext?: TokenCounterModelContext;
   private readonly inFlightAttachmentCounts = new Map<string, Promise<number | undefined>>();
   private readonly multimodalToolResultCounts = new WeakMap<object, { resultKey: string; tokens: number }>();
@@ -1242,7 +1281,6 @@ export class TokenCounter {
   private static readonly TOKENS_PER_CONVERSATION = 24;
 
   constructor(options?: TokenCounterOptions) {
-    this.cacheSource = `v${TOKEN_ESTIMATE_CACHE_VERSION}:${resolveEstimatorId()}`;
     this.defaultModelContext = parseModelContext(options?.model);
   }
 
@@ -1279,6 +1317,38 @@ export class TokenCounter {
       tokens,
     });
 
+    return tokens;
+  }
+
+  /**
+   * Count one content-only piece of a part (its text, a tool's args or result) the same way as
+   * {@link readOrPersistPartEstimate}: a stored count is reused only when its content hash matches.
+   * `refs` are the values the payload is built from. While the same part object still holds the same
+   * refs, the count from the last call is returned without serializing or hashing again, so a part
+   * counted by `getStatus` and then by the next step is hashed once per process.
+   * Only string refs are memoized (object payloads are hashed every time, since they can change in place).
+   */
+  private readOrPersistMemoizedPartEstimate(
+    part: CacheablePart,
+    kind: string,
+    refs: readonly unknown[],
+    getPayload: () => string,
+  ): number {
+    // Only string refs are safe to compare by identity: an object payload can change in place.
+    if (!refs.every(ref => typeof ref === 'string')) return this.readOrPersistPartEstimate(part, kind, getPayload());
+    let byKind = partCountMemo.get(part);
+    const memo = byKind?.get(kind);
+    if (
+      memo &&
+      memo.owner === this &&
+      memo.refs.length === refs.length &&
+      memo.refs.every((ref, i) => ref === refs[i])
+    ) {
+      return memo.tokens;
+    }
+    const tokens = this.readOrPersistPartEstimate(part, kind, getPayload());
+    if (!byKind) partCountMemo.set(part, (byKind = new Map()));
+    byKind.set(kind, { owner: this, refs, tokens });
     return tokens;
   }
 
@@ -1329,16 +1399,18 @@ export class TokenCounter {
       return undefined;
     }
 
+    const output = toolResult as Record<string, unknown>;
+    const content = output.type === 'content' && Array.isArray(output.value) ? output.value : output.content;
+    // Only results carrying attachment data are counted here. Check the shape before hashing so
+    // plain JSON results don't pay a full serialization on every count just to be ruled out.
+    if (!Array.isArray(content) || !content.some(isAttachmentContentPart)) {
+      return undefined;
+    }
+
     const resultKey = buildEstimateKey('tool-result-multimodal-content-source', JSON.stringify(toolResult));
     const cached = this.multimodalToolResultCounts.get(part);
     if (cached?.resultKey === resultKey) {
       return cached.tokens;
-    }
-
-    const output = toolResult as Record<string, unknown>;
-    const content = output.type === 'content' && Array.isArray(output.value) ? output.value : output.content;
-    if (!Array.isArray(content)) {
-      return undefined;
     }
 
     let hasAttachment = false;
@@ -1724,8 +1796,8 @@ export class TokenCounter {
   /**
    * Count the name and the arguments of a tool call. Every state before the tool produces an
    * output holds the same call signature in the context window, so all of those states share
-   * these cache kinds. `buildEstimateKey` hashes the text, so a shared kind stays correct and
-   * keeps the estimate warm while the invocation moves from one state to the next.
+   * these cache kinds, and the estimate stays warm while the invocation moves from one state to
+   * the next. Name and args don't change across those states once the call stops streaming.
    */
   private countToolCallSignature(
     part: CacheablePart,
@@ -1733,16 +1805,23 @@ export class TokenCounter {
   ): { tokens: number; overheadDelta: number } {
     let tokens = 0;
     let overheadDelta = 0;
+    // Args of a call that is still streaming grow in place, so they keep the payload-keyed count.
+    const storable = invocation.state !== 'partial-call';
+    const count = (kind: string, ref: unknown, getPayload: () => string) =>
+      storable
+        ? this.readOrPersistMemoizedPartEstimate(part, kind, [ref], getPayload)
+        : this.readOrPersistPartEstimate(part, kind, getPayload());
 
     if (invocation.toolName) {
-      tokens += this.readOrPersistPartEstimate(part, 'tool-call-name', invocation.toolName);
+      const toolName = invocation.toolName;
+      tokens += count('tool-call-name', toolName, () => toolName);
     }
     if (invocation.args !== undefined) {
-      if (typeof invocation.args === 'string') {
-        tokens += this.readOrPersistPartEstimate(part, 'tool-call-args', invocation.args);
+      const args = invocation.args;
+      if (typeof args === 'string') {
+        tokens += count('tool-call-args', args, () => args);
       } else {
-        const argsJson = JSON.stringify(invocation.args);
-        tokens += this.readOrPersistPartEstimate(part, 'tool-call-args-json', argsJson);
+        tokens += count('tool-call-args-json', args, () => JSON.stringify(args));
         overheadDelta -= 12;
       }
     }
@@ -1760,7 +1839,12 @@ export class TokenCounter {
     let extraMessageDelta = 0;
 
     if (part.type === 'text') {
-      return { tokens: this.readOrPersistPartEstimate(part, 'text', part.text), overheadDelta, extraMessageDelta };
+      const text = part.text;
+      return {
+        tokens: this.readOrPersistMemoizedPartEstimate(part, 'text', [text], () => text),
+        overheadDelta,
+        extraMessageDelta,
+      };
     }
 
     if (part.type === 'tool-invocation') {
@@ -1786,7 +1870,7 @@ export class TokenCounter {
         overheadDelta += signature.overheadDelta;
         const reason = invocation.approval?.reason;
         if (reason) {
-          tokens += this.readOrPersistPartEstimate(part, 'tool-approval-reason', reason);
+          tokens += this.readOrPersistMemoizedPartEstimate(part, 'tool-approval-reason', [reason], () => reason);
         }
         return { tokens, overheadDelta, extraMessageDelta };
       }
@@ -1810,11 +1894,11 @@ export class TokenCounter {
           if (contentTokens !== undefined) {
             tokens += contentTokens;
           } else {
-            const formattedResult = serializeToolResultForTokenCounting(resultForCounting);
-            tokens += this.readOrPersistPartEstimate(
+            tokens += this.readOrPersistMemoizedPartEstimate(
               part,
               usingStoredModelOutput ? 'tool-result-model-output-json' : 'tool-result-json',
-              formattedResult,
+              [resultForCounting],
+              () => serializeToolResultForTokenCounting(resultForCounting),
             );
           }
 
@@ -1828,10 +1912,11 @@ export class TokenCounter {
               ? errorText
               : 'Tool execution failed'
             : '[empty result]';
-          tokens += this.readOrPersistPartEstimate(
+          tokens += this.readOrPersistMemoizedPartEstimate(
             part,
             invocation.isError ? 'tool-result-error' : 'tool-result-json',
-            fallback,
+            [fallback],
+            () => fallback,
           );
         }
 
@@ -1848,7 +1933,7 @@ export class TokenCounter {
         const reason = invocation.approval?.reason?.trim()
           ? invocation.approval.reason
           : 'Tool call was not approved by the user';
-        tokens += this.readOrPersistPartEstimate(part, 'tool-result-denied', reason);
+        tokens += this.readOrPersistMemoizedPartEstimate(part, 'tool-result-denied', [reason], () => reason);
         return { tokens, overheadDelta, extraMessageDelta };
       }
 
@@ -1859,7 +1944,7 @@ export class TokenCounter {
         overheadDelta += signature.overheadDelta;
         const errorText = toolErrorTextToString(invocation.errorText);
         const errorMessage = errorText.trim() ? errorText : 'Tool execution failed';
-        tokens += this.readOrPersistPartEstimate(part, 'tool-result-error', errorMessage);
+        tokens += this.readOrPersistMemoizedPartEstimate(part, 'tool-result-error', [errorMessage], () => errorMessage);
         return { tokens, overheadDelta, extraMessageDelta };
       }
 
@@ -1871,6 +1956,11 @@ export class TokenCounter {
     }
 
     if (typeof part.type === 'string' && part.type.startsWith('data-')) {
+      return { tokens: 0, overheadDelta, extraMessageDelta };
+    }
+
+    // step-start is a step boundary marker; it carries no model tokens.
+    if (part.type === 'step-start') {
       return { tokens: 0, overheadDelta, extraMessageDelta };
     }
 

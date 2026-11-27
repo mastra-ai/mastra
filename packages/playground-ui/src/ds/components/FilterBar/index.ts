@@ -3,6 +3,7 @@ export type { FilterBarChipsProps, FilterBarProps } from './filter-bar';
 export {
   FilterBarChip,
   FilterBarChipField,
+  FilterBarChipNegate,
   FilterBarChipOperator,
   FilterBarChipValue,
   FilterBarChipRemove,
@@ -19,23 +20,28 @@ export type { FilterBarTimeRangeProps } from './filter-bar-time-range';
 export type { FilterBarInputProps } from './filter-bar-input';
 export { FilterBarAdvancedChip } from './filter-bar-advanced-chip';
 export type { FilterBarAdvancedChipProps } from './filter-bar-advanced-chip';
-export { FilterBarGroupEditor, FilterBarLogicToggle } from './filter-bar-group-editor';
+export { FilterBarGroupEditor, FilterBarLogicToggle, FilterBarQuantifierSwitch } from './filter-bar-group-editor';
 export type { FilterBarGroupEditorProps, FilterBarLogicToggleProps } from './filter-bar-group-editor';
 export { DEFAULT_FILTER_OPERATORS } from './default-operators';
 export { isFilterBarGroup } from './types';
 export type {
   FilterBarArity,
+  FilterBarCustomField,
   FilterBarDraft,
   FilterBarExpression,
   FilterBarField,
   FilterBarFieldType,
   FilterBarGroup,
+  FilterBarGroupScope,
   FilterBarItem,
   FilterBarLogic,
   FilterBarNode,
   FilterBarOperator,
   FilterBarOption,
+  FilterBarPlace,
+  FilterBarQuantifier,
   FilterBarScalar,
+  FilterBarScope,
   FilterBarSegment,
   FilterBarSuggestionsContext,
   FilterBarSuggestionsResolver,

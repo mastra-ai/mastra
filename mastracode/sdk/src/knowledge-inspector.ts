@@ -1,5 +1,4 @@
 import type { Session } from '@mastra/core/agent-controller';
-import { encodeKnowledgeScopeId } from '@mastra/core/knowledge';
 import type { Knowledge } from '@mastra/core/knowledge';
 import type { Mastra } from '@mastra/core/mastra';
 import { parseKnowledgeWikilinks } from '@mastra/core/storage';
@@ -12,6 +11,7 @@ import type {
   KnowledgeStorage,
 } from '@mastra/core/storage';
 
+import { encodeKnowledgeScopeId } from './knowledge-scope-id.js';
 import { knowledgeSessionTags, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
 import type { MastraCodeState } from './schema.js';
 

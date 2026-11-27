@@ -64,6 +64,12 @@ export type LoadedPlugin = ScopedInstalledPluginRecord & {
   instructions?: string;
   status: PluginStatus;
   error?: string;
+  /**
+   * Set when the latest reload of this plugin failed while an earlier load of it
+   * was active. The record is then that earlier load, kept whole (tools,
+   * providers, stamp), and this holds the error the reload hit.
+   */
+  reloadError?: string;
   tools: MastraCodePluginTools;
   renderConfigs?: Record<string, MastraCodeToolRenderConfig>;
   toolNames: string[];
@@ -85,6 +91,15 @@ export type LoadedPlugin = ScopedInstalledPluginRecord & {
    * this to decide between keeping what they have and cycling it.
    */
   versionStamp?: string;
+};
+
+/**
+ * A plugin problem the user should see: a reload that failed while the previous
+ * load kept running, or a signal provider that failed at runtime.
+ */
+export type PluginErrorEvent = {
+  pluginId: string;
+  message: string;
 };
 
 export type PluginScopePaths = {

@@ -15,11 +15,11 @@ pnpm check --no-vale                        # skip Vale (CI runs Vale separately
 
 The command exits `1` when any error is reported and `0` otherwise. Warnings and info findings never fail it. New rules start as warnings and become errors once existing content is clean.
 
-With file arguments, file-level checks (frontmatter, structure, links, prose, format) only look at those files. Sidebar and redirect checks always run repo-wide. Vale is skipped with a note when its binary isn't installed; run `pnpm vale:download` first.
+With file arguments, file-level checks (frontmatter, structure, links, prose, format) only look at those files. Sidebar and redirect checks always run repo-wide. Vale needs its binary, which is gitignored, so run `pnpm vale:download` once per checkout. When the binary is missing or Vale fails to start, `pnpm check` reports a `mastra/vale-unavailable` error and exits `1`. Pass `--no-vale` only when you mean to skip Vale. When the binary isn't the version CI uses, it reports a `mastra/vale-version` warning, because Vale releases can change which findings appear. Run `pnpm vale:download` again to update it.
 
 ## JSON output
 
-`--format json` (or `--json`) prints one object. `status` is `partial` when no errors were found but a check, usually Vale, was skipped:
+`--format json` (or `--json`) prints one object. `status` is `partial` when no errors were found but a check was skipped, for example a file argument that is not a content page:
 
 ```json
 {
@@ -79,34 +79,44 @@ Vale also honors its own `{/* vale off */}` and `{/* vale on */}` comments.
 
 `mastra/description-required`, `mastra/description-length`, `mastra/single-h1`, `mastra/code-block-lang`, and `mastra/bare-url` are implemented in `@mastra/lint-docs/remark-preset`, so `pnpm lint:remark` reports them too. `pnpm check` maps them to the IDs below.
 
-| Rule                              | Category    | Severity | Fixable | Description                                                                                                                                           |
-| --------------------------------- | ----------- | -------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mastra/frontmatter-missing`      | frontmatter | error    | No      | The page has no `---` frontmatter block.                                                                                                              |
-| `mastra/frontmatter-parse`        | frontmatter | error    | No      | The frontmatter is not valid YAML.                                                                                                                    |
-| `mastra/frontmatter-title`        | frontmatter | error    | No      | The frontmatter has no non-empty `title`.                                                                                                             |
-| `mastra/description-required`     | frontmatter | warn     | No      | The frontmatter has no non-empty `description`.                                                                                                       |
-| `mastra/description-length`       | frontmatter | warn     | No      | The `description` is shorter than 50 or longer than 200 characters.                                                                                   |
-| `mastra/frontmatter-packages`     | frontmatter | error    | No      | The `packages` field is missing, empty, or lists an invalid package name.                                                                             |
-| `mastra/frontmatter-packages-max` | frontmatter | warn     | No      | The `packages` field lists more than 4 packages. Each package embeds a full copy of the page.                                                         |
-| `mastra/sidebar-unlinked-page`    | sidebar     | error    | No      | An MDX page is not linked from its section sidebar.                                                                                                   |
-| `mastra/sidebar-reference-sort`   | sidebar     | error    | Yes     | The reference sidebar is not sorted alphabetically.                                                                                                   |
-| `mastra/sidebar-duplicate-id`     | sidebar     | error    | No      | A doc ID appears more than once in the reference sidebar.                                                                                             |
-| `mastra/sidebar-reference-item`   | sidebar     | warn     | No      | A reference sidebar item has an unknown type, or a property the sort fixer would drop.                                                                |
-| `mastra/sidebar-new-tag-stale`    | sidebar     | warn     | No      | A sidebar `new` tag was added more than 30 days ago.                                                                                                  |
-| `mastra/single-h1`                | structure   | warn     | No      | The page must have exactly one `#` heading.                                                                                                           |
-| `mastra/lint-comment-invalid`     | structure   | error    | No      | An inline `lint disable`, `enable`, or `ignore` comment names an unknown rule ID.                                                                     |
-| `mastra/code-block-lang`          | structure   | warn     | No      | A fenced code block has no language, e.g. ` ```typescript `.                                                                                          |
-| `mastra/internal-link`            | links       | warn     | No      | An internal link points to a route that does not exist.                                                                                               |
-| `mastra/redirected-link`          | links       | warn     | Yes     | An internal link points to a redirect source. The fix rewrites it to the destination.                                                                 |
-| `mastra/no-self-host-url`         | links       | warn     | Yes     | A link uses `https://mastra.ai/...` for a docs route. The fix rewrites it to a root-relative path.                                                    |
-| `mastra/bare-url`                 | prose       | warn     | No      | A URL appears as plain text instead of a Markdown link.                                                                                               |
-| `mastra/format`                   | format      | error    | Yes     | The file is not formatted with oxfmt (MDX via `@mastra/lint-docs/oxfmt-mdx`).                                                                         |
-| `mastra/redirect-duplicate`       | redirects   | error    | No      | `vercel.redirects.json` has two redirects with the same source.                                                                                       |
-| `mastra/redirect-chain`           | redirects   | error    | No      | A redirect points to the source of another redirect.                                                                                                  |
-| `mastra/redirect-destination`     | redirects   | error    | No      | An internal redirect destination does not resolve to a page.                                                                                          |
-| `mastra/redirect-generated-drift` | redirects   | error    | Yes     | `vercel.json` is out of date with `vercel.redirects.json`. The fix regenerates it.                                                                    |
-| `mastra/remark-*`                 | prose       | error    | No      | remark-lint rules from `@mastra/lint-docs/remark-preset`, e.g. `mastra/remark-heading-increment`.                                                     |
-| `mastra/vale-*`                   | prose       | warn     | No      | Vale checks from `.vale.ini`, e.g. `mastra/vale-mastra-headings`. Severity follows the Vale level (error → error, warning → warn, suggestion → info). |
+| Rule                                    | Category    | Severity | Fixable | Description                                                                                                                                           |
+| --------------------------------------- | ----------- | -------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mastra/frontmatter-missing`            | frontmatter | error    | No      | The page has no `---` frontmatter block.                                                                                                              |
+| `mastra/frontmatter-parse`              | frontmatter | error    | No      | The frontmatter is not valid YAML.                                                                                                                    |
+| `mastra/frontmatter-title`              | frontmatter | error    | No      | The frontmatter has no non-empty `title`.                                                                                                             |
+| `mastra/description-required`           | frontmatter | warn     | No      | The frontmatter has no non-empty `description`.                                                                                                       |
+| `mastra/description-length`             | frontmatter | warn     | No      | The `description` is shorter than 50 or longer than 200 characters.                                                                                   |
+| `mastra/frontmatter-packages`           | frontmatter | error    | No      | The `packages` field is missing, empty, or lists an invalid package name.                                                                             |
+| `mastra/frontmatter-packages-max`       | frontmatter | warn     | No      | The `packages` field lists more than 4 packages. Each package embeds a full copy of the page.                                                         |
+| `mastra/sidebar-unlinked-page`          | sidebar     | error    | No      | An MDX page is not linked from its section sidebar.                                                                                                   |
+| `mastra/sidebar-reference-sort`         | sidebar     | error    | Yes     | The reference sidebar is not sorted alphabetically.                                                                                                   |
+| `mastra/sidebar-duplicate-id`           | sidebar     | error    | No      | A doc ID appears more than once in the reference sidebar.                                                                                             |
+| `mastra/sidebar-reference-item`         | sidebar     | warn     | No      | A reference sidebar item has an unknown type, or a property the sort fixer would drop.                                                                |
+| `mastra/sidebar-new-tag-stale`          | sidebar     | warn     | No      | A sidebar `new` tag was added more than 30 days ago.                                                                                                  |
+| `mastra/external-sidebar-invalid`       | sidebar     | error    | No      | The `sidebars.js` of a directory in `.github/docs-sync.json` is missing or fails to load.                                                             |
+| `mastra/external-sidebar-unlinked-page` | sidebar     | error    | No      | A page in a directory synced to an external site is not linked from that directory's `sidebars.js`.                                                   |
+| `mastra/external-sidebar-missing-doc`   | sidebar     | error    | No      | The `sidebars.js` of a synced directory lists a doc ID that has no page.                                                                              |
+| `mastra/single-h1`                      | structure   | warn     | No      | The page must have exactly one `#` heading.                                                                                                           |
+| `mastra/lint-comment-invalid`           | structure   | error    | No      | An inline `lint disable`, `enable`, or `ignore` comment names an unknown rule ID.                                                                     |
+| `mastra/code-block-lang`                | structure   | warn     | No      | A fenced code block has no language, e.g. ` ```typescript `.                                                                                          |
+| `mastra/internal-link`                  | links       | warn     | No      | An internal link points to a route that does not exist.                                                                                               |
+| `mastra/redirected-link`                | links       | warn     | Yes     | An internal link points to a redirect source. The fix rewrites it to the destination.                                                                 |
+| `mastra/no-self-host-url`               | links       | warn     | Yes     | A link uses `https://mastra.ai/...` for a docs route. The fix rewrites it to a root-relative path.                                                    |
+| `mastra/external-manifest-invalid`      | links       | error    | No      | `.github/docs-sync.json` is not valid JSON, has an invalid entry, or names a missing `source` directory.                                              |
+| `mastra/external-internal-link`         | links       | error    | No      | A link in a synced directory does not resolve to a page on the same external site. Links use that site's routes.                                      |
+| `mastra/external-anchor`                | links       | error    | No      | A link in a synced directory points to a heading ID that does not exist on the linked page.                                                           |
+| `mastra/external-mdx-parse`             | links       | error    | No      | A page in a synced directory is not valid MDX, so its links and anchors were not checked.                                                             |
+| `mastra/bare-url`                       | prose       | warn     | No      | A URL appears as plain text instead of a Markdown link.                                                                                               |
+| `mastra/vale-unavailable`               | prose       | error    | No      | Vale is not installed or failed to start, so prose was not checked. Run `pnpm vale:download`, or pass `--no-vale` to skip Vale on purpose.            |
+| `mastra/vale-version`                   | prose       | warn     | No      | The Vale binary is not the version CI uses, so its findings can differ from CI. Run `pnpm vale:download`.                                             |
+| `mastra/heading-vocabulary-drift`       | prose       | error    | Yes     | The accept.txt terms copied into `Mastra.HeadingSentenceCase` are out of date. The fix regenerates them.                                              |
+| `mastra/format`                         | format      | error    | Yes     | The file is not formatted with oxfmt (MDX via `@mastra/lint-docs/oxfmt-mdx`).                                                                         |
+| `mastra/redirect-duplicate`             | redirects   | error    | No      | `vercel.redirects.json` has two redirects with the same source.                                                                                       |
+| `mastra/redirect-chain`                 | redirects   | error    | No      | A redirect points to the source of another redirect.                                                                                                  |
+| `mastra/redirect-destination`           | redirects   | error    | No      | An internal redirect destination does not resolve to a page.                                                                                          |
+| `mastra/redirect-generated-drift`       | redirects   | error    | Yes     | `vercel.json` is out of date with `vercel.redirects.json`. The fix regenerates it.                                                                    |
+| `mastra/remark-*`                       | prose       | error    | No      | remark-lint rules from `@mastra/lint-docs/remark-preset`, e.g. `mastra/remark-heading-increment`.                                                     |
+| `mastra/vale-*`                         | prose       | warn     | No      | Vale checks from `.vale.ini`, e.g. `mastra/vale-mastra-headings`. Severity follows the Vale level (error → error, warning → warn, suggestion → info). |
 
 ## Existing scripts
 

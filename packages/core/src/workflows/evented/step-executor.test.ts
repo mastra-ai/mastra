@@ -9,6 +9,7 @@ import {
   EXECUTION_UNVERIFIED_ERROR_ID,
   setExecutionClaim,
 } from '../../agent/durable/execution-fence';
+import { TripWire } from '../../agent/trip-wire';
 import type { ActorSignal } from '../../auth/ee';
 import { InMemoryServerCache } from '../../cache/inmemory';
 import { MastraError } from '../../error';
@@ -300,6 +301,73 @@ describe('StepExecutor', () => {
     // Verify stack is not in JSON output
     const serialized = JSON.stringify(failedResult.error);
     expect(serialized).not.toContain('stack');
+  });
+
+  it('logs a step error at ERROR with its stack', async () => {
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() };
+    stepExecutor.__setLogger(logger as any);
+    const boom = new Error('boom');
+    const failingStep = createStep({
+      id: 'failing-step',
+      execute: async () => {
+        throw boom;
+      },
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+    });
+
+    await stepExecutor.execute({
+      workflowId: 'test-workflow',
+      entry: { type: 'step', step: failingStep },
+      runId: 'test-run',
+      input: {},
+      stepResults: {},
+      state: {},
+      requestContext,
+    });
+
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining(`Error executing step failing-step: ${boom.stack}`),
+    );
+    expect(logger.trackException).toHaveBeenCalledTimes(1);
+  });
+
+  it('logs a processor tripwire at debug without a stack and still returns the tripwire', async () => {
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() };
+    stepExecutor.__setLogger(logger as any);
+    const blockingStep = createStep({
+      id: 'blocking-step',
+      execute: async () => {
+        throw new TripWire('blocked on purpose', { retry: false }, 'always-block');
+      },
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+    });
+
+    const result = await stepExecutor.execute({
+      workflowId: 'test-workflow',
+      entry: { type: 'step', step: blockingStep },
+      runId: 'test-run',
+      input: {},
+      stepResults: {},
+      state: {},
+      requestContext,
+    });
+
+    expect(result.status).toBe('failed');
+    expect((result as any).tripwire).toEqual({
+      reason: 'blocked on purpose',
+      retry: false,
+      metadata: undefined,
+      processorId: 'always-block',
+    });
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(logger.trackException).not.toHaveBeenCalled();
+    expect(logger.debug).toHaveBeenCalledWith('Step blocking-step stopped by tripwire', {
+      stepId: 'blocking-step',
+      processorId: 'always-block',
+      reason: 'blocked on purpose',
+    });
   });
 
   it('should save MastraError message without stack trace when step fails', async () => {
@@ -636,7 +704,10 @@ describe('StepExecutor', () => {
       }
 
       const cached = await cache.listFromTo(`pubsub:${topic}`, 0);
-      expect(cached.map(event => event.index)).toEqual([0, 1]);
+      // Indices are consecutive from a clock-seeded base, not 0-based.
+      const base = cached[0]!.index as number;
+      expect(typeof base).toBe('number');
+      expect(cached.map(event => event.index)).toEqual([base, base + 1]);
     });
 
     it('reuses a configured caching pubsub so one step frame is cached once', async () => {
@@ -659,8 +730,10 @@ describe('StepExecutor', () => {
 
       expect(live).toHaveLength(1);
       const cached = await cache.listFromTo(`pubsub:${topic}`, 0);
-      expect(cached.map(event => event.index)).toEqual([0]);
-      expect(live[0]?.index).toBe(0);
+      expect(cached).toHaveLength(1);
+      const index = cached[0]!.index as number;
+      expect(typeof index).toBe('number');
+      expect(live[0]?.index).toBe(index);
       expect(stepPubsub).toBe(target.pubsub);
     });
 
@@ -699,9 +772,12 @@ describe('StepExecutor', () => {
       await stepPubsub.publish(topic, { type: 'chunk', runId: 'run-caller', data: { n: 0 } } as any);
 
       const cached = await cache.listFromTo(`pubsub:${topic}`, 0);
+      // The step frame continues the numbering the caller's frame seeded.
+      const base = cached[0]!.index as number;
+      expect(typeof base).toBe('number');
       expect(cached.map(event => [event.type, event.index])).toEqual([
-        ['start', 0],
-        ['chunk', 1],
+        ['start', base],
+        ['chunk', base + 1],
       ]);
     });
 

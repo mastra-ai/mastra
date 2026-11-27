@@ -4,13 +4,13 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
+import { isDatasetTargetType } from '@mastra/playground-ui/domains/datasets';
+import { IconArrowUpRight } from '@mastra/playground-ui/icons/central/IconArrowUpRight';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useExperimentsForDatasetFilter } from '@mastra/react/hooks/experiments';
-import { ArrowUpRight } from 'lucide-react';
 import { useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
-import { isDatasetTargetType } from '@/domains/datasets/components/target-type-options';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { DatasetReview } from '@/domains/review/components/dataset-review';
 import type { ReviewListFilters } from '@/domains/review/components/dataset-review';
@@ -70,7 +70,7 @@ function ReviewQueuePage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Review Queue</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
@@ -79,7 +79,7 @@ function ReviewQueuePage() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Review Queue</h1>
         <PermissionDenied variant="fill" resource="experiments" />
       </PageLayout>
@@ -88,7 +88,7 @@ function ReviewQueuePage() {
 
   if (error) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Review Queue</h1>
         <EmptyState
           tone="error"
@@ -102,7 +102,6 @@ function ReviewQueuePage() {
 
   return (
     <DatasetReview
-      withQueryTrace={traceQuery.enabled}
       withFeedback={traceQuery.enabled}
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       datasetId={selected?.datasetId ?? undefined}
@@ -124,7 +123,7 @@ function ReviewQueuePage() {
       )}
       toolbarEnd={
         selectedId ? (
-          <Button render={<Link href={paths.experimentLink(selectedId)} />} icon={<ArrowUpRight />}>
+          <Button render={<Link href={paths.experimentLink(selectedId)} />} icon={<IconArrowUpRight />}>
             See experiment
           </Button>
         ) : undefined

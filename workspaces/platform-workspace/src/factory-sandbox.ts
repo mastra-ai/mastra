@@ -28,6 +28,18 @@ export interface PlatformFactorySandboxSettings extends Record<string, unknown> 
   publicPorts?: boolean;
 }
 
+/** vCPU counts a sandbox can be created with: one, or an even number up to 8. Any other count fails at creation. */
+const CPU_COUNTS = [1, 2, 4, 6, 8];
+
+/**
+ * The first of `counts` that is offered, else the built-in default. A count saved
+ * before the list existed, or passed as a default, may not be on it; a saved one
+ * falls back to the configured default, the same as once Factory drops it.
+ */
+function offeredCpuCount(...counts: Array<number | undefined>): number {
+  return counts.find(count => count !== undefined && CPU_COUNTS.includes(count)) ?? DEFAULT_SETTINGS.cpuCount;
+}
+
 /** Applied when neither the environment setting nor a host default is set. */
 const DEFAULT_SETTINGS = {
   cpuCount: 2,
@@ -45,8 +57,7 @@ const SETTINGS_SCHEMA = {
       title: 'CPU',
       description: 'vCPUs for the sandbox template',
       default: DEFAULT_SETTINGS.cpuCount,
-      minimum: 1,
-      maximum: 64,
+      oneOf: CPU_COUNTS.map(count => ({ const: count })),
     },
     memoryMb: {
       type: 'integer',
@@ -99,6 +110,7 @@ function settingsSchema(
   defaults: Partial<PlatformFactorySandboxSettings> | undefined,
 ): PublicSchema<PlatformFactorySandboxSettings> {
   const effective = { ...DEFAULT_SETTINGS, ...defaults };
+  effective.cpuCount = offeredCpuCount(effective.cpuCount);
   const properties = Object.fromEntries(
     Object.entries(SETTINGS_SCHEMA.properties).map(([key, property]) => [
       key,
@@ -176,7 +188,7 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
       ...rest,
       ...(Object.keys(mergedBuildEnv).length > 0 ? { buildEnv: mergedBuildEnv } : {}),
       ...(buildEnvRevision ? { buildEnvRevision } : {}),
-      cpuCount: settings.cpuCount ?? defaults?.cpuCount ?? DEFAULT_SETTINGS.cpuCount,
+      cpuCount: offeredCpuCount(settings.cpuCount, defaults?.cpuCount),
       memoryMB: settings.memoryMb ?? defaults?.memoryMb ?? DEFAULT_SETTINGS.memoryMb,
       docker: settings.docker ?? defaults?.docker ?? DEFAULT_SETTINGS.docker,
     });

@@ -167,7 +167,7 @@ handler: async c => {
 
 ## Examples
 
-### Basic GET Route
+### Basic GET route
 
 ```typescript
 import { Mastra } from '@mastra/core'
@@ -187,7 +187,7 @@ export const mastra = new Mastra({
 })
 ```
 
-### Route with Path Parameters
+### Route with path parameters
 
 ```typescript
 registerApiRoute('/users/:userId/posts/:postId', {
@@ -201,7 +201,7 @@ registerApiRoute('/users/:userId/posts/:postId', {
 })
 ```
 
-### POST Route with Body
+### POST route with body
 
 ```typescript
 registerApiRoute('/items', {
@@ -217,7 +217,7 @@ registerApiRoute('/items', {
 })
 ```
 
-### Route with Middleware
+### Route with middleware
 
 ```typescript
 registerApiRoute('/protected', {
@@ -254,7 +254,7 @@ registerApiRoute('/customer-webhook', {
 })
 ```
 
-### Route with OpenAPI Documentation
+### Route with OpenAPI documentation
 
 ```typescript
 import { z } from 'zod'

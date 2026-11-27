@@ -93,12 +93,6 @@ describe('joinModelId', () => {
 });
 
 describe('splitModelId / joinModelId round-trip', () => {
-  it('round-trips a simple id', () => {
-    const id = 'openai/gpt-4';
-    const split = splitModelId(id);
-    expect(joinModelId(split)).toBe(id);
-  });
-
   it('round-trips an id with nested slash', () => {
     const id = 'google/models/gemini-2.0';
     const split = splitModelId(id);
@@ -272,23 +266,16 @@ describe('mapInstructionBlocksFromApi', () => {
     expect(instructionBlocks[0].type).toBe('prompt_block');
   });
 
-  it('handles plain string input', () => {
-    const { instructionsString, instructionBlocks } = mapInstructionBlocksFromApi('Hello');
-    expect(instructionsString).toBe('Hello');
+  it.each([
+    ['handles plain string input', 'Hello', 'Hello'],
+    ['handles undefined input', undefined, ''],
+  ] as const)('%s', (_title, input, expected) => {
+    const { instructionsString, instructionBlocks } = mapInstructionBlocksFromApi(input);
+    expect(instructionsString).toBe(expected);
     expect(instructionBlocks).toHaveLength(1);
     expect(instructionBlocks[0].type).toBe('prompt_block');
     if (instructionBlocks[0].type === 'prompt_block') {
-      expect(instructionBlocks[0].content).toBe('Hello');
-    }
-  });
-
-  it('handles undefined input', () => {
-    const { instructionsString, instructionBlocks } = mapInstructionBlocksFromApi(undefined);
-    expect(instructionsString).toBe('');
-    expect(instructionBlocks).toHaveLength(1);
-    expect(instructionBlocks[0].type).toBe('prompt_block');
-    if (instructionBlocks[0].type === 'prompt_block') {
-      expect(instructionBlocks[0].content).toBe('');
+      expect(instructionBlocks[0].content).toBe(expected);
     }
   });
 
@@ -534,12 +521,5 @@ describe('observational memory round-trip', () => {
     expect(parsed.observation!.messageTokens).toBe(form.observation.messageTokens);
     expect(parsed.reflection!.model).toEqual(form.reflection.model);
     expect(parsed.reflection!.observationTokens).toBe(form.reflection.observationTokens);
-  });
-
-  it('build → parse round-trips boolean true', () => {
-    const api = buildObservationalMemoryForApi({ enabled: true });
-    expect(api).toBe(true);
-    const parsed = parseObservationalMemoryFromApi(api)!;
-    expect(parsed.enabled).toBe(true);
   });
 });

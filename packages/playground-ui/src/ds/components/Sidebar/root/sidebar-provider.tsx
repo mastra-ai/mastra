@@ -97,7 +97,20 @@ export function SidebarProvider({
 
   const [state, setState] = React.useState<SidebarState>(initial.state);
   const [width, setWidthState] = React.useState<number>(initial.width);
-  const [isMobile, setIsMobile] = React.useState(false);
+  const mobileQuery = `(max-width: ${mobileBreakpoint - 1}px)`;
+  const subscribeToMobile = React.useCallback(
+    (onChange: () => void) => {
+      const mq = window.matchMedia(mobileQuery);
+      mq.addEventListener('change', onChange);
+      return () => mq.removeEventListener('change', onChange);
+    },
+    [mobileQuery],
+  );
+  const isMobile = React.useSyncExternalStore(
+    subscribeToMobile,
+    () => window.matchMedia(mobileQuery).matches,
+    () => false,
+  );
   const [openMobile, setOpenMobileState] = React.useState(false);
   const [mobileDrawerPresent, setMobileDrawerPresent] = React.useState(false);
   const openMobileRef = React.useRef(false);
@@ -107,15 +120,7 @@ export function SidebarProvider({
   stateRef.current = state;
 
   const scopeRef = React.useRef<HTMLDivElement | null>(null);
-
-  React.useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const mq = window.matchMedia(`(max-width: ${mobileBreakpoint - 1}px)`);
-    const update = () => setIsMobile(mq.matches);
-    update();
-    mq.addEventListener('change', update);
-    return () => mq.removeEventListener('change', update);
-  }, [mobileBreakpoint]);
+  const panelRef = React.useRef<HTMLDivElement | null>(null);
 
   const setOpenMobile = React.useCallback((open: boolean) => {
     openMobileRef.current = open;
@@ -130,9 +135,9 @@ export function SidebarProvider({
     }
   }, [isMobile, openMobile, setOpenMobile]);
 
+  // The live width goes on the panel, not the scope: a variable changed on the scope restyles the whole app.
   const writeCssVar = React.useCallback((px: number) => {
-    const el = scopeRef.current;
-    if (el) el.style.setProperty(SIDEBAR_WIDTH_VAR, `${px}px`);
+    panelRef.current?.style.setProperty(SIDEBAR_WIDTH_VAR, `${px}px`);
   }, []);
 
   // Bounds can change at runtime (a view that needs more room raises `minWidth`). Show the stored
@@ -238,6 +243,8 @@ export function SidebarProvider({
       expand,
       commit,
       setGestureActive,
+      scopeRef,
+      panelRef,
       LinkComponent,
     }),
     [
@@ -276,6 +283,7 @@ export function SidebarProvider({
       data-sidebar-scope
       data-sidebar-state={state}
       data-sidebar-mobile={isMobile ? 'true' : 'false'}
+      data-sidebar-mobile-open={openMobile ? 'true' : 'false'}
       data-sidebar-mobile-present={mobileDrawerPresent ? 'true' : 'false'}
       style={scopeStyle}
       suppressHydrationWarning

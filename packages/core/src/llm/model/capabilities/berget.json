@@ -16,16 +16,10 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "zai-org/GLM-5.2": [
+    "Qwen/Qwen3.8-27B-FP8": [
       {
         "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "zai-org/GLM-5.3-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
     "moonshotai/Kimi-K3": [
@@ -34,10 +28,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "Qwen/Qwen3.8-27B-FP8": [
+    "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ]
   }

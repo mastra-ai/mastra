@@ -1,8 +1,11 @@
 import { Agent } from '@mastra/core/agent';
+import { createScorer } from '@mastra/core/evals';
+import { EventEmitterPubSub } from '@mastra/core/events';
+import type { Event } from '@mastra/core/events';
 import { coreFeatures } from '@mastra/core/features';
 import { Mastra } from '@mastra/core/mastra';
 import { SpanType } from '@mastra/core/observability';
-import { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
@@ -45,6 +48,7 @@ import {
   UPDATE_ITEM_ROUTE,
 } from './datasets';
 import { createTestServerContext } from './test-utils';
+import { RECEIVE_WORKFLOW_EVENT_ROUTE } from './workflows';
 
 describe('Datasets Handlers', () => {
   let mockStorage: InMemoryStore;
@@ -128,6 +132,13 @@ describe('Datasets Handlers', () => {
         "model": "anthropic/claude-haiku-4-5"
       }
     }`);
+
+    beforeEach(() => {
+      mastra.addScorer(
+        createScorer({ id: 'my-scorer', description: 'Always 1' }).generateScore(() => 1),
+        'my-scorer',
+      );
+    });
 
     async function triggerAndReadBack(body: unknown) {
       const dataset = await mastra.datasets.create({ name: 'Experiment Trigger DS' });
@@ -214,6 +225,20 @@ describe('Datasets Handlers', () => {
       expect(experiment?.datasetVersion).toBe(1);
     });
 
+    it('returns 400 and creates no experiment when a scorer id is unknown', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Unknown scorer DS' });
+      await dataset.addItem({ input: { prompt: 'hello' } });
+
+      await expect(
+        TRIGGER_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          ...TRIGGER_EXPERIMENT_ROUTE.bodySchema.parse({ ...issueReproductionBody, scorerIds: ['typo-scorer'] }),
+        } as any),
+      ).rejects.toMatchObject({ status: 400, message: expect.stringContaining('typo-scorer') });
+      expect((await dataset.listExperiments({ page: 0, perPage: 10 })).experiments).toHaveLength(0);
+    });
+
     it('converts a live RequestContext before forwarding to the dataset', async () => {
       const requestContext = new RequestContext();
       requestContext.set('tenantId', 'tenant-1');
@@ -262,6 +287,366 @@ describe('Datasets Handlers', () => {
       expect(startExperimentAsync).toHaveBeenCalledWith(
         expect.objectContaining({ targetType: 'agent', targetId: 'my-agent', agentModel: 'openai/gpt-5-mini' }),
       );
+    });
+
+    describe('durable', () => {
+      let generate: ReturnType<typeof vi.fn>;
+      let events: Event[];
+
+      beforeEach(async () => {
+        const agent = new Agent({ id: 'durable-agent', name: 'durable-agent', instructions: 'test', model: {} as any });
+        generate = vi.fn().mockResolvedValue({ text: 'answer' });
+        vi.spyOn(agent, 'getModel').mockResolvedValue({ specificationVersion: 'v2' } as any);
+        vi.spyOn(agent, 'generate').mockImplementation(generate as any);
+        mastra = new Mastra({
+          logger: false,
+          storage: mockStorage,
+          pubsub: new EventEmitterPubSub(),
+          agents: { 'durable-agent': agent },
+        });
+        events = [];
+        await mastra.pubsub.subscribe('workflows', event => {
+          events.push(event);
+        });
+      });
+
+      const push = (event: Event) =>
+        RECEIVE_WORKFLOW_EVENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          event: JSON.parse(JSON.stringify({ ...event, createdAt: new Date().toISOString() })),
+        } as any);
+
+      async function trigger(body: Record<string, unknown>, requestContext?: RequestContext) {
+        const dataset = await mastra.datasets.create({ name: 'Durable DS' });
+        await dataset.addItem({ input: { prompt: 'hello' } });
+        const parsedBody = TRIGGER_EXPERIMENT_ROUTE.bodySchema.parse({
+          targetType: 'agent',
+          targetId: 'durable-agent',
+          ...body,
+        });
+        const triggered = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          ...parsedBody,
+          ...(requestContext ? { requestContext } : {}),
+        } as any)) as any;
+        return { dataset, triggered };
+      }
+
+      it('starts the experiment workflow and leaves running it to whatever handles its events', async () => {
+        const { dataset, triggered } = await trigger({
+          durable: true,
+          maxConcurrency: 2,
+          itemTimeout: 5000,
+          maxRetries: 1,
+        });
+
+        expect(triggered).toMatchObject({ status: 'pending', totalItems: 1, startedAt: null });
+        await vi.waitFor(() => expect(events.length).toBeGreaterThan(0));
+        expect(events[0]).toMatchObject({
+          type: 'workflow.start',
+          runId: triggered.experimentId,
+          data: {
+            workflowId: '__mastra-experiment',
+            prevResult: {
+              output: {
+                datasetId: dataset.id,
+                experimentId: triggered.experimentId,
+                maxConcurrency: 2,
+                itemTimeout: 5000,
+                maxRetries: 1,
+              },
+            },
+          },
+        });
+
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const experiment = (await GET_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          experimentId: triggered.experimentId,
+        } as any)) as any;
+        expect(experiment).toMatchObject({ status: 'pending', startedAt: null });
+        expect(generate).not.toHaveBeenCalled();
+      });
+
+      it('carries a live RequestContext into the start event as plain JSON', async () => {
+        const requestContext = new RequestContext();
+        requestContext.set('projectId', 'project-1');
+        const { triggered } = await trigger({ durable: true }, requestContext);
+
+        await vi.waitFor(() => expect(events.length).toBeGreaterThan(0));
+        expect(events[0]?.data.prevResult.output).toMatchObject({
+          experimentId: triggered.experimentId,
+          requestContext: { projectId: 'project-1' },
+        });
+      });
+
+      it("keeps the caller's auth token and user out of the start event and the run snapshot", async () => {
+        const requestContext = new RequestContext();
+        requestContext.set('projectId', 'project-1');
+        requestContext.set(MASTRA_AUTH_TOKEN_KEY, 'secret-token');
+        requestContext.set('mastra__user', { id: 'secret-user' });
+        const { triggered } = await trigger({ durable: true }, requestContext);
+
+        await vi.waitFor(() => expect(events.length).toBeGreaterThan(0));
+        expect(events[0]?.data.prevResult.output.requestContext).toEqual({ projectId: 'project-1' });
+        const workflows = (await mockStorage.getStore('workflows'))!;
+        const snapshot = await workflows.loadWorkflowSnapshot({
+          workflowName: '__mastra-experiment',
+          runId: triggered.experimentId,
+        });
+        expect(snapshot).toBeTruthy();
+        expect(JSON.stringify(snapshot)).not.toContain('secret-');
+      });
+
+      it('refuses a pushed start for an experiment run that was never started, and accepts the real one', async () => {
+        const { dataset, triggered } = await trigger({ durable: true });
+        await vi.waitFor(() => expect(events.length).toBeGreaterThan(0));
+        const realStart = events[0]!;
+        const forged = { ...realStart, id: 'forged', runId: crypto.randomUUID() };
+        await expect(push(forged)).rejects.toMatchObject({ status: 404 });
+        expect(generate).not.toHaveBeenCalled();
+        const experiment = (await GET_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          experimentId: triggered.experimentId,
+        } as any)) as any;
+        expect(experiment).toMatchObject({ status: 'pending' });
+
+        await expect(push(realStart)).resolves.toMatchObject({ ok: true });
+      });
+
+      it.each([
+        [
+          'names another experiment',
+          (output: Record<string, unknown>, victim: Record<string, unknown>) => ({
+            ...output,
+            datasetId: victim.datasetId,
+            experimentId: victim.experimentId,
+          }),
+        ],
+        [
+          'carries its own request context',
+          (output: Record<string, unknown>) => ({
+            ...output,
+            requestContext: { mastra__user: { id: 'someone-else' } },
+          }),
+        ],
+      ])('refuses a pushed start for an existing experiment run that %s', async (_, forge) => {
+        const victim = await trigger({ durable: true });
+        const own = await trigger({ durable: true });
+        await vi.waitFor(() => expect(events.length).toBe(2));
+        const [victimStart, ownStart] = [victim, own].map(({ triggered }) =>
+          events.find(event => event.runId === triggered.experimentId)!,
+        );
+        const victimInput = (victimStart!.data as any).prevResult.output;
+        const ownData = ownStart!.data as any;
+        const forged = {
+          ...ownStart!,
+          id: 'forged',
+          data: {
+            ...ownData,
+            prevResult: { ...ownData.prevResult, output: forge(ownData.prevResult.output, victimInput) },
+          },
+        };
+
+        await expect(push(forged)).rejects.toMatchObject({ status: 400 });
+        await new Promise(resolve => setTimeout(resolve, 50));
+        expect(events).toHaveLength(2);
+        expect(generate).not.toHaveBeenCalled();
+      });
+
+      it('runs a real experiment to completion when every event comes through the push route', async () => {
+        const { dataset, triggered } = await trigger({ durable: true, maxConcurrency: 2 });
+        for (let next = 0; next < 200; next++) {
+          await vi.waitFor(() => expect(events.length).toBeGreaterThan(next));
+          const event = events[next]!;
+          await expect(push(event)).resolves.toMatchObject({ ok: true });
+          if (event.type === 'workflow.end') break;
+        }
+
+        const experiment = (await GET_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          experimentId: triggered.experimentId,
+        } as any)) as any;
+        expect(experiment).toMatchObject({ status: 'completed', succeededCount: 1, failedCount: 0 });
+        expect(generate).toHaveBeenCalledTimes(1);
+      });
+
+      it('refuses a pushed event whose run id differs from the run it is filed under', async () => {
+        const victim = await trigger({ durable: true });
+        const own = await trigger({ durable: true });
+        await vi.waitFor(() => expect(events.length).toBe(2));
+        const ownStart = events.find(event => event.runId === own.triggered.experimentId)!;
+        const forged = {
+          ...ownStart,
+          id: 'forged',
+          data: { ...(ownStart.data as any), runId: victim.triggered.experimentId },
+        };
+
+        await expect(push(forged)).rejects.toMatchObject({ status: 400 });
+        await new Promise(resolve => setTimeout(resolve, 50));
+        expect(events).toHaveLength(2);
+      });
+
+      it('refuses a pushed step event that swaps the run input', async () => {
+        const victim = await trigger({ durable: true });
+        const own = await trigger({ durable: true });
+        await vi.waitFor(() => expect(events.length).toBe(2));
+        const ownStart = events.find(event => event.runId === own.triggered.experimentId)!;
+        await expect(push(ownStart)).resolves.toMatchObject({ ok: true });
+        await vi.waitFor(() => expect(events.some(event => event.type === 'workflow.step.run')).toBe(true));
+        const stepRun = events.find(event => event.type === 'workflow.step.run')!;
+        const data = stepRun.data as any;
+        const forged = {
+          ...stepRun,
+          id: 'forged',
+          data: {
+            ...data,
+            stepResults: {
+              ...data.stepResults,
+              input: {
+                ...data.stepResults.input,
+                datasetId: victim.dataset.id,
+                experimentId: victim.triggered.experimentId,
+              },
+            },
+          },
+        };
+
+        await expect(push(forged)).rejects.toMatchObject({ status: 400 });
+        await expect(push(stepRun)).resolves.toMatchObject({ ok: true });
+      });
+
+      async function victimAndOwnRun() {
+        const victim = await trigger({ durable: true });
+        const own = await trigger({ durable: true });
+        await vi.waitFor(() => expect(events.length).toBe(2));
+        const ownStart = events.find(event => event.runId === own.triggered.experimentId)!;
+        const victimStart = events.find(event => event.runId === victim.triggered.experimentId)!;
+        const victimInput = (victimStart.data as any).prevResult.output;
+        const victimExperiment = async () =>
+          (await GET_EXPERIMENT_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            datasetId: victim.dataset.id,
+            experimentId: victim.triggered.experimentId,
+          } as any)) as any;
+        return { ownStart, victimInput, victimExperiment };
+      }
+
+      it.each([
+        [
+          'a resume that carries another experiment as its input',
+          (start: Event, victimInput: unknown) => ({
+            ...start,
+            type: 'workflow.resume',
+            data: { ...(start.data as any), prevResult: { status: 'success', output: victimInput } },
+          }),
+        ],
+        ['a suspend', (start: Event) => ({ ...start, type: 'workflow.suspend' })],
+        ['an event type an experiment never sends', (start: Event) => ({ ...start, type: 'workflow.whatever' })],
+        [
+          'a time travel to another experiment',
+          (start: Event, victimInput: unknown) => ({
+            ...start,
+            data: {
+              ...(start.data as any),
+              timeTravel: {
+                executionPath: [0],
+                steps: ['prepare'],
+                inputData: victimInput,
+                stepResults: { input: victimInput },
+              },
+            },
+          }),
+        ],
+        [
+          'a restart that carries another experiment as its input',
+          (start: Event, victimInput: unknown) => ({
+            ...start,
+            data: {
+              ...(start.data as any),
+              restart: { activePaths: [0], activeStepsPath: {}, stepResults: { input: victimInput } },
+            },
+          }),
+        ],
+      ])('refuses %s on an existing experiment run', async (_, forge) => {
+        const { ownStart, victimInput, victimExperiment } = await victimAndOwnRun();
+
+        await expect(push({ ...forge(ownStart, victimInput), id: 'forged' } as Event)).rejects.toMatchObject({
+          status: 400,
+        });
+        await new Promise(resolve => setTimeout(resolve, 50));
+        expect(events).toHaveLength(2);
+        expect(generate).not.toHaveBeenCalled();
+        expect(await victimExperiment()).toMatchObject({ status: 'pending' });
+      });
+
+      it("never lets a step event's previous result choose the experiment the first step prepares", async () => {
+        const { ownStart, victimInput, victimExperiment } = await victimAndOwnRun();
+        await expect(push(ownStart)).resolves.toMatchObject({ ok: true });
+        await vi.waitFor(() => expect(events.some(event => event.type === 'workflow.step.run')).toBe(true));
+        const stepRun = events.find(event => event.type === 'workflow.step.run')!;
+        const data = stepRun.data as any;
+
+        await push({
+          ...stepRun,
+          id: 'forged',
+          data: { ...data, prevResult: { status: 'success', output: victimInput } },
+        }).catch(() => {});
+        await new Promise(resolve => setTimeout(resolve, 50));
+        expect(await victimExperiment()).toMatchObject({ status: 'pending', startedAt: null });
+      });
+
+      it('returns 400 for a config a durable run cannot store', async () => {
+        const requestContext = new RequestContext();
+        requestContext.set('callback', () => 1);
+
+        await expect(trigger({ durable: true }, requestContext)).rejects.toMatchObject({ status: 400 });
+        expect(events).toEqual([]);
+      });
+
+      it('returns 400 instead of running in-process when the installed core has no durable experiments', async () => {
+        // Older cores don't have the experiment workflow and would ignore `durable`.
+        Object.defineProperty(mastra, '__ensureExperimentWorkflow', { value: undefined });
+
+        await expect(trigger({ durable: true })).rejects.toMatchObject({
+          status: 400,
+          message: expect.stringContaining('@mastra/core'),
+        });
+        const { experiments } = await (await mockStorage.getStore('experiments'))!.listExperiments({
+          pagination: { page: 0, perPage: 100 },
+        });
+        expect(experiments.filter(experiment => experiment.targetId === 'durable-agent')).toEqual([]);
+        await new Promise(resolve => setTimeout(resolve, 50));
+        expect(generate).not.toHaveBeenCalled();
+        expect(events).toEqual([]);
+      });
+
+      it('rejects invalid durable, maxConcurrency, itemTimeout and maxRetries before the handler', () => {
+        const base = { targetType: 'agent', targetId: 'durable-agent' };
+        const parse = (body: Record<string, unknown>) =>
+          TRIGGER_EXPERIMENT_ROUTE.bodySchema.safeParse({ ...base, ...body }).success;
+
+        expect(parse({ durable: 'yes' })).toBe(false);
+        expect(parse({ maxConcurrency: 0 })).toBe(false);
+        expect(parse({ maxConcurrency: 2.5 })).toBe(false);
+        expect(parse({ itemTimeout: 0 })).toBe(false);
+        expect(parse({ itemTimeout: 1.5 })).toBe(false);
+        expect(parse({ maxRetries: -1 })).toBe(false);
+        expect(parse({ maxRetries: 0.5 })).toBe(false);
+        expect(parse({ durable: true, maxConcurrency: 1, itemTimeout: 1000, maxRetries: 0 })).toBe(true);
+      });
+
+      it('still runs in-process without durable', async () => {
+        const { triggered } = await trigger({});
+
+        expect(triggered.startedAt).toBeInstanceOf(Date);
+        await vi.waitFor(() => expect(generate).toHaveBeenCalled());
+        expect(events).toEqual([]);
+      });
     });
 
     describe('agentModel validation', () => {

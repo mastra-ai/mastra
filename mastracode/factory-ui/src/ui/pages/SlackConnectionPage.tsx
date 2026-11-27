@@ -7,7 +7,6 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
-import { ChevronRight } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
 import { useApiConfig } from '../../api/config';
@@ -31,6 +30,7 @@ import { SettingsSubsection } from '../domains/settings/components/SettingsSubse
 import { connectSlackUrl } from '../domains/settings/services/channelAccounts';
 import type { ConnectedChannelAccount } from '../domains/settings/services/channelAccounts';
 import { SettingsPageLayout } from './SettingsPage';
+import { IconChevronRightMedium } from '@mastra/playground-ui/icons/central/IconChevronRightMedium';
 
 const linkedDateFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'long',
@@ -142,8 +142,13 @@ export function SlackConnectionSettings() {
               onClick={connectSlack}
               className={`group hover:bg-fill block w-full cursor-pointer rounded-xl text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
             >
-              <SettingsRow
-                label="Slack"
+              <SettingsItem
+                media={
+                  <SettingsItemIcon>
+                    <SlackIcon />
+                  </SettingsItemIcon>
+                }
+                title="Slack"
                 description={canConnect ? 'Not connected' : 'Slack connection is not configured'}
               >
                 <Txt
@@ -153,9 +158,9 @@ export function SlackConnectionSettings() {
                   className="group-hover:text-foreground flex items-center gap-2"
                 >
                   Connect Slack
-                  <ChevronRight aria-hidden="true" />
+                  <IconChevronRightMedium aria-hidden="true" />
                 </Txt>
-              </SettingsRow>
+              </SettingsItem>
             </button>
           </SettingsContainer>
         </SettingsSubsection>
@@ -257,10 +262,15 @@ export function SlackConnectionSettings() {
                   <Button
                     size="sm"
                     aria-label={`Disconnect ${account.externalUserName ?? account.externalUserId}`}
-                    disabled={disconnectMutation.isPending}
                     onClick={() => disconnect(account)}
+                    disabled={disconnectMutation.isPending}
+                    loading={
+                      disconnectMutation.isPending &&
+                      disconnectMutation.variables.externalTeamId === account.externalTeamId &&
+                      disconnectMutation.variables.externalUserId === account.externalUserId
+                    }
                   >
-                    {disconnectMutation.isPending ? 'Disconnecting…' : 'Disconnect'}
+                    Disconnect
                   </Button>
                 </SettingsRow>
               ))}

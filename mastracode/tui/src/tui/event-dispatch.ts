@@ -355,7 +355,7 @@ export async function dispatchEvent(
     }
 
     case 'info':
-      ectx.showInfo(event.message.replace(/^Switched model route:/, 'Switched model pack:'));
+      ectx.showInfo(event.message);
       break;
 
     case 'error':
@@ -663,7 +663,7 @@ export async function dispatchEvent(
           ectx,
           event.toolCallId,
           String(payload.question ?? ''),
-          payload.options as Array<{ label: string; description?: string }> | undefined,
+          payload.options as Array<{ label: string; description?: string; recommended?: boolean }> | undefined,
           payload.selectionMode as AskUserSelectionMode | undefined,
         );
       } else if (event.toolName === 'submit_plan') {

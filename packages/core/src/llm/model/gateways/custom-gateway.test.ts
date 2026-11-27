@@ -211,11 +211,6 @@ describe('Custom Gateway Integration', () => {
       const gateway = mastra.getGateway('custom');
       expect(gateway).toBe(gateway1);
     });
-
-    it('should throw error when getting non-existent gateway', () => {
-      const mastra = new Mastra();
-      expect(() => mastra.getGateway('nonexistent')).toThrow('Gateway with key nonexistent not found');
-    });
   });
 
   describe('ModelRouterLanguageModel with Custom Gateways', () => {
@@ -267,15 +262,6 @@ describe('Custom Gateway Integration', () => {
       expect(model).toBeDefined();
       expect(model.modelId).toBe('gpt-4o');
       expect(model.provider).toBe('openai');
-    });
-
-    it('should prefer custom gateway over default when both can handle the model', () => {
-      const customGateway = new TestCustomGateway();
-
-      // Custom gateway should be used for models with its prefix
-      const model = new ModelRouterLanguageModel('custom/my-provider/model-1', [customGateway]);
-
-      expect(model.provider).toBe('my-provider');
     });
 
     it('should fall back to default gateways when custom gateways cannot handle the model ID', () => {

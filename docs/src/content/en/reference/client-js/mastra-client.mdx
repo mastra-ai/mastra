@@ -55,9 +55,10 @@ You can also pass `requestContext` as a `Record<string, any>`.
   {
     name: 'retries',
     type: 'number',
-    description: 'The number of times a request will be retried on failure before throwing an error.',
+    description:
+      "The number of times a request will be retried on failure before throwing an error. Retries apply to read requests (GET, HEAD, OPTIONS) by default, and to the observability queries that read server state even though they are sent as POST (aggregateTraces, aggregateSpans, queryTraceThreads, querySpans). Write requests (POST, PUT, PATCH, DELETE) are sent once unless you set `retries` here, so a server error can't repeat a state-changing request. Methods that accept request options, such as `createFeedback()` and `replaceFeedback()`, can also set `retries` per call, and that count takes precedence over this one. This count covers transport retries only: `createScore()`, `createFeedback()`, and `replaceFeedback()` also retry missing-trace and missing-span responses for up to 30 seconds unless you pass `anchorRetryTimeoutMs: 0`, as described in the observability reference under Signal write options.",
     isOptional: true,
-    defaultValue: '3',
+    defaultValue: '3 for read requests, 0 for write requests',
   },
   {
     name: 'backoffMs',
@@ -65,14 +66,14 @@ You can also pass `requestContext` as a `Record<string, any>`.
     description:
       'The initial delay in milliseconds before retrying a failed request. This value is doubled with each retry (exponential backoff).',
     isOptional: true,
-    defaultValue: '300',
+    defaultValue: '100',
   },
   {
     name: 'maxBackoffMs',
     type: 'number',
     description: 'The maximum backoff time in milliseconds. Prevents retries from waiting too long between attempts.',
     isOptional: true,
-    defaultValue: '5000',
+    defaultValue: '1000',
   },
   {
     name: 'headers',

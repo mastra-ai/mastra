@@ -1,7 +1,7 @@
 import { createAnthropic } from '@ai-sdk/anthropic-v6';
 import { createGoogleGenerativeAI } from '@ai-sdk/google-v6';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v6';
-import { createOpenAI } from '@ai-sdk/openai-v6';
+import { createOpenAI } from '@ai-sdk/openai-v7';
 import { InMemoryServerCache } from '../../../cache/inmemory.js';
 import { MastraError } from '../../../error/index.js';
 import { MastraModelGateway } from './base.js';

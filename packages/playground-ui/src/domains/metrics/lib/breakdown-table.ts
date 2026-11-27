@@ -8,6 +8,7 @@ import { BREAKDOWN_SPAN_TYPES, countsSpans, isEntityTab, withDropped } from './b
 import { formatCount, formatDuration, formatPercent, formatUsd } from './chart-format';
 import { previousWindow } from './time-window';
 import { toTraceAggregateTimeRange } from './trace-aggregate';
+import { formatDate } from '@/utils/date-format';
 
 export const DASH = '—';
 
@@ -32,9 +33,8 @@ const METRIC_LABEL: Record<Exclude<ChangeMetric, 'count'>, string> = {
   cost: 'Cost',
 };
 
-const fmtMoment = (d: Date) =>
-  d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-const fmtRange = ({ start, end }: { start: Date; end: Date }) => `${fmtMoment(start)} – ${fmtMoment(end)}`;
+const fmtRange = ({ start, end }: { start: Date; end: Date }) =>
+  `${formatDate(start, 'day-time')} – ${formatDate(end, 'day-time')}`;
 
 /** The % Change column's tooltip: which figure it compares, and both ranges' dates. */
 export function changeDescription(window: { start: Date; end: Date }, label: string) {

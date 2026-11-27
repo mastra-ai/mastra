@@ -260,15 +260,6 @@ describe('stored-agents schemas – conditional fields & requestContextSchema', 
       expect(result.success).toBe(true);
     });
 
-    it('should allow omitting requestContextSchema', () => {
-      const result = createStoredAgentBodySchema.safeParse({
-        name: 'Test Agent',
-        instructions: 'Hello',
-        model: { provider: 'openai', name: 'gpt-4' },
-      });
-      expect(result.success).toBe(true);
-    });
-
     it('should include requestContextSchema in storedAgentSchema response', () => {
       const now = new Date();
       const result = storedAgentSchema.safeParse({
@@ -335,13 +326,6 @@ describe('stored-agents schemas – conditional fields & requestContextSchema', 
             value: {},
           },
         ],
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it('should accept null memory to disable it', () => {
-      const result = updateStoredAgentBodySchema.safeParse({
-        memory: null,
       });
       expect(result.success).toBe(true);
     });

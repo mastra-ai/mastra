@@ -7,7 +7,7 @@ description: "Browse StepFun Step Plan (China) model IDs, capabilities, and cont
 
 # <img src="https://models.dev/logos/stepfun-step-plan.svg" alt="StepFun Step Plan (China) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />StepFun Step Plan (China)
 
-Access 5 StepFun Step Plan (China) models through Mastra's model router. Authentication is handled automatically using the `STEPFUN_API_KEY` environment variable.
+Access 6 StepFun Step Plan (China) models through Mastra's model router. Authentication is handled automatically using the `STEPFUN_API_KEY` environment variable.
 
 Learn more in the [StepFun Step Plan (China) documentation](https://platform.stepfun.com/docs/zh/step-plan/integrations/reasoning-api).
 
@@ -101,7 +101,19 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 256000,
-    "maxOutput": 256000,
+    "maxOutput": 65536,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "stepfun-step-plan/stepaudio-2.5-chat",
+    "imageInput": false,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": null,
+    "maxOutput": null,
     "inputCost": null,
     "outputCost": null
   }
@@ -142,7 +154,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "stepfun-step-plan/step-router-v1"
+      ? "stepfun-step-plan/stepaudio-2.5-chat"
       : "stepfun-step-plan/step-3.5-flash";
   }
 });

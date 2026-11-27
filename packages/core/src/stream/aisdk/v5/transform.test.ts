@@ -488,36 +488,17 @@ describe('convertFullStreamChunkToMastra', () => {
   });
 
   describe('sanitizeToolCallInput', () => {
-    it('should strip <|call|> token from valid JSON', () => {
-      expect(sanitizeToolCallInput('{}<|call|>')).toBe('{}');
-    });
-
-    it('should strip <|endoftext|> token', () => {
-      expect(sanitizeToolCallInput('{"a":1}<|endoftext|>')).toBe('{"a":1}');
-    });
-
-    it('should strip multiple tokens', () => {
-      expect(sanitizeToolCallInput('{}<|call|><|endoftext|>')).toBe('{}');
-    });
-
-    it('should strip tab + token combinations', () => {
-      expect(sanitizeToolCallInput('{}\t<|call|>')).toBe('{}');
-    });
-
-    it('should be a no-op on clean JSON', () => {
-      expect(sanitizeToolCallInput('{"key": "value"}')).toBe('{"key": "value"}');
-    });
-
-    it('should handle empty string', () => {
-      expect(sanitizeToolCallInput('')).toBe('');
-    });
-
-    it('should strip <|end|> token', () => {
-      expect(sanitizeToolCallInput('{"x":1}<|end|>')).toBe('{"x":1}');
-    });
-
-    it('should strip tokens with surrounding whitespace', () => {
-      expect(sanitizeToolCallInput('{"x":1}  <|call|>  ')).toBe('{"x":1}');
+    it.each([
+      ['should strip <|call|> token from valid JSON', '{}<|call|>', '{}'],
+      ['should strip <|endoftext|> token', '{"a":1}<|endoftext|>', '{"a":1}'],
+      ['should strip multiple tokens', '{}<|call|><|endoftext|>', '{}'],
+      ['should strip tab + token combinations', '{}\t<|call|>', '{}'],
+      ['should be a no-op on clean JSON', '{"key": "value"}', '{"key": "value"}'],
+      ['should handle empty string', '', ''],
+      ['should strip <|end|> token', '{"x":1}<|end|>', '{"x":1}'],
+      ['should strip tokens with surrounding whitespace', '{"x":1}  <|call|>  ', '{"x":1}'],
+    ] as const)('%s', (_title, input, expected) => {
+      expect(sanitizeToolCallInput(input)).toBe(expected);
     });
 
     it('should preserve <|...|> patterns inside JSON string values', () => {

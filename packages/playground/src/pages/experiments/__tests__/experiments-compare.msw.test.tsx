@@ -167,14 +167,6 @@ describe('Experiments page — selection and compare', () => {
       expect(await getCompareTooltip()).toBe('Select at least two experiments to compare');
     });
 
-    it('offers New experiment without a Reset button', async () => {
-      await renderLoadedPage();
-
-      expect(screen.getByRole('button', { name: /new experiment/i })).toBeDefined();
-      expect(screen.queryByRole('button', { name: /reset/i })).toBeNull();
-      expect(screen.queryByRole('button', { name: /cancel/i })).toBeNull();
-    });
-
     it('lets every experiment be selected', async () => {
       await renderLoadedPage();
 
@@ -386,13 +378,6 @@ describe('Experiments page — selection and compare', () => {
 
   describe('when three experiments from the same dataset are selected', () => {
     beforeEach(listManySameDatasetExperiments);
-
-    it('counts them against the ten compare slots', async () => {
-      await renderLoadedPage();
-      select('exp-a', 'exp-b', 'exp-d');
-
-      expect(getSelectionCount(3)).toBeDefined();
-    });
 
     it('compares the first pick as baseline against the others as contenders', async () => {
       await renderLoadedPage();

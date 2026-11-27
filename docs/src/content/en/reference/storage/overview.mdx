@@ -98,7 +98,7 @@ The schema definitions below cover the built-in database-backed tables documente
 ]}
     />
 
-    The message `content` column contains a JSON object conforming to the `MastraMessageContentV2` type, which is designed to align closely with the AI SDK `UIMessage` message shape.
+    The message `content` column contains a JSON object conforming to the `MastraMessageContentV2` type, which is designed to align with the AI SDK `UIMessage` message shape.
 
     <SchemaTable
       columns={[
@@ -346,14 +346,14 @@ The schema definitions below cover the built-in database-backed tables documente
   },
   {
     name: 'global_run_id',
-    type: 'uuidv4',
+    type: 'text',
     description: 'Groups related evaluation runs (e.g. all unit tests in a CI run)',
     constraints: [{ type: 'nullable', value: false }],
   },
   {
     name: 'run_id',
-    type: 'uuidv4',
-    description: 'Unique identifier for the run being evaluated (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)',
+    type: 'text',
+    description: 'Unique identifier for the run being evaluated',
     constraints: [{ type: 'nullable', value: false }],
   },
   {

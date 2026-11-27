@@ -1,4 +1,4 @@
-import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
+import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/model-fallback';
 import { getBuiltinModePack } from '@mastra/code-sdk/onboarding/packs';
 import {
   loadSettings,
@@ -9,6 +9,11 @@ import {
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
   THREAD_FALLBACK_STATUS_KEY,
 } from '@mastra/code-sdk/onboarding/settings';
+import {
+  getCredentialProviderId,
+  parseCodexModelSelection,
+  withCodexFastModels,
+} from '@mastra/code-sdk/providers/model-ids';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
 import { applyPackToSession } from '../model-packs/apply.js';
@@ -144,7 +149,11 @@ export async function handleModelCommand(ctx: SlashCommandContext): Promise<void
 
     const models = await ctx.state.controller.listAvailableModels();
     const currentModelId = ctx.state.session.model.get();
-    const connected = models.filter(model => model.hasApiKey || model.id === currentModelId);
+    const { modelId: currentCatalogId } = parseCodexModelSelection(currentModelId);
+    const codexOAuth = ctx.authStorage?.get(getCredentialProviderId('openai'))?.type === 'oauth';
+    const available = models.filter(model => model.hasApiKey || model.id === currentCatalogId);
+    // A Factory's credentials run its sessions, so its list already says which Fast entries exist.
+    const connected = ctx.state.factory ? available : withCodexFastModels(available, { codexOAuth });
     if (connected.length === 0) {
       ctx.showInfo('No connected models. Use /connect to add a provider account or API key.');
       return;

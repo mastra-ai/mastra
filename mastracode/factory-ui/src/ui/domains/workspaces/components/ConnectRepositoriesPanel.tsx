@@ -1,14 +1,16 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Drawer, DrawerTrigger } from '@mastra/playground-ui/components/Drawer';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import {
   SettingsContainer,
   SettingsEmptyRow,
+  SettingsItem,
   SettingsListHeader,
   SettingsNoticeRow,
   SettingsSkeleton,
 } from '@mastra/playground-ui/new/settings';
-import { Plus, RotateCcw } from 'lucide-react';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 import { useRef, useState } from 'react';
 
 import { useLinkRepositoryMutation, useUnlinkRepositoryMutation } from '../../../../hooks/useFactories';
@@ -19,6 +21,7 @@ import type { RepositoryProviders } from '../../settings/components/environment/
 import { useEnvironmentSave } from '../../settings/components/environment/useEnvironmentSave';
 import type { FactoryProject } from '../services/github';
 import { AddRepositoryPicker } from './AddRepositoryPicker';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject }) {
   const sidePanel = useSidePanelDrawer();
@@ -37,7 +40,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
   const addRepository = (
     <DrawerTrigger
       render={
-        <Button ref={addButton} type="button" size="sm" icon={<Plus />} disabled={mutationPending}>
+        <Button ref={addButton} type="button" size="sm" icon={<IconPlusMedium />} disabled={mutationPending}>
           Add repository
         </Button>
       }
@@ -63,7 +66,24 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
           </SettingsListHeader>
         )}
         {environmentQuery.isPending && (
-          <SettingsSkeleton label="Loading repository configuration" variant="item" rows={2} />
+          <SettingsSkeleton
+            label="Loading repository configuration"
+            rows={2}
+            placeholder={
+              <SettingsItem
+                aria-hidden
+                media={
+                  <>
+                    <span className="size-control-sm shrink-0" />
+                    <Skeleton className="size-avatar-md shrink-0 rounded-lg motion-reduce:before:animate-none" />
+                  </>
+                }
+                title={<SkeletonText line="text-label" className="w-32 motion-reduce:before:animate-none" />}
+              >
+                <Skeleton className="h-control-sm w-20 rounded-full motion-reduce:before:animate-none" />
+              </SettingsItem>
+            }
+          />
         )}
         {environmentQuery.isError && (
           <SettingsNoticeRow>
@@ -73,8 +93,8 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
                 <Button
                   variant="ghost"
                   size="sm"
-                  icon={<RotateCcw />}
-                  disabled={environmentQuery.isFetching}
+                  icon={<IconArrowRotateCounterClockwise />}
+                  loading={environmentQuery.isFetching}
                   onClick={() => void environmentQuery.refetch()}
                 >
                   Retry repository configuration

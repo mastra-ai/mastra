@@ -6,10 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 
+import { DispatcherBoardEngine } from '../board-engine/engine.js';
 import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
-import { createTriageWorkRegistry } from '../boards/test-utils.js';
+import { createTestBoard, createTriageWorkRegistry, triageWorkBoard } from '../boards/test-utils.js';
+import type { FeedMove } from '../feed-events.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
+import type { FactoryTransitionRequest } from '../rules/transition-service.js';
 import type { FactoryRuleActor } from '../rules/types.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
 import {
@@ -20,6 +23,22 @@ import type { FactoryDeferredDecisionRecord, WorkItemUpdateConflictError } from 
 
 let auditRecorded: Array<Record<string, any>> = [];
 let auditFailure: Error | undefined;
+/** Work the build seat was handed (see acceptsWork): production syncs acceptance labels from here. */
+let acceptedHook: Array<{ workItemId: string }> = [];
+/** Committed stage changes: production reports them and ends the left phase's goal from here. */
+let committedHook: Array<{ workItemId: string; fromStage?: string; toStage: string }> = [];
+/** Every input the routes hand the board engine, in order. */
+let engineInputs: FactoryTransitionRequest[] = [];
+const deletedCards: string[] = [];
+/** Whether the routes' board engine takes moves on to settle later, as an engine with `submitMove` does. */
+let submitsMoves = false;
+let announcesMoves = true;
+let settlingFails = false;
+/** When set, a submitted move settles only once this does: a test holds it to look at the gap after the 202. */
+let settlingHeld: Promise<void> | undefined;
+const SUBMITTED_INPUT_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+/** What the routes told the project's open boards about moves answered `202`. */
+const announcedMoves: Array<{ scope: { orgId: string; factoryProjectId: string }; move: FeedMove }> = [];
 
 const auditRecorder: AuditRecorder = {
   async record(input) {
@@ -61,25 +80,24 @@ const audit: AuditEmitter = {
     }
   },
 };
-import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { createFactoryStorageForTests, finishQueuedRunsForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { boardCheck } from '../work-items/board-check.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { BoardPhasesResponse } from './contracts.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
+import type { WorkItemRoutesDeps } from './work-items.js';
 import { parseCreateWorkItem, parseUpdateWorkItem, WorkItemRoutes } from './work-items.js';
 
 // ── Test harness ─────────────────────────────────────────────────────────
-const PARKED_RUN = { toolName: 'ask_user', suspendedAt: 0 };
 
 function buildApp(
   user: { workosId: string; organizationId?: string } | null,
   startCoordinator?: { prepare: (input: any) => Promise<any> },
   requestContext?: RequestContext,
-  running: ReadonlySet<string> = new Set(),
   // Work as projects stored before new projects' Work dropped Triage: these tests walk its lanes.
   boardRegistry: BoardRegistry = createTriageWorkRegistry(),
-  parked: ReadonlySet<string> = new Set(),
+  sessionRepository?: WorkItemRoutesDeps['sessionRepository'],
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -95,19 +113,55 @@ function buildApp(
       projects: seed.projects,
       workItems: seed.workItems,
       boardRegistry,
+      // No intake rules to read: the route list, as before intake order.
+      intakeEvaluator: 'route-list',
       queueHealth: seed.queueHealth,
-      transitionService: new FactoryTransitionService({
-        configVersion: 'factory-config-v1',
-        storage: seed.workItems,
-        boards: boardRegistry,
-        audit: auditRecorder,
-      }),
-      startCoordinator,
-      liveSessions: {
-        isRunning: sessionId => running.has(sessionId),
-        parked: sessionId => (parked.has(sessionId) ? PARKED_RUN : undefined),
-        parkedIn: () => [...parked].map(sessionId => ({ sessionId, run: PARKED_RUN })),
+      // Absent when a test turns it off: a host that wired no way to tell the board.
+      get announceMove() {
+        if (!announcesMoves) return undefined;
+        return (scope: { orgId: string; factoryProjectId: string }, move: FeedMove) =>
+          void announcedMoves.push({ scope, move });
       },
+      boardEngine: {
+        cardDeleted: async card => void deletedCards.push(card.workItemId),
+        // Absent unless a test turns it on: the default engine has no `submitMove`.
+        get submitMove() {
+          if (!submitsMoves) return undefined;
+          return async (input: FactoryTransitionRequest) => {
+            const card = await seed.workItems.get({ orgId: input.orgId, id: input.workItemId });
+            // The check an engine can make right away; the rest of the move settles later.
+            if (card?.revision !== input.expectedRevision) return { answered: await this.requestMove(input) };
+            if (settlingFails) {
+              return { inputId: SUBMITTED_INPUT_ID, settled: Promise.reject(new Error('The board run is gone.')) };
+            }
+            const held = settlingHeld;
+            if (held) return { inputId: SUBMITTED_INPUT_ID, settled: held.then(() => this.requestMove(input)) };
+            return { inputId: SUBMITTED_INPUT_ID, settled: this.requestMove(input) };
+          };
+        },
+        requestMove(input: FactoryTransitionRequest) {
+          engineInputs.push(input);
+          return new DispatcherBoardEngine({
+            workItems: seed.workItems,
+            boards: boardRegistry,
+            transitionService: new FactoryTransitionService({
+              configVersion: 'factory-config-v1',
+              storage: seed.workItems,
+              boards: boardRegistry,
+              audit: auditRecorder,
+              onAccepted: async args => {
+                acceptedHook.push({ workItemId: args.workItemId });
+              },
+              onTransitionCommitted: async args => {
+                committedHook.push({ workItemId: args.workItemId, fromStage: args.fromStage, toStage: args.toStage });
+              },
+            }),
+          }).requestMove(input);
+        },
+      },
+      startCoordinator,
+      sessionRepository,
+      liveSessions: { parked: () => undefined, parkedIn: () => [] },
     }).routes(),
   );
   return app;
@@ -156,6 +210,8 @@ beforeEach(async () => {
   seed = await createFactoryStorageForTests();
   auditRecorded = [];
   auditFailure = undefined;
+  acceptedHook = [];
+  committedHook = [];
   await seedProject();
 });
 
@@ -187,7 +243,6 @@ describe('installed board catalog', () => {
       orgUser,
       undefined,
       undefined,
-      new Set(),
       withWork ? createBoardRegistry({ boards: [board] }) : boardRegistryOf([board]),
     );
     const response = await app.request(`/web/factory/projects/${PROJECT_ID}/boards`);
@@ -220,6 +275,8 @@ describe('installed board catalog', () => {
           context: 'release-preparer',
           role: 'release-preparer',
           autoStart: false,
+          // A board that lists no outcomes offers one per next phase.
+          outcomes: [{ key: 'shipped', label: 'Shipped', to: 'shipped' }],
           transitions: [{ outcome: null, to: 'shipped' }],
         },
         { id: 'shipped', name: 'Shipped', title: 'Shipped', kind: 'terminal', nextPhases: [], transitions: [] },
@@ -228,7 +285,7 @@ describe('installed board catalog', () => {
   });
 
   it("names the phase playing each part of each board's pull request loop", async () => {
-    const app = buildApp(orgUser, undefined, undefined, new Set(), createBoardRegistry());
+    const app = buildApp(orgUser, undefined, undefined, createBoardRegistry());
     const body = await (await app.request(`/web/factory/projects/${PROJECT_ID}/boards`)).json();
     expect(FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema.parse(body)).toEqual(body);
     // Factory's Work has no Triage, so its flow names none.
@@ -277,7 +334,7 @@ describe('installed board catalog', () => {
         shipped: { name: 'Shipped', kind: 'terminal' },
       },
     });
-    const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistryOf([board]));
+    const app = buildApp(orgUser, undefined, undefined, boardRegistryOf([board]));
     const body = await (await app.request(`/web/factory/projects/${PROJECT_ID}/boards`)).json();
     expect(FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema.parse(body)).toEqual(body);
     const [, planning, shipping] = body.boards[0].phases;
@@ -303,7 +360,7 @@ describe('installed board catalog', () => {
         shipped: { name: 'Shipped', kind: 'terminal' },
       },
     });
-    const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistryOf([board]));
+    const app = buildApp(orgUser, undefined, undefined, boardRegistryOf([board]));
     const body = await (await app.request(`/web/factory/projects/${PROJECT_ID}/boards`)).json();
     expect(FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema.parse(body)).toEqual(body);
     const [queued, drafting] = body.boards[0].phases;
@@ -312,7 +369,7 @@ describe('installed board catalog', () => {
   });
 
   it('supports an empty installation', async () => {
-    const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistryOf([]));
+    const app = buildApp(orgUser, undefined, undefined, boardRegistryOf([]));
     const response = await app.request(`/web/factory/projects/${PROJECT_ID}/boards`);
     expect(await response.json()).toEqual({ boards: [] });
   });
@@ -411,7 +468,7 @@ describe('POST /web/factory/projects/:id/work-items', () => {
       },
     });
     const boardRegistry = boardRegistryOf([releaseBoard]);
-    const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistry);
+    const app = buildApp(orgUser, undefined, undefined, boardRegistry);
     const importedItems = [
       {
         externalSource: {
@@ -669,7 +726,7 @@ describe('PATCH /web/factory/work-items/:id', () => {
         shipped: { title: 'Shipped', kind: 'terminal' },
       },
     });
-    const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistryOf([releaseBoard]));
+    const app = buildApp(orgUser, undefined, undefined, boardRegistryOf([releaseBoard]));
 
     const response = await app.request(`/web/factory/work-items/${item.id}`, {
       method: 'PATCH',
@@ -700,7 +757,7 @@ describe('PATCH /web/factory/work-items/:id', () => {
       initialPhase: 'backlog',
       phases: { backlog: { title: 'Backlog', kind: 'resting' } },
     });
-    const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistryOf([releaseBoard, supportBoard]));
+    const app = buildApp(orgUser, undefined, undefined, boardRegistryOf([releaseBoard, supportBoard]));
 
     const responses = await Promise.all([
       app.request(`/web/factory/work-items/${item.id}`, {
@@ -869,6 +926,115 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
     );
   });
 
+  describe('with a board engine that settles moves later', () => {
+    beforeEach(() => {
+      submitsMoves = true;
+      announcedMoves.length = 0;
+    });
+    afterEach(() => {
+      submitsMoves = false;
+      announcesMoves = true;
+      settlingFails = false;
+      settlingHeld = undefined;
+    });
+
+    it('answers 202 with an input id, and tells the board when the move landed', async () => {
+      const item = await createItem();
+      const res = await transition(item);
+      expect(res.status).toBe(202);
+      expect(await res.json()).toEqual({ inputId: SUBMITTED_INPUT_ID });
+
+      await vi.waitFor(() => expect(announcedMoves).toHaveLength(1));
+      expect(announcedMoves[0]).toEqual({
+        scope: { orgId: 'org1', factoryProjectId: PROJECT_ID },
+        move: { inputId: SUBMITTED_INPUT_ID, status: 'accepted' },
+      });
+      expect((await listItems())[0]?.stages).toEqual(['planning']);
+    });
+
+    it('answers 202 while the move is still settling, and tells the board only once it has', async () => {
+      let settle = () => {};
+      settlingHeld = new Promise<void>(resolve => {
+        settle = resolve;
+      });
+      const item = await createItem();
+      const res = await transition(item);
+      expect(res.status).toBe(202);
+      expect(await res.json()).toEqual({ inputId: SUBMITTED_INPUT_ID });
+      // The route answered with the move not made yet, and nothing told.
+      expect(announcedMoves).toEqual([]);
+      expect((await listItems())[0]?.stages).toEqual(['intake']);
+
+      settle();
+      await vi.waitFor(() => expect(announcedMoves).toHaveLength(1));
+      expect(announcedMoves[0]?.move).toEqual({ inputId: SUBMITTED_INPUT_ID, status: 'accepted' });
+      expect((await listItems())[0]?.stages).toEqual(['planning']);
+    });
+
+    it('answers a move its first checks refuse on the spot, as before', async () => {
+      const item = await createItem();
+      const res = await transition({ id: item.id, revision: item.revision + 5 });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ result: { status: 'rejected', code: 'stale' } });
+      expect(announcedMoves).toEqual([]);
+      expect((await listItems())[0]?.stages).toEqual(['intake']);
+    });
+
+    it('tells the board of a refusal that came after the 202, under its input id', async () => {
+      const item = await createItem();
+      const res = await transition(item, { stage: 'missing' });
+      expect(res.status).toBe(202);
+      const { inputId } = await res.json();
+
+      await vi.waitFor(() => expect(announcedMoves).toHaveLength(1));
+      expect(announcedMoves[0]?.move).toEqual({
+        inputId,
+        status: 'rejected',
+        code: 'invalid_transition',
+        reason: expect.stringContaining('does not allow moving from intake to missing'),
+      });
+      expect((await listItems())[0]?.stages).toEqual(['intake']);
+    });
+
+    it('tells the board the move failed when it broke after the 202', async () => {
+      settlingFails = true;
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const item = await createItem();
+      const res = await transition(item);
+      expect(res.status).toBe(202);
+
+      await vi.waitFor(() => expect(announcedMoves).toHaveLength(1));
+      expect(announcedMoves[0]?.move).toEqual({
+        inputId: SUBMITTED_INPUT_ID,
+        status: 'rejected',
+        code: 'failed',
+        reason: 'Factory could not move the card. Try again.',
+      });
+      expect((await listItems())[0]?.stages).toEqual(['intake']);
+      warn.mockRestore();
+    });
+
+    it('answers the whole move, as before, when nothing can tell the board how it ended', async () => {
+      announcesMoves = false;
+      const item = await createItem();
+      const res = await transition(item);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ result: { status: 'accepted', stage: 'planning' } });
+      expect((await listItems())[0]?.stages).toEqual(['planning']);
+    });
+  });
+
+  it("hands the card's placement and the person's move to the board engine", async () => {
+    engineInputs = [];
+    const item = await createItem();
+    const res = await transition(item);
+    expect(res.status).toBe(200);
+    expect(engineInputs.map(input => [input.workItemId, input.stage, input.ingress.type])).toEqual([
+      [item.id, 'intake', expect.any(String)],
+      [item.id, 'planning', 'human'],
+    ]);
+  });
+
   it('stamps the browser request onto the row a move leaves behind', async () => {
     const item = await createItem();
     auditRecorded = [];
@@ -947,6 +1113,7 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
     expect(stayed.status).toBe(200);
     expect(await decisionCount()).toBe(1);
 
+    await finishQueuedRunsForTests(seed.workItems);
     const reentered = await transition(
       { id: item.id, revision: (await stayed.json()).result.revision },
       { stage: 'triage', reenter: true, requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3' },
@@ -960,6 +1127,380 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
     const res = await transition(item, { board: 'review' });
     expect(res.status).toBe(422);
     expect(await res.json()).toMatchObject({ result: { status: 'rejected', code: 'invalid_transition' } });
+  });
+});
+
+describe('POST transition moving a card to another board', () => {
+  // On live projects, Work cards that belong on another board (e.g. OSS Features) had no manual
+  // path off their board: the transition endpoint rejected any `board` other than the card's.
+
+  // A board sharing a phase name with Work: on another board, a same-named phase is a new phase.
+  const previewBoard = defineBoard({
+    id: 'preview',
+    title: 'Preview',
+    initialPhase: 'inbox',
+    phases: {
+      inbox: { title: 'Inbox', kind: 'resting', nextPhases: ['triage'] },
+      triage: {
+        title: 'Triage',
+        kind: 'working',
+        runner: { context: 'triage', skill: 'preview-triage' },
+        next: 'done',
+      },
+      done: { title: 'Done', kind: 'terminal' },
+    },
+  });
+  const registry = () => boardRegistryOf([triageWorkBoard, createTestBoard(), previewBoard]);
+
+  async function createItem(overrides: Record<string, unknown> = {}) {
+    const res = await buildApp(orgUser, undefined, undefined, registry()).request(
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(createBody(overrides)),
+      },
+    );
+    return (await res.json()).workItem;
+  }
+
+  const move = (item: { id: string; revision: number }, overrides: Record<string, unknown> = {}) =>
+    buildApp(orgUser, undefined, undefined, registry()).request(
+      `/web/factory/projects/${PROJECT_ID}/work-items/${item.id}/transition`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          board: 'release',
+          stage: 'queued',
+          expectedRevision: item.revision,
+          requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab1',
+          cause: 'move_to_board',
+          ...overrides,
+        }),
+      },
+    );
+
+  it("a person moves a Work card to another board's phase, keeping its id, sessions and history", async () => {
+    const created = await createItem();
+    // A triage session from an earlier run stays on the card; only its board placement changes.
+    await seed.workItems.update({ orgId: 'org1', id: created.id, userId: 'u1', patch: { sessions: run } });
+    const item = (await seed.workItems.get({ orgId: 'org1', id: created.id }))!;
+    auditRecorded = [];
+
+    const res = await move(item);
+
+    expect(res.status).toBe(200);
+    const { result } = await res.json();
+    expect(result).toMatchObject({ status: 'accepted', itemId: created.id, stage: 'queued' });
+    const stored = (await seed.workItems.get({ orgId: 'org1', id: created.id }))!;
+    expect(stored.board).toBe('release');
+    expect(stored.stages).toEqual(['queued']);
+    expect(stored.sessions).toEqual(item.sessions);
+    expect(stored.sessions.execute).toMatchObject(run.execute);
+    expect(stored.stageHistory.map(entry => [entry.stage, entry.exitedAt !== undefined])).toEqual([
+      ['intake', true],
+      ['queued', false],
+    ]);
+    expect(auditRecorded).toContainEqual(
+      expect.objectContaining({
+        action: 'factory.work_item.stage_moved',
+        actorType: 'human',
+        actorId: 'u1',
+        metadata: expect.objectContaining({ ingressType: 'human', fromBoard: 'work', toBoard: 'release' }),
+      }),
+    );
+  });
+
+  it('holds a busy card, then supersedes the run the old board proposed once it moves', async () => {
+    const item = await createItem();
+    const triaged = await move(item, { board: 'work', stage: 'triage' });
+    expect(triaged.status).toBe(200);
+    const { result } = await triaged.json();
+
+    // The triage run is still queued: moving the card away would strand it mid-flight.
+    const busy = await move(
+      { id: item.id, revision: result.revision },
+      { requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab2' },
+    );
+    expect(busy.status).toBe(422);
+    expect(await busy.json()).toMatchObject({ result: { status: 'rejected', code: 'card_busy' } });
+
+    // A dispatcher parks the run for a person's approval; the proposal is not a live run.
+    const ownerId = 'dispatcher-1';
+    const now = new Date();
+    const [claimed] = await seed.workItems.claimDeferredDecisions({
+      ownerId,
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 60_000),
+      limit: 10,
+    });
+    await seed.workItems.proposeDeferredDecision(
+      { id: claimed!.id, orgId: claimed!.orgId, factoryProjectId: claimed!.factoryProjectId, ownerId },
+      now,
+    );
+
+    const moved = await move(
+      { id: item.id, revision: result.revision },
+      { requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab5' },
+    );
+
+    expect(moved.status).toBe(200);
+    // The old board's proposed run means nothing on the new board.
+    const proposals = await seed.workItems.listDeferredDecisions('org1', PROJECT_ID, { statuses: ['proposed'] });
+    expect(proposals).toHaveLength(0);
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).toBe('release');
+  });
+
+  it('returns typed stale on a lost revision race without moving the card', async () => {
+    const item = await createItem();
+    const res = await move({ id: item.id, revision: item.revision + 5 });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ result: { status: 'rejected', code: 'stale' } });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).not.toBe('release');
+  });
+
+  it('refuses a board that is not installed and a phase the target board does not declare', async () => {
+    const item = await createItem();
+
+    const unknownBoard = await move(item, { board: 'oss-features' });
+    expect(unknownBoard.status).toBe(422);
+    expect(await unknownBoard.json()).toMatchObject({
+      result: { status: 'rejected', code: 'invalid_transition', reason: 'Board "oss-features" is not installed.' },
+    });
+
+    const unknownPhase = await move(item, { stage: 'missing', requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab3' });
+    expect(unknownPhase.status).toBe(422);
+    expect(await unknownPhase.json()).toMatchObject({
+      result: { status: 'rejected', code: 'invalid_transition', reason: expect.stringContaining('no phase missing') },
+    });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).not.toBe('release');
+  });
+
+  it("refuses the target board's terminal phase: a card finishes on its own board", async () => {
+    const item = await createItem();
+    const res = await move(item, { stage: 'shipped' });
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ result: { status: 'rejected', code: 'invalid_transition' } });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).not.toBe('release');
+  });
+
+  it('refuses to move a finished card off its board', async () => {
+    const item = await createItem();
+    const canceled = await move(item, { board: 'work', stage: 'canceled' });
+    expect(canceled.status).toBe(200);
+    const { result } = await canceled.json();
+
+    const res = await move(
+      { id: item.id, revision: result.revision },
+      { requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab4' },
+    );
+
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ result: { status: 'rejected', code: 'invalid_transition' } });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.stages).toEqual(['canceled']);
+  });
+
+  it('enters a same-named phase on the other board as a new phase: its runner queues and the move is audited', async () => {
+    const item = await createItem();
+    const triaged = await move(item, { board: 'work', stage: 'triage' });
+    expect(triaged.status).toBe(200);
+    const { result } = await triaged.json();
+    await finishQueuedRunsForTests(seed.workItems);
+    auditRecorded = [];
+
+    const res = await move(
+      { id: item.id, revision: result.revision },
+      { board: 'preview', stage: 'triage', requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab6' },
+    );
+
+    expect(res.status).toBe(200);
+    const moved = (await res.json()).result;
+    expect(moved.status).toBe('accepted');
+    // Preview's Triage is not Work's Triage: entering it starts Preview's own runner, and the
+    // card's notice names both boards — the phase names alone would hide the move.
+    expect(moved.decisions).toContainEqual(
+      expect.objectContaining({
+        type: 'invokeSkill',
+        skillName: 'preview-triage',
+        startsAfterOwnMove: true,
+        precedingMessage:
+          'This work was moved from the triage stage on the Work board to the triage stage on the Preview board.',
+      }),
+    );
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).toBe('preview');
+    // Leaving Work's triage for Preview's is a stage change: the old phase's goal must end.
+    await vi.waitFor(() =>
+      expect(committedHook).toContainEqual({ workItemId: item.id, fromStage: 'triage', toStage: 'triage' }),
+    );
+    expect(auditRecorded).toContainEqual(
+      expect.objectContaining({
+        action: 'factory.work_item.stage_moved',
+        metadata: expect.objectContaining({ fromBoard: 'work', toBoard: 'preview' }),
+      }),
+    );
+  });
+
+  it('holds a busy card even when the destination phase shares its name', async () => {
+    const item = await createItem();
+    const triaged = await move(item, { board: 'work', stage: 'triage' });
+    expect(triaged.status).toBe(200);
+    const { result } = await triaged.json();
+
+    // The triage run is still queued: the same-named phase on another board is no exception.
+    const res = await move(
+      { id: item.id, revision: result.revision },
+      { board: 'preview', stage: 'triage', requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab7' },
+    );
+
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ result: { status: 'rejected', code: 'card_busy' } });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).toBe('work');
+  });
+
+  it('queues the destination runner even when the move names run_start as its cause', async () => {
+    // A run-start cause marks the card's own agent landing it where its run already is; crossing
+    // boards is never that, so the destination phase's runner still queues.
+    const item = await createItem();
+    const res = await move(item, { board: 'preview', stage: 'triage', cause: 'run_start' });
+    expect(res.status).toBe(200);
+    const { result } = await res.json();
+    expect(result.status).toBe('accepted');
+    expect(result.decisions).toContainEqual(
+      expect.objectContaining({ type: 'invokeSkill', skillName: 'preview-triage', startsAfterOwnMove: true }),
+    );
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).toBe('preview');
+  });
+
+  it("accepts the work when a person hands the card to the destination board's build seat", async () => {
+    const created = await createItem();
+    const toPreview = await move(created, { board: 'preview', stage: 'inbox' });
+    expect(toPreview.status).toBe(200);
+    const parked = (await seed.workItems.get({ orgId: 'org1', id: created.id }))!;
+    expect(acceptedHook).toEqual([]);
+    // The move's own notice is delivered before the next move, as a running dispatcher would.
+    await finishQueuedRunsForTests(seed.workItems);
+
+    // Inbox is a resting phase Work does not have; handing the card to Work's builder accepts it.
+    const toBuild = await move(
+      { id: created.id, revision: parked.revision },
+      { board: 'work', stage: 'planning', requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab9' },
+    );
+    expect(toBuild.status).toBe(200);
+    const stored = (await seed.workItems.get({ orgId: 'org1', id: created.id }))!;
+    expect(stored.board).toBe('work');
+    // The move is the approval: the acceptance hook (production: GitHub labels) fires for the card.
+    await vi.waitFor(() => expect(acceptedHook).toEqual([{ workItemId: created.id }]));
+  });
+
+  it('holds a busy card whatever cause the request names', async () => {
+    const item = await createItem();
+    const triaged = await move(item, { board: 'work', stage: 'triage' });
+    expect(triaged.status).toBe(200);
+    const { result } = await triaged.json();
+
+    const res = await move(
+      { id: item.id, revision: result.revision },
+      { cause: 'run_start', requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab8' },
+    );
+
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ result: { status: 'rejected', code: 'card_busy' } });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).toBe('work');
+  });
+});
+
+describe('PUT /web/factory/projects/:id/work-items/:workItemId/working-pull-request', () => {
+  async function issueWithPullRequests() {
+    const res = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({ externalSource: { integrationId: 'github', type: 'issue', externalId: 'github:7:issue:1' } }),
+    );
+    const { workItem } = await res.json();
+    const attach = (
+      number: number,
+      state: string,
+      cardMetadata?: (metadata: Record<string, unknown>) => Record<string, unknown>,
+    ) =>
+      seed.workItems.attachSource({
+        orgId: 'org1',
+        id: workItem.id,
+        source: { integrationId: 'github', type: 'pull-request', externalId: `github:7:pull-request:${number}` },
+        metadata: { githubPullRequestNumber: number, state },
+        cardMetadata,
+      });
+    await attach(2, 'open', metadata => ({
+      ...metadata,
+      pullRequestHeadSha: 'abc',
+      untrustedPullRequests: ['github:pull-request:github:7:pull-request:2'],
+    }));
+    await attach(3, 'closed');
+    return (await seed.workItems.get({ orgId: 'org1', id: workItem.id }))!;
+  }
+  const pick = (item: { id: string; revision: number }, pullRequest: number, expectedRevision = item.revision) =>
+    json('PUT', `/web/factory/projects/${PROJECT_ID}/work-items/${item.id}/working-pull-request`, {
+      pullRequest,
+      expectedRevision,
+    });
+
+  it("makes an outsider's linked pull request the card's working one when a person picks it", async () => {
+    const item = await issueWithPullRequests();
+    auditRecorded = [];
+
+    const res = await pick(item, 2);
+
+    expect(res.status).toBe(200);
+    const stored = await seed.workItems.get({ orgId: 'org1', id: item.id });
+    expect(stored?.metadata).toMatchObject({ openPullRequestNumber: 2, pullRequestHeadSha: null });
+    expect(stored?.metadata?.untrustedPullRequests).toEqual(['github:pull-request:github:7:pull-request:2']);
+    expect(auditRecorded).toContainEqual(expect.objectContaining({ action: 'factory.work_item.updated' }));
+  });
+
+  it('refuses a pull request that is not linked to the card, or is closed', async () => {
+    const item = await issueWithPullRequests();
+
+    expect(await (await pick(item, 9)).json()).toMatchObject({ error: 'pull_request_not_linked' });
+    expect(await (await pick(item, 3)).json()).toMatchObject({ error: 'pull_request_not_open' });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.metadata).not.toHaveProperty(
+      'openPullRequestNumber',
+    );
+  });
+
+  it('refuses a pick when the pull request closes while the pick is being made', async () => {
+    const item = await issueWithPullRequests();
+    const update = seed.workItems.update.bind(seed.workItems);
+    const closing = vi.spyOn(seed.workItems, 'update').mockImplementationOnce(async input => {
+      // The provider closes it after the endpoint read the card; closing touches the source, not the card's revision.
+      await seed.workItems.syncWorkItemSource({
+        orgId: 'org1',
+        factoryProjectId: PROJECT_ID,
+        provider: 'github',
+        externalId: 'pull-request:github:7:pull-request:2',
+        patch: { state: 'closed' },
+      });
+      return update(input);
+    });
+
+    const res = await pick(item, 2);
+
+    closing.mockRestore();
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ error: 'pull_request_not_open' });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.metadata).not.toHaveProperty(
+      'openPullRequestNumber',
+    );
+  });
+
+  it('refuses a pick made against an older revision of the card', async () => {
+    const item = await issueWithPullRequests();
+
+    const res = await pick(item, 2, item.revision - 1);
+
+    expect(res.status).toBe(409);
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.metadata).not.toHaveProperty(
+      'openPullRequestNumber',
+    );
   });
 });
 
@@ -1103,13 +1644,18 @@ describe('DELETE /web/factory/work-items/:id', () => {
   it('removes the item for the org', async () => {
     const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
     const { workItem } = await created.json();
+    deletedCards.length = 0;
     const res = await json('DELETE', `/web/factory/work-items/${workItem.id}`);
     expect((await res.json()).ok).toBe(true);
     expect(await listItems()).toHaveLength(0);
+    // The board engine hears of the delete, to let go of what it kept for the card.
+    expect(deletedCards).toEqual([workItem.id]);
   });
 
   it('404s for unknown or cross-org items', async () => {
+    deletedCards.length = 0;
     expect((await json('DELETE', `/web/factory/work-items/00000000-0000-4000-8000-000000000099`)).status).toBe(404);
+    expect(deletedCards).toEqual([]);
   });
 });
 
@@ -1222,8 +1768,7 @@ describe('GET /web/factory/projects/:id/decisions', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: null,
-      ingress: { identity: 'decision-source', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'decision-source' },
       expectedRevision: null,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1275,8 +1820,7 @@ describe('GET /web/factory/projects/:id/decisions retry eligibility', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: workItem.id,
-      ingress: { identity: 'not-failed', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'not-failed' },
       expectedRevision: workItem.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1335,8 +1879,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: workItem.id,
-      ingress: { identity: 'stale-retry', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'stale-retry' },
       expectedRevision: workItem.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1391,8 +1934,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: workItem.id,
-      ingress: { identity: 'attention-failure', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'attention-failure' },
       expectedRevision: workItem.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1611,8 +2153,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: workItem.id,
-      ingress: { identity: 'approval-queue', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'approval-queue' },
       expectedRevision: workItem.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1676,8 +2217,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: workItem.id,
-      ingress: { identity: 'approve-attribution', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'approve-attribution' },
       expectedRevision: workItem.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1717,8 +2257,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: null,
-      ingress: { identity: 'attention-refailure-order', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'attention-refailure-order' },
       expectedRevision: null,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1847,8 +2386,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: null,
-      ingress: { identity: 'legacy-attention-failure', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'legacy-attention-failure' },
       expectedRevision: null,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1907,8 +2445,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: workItem.id,
-      ingress: { identity: 'attention-pagination', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'attention-pagination' },
       expectedRevision: workItem.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -2196,53 +2733,12 @@ describe('run activity on the work-item listing', () => {
     expect(second.item.sessions.execute).toMatchObject({ sessionId: 'session-execute', startedBy: 'u2' });
   });
 
-  it('reports the listed cards whose session has a run in flight', async () => {
-    await startRun('session-running');
-    await startRun('session-idle');
-
-    const res = await buildApp(orgUser, undefined, undefined, new Set(['session-running'])).request(
-      `/web/factory/projects/${PROJECT_ID}/work-items`,
-    );
-
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.workItems).toHaveLength(2);
-    expect(body.runningSessionIds).toEqual(['session-running']);
-    expect(body.parkedSessionIds).toEqual([]);
-  });
-
-  it('reports the listed cards whose session waits on an answer', async () => {
-    await startRun('session-parked');
-    await startRun('session-idle');
-
-    const res = await buildApp(
-      orgUser,
-      undefined,
-      undefined,
-      new Set(),
-      undefined,
-      new Set(['session-parked']),
-    ).request(`/web/factory/projects/${PROJECT_ID}/work-items`);
-
-    expect((await res.json()).parkedSessionIds).toEqual(['session-parked']);
-  });
-
-  it('reports no activity for a session that belongs to no card in the project', async () => {
-    await startRun('session-idle');
-
-    const res = await buildApp(orgUser, undefined, undefined, new Set(['session-elsewhere'])).request(
-      `/web/factory/projects/${PROJECT_ID}/work-items`,
-    );
-
-    expect((await res.json()).runningSessionIds).toEqual([]);
-  });
-
   describe('repeat reads of an unchanged board', () => {
     const listPath = () => `/web/factory/projects/${PROJECT_ID}/work-items`;
 
-    it('answers 304 without a body while the cards and their activity are unchanged', async () => {
+    it('answers 304 without a body while the cards are unchanged', async () => {
       await startRun('session-running');
-      const app = buildApp(orgUser, undefined, undefined, new Set(['session-running']));
+      const app = buildApp(orgUser);
 
       const first = await app.request(listPath());
       const etag = first.headers.get('etag');
@@ -2266,25 +2762,6 @@ describe('run activity on the work-item listing', () => {
       expect(after.status).toBe(200);
       expect(after.headers.get('etag')).not.toBe(etag);
       expect((await after.json()).workItems[0].title).toBe('Renamed');
-    });
-
-    it('sends the board again once a run starts or parks on an unchanged card', async () => {
-      await startRun('session-a');
-      const running = new Set<string>();
-      const parked = new Set<string>();
-      const app = buildApp(orgUser, undefined, undefined, running, undefined, parked);
-      const idle = (await app.request(listPath())).headers.get('etag')!;
-
-      running.add('session-a');
-      const started = await app.request(listPath(), { headers: { 'if-none-match': idle } });
-      expect(started.status).toBe(200);
-      expect((await started.json()).runningSessionIds).toEqual(['session-a']);
-
-      running.delete('session-a');
-      parked.add('session-a');
-      const parkedRes = await app.request(listPath(), { headers: { 'if-none-match': idle } });
-      expect(parkedRes.status).toBe(200);
-      expect((await parkedRes.json()).parkedSessionIds).toEqual(['session-a']);
     });
 
     it('gzips the body for clients that accept it', async () => {
@@ -2520,10 +2997,10 @@ describe('run activity on the work-item listing', () => {
     const scopedPath = (...sessionIds: string[]) =>
       `${boardPath()}?${sessionIds.map(sessionId => `sessionId=${encodeURIComponent(sessionId)}`).join('&')}`;
 
-    it('lists the card that holds the session, and the activity of that card only', async () => {
+    it('lists the card that holds the session', async () => {
       const mine = await startRun('session-mine');
       await startRun('session-other');
-      const app = buildApp(orgUser, undefined, undefined, new Set(['session-mine', 'session-other']));
+      const app = buildApp(orgUser);
 
       const res = await app.request(scopedPath('session-mine'));
 
@@ -2531,7 +3008,6 @@ describe('run activity on the work-item listing', () => {
       const body = await res.json();
       expect(FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(body)).toEqual(body);
       expect(body.workItems.map((item: { id: string }) => item.id)).toEqual([mine.id]);
-      expect(body.runningSessionIds).toEqual(['session-mine']);
     });
 
     it('lists the cards of every session named, in board order', async () => {
@@ -2587,19 +3063,6 @@ describe('run activity on the work-item listing', () => {
       expect((await changed.json()).workItems[0].title).toBe('Renamed');
     });
 
-    it('sends the session’s card again once its run starts', async () => {
-      await startRun('session-mine');
-      const running = new Set<string>();
-      const app = buildApp(orgUser, undefined, undefined, running);
-      const idle = (await app.request(scopedPath('session-mine'))).headers.get('etag')!;
-
-      running.add('session-mine');
-      const started = await app.request(scopedPath('session-mine'), { headers: { 'if-none-match': idle } });
-
-      expect(started.status).toBe(200);
-      expect((await started.json()).runningSessionIds).toEqual(['session-mine']);
-    });
-
     it('refuses a blank session id rather than sending the whole board', async () => {
       await startRun('session-mine');
 
@@ -2612,19 +3075,12 @@ describe('run activity on the work-item listing', () => {
   describe('the cards holding a session (?scope=sessions)', () => {
     const sessionsPath = () => `${boardPath()}?scope=sessions`;
 
-    it('lists every card holding a session with its activity, in board order, without the cards holding none', async () => {
+    it('lists every card holding a session, in board order, without the cards holding none', async () => {
       const first = await startRun('session-first');
       await createCard('unstarted');
       const second = await startRun('session-second');
       const board = await listedIds(await buildApp(orgUser).request(boardPath()));
-      const app = buildApp(
-        orgUser,
-        undefined,
-        undefined,
-        new Set(['session-first']),
-        undefined,
-        new Set(['session-second']),
-      );
+      const app = buildApp(orgUser);
 
       const res = await app.request(sessionsPath());
 
@@ -2634,8 +3090,6 @@ describe('run activity on the work-item listing', () => {
       expect(body.workItems.map((item: { id: string }) => item.id)).toEqual(
         board.filter(id => id === first.id || id === second.id),
       );
-      expect(body.runningSessionIds).toEqual(['session-first']);
-      expect(body.parkedSessionIds).toEqual(['session-second']);
     });
 
     it('brings the pull request pushed from a session’s branch, though it holds no session', async () => {
@@ -2666,25 +3120,6 @@ describe('run activity on the work-item listing', () => {
       const changed = await app.request(sessionsPath(), { headers: { 'if-none-match': etag } });
       expect(changed.status).toBe(200);
       expect((await changed.json()).workItems[0].title).toBe('Renamed');
-    });
-
-    it('sends the list again each time a run starts or stops on an unchanged card', async () => {
-      await startRun('session-mine');
-      const running = new Set<string>();
-      const app = buildApp(orgUser, undefined, undefined, running);
-      const idle = (await app.request(sessionsPath())).headers.get('etag')!;
-
-      running.add('session-mine');
-      const started = await app.request(sessionsPath(), { headers: { 'if-none-match': idle } });
-      expect(started.status).toBe(200);
-      expect((await started.json()).runningSessionIds).toEqual(['session-mine']);
-
-      running.delete('session-mine');
-      const stopped = await app.request(sessionsPath(), {
-        headers: { 'if-none-match': started.headers.get('etag')! },
-      });
-      expect(stopped.status).toBe(200);
-      expect((await stopped.json()).runningSessionIds).toEqual([]);
     });
 
     it.each([
@@ -2745,6 +3180,32 @@ describe('run activity on the work-item listing', () => {
       expect((await unstarted('&q=eng-77')).titles).toEqual(['Tidy the settings page']);
       expect(await unstarted('&q=fix%20palette')).toEqual({ titles: [], total: 0 });
       expect((await unstarted('&q=login')).total).toBe(2);
+    });
+
+    it('finds the card a pasted link names, as the board’s search does', async () => {
+      await createCard('github:7:issue:12', {
+        title: 'Fix the login flow',
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github:7:issue:12',
+          url: 'https://github.com/acme/app/issues/12',
+        },
+        metadata: { number: 12 },
+      });
+      await createCard('github:7:issue:120', {
+        title: 'Rework the login palette',
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github:7:issue:120',
+          url: 'https://github.com/acme/app/issues/120',
+        },
+        metadata: { number: 120 },
+      });
+
+      const pasted = encodeURIComponent('https://github.com/acme/app/issues/12#issuecomment-1');
+      expect(await unstarted(`&q=${pasted}`)).toEqual({ titles: ['Fix the login flow'], total: 1 });
     });
 
     it('never lists a card holding a session, whatever is typed', async () => {
@@ -2833,6 +3294,26 @@ describe('run activity on the work-item listing', () => {
       await createCard('github:7:issue:12');
 
       expect(await listedIds(await buildApp(orgUser).request(sourcePath('github:7:issue:404')))).toEqual([]);
+    });
+
+    it('lists the issue card a pull request is attached to, by its id or its URL', async () => {
+      const issue = await createCard('github:7:issue:1');
+      await seed.workItems.attachSource({
+        orgId: 'org1',
+        id: issue.id,
+        source: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github:7:pull-request:2',
+          url: 'https://github.com/acme/app/pull/2',
+        },
+        metadata: { githubPullRequestNumber: 2 },
+      });
+
+      const app = buildApp(orgUser);
+      expect(await listedIds(await app.request(sourcePath('github:7:pull-request:2')))).toEqual([issue.id]);
+      expect(await listedIds(await app.request(sourcePath('https://github.com/acme/app/pull/2')))).toEqual([issue.id]);
+      expect(await listedIds(await app.request(sourcePath('github:7:pull-request:3')))).toEqual([]);
     });
   });
 
@@ -2950,8 +3431,7 @@ describe('GET /web/factory/projects/:id/work-items/starters', () => {
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: card.id,
-      ingress: { identity: 'failing-run', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'failing-run' },
       expectedRevision: card.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -3166,7 +3646,7 @@ describe('GET /web/factory/projects/:id/boards/:boardKey/phases', () => {
       },
       transitionPolicy: () => undefined,
     });
-    const app = buildApp(orgUser, undefined, undefined, new Set(), createBoardRegistry({ boards: [release] }));
+    const app = buildApp(orgUser, undefined, undefined, createBoardRegistry({ boards: [release] }));
     const filed = await app.request(itemsPath(), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -3397,6 +3877,102 @@ describe('GET /web/factory/projects/:id/boards/:boardKey/phases', () => {
     });
   });
 
+  describe('a search for a pasted link or a whole name', () => {
+    const github = (type: 'issue' | 'pull-request', repository: string, number: number) => ({
+      integrationId: 'github',
+      type,
+      externalId: `github:${repository}:${type}:${number}`,
+      url: `https://github.com/${repository}/${type === 'issue' ? 'issues' : 'pull'}/${number}`,
+    });
+    const fileLinkedBoard = async () => {
+      // Its pull request was opened from its session, so the pull request rides on the issue's card.
+      const issue = await file('', {
+        externalSource: github('issue', 'acme/app', 12),
+        title: 'Fix the login flow',
+        metadata: { number: 12 },
+      });
+      await seed.workItems.attachSource({
+        orgId: 'org1',
+        id: issue.id,
+        source: github('pull-request', 'acme/app', 307),
+        metadata: { githubPullRequestNumber: 307, headBranch: 'octo.cat/login-redirect' },
+      });
+      // Its number starts with the attached pull request's.
+      const pullRequest = await file('', {
+        externalSource: github('pull-request', 'acme/app', 30772),
+        title: 'Tidy the palette',
+        metadata: { number: 30772 },
+      });
+      const linear = await file('', {
+        externalSource: {
+          integrationId: 'linear',
+          type: 'issue',
+          externalId: 'linear:issue-uuid',
+          url: 'https://linear.app/acme/issue/ENG-42/slow-sync',
+        },
+        title: 'Slow sync',
+        metadata: { identifier: 'ENG-42' },
+      });
+      const otherRepository = await file('', {
+        externalSource: github('issue', 'acme/web', 5),
+        title: 'List open issues in the sidebar',
+        metadata: { number: 5 },
+      });
+      return {
+        issue,
+        names: new Map([
+          [issue.id, 'issue'],
+          [pullRequest.id, 'pull request'],
+          [linear.id, 'linear'],
+          [otherRepository.id, 'other repository'],
+        ]),
+      };
+    };
+    const found = async (names: Map<string, string>, q: string) => {
+      const body = await read(`q=${encodeURIComponent(q)}`);
+      expect(body.matchingTotal).toBe(under(body, 'intake').total);
+      return under(body, 'intake')
+        .ids.map(id => names.get(id))
+        .sort();
+    };
+
+    it.each([
+      ['a link to a pull request attached to an issue’s card', 'https://github.com/acme/app/pull/307', ['issue']],
+      ['a link to a page of it, in any case', 'https://GitHub.com/Acme/App/pull/307/files#diff-1a2b', ['issue']],
+      ['a link without its scheme', 'github.com/acme/app/pull/307?tab=checks', ['issue']],
+      ['the issue link GitHub gives the same number', 'https://github.com/acme/app/issues/307', ['issue']],
+      [
+        'a link to a pull request, never to one whose number starts the same',
+        'https://github.com/acme/app/pull/30772',
+        ['pull request'],
+      ],
+      ['a Linear link with another title in it', 'https://linear.app/acme/issue/ENG-42/renamed-since', ['linear']],
+      ['a repository’s link', 'https://github.com/acme/app', ['issue', 'pull request']],
+      ['a link and a word', 'https://github.com/acme/app login', ['issue']],
+      ['an attached pull request’s key, never one it starts', 'acme/app#307', ['issue']],
+      ['an attached pull request’s number, never one it starts', '#307', ['issue']],
+      // Bare digits read as a word: they find the numbers holding them.
+      ['digits of a number', '307', ['issue', 'pull request']],
+      ['a branch, whole', 'octo.cat/login-redirect', ['issue']],
+      // Every GitHub issue link holds `issues`; only one title does.
+      ['a word of links but of one title', 'issues', ['other repository']],
+      ['a link to an issue no card carries', 'https://github.com/acme/app/issues/404', []],
+    ])('finds the cards for %s', async (_case, q, expected) => {
+      const { names } = await fileLinkedBoard();
+
+      expect(await found(names, q)).toEqual(expected);
+    });
+
+    it('finds the card a Factory link opens', async () => {
+      const { issue, names } = await fileLinkedBoard();
+
+      expect(await found(names, `https://factory.example.com/factories/${PROJECT_ID}/cards/${issue.id}`)).toEqual([
+        'issue',
+      ]);
+      expect(await found(names, issue.id)).toEqual(['issue']);
+    });
+  });
+
   describe('the cards an answer names', () => {
     const fileParentAndPullRequest = async () => {
       const parent = await file('parent');
@@ -3456,34 +4032,6 @@ describe('GET /web/factory/projects/:id/boards/:boardKey/phases', () => {
       const byId = await (await json('GET', `${itemsPath()}?workItemId=${card.id}`)).json();
 
       expect(byId.workItems).toMatchObject([{ id: card.id, version: phases.phases[0]?.cards[0]?.version }]);
-    });
-
-    it('reports which sessions of the named cards run or wait, and none of an unlisted card', async () => {
-      const start = async (sessionId: string) => {
-        await seed.workItems.prepareRunStart({
-          orgId: 'org1',
-          userId: 'u1',
-          factoryProjectId: PROJECT_ID,
-          workItem: { input: { title: `Work for ${sessionId}`, stages: ['execute'] } },
-          role: 'execute',
-          session: { sessionId, branch: `factory/${sessionId}`, threadId: `thread-${sessionId}` },
-          resourceId: sessionId,
-          kickoffKey: `kickoff-${sessionId}`,
-          kickoffMessage: null,
-        });
-      };
-      await start('session-older');
-      at('2026-11-01T10:01:00Z');
-      await start('session-newer');
-      const sessions = new Set(['session-older', 'session-newer']);
-      const app = buildApp(orgUser, undefined, undefined, sessions, undefined, new Set(['session-newer']));
-
-      const firstOnly = await read('limit=1', app);
-      const both = await read('', app);
-
-      expect(firstOnly).toMatchObject({ runningSessionIds: ['session-newer'], parkedSessionIds: ['session-newer'] });
-      expect(both.runningSessionIds.toSorted()).toEqual(['session-newer', 'session-older']);
-      expect(both.parkedSessionIds).toEqual(['session-newer']);
     });
   });
 
@@ -3725,7 +4273,7 @@ describe('audit events', () => {
     return (await res.json()).workItem;
   }
 
-  it('records work_item.created on POST with actor, project, and target', async () => {
+  it('records work_item.opened on POST with actor, project, and target', async () => {
     const item = await createItem();
     expect(auditRecorded).toHaveLength(1);
     expect(auditRecorded[0]).toMatchObject({
@@ -3861,5 +4409,71 @@ describe('parseUpdateWorkItem', () => {
     expect(parseUpdateWorkItem({})).toBeNull();
     expect(parseUpdateWorkItem({ stages: ['done'] })).toEqual({ stages: ['done'] });
     expect(parseUpdateWorkItem({ url: null })).toBeNull();
+  });
+});
+
+describe('GET /web/factory/projects/:id/work-items/:workItemId/session-repository', () => {
+  async function createItem() {
+    const res = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    return (await res.json()).workItem as { id: string };
+  }
+
+  const ask = (
+    sessionRepository: WorkItemRoutesDeps['sessionRepository'],
+    path: string,
+    user: typeof orgUser = orgUser,
+  ) => buildApp(user, undefined, undefined, undefined, sessionRepository).request(path);
+
+  it('sends the repository the server files a session under, without the unnamed candidates', async () => {
+    const item = await createItem();
+    const sessionRepository = vi.fn(async () => ({
+      status: 'resolved' as const,
+      projectRepositoryId: 'link-1',
+      slug: 'acme/app',
+      unnamed: { repositories: ['acme/app', 'acme/web'] },
+    }));
+    const res = await ask(
+      sessionRepository,
+      `/web/factory/projects/${PROJECT_ID}/work-items/${item.id}/session-repository`,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ status: 'resolved', projectRepositoryId: 'link-1', slug: 'acme/app' });
+    expect(sessionRepository).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orgId: 'org1',
+        factoryProjectId: PROJECT_ID,
+        item: expect.objectContaining({ id: item.id }),
+      }),
+    );
+  });
+
+  it('sends why a card has no repository', async () => {
+    const item = await createItem();
+    const hint = 'Source-control repository 1 is not linked to this Factory.';
+    const res = await ask(
+      async () => ({ status: 'unlinked', hint }),
+      `/web/factory/projects/${PROJECT_ID}/work-items/${item.id}/session-repository`,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ status: 'unlinked', hint });
+  });
+
+  it('404s for a card of another project or org without resolving it', async () => {
+    const item = await createItem();
+    const homeProject = PROJECT_ID;
+    const sessionRepository = vi.fn();
+    await seedProject('org1');
+    const otherProject = await ask(
+      sessionRepository,
+      `/web/factory/projects/${PROJECT_ID}/work-items/${item.id}/session-repository`,
+    );
+    expect(otherProject.status).toBe(404);
+    const otherOrg = await ask(
+      sessionRepository,
+      `/web/factory/projects/${homeProject}/work-items/${item.id}/session-repository`,
+      { workosId: 'u9', organizationId: 'org2' },
+    );
+    expect(otherOrg.status).toBe(404);
+    expect(sessionRepository).not.toHaveBeenCalled();
   });
 });

@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { isStubbedProjectRead } from '../../../../../../e2e/ui/board-reads';
 import { builtinBoardCatalog, releaseBoard } from '../../../../../../e2e/ui/board-catalog';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
@@ -94,6 +95,13 @@ beforeEach(() => {
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/sessions`, () => HttpResponse.json({ sessions })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, () =>
       HttpResponse.json({ workItems: releaseItems }),
+    ),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/code/active-runs`, () =>
+      HttpResponse.json({
+        runs: sessions
+          .filter(({ materializedAt }) => materializedAt === null)
+          .map(({ sessionId }) => ({ runId: `run-${sessionId}`, resourceId: sessionId, threadId: sessionId })),
+      }),
     ),
   );
 });
@@ -276,8 +284,8 @@ describe('Sessions sidebar groups', () => {
       http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, () =>
         HttpResponse.json({ workItems: releaseItems.map(item => ({ ...item, stages: ['shipped'] })) }),
       ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/boards`, async () => {
-        await catalogLoaded;
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/boards`, async ({ request }) => {
+        if (!isStubbedProjectRead(request)) await catalogLoaded;
         return HttpResponse.json({
           boards: [...builtinBoardCatalog.boards, releaseBoard],
         } satisfies BoardCatalogResponse);
@@ -289,7 +297,10 @@ describe('Sessions sidebar groups', () => {
 
     await pickSessionProperty(user, 'Status', 'Idle');
 
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'Work old' })).not.toBeInTheDocument());
+    expect(screen.getByRole('link', { name: 'Work new' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Release new' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Release old' })).not.toBeInTheDocument();
     releaseCatalog();
   });
 });

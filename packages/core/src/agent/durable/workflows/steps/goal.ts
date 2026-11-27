@@ -4,11 +4,11 @@ import { evaluateGoal } from '../../../../loop/shared/steps/goal-core';
 import type { ChunkType } from '../../../../stream/types';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
-import { getRunRegistryEntry, globalRunRegistry } from '../../run-registry';
+import { getLiveRunRequestContext, getRunRegistryEntry, globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent } from '../../stream-adapter';
 import { restoreCustomContext, restoreRequestContext } from '../../utils/resolve-runtime';
 import { createRunMessageList } from '../../utils/run-message-list';
-import { readAccumulatedSteps } from '../shared/accumulated-steps';
+import { loadAccumulatedSteps } from '../shared/accumulated-steps';
 import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
 
 /**
@@ -64,11 +64,14 @@ export function createDurableGoalStep() {
         goalConfig = (mastra as any)?.getAgentById?.(initData.agentId)?.__getGoalConfig?.();
       }
 
-      // Rebuild requestContext from serialized entries for resolvers. The signed-in
-      // user comes from the live run context, never from the run's starting request.
-      const liveRequestContext = registryEntry?.requestContext ?? params.requestContext;
-      const requestContext = restoreRequestContext(initData.requestContextEntries, liveRequestContext);
-      const customContext = restoreCustomContext(initData.requestContextEntries, liveRequestContext);
+      const liveRunContext = getLiveRunRequestContext(registryEntry, state.runId, params.requestContext);
+      const currentRequestContext = liveRunContext ?? params.requestContext;
+      const requestContext = restoreRequestContext(
+        initData.requestContextEntries,
+        params.requestContext,
+        liveRunContext,
+      );
+      const customContext = restoreCustomContext(initData.requestContextEntries, currentRequestContext);
 
       // No goal configured on the agent → nothing to judge.
       if (!goalConfig) return state;
@@ -86,7 +89,7 @@ export function createDurableGoalStep() {
         return messageList;
       };
 
-      const lastStep = readAccumulatedSteps(params.state, state).at(-1);
+      const lastStep = (await loadAccumulatedSteps(params, state)).at(-1);
       const outcome = await evaluateGoal({
         goal: goalConfig,
         stepReason: state.lastStepResult?.reason,

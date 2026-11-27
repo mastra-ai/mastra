@@ -221,6 +221,8 @@ export const packFallbackScenario: McE2eScenario = {
     };
     restartApp = async () => {
       await currentStop?.();
+      // Take the old app's frame off screen, so waiting for the banner waits for the new app.
+      console.info('\x1b[2J\x1b[H');
       await start();
     };
 
@@ -302,11 +304,7 @@ export const packFallbackScenario: McE2eScenario = {
     // Both notices render live: the pool exhaustion, then the pack hop.
     try {
       await runtime.waitForScreenText(/All Kimi accounts unavailable \(pool exhausted\)/i, terminal, 30_000);
-      await runtime.waitForScreenText(
-        /Switched model pack: hop-kimi → Anthropic \(pool exhausted\)/i,
-        terminal,
-        30_000,
-      );
+      await runtime.waitForScreenText(/hop-kimi is rate-limited, switched to Anthropic/i, terminal, 30_000);
       await runtime.waitForScreenText(new RegExp(RESPONSE_TEXT), terminal, 30_000);
     } catch (error) {
       throw new Error(
@@ -342,7 +340,7 @@ export const packFallbackScenario: McE2eScenario = {
     terminal.write('\r');
     await runtime.waitForScreenText(/Switched to:/i, terminal, 10_000);
     await runtime.waitForScreenText(/All Kimi accounts unavailable \(pool exhausted\)/i, terminal, 30_000);
-    await runtime.waitForScreenText(/Switched model pack: hop-kimi → Anthropic \(pool exhausted\)/i, terminal, 30_000);
+    await runtime.waitForScreenText(/hop-kimi is rate-limited, switched to Anthropic/i, terminal, 30_000);
     await runtime.waitForScreenText(/fable-5/i, terminal, 10_000);
     await runtime.waitForScreenText(/Using fallback Anthropic \(hop-kimi failed\)/i, terminal, 10_000);
     runtime.printScreen('after restart history reload', terminal);
