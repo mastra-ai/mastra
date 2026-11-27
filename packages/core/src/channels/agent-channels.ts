@@ -930,24 +930,39 @@ export class AgentChannels {
                 runId = stashed.runId;
                 toolName = stashed.toolName;
                 toolArgs = stashed.args;
-              } else {
+              }
+
+              // Recover the requester from the persisted user turn whenever the
+              // stash carries no identity. A render context rebuilt from the
+              // thread (a channel-backed run that started outside the platform,
+              // then posted an approval card) has no inbound author to close
+              // over, so `onApprovalPosted` records no requester; without this
+              // read the check below would see `undefined` and let any channel
+              // member answer. The stash still owns the run target when it has
+              // one: it is keyed by toolCallId and survives parallel same-tool
+              // approvals, where the persisted metadata keeps only the latest.
+              if (!requesterId) {
                 const { result: lookup } = await this.lookupPersistedApproval({ mastra, card, platform });
-                if (lookup.status === 'answered') {
-                  this.log('info', 'Tool approval already answered', actionEventContext);
-                  return;
+                if (!stashed?.runId) {
+                  if (lookup.status === 'answered') {
+                    this.log('info', 'Tool approval already answered', actionEventContext);
+                    return;
+                  }
+                  if (lookup.status === 'pending') {
+                    runId = lookup.runId;
+                    toolName = lookup.toolName;
+                    toolArgs = lookup.args;
+                  }
                 }
                 if (lookup.status === 'pending') {
-                  runId = lookup.runId;
-                  toolName = lookup.toolName;
-                  toolArgs = lookup.args;
                   // If the user turn that led to the approval has messages from
                   // more than one author we can't tell who triggered the tool, so
                   // no one may answer the card.
-                  if (adapterConfig?.toolApprovers !== 'anyone' && !requesterId && lookup.authors.length > 1) {
+                  if (adapterConfig?.toolApprovers !== 'anyone' && lookup.authors.length > 1) {
                     this.log('info', 'Ignoring tool approval action: requester is ambiguous', actionEventContext);
                     return;
                   }
-                  requesterId ??= lookup.authors[0];
+                  requesterId = lookup.authors[0];
                 }
               }
 

@@ -1352,6 +1352,69 @@ describe('AgentChannels', () => {
         expect(dispatchApproval).toHaveBeenCalledTimes(1);
       });
 
+      // Persisted turn metadata for a card this instance stashed without a
+      // requester: the shape a run that rebuilt its render context from the
+      // thread produces, since it has no inbound author to close over.
+      const rebuiltContextMessages = (authors: string[]) => [
+        {
+          role: 'assistant',
+          content: {
+            metadata: {
+              pendingToolApprovals: {
+                lookup: { toolCallId: 'tool-call-1', runId: 'run-1', toolName: 'lookup', args: {} },
+              },
+            },
+          },
+        },
+        ...authors.map(userId => ({
+          role: 'user',
+          content: { providerMetadata: { mastra: { channels: { discord: { author: { userId } } } } } },
+        })),
+      ];
+      const mastraWith = (messages: unknown[]) =>
+        ({
+          getStorage: () => ({ getStore: async () => ({ listMessages: async () => ({ messages }) }) }),
+          getServer: () => null,
+          getLogger: () => noopLogger,
+        }) as any;
+
+      it.each([
+        ['approve', 'tool_approve:tool-call-1', 'dispatchApproval'],
+        ['deny', 'tool_deny:tool-call-1', 'dispatchDecline'],
+      ] as const)(
+        'checks the requester of a card posted through a rebuilt render context (%s)',
+        async (_action, actionId, dispatchKey) => {
+          const ctx = await setup({}, mastraWith(rebuiltContextMessages(['alice'])));
+
+          await ctx.click(actionId, 'mallory');
+          expect(ctx[dispatchKey]).not.toHaveBeenCalled();
+
+          await ctx.click(actionId, 'alice');
+          expect(ctx[dispatchKey]).toHaveBeenCalledTimes(1);
+          // The stash still owns the run target, since it is keyed by the tool call.
+          expect(ctx[dispatchKey]).toHaveBeenCalledWith(expect.objectContaining({ runId: 'run-1' }));
+        },
+      );
+
+      it('keeps a rebuilt-context card closed when the persisted authors are ambiguous', async () => {
+        const { dispatchApproval, click } = await setup({}, mastraWith(rebuiltContextMessages(['bob', 'alice'])));
+
+        await click('tool_approve:tool-call-1', 'bob');
+        await click('tool_approve:tool-call-1', 'alice');
+        expect(dispatchApproval).not.toHaveBeenCalled();
+      });
+
+      it('lets a channel member answer a rebuilt-context card when anyone is enabled', async () => {
+        const { dispatchApproval, click } = await setup(
+          {},
+          mastraWith(rebuiltContextMessages(['bob', 'alice'])),
+          'anyone',
+        );
+
+        await click('tool_approve:tool-call-1', 'charlie');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
       it('keeps the permissive behavior when no requester was recorded', async () => {
         const { dispatchApproval, click } = await setup({});
         await click('tool_approve:tool-call-1', 'mallory');
