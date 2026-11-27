@@ -1,4 +1,3 @@
-import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '../channels/output-processor';
 import {
   RequestContext,
   MASTRA_AUTH_TOKEN_KEY,
@@ -64,7 +63,9 @@ export function snapshotRequestContextEntries(
     // per-run state, not run input: JSON has no way to carry those methods, so a
     // replica that restored it would call `render.wrapStream` on a husk and fail.
     // The resumed run rebuilds it from its thread instead.
-    if (key === CHAT_CHANNEL_RENDER_CONTEXT_KEY) continue;
+    // Spelled as a literal rather than importing CHAT_CHANNEL_RENDER_CONTEXT_KEY:
+    // this module must not pull the channel layer (and its chat drivers) in.
+    if (key === '__mastra_chat_channel_render') continue;
     // Serialize each entry exactly once with a bounded pass: a shared-reference
     // graph would otherwise make JSON.stringify expand exponentially and wedge
     // the event loop on every durable step, and reading the value twice (probe
