@@ -1311,16 +1311,16 @@ export class WorkflowEventProcessor extends EventProcessor {
       !!targetId &&
       getStepId(workflow, executionPath ?? [0]) === targetId &&
       (!!timeTravel || !!resumeSteps?.length);
+    // The target as this event writes it: a resume finds its step suspended. A storage v2 resume
+    // event carries no step results, so the occurrence it expected is kept with the run.
+    const writtenStatus = timeTravel ? timeTravel.stepResults?.[targetId!]?.status : 'suspended';
     const alreadyApplied = trigger && header?.appliedTriggerEventId === eventId;
     if (alreadyApplied) {
       const stored = (await runStorage.loadStep(targetId!))?.context?.[targetId!];
-      const written = timeTravel
-        ? timeTravel.stepResults?.[targetId!]
-        : { status: 'suspended', metadata: { startedBy: stepResults?.[targetId!]?.metadata?.startedBy } };
       if (
         header.status !== 'running' ||
-        stored?.status !== written?.status ||
-        stored?.metadata?.startedBy !== written?.metadata?.startedBy
+        stored?.status !== writtenStatus ||
+        stored?.metadata?.startedBy !== header.appliedTriggerTargetStartedBy
       ) {
         this.mastra.getLogger()?.debug('Ignoring a repeated workflow trigger: the run already went past it', {
           workflowId,
@@ -1375,7 +1375,12 @@ export class WorkflowEventProcessor extends EventProcessor {
         status: 'running',
         // Stored only because guards or storage v2 need it, so a suspend that declines its snapshot removes it.
         guardedOnlySnapshot: !persistRequested,
-        ...(trigger ? { appliedTriggerEventId: eventId } : {}),
+        ...(trigger
+          ? {
+              appliedTriggerEventId: eventId,
+              appliedTriggerTargetStartedBy: (timeTravel?.stepResults ?? stepResults)?.[targetId!]?.metadata?.startedBy,
+            }
+          : {}),
         value: initialState,
         // A cancel sent before the first step result reads its execution claim from here.
         requestContext: withoutAuthToken(requestContext),

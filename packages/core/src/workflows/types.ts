@@ -467,6 +467,11 @@ export interface WorkflowRunState {
    * so a repeated delivery of it does not rewrite the run again.
    */
   appliedTriggerEventId?: string;
+  /**
+   * @internal The occurrence that event expected on the step it targets. A resume event on storage
+   * v2 carries no step results, so a repeated delivery compares the stored step against this.
+   */
+  appliedTriggerTargetStartedBy?: string;
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;
   stepExecutionPath?: string[];

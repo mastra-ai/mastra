@@ -594,6 +594,63 @@ export function describeResumeOccurrenceCases({
       });
     }, 20_000);
 
+    // A resume event delivered again after the step it resumed suspended again, but before the run
+    // stored the new suspension, must not run the step again with the old resume data. On storage
+    // v2 the event carries no step results, so the occurrence it expected has to be kept with the
+    // run when it is first applied.
+    it('does not resume a step again with the old data when its resume event is delivered after it suspended again', async () => {
+      const rounds: number[] = [];
+      const ask = createStep({
+        id: 'ask',
+        inputSchema: Num,
+        outputSchema: Num,
+        resumeSchema: z.object({ round: z.number() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          if (resumeData) rounds.push(resumeData.round);
+          if ((resumeData?.round ?? 0) < 2) return suspend({});
+          return inputData;
+        },
+      });
+      const workflow = createWorkflow({ id: `resuspend-replay-${randomUUID()}`, inputSchema: Num, outputSchema: Num })
+        .then(ask)
+        .commit();
+      await withHost({ [workflow.id]: workflow }, async ({ driver }) => {
+        const run = await workflow.createRun();
+        expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'suspended' });
+        // Hold the run's header at `running` while the resumed step suspends again.
+        const store = (await storage.getStore('workflows'))!;
+        const method = storageVersion === 1 ? 'updateWorkflowState' : 'updateWorkflowRunHeader';
+        const update = (store[method] as (args: any) => Promise<any>).bind(store);
+        const reached = deferred();
+        const release = deferred();
+        const held = vi.spyOn(store, method).mockImplementation(async (args: any) => {
+          if (args.workflowName === workflow.id && args.opts?.status === 'suspended') {
+            reached.resolve();
+            await release.promise;
+          }
+          return update(args);
+        });
+        try {
+          const from = driver.events.length;
+          const resumed = run.resume({ step: 'ask', resumeData: { round: 1 } });
+          await reached.promise;
+          expect((await storedSteps(workflow.id, run.runId))?.ask).toMatchObject({ status: 'suspended' });
+          const trigger = driver.events
+            .slice(from)
+            .find(event => event.type === 'workflow.resume' && event.runId === run.runId)!;
+          await driver.redeliverEvent(trigger);
+          await settleDeliveries(stepRunsSince(driver, from, run.runId, '0'));
+          release.resolve();
+          expect(await resumed).toMatchObject({ status: 'suspended' });
+        } finally {
+          release.resolve();
+          held.mockRestore();
+        }
+        await drainHandlers();
+        expect(rounds).toEqual([1]);
+      });
+    }, 20_000);
+
     it('resumes a resumed step again after it suspends again', async () => {
       const rounds: number[] = [];
       const ask = createStep({
