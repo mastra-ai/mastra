@@ -3071,9 +3071,11 @@ export class WorkflowEventProcessor extends EventProcessor {
         args = { ...args, stepResults: { ...args.stepResults, [leafId]: stepResult } };
       } catch (error) {
         if (!isWorkflowStepConflictError(error) || error.reason !== 'completed' || !error.storedResult) throw error;
-        // The condition threw on an earlier delivery. Report it again only if the run has not ended.
+        // A non-retryable failure is the condition that threw on an earlier delivery: report it
+        // again only if the run has not ended. Any other failure is a body attempt another copy
+        // saved, and that copy's own delivery retries or fails the run.
         if (error.storedResult.status === 'failed') {
-          if (error.storedSnapshot?.status !== 'running') return;
+          if (error.storedSnapshot?.status !== 'running' || !error.storedResult.nonRetryable) return;
           throw markNonRedeliverable(getErrorFromUnknown(error.storedResult.error, { serializeStack: false }));
         }
         stepResult = error.storedResult;
