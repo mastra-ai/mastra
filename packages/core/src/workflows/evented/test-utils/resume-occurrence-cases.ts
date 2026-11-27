@@ -10,7 +10,7 @@
 import { randomUUID } from 'node:crypto';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { MockInstance } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../agent/agent';
@@ -41,14 +41,24 @@ type Host = { driver: RedeliveryDriver; warn: MockInstance };
 export function describeResumeOccurrenceCases({
   getStorage,
   storageVersion,
+  countV1Snapshots,
 }: {
   getStorage: () => MastraStorage;
   storageVersion: 1 | 2;
+  /**
+   * Counts the rows of the store's v1 snapshot table. Omit it when the caller checks the table
+   * itself.
+   */
+  countV1Snapshots?: () => Promise<number>;
 }) {
   describe('evented resume and time travel occurrences (COR-1620)', () => {
     let storage: MastraStorage;
     beforeAll(() => {
       storage = getStorage();
+    });
+    // A v2 run must never fall back to the v1 snapshot table.
+    afterAll(async () => {
+      if (storageVersion === 2 && countV1Snapshots) expect(await countV1Snapshots()).toBe(0);
     });
     const createWorkflow = ((params: Parameters<typeof createEventedWorkflow>[0]) => {
       const options: WorkflowOptions<any> = { ...params.options, storageVersion };

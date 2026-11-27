@@ -23,18 +23,15 @@ describe.each([1, 2] as const)('LibSQL evented occurrence replay on storage v%i'
     await rm(dir, { recursive: true, force: true, maxRetries: 5 });
   });
 
-  describeOccurrenceReplayCases({
-    getStorage: () => storage,
-    storageVersion,
-    countV1Snapshots: async () => {
-      const client = createClient({ url });
-      try {
-        const { rows } = await client.execute('SELECT count(*) AS n FROM mastra_workflow_snapshot');
-        return Number(rows[0]!.n);
-      } finally {
-        client.close();
-      }
-    },
-  });
-  describeResumeOccurrenceCases({ getStorage: () => storage, storageVersion });
+  const countV1Snapshots = async () => {
+    const client = createClient({ url });
+    try {
+      const { rows } = await client.execute('SELECT count(*) AS n FROM mastra_workflow_snapshot');
+      return Number(rows[0]!.n);
+    } finally {
+      client.close();
+    }
+  };
+  describeOccurrenceReplayCases({ getStorage: () => storage, storageVersion, countV1Snapshots });
+  describeResumeOccurrenceCases({ getStorage: () => storage, storageVersion, countV1Snapshots });
 });
