@@ -7,10 +7,15 @@ Added Factory's card source presentation to `@mastra/playground-ui/domains/facto
 ```tsx
 import { CardSourceIcon, CardSourceRow, cardSourceOf } from '@mastra/playground-ui/domains/factory';
 
-const source = cardSourceOf(card.externalSource); // e.g. 'github-issue'
+const externalSource = {
+  integrationId: 'github',
+  type: 'pull-request',
+  url: 'https://github.com/acme/app/pull/117',
+};
+const source = cardSourceOf(externalSource); // e.g. 'github-pr'
 
 <>
   <CardSourceIcon source={source} />
-  <CardSourceRow reference="#117" url={card.externalSource.url} state="open" />
+  <CardSourceRow reference="#117" url={externalSource.url} state="open" />
 </>
 ```
