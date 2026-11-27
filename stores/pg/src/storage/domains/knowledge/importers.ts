@@ -423,6 +423,14 @@ export class PgKnowledgeImporters implements KnowledgeImportersStorage {
     );
     return row ? toNode(row) : null;
   }
+  async getNodes(bindingId: string, sourceIds: string[]) {
+    if (sourceIds.length === 0) return [];
+    const rows = await this.#client.manyOrNone(
+      `SELECT * FROM ${this.#t.nodes} WHERE binding_id = $1 AND source_id = ANY($2::text[])`,
+      [bindingId, [...new Set(sourceIds)]],
+    );
+    return rows.map(toNode);
+  }
   async getNodeByPage(pageId: string) {
     const row = await this.#client.oneOrNone(`SELECT * FROM ${this.#t.nodes} WHERE page_id = $1`, [pageId]);
     return row ? toNode(row) : null;

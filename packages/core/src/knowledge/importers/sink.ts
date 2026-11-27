@@ -2,12 +2,12 @@ import { randomUUID } from 'node:crypto';
 
 import { KnowledgeUnsupportedCapabilityError } from '../../storage/domains/knowledge/base';
 import type { KnowledgeStorage } from '../../storage/domains/knowledge/base';
+import { KnowledgeImportersStorage } from '../../storage/domains/knowledge/importers';
 import type {
   KnowledgeImporterBindingRecord,
   KnowledgeImporterChangeKind,
   KnowledgeImporterNodeLink,
   KnowledgeImporterNodeRecord,
-  KnowledgeImportersStorage,
 } from '../../storage/domains/knowledge/importers';
 import type { KnowledgePage, KnowledgeProvenance } from '../../storage/domains/knowledge/pages';
 import {
@@ -478,8 +478,10 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
   const ref = (keys: string[]) => `${target.scope}#${keys.join('/')}`;
 
   // A link's line, or null while its target has no live page.
-  const linkLine = async (link: KnowledgeImporterNodeLink): Promise<string | null> => {
-    const node = await importers.getNode(binding.id, link.sourceId);
+  const linkLine = async (
+    link: KnowledgeImporterNodeLink,
+    node: KnowledgeImporterNodeRecord | undefined,
+  ): Promise<string | null> => {
     const page = node ? await storage.getPage({ id: node.pageId, read: 'all' }) : null;
     const path = live(page) ? await keyPath(page) : null;
     return path ? `- ${link.rel ? `${link.rel}: ` : ''}[[${ref(path.keys)}]]` : null;
@@ -488,8 +490,21 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
   const renderLinks = async (links: KnowledgeImporterNodeLink[]) => {
     const lines: string[] = [];
     const unresolved: string[] = [];
+    // Where the targets are now, in one read made for this render and kept no longer: another
+    // binding may take a target over between renders. A store that only implements getNode (it
+    // predates getNodes) gets the base class's loop.
+    const getNodes =
+      (importers as Partial<KnowledgeImportersStorage>).getNodes ?? KnowledgeImportersStorage.prototype.getNodes;
+    const found = links.length
+      ? await getNodes.call(
+          importers,
+          binding.id,
+          links.map(link => link.sourceId),
+        )
+      : [];
+    const nodes = new Map(found.map(node => [node.sourceId, node]));
     for (const link of links) {
-      const line = await linkLine(link);
+      const line = await linkLine(link, nodes.get(link.sourceId));
       if (line) lines.push(line);
       else unresolved.push(encodeLink(link));
     }

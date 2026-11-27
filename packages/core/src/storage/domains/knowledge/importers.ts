@@ -243,6 +243,20 @@ export abstract class KnowledgeImportersStorage {
   }): Promise<KnowledgeImporterRunRecord>;
 
   abstract getNode(bindingId: string, sourceId: string): Promise<KnowledgeImporterNodeRecord | null>;
+  /**
+   * The binding's nodes for `sourceIds`, in no particular order; missing ids are left out and
+   * duplicates count once. Other bindings' nodes never appear. Defaults to one {@link getNode} each.
+   *
+   * @experimental
+   */
+  async getNodes(bindingId: string, sourceIds: string[]): Promise<KnowledgeImporterNodeRecord[]> {
+    const nodes: KnowledgeImporterNodeRecord[] = [];
+    for (const sourceId of new Set(sourceIds)) {
+      const node = await this.getNode(bindingId, sourceId);
+      if (node) nodes.push(node);
+    }
+    return nodes;
+  }
   abstract getNodeByPage(pageId: string): Promise<KnowledgeImporterNodeRecord | null>;
   /** Insert or replace by `(bindingId, sourceId)`. A page already mapped to another node throws. */
   abstract saveNode(node: Omit<KnowledgeImporterNodeRecord, 'updatedAt'>): Promise<void>;
