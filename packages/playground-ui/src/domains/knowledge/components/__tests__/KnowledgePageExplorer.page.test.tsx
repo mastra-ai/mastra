@@ -168,6 +168,7 @@ function OutsidePickerHost() {
 }
 
 beforeAll(() => {
+  Element.prototype.getAnimations ??= () => [];
   window.ResizeObserver ??= class {
     observe() {}
     unobserve() {}
@@ -176,6 +177,12 @@ beforeAll(() => {
 });
 
 const pageView = () => screen.getByRole('region', { name: 'Selected page' });
+
+function chevron(row: HTMLElement) {
+  const toggle = row.querySelector<HTMLElement>('[data-tree-toggle]');
+  if (!toggle) throw new Error(`no chevron on ${row.textContent}`);
+  return toggle;
+}
 
 describe('KnowledgePageExplorer page view', () => {
   describe('when a page is open', () => {
@@ -393,7 +400,7 @@ describe('KnowledgePageExplorer page view', () => {
       renderWithProviders(<Host />);
       const tree = within(screen.getByRole('tree', { name: 'Knowledge pages' }));
       expect(tree.getAllByRole('treeitem').map(row => row.textContent)).toEqual(['Acmeorg:acme', 'Policies']);
-      fireEvent.click(tree.getByRole('button', { name: 'Expand Policies' }));
+      fireEvent.click(chevron(tree.getByRole('treeitem', { name: /^Policies/ })));
       expect(tree.getByRole('treeitem', { name: /Refund Policy/ })).toBeTruthy();
       expect(tree.queryByText('Escalation Process')).toBeNull();
       fireEvent.click(tree.getByRole('button', { name: 'Load more' }));
@@ -410,7 +417,7 @@ describe('KnowledgePageExplorer page view', () => {
       it('stays collapsed, hiding the selected page', () => {
         renderWithProviders(<Host initial="child-2" initialView="page" />);
         const tree = within(screen.getByRole('tree', { name: 'Knowledge pages' }));
-        fireEvent.click(tree.getByRole('button', { name: 'Collapse Policies' }));
+        fireEvent.click(chevron(tree.getByRole('treeitem', { name: /^Policies/ })));
         expect(tree.getByRole('treeitem', { name: 'Policies' }).getAttribute('aria-expanded')).toBe('false');
         expect(tree.queryByRole('treeitem', { selected: true })).toBeNull();
       });
@@ -418,7 +425,7 @@ describe('KnowledgePageExplorer page view', () => {
       it('opens the path again when another page is selected under it', async () => {
         renderWithProviders(<Host initial="child-2" initialView="page" />);
         const tree = within(screen.getByRole('tree', { name: 'Knowledge pages' }));
-        fireEvent.click(tree.getByRole('button', { name: 'Collapse Policies' }));
+        fireEvent.click(chevron(tree.getByRole('treeitem', { name: /^Policies/ })));
         fireEvent.click(within(pageView()).getByRole('button', { name: /Refund Policy/ }));
         expect(tree.getByRole('treeitem', { selected: true }).textContent).toContain('Refund Policy');
       });
@@ -426,7 +433,7 @@ describe('KnowledgePageExplorer page view', () => {
       it('opens the path again when the same page is picked after the selection was cleared', () => {
         renderWithProviders(<OutsidePickerHost />);
         const tree = within(screen.getByRole('tree', { name: 'Knowledge pages' }));
-        fireEvent.click(tree.getByRole('button', { name: 'Collapse Policies' }));
+        fireEvent.click(chevron(tree.getByRole('treeitem', { name: /^Policies/ })));
         fireEvent.click(screen.getByRole('button', { name: 'Clear selection' }));
         fireEvent.click(screen.getByRole('button', { name: 'Pick child-2' }));
         expect(tree.getByRole('treeitem', { name: 'Policies' }).getAttribute('aria-expanded')).toBe('true');

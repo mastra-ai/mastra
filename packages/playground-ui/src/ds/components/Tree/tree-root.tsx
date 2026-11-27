@@ -10,8 +10,15 @@ import { transitions } from '@/ds/primitives/transitions';
 import { useIsomorphicLayoutEffect } from '@/hooks/use-isomorphic-layout-effect';
 import { cn } from '@/lib/utils';
 
-const ROW_HEIGHT = 28;
+const ROW_SIZES = {
+  sm: { height: 28, indent: 0, className: 'h-7 gap-1.5 rounded-sm pr-1 text-caption' },
+  md: { height: 32, indent: 4, className: 'h-8 gap-2 rounded-md pr-2 text-body-sm' },
+};
+const ROW_HEIGHT = ROW_SIZES.sm.height;
 const INDENT = 12;
+const REVEAL_AT = 1 / 3;
+const COMFORT_TOP = 0.1;
+const COMFORT_BOTTOM = 0.7;
 const TYPEAHEAD_TIMEOUT = 500;
 const FALLBACK_RECT = { width: 0, height: ROW_HEIGHT * 30 };
 const FIND_CHUNK_SIZE = 100;
@@ -33,6 +40,7 @@ export interface TreeProps<Row extends TreeRow> {
   onActivate: (row: Row) => void;
   onExpandedChange: (row: Row, expanded: boolean) => void;
   renderRow: (row: Row) => ReactNode;
+  size?: keyof typeof ROW_SIZES;
   className?: string;
   contentClassName?: string;
 }
@@ -51,9 +59,11 @@ export function TreeRoot<Row extends TreeRow>({
   onActivate,
   onExpandedChange,
   renderRow,
+  size = 'sm',
   className,
   contentClassName,
 }: TreeProps<Row>) {
+  const rowSize = ROW_SIZES[size];
   const [scrollElement, setScrollElement] = useState<HTMLDivElement>();
   const [treeElement, setTreeElement] = useState<HTMLDivElement>();
   const [focusedId, setFocusedId] = useState<string>();
@@ -61,6 +71,8 @@ export function TreeRoot<Row extends TreeRow>({
   const [scrollMargin, setScrollMargin] = useState(0);
   const pendingFocus = useRef<string | undefined>(undefined);
   const revealed = useRef<string | undefined>(undefined);
+  const activated = useRef<string | undefined>(undefined);
+  const userMoved = useRef(false);
   const typeahead = useRef({ query: '', at: 0 });
 
   const selectedIndex = selectedId === undefined ? -1 : rows.findIndex(row => row.id === selectedId);
@@ -70,7 +82,7 @@ export function TreeRoot<Row extends TreeRow>({
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollElement ?? null,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: () => rowSize.height,
     getItemKey: index => rows[index]?.id ?? index,
     overscan: 10,
     scrollMargin,
@@ -91,11 +103,24 @@ export function TreeRoot<Row extends TreeRow>({
   }, [treeElement, scrollElement, contentClassName]);
 
   useEffect(() => {
-    if (selectedId === undefined) revealed.current = undefined;
-    if (!scrollElement || selectedIndex < 0 || revealed.current === selectedId) return;
-    revealed.current = selectedId;
-    virtualizer.scrollToIndex(selectedIndex, { align: 'auto' });
-  }, [scrollElement, selectedId, selectedIndex, virtualizer]);
+    if (selectedId === undefined) {
+      revealed.current = undefined;
+      return;
+    }
+    if (!scrollElement || selectedIndex < 0) return;
+    const first = revealed.current !== selectedId;
+    if (first) {
+      revealed.current = selectedId;
+      userMoved.current = activated.current === selectedId;
+    }
+    if (userMoved.current) return;
+    const height = scrollElement.clientHeight;
+    const start = selectedIndex * rowSize.height + scrollMargin;
+    const top = start - scrollElement.scrollTop;
+    if (height > 0 && top >= height * COMFORT_TOP && top + rowSize.height <= height * COMFORT_BOTTOM) return;
+    const smooth = first && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    scrollElement.scrollTo({ top: Math.max(0, start - height * REVEAL_AT), behavior: smooth ? 'smooth' : 'auto' });
+  }, [scrollElement, selectedId, selectedIndex, scrollMargin, rowSize.height]);
 
   useEffect(() => {
     if (!treeElement) return;
@@ -104,12 +129,12 @@ export function TreeRoot<Row extends TreeRow>({
       const index = Number(event.target.dataset.treeFindIndex);
       treeElement.querySelectorAll(`${FIND_TEXT}:not([hidden])`).forEach(hideUntilFound);
       event.target.className = FOUND_TEXT_CLASS;
-      event.target.style.top = `${index * ROW_HEIGHT}px`;
+      event.target.style.top = `${index * rowSize.height}px`;
       setFoundId(rows[index]?.id);
     };
     treeElement.addEventListener('beforematch', onBeforeMatch);
     return () => treeElement.removeEventListener('beforematch', onBeforeMatch);
-  }, [treeElement, rows]);
+  }, [treeElement, rows, rowSize.height]);
 
   useIsomorphicLayoutEffect(() => {
     const id = pendingFocus.current;
@@ -126,6 +151,11 @@ export function TreeRoot<Row extends TreeRow>({
     if (foundId === undefined) return;
     treeElement?.querySelectorAll(`${FIND_TEXT}:not([hidden]), ${FIND_CHUNK}:not([hidden])`).forEach(hideUntilFound);
     setFoundId(undefined);
+  };
+
+  const activate = (row: Row) => {
+    activated.current = row.id;
+    onActivate(row);
   };
 
   const moveTo = (index: number, align: 'auto' | 'center' = 'auto') => {
@@ -174,10 +204,10 @@ export function TreeRoot<Row extends TreeRow>({
         break;
       case ' ':
         if (typing) jumpTo(event, index);
-        else onActivate(row);
+        else activate(row);
         break;
       case 'Enter':
-        onActivate(row);
+        activate(row);
         break;
       default:
         if (event.key.length !== 1 || event.ctrlKey || event.metaKey || event.altKey) return;
@@ -212,18 +242,29 @@ export function TreeRoot<Row extends TreeRow>({
         onClick={event => {
           if (isInteractiveTarget(event.target)) return;
           setFocusedId(row.id);
-          onActivate(row);
+          activate(row);
         }}
         className={cn(
-          'group absolute inset-x-0 top-0 flex h-7 min-w-0 cursor-pointer items-center gap-1.5 rounded-sm pr-1 outline-hidden',
+          'group absolute inset-x-0 top-0 flex min-w-0 cursor-pointer items-center outline-hidden',
+          rowSize.className,
           transitions.colors,
           'hover:bg-fill-subtle focus-visible:bg-fill-subtle focus-visible:text-foreground',
           found && 'bg-fill-subtle text-foreground',
           selected && 'bg-fill-hover text-foreground',
         )}
-        style={{ transform: `translateY(${start}px)`, paddingLeft: row.level * INDENT }}
+        style={{ transform: `translateY(${start}px)`, paddingLeft: row.level * INDENT + rowSize.indent }}
       >
-        <span aria-hidden className="flex size-3 shrink-0 items-center justify-center text-muted-foreground">
+        <span
+          aria-hidden
+          data-tree-toggle={row.expanded === undefined ? undefined : ''}
+          className="flex size-3 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground"
+          onClick={event => {
+            if (row.expanded === undefined) return;
+            event.stopPropagation();
+            setFocusedId(row.id);
+            onExpandedChange(row, !row.expanded);
+          }}
+        >
           {row.expanded === undefined ? null : (
             <DisclosureChevron direction="right" open={row.expanded} className="size-3" />
           )}
@@ -241,13 +282,19 @@ export function TreeRoot<Row extends TreeRow>({
   };
 
   return (
-    <ScrollArea className={cn('min-h-0 flex-1', className)}>
+    <ScrollArea
+      className={cn('min-h-0 flex-1', className)}
+      onWheel={() => (userMoved.current = true)}
+      onTouchMove={() => (userMoved.current = true)}
+      onPointerDown={() => (userMoved.current = true)}
+      onKeyDown={() => (userMoved.current = true)}
+    >
       <ScrollAreaViewport ref={element => setScrollElement(element ?? undefined)} contentClassName={contentClassName}>
         <div
           ref={element => setTreeElement(element ?? undefined)}
           role="tree"
           aria-label={ariaLabel}
-          className="relative text-caption"
+          className="relative"
           style={{ height: virtualizer.getTotalSize() }}
           onKeyDownCapture={clearFound}
           onPointerDownCapture={clearFound}

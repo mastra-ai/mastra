@@ -64,6 +64,92 @@ function ProjectTree({
 
 const item = (name: string) => screen.getByRole('treeitem', { name: new RegExp(`^${name}`) });
 
+const files = (count: number) =>
+  Array.from({ length: count }, (_, index) => ({
+    id: `file-${index}`,
+    level: 0,
+    posInSet: index + 1,
+    setSize: count,
+  }));
+
+function SelectedTree({ rows, selectedId }: { rows: ReturnType<typeof files>; selectedId?: string }) {
+  const [activated, setActivated] = useState<string>();
+  return (
+    <Tree
+      aria-label="Files"
+      rows={rows}
+      getRowLabel={row => row.id}
+      selectedId={activated ?? selectedId}
+      onActivate={row => setActivated(row.id)}
+      onExpandedChange={() => {}}
+      renderRow={row => <Tree.Label>{row.id}</Tree.Label>}
+    />
+  );
+}
+
+function revealScrolls(container: HTMLElement, height: number) {
+  const viewport = container.querySelector('[role="tree"]')?.parentElement?.parentElement;
+  if (!viewport) throw new Error('no viewport');
+  Object.defineProperty(viewport, 'clientHeight', { configurable: true, value: height });
+  const scrollTo = vi.spyOn(Element.prototype, 'scrollTo');
+  return {
+    viewport,
+    scrolls: () =>
+      scrollTo.mock.calls.filter((_, call) => scrollTo.mock.contexts[call] === viewport).map(([options]) => options),
+  };
+}
+
+describe('Tree selection reveal', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('brings a row selected from elsewhere a third of the way down the view', () => {
+    const { container, rerender } = render(<SelectedTree rows={files(200)} />);
+    const scrolls = revealScrolls(container, 300);
+    rerender(<SelectedTree rows={files(200)} selectedId="file-100" />);
+    expect(scrolls.scrolls()).toEqual([expect.objectContaining({ top: 100 * 28 - 100 })]);
+  });
+
+  it('leaves a selected row that is already comfortably in view where it is', () => {
+    const { container, rerender } = render(<SelectedTree rows={files(200)} />);
+    const scrolls = revealScrolls(container, 300);
+    rerender(<SelectedTree rows={files(200)} selectedId="file-3" />);
+    expect(scrolls.scrolls()).toEqual([]);
+  });
+
+  it('does not scroll a row the user just clicked', () => {
+    const { container } = render(<SelectedTree rows={files(200)} />);
+    const scrolls = revealScrolls(container, 300);
+    fireEvent.click(item('file-9'));
+    expect(item('file-9').getAttribute('aria-selected')).toBe('true');
+    expect(scrolls.scrolls()).toEqual([]);
+  });
+
+  it('reveals it again when rows load above it, but only until the user scrolls', () => {
+    const { container, rerender } = render(<SelectedTree rows={files(200)} selectedId="file-100" />);
+    const scrolls = revealScrolls(container, 300);
+    const grown = [...files(20).map(row => ({ ...row, id: `new-${row.id}` })), ...files(200)];
+    rerender(<SelectedTree rows={grown} selectedId="file-100" />);
+    expect(scrolls.scrolls()).toEqual([expect.objectContaining({ top: 120 * 28 - 100 })]);
+
+    fireEvent.wheel(scrolls.viewport);
+    rerender(
+      <SelectedTree
+        rows={[...files(5).map(row => ({ ...row, id: `top-${row.id}` })), ...grown]}
+        selectedId="file-100"
+      />,
+    );
+    expect(scrolls.scrolls()).toHaveLength(1);
+  });
+
+  it('scrolls once per selection, not on every render', () => {
+    const { container, rerender } = render(<SelectedTree rows={files(200)} />);
+    const scrolls = revealScrolls(container, 300);
+    rerender(<SelectedTree rows={files(200)} selectedId="file-100" />);
+    rerender(<SelectedTree rows={files(200)} selectedId="file-100" />);
+    expect(scrolls.scrolls()).toHaveLength(1);
+  });
+});
+
 describe('Tree', () => {
   it('describes each row’s level and place, with one tab stop', () => {
     render(<ProjectTree />);
@@ -105,6 +191,18 @@ describe('Tree', () => {
     expect(document.activeElement).toBe(item('src'));
     await user.keyboard('{ArrowLeft}');
     expect(item('src').getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('opens and closes a folder from its chevron without activating it', () => {
+    const onActivate = vi.fn();
+    render(<ProjectTree onActivate={onActivate} />);
+
+    const chevron = item('src').querySelector('[data-tree-toggle]');
+    if (!chevron) throw new Error('no chevron');
+    fireEvent.click(chevron);
+    expect(item('src').getAttribute('aria-expanded')).toBe('false');
+    expect(onActivate).not.toHaveBeenCalled();
+    expect(item('README.md').querySelector('[data-tree-toggle]')).toBeNull();
   });
 
   it('stays on an open, empty folder when Right is pressed', async () => {

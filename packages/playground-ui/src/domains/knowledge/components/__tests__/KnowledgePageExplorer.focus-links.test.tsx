@@ -117,6 +117,7 @@ const drawnIds = (container: HTMLElement) =>
   [...container.querySelectorAll('.react-flow__node [data-page-id]')].map(node => node.getAttribute('data-page-id'));
 
 beforeAll(() => {
+  Element.prototype.getAnimations ??= () => [];
   window.ResizeObserver ??= class {
     observe() {}
     unobserve() {}

@@ -86,6 +86,7 @@ function Host({
 }
 
 beforeAll(() => {
+  Element.prototype.getAnimations ??= () => [];
   window.ResizeObserver ??= class {
     observe() {}
     unobserve() {}

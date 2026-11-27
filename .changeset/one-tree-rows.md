@@ -39,4 +39,6 @@ import { Tree, flattenTreeRows } from '@mastra/playground-ui/components/Tree';
 />;
 ```
 
+`size="md"` gives taller rows for navigation trees, like the Knowledge sidebar. A row selected from outside the tree (a graph or search) scrolls into view a third of the way down, unless the person already scrolled or clicked in the tree.
+
 Typing the start of a name jumps to that row, even one that isn't drawn yet. The browser's find in page (Cmd+F or Ctrl+F) finds rows that are scrolled out of view and scrolls to them, in browsers that support `hidden="until-found"`.

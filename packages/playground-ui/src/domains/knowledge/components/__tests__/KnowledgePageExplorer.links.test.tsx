@@ -100,6 +100,7 @@ function Host({ initial, initialView }: { initial: string | null; initialView: K
 }
 
 beforeAll(() => {
+  Element.prototype.getAnimations ??= () => [];
   window.ResizeObserver ??= class {
     observe() {}
     unobserve() {}

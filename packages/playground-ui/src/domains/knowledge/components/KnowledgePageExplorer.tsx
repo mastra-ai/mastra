@@ -1342,7 +1342,7 @@ export function KnowledgePageExplorer({
           </Button>
         </div>
       ) : null}
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="flex min-h-0 flex-1 flex-col">
         {source.useTreeLevels && lazy.rootsPending ? (
           <PageTreeSkeleton rows={6} />
         ) : (

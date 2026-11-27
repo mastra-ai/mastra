@@ -21,6 +21,7 @@ vi.mock('@xyflow/react', async importOriginal => {
 const originalMatchMedia = window.matchMedia;
 const measure = (element: HTMLElement, size: number) => (element.closest('.hidden') ? 0 : size);
 beforeAll(() => {
+  Element.prototype.getAnimations ??= () => [];
   window.matchMedia = (query: string) =>
     ({
       matches: query.includes('max-width'),
