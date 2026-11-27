@@ -10,7 +10,7 @@
 import { randomUUID } from 'node:crypto';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { MockInstance } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../agent/agent';
@@ -22,6 +22,7 @@ import type { MastraStorage } from '../../../storage';
 import { createTool } from '../../../tools';
 import type { WorkflowOptions } from '../..';
 import { createStep, createWorkflow as createEventedWorkflow } from '..';
+import { drainHandlers, settleDeliveries } from './redelivery-contract';
 import { RedeliveryDriver } from './redelivery-driver';
 
 const Num = z.object({ n: z.number() });
@@ -54,6 +55,19 @@ export function describeResumeOccurrenceCases({
       return createEventedWorkflow({ ...params, options });
     }) as typeof createEventedWorkflow;
 
+    // A case that hangs never reaches its own cleanup; release its host so later cases can run.
+    let live: { mastra: Mastra; driver: RedeliveryDriver } | undefined;
+    afterEach(async () => {
+      const host = live;
+      live = undefined;
+      if (!host) return;
+      try {
+        await host.mastra.stopWorkers();
+      } finally {
+        host.driver.dispose();
+      }
+    });
+
     async function withHost(
       workflows: Record<string, any>,
       body: (host: Host) => Promise<void>,
@@ -61,12 +75,14 @@ export function describeResumeOccurrenceCases({
     ) {
       const driver = new RedeliveryDriver();
       const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows, agents });
+      live = { mastra, driver };
       const warn = vi.spyOn(mastra.getLogger(), 'warn');
       try {
         await mastra.startWorkers();
         await body({ driver, warn });
       } finally {
         warn.mockRestore();
+        live = undefined;
         try {
           await mastra.stopWorkers();
         } finally {
@@ -83,13 +99,32 @@ export function describeResumeOccurrenceCases({
       await driver.redeliverEvent(event);
     }
 
-    /** Waits until the run publishes nothing for a while, so work a duplicate started has run. */
-    async function settle(driver: RedeliveryDriver) {
-      let seen = -1;
-      for (let i = 0; i < 50 && seen !== driver.events.length; i++) {
-        seen = driver.events.length;
-        await new Promise(resolve => setTimeout(resolve, 150));
-      }
+    /** The step ends published for a step since event index `from`. */
+    const stepEndsSince = (driver: RedeliveryDriver, from: number, runId: string, workflowId: string, path: number[]) =>
+      driver.events
+        .slice(from)
+        .filter(
+          event =>
+            event.type === 'workflow.step.end' &&
+            event.runId === runId &&
+            event.data.workflowId === workflowId &&
+            JSON.stringify(event.data.executionPath) === JSON.stringify(path),
+        );
+
+    /**
+     * Waits until both copies of a step delivered twice since event index `from` have ended and
+     * the second one's completion was handled: refused, or continued from the saved result.
+     */
+    async function settleSecondCompletion(
+      driver: RedeliveryDriver,
+      from: number,
+      runId: string,
+      workflowId: string,
+      path: number[],
+    ) {
+      const ends = () => stepEndsSince(driver, from, runId, workflowId, path);
+      await expect.poll(() => ends().length, { timeout: 10_000 }).toBe(2);
+      await settleDeliveries([ends()[1]!]);
     }
 
     async function storedSteps(workflowId: string, runId: string) {
@@ -205,10 +240,10 @@ export function describeResumeOccurrenceCases({
           await redeliverInBody(driver, afterRun);
           await wf.entered.next.promise;
           wf.held.after.resolve();
-          await settle(driver);
+          await settleSecondCompletion(driver, from, run.runId, wf.workflow.id, [1]);
           wf.held.next.resolve();
           expect(await result).toMatchObject({ status: 'success', result: { n: 2 } });
-          await settle(driver);
+          await drainHandlers();
           expect(wf.calls).toEqual({ gate: 1, after: 2, next: 1 });
           // The slower copy's completion is refused by the guard and logged.
           expect(warn).toHaveBeenCalledWith(
@@ -237,10 +272,10 @@ export function describeResumeOccurrenceCases({
           await redeliverInBody(driver, gateRun);
           await wf.entered.after.promise;
           wf.held.gate.resolve();
-          await settle(driver);
+          await settleSecondCompletion(driver, from, run.runId, wf.workflow.id, [0]);
           wf.held.after.resolve();
           expect(await result).toMatchObject({ status: 'success', result: { n: 2 } });
-          await settle(driver);
+          await drainHandlers();
           expect(wf.calls).toEqual({ gate: 2, after: 1, next: 1 });
           expect((await storedSteps(wf.workflow.id, run.runId))?.gate).toMatchObject({
             status: 'success',
@@ -274,10 +309,9 @@ export function describeResumeOccurrenceCases({
           const after = await storedSteps(wf.workflow.id, run.runId);
           expect(after?.gate).toEqual(before?.gate);
           expect(after?.after).toEqual(before?.after);
-          await settle(driver);
           wf.held.next.resolve();
           expect(await result).toMatchObject({ status: 'success', result: { n: 2 } });
-          await settle(driver);
+          await drainHandlers();
           expect(wf.calls).toEqual({ gate: 1, after: 1, next: 1 });
         } finally {
           wf.releaseAll();
@@ -301,10 +335,10 @@ export function describeResumeOccurrenceCases({
           await redeliverInBody(driver, afterRun);
           await wf.entered.next.promise;
           wf.held.after.resolve();
-          await settle(driver);
+          await settleSecondCompletion(driver, from, run.runId, wf.workflow.id, [1]);
           wf.held.next.resolve();
           expect(await result).toMatchObject({ status: 'success', result: { n: 13 } });
-          await settle(driver);
+          await drainHandlers();
           expect(wf.calls).toEqual({ first: 2, after: 3, next: 2 });
         } finally {
           wf.releaseAll();
@@ -327,10 +361,10 @@ export function describeResumeOccurrenceCases({
           await redeliverInBody(driver, gateRun);
           await wf.entered.after.promise;
           wf.held.gate.resolve();
-          await settle(driver);
+          await settleSecondCompletion(driver, from, run.runId, wf.workflow.id, [0]);
           wf.held.after.resolve();
           expect(await result).toMatchObject({ status: 'success', result: { n: 2 } });
-          await settle(driver);
+          await drainHandlers();
           expect(wf.calls).toEqual({ gate: 2, after: 1, next: 1 });
         } finally {
           wf.releaseAll();
@@ -359,10 +393,9 @@ export function describeResumeOccurrenceCases({
           const after = await storedSteps(wf.workflow.id, run.runId);
           expect(after?.first).toEqual(before?.first);
           expect(after?.after).toEqual(before?.after);
-          await settle(driver);
           wf.held.next.resolve();
           expect(await result).toMatchObject({ status: 'success', result: { n: 13 } });
-          await settle(driver);
+          await drainHandlers();
           expect(wf.calls).toEqual({ first: 2, after: 2, next: 2 });
         } finally {
           wf.releaseAll();
@@ -730,6 +763,7 @@ export function describeResumeOccurrenceCases({
             for (let chunk = await first.read(); !chunk.done; chunk = await first.read()) {
               if (chunk.value?.type === 'tool-call-approval') break;
             }
+            const from = driver.events.length;
             const resumed = await agent.resume(started.runId, { approved: true });
             const finished = drain(resumed.fullStream as ReadableStream<unknown>);
             await entered.promise;
@@ -744,8 +778,15 @@ export function describeResumeOccurrenceCases({
             expect(finishing.data.resumeSteps?.length).toBeGreaterThan(0);
             await redeliverInBody(driver, finishing);
             held.resolve();
+            await settleSecondCompletion(
+              driver,
+              from,
+              started.runId,
+              DurableStepIds.AGENTIC_LOOP,
+              finishing.data.executionPath,
+            );
             await finished;
-            await settle(driver);
+            await drainHandlers();
             const after = `${DurableStepIds.AGENTIC_LOOP}@${finishing.data.executionPath[0] + 1}`;
             expect(processed).toBe(2);
             expect(driver.deliveryCount({ spec: after, runId: started.runId })).toBe(1);
