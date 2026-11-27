@@ -152,7 +152,13 @@ export function describeResumeOccurrenceCases({
      * gate -> after -> next. `gate` suspends until it is resumed (or time travelled into with
      * resume data). Each step can be held inside its body on its first execution after `arm()`.
      */
-    function linearWorkflow(onExecute?: (id: 'gate' | 'after' | 'next', call: number, runId: string) => Promise<void>) {
+    function linearWorkflow({
+      onExecute,
+      options,
+    }: {
+      onExecute?: (id: 'gate' | 'after' | 'next', call: number, runId: string) => Promise<void>;
+      options?: WorkflowOptions<any>;
+    } = {}) {
       const calls = { gate: 0, after: 0, next: 0 };
       const held = { gate: deferred(), after: deferred(), next: deferred() };
       const entered = { gate: deferred(), after: deferred(), next: deferred() };
@@ -194,7 +200,12 @@ export function describeResumeOccurrenceCases({
           return { n: inputData.n + 1 };
         },
       });
-      const workflow = createWorkflow({ id: `resume-linear-${randomUUID()}`, inputSchema: Num, outputSchema: Num })
+      const workflow = createWorkflow({
+        id: `resume-linear-${randomUUID()}`,
+        inputSchema: Num,
+        outputSchema: Num,
+        ...(options ? { options } : {}),
+      })
         .then(gate)
         .then(after)
         .then(next)
@@ -272,8 +283,10 @@ export function describeResumeOccurrenceCases({
     it('runs the step after a resume once when the resumed step is delivered twice', async () => {
       // What the duplicate's claim left stored, read inside its body.
       let claimedByDuplicate: unknown;
-      const wf = linearWorkflow(async (id, call, runId) => {
-        if (id === 'gate' && call === 2) claimedByDuplicate = (await storedSteps(wf.workflow.id, runId))?.gate;
+      const wf = linearWorkflow({
+        onExecute: async (id, call, runId) => {
+          if (id === 'gate' && call === 2) claimedByDuplicate = (await storedSteps(wf.workflow.id, runId))?.gate;
+        },
       });
       await withHost({ [wf.workflow.id]: wf.workflow }, async ({ driver }) => {
         try {
@@ -310,35 +323,57 @@ export function describeResumeOccurrenceCases({
 
     // T3. A resume event delivered again rewrote the run's snapshot from its own data: on storage
     // v1 that set the resumed step back to suspended and dropped the steps after it, and on both
-    // versions the resumed step and the steps after it ran again.
-    it('keeps the progress of a resumed run when the resume event is delivered again', async () => {
-      const wf = linearWorkflow();
-      await withHost({ [wf.workflow.id]: wf.workflow }, async ({ driver }) => {
-        try {
-          const run = await wf.workflow.createRun();
-          expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'suspended' });
-          wf.arm('next');
-          const result = run.resume({ step: 'gate', resumeData: { ok: true } });
-          await wf.entered.next.promise;
-          const before = await storedSteps(wf.workflow.id, run.runId);
-          expect(before).toMatchObject({ gate: { status: 'success' }, after: { status: 'success' } });
-          const trigger = driver.events.find(
-            event =>
-              event.type === 'workflow.resume' && event.runId === run.runId && event.data.workflowId === wf.workflow.id,
-          )!;
-          await driver.redeliverEvent(trigger);
-          const after = await storedSteps(wf.workflow.id, run.runId);
-          expect(after?.gate).toEqual(before?.gate);
-          expect(after?.after).toEqual(before?.after);
-          wf.held.next.resolve();
-          expect(await result).toMatchObject({ status: 'success', result: { n: 2 } });
-          await drainHandlers();
-          expect(wf.calls).toEqual({ gate: 1, after: 1, next: 1 });
-        } finally {
-          wf.releaseAll();
-        }
-      });
-    }, 20_000);
+    // versions the resumed step and the steps after it ran again. A workflow that declines running
+    // snapshots stores nothing on resume on storage v1, so the run does not record the event it
+    // applied there: the resumed step's guard refuses the repeated step event before the step runs,
+    // and logs it. Storage v2 always stores the run, so there the start handler ignores the event.
+    it.each([
+      { name: 'stores running snapshots', declinesRunning: false },
+      { name: 'declines running snapshots', declinesRunning: true },
+    ])(
+      'keeps the progress of a resumed run when the resume event is delivered again ($name)',
+      async ({ declinesRunning }) => {
+        const wf = linearWorkflow(
+          declinesRunning
+            ? { options: { shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus !== 'running' } }
+            : {},
+        );
+        await withHost({ [wf.workflow.id]: wf.workflow }, async ({ driver, warn }) => {
+          try {
+            const run = await wf.workflow.createRun();
+            expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'suspended' });
+            wf.arm('next');
+            const result = run.resume({ step: 'gate', resumeData: { ok: true } });
+            await wf.entered.next.promise;
+            const before = await storedSteps(wf.workflow.id, run.runId);
+            expect(before).toMatchObject({ gate: { status: 'success' }, after: { status: 'success' } });
+            const trigger = driver.events.find(
+              event =>
+                event.type === 'workflow.resume' &&
+                event.runId === run.runId &&
+                event.data.workflowId === wf.workflow.id,
+            )!;
+            await driver.redeliverEvent(trigger);
+            const after = await storedSteps(wf.workflow.id, run.runId);
+            expect(after?.gate).toEqual(before?.gate);
+            expect(after?.after).toEqual(before?.after);
+            wf.held.next.resolve();
+            expect(await result).toMatchObject({ status: 'success', result: { n: 2 } });
+            await drainHandlers();
+            expect(wf.calls).toEqual({ gate: 1, after: 1, next: 1 });
+            if (declinesRunning && storageVersion === 1) {
+              expect(warn).toHaveBeenCalledWith(
+                expect.stringContaining('stale'),
+                expect.objectContaining({ runId: run.runId, executionPath: [0] }),
+              );
+            }
+          } finally {
+            wf.releaseAll();
+          }
+        });
+      },
+      20_000,
+    );
 
     // T4 (T1 after a time travel). Time travel carries its flag on every later step, so without the
     // guards nothing told the two copies of a duplicated step apart and the step after it ran twice.
