@@ -49,6 +49,8 @@ export const MAX_KNOWLEDGE_SEQUENCE_SCHEMA_ARRAY_ITEMS = 1000;
 export const MAX_KNOWLEDGE_SEQUENCE_ITEM_TYPES = 50;
 /** At most this many bytes for a sequence's `itemTypes`, and for its `propertiesSchema`, as JSON. */
 export const MAX_KNOWLEDGE_SEQUENCE_DECLARATION_BYTES = 64 * 1024;
+/** At most this many levels of objects and arrays in item properties or a declaration, the outer object counting as one. */
+export const MAX_KNOWLEDGE_SEQUENCE_JSON_DEPTH = 64;
 export const MAX_KNOWLEDGE_SEQUENCE_ITEM_TYPE_LABEL = 80;
 export const MAX_KNOWLEDGE_SEQUENCE_ITEM_TYPE_DESCRIPTION = 500;
 
@@ -593,14 +595,15 @@ export function checkKnowledgeSequenceDeclaration(
   const propertiesSchema = input.propertiesSchema ?? null;
   const itemTypes = input.itemTypes ?? null;
   if (propertiesSchema !== null) {
-    if (!isJsonValue(propertiesSchema)) schemaInvalid('propertiesSchema', 'must be plain JSON.');
+    checkDeclarationJson(propertiesSchema, 'propertiesSchema', 'must be plain JSON.');
     checkDeclarationSize(propertiesSchema, 'propertiesSchema');
     checkPropertiesSchema(propertiesSchema, 'propertiesSchema');
   }
   if (itemTypes !== null) {
-    if (!itemTypes || typeof itemTypes !== 'object' || Array.isArray(itemTypes) || !isJsonValue(itemTypes)) {
+    if (!itemTypes || typeof itemTypes !== 'object' || Array.isArray(itemTypes)) {
       schemaInvalid('itemTypes', 'must be a plain JSON object.');
     }
+    checkDeclarationJson(itemTypes, 'itemTypes', 'must be a plain JSON object.');
     checkDeclarationSize(itemTypes, 'itemTypes');
     const keys = Object.keys(itemTypes);
     if (keys.length > MAX_KNOWLEDGE_SEQUENCE_ITEM_TYPES) {
@@ -700,26 +703,51 @@ function checkItemProperties(
  * the same value: plain objects and arrays of own, enumerable data properties (no getters, symbol
  * keys, hidden `toJSON` hooks or holes), no cycles, finite numbers, strings, booleans and null.
  */
-function isJsonValue(value: unknown, ancestors: Set<object> = new Set()): boolean {
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
-  if (typeof value === 'number') return Number.isFinite(value);
-  if (typeof value !== 'object' || ancestors.has(value)) return false;
-  const array = Array.isArray(value);
-  const proto = Object.getPrototypeOf(value);
-  if (array ? proto !== Array.prototype : proto !== Object.prototype && proto !== null) return false;
-  const keys = Reflect.ownKeys(value).filter(key => !(array && key === 'length'));
-  if (array && !keys.every((key, index) => key === String(index))) return false;
-  if (array && keys.length !== (value as unknown[]).length) return false;
-  const children: unknown[] = [];
-  for (const key of keys) {
-    const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
-    if (typeof key !== 'string' || !descriptor.enumerable || !('value' in descriptor)) return false;
-    children.push(descriptor.value);
+function isJsonValue(root: unknown): boolean | 'too-deep' {
+  // An explicit stack, not recursion: a deeply nested value within the size limits is checked
+  // without exhausting the call stack.
+  const ancestors = new Set<object>();
+  const stack: { value: object; children: unknown[]; next: number }[] = [];
+  const enter = (value: unknown): boolean => {
+    if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
+    if (typeof value === 'number') return Number.isFinite(value);
+    if (typeof value !== 'object' || ancestors.has(value)) return false;
+    const array = Array.isArray(value);
+    const proto = Object.getPrototypeOf(value);
+    if (array ? proto !== Array.prototype : proto !== Object.prototype && proto !== null) return false;
+    const keys = Reflect.ownKeys(value).filter(key => !(array && key === 'length'));
+    if (array && !keys.every((key, index) => key === String(index))) return false;
+    if (array && keys.length !== (value as unknown[]).length) return false;
+    const children: unknown[] = [];
+    for (const key of keys) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
+      if (typeof key !== 'string' || !descriptor.enumerable || !('value' in descriptor)) return false;
+      children.push(descriptor.value);
+    }
+    ancestors.add(value);
+    stack.push({ value, children, next: 0 });
+    return true;
+  };
+  if (!enter(root)) return false;
+  while (stack.length > 0) {
+    // Deeper values can't be measured, compared or stored without risking the call stack.
+    if (stack.length > MAX_KNOWLEDGE_SEQUENCE_JSON_DEPTH) return 'too-deep';
+    const top = stack.at(-1)!;
+    if (top.next === top.children.length) {
+      ancestors.delete(top.value);
+      stack.pop();
+    } else if (!enter(top.children[top.next++])) {
+      return false;
+    }
   }
-  ancestors.add(value);
-  const ok = children.every(child => isJsonValue(child, ancestors));
-  ancestors.delete(value);
-  return ok;
+  return true;
+}
+
+/** Refuses a declaration part that isn't plain JSON or nests too deep. */
+function checkDeclarationJson(value: unknown, path: string, message: string): void {
+  const json = isJsonValue(value);
+  if (json === 'too-deep') schemaInvalid(path, `nests at most ${MAX_KNOWLEDGE_SEQUENCE_JSON_DEPTH} levels.`);
+  if (!json) schemaInvalid(path, message);
 }
 
 function invalid(field: string, message: string): never {
@@ -781,7 +809,9 @@ export function checkKnowledgeSequenceItemInput(
   }
   if (properties != null) {
     if (typeof properties !== 'object' || Array.isArray(properties)) invalid('properties', 'must be a JSON object.');
-    if (!isJsonValue(properties)) {
+    const json = isJsonValue(properties);
+    if (json === 'too-deep') invalid('properties', `nest at most ${MAX_KNOWLEDGE_SEQUENCE_JSON_DEPTH} levels.`);
+    if (!json) {
       invalid(
         'properties',
         'must be plain JSON: no undefined, holes, cycles, getters, hidden or symbol keys, functions, non-finite numbers or class instances.',

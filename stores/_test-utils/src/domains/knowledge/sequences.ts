@@ -10,6 +10,7 @@ import {
   KnowledgeSequenceParentNotFoundError,
   KnowledgeSequencePurgeRefusedError,
   KnowledgeSequenceSchemaInvalidError,
+  MAX_KNOWLEDGE_SEQUENCE_JSON_DEPTH,
 } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
@@ -968,6 +969,58 @@ export function createKnowledgeSequenceTests(createStore: () => Promise<Knowledg
         }
         expect(await sequences.getSequence({ pageId: page.id })).toBeNull();
         expect(await sequences.listSequenceIds({ pageIds: [page.id] })).toEqual([]);
+      });
+
+      it('refuses a deeply nested declaration with a schema error, and writes nothing', async () => {
+        const { store, scope, sequences } = await setup();
+        const page = await store.createPage({ parentId: scope.id, name: 'Deep', provenance: host });
+        const nested = (depth: number) => {
+          let value: Record<string, unknown> = {};
+          for (let i = 0; i < depth; i++) value = { a: value };
+          return value;
+        };
+        for (const [declaration, path] of [
+          [{ propertiesSchema: { type: 'object', properties: { value: nested(4000) } } }, 'propertiesSchema'],
+          [{ itemTypes: { deploy: { propertiesSchema: nested(4000) } } }, 'itemTypes'],
+        ] as const) {
+          const error = await sequences.markSequence({ pageId: page.id, ...(declaration as object) }).then(
+            () => undefined,
+            (e: unknown) => e,
+          );
+          expect(error).toBeInstanceOf(KnowledgeSequenceSchemaInvalidError);
+          expect((error as { path: string }).path.startsWith(path)).toBe(true);
+        }
+        expect(await sequences.getSequence({ pageId: page.id })).toBeNull();
+      });
+
+      it('takes free-form properties nested to the depth limit, and refuses deeper ones with a typed error', async () => {
+        const { store, scope, sequences } = await setup();
+        const page = await store.createPage({ parentId: scope.id, name: 'Free', provenance: host });
+        await sequences.markSequence({ pageId: page.id });
+        const nested = (depth: number) => {
+          let value: Record<string, unknown> = {};
+          for (let i = 1; i < depth; i++) value = { a: value };
+          return value;
+        };
+        const write = (externalId: string, depth: number) =>
+          sequences.upsertItem({
+            sequenceId: page.id,
+            externalId,
+            occurredAt: at(1),
+            title: externalId,
+            properties: nested(depth),
+            writtenBy: importer,
+          });
+        expect((await write('deepest', MAX_KNOWLEDGE_SEQUENCE_JSON_DEPTH)).status).toBe('created');
+        expect((await write('deepest', MAX_KNOWLEDGE_SEQUENCE_JSON_DEPTH)).status).toBe('unchanged');
+        for (const depth of [MAX_KNOWLEDGE_SEQUENCE_JSON_DEPTH + 1, 2500]) {
+          await expect(write(`too-deep-${depth}`, depth)).rejects.toMatchObject({
+            name: 'KnowledgeSequenceItemInvalidError',
+            field: 'properties',
+          });
+        }
+        const { items } = await sequences.listItems({ sequenceId: page.id, read: 'all', limit: 10 });
+        expect(items.map(i => i.externalId)).toEqual(['deepest']);
       });
 
       it('re-declares: same schemas in another key order write nothing, changed ones replace in place', async () => {
