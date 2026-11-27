@@ -8,10 +8,8 @@ import { activityDepth, periodActivity } from '../periodActivity';
 import type { ActivityPeriod, RunStarts } from '../periodActivity';
 import { useRunStarts } from './useRunStarts';
 
-export interface RunsState {
-  status: 'pending' | 'error' | 'success';
-  complete: boolean;
-}
+export type { RunsState } from '@mastra/playground-ui/domains/factory';
+import type { RunsState } from '@mastra/playground-ui/domains/factory';
 
 const NO_RUN_STARTS: RunStarts = { starts: [], completeAfter: Number.NEGATIVE_INFINITY };
 const NO_CARD_TIMES: WorkItemActivity = { total: 0, createdAt: [], doneAt: [] };
