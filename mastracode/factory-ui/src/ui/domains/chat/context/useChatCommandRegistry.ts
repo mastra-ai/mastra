@@ -20,12 +20,11 @@ import {
 import { useAgentControllerSettings } from '../../../../hooks/useAgentControllerSettings';
 import { useModelReasoningOptions } from '../../../../hooks/useAvailableModels';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useUpdateAgentControllerSettingsMutation } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { sessionDefaultsAnchor, settingsSectionPath } from '../../settings/settingsSections';
 import type { SlashCommand, SlashCommandOption } from '../services/commands';
-import { findCommand, parseSlashCommand } from '../services/commands';
+import { findCommand, isSlashCommand, parseSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { THINKING_DEFAULT_SOURCE_LABELS, THINKING_LEVEL_LABELS } from '../services/thinkingLevels';
+import { DEFAULT_SOURCE_LABELS, THINKING_LEVEL_LABELS } from '../services/thinkingLevels';
 import type { ThinkingDefault } from '../services/thinkingLevels';
 import { useChatModels } from './useChatModels';
 import { useChatModelScope } from './useChatModelScope';
@@ -38,7 +37,7 @@ import { useChatTranscript } from './useChatTranscript';
 const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
 
 function describeThinkingDefault({ level, origin }: ThinkingDefault): string {
-  return `${level} (${THINKING_DEFAULT_SOURCE_LABELS[origin]})`;
+  return `${level} (${DEFAULT_SOURCE_LABELS[origin]})`;
 }
 
 export function useChatCommandRegistry(prefillComposer: (draft: string) => void) {
@@ -49,7 +48,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const { sessionId, sessionEnabled, baseUrl, modelLockedReason } = useChatSessionContext();
   const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { usage, omPhase } = useChatRuntime();
-  const { activeModelId, setModel } = useChatModels();
+  const { activeModelId, select } = useChatModels();
   const { catalogTarget, modelScope } = useChatModelScope();
   const activeModelReasoningOptions = useModelReasoningOptions(activeModelId, catalogTarget);
   const availableThinkingLevels = getAvailableThinkingLevelsForModel(activeModelId ?? '', activeModelReasoningOptions);
@@ -67,9 +66,8 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
   const followUpMutation = useFollowUpAgentControllerMutation(hookArgs);
   const settingsQuery = useAgentControllerSettings(hookArgs);
-  const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
   const { permissions, permissionsLoading, setPermissionForCategory } = useChatPermissions();
-  const { thinkingDefault } = useChatThinking();
+  const { thinkingDefault, setLevel, resetLevel } = useChatThinking();
 
   const openSessionDefaults = () => {
     if (factoryId)
@@ -85,7 +83,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     {
       value: 'default',
       label: 'Default',
-      ...(thinkingDefault ? { description: THINKING_DEFAULT_SOURCE_LABELS[thinkingDefault.origin] } : {}),
+      ...(thinkingDefault ? { description: DEFAULT_SOURCE_LABELS[thinkingDefault.origin] } : {}),
       active: settingsQuery.data !== undefined && currentThinkingLevel === undefined,
     },
     ...availableThinkingLevels.map(level => ({
@@ -111,7 +109,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
       execute: async rawArguments => {
         if (!rawArguments) return;
         if (modelLockedReason) return pushNotice(modelLockedReason);
-        await setModel(rawArguments);
+        await select({ kind: 'model', modelId: rawArguments });
       },
     },
     {
@@ -184,7 +182,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
         pushNotice(
           !usage?.totalTokens
             ? 'No token usage recorded yet.'
-            : `Tokens — prompt: ${usage.promptTokens ?? 0}, completion: ${usage.completionTokens ?? 0}, total: ${usage.totalTokens}`,
+            : `Used ${usage.totalTokens} tokens (${usage.promptTokens ?? 0} prompt, ${usage.completionTokens ?? 0} completion).`,
         );
       },
     },
@@ -207,13 +205,13 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
           if (modelLockedReason && changesThinkingLevel) return pushNotice(modelLockedReason);
           if (action.kind === 'set') {
             await ensureSettings();
-            await updateSettingsMutation.mutateAsync({ thinkingLevel: action.level });
+            await setLevel(action.level);
             pushNotice(`Thinking level set to ${action.level}.`);
             return;
           }
           if (action.kind === 'clear') {
             await ensureSettings();
-            await updateSettingsMutation.mutateAsync({ thinkingLevel: null });
+            await resetLevel();
             pushNotice(
               thinkingDefault
                 ? `Thinking level set to default: ${describeThinkingDefault(thinkingDefault)}.`
@@ -297,10 +295,8 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     requiresSession: false,
     execute: async () => {
       const commands = [...commandsWithoutHelp, helpCommand];
-      const width = Math.max(...commands.map(command => `/${command.name} ${command.args ?? ''}`.length));
       const lines = commands.map(command => {
-        const signature = `/${command.name} ${command.args ?? ''}`.padEnd(width);
-        return `  ${signature}  — ${command.description}`;
+        return `/${command.name}${command.args ? ` ${command.args}` : ''}: ${command.description}`;
       });
       pushNotice(['Available commands:', ...lines].join('\n'));
     },
@@ -309,7 +305,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const commands = [...commandsWithoutHelp, helpCommand];
 
   const runComposerCommand = async (text: string): Promise<boolean> => {
-    if (!text.startsWith('/')) return false;
+    if (!isSlashCommand(text)) return false;
     const command = findCommand(commands, text);
     const parsed = parseSlashCommand(text);
     if (!command) {

@@ -11,22 +11,19 @@ import { AgentThreadLeaseLostError, agentThreadStreamRuntime } from '../agent/th
 import type { AgentThreadSubscription } from '../agent/types';
 import { getErrorFromUnknown, MastraError } from '../error';
 import { isLeaseProvider } from '../events/pubsub';
+import { describeNonSuccessFinishReason } from '../loop/shared/non-success-finish-reason';
 import type { RequestContext } from '../request-context';
 import type { GoalEvaluationPayload, IsTaskCompletePayload } from '../stream/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
-import type { Session, SessionMachinery } from './session';
+import type { PendingSuspension, Session, SessionMachinery } from './session';
 import {
   ABORTED_BY_USER_REASON,
   SOURCE_APPROVAL_CALLS_KEY,
   SUSPENDED_RUN_AGENT_KEY,
   SUSPENDED_RUN_MEMORY_KEY,
 } from './session';
-import {
-  describeNonSuccessFinishReason,
-  describeServerSideFallback,
-  getDisplayTransform,
-  toStepTokenUsage,
-} from './stream-content';
+import { describeServerSideFallback, getDisplayTransform, toStepTokenUsage } from './stream-content';
+import { isToolResultError } from './tool-result';
 import { createEmptyTokenUsage } from './types';
 import type { ActiveSubagentState, AgentControllerEvent, TokenUsage } from './types';
 
@@ -103,6 +100,7 @@ type StreamChunk =
   | StreamDataChunk<'data-om-activation'>
   | StreamDataChunk<'data-om-thread-update'>
   | StreamDataChunk<'data-mastracode-tool-progress'>
+  | StreamDataChunk<'data-mastracode-model-fallback'>
   | StreamDataChunk<'data-sandbox-stdout'>
   | StreamDataChunk<'data-sandbox-stderr'>
   | StreamDataChunk<'data-sandbox-exit'>;
@@ -198,6 +196,9 @@ function formatToolProgressOutput(progress: unknown): string {
 }
 
 const ABORT_STREAM_GRACE_MS = 5_000;
+
+/** `agent_end.abortReason` when an observational-memory failure stopped the run. */
+const MEMORY_FAILURE_ABORT_REASON = 'memory-failure';
 const abortBailed = Symbol('abort-bailed');
 
 /**
@@ -247,6 +248,8 @@ type StreamState = {
   /** Response ids offered by `step-start` — an id binds to at most one display message. */
   offeredResponseIds: Set<string>;
   completedToolPrelude: boolean;
+  /** Model-fallback parts saved under the next response's id, held until its `step-start` binds that id. */
+  pendingModelFallbackParts: MastraMessagePart[];
   /**
    * Set when a stream ends on a non-success finish reason (e.g. `content-filter`,
    * `error`, `length`). Carries the user-facing message so the run finalizes
@@ -398,6 +401,13 @@ export class SessionRunEngine {
     state.completedToolPrelude = false;
   }
 
+  private emitPendingModelFallbacks(state: StreamState): void {
+    for (const part of state.pendingModelFallbackParts.splice(0)) {
+      const index = state.currentMessage.content.parts.push(part) - 1;
+      this.emitMessagePart(state, index);
+    }
+  }
+
   createStreamState(
     threadId = this.#session.thread.getId() ?? undefined,
     resourceId = this.#session.identity.getResourceId(),
@@ -415,6 +425,7 @@ export class SessionRunEngine {
       toolPartById: new Map<string, number>(),
       offeredResponseIds: new Set<string>(),
       completedToolPrelude: false,
+      pendingModelFallbackParts: [],
     };
   }
 
@@ -513,11 +524,19 @@ export class SessionRunEngine {
     });
   }
 
+  /** Set when the observer or reflector stopped the run, so its end says why. */
+  #memoryFailureAbort = false;
+
+  #takeAbortReason(reason?: string): string | undefined {
+    return this.#memoryFailureAbort ? MEMORY_FAILURE_ABORT_REASON : reason;
+  }
+
   private abortForOmFailure({ operationType, stage, error }: { operationType: string; stage: string; error: string }) {
     this.#session.emit({
       type: 'error',
       error: new Error(`Observational memory ${operationType} ${stage} failed: ${error}`),
     });
+    this.#memoryFailureAbort = true;
     this.#session.abortRun();
   }
 
@@ -589,15 +608,18 @@ export class SessionRunEngine {
       });
     }
 
+    const reason = error
+      ? 'error'
+      : result.suspended
+        ? 'suspended'
+        : aborted || this.#session.run.isAbortRequested()
+          ? 'aborted'
+          : 'complete';
     await this.#session.finishAgentRun(
-      error
-        ? 'error'
-        : result.suspended
-          ? 'suspended'
-          : aborted || this.#session.run.isAbortRequested()
-            ? 'aborted'
-            : 'complete',
+      reason,
+      reason === 'aborted' ? { abortReason: this.#takeAbortReason() } : undefined,
     );
+    this.#memoryFailureAbort = false;
 
     this.#session.run.reset();
 
@@ -682,7 +704,10 @@ export class SessionRunEngine {
         const messageId = getString(payload.messageId);
         if (!messageId) break;
         if (state.offeredResponseIds.has(messageId)) {
-          if (messageId === state.currentMessage.id) this.stampResponseModel(state.currentMessage, payload);
+          if (messageId === state.currentMessage.id) {
+            this.stampResponseModel(state.currentMessage, payload);
+            this.emitPendingModelFallbacks(state);
+          }
           break;
         }
         // A resumed tool can finish before the first model step starts. Seal
@@ -702,6 +727,7 @@ export class SessionRunEngine {
           state.currentMessage.id = messageId;
         }
         this.stampResponseModel(state.currentMessage, payload);
+        if (state.currentMessage.id === messageId) this.emitPendingModelFallbacks(state);
         break;
       }
 
@@ -787,7 +813,7 @@ export class SessionRunEngine {
           toolCallId: getString(toolResult.toolCallId) ?? '',
           toolName: getString(toolResult.toolName) ?? '',
           result: getDisplayTransform(chunk.metadata, 'output-available', toolResult.result),
-          isError: getBoolean(toolResult.isError, false),
+          isError: isToolResultError(toolResult),
           providerMetadata: isProviderMetadata(toolResult.providerMetadata) ? toolResult.providerMetadata : undefined,
         });
         break;
@@ -847,7 +873,7 @@ export class SessionRunEngine {
               agentType,
               subToolName: getString(nested.toolName) ?? '',
               subToolResult: output.type === 'tool-error' ? nested.error : nested.result,
-              isError: output.type === 'tool-error' || getBoolean(nested.isError, false),
+              isError: output.type === 'tool-error' || isToolResultError(nested),
             });
             break;
         }
@@ -906,7 +932,8 @@ export class SessionRunEngine {
           ? approvalTransform.transformed
           : getDisplayTransform(chunk.metadata, 'input-available', getPayload(chunk).args);
 
-        const policy = this.#session.resolveToolApproval(toolName, state.threadId);
+        // The policy is that of the run's own thread, which may not be the one the session holds now.
+        const policy = this.#session.resolveToolApproval(toolName, requestContext);
 
         // Resolve the call against the run that raised it, not the session's
         // currently-bound thread/run/resource. The session can switch thread or
@@ -1149,13 +1176,17 @@ export class SessionRunEngine {
               threadId: suspThreadId,
               resourceId: suspResourceId,
             });
-            this.#session.suspensions.register({
-              toolCallId: suspToolCallId,
-              runId: suspRunId,
-              toolName: suspToolName,
-              threadId: suspThreadId,
-              resourceId: suspResourceId,
-            });
+            this.#session.__registerStreamSuspension(
+              {
+                toolCallId: suspToolCallId,
+                runId: suspRunId,
+                toolName: suspToolName,
+                threadId: suspThreadId,
+                resourceId: suspResourceId,
+              },
+              // The thread subscription can replay a suspension from another mode's agent.
+              runScope?.get(SUSPENDED_RUN_AGENT_KEY),
+            );
           }
         }
         state.isSuspended = true;
@@ -1178,7 +1209,12 @@ export class SessionRunEngine {
       }
 
       case 'error': {
-        const streamError = getErrorFromUnknown(getPayload(chunk).error);
+        const errorPayload = getPayload(chunk);
+        const streamError = getErrorFromUnknown(errorPayload.error);
+        // A chunk that names the tool call it failed for reports a failure of that call
+        // only: the run stays alive, so suspensions parked for sibling calls of the same
+        // run stay resumable.
+        const failedToolCallId = getString(errorPayload.toolCallId);
         this.#session.emit({ type: 'error', error: streamError });
         if (!(streamError instanceof AgentThreadLeaseLostError)) {
           this.retractFailedRunSuspensions({
@@ -1186,6 +1222,7 @@ export class SessionRunEngine {
             threadId: state.threadId,
             runId: chunk.runId ?? this.#session.run.getRunId(),
             reason: streamError.message,
+            toolCallId: failedToolCallId,
           });
         }
         break;
@@ -1241,7 +1278,7 @@ export class SessionRunEngine {
             break;
           if (savedUsage) this.#session.setTokenUsage({ ...createEmptyTokenUsage(), ...savedUsage });
           else this.#session.addUsage(stepUsage);
-          this.#session.emit({ type: 'usage_update', usage: stepUsage });
+          this.#session.emit({ type: 'usage_update', usage: stepUsage, total: this.#session.getTokenUsage() });
         }
         break;
       }
@@ -1573,6 +1610,10 @@ export class SessionRunEngine {
         break;
       }
 
+      case 'data-mastracode-model-fallback':
+        state.pendingModelFallbackParts.push({ type: chunk.type, data: chunk.data });
+        break;
+
       // Sandbox streaming data chunks (from workspace execute_command tool)
       case 'data-sandbox-stdout': {
         const d = getDataRecord(chunk);
@@ -1603,6 +1644,9 @@ export class SessionRunEngine {
             toolCallId,
             exitCode,
             success: getBoolean(d?.success, exitCode === 0),
+            killed: getBoolean(d?.killed, false),
+            timedOut: getBoolean(d?.timedOut, false),
+            error: getString(d?.error),
           });
         }
         break;
@@ -1820,39 +1864,63 @@ export class SessionRunEngine {
     } else if (reason === 'error' && terminalError) {
       this.retractFailedRunSuspensions({ resourceId, threadId, runId, reason: terminalError });
     }
-    await this.#session.finishAgentRun(reason, reason === 'aborted' ? { abortReason } : undefined);
+    await this.#session.finishAgentRun(
+      reason,
+      reason === 'aborted' ? { abortReason: this.#takeAbortReason(abortReason) } : undefined,
+    );
+    this.#memoryFailureAbort = false;
     this.#session.run.reset();
   }
 
+  /**
+   * Drop suspensions that a failed run can no longer resume. With `toolCallId`, only that
+   * call's suspension is dropped: the stream reported a failure scoped to one tool call
+   * (for example its own save failed) while the rest of the run is still live.
+   */
   private retractFailedRunSuspensions({
     resourceId,
     threadId,
     runId,
     reason,
+    toolCallId,
   }: {
     resourceId: string | undefined;
     threadId: string | undefined;
     runId: string | null;
     reason: string;
+    toolCallId?: string;
   }): void {
     if (!resourceId || !threadId || !runId) return;
 
-    for (const suspension of this.#session.suspensions.deleteForRun({ resourceId, threadId, runId })) {
-      this.#session.emit({
-        type: 'tool_suspension_cancelled',
-        resourceId: suspension.resourceId,
-        threadId: suspension.threadId,
-        runId: suspension.runId,
-        toolCallId: suspension.toolCallId,
-        toolName: suspension.toolName,
-        reason,
-      });
+    if (toolCallId) {
+      const suspension = this.#session.suspensions.get({ resourceId, threadId, runId, toolCallId });
+      if (!suspension) return;
+      this.#session.suspensions.delete({ resourceId, threadId, runId, toolCallId });
+      this.emitSuspensionCancelled(suspension, reason);
+      return;
     }
+
+    for (const suspension of this.#session.suspensions.deleteForRun({ resourceId, threadId, runId })) {
+      this.emitSuspensionCancelled(suspension, reason);
+    }
+  }
+
+  private emitSuspensionCancelled(suspension: PendingSuspension, reason: string): void {
+    this.#session.emit({
+      type: 'tool_suspension_cancelled',
+      resourceId: suspension.resourceId,
+      threadId: suspension.threadId,
+      runId: suspension.runId,
+      toolCallId: suspension.toolCallId,
+      toolName: suspension.toolName,
+      reason,
+    });
   }
 
   private async handleSubscribedStreamError(error: unknown, resourceId: string, threadId: string): Promise<void> {
     if (error instanceof Error && error.name === 'AbortError') {
-      await this.#session.finishAgentRun('aborted');
+      const abortReason = this.#takeAbortReason();
+      await this.#session.finishAgentRun('aborted', abortReason ? { abortReason } : undefined);
     } else {
       const streamError = getErrorFromUnknown(error);
       this.#session.emit({ type: 'error', error: streamError });
@@ -1866,6 +1934,7 @@ export class SessionRunEngine {
       }
       await this.#session.finishAgentRun('error');
     }
+    this.#memoryFailureAbort = false;
     this.#session.stream.detach();
     this.#session.run.reset();
   }
@@ -1924,10 +1993,11 @@ export class SessionRunEngine {
             chunk.type === 'tripwire' ||
             chunk.type === 'tool-call-suspended'
           ) {
-            const suspended =
-              chunk.type === 'tool-call-suspended' ||
-              (streamResult ?? this.finishStreamState(currentRun)).suspended ||
-              undefined;
+            // Finish the stream state before checking the chunk type: it emits the
+            // `message_end` that closes the assistant message, which a turn ending in a
+            // tool suspension needs as much as any other.
+            const finished = streamResult ?? this.finishStreamState(currentRun);
+            const suspended = chunk.type === 'tool-call-suspended' || finished.suspended || undefined;
             const aborted = chunk.type === 'abort';
             // A non-success terminal finish reason (e.g. a `claude-fable-5`
             // content-filter refusal) becomes an explicit error so the

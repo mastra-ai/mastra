@@ -6,6 +6,7 @@ import { createVectorTestSuite } from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 
+import type { LibSQLVectorFilter } from './filter.js';
 import { LibSQLVector } from './index.js';
 
 const libSQLVectorDB = new LibSQLVector({
@@ -411,6 +412,97 @@ describe('LibSQLVector local-file concurrency', () => {
   });
 });
 
+describe('LibSQLVector truncation', () => {
+  const indexName = 'truncate_vectors';
+  let tmpDir: string;
+  let vector: LibSQLVector;
+
+  beforeEach(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'libsql-vector-truncate-'));
+    vector = new LibSQLVector({ id: 'truncate-local-file', url: `file:${path.join(tmpDir, 'vectors.db')}` });
+    await vector.createIndex({ indexName, dimension: 3 });
+  });
+
+  afterEach(async () => {
+    await vector.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('can reinsert and retrieve vectors after truncating an indexed table', async () => {
+    await vector.upsert({
+      indexName,
+      ids: ['first', 'second', 'third'],
+      vectors: [
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+      ],
+    });
+    await vector.truncateIndex({ indexName });
+
+    await expect(vector.upsert({ indexName, ids: ['replacement'], vectors: [[1, 1, 0]] })).resolves.toEqual([
+      'replacement',
+    ]);
+    await expect(vector.query({ indexName, queryVector: [1, 1, 0], topK: 10 })).resolves.toMatchObject([
+      { id: 'replacement' },
+    ]);
+  });
+
+  it('supports empty and repeated truncate cycles', async () => {
+    await expect(vector.truncateIndex({ indexName })).resolves.toBeUndefined();
+
+    for (const id of ['first-cycle', 'second-cycle']) {
+      await vector.upsert({ indexName, ids: [id], vectors: [[1, 0, 0]] });
+      await vector.truncateIndex({ indexName });
+      await expect(vector.query({ indexName, queryVector: [1, 0, 0], topK: 10 })).resolves.toEqual([]);
+    }
+
+    await expect(vector.upsert({ indexName, ids: ['final'], vectors: [[0, 1, 0]] })).resolves.toEqual(['final']);
+  });
+
+  it('keeps partial deletion behavior intact', async () => {
+    await vector.upsert({
+      indexName,
+      ids: ['keep', 'remove-by-id', 'remove-by-filter'],
+      vectors: [
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+      ],
+      metadata: [{ group: 'keep' }, { group: 'remove' }, { group: 'remove' }],
+    });
+
+    await vector.deleteVector({ indexName, id: 'remove-by-id' });
+    await vector.deleteVectors({ indexName, filter: { group: { $eq: 'remove' } } });
+
+    await expect(vector.query({ indexName, queryVector: [1, 0, 0], topK: 10 })).resolves.toMatchObject([
+      { id: 'keep' },
+    ]);
+    await expect(vector.upsert({ indexName, ids: ['replacement'], vectors: [[0, 1, 1]] })).resolves.toEqual([
+      'replacement',
+    ]);
+  });
+
+  it('can reinsert and retrieve vectors after truncating an in-memory indexed table', async () => {
+    const memoryVector = new LibSQLVector({ id: 'truncate-memory', url: ':memory:' });
+    try {
+      await memoryVector.createIndex({ indexName: 'memory_vectors', dimension: 3 });
+      await memoryVector.upsert({ indexName: 'memory_vectors', ids: ['first'], vectors: [[1, 0, 0]] });
+
+      await memoryVector.truncateIndex({ indexName: 'memory_vectors' });
+
+      await expect(
+        memoryVector.upsert({ indexName: 'memory_vectors', ids: ['replacement'], vectors: [[1, 1, 0]] }),
+      ).resolves.toEqual(['replacement']);
+      await expect(
+        memoryVector.query({ indexName: 'memory_vectors', queryVector: [1, 1, 0], topK: 10 }),
+      ).resolves.toMatchObject([{ id: 'replacement' }]);
+    } finally {
+      await memoryVector.close();
+    }
+  });
+});
+
 describe('LibSQLVector bare :memory: concurrency', () => {
   // Regression for mastra-ai/mastra#22328: a bare `:memory:` url has a single
   // connection, so interleaved upserts, queries and index reads must queue
@@ -440,5 +532,135 @@ describe('LibSQLVector bare :memory: concurrency', () => {
 
     await expect(vector.describeIndex({ indexName })).resolves.toMatchObject({ count: writerCount * 2 });
     await vector.close();
+  });
+});
+
+// Regression tests for mastra-ai/mastra#31591. LibSQL predicates used raw
+// json_extract() without type guards, so booleans were conflated with the
+// integers 0/1, an explicit `null` was indistinguishable from a missing key,
+// and filtered updates/deletes could touch rows of the wrong JSON type.
+describe('LibSQLVector JSON filter type safety', () => {
+  const indexName = 'json_filter_types';
+  let vector: LibSQLVector;
+  let tmpDir: string;
+
+  const rows = [
+    { id: 'false-bool', metadata: { flag: false, n: 1 } },
+    { id: 'true-bool', metadata: { flag: true, n: 2 } },
+    { id: 'zero-int', metadata: { flag: 0, n: 3 } },
+    { id: 'one-int', metadata: { flag: 1, n: 4 } },
+    { id: 'false-str', metadata: { flag: 'false', n: 5 } },
+    { id: 'null-flag', metadata: { flag: null } },
+    { id: 'absent-flag', metadata: { other: 'value' } },
+    { id: 'n-str', metadata: { n: '10' } },
+    { id: 'n-bool', metadata: { n: true } },
+  ];
+
+  beforeEach(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'libsql-json-filter-'));
+    vector = new LibSQLVector({ id: 'json-filter-types', url: `file:${path.join(tmpDir, 'vectors.db')}` });
+    await vector.createIndex({ indexName, dimension: 3 });
+    await vector.upsert({
+      indexName,
+      ids: rows.map(r => r.id),
+      vectors: rows.map((_, i) => [1, 0.001 * i, 0]),
+      metadata: rows.map(r => r.metadata),
+    });
+  });
+
+  afterEach(async () => {
+    await vector.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const queryIds = async (filter?: LibSQLVectorFilter) => {
+    const results = await vector.query({ indexName, queryVector: [1, 0, 0], topK: 20, filter });
+    return results.map(r => r.id).sort();
+  };
+
+  describe('cross-type equality', () => {
+    it('does not conflate booleans with numbers or strings', async () => {
+      await expect(queryIds({ flag: { $eq: false } })).resolves.toEqual(['false-bool']);
+      await expect(queryIds({ flag: { $eq: true } })).resolves.toEqual(['true-bool']);
+      await expect(queryIds({ flag: { $eq: 0 } })).resolves.toEqual(['zero-int']);
+      await expect(queryIds({ flag: { $eq: 1 } })).resolves.toEqual(['one-int']);
+      await expect(queryIds({ flag: { $eq: 'false' } })).resolves.toEqual(['false-str']);
+    });
+
+    it('applies the same type discipline to the primitive shorthand', async () => {
+      await expect(queryIds({ flag: false })).resolves.toEqual(['false-bool']);
+      await expect(queryIds({ flag: 0 })).resolves.toEqual(['zero-int']);
+    });
+  });
+
+  describe('$ne scoping', () => {
+    it('treats $ne as present, non-null and type-aware', async () => {
+      // "not false" must exclude the boolean false but keep 0, 1, true and 'false'.
+      await expect(queryIds({ flag: { $ne: false } })).resolves.toEqual([
+        'false-str',
+        'one-int',
+        'true-bool',
+        'zero-int',
+      ]);
+      // "not null" keeps every present, non-null value and drops absent keys.
+      await expect(queryIds({ flag: { $ne: null } })).resolves.toEqual([
+        'false-bool',
+        'false-str',
+        'one-int',
+        'true-bool',
+        'zero-int',
+      ]);
+    });
+  });
+
+  describe('null vs absent', () => {
+    it('matches only the explicit null and never an absent key', async () => {
+      await expect(queryIds({ flag: { $eq: null } })).resolves.toEqual(['null-flag']);
+    });
+  });
+
+  describe('numeric ranges', () => {
+    it('keeps range operators scoped to numeric values', async () => {
+      await expect(queryIds({ n: { $gt: 2 } })).resolves.toEqual(['false-str', 'one-int', 'zero-int']);
+      await expect(queryIds({ n: { $gte: 2 } })).resolves.toEqual(['false-str', 'one-int', 'true-bool', 'zero-int']);
+      await expect(queryIds({ n: { $lt: 3 } })).resolves.toEqual(['false-bool', 'true-bool']);
+      await expect(queryIds({ n: { $lte: 3 } })).resolves.toEqual(['false-bool', 'true-bool', 'zero-int']);
+      // Numeric-string operands are still coerced against numeric columns.
+      await expect(queryIds({ n: { $gt: '3' } })).resolves.toEqual(['false-str', 'one-int']);
+    });
+  });
+
+  describe('filtered mutations', () => {
+    it('updates only rows whose value matches the predicate type', async () => {
+      await vector.updateVector({
+        indexName,
+        filter: { flag: { $eq: false } },
+        update: { metadata: { flag: false, updated: true } },
+      });
+
+      const updated = await queryIds({ updated: { $eq: true } });
+      expect(updated).toEqual(['false-bool']);
+
+      // The integer 0 row must be untouched.
+      const zero = await queryIds({ flag: { $eq: 0 } });
+      expect(zero).toEqual(['zero-int']);
+    });
+
+    it('deletes only rows whose value matches the predicate type', async () => {
+      await vector.deleteVectors({ indexName, filter: { flag: { $eq: false } } });
+
+      await expect(queryIds()).resolves.toEqual([
+        'absent-flag',
+        'false-str',
+        'n-bool',
+        'n-str',
+        'null-flag',
+        'one-int',
+        'true-bool',
+        'zero-int',
+      ]);
+      // The integer 0 row must survive.
+      await expect(queryIds({ flag: { $eq: 0 } })).resolves.toEqual(['zero-int']);
+    });
   });
 });

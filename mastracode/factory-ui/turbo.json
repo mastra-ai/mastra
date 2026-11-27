@@ -2,6 +2,9 @@
   "$schema": "https://v2-9-16.turborepo.dev/schema.json",
   "extends": ["//"],
   "tasks": {
+    "lint": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/oxlint.config.ts", "$TURBO_ROOT$/packages/playground-ui/oxlint/**"]
+    },
     "dev:api": {
       "dependsOn": ["^build"],
       "cache": false,

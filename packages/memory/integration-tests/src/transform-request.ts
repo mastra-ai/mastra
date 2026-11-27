@@ -115,6 +115,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+// OpenAI provider versions serialize assistant history differently: v6 uses an
+// output_text part array while v7 may use a plain string. Both forms are
+// equivalent to the Responses API, so canonicalize them only for recording
+// hashes to keep existing fixtures reusable without changing production requests.
+function normalizeOpenAIResponsesAssistantText(body: unknown): unknown {
+  if (!isRecord(body) || !Array.isArray(body.input)) {
+    return body;
+  }
+
+  const input = body.input.map(item => {
+    if (!isRecord(item) || item.role !== 'assistant' || typeof item.content !== 'string') {
+      return item;
+    }
+
+    return { ...item, content: [{ type: 'output_text', text: item.content }] };
+  });
+
+  return { ...body, input };
+}
+
 // Google provider versions disagree on whether text emitted before a tool call
 // belongs beside that call or after its response. Use the current combined form
 // so old recordings and current requests hash to the same value.
@@ -179,7 +199,11 @@ function normalizeGoogleToolCallMessages(body: unknown): unknown {
 
 export function transformRequest({ url, body }: { url: string; body: unknown }): { url: string; body: unknown } {
   let normalizedBody = normalizeOpenAIResponseFunctionCalls(normalizeNetworkFinalResultMessages(body));
-  const { hostname } = new URL(url);
+  const parsedUrl = new URL(url);
+  const { hostname } = parsedUrl;
+  if (parsedUrl.pathname.endsWith('/responses')) {
+    normalizedBody = normalizeOpenAIResponsesAssistantText(normalizedBody);
+  }
   if (hostname === 'generativelanguage.googleapis.com') {
     normalizedBody = normalizeGoogleToolCallMessages(normalizedBody);
   }
@@ -205,6 +229,12 @@ export function transformRequest({ url, body }: { url: string; body: unknown }):
   // Anthropic tool definitions may include eager_input_streaming depending on SDK version
   stringifiedBody = stringifiedBody.replaceAll(/"eager_input_streaming":(true|false),/g, '');
   stringifiedBody = stringifiedBody.replaceAll(/,"eager_input_streaming":(true|false)/g, '');
+  // Zod 4 adds "propertyNames":{"type":"string"} to z.record() JSON schemas; Zod 3 omits it.
+  // Strip it (raw and string-escaped) so recordings match across Zod majors.
+  for (const pattern of [/"propertyNames":\{"type":"string"\}/g, /\\"propertyNames\\":\{\\"type\\":\\"string\\"\}/g]) {
+    stringifiedBody = stringifiedBody.replaceAll(new RegExp(`${pattern.source},`, 'g'), '');
+    stringifiedBody = stringifiedBody.replaceAll(new RegExp(`,${pattern.source}`, 'g'), '');
+  }
   // Normalize dates/timestamps in remembered messages (timezone/date differences cause hash mismatches)
   stringifiedBody = stringifiedBody.replaceAll(/\d{4},\s*\w{3},\s*\d{1,2}/g, 'REDACTED_DATE');
   stringifiedBody = stringifiedBody.replaceAll(/\d{1,2}:\d{2}\s*(AM|PM)/gi, 'REDACTED_TIME');

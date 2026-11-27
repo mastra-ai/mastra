@@ -81,28 +81,27 @@ describe('restartEnvironment', () => {
     expect(init.headers).toMatchObject({ Authorization: 'Bearer tok', 'x-organization-id': 'org-1' });
   });
 
-  it('surfaces the 409 never-deployed detail', async () => {
-    mockFetch.mockResolvedValue({
-      ok: false,
-      status: 409,
-      json: async () => ({ detail: 'Environment has no active deployment to restart' }),
-    });
-
-    await expect(restartEnvironment('tok', 'org-1', 'proj-1', 'env-1')).rejects.toThrow(
+  it.each([
+    [
+      'surfaces the 409 never-deployed detail',
+      409,
       'Environment has no active deployment to restart',
-    );
-  });
-
-  it('surfaces the 402 billing detail', async () => {
+      'Environment has no active deployment to restart',
+    ],
+    [
+      'surfaces the 402 billing detail',
+      402,
+      'Billing grace period has elapsed. Add credits or upgrade your plan.',
+      'Billing grace period has elapsed',
+    ],
+  ] as const)('%s', async (_title, status, detail, expected) => {
     mockFetch.mockResolvedValue({
       ok: false,
-      status: 402,
-      json: async () => ({ detail: 'Billing grace period has elapsed. Add credits or upgrade your plan.' }),
+      status,
+      json: async () => ({ detail }),
     });
 
-    await expect(restartEnvironment('tok', 'org-1', 'proj-1', 'env-1')).rejects.toThrow(
-      'Billing grace period has elapsed',
-    );
+    await expect(restartEnvironment('tok', 'org-1', 'proj-1', 'env-1')).rejects.toThrow(expected);
   });
 
   it('throws session expired on 401', async () => {

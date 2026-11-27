@@ -1,13 +1,15 @@
 import type { AutoFormFieldProps } from '@autoform/react';
-import { format, isValid } from 'date-fns';
-import { CalendarIcon, X } from 'lucide-react';
+import { isValid } from 'date-fns';
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/ds/components/Button';
 import { DatePicker } from '@/ds/components/DateTimePicker';
 import { useFieldControlAria } from '@/ds/components/Field';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
+import { IconCalendar1 } from '@/ds/icons/central/IconCalendar1';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { fieldTriggerErrorBorder } from '@/ds/primitives/form-element';
 import { cn } from '@/utils/cn';
+import { formatDate } from '@/utils/date-format';
 
 export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, field }) => {
   const { key, ...props } = inputProps;
@@ -50,10 +52,10 @@ export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, field }) =
           variant="default"
           size="lg"
           className={cn('w-full', fieldTriggerErrorBorder)}
-          icon={<CalendarIcon />}
+          icon={<IconCalendar1 />}
         >
           {value ? (
-            <span className="text-foreground">{format(value, 'PPP')}</span>
+            <span className="text-foreground">{formatDate(value, 'date-long')}</span>
           ) : (
             <span className="text-muted-foreground">Pick a date</span>
           )}
@@ -63,7 +65,7 @@ export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, field }) =
         <DatePicker mode="single" selected={value} onSelect={handleSelect} month={value} onMonthChange={setValue} />
         {value && (
           <div className="p-3 pt-0">
-            <Button icon={<X />} variant="default" size="lg" className="w-full" onClick={handleClear}>
+            <Button icon={<IconCrossMedium />} variant="default" size="lg" className="w-full" onClick={handleClear}>
               Clear
             </Button>
           </div>

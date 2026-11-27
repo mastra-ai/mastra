@@ -35,11 +35,10 @@ class GitcrawlSetupProgress extends Box {
   private _focused = false;
 
   constructor(
-    private title: string,
     private command: string,
     private onCancel: () => void,
   ) {
-    super(2, 1);
+    super(0, 0);
     this.rebuild();
   }
 
@@ -69,9 +68,7 @@ class GitcrawlSetupProgress extends Box {
 
   private rebuild(): void {
     this.clear();
-    this.addChild(new Text(this.title, 0, 0));
     this.addChild(new Text(this.command, 0, 0));
-    this.addChild(new Text('Press Esc to cancel.', 0, 0));
     this.addChild(new Spacer(1));
     const output = this.lines.length > 0 ? this.lines : ['Waiting for Homebrew output...'];
     for (const line of output) {
@@ -96,11 +93,11 @@ function runGitcrawlSetupCommand(
       overlay.hide();
       callback();
     };
-    const progress = new GitcrawlSetupProgress(title, command, () => {
+    const progress = new GitcrawlSetupProgress(command, () => {
       child.kill('SIGTERM');
       finish(() => reject(new Error(`${title} cancelled`)));
     });
-    const overlay = showModalOverlay(tui, progress, { maxHeight: '50%' });
+    const overlay = showModalOverlay(tui, progress, { title });
     overlay.focus();
 
     child.stdout.on('data', chunk => {
@@ -188,6 +185,10 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     thinkingLevel: (state?.thinkingLevel ?? globalSettings.preferences.thinkingLevel) as string,
     currentModelId: ctx.state.session.model.get() ?? '',
     escapeAsCancel: ctx.state.editor.escapeEnabled,
+    mouse: {
+      dialogs: globalSettings.preferences.mouseDialogs ?? false,
+      input: globalSettings.preferences.mouseInput ?? false,
+    },
     previewLines: globalSettings.preferences.previewLines,
     storageBackend: globalSettings.storage.backend,
     pgConnectionString: globalSettings.storage.pg?.connectionString ?? '',
@@ -195,6 +196,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     experimentalGithubSignals: globalSettings.signals.experimentalGithubSignals,
     experimentalCrossAgentSignals: globalSettings.signals.experimentalCrossAgentSignals,
     experimentalScheduleTools: globalSettings.signals.experimentalScheduleTools,
+    experimentalKnowledge: globalSettings.signals.experimentalKnowledge,
     experimentalAgent: resolveExperimentalAgentSetting(globalSettings.experimentalAgent),
     backgroundToolsEnabled: globalSettings.backgroundTools?.enabled ?? false,
     // Display an explicit provider choice as Auto while its API key is missing,
@@ -230,6 +232,14 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         ctx.state.editor.escapeEnabled = enabled;
         await ctx.state.session.state.set({ escapeAsCancel: enabled });
         await ctx.state.session.thread.setSetting({ key: 'escapeAsCancel', value: enabled });
+      },
+      onMouseChange: ({ dialogs, input }) => {
+        const current = loadSettings();
+        current.preferences.mouseDialogs = dialogs;
+        current.preferences.mouseInput = input;
+        saveSettings(current);
+        ctx.state.mouseController?.setDialogMouseEnabled(dialogs);
+        ctx.state.mouseController?.setInputMouseModeEnabled(input);
       },
       onPreviewLinesChange: lines => {
         const current = loadSettings();
@@ -276,6 +286,12 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         saveSettings(current);
         ctx.showInfo(`Experimental schedule tools: ${enabled ? 'on' : 'off'} (restart required)`);
       },
+      onExperimentalKnowledgeChange: enabled => {
+        const current = loadSettings();
+        current.signals.experimentalKnowledge = enabled;
+        saveSettings(current);
+        ctx.showInfo(`Experimental Knowledge: ${enabled ? 'on' : 'off'} (restart required)`);
+      },
       onExperimentalAgentChange: (agent: ExperimentalAgent | null) => {
         const current = loadSettings();
         current.experimentalAgent = agent;
@@ -305,7 +321,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
       },
     });
 
-    showModalOverlay(ctx.state.ui, settings, { maxHeight: '75%' });
+    showModalOverlay(ctx.state.ui, settings, { title: 'Settings' });
     settings.focused = true;
   });
 }

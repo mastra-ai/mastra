@@ -17,8 +17,10 @@ export interface ParsedSlashCommand {
   rawArguments: string;
 }
 
+export const isSlashCommand = (text: string) => text.startsWith('/');
+
 export function parseSlashCommand(text: string): ParsedSlashCommand {
-  if (!text.startsWith('/')) return { rawArguments: '' };
+  if (!isSlashCommand(text)) return { rawArguments: '' };
   const withoutSlash = text.slice(1);
   const firstWhitespace = withoutSlash.search(/\s/);
   if (firstWhitespace === -1) return { name: withoutSlash, rawArguments: '' };

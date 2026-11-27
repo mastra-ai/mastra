@@ -8,9 +8,11 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../../e2e/ui/factory-projects';
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
+import type { FactoryUserSession } from '../../domains/workspaces/services/user-sessions';
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
@@ -41,6 +43,19 @@ const wardSession = {
 };
 
 const wardSessionWithoutProfile = { ...wardSession, owner: undefined };
+
+const factorySession = {
+  ...wardSession,
+  userId: `factory-project:${FACTORY_ID}`,
+  owner: { id: `factory-project:${FACTORY_ID}`, name: 'Factory' },
+  branch: 'factory/issue-49',
+  capabilities: { ...wardSession.capabilities, takeOwnership: false, ownershipLock: 'card' as const },
+};
+
+type SessionFixture = Omit<typeof wardSession, 'owner' | 'capabilities'> & {
+  owner?: { id: string; name: string };
+  capabilities: FactoryUserSession['capabilities'];
+};
 const USER_THREAD_PATH = `/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`;
 const BOARD_THREAD_PATH = `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/thread-review-1`;
 
@@ -64,15 +79,17 @@ const openAIKeyModel: ModelCatalogEntry = {
 function serveModelCatalogs({
   sessionScope,
   viewerModels,
+  sessionModels = [openAIKeyModel],
 }: {
   sessionScope: 'factory' | 'user';
   viewerModels: ModelCatalogEntry[];
+  sessionModels?: ModelCatalogEntry[];
 }) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/config/models`, ({ request }) => {
       const query = new URL(request.url).searchParams;
       if (query.get('scope') === 'user') return HttpResponse.json({ models: viewerModels });
-      return HttpResponse.json({ modelScope: sessionScope, defaultModelId: null, models: [openAIKeyModel] });
+      return HttpResponse.json({ modelScope: sessionScope, defaultModelId: null, models: sessionModels });
     }),
   );
 }
@@ -94,34 +111,33 @@ function openWardSessionAs(
     path = USER_THREAD_PATH,
     threadMessages = [],
     agentRunning = false,
+    projectModelScope,
   }: {
-    session?: typeof wardSession | typeof wardSessionWithoutProfile;
+    session?: SessionFixture;
     path?: string;
     threadMessages?: MastraDBMessage[];
     agentRunning?: boolean;
+    projectModelScope?: 'factory' | 'user' | 'hybrid';
   } = {},
 ) {
+  if (projectModelScope) {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, () =>
+        HttpResponse.json({ project: { id: FACTORY_ID, name: 'Acme Factory', modelScope: projectModelScope } }),
+      ),
+    );
+  }
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: viewerUserId } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: REPO_ID,
-                branch: 'main',
-                sandboxWorkdir: '/local/acme/app',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main' })],
           },
         ],
       }),
@@ -144,6 +160,7 @@ function openWardSessionAs(
         modeId: 'build',
         modelId: 'openai/gpt-4o-mini',
         threadId: SESSION_ID,
+        running: agentRunning,
         settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
       }),
     ),
@@ -193,20 +210,57 @@ describe("a teammate's Factory session", () => {
     it('says "a teammate" when the owner has no profile, never the raw user id', async () => {
       openWardSessionAs('user-damien', { session: wardSessionWithoutProfile });
 
-      expect(await screen.findByText('You’re steering a teammate’s session')).toBeInTheDocument();
-      expect(screen.queryByText(/user-ward/)).not.toBeInTheDocument();
+      const composer = await screen.findByRole('region', { name: 'Thread composer' });
+      expect(await within(composer).findByText('You’re steering a teammate’s session')).toBeInTheDocument();
+      expect(within(composer).queryByText(/user-ward/)).not.toBeInTheDocument();
+      await userEvent.setup().click(await screen.findByRole('button', { name: 'Take ownership' }));
+      expect(await screen.findByRole('alertdialog', { name: 'Take a teammate’s session?' })).toBeInTheDocument();
     });
 
-    it('offers no takeover of a Slack thread, which the server keeps with its owner', async () => {
+    // A card a webhook filed, or an automatic phase picked up, runs in a session no person owns.
+    it('says the session is the Factory’s and stays on organization keys, with no takeover, when automatic work owns it', async () => {
+      serveModelCatalogs({ sessionScope: 'factory', viewerModels: [] });
+      openWardSessionAs('user-caleb', { session: factorySession, path: BOARD_THREAD_PATH });
+
+      expect(
+        await screen.findByText('You’re steering the Factory’s session. Card work stays on the organization’s keys.'),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Take ownership' })).not.toBeInTheDocument();
+    });
+
+    it('says a card session keeps its owner when the owner pays for it', async () => {
+      serveModelCatalogs({ sessionScope: 'user', viewerModels: [openAIKeyModel] });
+      openWardSessionAs('user-damien', {
+        session: {
+          ...wardSession,
+          branch: 'factory/issue-49',
+          capabilities: { ...wardSession.capabilities, takeOwnership: false, ownershipLock: 'card' },
+        },
+      });
+
+      expect(
+        await screen.findByText('You’re steering Ward Peeters’s session. Card sessions keep their owner.'),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Take ownership' })).not.toBeInTheDocument();
+    });
+
+    it('offers no takeover of a Slack thread, and says it keeps its owner', async () => {
       openWardSessionAs('user-damien', {
         session: {
           ...wardSession,
           branch: 'slack/C123-1700000000.000100',
-          capabilities: { recreateSandbox: false, takeOwnership: false, switchModel: false },
+          capabilities: {
+            recreateSandbox: false,
+            takeOwnership: false,
+            switchModel: false,
+            ownershipLock: 'slack-thread',
+          },
         },
       });
 
-      expect(await screen.findByText('You’re steering Ward Peeters’s session')).toBeInTheDocument();
+      expect(
+        await screen.findByText('You’re steering Ward Peeters’s session. Slack thread sessions keep their owner.'),
+      ).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Take ownership' })).not.toBeInTheDocument();
     });
   });
@@ -214,18 +268,22 @@ describe("a teammate's Factory session", () => {
   describe('when a teammate tries to change its model', () => {
     const lockedReason = 'Only Ward Peeters can change this session’s model or thinking level.';
 
-    it('shows the model and thinking level disabled, with who can change them', async () => {
+    it('shows the model picker disabled with its thinking level, who can change it, and whose credential it runs on', async () => {
       serveModelCatalogs({ sessionScope: 'user', viewerModels: [openAIKeyModel] });
       openWardSessionAs('user-damien');
       const user = userEvent.setup();
 
-      const model = await screen.findByRole('button', { name: `Session model: GPT-4o Mini. ${lockedReason}` });
+      const credentialNote = 'Your messages use Ward Peeters’s OpenAI API key.';
+      const model = await screen.findByRole('button', {
+        name: `Session model: GPT-4o Mini. Thinking: Medium. ${lockedReason} ${credentialNote}`,
+      });
       expect(model).toHaveAttribute('aria-disabled', 'true');
-      const thinking = await screen.findByRole('button', { name: `Thinking: Medium. ${lockedReason}` });
-      expect(thinking).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.queryByRole('button', { name: /^OpenAI API key\./ })).not.toBeInTheDocument();
 
       await user.hover(model);
-      expect(await screen.findByRole('tooltip')).toHaveTextContent(lockedReason);
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(`${lockedReason} ${credentialNote}`);
+      await user.click(model);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
     it('refuses /model and /think without changing the session', async () => {
@@ -234,7 +292,7 @@ describe("a teammate's Factory session", () => {
       serveModelCatalogs({ sessionScope: 'user', viewerModels: [openAIKeyModel] });
       openWardSessionAs('user-damien');
       server.use(
-        http.post(`${AC}/sessions/:resourceId/model`, async ({ request }) => {
+        http.put(`${TEST_BASE_URL}/web/config/session-model`, async ({ request }) => {
           modelSwitches.push(await request.json());
           return HttpResponse.json({ ok: true });
         }),
@@ -255,6 +313,41 @@ describe("a teammate's Factory session", () => {
       await waitFor(() => expect(screen.getAllByText(lockedReason)).toHaveLength(2));
       expect(modelSwitches).toEqual([]);
       expect(stateWrites).not.toContainEqual({ state: { thinkingLevel: 'high' } });
+    });
+
+    describe('when the Factory owns the session', () => {
+      const organizationModel: ModelCatalogEntry = {
+        ...openAIKeyModel,
+        credentialLabel: 'OpenAI organization key',
+        credentialHolder: 'organization',
+      };
+
+      it('tells a member only an org admin can change it, and that card work runs on organization keys', async () => {
+        serveModelCatalogs({ sessionScope: 'factory', viewerModels: [], sessionModels: [organizationModel] });
+        openWardSessionAs('user-caleb', { session: factorySession, projectModelScope: 'hybrid' });
+        const user = userEvent.setup();
+
+        const reason =
+          'Only an organization admin can change this session’s model or thinking level. OpenAI organization key: Card work uses the organization’s keys.';
+        const model = await screen.findByRole('button', {
+          name: `Session model: GPT-4o Mini. Thinking: Medium. ${reason}`,
+        });
+        expect(model).toHaveAttribute('aria-disabled', 'true');
+        await user.hover(model);
+        expect(await screen.findByRole('tooltip')).toHaveTextContent(reason);
+      });
+
+      it('gives an org admin the picker', async () => {
+        serveModelCatalogs({ sessionScope: 'factory', viewerModels: [], sessionModels: [organizationModel] });
+        openWardSessionAs('user-caleb', {
+          session: { ...factorySession, capabilities: { ...factorySession.capabilities, switchModel: true } },
+          projectModelScope: 'hybrid',
+        });
+
+        const model = await screen.findByRole('button', { name: 'Session model' });
+        expect(model).not.toHaveAttribute('aria-disabled', 'true');
+        expect(screen.getByText(/You’re steering the Factory’s session/)).toBeInTheDocument();
+      });
     });
 
     it('keeps the picker for the owner', async () => {

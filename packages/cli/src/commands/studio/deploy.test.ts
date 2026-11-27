@@ -188,18 +188,26 @@ afterEach(() => {
 });
 
 describe('parseEnvFile', () => {
-  it('parses simple key=value pairs', async () => {
+  it.each([
+    ['parses simple key=value pairs', 'FOO=bar\nBAZ=qux'],
+    ['ignores lines without equals sign', 'FOO=bar\nINVALID_LINE\nBAZ=qux'],
+    ['strips export prefix from keys', 'export FOO=bar\nexport BAZ="qux"'],
+  ] as const)('%s', async (_title, input) => {
     const { parseEnvFile } = await import('./deploy.js');
 
-    const result = parseEnvFile('FOO=bar\nBAZ=qux');
+    const result = parseEnvFile(input);
     expect(result).toEqual({ FOO: 'bar', BAZ: 'qux' });
   });
 
-  it('ignores comments and empty lines', async () => {
+  it.each([
+    ['ignores comments and empty lines', '# comment\n\nFOO=bar\n  # another comment\n', 'bar'],
+    ['handles single-quoted values', "FOO='hello world'", 'hello world'],
+    ['trims whitespace from keys and values', '  FOO  =  bar  ', 'bar'],
+  ] as const)('%s', async (_title, input, FOO) => {
     const { parseEnvFile } = await import('./deploy.js');
 
-    const result = parseEnvFile('# comment\n\nFOO=bar\n  # another comment\n');
-    expect(result).toEqual({ FOO: 'bar' });
+    const result = parseEnvFile(input);
+    expect(result).toEqual({ FOO });
   });
 
   it('handles double-quoted values', async () => {
@@ -209,13 +217,6 @@ describe('parseEnvFile', () => {
     expect(result).toEqual({ FOO: 'hello world', BAR: 'with spaces' });
   });
 
-  it('handles single-quoted values', async () => {
-    const { parseEnvFile } = await import('./deploy.js');
-
-    const result = parseEnvFile("FOO='hello world'");
-    expect(result).toEqual({ FOO: 'hello world' });
-  });
-
   it('handles values with equals signs', async () => {
     const { parseEnvFile } = await import('./deploy.js');
 
@@ -223,32 +224,11 @@ describe('parseEnvFile', () => {
     expect(result).toEqual({ DB_URL: 'postgres://host:5432/db?sslmode=require' });
   });
 
-  it('ignores lines without equals sign', async () => {
-    const { parseEnvFile } = await import('./deploy.js');
-
-    const result = parseEnvFile('FOO=bar\nINVALID_LINE\nBAZ=qux');
-    expect(result).toEqual({ FOO: 'bar', BAZ: 'qux' });
-  });
-
   it('returns empty object for empty content', async () => {
     const { parseEnvFile } = await import('./deploy.js');
 
     const result = parseEnvFile('');
     expect(result).toEqual({});
-  });
-
-  it('trims whitespace from keys and values', async () => {
-    const { parseEnvFile } = await import('./deploy.js');
-
-    const result = parseEnvFile('  FOO  =  bar  ');
-    expect(result).toEqual({ FOO: 'bar' });
-  });
-
-  it('strips export prefix from keys', async () => {
-    const { parseEnvFile } = await import('./deploy.js');
-
-    const result = parseEnvFile('export FOO=bar\nexport BAZ="qux"');
-    expect(result).toEqual({ FOO: 'bar', BAZ: 'qux' });
   });
 });
 
@@ -794,6 +774,7 @@ describe('resolveProject (studio)', () => {
       initialValue?: string;
     };
     expect(selectArgs.options.map(o => o.value)).toEqual(['proj-a', 'proj-b', '__create_new__']);
+    expect(selectArgs.initialValue).toBe('__create_new__');
 
     exitSpy.mockRestore();
   });

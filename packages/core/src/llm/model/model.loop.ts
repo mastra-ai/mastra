@@ -3,8 +3,12 @@ import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { loop } from '../../loop';
+import { CONTINUATION_STOP_CAUSE_KEY, DELEGATION_FAILURE_KEY } from '../../loop/run-scope-keys';
+import { markStepBudgetCondition } from '../../loop/shared/continuation-core';
+import { agentLoopTermination, executionFailureTermination } from '../../loop/shared/execution-outcome';
 import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
+import { createRunScope } from '../../mastra/run-scope';
 import { SpanType, resolveObservabilityContext } from '../../observability';
 import { calculateObservedUsage, isUsageIncomplete, subtractReportedUsage } from '../../observability/usage';
 import { executeWithContextSync } from '../../observability/utils';
@@ -20,8 +24,11 @@ import type { MastraModelOptions } from './shared.types';
 
 // Like `stepCountIs`, but processor retry steps re-run the same step, so they
 // do not count against `maxSteps`. Retries stay bounded by maxProcessorRetries.
+// Marked so the loop can tell the budget running out from the caller's stopWhen.
 function llmStepCountIs(maxSteps: number): StopCondition<any> {
-  return ({ steps }) => steps.filter(step => (step.finishReason as string) !== 'retry').length >= maxSteps;
+  return markStepBudgetCondition<StopCondition<any>>(
+    ({ steps }) => steps.filter(step => (step.finishReason as string) !== 'retry').length >= maxSteps,
+  );
 }
 
 export class MastraLLMVNext extends MastraBase {
@@ -134,7 +141,11 @@ export class MastraLLMVNext extends MastraBase {
     requireToolApproval,
     toolCallConcurrency,
     eagerToolExecution,
+    streamPublisher,
     _internal,
+    onTracingTripwire,
+    onTracingTerminalError,
+    tracingScope = createRunScope(),
     agentId,
     agentVersionId,
     resolvedScopes,
@@ -156,6 +167,8 @@ export class MastraLLMVNext extends MastraBase {
     onIterationComplete,
     workspace,
     agentRunSpan,
+    agent,
+    resultType,
     ...rest
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
     const observabilityContext = resolveObservabilityContext(rest);
@@ -190,6 +203,7 @@ export class MastraLLMVNext extends MastraBase {
     const modelSpan = parentSpan?.createChildSpan({
       name: `llm: '${firstModel.modelId}'`,
       type: SpanType.MODEL_GENERATION,
+      outcome: null,
       input: {
         messages: [...messageList.getAllSystemMessages(), ...messages],
       },
@@ -199,6 +213,7 @@ export class MastraLLMVNext extends MastraBase {
         streaming: true,
         parameters: modelSettings,
         ...(toolDefinitions ? { tools: toolDefinitions } : {}),
+        ...(resultType ? { resultType } : {}),
       },
       metadata: {
         runId,
@@ -231,6 +246,23 @@ export class MastraLLMVNext extends MastraBase {
     try {
       const loopOptions: LoopOptions<Tools, OUTPUT> = {
         mastra: this.#mastra,
+        tracingScope,
+        onTracingTerminalError: error => {
+          try {
+            modelSpanTracker?.reportGenerationError({ error, ...executionFailureTermination(error) });
+          } finally {
+            onTracingTerminalError?.(error);
+          }
+        },
+        onTracingTripwire: (tripwire, usage, text) => {
+          modelSpanTracker?.endGeneration({
+            ...agentLoopTermination({ tripwire }),
+            usage,
+            output: { text },
+            attributes: {},
+          });
+          onTracingTripwire?.(tripwire, text);
+        },
         resumeContext,
         runId,
         toolCallId,
@@ -254,6 +286,7 @@ export class MastraLLMVNext extends MastraBase {
         requireToolApproval,
         toolCallConcurrency,
         eagerToolExecution,
+        streamPublisher,
         agentId,
         agentVersionId,
         resolvedScopes,
@@ -273,9 +306,21 @@ export class MastraLLMVNext extends MastraBase {
         goal,
         onIterationComplete,
         workspace,
+        agent,
         ...observabilityContext,
         options: {
           ...options,
+          onError: async event => {
+            const error = event.error instanceof Error ? event.error : new Error(String(event.error));
+            modelSpanTracker?.reportGenerationError({
+              error,
+              ...executionFailureTermination(error),
+              // The stream owner separately reports errors that cannot reach onFinish.
+              // Retain this span until usage/output arrive or that terminal notification.
+              endSpan: false,
+            });
+            await options?.onError?.(event);
+          },
           onStepFinish: async props => {
             try {
               await options?.onStepFinish?.({ ...props, runId: runId! });
@@ -299,7 +344,10 @@ export class MastraLLMVNext extends MastraBase {
                 },
                 e,
               );
-              modelSpanTracker?.reportGenerationError({ error: mastraError });
+              modelSpanTracker?.reportGenerationError({
+                error: mastraError,
+                ...executionFailureTermination(mastraError),
+              });
               this.logger.trackException(mastraError);
               throw mastraError;
             }
@@ -337,6 +385,20 @@ export class MastraLLMVNext extends MastraBase {
             // This ensures the model span ends before the agent span
             // Pass raw usage and providerMetadata - ModelSpanTracker will convert to UsageStats
             modelSpanTracker?.endGeneration({
+              ...(props.finishReason === 'error'
+                ? executionFailureTermination(props.error)
+                : agentLoopTermination({
+                    stopCause: tracingScope.get(CONTINUATION_STOP_CAUSE_KEY),
+                    delegationFailure: tracingScope.get(DELEGATION_FAILURE_KEY),
+                    finishReason: props.finishReason,
+                    tripwire: context?.outputResultTripwire ?? props.tripwire,
+                    maxSteps,
+                    suspension: {
+                      approvalRequired: props.suspendReason === 'tool-call-approval',
+                      toolCallId: props.toolCallId,
+                      toolName: props.toolName,
+                    },
+                  })),
               output: {
                 files: props?.files,
                 object: props?.object,
@@ -366,11 +428,16 @@ export class MastraLLMVNext extends MastraBase {
               },
               usage: subtractReportedUsage(observedUsage, props?.generationReportedUsage),
               providerMetadata: props?.providerMetadata,
-              stepProviderMetadata: props?.steps.map(step => step.providerMetadata),
+              stepProviderMetadata:
+                props?.generationStepProviderMetadata ?? props?.steps.map(step => step.providerMetadata),
             });
 
             try {
-              const { generationReportedUsage: _generationReportedUsage, ...userProps } = props;
+              const {
+                generationReportedUsage: _generationReportedUsage,
+                generationStepProviderMetadata: _generationStepProviderMetadata,
+                ...userProps
+              } = props;
               await options?.onFinish?.({ ...userProps, runId: runId! }, context);
             } catch (e: unknown) {
               const mastraError = new MastraError(
@@ -392,7 +459,10 @@ export class MastraLLMVNext extends MastraBase {
                 },
                 e,
               );
-              modelSpanTracker?.reportGenerationError({ error: mastraError });
+              modelSpanTracker?.reportGenerationError({
+                error: mastraError,
+                ...executionFailureTermination(mastraError),
+              });
               this.logger.trackException(mastraError);
               throw mastraError;
             }
@@ -429,7 +499,7 @@ export class MastraLLMVNext extends MastraBase {
         },
         e,
       );
-      modelSpanTracker?.reportGenerationError({ error: mastraError });
+      modelSpanTracker?.reportGenerationError({ error: mastraError, ...executionFailureTermination(mastraError) });
       throw mastraError;
     }
   }

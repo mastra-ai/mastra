@@ -26,8 +26,28 @@ describe('toTracesListViewTraces', () => {
         status: trace.status,
         startedAt: trace.startedAt,
         endedAt: trace.endedAt,
+        timeToFirstChunkMs: trace.timeToFirstChunkMs,
+        timeToFirstTokenMs: trace.timeToFirstTokenMs,
       },
     ]);
+  });
+
+  it('passes the root time to first chunk through', () => {
+    const trace = firstTraceQueryPage.traces[0];
+    if (!trace) throw new Error('Expected a trace fixture');
+    const [streamed] = toTracesListViewTraces([{ ...trace, timeToFirstChunkMs: 412 }]);
+    const [neverStreamed] = toTracesListViewTraces([{ ...trace, timeToFirstChunkMs: null }]);
+    expect(streamed?.timeToFirstChunkMs).toBe(412);
+    expect(neverStreamed?.timeToFirstChunkMs).toBeNull();
+  });
+
+  it('passes the root time to first token through', () => {
+    const trace = firstTraceQueryPage.traces[0];
+    if (!trace) throw new Error('Expected a trace fixture');
+    const [streamed] = toTracesListViewTraces([{ ...trace, timeToFirstTokenMs: 538 }]);
+    const [neverStreamed] = toTracesListViewTraces([{ ...trace, timeToFirstTokenMs: null }]);
+    expect(streamed?.timeToFirstTokenMs).toBe(538);
+    expect(neverStreamed?.timeToFirstTokenMs).toBeNull();
   });
 
   it('passes the output and error previews through', () => {
@@ -52,24 +72,14 @@ describe('toTracesListViewTraces', () => {
     if (!base) throw new Error('Expected a trace fixture');
     const nameOf = (name: string | null) => toTracesListViewTraces([{ ...base, name }])[0]?.name;
 
-    it('strips the agent run prefix', () => {
-      expect(nameOf("agent run: 'weatherAgent'")).toBe('weatherAgent');
-    });
-
-    it('strips the workflow run prefix', () => {
-      expect(nameOf("workflow run: 'orderFlow'")).toBe('orderFlow');
-    });
-
-    it('strips the scorer run prefix', () => {
-      expect(nameOf("scorer run: 'toxicity'")).toBe('toxicity');
-    });
-
-    it('keeps the resumed suffix after stripping', () => {
-      expect(nameOf("agent run: 'weatherAgent' (resumed)")).toBe('weatherAgent (resumed)');
-    });
-
-    it('leaves names without a prefix untouched', () => {
-      expect(nameOf('fetchWeather')).toBe('fetchWeather');
+    it.each([
+      ['strips the agent run prefix', "agent run: 'weatherAgent'", 'weatherAgent'],
+      ['strips the workflow run prefix', "workflow run: 'orderFlow'", 'orderFlow'],
+      ['strips the scorer run prefix', "scorer run: 'toxicity'", 'toxicity'],
+      ['keeps the resumed suffix after stripping', "agent run: 'weatherAgent' (resumed)", 'weatherAgent (resumed)'],
+      ['leaves names without a prefix untouched', 'fetchWeather', 'fetchWeather'],
+    ] as const)('%s', (_title, input, expected) => {
+      expect(nameOf(input)).toBe(expected);
     });
 
     it('keeps a null name null', () => {

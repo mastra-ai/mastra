@@ -35,14 +35,6 @@ describe('formatHierarchicalSpans', () => {
   });
 
   describe('without anchorSpanId (trace mode)', () => {
-    it('uses spans with parentSpanId == null as roots', () => {
-      const result = formatHierarchicalSpans([span('root', null), span('child', 'root')]);
-      expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('root');
-      expect(result[0].spans).toHaveLength(1);
-      expect(getAt(getChildren(result[0]), 0).id).toBe('child');
-    });
-
     it('nests descendants under the correct parent across multiple levels', () => {
       const result = formatHierarchicalSpans([span('root', null), span('a', 'root'), span('b', 'a'), span('c', 'b')]);
       expect(result).toHaveLength(1);

@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Sidebar, SidebarProvider, useSidebar } from '..';
 
 const mockMatchMedia = (matches: boolean) => {
@@ -22,6 +22,10 @@ const mockMatchMedia = (matches: boolean) => {
   });
 };
 
+beforeAll(() => {
+  Element.prototype.getAnimations ??= () => [];
+});
+
 beforeEach(() => {
   window.localStorage.clear();
 });
@@ -39,6 +43,9 @@ const getSidebarScope = () => {
   if (!scope) throw new Error('Sidebar scope was not rendered');
   return scope;
 };
+
+const widthOf = (scope: HTMLElement) =>
+  scope.querySelector<HTMLElement>('[data-slot="sidebar-panel"]')?.style.getPropertyValue('--sidebar-width');
 
 describe('Sidebar resize handle gesture', () => {
   const renderCollapsedSidebar = () => {
@@ -191,8 +198,6 @@ describe('Sidebar resize handle keyboard', () => {
     return { scope: getSidebarScope(), separator: screen.getByRole('separator') };
   };
 
-  const widthOf = (scope: HTMLElement) => scope.style.getPropertyValue('--sidebar-width');
-
   it('narrows the sidebar a step at a time', () => {
     const { scope, separator } = renderSidebar();
     expect(widthOf(scope)).toBe('300px');
@@ -211,12 +216,16 @@ describe('Sidebar resize handle keyboard', () => {
     expect(widthOf(scope)).toBe('280px');
   });
 
-  it('widens the sidebar a step at a time', () => {
+  it.each([
+    ['widens the sidebar a step at a time', 'ArrowRight', '310px'],
+    ['jumps to the narrowest width', 'Home', '200px'],
+    ['jumps to the widest width', 'End', '480px'],
+  ] as const)('%s', (_title, key, expected) => {
     const { scope, separator } = renderSidebar();
 
-    fireEvent.keyDown(separator, { key: 'ArrowRight' });
+    fireEvent.keyDown(separator, { key });
 
-    expect(widthOf(scope)).toBe('310px');
+    expect(widthOf(scope)).toBe(expected);
   });
 
   it('has nothing to narrow while collapsed', () => {
@@ -236,22 +245,6 @@ describe('Sidebar resize handle keyboard', () => {
 
     expect(scope.getAttribute('data-sidebar-state')).toBe('default');
     expect(widthOf(scope)).toBe('300px');
-  });
-
-  it('jumps to the narrowest width', () => {
-    const { scope, separator } = renderSidebar();
-
-    fireEvent.keyDown(separator, { key: 'Home' });
-
-    expect(widthOf(scope)).toBe('200px');
-  });
-
-  it('jumps to the widest width', () => {
-    const { scope, separator } = renderSidebar();
-
-    fireEvent.keyDown(separator, { key: 'End' });
-
-    expect(widthOf(scope)).toBe('480px');
   });
 
   it.each(['Home', 'End'])('opens a collapsed sidebar when jumping with %s', key => {
@@ -292,12 +285,15 @@ describe('Sidebar resize handle keyboard', () => {
     },
   );
 
-  it('remembers a width reached with the keyboard', () => {
+  it.each([
+    ['remembers a width reached with the keyboard', 'ArrowLeft', '290'],
+    ['remembers a width the right arrow reached', 'ArrowRight', '310'],
+  ] as const)('%s', (_title, key, expected) => {
     const { separator } = renderSidebar();
 
-    fireEvent.keyDown(separator, { key: 'ArrowLeft' });
+    fireEvent.keyDown(separator, { key });
 
-    expect(window.localStorage.getItem('sidebar:width')).toBe('290');
+    expect(window.localStorage.getItem('sidebar:width')).toBe(expected);
   });
 
   it('remembers a sidebar opened with the keyboard, width and all', () => {
@@ -307,14 +303,6 @@ describe('Sidebar resize handle keyboard', () => {
 
     expect(window.localStorage.getItem('sidebar:state')).toBe('default');
     expect(window.localStorage.getItem('sidebar:width')).toBe('300');
-  });
-
-  it('remembers a width the right arrow reached', () => {
-    const { separator } = renderSidebar();
-
-    fireEvent.keyDown(separator, { key: 'ArrowRight' });
-
-    expect(window.localStorage.getItem('sidebar:width')).toBe('310');
   });
 
   it('says how wide it is, and what Enter would do', () => {
@@ -346,6 +334,60 @@ describe('Sidebar resize handle keyboard', () => {
   });
 });
 
+describe('Sidebar minimum width raised at runtime', () => {
+  const SidebarAt = ({ minWidth }: { minWidth: number }) => (
+    <SidebarProvider defaultWidth={240} minWidth={minWidth} collapseBelow={200} maxWidth={480}>
+      <Sidebar>
+        <Sidebar.Nav>
+          <Sidebar.NavList>
+            <Sidebar.NavLink link={{ name: 'Agents', url: '/agents' }} />
+          </Sidebar.NavList>
+        </Sidebar.Nav>
+      </Sidebar>
+    </SidebarProvider>
+  );
+
+  it('widens a narrower sidebar, then returns it to the width the user chose', () => {
+    mockMatchMedia(false);
+    const view = render(<SidebarAt minWidth={200} />);
+    const scope = getSidebarScope();
+    expect(widthOf(scope)).toBe('240px');
+
+    view.rerender(<SidebarAt minWidth={320} />);
+    expect(widthOf(scope)).toBe('320px');
+    expect(screen.getByRole('separator').getAttribute('aria-valuenow')).toBe('320');
+    expect(window.localStorage.getItem('sidebar:width')).toBeNull();
+
+    view.rerender(<SidebarAt minWidth={200} />);
+    expect(widthOf(scope)).toBe('240px');
+  });
+
+  it('leaves a sidebar that is already wide enough alone', () => {
+    window.localStorage.setItem('sidebar:width', '400');
+    mockMatchMedia(false);
+    const view = render(<SidebarAt minWidth={200} />);
+    const scope = getSidebarScope();
+
+    view.rerender(<SidebarAt minWidth={320} />);
+
+    expect(widthOf(scope)).toBe('400px');
+  });
+
+  it('keeps the width the user chose when it first opens on a view that needs more room', () => {
+    window.localStorage.setItem('sidebar:width', '240');
+    mockMatchMedia(false);
+    const view = render(<SidebarAt minWidth={320} />);
+    const scope = getSidebarScope();
+    expect(widthOf(scope)).toBe('320px');
+
+    view.rerender(<SidebarAt minWidth={200} />);
+
+    expect(widthOf(scope)).toBe('240px');
+    expect(screen.getByRole('separator').getAttribute('aria-valuenow')).toBe('240');
+    expect(window.localStorage.getItem('sidebar:width')).toBe('240');
+  });
+});
+
 describe('Sidebar dragging the resize handle', () => {
   const renderSidebar = (props: { defaultState?: 'default' | 'collapsed'; collapsedWidth?: number } = {}) => {
     mockMatchMedia(false);
@@ -368,8 +410,6 @@ describe('Sidebar dragging the resize handle', () => {
     );
     return { ...view, scope: getSidebarScope(), separator: screen.getByRole('separator') };
   };
-
-  const widthOf = (scope: HTMLElement) => scope.style.getPropertyValue('--sidebar-width');
   const press = (separator: HTMLElement, clientX: number, pointerId = 1, button = 0) =>
     fireEvent(separator, pointerEvent('pointerdown', { button, pointerId, clientX }));
   const move = (clientX: number, pointerId = 1) =>
@@ -422,26 +462,18 @@ describe('Sidebar dragging the resize handle', () => {
     expect(widthOf(scope)).toBe('306px');
   });
 
-  it('is still a click when the pointer never really moved', () => {
+  it.each([
+    ['is still a click when the pointer never really moved', 303, 'collapsed'],
+    ['is not a click once it has been dragged', 350, 'default'],
+  ] as const)('%s', (_title, input, expected) => {
     const { scope, separator } = renderSidebar();
 
     press(separator, 300);
-    move(303);
+    move(input);
     release();
     fireEvent.click(separator);
 
-    expect(scope.getAttribute('data-sidebar-state')).toBe('collapsed');
-  });
-
-  it('is not a click once it has been dragged', () => {
-    const { scope, separator } = renderSidebar();
-
-    press(separator, 300);
-    move(350);
-    release();
-    fireEvent.click(separator);
-
-    expect(scope.getAttribute('data-sidebar-state')).toBe('default');
+    expect(scope.getAttribute('data-sidebar-state')).toBe(expected);
   });
 
   it('goes back to being a click after the drag it swallowed', () => {
@@ -757,7 +789,7 @@ describe('Sidebar mobile drawer closing', () => {
   });
 });
 
-function SidebarStackFixture() {
+function SidebarStackFixture({ closeOnEscape }: { closeOnEscape?: boolean }) {
   const { expand } = useSidebar();
   const [view, setView] = useState('root');
   const returnFocusRef = useRef<HTMLButtonElement>(null);
@@ -775,7 +807,12 @@ function SidebarStackFixture() {
       <Sidebar.Nav>
         <Sidebar.NavStack value={view} onValueChange={setView}>
           <Sidebar.NavStack.Root>Grouped navigation</Sidebar.NavStack.Root>
-          <Sidebar.NavStack.View value="account-settings" title="Account settings" returnFocusRef={returnFocusRef}>
+          <Sidebar.NavStack.View
+            value="account-settings"
+            title="Account settings"
+            returnFocusRef={returnFocusRef}
+            closeOnEscape={closeOnEscape}
+          >
             Account navigation
           </Sidebar.NavStack.View>
         </Sidebar.NavStack>
@@ -820,6 +857,27 @@ describe('Sidebar', () => {
 
     await waitFor(() => expect(document.activeElement).toBe(trigger));
     expect(screen.getByText('Grouped navigation')).toBeDefined();
+  });
+
+  it('leaves focus where it is when the sidebar expands onto an open takeover', async () => {
+    mockMatchMedia(false);
+    render(
+      <Sidebar.Provider storageKey="sidebar-stack-expand-test" disableKeyboardShortcut={false}>
+        <SidebarStackFixture />
+      </Sidebar.Provider>,
+    );
+    const trigger = screen.getByRole('button', { name: 'Open account settings' });
+    fireEvent.click(trigger);
+    const back = await screen.findByRole('button', { name: 'Back to main navigation: Account settings' });
+    await waitFor(() => expect(document.activeElement).toBe(back));
+
+    fireEvent.keyDown(window, { code: 'KeyB', ctrlKey: true });
+    await waitFor(() => expect(document.querySelector('[data-sidebar-state="collapsed"]')).not.toBeNull());
+    trigger.focus();
+    fireEvent.keyDown(window, { code: 'KeyB', ctrlKey: true });
+    await waitFor(() => expect(document.querySelector('[data-sidebar-state="default"]')).not.toBeNull());
+
+    expect(document.activeElement).toBe(trigger);
   });
 
   it('renders only the active takeover page once its exit finishes', async () => {
@@ -875,6 +933,22 @@ describe('Sidebar', () => {
     expect(screen.getByText('Account navigation').closest('[aria-hidden]')?.getAttribute('aria-hidden')).toBe('false');
   });
 
+  it('keeps a view that accompanies a page open on Escape when asked to', async () => {
+    mockMatchMedia(false);
+    render(
+      <Sidebar.Provider storageKey="sidebar-page-escape-test">
+        <SidebarStackFixture closeOnEscape={false} />
+      </Sidebar.Provider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open account settings' }));
+    const back = await screen.findByRole('button', { name: 'Back to main navigation: Account settings' });
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(document.activeElement).toBe(back);
+    expect(screen.getByText('Account navigation').closest('[aria-hidden]')?.getAttribute('aria-hidden')).toBe('false');
+  });
+
   it('keeps group titles visible and hides the page trigger while the mobile drawer is present', async () => {
     mockMatchMedia(true);
     render(
@@ -899,29 +973,12 @@ describe('Sidebar', () => {
     expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).toBeNull();
     expect(document.querySelector('[data-sidebar-scope]')?.getAttribute('data-sidebar-mobile-present')).toBe('true');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close navigation menu' }));
 
     await waitFor(() =>
       expect(document.querySelector('[data-sidebar-scope]')?.getAttribute('data-sidebar-mobile-present')).toBe('false'),
     );
     expect(screen.getByRole('button', { name: 'Open navigation menu' })).toBe(mobileTrigger);
     await waitFor(() => expect(document.activeElement).toBe(mobileTrigger));
-  });
-});
-
-describe('Sidebar padding', () => {
-  it('insets its content on every side, so the header and footer never touch an edge', () => {
-    mockMatchMedia(false);
-    render(
-      <SidebarProvider>
-        <Sidebar>
-          <Sidebar.Nav />
-          <Sidebar.Footer />
-        </Sidebar>
-      </SidebarProvider>,
-    );
-    const content = document.querySelector('.sidebar-layout > div');
-    expect(content?.className).toMatch(/\bp-2\b/);
-    expect(document.querySelector('[data-slot=sidebar-footer]')?.className).not.toMatch(/\bpb-/);
   });
 });

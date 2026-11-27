@@ -105,6 +105,22 @@ describe('E2BFactorySandbox', () => {
     expect((await schema['~standard'].validate({ memoryMb: 16384 })).issues).toBeDefined();
   });
 
+  it('offers one vCPU or an even count up to 64 and rejects an odd count above one', async () => {
+    const sandbox = new E2BFactorySandbox({ apiKey: 'e2b_test' });
+    const cpu = describeFactorySandbox(sandbox).settingsSchema.properties?.cpuCount as { oneOf: { const: number }[] };
+    const counts = cpu.oneOf.map(member => member.const);
+    expect(counts.slice(0, 4)).toEqual([1, 2, 4, 6]);
+    expect(counts.at(-1)).toBe(64);
+    expect(counts.filter(count => count > 1 && count % 2 === 1)).toEqual([]);
+    const schema = normalizeFactorySandboxSettings(sandbox);
+    for (const cpuCount of [1, 2, 4, 64]) {
+      expect((await schema['~standard'].validate({ cpuCount })).issues).toBeUndefined();
+    }
+    for (const cpuCount of [0, 3, 5, 63, 66]) {
+      expect((await schema['~standard'].validate({ cpuCount })).issues).toBeDefined();
+    }
+  });
+
   it('resolves the same sha-tagged ref as createRepoTemplate(ctx), with settings over defaults', async () => {
     const ctx = context();
     const callback = createRepoTemplate(ctx)!;
@@ -122,6 +138,37 @@ describe('E2BFactorySandbox', () => {
     const tuned = new E2BFactorySandbox({ defaults: { cpuCount: 4, memoryMb: 4096 } }).template(ctx, { cpuCount: 2 })!;
     expect((await tuned.resolveSpec()).ref).toBe(expected);
     expect((await createRepoTemplate({ ...ctx, cpuCount: 2, memoryMB: 4096 })!.resolveSpec()).ref).toBe(expected);
+  });
+
+  it('advertises the CPU default it will use when the configured default is not offered', () => {
+    const cpu = describeFactorySandbox(new E2BFactorySandbox({ apiKey: 'e2b_test', defaults: { cpuCount: 3 } }))
+      .settingsSchema.properties?.cpuCount as { default: number };
+    expect(cpu.default).toBe(2);
+  });
+
+  it('advertises the built-in CPU default when the configured default is undefined', () => {
+    const cpu = describeFactorySandbox(new E2BFactorySandbox({ apiKey: 'e2b_test', defaults: { cpuCount: undefined } }))
+      .settingsSchema.properties?.cpuCount as { default: number };
+    expect(cpu.default).toBe(2);
+  });
+
+  it.each([
+    [3, 2],
+    [7, 2],
+    [65, 2],
+  ])('builds a saved CPU count of %i, which is not offered, with the default %i', async (saved, used) => {
+    const ctx = context();
+    const expected = repoTemplateRef({ cloneUrl: CLONE_URL, setupCommand: SETUP, sha: SHA, cpuCount: used });
+    const fromSetting = new E2BFactorySandbox().template(ctx, { cpuCount: saved })!;
+    expect((await fromSetting.resolveSpec()).ref).toBe(expected);
+  });
+
+  it('builds a saved CPU count that is not offered with the configured default, as once Factory drops it', async () => {
+    const sandbox = new E2BFactorySandbox({ defaults: { cpuCount: 4 } });
+    const saved = await sandbox.template(context(), { cpuCount: 7 })!.resolveSpec();
+    const dropped = await sandbox.template(context(), {})!.resolveSpec();
+    expect(saved.ref).toBe(dropped.ref);
+    expect(dropped.ref).toBe(repoTemplateRef({ cloneUrl: CLONE_URL, setupCommand: SETUP, sha: SHA, cpuCount: 4 }));
   });
 
   it('creates an E2BSandbox keyed by the session with the sandbox id and template', () => {
@@ -150,6 +197,45 @@ describe('E2BFactorySandbox', () => {
     expect(advertised(new E2BFactorySandbox({ timeout: 90_000 }))).toBe(2);
     expect(advertised(new E2BFactorySandbox({ timeout: 90_000, defaults: { idleTimeoutMinutes: 10 } }))).toBe(10);
     expect(advertised(new E2BFactorySandbox({}))).toBe(5);
+  });
+
+  it('resolves an env function per session so a credential reaches one factory only', () => {
+    const sandbox = new E2BFactorySandbox({
+      env: ctx => (ctx.factoryId === 'fac-platform' ? { TOKEN: 't' } : {}),
+    });
+    const envOf = (factoryId: string) =>
+      (sandbox.create({ ...context(), factoryId }, {}) as any)._constructorOptions.env;
+    expect(envOf('fac-platform')).toEqual({ TOKEN: 't' });
+    expect(envOf('fac-mastra')).toEqual({});
+  });
+
+  describe('Factory build env from the context', () => {
+    const withBuild = (buildEnv: Record<string, string>, buildEnvRevision?: string): FactorySandboxContext => ({
+      ...context(),
+      buildEnv,
+      ...(buildEnvRevision ? { buildEnvRevision } : {}),
+    });
+
+    it('names the template by the revision and keeps values out of the name and runtime env', async () => {
+      const sandbox = new E2BFactorySandbox({ env: { HOST: 'h' } });
+      const refOf = async (ctx: FactorySandboxContext) => (await sandbox.template(ctx, {})!.resolveSpec()).ref;
+      const plain = await refOf(context());
+      const a = await refOf(withBuild({ NPM_TOKEN: 'sentinel-one' }, 'rev-a'));
+      expect(await refOf(withBuild({ NPM_TOKEN: 'sentinel-two' }, 'rev-a'))).toBe(a);
+      expect(await refOf(withBuild({ NPM_TOKEN: 'sentinel-one' }, 'rev-b'))).not.toBe(a);
+      expect(a).not.toBe(plain);
+      expect(a).toBe(
+        repoTemplateRef({ cloneUrl: CLONE_URL, setupCommand: SETUP, sha: SHA, buildEnvRevision: 'rev-a' }),
+      );
+      // Without a revision the value alone must not rename the template.
+      expect(await refOf(withBuild({ NPM_TOKEN: 'sentinel-one' }))).toBe(plain);
+
+      const spec = await sandbox.template(withBuild({ NPM_TOKEN: 'sentinel-one' }, 'rev-a'), {})!.resolveSpec();
+      expect(await Template.toJSON(spec.template as never, false)).toContain('sentinel-one');
+      const runtimeEnv = (sandbox.create(withBuild({ NPM_TOKEN: 'sentinel-one' }, 'rev-a'), {}) as any)
+        ._constructorOptions.env;
+      expect(runtimeEnv).toEqual({ HOST: 'h' });
+    });
   });
 
   describe('builds', () => {
@@ -282,6 +368,24 @@ describe('E2BFactorySandbox', () => {
 
       sdk.templatesGet.mockResolvedValue({ error: { code: 401, message: 'nope' } });
       await expect(sandbox.builds.list!(context(), {})).rejects.toThrow(/E2B template listing failed/);
+    });
+
+    it('list looks up the template named by the build env revision', async () => {
+      const revisioned = repoTemplateRef({
+        cloneUrl: CLONE_URL,
+        setupCommand: SETUP,
+        sha: SHA,
+        buildEnvRevision: 'rev-a',
+      });
+      const name = revisioned.slice(0, revisioned.lastIndexOf(':'));
+      sdk.templatesGet.mockImplementation(async (path: string) =>
+        path === '/templates'
+          ? { data: [{ templateID: 'tpl_rev', names: [name], aliases: [] }] }
+          : { data: { templateID: 'tpl_rev', builds: [{ buildID: 'bld_1', status: 'ready', createdAt: 'x' }] } },
+      );
+      const ctx = { ...context(), buildEnv: { NPM_TOKEN: 'v' }, buildEnvRevision: 'rev-a' };
+      expect((await sandbox.builds.list!(ctx, {})).map(b => b.buildId)).toEqual(['tpl_rev:bld_1']);
+      expect(await sandbox.builds.list!(context(), {})).toEqual([]);
     });
   });
 });

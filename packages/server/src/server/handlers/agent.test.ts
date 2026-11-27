@@ -960,6 +960,52 @@ describe('Agent Handlers', () => {
       expect(reorderedModelList?.[1].model.modelId).toBe('gpt-4o');
       expect(reorderedModelList?.[2].model.modelId).toBe('gpt-4o-mini');
     });
+
+    it('persists reordered Editor-owned model lists as a draft', async () => {
+      const agent = makeMockAgent({
+        id: 'editor-owned-models',
+        model: [
+          { id: 'primary', model: 'openai/gpt-4o' },
+          { id: 'fallback', model: 'openai/gpt-4o-mini', maxRetries: 1 },
+        ],
+        editor: { model: true },
+      });
+      mockMastra = makeMastraMock({ agents: { 'editor-owned-models': agent } });
+
+      const create = vi.fn().mockResolvedValue(agent);
+      vi.spyOn(mockMastra, 'getEditor').mockReturnValue({
+        agent: {
+          applyStoredOverrides: vi.fn().mockResolvedValue(agent),
+          create,
+        },
+      } as never);
+      vi.spyOn(mockMastra, 'getStorage').mockReturnValue({
+        getStore: vi.fn().mockResolvedValue({ getById: vi.fn().mockResolvedValue(null) }),
+      } as never);
+
+      await REORDER_AGENT_MODEL_LIST_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        agentId: 'editor-owned-models',
+        reorderedModelIds: ['fallback', 'primary'],
+        requestContext,
+      });
+
+      expect(await agent.getModelList()).toMatchObject([
+        { id: 'primary', model: { modelId: 'gpt-4o' } },
+        { id: 'fallback', model: { modelId: 'gpt-4o-mini' } },
+      ]);
+      expect(create).toHaveBeenCalledWith({
+        id: 'editor-owned-models',
+        name: 'test-agent',
+        authorId: undefined,
+        visibility: 'public',
+        metadata: undefined,
+        modelList: [
+          { id: 'fallback', provider: 'openai', modelId: 'gpt-4o-mini', enabled: true, maxRetries: 1 },
+          { id: 'primary', provider: 'openai', modelId: 'gpt-4o', enabled: true, maxRetries: 0 },
+        ],
+      });
+    });
   });
 
   describe('updateAgentModelInModelListHandler', () => {
@@ -984,9 +1030,198 @@ describe('Agent Handlers', () => {
       expect(updatedModelList?.[1].maxRetries).toBe(4);
       expect(updatedModelList?.[2].model.modelId).toBe('gpt-4.1');
     });
+
+    it('persists updated Editor-owned model lists as a draft', async () => {
+      const agent = makeMockAgent({
+        id: 'editor-owned-models',
+        model: [
+          { id: 'primary', model: 'openai/gpt-4o' },
+          { id: 'fallback', model: 'openai/gpt-4o-mini', maxRetries: 1 },
+        ],
+        editor: { model: true },
+      });
+      mockMastra = makeMastraMock({ agents: { 'editor-owned-models': agent } });
+
+      const update = vi.fn().mockResolvedValue(agent);
+      vi.spyOn(mockMastra, 'getEditor').mockReturnValue({
+        agent: {
+          applyStoredOverrides: vi.fn().mockResolvedValue(agent),
+          update,
+        },
+      } as never);
+      vi.spyOn(mockMastra, 'getStorage').mockReturnValue({
+        getStore: vi.fn().mockResolvedValue({ getById: vi.fn().mockResolvedValue({ id: 'editor-owned-models' }) }),
+      } as never);
+
+      await UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        agentId: 'editor-owned-models',
+        modelConfigId: 'fallback',
+        model: { modelId: 'gpt-4.1', provider: 'openai' },
+        maxRetries: 4,
+        enabled: false,
+        requestContext,
+      });
+
+      expect(await agent.getModelList()).toMatchObject([
+        { id: 'primary', model: { modelId: 'gpt-4o' } },
+        { id: 'fallback', model: { modelId: 'gpt-4o-mini' }, enabled: true, maxRetries: 1 },
+      ]);
+      expect(update).toHaveBeenCalledWith({
+        id: 'editor-owned-models',
+        modelList: [
+          { id: 'primary', provider: 'openai', modelId: 'gpt-4o', enabled: true, maxRetries: 0 },
+          { id: 'fallback', provider: 'openai', modelId: 'gpt-4.1', enabled: false, maxRetries: 4 },
+        ],
+      });
+    });
   });
 
   describe('model list edits', () => {
+    it('should preserve an earlier draft toggle when the model list is reordered', async () => {
+      const agent = makeMockAgent({
+        id: 'editor-owned-models',
+        model: [
+          { id: 'primary', model: 'openai/gpt-4o' },
+          { id: 'secondary', model: 'openai/gpt-4o-mini' },
+        ],
+        editor: { model: true },
+      });
+      const draftAgent = agent.__fork();
+      draftAgent.__updateModel({
+        model: [
+          { id: 'primary', model: 'openai/gpt-4o', enabled: true },
+          { id: 'secondary', model: 'openai/gpt-4o-mini', enabled: false },
+        ],
+      });
+      const mastra = makeMastraMock({ agents: { 'editor-owned-models': agent } });
+      const update = vi.fn().mockResolvedValue(draftAgent);
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({
+        agent: {
+          applyStoredOverrides: vi
+            .fn()
+            .mockImplementation((_agent, options) => (options?.status === 'draft' ? draftAgent : agent)),
+          update,
+        },
+      } as never);
+      vi.spyOn(mastra, 'getStorage').mockReturnValue({
+        getStore: vi.fn().mockResolvedValue({ getById: vi.fn().mockResolvedValue({ id: 'editor-owned-models' }) }),
+      } as never);
+
+      await REORDER_AGENT_MODEL_LIST_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'editor-owned-models',
+        reorderedModelIds: ['secondary', 'primary'],
+        requestContext,
+      });
+
+      expect(update).toHaveBeenCalledWith({
+        id: 'editor-owned-models',
+        modelList: [
+          { id: 'secondary', provider: 'openai', modelId: 'gpt-4o-mini', enabled: false, maxRetries: 0 },
+          { id: 'primary', provider: 'openai', modelId: 'gpt-4o', enabled: true, maxRetries: 0 },
+        ],
+      });
+    });
+
+    it('should mutate published sub-agent model lists when Editor does not own them', async () => {
+      const subAgent = makeMockAgent({
+        id: 'sub-agent',
+        model: [
+          { id: 'primary', model: 'openai/gpt-4o' },
+          { id: 'fallback', model: 'openai/gpt-4o-mini' },
+        ],
+      });
+      const parentAgent = makeMockAgent({ id: 'parent-agent' });
+      vi.spyOn(parentAgent, 'listAgents').mockResolvedValue({ 'sub-agent': subAgent });
+      const mastra = makeMastraMock({ agents: { 'parent-agent': parentAgent } });
+
+      await REORDER_AGENT_MODEL_LIST_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'sub-agent',
+        reorderedModelIds: ['fallback', 'primary'],
+        requestContext,
+      });
+      await UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'sub-agent',
+        modelConfigId: 'fallback',
+        enabled: false,
+        requestContext,
+      });
+
+      expect(await subAgent.getModelList()).toMatchObject([
+        { id: 'fallback', enabled: false },
+        { id: 'primary', enabled: true },
+      ]);
+    });
+
+    it('should resolve stored-only agents before reordering or updating their model lists', async () => {
+      const agent = makeMockAgent({
+        id: 'stored-only-agent',
+        model: [
+          { id: 'primary', model: 'openai/gpt-4o' },
+          { id: 'fallback', model: 'openai/gpt-4o-mini' },
+        ],
+        editor: { model: true },
+      });
+      const mastra = makeMastraMock({ agents: {} });
+      const getById = vi.fn().mockResolvedValue(agent);
+      const update = vi.fn().mockResolvedValue(agent);
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({
+        agent: {
+          applyStoredOverrides: vi.fn(),
+          getById,
+          update,
+        },
+      } as never);
+      vi.spyOn(mastra, 'getStorage').mockReturnValue({
+        getStore: vi.fn().mockResolvedValue({ getById: vi.fn().mockResolvedValue({ id: 'stored-only-agent' }) }),
+      } as never);
+
+      await REORDER_AGENT_MODEL_LIST_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'stored-only-agent',
+        reorderedModelIds: ['fallback', 'primary'],
+        requestContext,
+      });
+      await UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'stored-only-agent',
+        modelConfigId: 'fallback',
+        enabled: false,
+        requestContext,
+      });
+
+      expect(getById).toHaveBeenCalledTimes(4);
+      expect(getById).toHaveBeenNthCalledWith(1, 'stored-only-agent', { status: 'published' });
+      expect(getById).toHaveBeenNthCalledWith(2, 'stored-only-agent', { status: 'draft' });
+      expect(getById).toHaveBeenNthCalledWith(3, 'stored-only-agent', { status: 'published' });
+      expect(getById).toHaveBeenNthCalledWith(4, 'stored-only-agent', { status: 'draft' });
+      expect(update).toHaveBeenCalledTimes(2);
+      expect(update).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          id: 'stored-only-agent',
+          modelList: [expect.objectContaining({ id: 'fallback' }), expect.objectContaining({ id: 'primary' })],
+        }),
+      );
+      expect(update).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          id: 'stored-only-agent',
+          modelList: [
+            expect.objectContaining({ id: 'primary' }),
+            expect.objectContaining({ id: 'fallback', enabled: false }),
+          ],
+        }),
+      );
+      expect(await agent.getModelList()).toMatchObject([
+        { id: 'primary', enabled: true },
+        { id: 'fallback', enabled: true },
+      ]);
+    });
+
     it('should return 409 for function-valued model lists and leave the function in place', async () => {
       const modelFn = () => [{ model: openaiV5('gpt-4o-mini') }, { model: openaiV5('gpt-4o') }];
       const mastra = makeMastraMock({
@@ -1093,6 +1328,114 @@ describe('Agent Handlers', () => {
           process.env.OPENAI_API_KEY = originalEnv;
         }
       }
+    });
+
+    // An agent built with an explicit AI SDK model instance (e.g. `openai('gpt-4o')`)
+    // carries its credentials on the instance, not in the provider's env var. The
+    // enhance endpoint must not require that env var for such agents. (#31608)
+    it('should enhance instructions for an explicit AI SDK model without a provider env var', async () => {
+      const originalEnv = process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      onTestFinished(() => {
+        if (originalEnv === undefined) {
+          delete process.env.OPENAI_API_KEY;
+        } else {
+          process.env.OPENAI_API_KEY = originalEnv;
+        }
+      });
+
+      const mockEnhancedResult = {
+        object: {
+          explanation: 'Clarified the tone.',
+          new_prompt: 'You are a concise, friendly assistant.',
+        },
+      };
+
+      const generateSpy = vi.spyOn(Agent.prototype, 'generate').mockResolvedValue(mockEnhancedResult as any);
+      onTestFinished(() => generateSpy.mockRestore());
+
+      // Use a v2+ SDK instance (`@ai-sdk/openai-v5`) so the chosen model is one
+      // generate() actually accepts; the default 1.x fixture is a v1 model that
+      // generate() rejects, which would make this success path depend on the spy.
+      const explicitAgent = makeMockAgent({ name: 'test-explicit-model-agent', model: openaiV5('gpt-4o') });
+      const explicitMastra = makeMastraMock({ agents: { 'test-explicit-model-agent': explicitAgent } });
+      const result = await ENHANCE_INSTRUCTIONS_ROUTE.handler({
+        ...createTestServerContext({ mastra: explicitMastra }),
+        agentId: 'test-explicit-model-agent',
+        instructions: 'You are a helpful assistant.',
+      });
+
+      expect(result).toEqual({
+        explanation: 'Clarified the tone.',
+        new_prompt: 'You are a concise, friendly assistant.',
+      });
+      expect(generateSpy).toHaveBeenCalledOnce();
+    });
+
+    // A model list can mix router ids (which need the provider env var) with explicit
+    // SDK instances (which do not). The enhancer must skip a router model whose provider
+    // is not connected and fall through to the explicit instance. (#31608)
+    it('should fall back to an explicit AI SDK model when an earlier router model has no env var', async () => {
+      const originalEnv = process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      onTestFinished(() => {
+        if (originalEnv === undefined) {
+          delete process.env.OPENAI_API_KEY;
+        } else {
+          process.env.OPENAI_API_KEY = originalEnv;
+        }
+      });
+
+      const mixedAgent = makeMockAgent({
+        name: 'test-mixed-model-agent',
+        model: [{ model: 'openai/gpt-4o' }, { model: openaiV5('gpt-4o-mini') }],
+      });
+      const mixedMastra = makeMastraMock({ agents: { 'test-mixed-model-agent': mixedAgent } });
+
+      let usedProvider: string | undefined;
+      const generateSpy = vi.spyOn(Agent.prototype, 'generate').mockImplementation(function (this: Agent) {
+        usedProvider = (this.model as { provider?: string }).provider;
+        return Promise.resolve({ object: { explanation: 'x', new_prompt: 'y' } } as any);
+      });
+      onTestFinished(() => generateSpy.mockRestore());
+
+      const result = await ENHANCE_INSTRUCTIONS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mixedMastra }),
+        agentId: 'test-mixed-model-agent',
+        instructions: 'You are a helpful assistant.',
+      });
+
+      expect(result).toEqual({ explanation: 'x', new_prompt: 'y' });
+      // The explicit `@ai-sdk/openai-v5` instance was chosen, not the router entry.
+      expect(usedProvider).toBe('openai.responses');
+    });
+
+    // Control case: an agent whose only model is a router id still requires its provider
+    // env var, so the endpoint keeps returning a 400 when nothing is connected. (#31608)
+    it('should reject when the only model is a router id with no configured provider', async () => {
+      const originalEnv = process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      onTestFinished(() => {
+        if (originalEnv === undefined) {
+          delete process.env.OPENAI_API_KEY;
+        } else {
+          process.env.OPENAI_API_KEY = originalEnv;
+        }
+      });
+
+      const routerAgent = makeMockAgent({
+        name: 'test-router-model-agent',
+        model: 'openai/gpt-4o',
+      });
+      const routerMastra = makeMastraMock({ agents: { 'test-router-model-agent': routerAgent } });
+
+      await expect(
+        ENHANCE_INSTRUCTIONS_ROUTE.handler({
+          ...createTestServerContext({ mastra: routerMastra }),
+          agentId: 'test-router-model-agent',
+          instructions: 'You are a helpful assistant.',
+        }),
+      ).rejects.toMatchObject({ status: 400 });
     });
   });
 });

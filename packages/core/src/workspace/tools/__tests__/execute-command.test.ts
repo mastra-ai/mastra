@@ -1,8 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import type { MastraBrowser } from '../../../browser/browser';
 import { browserCliHandler } from '../../../browser/cli-handler';
+import { RequestContext } from '../../../request-context';
 import type { ToolExecutionContext } from '../../../tools/types';
+import type { WorkspaceFilesystem } from '../../filesystem';
+import { LocalSandbox } from '../../sandbox/local-sandbox';
 import type { CommandResult, ExecuteCommandOptions } from '../../sandbox/types';
 import { Workspace } from '../../workspace';
 import { executeCommandTool } from '../execute-command';
@@ -262,6 +268,8 @@ describe('executeCommandTool data chunks', () => {
       expect(exitChunks).toHaveLength(1);
       expect(exitChunks[0].data.exitCode).toBe(-1);
       expect(exitChunks[0].data.success).toBe(false);
+      // -1 is no real exit code, so the exit says why the command never finished.
+      expect(exitChunks[0].data.error).toBe('sandbox disconnected');
       expect(exitChunks[0].data.executionTimeMs).toBeGreaterThanOrEqual(0);
       expect(exitChunks[0].data.executionTimeMs).toBeLessThanOrEqual(after - before + 10);
     });
@@ -299,7 +307,7 @@ describe('executeCommandTool data chunks', () => {
       const result = await execute({ command: 'node', args: ['slow.js'], timeout: null, cwd: null }, context);
 
       expect(result).toBe(
-        'stdout:\nLog #1\nLog #2\n\nstderr:\nwarning: cleanup incomplete\n\nError: Process timed out after 4000ms',
+        'stdout:\nLog #1\nLog #2\n\nstderr:\nwarning: cleanup incomplete\n\nError: Process timed out after 4000ms\nExit code: -1',
       );
     });
 
@@ -312,7 +320,7 @@ describe('executeCommandTool data chunks', () => {
 
       const result = await execute({ command: 'nonexistent', args: [], timeout: null, cwd: null }, context);
 
-      expect(result).toBe('Error: Command not found');
+      expect(result).toBe('Error: Command not found\nExit code: -1');
     });
 
     it('returns accumulated stderr + error when only stderr before throw', async () => {
@@ -325,7 +333,7 @@ describe('executeCommandTool data chunks', () => {
 
       const result = await execute({ command: 'test', args: [], timeout: null, cwd: null }, context);
 
-      expect(result).toBe('stderr:\nwarning: something bad\n\nError: killed');
+      expect(result).toBe('stderr:\nwarning: something bad\n\nError: killed\nExit code: -1');
     });
 
     it('returns "(no output)" for successful command with empty stdout', async () => {
@@ -458,7 +466,7 @@ describe('executeCommandTool data chunks', () => {
 
       const result = await execute({ command: 'flood', args: [], timeout: null, cwd: null, tail: 0 }, context);
 
-      expect(result.endsWith('Error: boom')).toBe(true);
+      expect(result.endsWith('Error: boom\nExit code: -1')).toBe(true);
       // 1 MiB cap per stream, so the 16 MiB streamed stays far out of the result.
       expect(result.length).toBeLessThan(4 * 1024 * 1024);
       expect(result).toContain('[stdout: the first ');
@@ -475,7 +483,7 @@ describe('executeCommandTool data chunks', () => {
 
       const result = await execute({ command: 'fail', args: [], timeout: null, cwd: null }, context);
 
-      expect(result).toBe('before error\n\nError: boom');
+      expect(result).toBe('before error\n\nError: boom\nExit code: -1');
 
       // Streamed stdout is the partial output
       const stdoutChunks = getChunks(writerCustom, 'data-sandbox-stdout');
@@ -644,7 +652,7 @@ describe('executeCommandTool data chunks', () => {
 
       const result = await execute({ command: 'echo started; sleep 10', timeout: null, cwd: null }, context);
 
-      expect(result).toBe(`started\n\n${cancelledNote}\nError: process terminated`);
+      expect(result).toBe(`started\n\n${cancelledNote}\nError: process terminated\nExit code: -1`);
     });
 
     it('preserves provider uncertainty when observation is aborted but remote work may continue', async () => {
@@ -656,7 +664,9 @@ describe('executeCommandTool data chunks', () => {
       const result = await execute({ command: 'deploy', timeout: null, cwd: null }, context);
 
       expect(result).not.toMatch(/so it was killed/);
-      expect(result).toBe(`partial\n\n${cancelledNote}\nError: Observation aborted. Remote work may still be running.`);
+      expect(result).toBe(
+        `partial\n\n${cancelledNote}\nError: Observation aborted. Remote work may still be running.\nExit code: -1`,
+      );
     });
 
     function abortOnExitChunk(writerCustom: ReturnType<typeof vi.fn>, controller: AbortController) {
@@ -698,49 +708,87 @@ describe('executeCommandTool data chunks', () => {
       const result = await execute({ command: 'pnpm test', timeout: null, cwd: null }, context);
 
       expect(controller.signal.aborted).toBe(true);
-      expect(result).toBe('Error: connection reset');
+      expect(result).toBe('Error: connection reset\nExit code: -1');
     });
   });
 
-  describe('tail pipe extraction', () => {
-    it('strips | tail -N from command and applies tail to result', async () => {
-      let receivedCommand = '';
-      const lines = Array.from({ length: 50 }, (_, i) => `line ${i + 1}`).join('\n') + '\n';
+  // Real child processes: bound each command and test so a stuck process fails fast
+  // instead of waiting out the suite's 120s test timeout.
+  describe.skipIf(process.platform === 'win32')('shell pipelines', { timeout: 20_000 }, () => {
+    const resources: { sandbox: LocalSandbox; directory: string }[] = [];
 
-      const { context } = createMockContext({
-        executeCommand: async (cmd, _args, opts) => {
-          receivedCommand = cmd;
-          opts?.onStdout?.(lines);
-          return { success: true, exitCode: 0, stdout: lines, stderr: '', executionTimeMs: 10 };
-        },
-      });
-
-      const result = await execute(
-        { command: 'cat big.log | tail -10', timeout: null, cwd: null, tail: null },
-        context,
-      );
-
-      // Command sent to sandbox should NOT have | tail -10
-      expect(receivedCommand).toBe('cat big.log');
-      // Result should be truncated to last 10 lines
-      expect(result).toContain('[showing last 10 of 50 lines]');
-      expect(result).toContain('line 50');
-      expect(result).not.toContain('line 1\n');
+    afterEach(async () => {
+      for (const { sandbox, directory } of resources.splice(0)) {
+        await sandbox.destroy();
+        await rm(directory, { recursive: true, force: true });
+      }
     });
 
-    it('strips | tail -n N from command', async () => {
-      let receivedCommand = '';
-
-      const { context } = createMockContext({
-        executeCommand: async cmd => {
-          receivedCommand = cmd;
-          return { success: true, exitCode: 0, stdout: 'ok\n', stderr: '', executionTimeMs: 1 };
+    async function runCommand(command: string, tail = 0) {
+      const directory = await mkdtemp(join(tmpdir(), 'mastra-command-'));
+      const sandbox = new LocalSandbox({ workingDirectory: directory, isolation: 'none' });
+      resources.push({ sandbox, directory });
+      const chunks: { type: string; data: any }[] = [];
+      const result = await execute(
+        { command, tail, timeout: 10 },
+        {
+          workspace: new Workspace({ sandbox }),
+          writer: {
+            custom: async (chunk: any) => {
+              chunks.push(chunk);
+            },
+          } as ToolExecutionContext['writer'],
         },
+      );
+      return {
+        result,
+        chunks,
+        stdout: chunks
+          .filter(chunk => chunk.type === 'data-sandbox-stdout')
+          .map(chunk => chunk.data.output)
+          .join(''),
+      };
+    }
+
+    it.each(['tail -10', 'tail -n 10'])('streams only the output of the actual %s pipeline', async tailCommand => {
+      const { result, stdout } = await runCommand(`seq 1 50 | ${tailCommand}`);
+      const expected = Array.from({ length: 10 }, (_, i) => `${i + 41}\n`).join('');
+      expect(stdout).toBe(expected);
+      expect(result).toBe(expected);
+    });
+
+    it('reports an upstream failure in a pipeline ending in tail', async () => {
+      const { result, stdout, chunks } = await runCommand(`sh -c 'printf "kept\\n"; exit 7' | tail -20`);
+      expect(stdout).toBe('kept\n');
+      expect(result).toContain('kept');
+      expect(result).toContain('Exit code: 7');
+      expect(chunks.find(chunk => chunk.type === 'data-sandbox-exit')?.data).toMatchObject({
+        exitCode: 7,
+        success: false,
       });
+    });
 
-      await execute({ command: 'npm test | tail -n 20', timeout: null, cwd: null, tail: null }, context);
+    it('keeps shell exit status for pipelines that do not end in tail', async () => {
+      const { result, chunks } = await runCommand(`sh -c 'printf "kept\\n"; exit 7' | cat`);
+      expect(result).toBe('kept\n');
+      expect(chunks.find(chunk => chunk.type === 'data-sandbox-exit')?.data).toMatchObject({
+        exitCode: 0,
+        success: true,
+      });
+    });
 
-      expect(receivedCommand).toBe('npm test');
+    it('preserves quoted pipe characters in a command', async () => {
+      const { result, stdout } = await runCommand(`printf '%s\\n' 'quoted | text' 'last | value' | tail -n 1`);
+      expect(result).toBe('last | value\n');
+      expect(stdout).toBe('last | value\n');
+    });
+
+    it('applies the schema tail to model output after the shell pipeline', async () => {
+      const { result, stdout } = await runCommand('seq 1 10 | tail -5', 2);
+      expect(stdout).toBe('6\n7\n8\n9\n10\n');
+      expect(result).toContain('[showing last 2 of 5 lines]');
+      expect(result).toContain('9\n10\n');
+      expect(result).not.toContain('8\n');
     });
 
     it('does not strip tail pipe for background commands', async () => {
@@ -1226,5 +1274,159 @@ describe('executeCommandTool browser CLI logic', () => {
       expect(executedCommands).toHaveLength(1);
       expect(executedCommands[0]).toContain('open');
     });
+  });
+});
+
+/**
+ * A filesystem stub that reports the sandbox directory shell commands should default to,
+ * like a sandbox-backed filesystem whose paths all resolve against one root.
+ */
+function createMockFilesystem(getCommandCwd?: () => Promise<string | undefined>): WorkspaceFilesystem {
+  return {
+    id: 'test-filesystem',
+    name: 'test-filesystem',
+    provider: 'test',
+    ...(getCommandCwd ? { getCommandCwd } : {}),
+  } as unknown as WorkspaceFilesystem;
+}
+
+function commandResult(): CommandResult {
+  return { success: true, exitCode: 0, stdout: '', stderr: '', executionTimeMs: 1 };
+}
+
+describe('executeCommandTool default cwd', () => {
+  it.each([
+    ['defaults cwd to the workspace filesystem root when the model omits one', null, '/srv/session/repo'],
+    ['keeps an explicit absolute cwd', '/tmp/elsewhere', '/tmp/elsewhere'],
+    ['resolves a relative cwd under the workspace filesystem root', 'src', '/srv/session/repo/src'],
+  ] as const)('%s', async (_title, cwd, expected) => {
+    let received: ExecuteCommandOptions | undefined;
+    const sandbox = {
+      id: 'test-sandbox',
+      name: 'test-sandbox',
+      provider: 'test',
+      status: 'running' as const,
+      executeCommand: async (_command: string, _args: string[], opts?: ExecuteCommandOptions) => {
+        received = opts;
+        return commandResult();
+      },
+    };
+    const workspace = new Workspace({
+      sandbox: sandbox as any,
+      filesystem: createMockFilesystem(async () => '/srv/session/repo'),
+    });
+    const context: ToolExecutionContext = { workspace, writer: { custom: vi.fn() } as any };
+
+    await execute({ command: 'ls', timeout: null, cwd, tail: null }, context);
+
+    expect(received?.cwd).toBe(expected);
+  });
+
+  it('defaults cwd for background commands too', async () => {
+    let received: any;
+    const spawn = async (_command: string, options: any) => {
+      received = options;
+      return { pid: 123 };
+    };
+    const sandbox = {
+      id: 'test-sandbox',
+      name: 'test-sandbox',
+      provider: 'test',
+      status: 'running' as const,
+      executeCommand: async () => commandResult(),
+      processes: { spawn },
+    };
+    const workspace = new Workspace({
+      sandbox: sandbox as any,
+      filesystem: createMockFilesystem(async () => '/srv/session/repo'),
+    });
+    const context: ToolExecutionContext = { workspace, writer: { custom: vi.fn() } as any };
+
+    const { executeCommandWithBackgroundTool } = await import('../execute-command');
+    await executeCommandWithBackgroundTool.execute!(
+      { command: 'npm start', timeout: null, cwd: null, tail: null, background: true },
+      context,
+    );
+
+    expect(received?.cwd).toBe('/srv/session/repo');
+  });
+
+  it('passes no cwd when the filesystem reports no command root', async () => {
+    let received: ExecuteCommandOptions | undefined;
+    const sandbox = {
+      id: 'test-sandbox',
+      name: 'test-sandbox',
+      provider: 'test',
+      status: 'running' as const,
+      executeCommand: async (_command: string, _args: string[], opts?: ExecuteCommandOptions) => {
+        received = opts;
+        return commandResult();
+      },
+    };
+    const workspace = new Workspace({
+      sandbox: sandbox as any,
+      filesystem: createMockFilesystem(),
+    });
+    const context: ToolExecutionContext = { workspace, writer: { custom: vi.fn() } as any };
+
+    await execute({ command: 'ls', timeout: null, cwd: null, tail: null }, context);
+
+    expect(received?.cwd).toBeUndefined();
+  });
+
+  it('ignores a command root that is not an absolute sandbox path', async () => {
+    let received: ExecuteCommandOptions | undefined;
+    const sandbox = {
+      id: 'test-sandbox',
+      name: 'test-sandbox',
+      provider: 'test',
+      status: 'running' as const,
+      executeCommand: async (_command: string, _args: string[], opts?: ExecuteCommandOptions) => {
+        received = opts;
+        return commandResult();
+      },
+    };
+    const workspace = new Workspace({
+      sandbox: sandbox as any,
+      filesystem: createMockFilesystem(async () => 'relative/dir'),
+    });
+    const context: ToolExecutionContext = { workspace, writer: { custom: vi.fn() } as any };
+
+    await execute({ command: 'ls', timeout: null, cwd: null, tail: null }, context);
+
+    expect(received?.cwd).toBeUndefined();
+  });
+
+  it('does not resolve a dynamic filesystem just to learn the command cwd', async () => {
+    let received: ExecuteCommandOptions | undefined;
+    let resolutions = 0;
+    const workspace = new Workspace({
+      sandbox: {
+        id: 'test-sandbox',
+        name: 'test-sandbox',
+        provider: 'test',
+        status: 'running' as const,
+        executeCommand: async (_command: string, _args: string[], opts?: ExecuteCommandOptions) => {
+          received = opts;
+          return commandResult();
+        },
+      } as any,
+      // A sandbox-only tool call must not pay for the filesystem resolver, so the default
+      // cwd comes from a configured filesystem only — never from a dynamic one.
+      filesystem: () => {
+        resolutions++;
+        return createMockFilesystem(async () => '/srv/session/repo');
+      },
+    });
+    const context: ToolExecutionContext = {
+      workspace,
+      writer: { custom: vi.fn() } as any,
+      requestContext: new RequestContext(),
+    };
+
+    await execute({ command: 'ls', timeout: null, cwd: null, tail: null }, context);
+
+    expect(resolutions).toBe(0);
+    expect(received?.cwd).toBeUndefined();
   });
 });

@@ -37,7 +37,7 @@ Comma-separated list of custom arguments to pass to the Node.js process, e.g. `-
 
 #### `--request-context-presets`
 
-Path to a JSON file containing [request context](/docs/server/request-context) presets. When provided, a dropdown displays in Studio's request context editor, letting you quickly switch between preset configurations.
+Path to a JSON file containing [request context](/docs/server/request-context) presets. When provided, a dropdown displays in Studio's request context editor, letting you switch between preset configurations.
 
 ```bash
 mastra dev --request-context-presets ./presets.json
@@ -121,7 +121,7 @@ Use `mastra factory dev` when developing Agent Builder features. It accepts the 
 
 ## `mastra build`
 
-The `mastra build` command bundles your Mastra project into a production-ready Hono server. [Hono](https://hono.dev/) is a lightweight, type-safe web framework that makes it straightforward to deploy Mastra agents as HTTP endpoints with middleware support.
+The `mastra build` command bundles your Mastra project into a production-ready Hono server. [Hono](https://hono.dev/) is a lightweight, type-safe web framework that lets you deploy Mastra agents as HTTP endpoints with middleware support.
 
 Under the hood Mastra's Rollup server locates your Mastra entry file and bundles it to a production-ready Hono server. During that bundling it tree-shakes your code and generates source maps for debugging.
 
@@ -500,7 +500,7 @@ mastra env restart <env>
 
 ### `mastra env vars pull`
 
-Pulls an environment's env vars into a local env file (default: `.env`). The file contains the set a deploy of that environment runs with: the vars stored on the environment itself (for example, added in the dashboard's environment editor). Each environment is pulled on its own, and values stored on another environment are never merged in. Projects still on the [legacy pipeline](/docs/mastra-platform/deploy#migrating-from-server-and-studio-deploys) run from project-level vars instead, so pulling any of their environments returns those shared project-level values. Managed vars injected by attached databases are listed as comments (names only) since their values are platform-managed secrets.
+Pulls an environment's env vars into a local env file (default: `.env`). The file contains the set a deploy of that environment runs with: the vars stored on the environment itself (for example, added in the dashboard's environment editor). Each environment is pulled on its own, and values stored on another environment are never merged in. Projects still on the [legacy pipeline](/docs/mastra-platform/deploy/overview#migrating-from-server-and-studio-deploys) run from project-level vars instead, so pulling any of their environments returns those shared project-level values. Managed vars injected by attached databases, and [secrets](/docs/mastra-platform/deploy/environments#secrets-and-config) on environments where secrets are write-only, are listed as comments (names only) because their values can't be read back. Config values are written in full.
 
 ```bash
 mastra env vars pull
@@ -516,6 +516,28 @@ File to write. Defaults to `.env`.
 #### `-f, --force`
 
 Replace an existing output file.
+
+### `mastra env vars set`
+
+Sets env vars on an environment and chooses whether they're stored as a [secret or config](/docs/mastra-platform/deploy/environments#secrets-and-config), leaving variables you don't name at their stored values. New values apply on the next deploy or `mastra env restart`.
+
+```bash
+mastra env vars set <env> API_KEY=sk-123 --secret
+mastra env vars set <env> LOG_LEVEL=debug FEATURE_X=on --config
+mastra env vars set <env> DATABASE_URL --secret
+```
+
+Pass variables as `KEY=VALUE`. To change only how an existing variable is stored, pass its name without a value along with `--secret` or `--config`. The flag applies to every variable in the command, so set secrets and config values with separate commands.
+
+`<env>` can be an environment name, slug, or ID, and can be omitted when the project has exactly one environment. Values passed on the command line can end up in your shell history.
+
+#### `--secret`
+
+Store every variable in the command as a secret, which is write-only and delivered at boot.
+
+#### `--config`
+
+Store every variable in the command as config, which stays readable and is stored on the hosting provider. Converting an existing secret into config requires passing its value in the same command, because the platform can't read the stored secret back.
 
 ### `mastra env db`
 
@@ -897,6 +919,8 @@ Manages authentication for Mastra platform. Credentials are stored in `~/.mastra
 
 Opens a browser for login and stores the credentials locally.
 
+When browser sign-in is needed and there's no interactive terminal (in CI, when input or output is piped, or in an agent's shell), the command first prints how to authenticate headless shells, then still waits for browser sign-in. On the same machine, you can run `mastra auth login` once in your own terminal so later commands reuse the saved session. In CI or on another machine, set `MASTRA_API_TOKEN` and `MASTRA_ORG_ID` instead. Create the token from a signed-in terminal with [`mastra auth tokens create`](#mastra-auth-tokens-create) or in the dashboard. If the browser sign-in wait times out, the command exits with status 1. If `MASTRA_API_TOKEN` is already set in a non-interactive shell, the command skips browser sign-in: it verifies the token and checks that an organization is selected (from `MASTRA_ORG_ID` or saved credentials), then exits with status 0. If either check fails, it exits with status 1 and names what's missing.
+
 ### `mastra auth logout`
 
 Removes stored credentials. If `MASTRA_API_TOKEN` is still set in the environment, the CLI warns that it will continue to be used.
@@ -923,6 +947,14 @@ Creates a new API token. The secret is displayed once and can't be retrieved aga
 
 ```bash
 mastra auth tokens create <name>
+```
+
+Use `--permission` to grant the token extra access. The available permission is `databases:write`, which lets the token create and delete managed databases, for example from CI. Only organization admins can create tokens with permissions. Repeat the flag to grant more than one.
+
+If the platform creates the token without a requested permission, the command revokes that token and exits with an error. If the revoke also fails, the error shows the `mastra auth tokens revoke` command to run.
+
+```bash
+mastra auth tokens create ci --permission databases:write
 ```
 
 #### `mastra auth tokens revoke`
@@ -955,7 +987,7 @@ Connects a provider to the project. When the organization already has connection
 
 OAuth providers open the provider's consent screen in your browser and print its URL if you need to open it manually. API key and Basic auth providers prompt for credentials in the terminal and verify them before completing the connection. Providers with other auth types open a hosted connect page. The command waits until the connection becomes active before exiting.
 
-Credential prompts require an interactive terminal, even with `--yes`. Run the command outside CI or connect through the platform UI. See [provider setup](/docs/mastra-platform/connect/providers) for API keys and required permissions.
+Credential prompts require an interactive terminal, even with `--yes`. Run the command outside CI or connect through the platform UI. Each provider's [integration page](/docs/mastra-platform/connect#providers) lists its API key and permission requirements.
 
 Once a new connection is active, the command offers to set a display name so you can tell connections to the same provider apart. It lists the provider's existing connections, suggests a name that doesn't collide with them, and asks for confirmation if the chosen name duplicates another connection's name. Leave the field blank to skip naming. Setting a display name requires the organization admin role; if naming fails, the connection remains active.
 
@@ -1149,7 +1181,7 @@ The following provider is currently supported:
 | - | - | - |
 | Langfuse | `langfuse` | Langfuse Cloud or self-hosted Langfuse v4 or later |
 
-See [Import existing traces](/docs/mastra-platform/observability#import-existing-traces) for the complete workflow, data mapping, local-file lifecycle, and limits.
+See [Import existing traces](/docs/mastra-platform/observability/import-traces) for the complete workflow, data mapping, local-file lifecycle, and limits.
 
 ### Options
 
@@ -1257,6 +1289,13 @@ Errors are written to `stderr` as JSON and return a non-zero exit code:
   }
 }
 ```
+
+The exit code reflects whether the request succeeded, not the contents of the response:
+
+- `0`: The server returned a successful response. This includes empty results and payloads that report existing state, such as a tool result saying a record already exists. A tool that returns an object with an `error` field still exits `0`, so check the `data` payload when the tool reports its own failures.
+- `1`: The request failed. This includes an unreachable server, invalid JSON input, a missing resource, or a tool that throws an error.
+
+If the command reading the output exits early, as with `| head`, the exit code still reflects whether the request succeeded.
 
 ### Target resolution
 
@@ -1695,7 +1734,7 @@ Omitting `after` establishes a cursor and returns no historical traces. Changing
 
 #### `mastra api trace aggregate`
 
-Groups the traces selected by a time range and optional `where` predicate, and returns one row of measures per group. The inline JSON input is required and accepts the same predicates as `trace query`. Like other observability commands, it targets `https://observability.mastra.ai` by default.
+Groups the traces selected by a time range and optional `where` predicate, and returns one row of measures per group, or per group and non-empty time bucket when `interval` is set. The inline JSON input is required and accepts the same predicates as `trace query`. Like other observability commands, it targets `https://observability.mastra.ai` by default.
 
 ```bash
 mastra api trace aggregate <input>
@@ -1730,7 +1769,7 @@ Servers whose observability store doesn't support trace aggregation return `501`
 
 #### `mastra api span query`
 
-Queries completed observability spans across traces, including agent runs and tool calls nested inside other traces. The inline JSON input is required and uses the same request as [`querySpans()`](/reference/client-js/observability#querying-spans). Its `where` predicate filters span fields directly. Like other observability commands, it targets `https://observability.mastra.ai` by default.
+Queries completed observability spans across traces, including agent runs and tool calls nested inside other traces. The inline JSON input is required and uses the same request as [`querySpans()`](/reference/observability/tracing/advanced-queries#query-spans). Its `where` predicate filters span fields directly. Like other observability commands, it targets `https://observability.mastra.ai` by default.
 
 ```bash
 mastra api span query <input>
@@ -1743,7 +1782,7 @@ Servers whose observability store doesn't support span queries return `501`. Fil
 
 #### `mastra api span aggregate`
 
-Groups the spans selected by a time range and optional `where` predicate, and returns one row of measures per group. It accepts the same measures, `interval`, `having`, `orderBy`, and `limit` as `trace aggregate`, but groups by span fields such as `spanType`, `entityName`, `status`, and `rootEntityName`.
+Groups the spans selected by a time range and optional `where` predicate, and returns one row of measures per group, or per group and non-empty time bucket when `interval` is set. It accepts the same fixed measures, `interval`, `having`, `orderBy`, and `limit` as `trace aggregate`. Its `where` filters spans directly, and its dimensions and `countDistinct` fields follow the span contract. It groups by span fields such as `spanType`, `entityName`, `status`, and `rootEntityName`.
 
 ```bash
 mastra api span aggregate <input>
@@ -1863,26 +1902,94 @@ curl -sS "https://observability.mastra.ai/api/observability/traces/<trace-id>/sp
 
 #### `mastra api score create`
 
-Creates an observability score. The input uses the server score body shape. Inspect it with `--schema`.
+Creates a score for a trace. Wrap the record in `score` with a required `traceId` and an optional `spanId`. The CLI generates an ID and timestamp when omitted and preserves them across retries. Pass `--schema` to inspect the request fields.
 
 ```bash
-mastra api score create <input>
+mastra api score create '{"score":{"traceId":"trace_123","scorerId":"quality","score":0.95}}'
 ```
+
+Score and feedback creates accept an optional top-level `contextMode`. Use `"resolve"` to look up context from a stored trace or span, or `"provided"` to write the fields you supply without a lookup. When you omit `contextMode`, OSS uses `provided` and Platform uses `resolve`, regardless of any context fields you supply.
+
+Successful writes on Platform mean the record is accepted for storage and may not be readable immediately. Output preserves the server's success response and any returned ID and timestamp. Older servers may return only `success`.
 
 #### `mastra api score list`
 
-Lists observability scores. Pass optional JSON input for filters such as run ID or pagination.
+Lists scores with optional filters and pagination.
 
 ```bash
-mastra api score list [input]
+mastra api score list '{"traceId":"trace_123","page":0,"perPage":50}'
 ```
 
 #### `mastra api score get`
 
-Gets one observability score by ID.
+Gets a score by ID. Missing scores return `{"data":{"score":null}}`.
 
 ```bash
-mastra api score get <scoreId>
+mastra api score get score_123
+```
+
+#### `mastra api feedback create`
+
+Creates feedback for a trace or span. Wrap the record in `feedback`. Feedback requires `traceId`, with IDs and timestamps generated when omitted.
+
+```bash
+mastra api feedback create '{"contextMode":"resolve","feedback":{"traceId":"trace_123","feedbackType":"comment","feedbackSource":"user","value":"actionable","feedbackUserId":"reviewer_123"}}'
+```
+
+`feedbackUserId` identifies the feedback author. `userId` describes the trace or span context and is separate from the author.
+
+#### `mastra api feedback list`
+
+Lists feedback with optional filters and pagination.
+
+```bash
+mastra api feedback list '{"traceId":"trace_123","reviewStatus":"needs-review","page":0,"perPage":50}'
+```
+
+#### `mastra api feedback get`
+
+Gets feedback by ID. Missing feedback returns `{"data":{"feedback":null}}`.
+
+```bash
+mastra api feedback get feedback_123
+```
+
+#### `mastra api feedback replace`
+
+Replaces the full feedback record. Send the original `feedbackId`, `traceId`, and `timestamp`, along with the complete replacement. Copy the timestamp from the create response or a subsequent read. The ID in the argument must match the body. Scores don't support replacement.
+
+```bash
+mastra api feedback replace feedback_123 '{"feedback":{"feedbackId":"feedback_123","traceId":"trace_123","timestamp":"2026-11-11T10:00:00.123Z","feedbackType":"comment","feedbackSource":"user","value":"corrected"}}'
+```
+
+Creates and replacements retry missing trace/span responses and transient failures within the command timeout, for at most six attempts or 30 seconds. Each accepted replacement retry counts as a new replacement. Older servers without PUT support return an error.
+
+#### `mastra api feedback review-status`
+
+Changes only the review status to `needs-review` or `reviewed`. No timestamp is required. Missing feedback returns an error, including records still waiting to be stored on Platform.
+
+```bash
+mastra api feedback review-status feedback_123 '{"reviewStatus":"reviewed"}'
+```
+
+#### Score and feedback analytics
+
+Both command groups expose `aggregate`, `breakdown`, `timeseries`, and `percentiles` for numeric values. Select scores by `scorerId` and feedback by `feedbackType`. Use `--schema` on an operation to inspect its filters and options.
+
+```bash
+mastra api score aggregate '{"scorerId":"quality","aggregation":"avg"}'
+mastra api score breakdown '{"scorerId":"quality","aggregation":"avg","groupBy":["entityName"]}'
+mastra api feedback timeseries '{"feedbackType":"rating","aggregation":"avg","interval":"1d"}'
+mastra api feedback percentiles '{"feedbackType":"rating","percentiles":[0.5,0.95],"interval":"1d"}'
+```
+
+#### Score and feedback deletion
+
+Deletes records by ID. Platform returns `accepted: true` when cleanup is queued. OSS returns `success` after deletion.
+
+```bash
+mastra api score delete '{"scoreIds":["score_123"]}'
+mastra api feedback delete '{"feedbackIds":["feedback_123"]}'
 ```
 
 #### `mastra api dataset list`

@@ -1,11 +1,9 @@
 import { createContext } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
-import type { OutgoingFile } from '../services/transcript';
+import type { PendingImage } from '@mastra/playground-ui/domains/chat/transcript';
 
-export interface PendingImage extends OutgoingFile {
-  id: string;
-}
+export type { PendingImage };
 
 export interface ComposerImagesApi {
   images: PendingImage[];

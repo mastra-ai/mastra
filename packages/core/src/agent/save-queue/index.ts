@@ -165,6 +165,8 @@ export class SaveQueueManager {
         saved = await this.memory.saveMessages({
           messages: newMessages,
           memoryConfig,
+          // The SemanticRecall output processor may have embedded these already in this run.
+          embeddedMessages: messageList.getEmbeddedMessages(),
         });
       } catch (error) {
         // Nothing else writes drained messages, so a later save must retry them.
@@ -199,9 +201,8 @@ export class SaveQueueManager {
 
     if (earliest && now - earliest > SaveQueueManager.MAX_STALENESS_MS) {
       return this.flushMessages(messageList, threadId, memoryConfig);
-    } else {
-      return this.debounceSave(threadId, messageList, memoryConfig);
     }
+    return this.debounceSave(threadId, messageList, memoryConfig);
   }
 
   /**

@@ -1,0 +1,85 @@
+---
+title: "Access tokens | Mastra platform"
+description: "Create, use, and revoke Mastra platform access tokens for the CLI, CI/CD pipelines, and apps that call platform services."
+---
+
+# Access tokens
+
+An access token lets a script, CI pipeline, or app act on your Mastra platform organization without an interactive login. The dashboard calls them API keys. Use access tokens to:
+
+- Run `mastra deploy` and other CLI commands in CI. See [CI/CD](/docs/mastra-platform/deploy/server#cicd).
+- Authenticate apps that use [Connect](/docs/mastra-platform/connect) or `@mastra/platform` outside a platform deploy, such as on your local machine.
+
+A token belongs to one organization. It's tied to the member who created it and stops working if that member leaves the organization. Admins and members can create tokens. Viewers can't.
+
+## Create an access token
+
+You can create a token in the dashboard or with the CLI. Either way, the token is shown once. Copy it before you close the dialog or terminal, because you can't see it again.
+
+### In the dashboard
+
+1. Open your organization's settings in the [Mastra platform](https://projects.mastra.ai) and select **API Keys**.
+1. Select **Create API key**.
+1. Enter a name that identifies where you'll use the token, such as `CI Deploy`.
+1. Select **Create**, then copy the token.
+
+### With the CLI
+
+Log in, then create a token for the current organization:
+
+```bash
+mastra auth login
+mastra auth tokens create ci-deploy
+```
+
+The CLI uses the organization set by `mastra auth orgs switch`, or `MASTRA_ORG_ID` when it's set.
+
+## Use an access token
+
+Different tools read the token from different environment variables:
+
+| Variable | Read by |
+| - | - |
+| `MASTRA_API_TOKEN` | The `mastra` CLI. When it's set, commands such as `mastra deploy` run without an interactive login. |
+| `MASTRA_PLATFORM_ACCESS_TOKEN` | `@mastra/platform` and `@mastra/connect`. |
+
+For example, to deploy from CI to the `production` environment:
+
+```bash
+MASTRA_API_TOKEN=your-token \
+MASTRA_ORG_ID=your-org-id \
+MASTRA_PROJECT_ID=your-project-id \
+mastra deploy --yes
+```
+
+`MASTRA_PROJECT_ID` selects the project, not the environment. Without `--env`, `mastra deploy` deploys to `production`. To deploy to another environment, add `--env`, for example `mastra deploy --env staging --yes`.
+
+Store tokens as secrets in your CI provider or hosting platform. Don't commit them to your repository.
+
+## List and revoke tokens
+
+The **API Keys** page lists your organization's tokens with their names, creation dates, and last-used dates. To list them from the terminal, run:
+
+```bash
+mastra auth tokens
+```
+
+To revoke a token, select its remove icon on the **API Keys** page, then select **Revoke**, or run:
+
+```bash
+mastra auth tokens revoke <token-id>
+```
+
+A revoked token stops working immediately, and you can't restore it. Any CLI sessions, CI pipelines, or telemetry ingestion that use it lose access. To replace a token without downtime:
+
+1. Create a new token.
+1. Update every place that uses the old token, such as CI secrets and environment variables.
+1. Redeploy or [restart](/docs/mastra-platform/deploy/environments#environment-variables) affected environments. Running deploys keep the old value until they restart.
+1. Confirm that each service works with the new token.
+1. Revoke the old token.
+
+## Related
+
+- [Team members](/docs/mastra-platform/team-members)
+- [Deploy a server](/docs/mastra-platform/deploy/server)
+- [System environment variables](/docs/mastra-platform/system-environment-variables)

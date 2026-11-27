@@ -9,6 +9,7 @@ import {
   InputNumberInput,
 } from '@mastra/playground-ui/components/InputNumber';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode } from 'react';
@@ -21,7 +22,6 @@ import {
   useUpdateOMThresholds,
 } from '../../../../hooks/use-om';
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { ModelCombobox } from './ModelCombobox';
 
 type AttachmentChoice = 'auto' | 'on' | 'off';
@@ -99,20 +99,52 @@ function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (va
   );
 }
 
+function OMSkeleton() {
+  const field = <Skeleton className="h-control-sm w-full rounded-full motion-reduce:before:animate-none" />;
+  return (
+    <div role="status" aria-label="Loading observational-memory settings" className="@container flex flex-col gap-3">
+      <ol aria-hidden className="flex flex-col">
+        <OMRow as="li" rail="node" label="Messages" />
+        <OMRow as="li" rail="edge" label="Observe after" controlNamesItself>
+          {field}
+        </OMRow>
+        <OMRow as="li" rail="node" label="Observer" controlNamesItself>
+          {field}
+        </OMRow>
+        <OMRow as="li" rail="edge" label="Reflect after" controlNamesItself>
+          {field}
+        </OMRow>
+        <OMRow as="li" rail="node" label="Reflector" controlNamesItself>
+          {field}
+        </OMRow>
+      </ol>
+      <div aria-hidden>
+        <OMRow rail="none" label="Attachments" controlNamesItself>
+          <Skeleton className="h-control-sm w-36 rounded-full motion-reduce:before:animate-none" />
+        </OMRow>
+      </div>
+    </div>
+  );
+}
+
 export function OMSection({
   sessionId,
   factoryId,
+  threadId,
+  resourceId,
   models,
 }: {
   sessionId?: string;
   factoryId?: string;
+  threadId?: string;
+  resourceId?: string;
   models: AvailableModelOption[];
 }) {
-  const omQuery = useOMQuery(sessionId, factoryId);
-  const observerMutation = useUpdateOMModel(sessionId, 'observer', factoryId);
-  const reflectorMutation = useUpdateOMModel(sessionId, 'reflector', factoryId);
-  const thresholdsMutation = useUpdateOMThresholds(sessionId, factoryId);
-  const attachmentsMutation = useUpdateOMObserveAttachments(sessionId, factoryId);
+  const omQuery = useOMQuery(sessionId, factoryId, threadId, resourceId);
+  const observerMutation = useUpdateOMModel(sessionId, 'observer', factoryId, threadId, resourceId);
+  const reflectorMutation = useUpdateOMModel(sessionId, 'reflector', factoryId, threadId, resourceId);
+  const thresholdsMutation = useUpdateOMThresholds(sessionId, factoryId, threadId, resourceId);
+  const attachmentsMutation = useUpdateOMObserveAttachments(sessionId, factoryId, threadId, resourceId);
 
   const busy =
     observerMutation.isPending ||
@@ -133,9 +165,7 @@ export function OMSection({
     mutation.mutate({ modelId });
   };
 
-  if (omQuery.isPending) {
-    return <SkeletonRows label="Loading observational-memory settings" rows={2} rowClassName="h-14 w-full" />;
-  }
+  if (omQuery.isPending) return <OMSkeleton />;
 
   if (omQuery.data === undefined) {
     return (
@@ -183,7 +213,7 @@ export function OMSection({
               models={models}
               value={config.observer.model}
               auto={{ effectiveModelId: config.observer.effectiveModelId }}
-              placeholder="Select observer model…"
+              placeholder="Select observer model"
               aria-label="Observer model"
               size="sm"
               disabled={busy}
@@ -206,7 +236,7 @@ export function OMSection({
               models={models}
               value={config.reflector.model}
               auto={{ effectiveModelId: config.reflector.effectiveModelId }}
-              placeholder="Select reflector model…"
+              placeholder="Select reflector model"
               aria-label="Reflector model"
               size="sm"
               disabled={busy}

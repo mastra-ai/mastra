@@ -218,7 +218,7 @@ describe('A2A', () => {
       const { card, publicJwk } = await createSignedAgentCard(baseCard);
       const tamperedSignature = (() => {
         const bytes = base64url.decode(card.signatures?.[0]?.signature ?? '');
-        bytes[0] = bytes[0] ^ 0xff;
+        bytes[0] ^= 0xff;
         return base64url.encode(bytes);
       })();
       const invalidCard: AgentCard = {
@@ -494,6 +494,36 @@ describe('A2A', () => {
         params: { id: 'task-1' },
       });
       expect(response).toMatchObject({ result: { kind: 'task', id: 'task-1' } });
+    });
+
+    it('cancelTask rejects a JSON-RPC error envelope returned with HTTP 200', async () => {
+      server.on('request', (req, res) => {
+        req.resume();
+        req.on('end', () => {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              id: 'cancel-error',
+              error: {
+                code: -32001,
+                message: 'Task not found',
+                data: { taskId: 'missing-task' },
+              },
+            }),
+          );
+        });
+      });
+
+      const a2a = new A2A({ baseUrl: serverUrl }, 'test-agent');
+      const response = a2a.cancelTask({ id: 'missing-task' });
+
+      await expect(response).rejects.toBeInstanceOf(MastraA2AError);
+      await expect(response).rejects.toMatchObject({
+        code: -32001,
+        message: 'Task not found',
+        data: { taskId: 'missing-task' },
+      });
     });
 
     it('getTask returns the full JSON-RPC envelope (backward-compatible contract)', async () => {

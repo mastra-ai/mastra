@@ -27,10 +27,15 @@ describe('NotificationSignalNotice', () => {
       },
     } satisfies SignalData;
 
-    it('renders the source and kind as the title', () => {
+    it.each([
+      ['renders the source and kind as the title', 'github / issue-opened'],
+      ['renders the priority metadata', 'urgent'],
+      ['renders the status metadata', 'delivered'],
+      ['keeps a zero pending count visible', '0 pending'],
+    ] as const)('%s', (_title, input) => {
       render(<NotificationSignalNotice signal={signal} />);
 
-      expect(screen.getByText('github / issue-opened')).not.toBeNull();
+      expect(screen.getByText(input)).not.toBeNull();
     });
 
     it('renders every text content part once opened', () => {
@@ -40,24 +45,6 @@ describe('NotificationSignalNotice', () => {
       expect(
         screen.getByText('Studio crashes when I open a workflow Opening any workflow shows a blank page.'),
       ).not.toBeNull();
-    });
-
-    it('renders the priority metadata', () => {
-      render(<NotificationSignalNotice signal={signal} />);
-
-      expect(screen.getByText('urgent')).not.toBeNull();
-    });
-
-    it('renders the status metadata', () => {
-      render(<NotificationSignalNotice signal={signal} />);
-
-      expect(screen.getByText('delivered')).not.toBeNull();
-    });
-
-    it('keeps a zero pending count visible', () => {
-      render(<NotificationSignalNotice signal={signal} />);
-
-      expect(screen.getByText('0 pending')).not.toBeNull();
     });
   });
 
@@ -74,28 +61,15 @@ describe('NotificationSignalNotice', () => {
       },
     } satisfies SignalData;
 
-    it('uses the attribute title fallback', () => {
+    it.each([
+      ['uses the attribute title fallback', 'slack / mention'],
+      ['uses the attribute priority fallback', 'medium'],
+      ['uses the attribute status fallback', 'seen'],
+      ['uses the attribute pending-count fallback', '3 pending'],
+    ] as const)('%s', (_title, input) => {
       render(<NotificationSignalNotice signal={signal} />);
 
-      expect(screen.getByText('slack / mention')).not.toBeNull();
-    });
-
-    it('uses the attribute priority fallback', () => {
-      render(<NotificationSignalNotice signal={signal} />);
-
-      expect(screen.getByText('medium')).not.toBeNull();
-    });
-
-    it('uses the attribute status fallback', () => {
-      render(<NotificationSignalNotice signal={signal} />);
-
-      expect(screen.getByText('seen')).not.toBeNull();
-    });
-
-    it('uses the attribute pending-count fallback', () => {
-      render(<NotificationSignalNotice signal={signal} />);
-
-      expect(screen.getByText('3 pending')).not.toBeNull();
+      expect(screen.getByText(input)).not.toBeNull();
     });
   });
 
@@ -183,7 +157,7 @@ describe('NotificationSignalNotice', () => {
     it('titles it with the server and event', () => {
       render(<NotificationSignalNotice signal={signal} />);
 
-      expect(screen.getByText('tickets · ticket.created')).not.toBeNull();
+      expect(screen.getByText('tickets: ticket.created')).not.toBeNull();
       expect(screen.queryByText('mcp-events / mcp-event')).toBeNull();
     });
 
@@ -197,7 +171,7 @@ describe('NotificationSignalNotice', () => {
     it('labels the opened body as untrusted', () => {
       render(<NotificationSignalNotice signal={signal} />);
       expect(screen.queryByText('Untrusted event data from the MCP server')).toBeNull();
-      fireEvent.click(screen.getByRole('button', { name: /tickets · ticket\.created/ }));
+      fireEvent.click(screen.getByRole('button', { name: /tickets: ticket\.created/ }));
 
       expect(screen.getByText('Untrusted event data from the MCP server')).not.toBeNull();
       expect(screen.getAllByText('tickets emitted ticket.created')).toHaveLength(2);
@@ -249,7 +223,7 @@ describe('NotificationSignalNotice', () => {
     it('titles it as an ended subscription', () => {
       render(<NotificationSignalNotice signal={signal} />);
 
-      expect(screen.getByText('tickets · ticket.created · subscription ended')).not.toBeNull();
+      expect(screen.getByText('tickets: ticket.created (subscription ended)')).not.toBeNull();
       expect(screen.getByText('high')).not.toBeNull();
     });
   });

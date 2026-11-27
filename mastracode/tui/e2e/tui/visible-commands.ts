@@ -24,7 +24,7 @@ export const visibleCommandsScenario: McE2eScenario = {
     await runtime.waitForScreenText(/\/rename\s+Alias for \/name/i, terminal);
     await runtime.waitForScreenText(/\/api-keys/i, terminal);
     await runtime.waitForScreenText(/Ctrl\+Z|Suspend process/i, terminal);
-    await runtime.waitForScreenTextAbsent(/\/knowledge\s+Browse scoped Subconscious knowledge/i, terminal);
+    await runtime.waitForScreenTextAbsent(/\/knowledge\s+Browse scoped knowledge/i, terminal);
     runtime.printScreen('after /help', terminal);
 
     terminal.submit('/knowledge');
@@ -35,11 +35,11 @@ export const visibleCommandsScenario: McE2eScenario = {
     runtime.printScreen('after /theme status', terminal);
 
     terminal.submit('/theme');
-    await runtime.waitForScreenText(/preview · Enter select · Esc cancel/i, terminal);
+    await runtime.waitForScreenText(/Custom themes:/i, terminal);
     runtime.printScreen('after /theme', terminal);
 
     terminal.write('\x1b');
-    await runtime.waitForScreenTextAbsent(/preview · Enter select · Esc cancel/i, terminal);
+    await runtime.waitForScreenTextAbsent(/Custom themes:/i, terminal);
 
     terminal.submit('/theme neon');
     await runtime.waitForScreenText(/Could not load theme:/i, terminal);

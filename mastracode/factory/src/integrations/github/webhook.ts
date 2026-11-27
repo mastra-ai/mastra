@@ -3,6 +3,7 @@ import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { NotificationPriority } from '@mastra/core/notifications';
 import type { Context } from 'hono';
 import { requestsChangesVerdict } from '../../review-verdict.js';
+import { announcePullRequest } from '../channel-thread-announcements.js';
 import { resolveSubscriptionSession, subscriptionRunContext } from '../subscription-session.js';
 import type { FactorySessionOwner } from '../subscription-session.js';
 import type { GithubAppIdentity } from './app-identity.js';
@@ -482,6 +483,23 @@ async function isAuthorizedGithubSender(
   }
 }
 
+/**
+ * Tell the chat thread that asked for this work that its pull request merged,
+ * which closes the thread out. Best effort: the agent already has the
+ * notification, so a chat failure must not turn it into a redelivery.
+ */
+function announceMerged(
+  dependencies: GithubWebhookDispatchDependencies,
+  subscription: GithubSignalSubscriptionRow,
+  url: string | undefined,
+): void {
+  if (!subscription.threadId) return;
+  const target = url ?? `https://github.com/${subscription.data.repositorySlug}/pull/${subscription.data.changeRequestId}`;
+  void announcePullRequest(dependencies.controller.getChannels?.(), subscription.threadId, 'merged', target).catch(
+    error => console.warn('[GitHub Webhook] merged announcement failed', { subscriptionId: subscription.id, error }),
+  );
+}
+
 export async function dispatchGithubWebhook(
   parsed: ParsedGithubWebhook,
   dependencies: GithubWebhookDispatchDependencies,
@@ -528,9 +546,13 @@ export async function dispatchGithubWebhook(
       continue;
     }
     try {
+      let pendingRunContext: ReturnType<typeof subscriptionRunContext> | undefined;
+      const runContextOnce = () =>
+        (pendingRunContext ??= subscriptionRunContext(subscription, dependencies.github?.sourceControlStorage));
       const session = await resolveSubscriptionSession(dependencies.controller, subscription, {
         label: 'GitHub',
         sourceControl: dependencies.github?.sourceControlStorage,
+        runContext: runContextOnce,
       });
       // No session means this deployment does not hold the subscribed thread.
       // That is not a delivery failure, so it must not be retried or counted as
@@ -542,7 +564,7 @@ export async function dispatchGithubWebhook(
         continue;
       }
       const overrides = managedInlineReviewOverrides(notification, subscription);
-      const runContext = await subscriptionRunContext(subscription, dependencies.github?.sourceControlStorage);
+      const runContext = await runContextOnce();
       // Without a tenant identity the run fails closed on credential resolution
       // after routing has accepted the signal, and a terminal notification would
       // already have retired the subscription. Fail before sending so the target
@@ -579,6 +601,9 @@ export async function dispatchGithubWebhook(
         await retireSubscription(subscription.id, 'open');
       }
       delivered += 1;
+      if (notification.kind === 'pull-request-merged' && isFactoryManagedAuthoringSubscription(subscription)) {
+        announceMerged(dependencies, subscription, notificationTargetUrl(parsed.event, parsed.payload));
+      }
     } catch (error) {
       failed += 1;
       dependencies.onTargetError?.(subscription, error);

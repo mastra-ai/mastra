@@ -265,7 +265,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       for await (const textPart of response.textStream) {
         expect(textPart === previousText).toBe(false);
         previousText = textPart;
-        finalText = finalText + previousText;
+        finalText += previousText;
         expect(textPart).toBeDefined();
       }
 
@@ -2237,21 +2237,20 @@ describe('Agent Tests', () => {
               ],
               warnings: [],
             };
-          } else {
-            // Step 1: With structuredOutput - return object
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-              content: [
-                {
-                  type: 'text' as const,
-                  text: JSON.stringify({ sentiment: 'positive', score: 0.9 }),
-                },
-              ],
-              warnings: [],
-            };
           }
+          // Step 1: With structuredOutput - return object
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify({ sentiment: 'positive', score: 0.9 }),
+              },
+            ],
+            warnings: [],
+          };
         },
         doStream: async () => {
           throw new Error('Not implemented');
@@ -2526,16 +2525,15 @@ describe('Agent Tests', () => {
               ],
               warnings: [],
             };
-          } else {
-            // Second call: return text (stop)
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-              content: [{ type: 'text' as const, text: 'Done' }],
-              warnings: [],
-            };
           }
+          // Second call: return text (stop)
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text' as const, text: 'Done' }],
+            warnings: [],
+          };
         },
         doStream: async () => {
           throw new Error('Not implemented');
@@ -3000,32 +2998,14 @@ describe('sub-agent tool input schema coercion', () => {
     expect(r.invocations).toContain('child-ran');
   });
 
-  it('rejects non-integer maxSteps', async () => {
-    const r = await runDelegation(JSON.stringify({ prompt: 'hello', maxSteps: 5.5 }));
-    expect(r.invocations).not.toContain('child-ran');
-    expect(r.toolResults[0]?.payload?.result?.error).toBe(true);
-  });
-
-  it('rejects non-integer maxSteps sent as a string', async () => {
-    const r = await runDelegation(JSON.stringify({ prompt: 'hello', maxSteps: '5.5' }));
-    expect(r.invocations).not.toContain('child-ran');
-    expect(r.toolResults[0]?.payload?.result?.error).toBe(true);
-  });
-
-  it('rejects maxSteps below minimum of 3', async () => {
-    const r = await runDelegation(JSON.stringify({ prompt: 'hello', maxSteps: 1 }));
-    expect(r.invocations).not.toContain('child-ran');
-    expect(r.toolResults[0]?.payload?.result?.error).toBe(true);
-  });
-
-  it('rejects maxSteps below minimum of 3 sent as a string', async () => {
-    const r = await runDelegation(JSON.stringify({ prompt: 'hello', maxSteps: '1' }));
-    expect(r.invocations).not.toContain('child-ran');
-    expect(r.toolResults[0]?.payload?.result?.error).toBe(true);
-  });
-
-  it('rejects non-numeric string maxSteps', async () => {
-    const r = await runDelegation(JSON.stringify({ prompt: 'hello', maxSteps: 'ten' }));
+  it.each([
+    ['rejects non-integer maxSteps', 5.5],
+    ['rejects non-integer maxSteps sent as a string', '5.5'],
+    ['rejects maxSteps below minimum of 3', 1],
+    ['rejects maxSteps below minimum of 3 sent as a string', '1'],
+    ['rejects non-numeric string maxSteps', 'ten'],
+  ] as const)('%s', async (_title, maxSteps) => {
+    const r = await runDelegation(JSON.stringify({ prompt: 'hello', maxSteps }));
     expect(r.invocations).not.toContain('child-ran');
     expect(r.toolResults[0]?.payload?.result?.error).toBe(true);
   });

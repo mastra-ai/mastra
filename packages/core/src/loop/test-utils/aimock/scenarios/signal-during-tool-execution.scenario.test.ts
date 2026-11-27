@@ -23,7 +23,7 @@ import { InMemoryDB } from '../../../../storage/domains/inmemory-db';
 import { InMemoryMemory } from '../../../../storage/domains/memory/inmemory';
 import type { MastraDBMessage } from '../../../../agent/message-list';
 import { createTool } from '../../../../tools';
-import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines, anyToolResult } from '../aimock-scenario';
 import type { EngineVariant } from '../types';
 
 const REMINDER = 'Reminder: the deploy window closes in 5 minutes';
@@ -145,10 +145,10 @@ async function runDeployWithReminder(
     stopWhen: stepCountIs(5),
     fixtures: mock => {
       mock.on(
-        { endpoint: 'chat', hasToolResult: false },
+        { endpoint: 'chat', predicate: req => !anyToolResult(req) },
         { toolCalls: [{ id: 'call_deploy', name: 'deploy', arguments: { service: 'api' } }] },
       );
-      mock.on({ endpoint: 'chat', hasToolResult: true }, { content: 'The api service is deployed.' });
+      mock.on({ endpoint: 'chat', predicate: anyToolResult }, { content: 'The api service is deployed.' });
     },
   });
   const text = await output.text;
@@ -177,6 +177,7 @@ describeForAllEngines('AIMock scenario: signal arrives while a tool is running',
     expect(callIndex).toBeGreaterThan(-1);
     expect(resultIndex).toBeGreaterThan(callIndex);
     expect(JSON.parse(second[resultIndex].content)).toEqual({ deployed: 'api' });
+    expect(JSON.stringify(second).split(REMINDER)).toHaveLength(2);
 
     // History keeps exactly one completed invocation, alongside the data part the tool wrote after the signal.
     const owners = toolInvocationsFor(messages, 'call_deploy');

@@ -79,6 +79,17 @@ CREATE TABLE IF NOT EXISTS span_events (
   endedAt TIMESTAMP,
   timeToFirstChunkMs DOUBLE,
 
+  -- Native span fields, stored as supplied (NULL when the producer set none)
+  externalParentSpanId VARCHAR,
+  resumedFromSpanId VARCHAR,
+  model VARCHAR,
+  provider VARCHAR,
+  outcome VARCHAR,
+  stopReason VARCHAR,
+  timeToFirstTokenMs DOUBLE,
+  errorCount INTEGER,
+  stopReasonContext JSON,
+
   -- JSON fields
   attributes JSON,
   metadata JSON,
@@ -365,6 +376,15 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS hasOutputPayload BOOLEAN`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS hasErrorPayload BOOLEAN`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS timeToFirstChunkMs DOUBLE`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS externalParentSpanId VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS resumedFromSpanId VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS model VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS provider VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS outcome VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS stopReason VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS timeToFirstTokenMs DOUBLE`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS errorCount INTEGER`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS stopReasonContext JSON`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS parentEntityType VARCHAR`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS parentEntityId VARCHAR`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS parentEntityName VARCHAR`,

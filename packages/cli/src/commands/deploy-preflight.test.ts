@@ -3,7 +3,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 
-import { mergePreflightEnvVars, preflightBuildOutput, printPreflightIssues } from './deploy-preflight.js';
+import {
+  hasWorkersRedisRequirement,
+  mergePreflightEnvVars,
+  preflightBuildOutput,
+  printPreflightIssues,
+} from './deploy-preflight.js';
 import type { PreflightIssue } from './deploy-preflight.js';
 
 /**
@@ -176,19 +181,19 @@ describe('preflightBuildOutput', () => {
       });
     });
 
-    it('does not flag platform-set env vars (PORT, NODE_ENV, MASTRA_*)', async () => {
-      writeBundle(`
+    it.each([
+      [
+        'does not flag platform-set env vars (PORT, NODE_ENV, MASTRA_*)',
+        `
         const port = process.env.PORT;
         const env = process.env.NODE_ENV;
         const mst = process.env.MASTRA_API_TOKEN;
         const otel = process.env.OTEL_SERVICE_NAME;
-      `);
-      const issues = await preflightBuildOutput(tmpDir, {});
-      expect(issues.find(i => i.code === 'MISSING_ENV_VAR')).toBeUndefined();
-    });
-
-    it('does not flag framework-internal sentinel env vars from bundled deps', async () => {
-      writeBundle(`
+      `,
+      ],
+      [
+        'does not flag framework-internal sentinel env vars from bundled deps',
+        `
         const dbg = process.env.DEBUG;
         const fd = process.env.DEBUG_FD;
         const exp = process.env.EXPERIMENTAL_FEATURES;
@@ -197,7 +202,14 @@ describe('preflightBuildOutput', () => {
         const skills = process.env.SKILLS_BASE_DIR;
         const noColor = process.env.NO_COLOR;
         const force = process.env.FORCE_COLOR;
-      `);
+      `,
+      ],
+      [
+        'does not flag AUTO_BLOCK_EXTERNAL_PROVIDERS (read by bundled @mastra/server)',
+        `const f = process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS;`,
+      ],
+    ] as const)('%s', async (_title, input) => {
+      writeBundle(input);
       const issues = await preflightBuildOutput(tmpDir, {});
       expect(issues.find(i => i.code === 'MISSING_ENV_VAR')).toBeUndefined();
     });
@@ -207,12 +219,6 @@ describe('preflightBuildOutput', () => {
       const issues = await preflightBuildOutput(tmpDir, {});
       const missing = issues.find(i => i.code === 'MISSING_ENV_VAR');
       expect(missing?.message).toContain('STRIPE_KEY');
-    });
-
-    it('does not flag AUTO_BLOCK_EXTERNAL_PROVIDERS (read by bundled @mastra/server)', async () => {
-      writeBundle(`const f = process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS;`);
-      const issues = await preflightBuildOutput(tmpDir, {});
-      expect(issues.find(i => i.code === 'MISSING_ENV_VAR')).toBeUndefined();
     });
   });
 
@@ -434,29 +440,19 @@ describe('preflightBuildOutput', () => {
       });
     });
 
-    it('attaches an autofix hint on the hasEnvFile branch too (lint / no platform context)', async () => {
+    it.each([
+      ['attaches an autofix hint on the hasEnvFile branch too (lint / no platform context)', 'DATABASE_URL', 'neon'],
+      ['attaches a create-managed-database autofix hint for REDIS_URL', 'REDIS_URL', 'redis'],
+    ] as const)('%s', async (_title, guardedBy, provider) => {
       writeBundle(`export {};`);
-      writeMetadata({ localPaths: [{ ...guardedDetection, guardedBy: 'DATABASE_URL' }] });
+      writeMetadata({ localPaths: [{ ...guardedDetection, guardedBy }] });
 
       const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: true });
       const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
       expect(issue?.autofix).toEqual({
         kind: 'create-managed-database',
-        provider: 'neon',
-        envVarName: 'DATABASE_URL',
-      });
-    });
-
-    it('attaches a create-managed-database autofix hint for REDIS_URL', async () => {
-      writeBundle(`export {};`);
-      writeMetadata({ localPaths: [{ ...guardedDetection, guardedBy: 'REDIS_URL' }] });
-
-      const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: true });
-      const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
-      expect(issue?.autofix).toEqual({
-        kind: 'create-managed-database',
-        provider: 'redis',
-        envVarName: 'REDIS_URL',
+        provider,
+        envVarName: guardedBy,
       });
     });
 
@@ -670,6 +666,24 @@ describe('preflightBuildOutput', () => {
       expect(workerIssue).toBeUndefined();
     });
 
+    it('does not reject a stored write-only REDIS_URL secret', async () => {
+      writeBundle(`export default {};`);
+      writeWorkersManifest({
+        version: 1,
+        orchestration: { enabled: true },
+        scheduler: { enabled: false },
+        backgroundTasks: { enabled: false },
+        custom: [],
+      });
+
+      const deploymentEnv = mergePreflightEnvVars({ REDIS_URL: '__mastra_secret__' }, { LOG_LEVEL: 'info' });
+      expect(hasWorkersRedisRequirement(deploymentEnv, [])).toBe(true);
+
+      const issues = await preflightBuildOutput(tmpDir, deploymentEnv, { checkWorkers: true });
+      expect(issues.find(i => i.code === 'MISSING_ENV_VAR')).toBeUndefined();
+      expect(issues.find(i => i.message.includes('Background tasks'))).toBeUndefined();
+    });
+
     it('does not flag when REDIS_URL is injected by a platform-managed database', async () => {
       writeBundle(`export default {};`);
       writeWorkersManifest({
@@ -754,6 +768,19 @@ describe('mergePreflightEnvVars', () => {
     ).toEqual({
       TURSO_DATABASE_URL: '',
     });
+  });
+
+  it('keeps the stored value when the local file holds a write-only secret placeholder', () => {
+    expect(mergePreflightEnvVars({ REDIS_URL: 'redis://stored:6379' }, { REDIS_URL: '__mastra_secret__' })).toEqual({
+      REDIS_URL: 'redis://stored:6379',
+    });
+    expect(mergePreflightEnvVars({ REDIS_URL: '__mastra_secret__' }, { REDIS_URL: '__mastra_secret__' })).toEqual({
+      REDIS_URL: '__mastra_secret__',
+    });
+  });
+
+  it('does not invent a value for a placeholder with nothing stored', () => {
+    expect(mergePreflightEnvVars({}, { REDIS_URL: '__mastra_secret__' })).toEqual({});
   });
 
   it('tolerates absent stored env (older platform responses)', () => {

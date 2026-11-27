@@ -472,7 +472,9 @@ type ParsedColumn = {
 const SIMPLE_IDENTIFIER = /^[A-Za-z][A-Za-z0-9_]*$/;
 const LOWERCASE_SQL_IDENTIFIER = /^[a-z][a-z0-9_]*$/;
 const QUOTED_IDENTIFIER = /^"([A-Za-z][A-Za-z0-9_]*)"$/;
-const ORDERED_COLUMN = /^(.*?)(?:\s+(ASC|DESC))?$/i;
+// Anchored at the end and matched once, so it stays linear on long whitespace runs.
+const TRAILING_DIRECTION = /\s(ASC|DESC)$/i;
+const LINE_TERMINATOR = /[\n\r\u2028\u2029]/;
 const UNSAFE_SQL =
   /;|--|\/\*|\*\/|\0|\b(CREATE|ALTER|DROP|TRUNCATE|INSERT|UPDATE|DELETE|MERGE|GRANT|REVOKE|COMMIT|ROLLBACK|EXECUTE|BEGIN|END)\b/i;
 const RESERVED_COLUMN_NAMES = new Set(['references', 'size']);
@@ -854,10 +856,10 @@ function parseColumn(table: string, column: string): ParsedColumn {
 
   // Custom index columns may be normal schema fields or vetted expressions such
   // as JSON_VALUE(...). Keep a narrow SQL surface before passing DDL to Oracle.
-  const match = trimmed.match(ORDERED_COLUMN);
-  const rawExpression = match?.[1]?.trim();
-  const direction = match?.[2]?.toUpperCase() as 'ASC' | 'DESC' | undefined;
-  if (!rawExpression) throw new Error(`Invalid index column: ${column}`);
+  const directionMatch = TRAILING_DIRECTION.exec(trimmed);
+  const rawExpression = (directionMatch ? trimmed.slice(0, directionMatch.index) : trimmed).trimEnd();
+  const direction = directionMatch?.[1]?.toUpperCase() as 'ASC' | 'DESC' | undefined;
+  if (!rawExpression || LINE_TERMINATOR.test(rawExpression)) throw new Error(`Invalid index column: ${column}`);
 
   const quoted = rawExpression.match(QUOTED_IDENTIFIER);
   if (quoted) return { expression: `"${quoted[1]}"`, direction };

@@ -275,6 +275,43 @@ describe('buildTraceQueryRequest', () => {
     });
   });
 
+  describe('when an outcome token carries is', () => {
+    it('emits an eq predicate on the trace outcome', () => {
+      expect(buildTraceQueryRequest({ tokens: [{ fieldId: 'outcome', value: 'limit' }], now }).where).toEqual({
+        op: 'and',
+        args: [{ op: 'eq', left: { path: 'outcome' }, right: { literal: 'limit' } }],
+      });
+    });
+  });
+
+  describe('when an outcome token carries notExists', () => {
+    it('matches traces with no recorded outcome', () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: 'outcome', value: '', operatorId: 'notExists' }], now }).where,
+      ).toEqual({ op: 'and', args: [{ op: 'notExists', path: 'outcome' }] });
+    });
+  });
+
+  describe('when a stop reason token carries isNot', () => {
+    it('also matches traces with no recorded stop reason', () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: 'stopReason', value: 'max_steps', operatorId: 'isNot' }], now })
+          .where,
+      ).toEqual({
+        op: 'and',
+        args: [
+          {
+            op: 'or',
+            args: [
+              { op: 'ne', left: { path: 'stopReason' }, right: { literal: 'max_steps' } },
+              { op: 'notExists', path: 'stopReason' },
+            ],
+          },
+        ],
+      });
+    });
+  });
+
   describe('when an optional trace field carries isNot', () => {
     it('also matches traces where the field is unset', () => {
       expect(
@@ -396,33 +433,18 @@ describe('buildTraceQueryRequest', () => {
       ).toBeUndefined();
     });
 
-    it('keeps the word Any, which is only a neutral sentinel for pick lists', () => {
+    it.each([
+      ['keeps the word Any, which is only a neutral sentinel for pick lists', 'Any'],
+      ['emits matches with the field on the left and the words on the right', 'incorrect dosage'],
+    ] as const)('%s', (_title, value) => {
       expect(
         buildTraceQueryRequest({
-          tokens: [{ fieldId: 'feedback.comment', value: 'Any', operatorId: 'matches' }],
+          tokens: [{ fieldId: 'feedback.comment', value, operatorId: 'matches' }],
           now,
         }).where,
       ).toEqual({
         op: 'and',
-        args: [{ feedback: { some: { op: 'matches', left: { path: 'comment' }, right: { literal: 'Any' } } } }],
-      });
-    });
-
-    it('emits matches with the field on the left and the words on the right', () => {
-      expect(
-        buildTraceQueryRequest({
-          tokens: [{ fieldId: 'feedback.comment', value: 'incorrect dosage', operatorId: 'matches' }],
-          now,
-        }).where,
-      ).toEqual({
-        op: 'and',
-        args: [
-          {
-            feedback: {
-              some: { op: 'matches', left: { path: 'comment' }, right: { literal: 'incorrect dosage' } },
-            },
-          },
-        ],
+        args: [{ feedback: { some: { op: 'matches', left: { path: 'comment' }, right: { literal: value } } } }],
       });
     });
   });
@@ -500,6 +522,46 @@ describe('buildTraceQueryRequest', () => {
       expect(
         buildTraceQueryRequest({ tokens: [{ fieldId: 'durationMs', value: '', operatorId: 'exists' }], now }).where,
       ).toEqual({ op: 'and', args: [{ op: 'exists', path: 'durationMs' }] });
+    });
+  });
+
+  describe.each([
+    ['timeToFirstChunkMs', 'time to first chunk'],
+    ['timeToFirstTokenMs', 'time to first token'],
+  ])('when a root %s token is set', (path, name) => {
+    it(`emits a top-level range predicate on the root ${name}`, () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: path, value: '400', operatorId: 'lte' }], now }).where,
+      ).toEqual({ op: 'and', args: [{ op: 'lte', left: { path }, right: { literal: 400 } }] });
+    });
+
+    it('also matches traces that never streamed when excluding a value', () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: path, value: '400', operatorId: 'isNot' }], now }).where,
+      ).toEqual({
+        op: 'and',
+        args: [
+          {
+            op: 'or',
+            args: [
+              { op: 'ne', left: { path }, right: { literal: 400 } },
+              { op: 'notExists', path },
+            ],
+          },
+        ],
+      });
+    });
+
+    it(`emits a spans.some predicate for the span ${name}`, () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: `spans.${path}`, value: '250', operatorId: 'gt' }], now }).where,
+      ).toEqual({ op: 'and', args: [{ spans: { some: { op: 'gt', left: { path }, right: { literal: 250 } } } }] });
+    });
+
+    it('drops a non-numeric value', () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: path, value: 'fast', operatorId: 'gt' }], now }).where,
+      ).toBeUndefined();
     });
   });
 

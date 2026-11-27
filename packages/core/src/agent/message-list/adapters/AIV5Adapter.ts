@@ -23,9 +23,38 @@ import type {
 } from '../state/types';
 import type { AIV5Type } from '../types';
 import { findToolCallArgs } from '../utils/provider-compat';
+import { hasReplayableReasoningMetadata } from '../utils/reasoning-metadata';
 import { preserveResponseItemIdsOnMerge } from '../utils/response-item-metadata';
 import { sanitizeToolName } from '../utils/tool-name';
 import { normalizeToolOutput, unwrapLegacyToolOutput } from '../utils/unwrap-legacy-tool-output';
+
+type AIV5AssistantModelMessage = Extract<AIV5Type.ModelMessage, { role: 'assistant' }>;
+type AIV5AssistantContentPart = Exclude<AIV5AssistantModelMessage['content'], string>[number];
+
+type ProviderCustomModelPart = {
+  type: 'custom';
+  kind: string;
+  providerMetadata?: AIV5Type.ProviderMetadata;
+  providerOptions?: AIV5Type.ProviderMetadata;
+};
+
+type ProviderCustomAssistantModelMessage = Omit<AIV5AssistantModelMessage, 'content'> & {
+  content: Array<AIV5AssistantContentPart | ProviderCustomModelPart>;
+};
+
+function getProviderCustomModelPart(part: unknown): ProviderCustomModelPart | undefined {
+  if (!part || typeof part !== 'object') return undefined;
+  if (
+    !('type' in part) ||
+    part.type !== 'custom' ||
+    !('kind' in part) ||
+    typeof part.kind !== 'string' ||
+    part.kind.length === 0
+  ) {
+    return undefined;
+  }
+  return part as ProviderCustomModelPart;
+}
 
 /**
  * Compact malformed entries and filter out empty text parts from message parts arrays.
@@ -387,7 +416,10 @@ export class AIV5Adapter {
               return p;
             }, '') ??
               '');
-          if (text || part.details?.length) {
+          // Signed-but-empty reasoning (Anthropic thinking with no visible text) still has to
+          // reach the model prompt: dropping it here loses the signature before the provider
+          // conversion ever sees it (GRWTH-1919).
+          if (text || part.details?.length || hasReplayableReasoningMetadata(part.providerMetadata)) {
             const v5UIPart: AIV5Type.ReasoningUIPart = {
               type: 'reasoning' as const,
               text: text || '',
@@ -519,6 +551,11 @@ export class AIV5Adapter {
               transformToolPayloads,
             ),
           });
+        } else if (part.type === 'custom') {
+          // AI SDK v5's UIMessage part type predates provider custom parts, even
+          // though newer providers emit and consume them at runtime.
+          parts.push(part as unknown as AIV5Type.UIMessage['parts'][number]);
+          hasNonToolReasoningParts = true;
         } else if (part.type === 'error') {
           // Mastra-only record of a terminal failure. Preserved for DB/UI history
           // (see sanitizeV5UIMessages, which strips it from provider prompts).
@@ -688,6 +725,15 @@ export class AIV5Adapter {
     // Build V2-compatible parts array
     const v2Parts = parts
       .map(p => {
+        const providerCustomPart = getProviderCustomModelPart(p);
+        if (providerCustomPart) {
+          return {
+            type: 'custom' as const,
+            kind: providerCustomPart.kind,
+            providerMetadata: providerCustomPart.providerMetadata,
+          };
+        }
+
         // Convert AIV5 UI parts to V2 parts
         if (AIV5.isToolUIPart(p)) {
           const toolName = getToolName(p);
@@ -833,7 +879,7 @@ export class AIV5Adapter {
         if (typeof p.type === 'string' && p.type.startsWith('data-')) {
           return {
             type: p.type,
-            data: 'data' in p ? (p as any).data : undefined,
+            data: 'data' in p ? p.data : undefined,
           };
         }
 
@@ -920,43 +966,40 @@ export class AIV5Adapter {
 
     if (data instanceof URL) {
       return data.toString();
-    } else {
-      if (data instanceof Buffer) {
-        const base64 = data.toString('base64');
-        return `data:${mimeType};base64,${base64}`;
-      } else if (typeof data === 'string') {
-        // Absolute URLs of any scheme (https:, gs:, s3:, ...) pass through. So do OpenAI
-        // Files API file IDs (e.g. "file-abc123"), which @ai-sdk/openai forwards as
-        // { file_id: "file-..." }. Only base64 is wrapped as a data URL; anything else
-        // (e.g. a relative path) is kept as-is, and the prompt build treats it as an
-        // attachment that can't be downloaded.
-        if (data.startsWith('data:') || data.startsWith('file-') || isAbsoluteUrl(data) || !isBase64Like(data)) {
-          return data;
-        }
-        return `data:${mimeType};base64,${data}`;
-      } else if (data instanceof Uint8Array) {
-        const base64 = Buffer.from(data).toString('base64');
-        return `data:${mimeType};base64,${base64}`;
-      } else if (data instanceof ArrayBuffer) {
-        const base64 = Buffer.from(data).toString('base64');
-        return `data:${mimeType};base64,${base64}`;
-      } else {
-        throw new MastraError({
-          id: 'MASTRA_AIV5_DATA_PART_INVALID',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: 'Unrecognized file data in message part',
-          details: { dataType: typeof data },
-        });
+    } else if (data instanceof Buffer) {
+      const base64 = data.toString('base64');
+      return `data:${mimeType};base64,${base64}`;
+    } else if (typeof data === 'string') {
+      // Absolute URLs of any scheme (https:, gs:, s3:, ...) pass through. So do OpenAI
+      // Files API file IDs (e.g. "file-abc123"), which @ai-sdk/openai forwards as
+      // { file_id: "file-..." }. Only base64 is wrapped as a data URL; anything else
+      // (e.g. a relative path) is kept as-is, and the prompt build treats it as an
+      // attachment that can't be downloaded.
+      if (data.startsWith('data:') || data.startsWith('file-') || isAbsoluteUrl(data) || !isBase64Like(data)) {
+        return data;
       }
+      return `data:${mimeType};base64,${data}`;
+    } else if (data instanceof Uint8Array) {
+      const base64 = Buffer.from(data).toString('base64');
+      return `data:${mimeType};base64,${base64}`;
+    } else if (data instanceof ArrayBuffer) {
+      const base64 = Buffer.from(data).toString('base64');
+      return `data:${mimeType};base64,${base64}`;
     }
+    throw new MastraError({
+      id: 'MASTRA_AIV5_DATA_PART_INVALID',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.USER,
+      text: 'Unrecognized file data in message part',
+      details: { dataType: typeof data },
+    });
   }
 
   /**
    * Direct conversion from AIV5 ModelMessage to MastraDBMessage
    */
   static fromModelMessage(
-    modelMsg: AIV5Type.ModelMessage,
+    modelMsg: AIV5Type.ModelMessage | ProviderCustomAssistantModelMessage,
     _messageSource?: MessageSource,
     context: { dbMessages?: MastraDBMessage[] } = {},
   ): MastraDBMessage {
@@ -972,6 +1015,7 @@ export class AIV5Adapter {
     const experimental_attachments: NonNullable<MastraDBMessage['content']['experimental_attachments']> = [];
 
     for (const part of content) {
+      const providerCustomPart = getProviderCustomModelPart(part);
       if (part.type === 'text') {
         const textPart: MastraDBMessage['content']['parts'][number] = {
           type: 'text' as const,
@@ -1109,6 +1153,12 @@ export class AIV5Adapter {
         }
         mastraDBParts.push(v2ReasoningPart);
         reasoningParts.push(part.text);
+      } else if (providerCustomPart) {
+        mastraDBParts.push({
+          type: 'custom',
+          kind: providerCustomPart.kind,
+          providerMetadata: providerCustomPart.providerMetadata ?? providerCustomPart.providerOptions,
+        });
       } else if (part.type === 'image') {
         const imagePart = part;
         const mimeType = imagePart.mediaType || 'image/jpeg';

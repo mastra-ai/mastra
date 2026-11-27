@@ -1,0 +1,11 @@
+{
+  "attachment": ["qwen3.8-27b"],
+  "temperature": ["qwen3.8-27b"],
+  "reasoning": {
+    "qwen3.8-27b": [
+      {
+        "type": "toggle"
+      }
+    ]
+  }
+}

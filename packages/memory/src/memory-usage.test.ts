@@ -67,43 +67,29 @@ const testMessages: MastraDBMessage[] = [
 
 describe('Memory Token Usage', () => {
   describe('saveMessages usage tracking', () => {
-    it('should track usage with v3 spec embedder (ai-v6)', async () => {
-      const memory = createMemoryWithEmbedder('v3');
+    it.each([
+      ['should track usage with v3 spec embedder (ai-v6)', 'v3', 42],
+      ['should track usage with v2 spec embedder (ai-sdk-v5)', 'v2', 55],
+      ['should track usage with v1 spec embedder (ai-sdk-v4)', 'v1', 33],
+    ] as const)('%s', async (_title, input, expected) => {
+      const memory = createMemoryWithEmbedder(input);
       const result = await memory.saveMessages({
         messages: testMessages,
         memoryConfig: { semanticRecall: true },
       });
 
       expect(result.usage).toBeDefined();
-      expect(result.usage?.tokens).toBe(42);
-    });
-
-    it('should track usage with v2 spec embedder (ai-sdk-v5)', async () => {
-      const memory = createMemoryWithEmbedder('v2');
-      const result = await memory.saveMessages({
-        messages: testMessages,
-        memoryConfig: { semanticRecall: true },
-      });
-
-      expect(result.usage).toBeDefined();
-      expect(result.usage?.tokens).toBe(55);
-    });
-
-    it('should track usage with v1 spec embedder (ai-sdk-v4)', async () => {
-      const memory = createMemoryWithEmbedder('v1');
-      const result = await memory.saveMessages({
-        messages: testMessages,
-        memoryConfig: { semanticRecall: true },
-      });
-
-      expect(result.usage).toBeDefined();
-      expect(result.usage?.tokens).toBe(33);
+      expect(result.usage?.tokens).toBe(expected);
     });
   });
 
   describe('recall usage tracking', () => {
-    it('should track usage from recall with v3 spec', async () => {
-      const memory = createMemoryWithEmbedder('v3');
+    it.each([
+      ['should track usage from recall with v3 spec', 'v3', 42],
+      ['should track usage from recall with v2 spec', 'v2', 55],
+      ['should track usage from recall with v1 spec', 'v1', 33],
+    ] as const)('%s', async (_title, input, expected) => {
+      const memory = createMemoryWithEmbedder(input);
       const result = await memory.recall({
         threadId: 'thread-1',
         vectorSearchString: 'search query',
@@ -117,43 +103,7 @@ describe('Memory Token Usage', () => {
       });
 
       expect(result.usage).toBeDefined();
-      expect(result.usage?.tokens).toBe(42);
-    });
-
-    it('should track usage from recall with v2 spec', async () => {
-      const memory = createMemoryWithEmbedder('v2');
-      const result = await memory.recall({
-        threadId: 'thread-1',
-        vectorSearchString: 'search query',
-        threadConfig: {
-          semanticRecall: {
-            scope: 'thread',
-            topK: 10,
-            messageRange: 2,
-          },
-        },
-      });
-
-      expect(result.usage).toBeDefined();
-      expect(result.usage?.tokens).toBe(55);
-    });
-
-    it('should track usage from recall with v1 spec', async () => {
-      const memory = createMemoryWithEmbedder('v1');
-      const result = await memory.recall({
-        threadId: 'thread-1',
-        vectorSearchString: 'search query',
-        threadConfig: {
-          semanticRecall: {
-            scope: 'thread',
-            topK: 10,
-            messageRange: 2,
-          },
-        },
-      });
-
-      expect(result.usage).toBeDefined();
-      expect(result.usage?.tokens).toBe(33);
+      expect(result.usage?.tokens).toBe(expected);
     });
   });
 

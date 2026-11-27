@@ -2,8 +2,9 @@ import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { InMemoryNotificationsStorage } from '@mastra/core/notifications';
 import { describe, expect, it, vi } from 'vitest';
 
+import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { createSessionApprovalNotifier, createSessionRunEndReporter } from './reports.js';
-import { observeSessionRunReports } from './run-watch.js';
+import { observeSessionRunReports, reportsTellingOfWaits } from './run-watch.js';
 
 function fakeSession() {
   const listeners = new Set<(event: AgentControllerEvent) => void>();
@@ -48,9 +49,29 @@ describe('observeSessionRunReports', () => {
     session.emit(end('suspended'));
 
     expect(report).toHaveBeenCalledWith(
-      { status: 'blocked', toolName: 'factory_transition_work_item', approval: true },
+      { status: 'blocked', toolName: 'factory_transition_work_item', toolCallId: 'call-1', approval: true },
       expect.any(Date),
     );
+  });
+
+  it('reports a run a memory-model failure stopped as failed, quoting the failure', () => {
+    const session = fakeSession();
+    const report = vi.fn(async () => {});
+    observeSessionRunReports(session, report);
+
+    session.emit({
+      type: 'error',
+      error: new Error('Observational memory observation run failed: insufficient_quota'),
+    } as AgentControllerEvent);
+    session.emit({ type: 'agent_end', reason: 'aborted', abortReason: 'memory-failure' } as AgentControllerEvent);
+    session.emit({ type: 'agent_end', reason: 'aborted', abortReason: 'thread-lease-lost' } as AgentControllerEvent);
+
+    expect(report.mock.calls.map(([outcome]) => outcome)).toEqual([
+      {
+        status: 'failed',
+        reason: 'the run ended in error: Observational memory observation run failed: insufficient_quota',
+      },
+    ]);
   });
 
   it('says nothing for an aborted run, and the next run’s window starts where the aborted one did', () => {
@@ -115,44 +136,52 @@ describe('observeSessionRunReports', () => {
     ]);
   });
 
-  it('reports a usage-limit rejection from the provider body instead of Bad Request', () => {
+  function failedReport(error: Error) {
     const session = fakeSession();
     const report = vi.fn(async () => {});
     observeSessionRunReports(session, report);
-    const error = new Error('Bad Request');
-    Object.assign(error, {
-      statusCode: 400,
-      responseBody: JSON.stringify({
-        error: { message: 'You have exceeded your current quota, please check your plan.' },
-      }),
-    });
-
     session.emit({ type: 'error', error } as AgentControllerEvent);
     session.emit(end('error'));
+    return report.mock.calls.map(([outcome]) => outcome)[0];
+  }
 
-    expect(report).toHaveBeenCalledWith(
-      {
-        status: 'failed',
-        reason: 'the run ended in error: You have exceeded your current quota, please check your plan.',
-      },
-      expect.any(Date),
-    );
+  function badRequest(body: unknown) {
+    return Object.assign(new Error('Bad Request'), { statusCode: 400, responseBody: JSON.stringify(body) });
+  }
+
+  it.each([
+    {
+      name: 'a usage-limit sentence in the provider body',
+      error: badRequest({ error: { message: 'You have exceeded your current quota, please check your plan.' } }),
+      reason: 'You have exceeded your current quota, please check your plan.',
+    },
+    {
+      name: 'any other sentence in the provider body',
+      error: badRequest({ error: { message: 'Invalid model id' } }),
+      reason: 'Invalid model id',
+    },
+    {
+      name: 'a Codex detail sentence',
+      error: badRequest({ detail: 'You have exceeded your usage limit for Codex' }),
+      reason: 'You have exceeded your usage limit for Codex',
+    },
+    {
+      name: 'a provider sentence behind a wrapping cause',
+      error: new Error('Agent stream failed', {
+        cause: badRequest({ error: { message: 'prompt is too long: 210345 tokens > 200000 maximum' } }),
+      }),
+      reason: 'prompt is too long: 210345 tokens > 200000 maximum',
+    },
+  ])('quotes $name instead of Bad Request', ({ error, reason }) => {
+    expect(failedReport(error)).toEqual({ status: 'failed', reason: `the run ended in error: ${reason}` });
   });
 
-  it('leaves a plain Bad Request unchanged when the provider body has no usage-limit reason', () => {
-    const session = fakeSession();
-    const report = vi.fn(async () => {});
-    observeSessionRunReports(session, report);
-    const error = new Error('Bad Request');
-    Object.assign(error, { statusCode: 400, responseBody: JSON.stringify({ error: { message: 'Invalid model id' } }) });
-
-    session.emit({ type: 'error', error } as AgentControllerEvent);
-    session.emit(end('error'));
-
-    expect(report).toHaveBeenCalledWith(
-      { status: 'failed', reason: 'the run ended in error: Bad Request' },
-      expect.any(Date),
-    );
+  it('quotes at most 400 characters of the provider sentence', () => {
+    const sentence = `Your weekly usage limit is reached. ${'x'.repeat(500)}`;
+    expect(failedReport(badRequest({ error: { message: sentence } }))).toEqual({
+      status: 'failed',
+      reason: `the run ended in error: ${sentence.slice(0, 400)}`,
+    });
   });
 
   it('keeps listening when a report fails', async () => {
@@ -336,7 +365,13 @@ describe('createSessionRunEndReporter for the run that finishes its card', () =>
             revokedAt,
           }) as never,
         listWorkItemSubscribers: async () => [{ sessionId: 'follower', threadId: 'follower-thread' }] as never,
-        getForProject: async () => ({ title: 'Fix it', externalSource: null, metadata: {} }) as never,
+        getForProject: async () =>
+          ({
+            title: 'Fix it',
+            externalSource: null,
+            metadata: {},
+            workItem: createProviderWorkItemForTests({ id: 'item-1', title: 'Fix it', source: null, metadata: null }),
+          }) as never,
       },
       reporting: async () => ({ deliver, notifications: { listNotifications: async () => [] } as never }),
     });
@@ -392,7 +427,13 @@ describe('createSessionApprovalNotifier', () => {
             { sessionId: 'follower', threadId: 'follower-thread' },
             { sessionId: 'worker', threadId: 'worker-thread' },
           ] as never,
-        getForProject: async () => ({ title: 'Fix it', externalSource: null, metadata: {} }) as never,
+        getForProject: async () =>
+          ({
+            title: 'Fix it',
+            externalSource: null,
+            metadata: {},
+            workItem: createProviderWorkItemForTests({ id: 'item-1', title: 'Fix it', source: null, metadata: null }),
+          }) as never,
       },
       reporting: async () => ({ deliver, notifications: {} as never }),
     });
@@ -462,5 +503,69 @@ describe('createSessionApprovalNotifier', () => {
     const { notify, deliver } = notifier(false);
     await notify(request);
     expect(deliver).not.toHaveBeenCalled();
+  });
+});
+
+describe('reportsTellingOfWaits', () => {
+  function held() {
+    let release = () => {};
+    const told: string[] = [];
+    const hold = new Promise<void>(resolve => (release = resolve));
+    const session = fakeSession();
+    const waits = reportsTellingOfWaits({
+      reportRunEnd: async outcome => void told.push(`ended:${outcome.status}`),
+      notifyApproval: async request => void told.push(`notice:${request.toolCallId}`),
+      runPaused: async () => {
+        told.push('engine asked');
+        await hold;
+        told.push('engine answered');
+      },
+      answersItself: toolCallId => toolCallId === 'answered-by-factory',
+    });
+    observeSessionRunReports(session, waits.report, { onApprovalRequested: waits.onApprovalRequested });
+    return { session, told, release };
+  }
+  const approval = (toolCallId: string) =>
+    ({ type: 'tool_approval_required', toolCallId, toolName: 'execute_command', args: {} }) as AgentControllerEvent;
+
+  it("sends the approval notice while the board engine still hasn't taken the wait", async () => {
+    const { session, told, release } = held();
+
+    session.emit(approval('call-1'));
+    await vi.waitFor(() => expect(told).toContain('engine asked'));
+
+    expect(told).toEqual(['notice:call-1', 'engine asked']);
+    release();
+    await vi.waitFor(() => expect(told).toEqual(['notice:call-1', 'engine asked', 'engine answered']));
+  });
+
+  it("reports a run that ended waiting on a person while the board engine still hasn't taken the wait", async () => {
+    const { session, told, release } = held();
+
+    session.emit({
+      type: 'tool_suspended',
+      toolCallId: 'call-2',
+      toolName: 'submit_plan',
+      resumeSchema: JSON.stringify({
+        properties: { action: { enum: ['approved', 'rejected'] } },
+        required: ['action'],
+      }),
+    } as AgentControllerEvent);
+    session.emit(end('suspended'));
+    await vi.waitFor(() => expect(told).toContain('engine asked'));
+
+    expect(told).toEqual(['ended:blocked', 'engine asked']);
+    release();
+  });
+
+  it('tells the board engine of no wait for a call Factory answers itself, or a run that just ended', async () => {
+    const { session, told } = held();
+
+    session.emit(approval('answered-by-factory'));
+    session.emit(end('complete'));
+
+    await vi.waitFor(() => expect(told).toEqual(['notice:answered-by-factory', 'ended:done']));
+    await new Promise(resolve => setImmediate(resolve));
+    expect(told).not.toContain('engine asked');
   });
 });

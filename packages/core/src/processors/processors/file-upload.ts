@@ -685,7 +685,9 @@ const MAX_DISPLAY_LENGTH = 200;
 
 const ANSI_ESCAPE_SEQUENCES = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/g;
-const DIACRITICS = /[̀-ͯ]/g;
+// Escaped so the published JS stays ASCII: one wider character makes V8 store a bundled
+// Worker's whole script at two bytes per character.
+const DIACRITICS = /[\u0300-\u036f]/g;
 
 /** Extensions for files sent without a name; anything else is written without one. */
 const EXTENSIONS_BY_MIME_TYPE: Record<string, string> = {

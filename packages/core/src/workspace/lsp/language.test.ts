@@ -59,28 +59,16 @@ describe('LANGUAGE_EXTENSIONS', () => {
 });
 
 describe('getLanguageId', () => {
-  it('returns correct language ID for TypeScript file', () => {
-    expect(getLanguageId('/src/app.ts')).toBe('typescript');
-  });
-
-  it('returns correct language ID for TSX file', () => {
-    expect(getLanguageId('/src/component.tsx')).toBe('typescriptreact');
-  });
-
-  it('returns correct language ID for JavaScript file', () => {
-    expect(getLanguageId('/src/app.js')).toBe('javascript');
-  });
-
-  it('returns correct language ID for Python file', () => {
-    expect(getLanguageId('/src/main.py')).toBe('python');
-  });
-
-  it('returns correct language ID for Go file', () => {
-    expect(getLanguageId('/src/main.go')).toBe('go');
-  });
-
-  it('returns correct language ID for Rust file', () => {
-    expect(getLanguageId('/src/main.rs')).toBe('rust');
+  it.each([
+    ['returns correct language ID for TypeScript file', '/src/app.ts', 'typescript'],
+    ['returns correct language ID for TSX file', '/src/component.tsx', 'typescriptreact'],
+    ['returns correct language ID for JavaScript file', '/src/app.js', 'javascript'],
+    ['returns correct language ID for Python file', '/src/main.py', 'python'],
+    ['returns correct language ID for Go file', '/src/main.go', 'go'],
+    ['returns correct language ID for Rust file', '/src/main.rs', 'rust'],
+    ['handles deeply nested paths', '/a/b/c/d/e/file.ts', 'typescript'],
+  ] as const)('%s', (_title, input, expected) => {
+    expect(getLanguageId(input)).toBe(expected);
   });
 
   it('returns undefined for unknown extension', () => {
@@ -89,10 +77,6 @@ describe('getLanguageId', () => {
 
   it('returns undefined for file with no extension', () => {
     expect(getLanguageId('Makefile')).toBeUndefined();
-  });
-
-  it('handles deeply nested paths', () => {
-    expect(getLanguageId('/a/b/c/d/e/file.ts')).toBe('typescript');
   });
 
   it('handles files with multiple dots', () => {

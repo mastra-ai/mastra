@@ -125,7 +125,7 @@ Flushes pending batched events and shuts down the PostHog client.
 
 ## Usage
 
-### Zero-Config (using environment variables)
+### Zero-config (using environment variables)
 
 ```typescript
 import { PosthogExporter } from '@mastra/posthog'
@@ -134,7 +134,7 @@ import { PosthogExporter } from '@mastra/posthog'
 const exporter = new PosthogExporter()
 ```
 
-### Explicit Configuration
+### Explicit configuration
 
 ```typescript
 import { PosthogExporter } from '@mastra/posthog'
@@ -201,4 +201,4 @@ Feedback events map to these PostHog properties:
 | `metadata.sessionId` | `$ai_session_id` |
 | `metadata` (other keys) | custom properties |
 
-Feedback without a `traceId` is dropped because PostHog anchors feedback to a trace through `$ai_trace_id`. The event's distinct ID resolves from `feedbackUserId`, then `metadata.userId`, then `defaultDistinctId`, then `anonymous`.
+Feedback without a `traceId` is dropped because PostHog anchors feedback to a trace through `$ai_trace_id`. The event's distinct ID resolves from `feedbackUserId`, then `userId`, then `metadata.userId`, then `defaultDistinctId`, then `anonymous`.

@@ -15,6 +15,12 @@
   --radius-md: 6px;
   --radius-lg: 10px;
   --radius-xl: 14px;
+  /* The board card's corner. It is not a free number: a card is a rounded box with
+   * a capsule pill sitting in its bottom corner, and the two only look concentric
+   * while the card's radius is the pill's plus the padding between them —
+   * `1.375rem = 0.875rem (h-control-sm capsule) + 0.5rem (p-2)`. Move one, move all
+   * three. */
+  --radius-card: 1.375rem;
 
   /* One rung, one declaration. Every size utility in Tailwind v4 reads the
      `--spacing-*` namespace, so `h-icon-md`, `w-icon-md` and `size-icon-md`
@@ -22,10 +28,10 @@
      `--height-*`, `--max-height-*`, `--width-*` and `--container-*`, which is
      how `icon-smd` came to exist in three of them and `--container-icon-smd`
      in none. */
-  --spacing-icon-xs: 12px;
-  --spacing-icon-sm: 14px;
-  --spacing-icon-md: 16px;
-  --spacing-icon-lg: 20px;
+  --spacing-icon-xs: 14px;
+  --spacing-icon-sm: 16px;
+  --spacing-icon-md: 18px;
+  --spacing-icon-lg: 22px;
 
   --spacing-control-sm: 1.75rem; /* 28px */
   --spacing-control-md: 1.875rem; /* 30px — the default control height */
@@ -35,6 +41,8 @@
   --spacing-table-header: 28px;
   --spacing-table-row: 40px;
   --spacing-table-row-small: 32px;
+  --spacing-avatar-xs: 12px;
+  --spacing-avatar-inline: 16px;
   --spacing-avatar-sm: 24px;
   --spacing-avatar-md: 32px;
   --spacing-avatar-lg: 40px;

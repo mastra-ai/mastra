@@ -36,6 +36,18 @@ export interface MountOperationResult {
   error?: string;
 }
 
+/**
+ * Owner of the files inside a FUSE mount, as numeric uid/gid.
+ *
+ * Set this when commands run as a different OS user than the one the sandbox
+ * mounts as, so that user can read and write the mounted files. Without it the
+ * mount probes `id -u && id -g` and the files are owned by the default user.
+ */
+export interface MountOwner {
+  uid: number;
+  gid: number;
+}
+
 const SAFE_S3_BUCKET_NAME = /^[a-z0-9][a-z0-9.\-]{1,61}[a-z0-9]$/;
 const SAFE_GCS_BUCKET_NAME = /^[a-z0-9][a-z0-9._-]{1,61}[a-z0-9]$/;
 
@@ -76,6 +88,21 @@ export function validateRegion(region: unknown): asserts region is string {
   if (typeof region !== 'string' || !SAFE_REGION.test(region)) {
     throw new Error(
       `Invalid region: ${JSON.stringify(region)}. Region must be a string of lowercase alphanumeric or hyphens (e.g., "us-east-1", "ap-northeast-1", "auto").`,
+    );
+  }
+}
+
+/**
+ * Validate a mount owner before interpolating uid/gid into shell commands.
+ */
+export function validateOwner(owner: unknown): asserts owner is MountOwner {
+  if (owner === undefined) {
+    throw new Error('Invalid mount owner: expected an object with numeric "uid" and "gid".');
+  }
+  const { uid, gid } = owner as { uid?: unknown; gid?: unknown };
+  if (!Number.isInteger(uid) || (uid as number) < 0 || !Number.isInteger(gid) || (gid as number) < 0) {
+    throw new Error(
+      `Invalid mount owner: ${JSON.stringify(owner)}. "uid" and "gid" must both be non-negative integers.`,
     );
   }
 }

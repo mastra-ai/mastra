@@ -263,4 +263,27 @@ describe('Oracle storage index DDL', () => {
       generateOracleIndexSQL({ name: 'bad', table: TABLE_THREADS, columns: ['LOWER(title))'] } as any),
     ).toThrow(/unbalanced/i);
   });
+
+  it('parses the sort direction after any whitespace run and rejects multi-line expressions', () => {
+    expect(generateOracleIndexSQL({ name: 'idx_dir', table: 'custom_table', columns: ['plain \t  desc'] } as any)).toBe(
+      'CREATE INDEX "IDX_DIR" ON "CUSTOM_TABLE" (PLAIN DESC)',
+    );
+    expect(
+      generateOracleIndexSQL({ name: 'idx_dir', table: 'custom_table', columns: ['LOWER(title)\n ASC'] } as any),
+    ).toBe('CREATE INDEX "IDX_DIR" ON "CUSTOM_TABLE" (LOWER(title) ASC)');
+    expect(generateOracleIndexSQL({ name: 'idx_dir', table: 'custom_table', columns: ['plain'] } as any)).toBe(
+      'CREATE INDEX "IDX_DIR" ON "CUSTOM_TABLE" (PLAIN)',
+    );
+    expect(() =>
+      generateOracleIndexSQL({ name: 'bad', table: 'custom_table', columns: ['LOWER(\ntitle)'] } as any),
+    ).toThrow(/invalid index column/i);
+  });
+
+  it('rejects an adversarial whitespace-padded column in linear time', () => {
+    const started = performance.now();
+    expect(() =>
+      generateOracleIndexSQL({ name: 'bad', table: 'custom_table', columns: [`a${' '.repeat(200_000)}(`] } as any),
+    ).toThrow();
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
 });

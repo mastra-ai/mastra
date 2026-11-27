@@ -1,10 +1,15 @@
 import { execFileSync } from 'node:child_process';
+import { once } from 'node:events';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type * as authStudioModule from '@mastra/auth-studio';
+import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { resolveCustomProviders } from '@mastra/code-sdk/agents/custom-provider-source';
 import { getDynamicInstructions } from '@mastra/code-sdk/agents/instructions';
+import { tools as connectTools } from '@mastra/connect';
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
@@ -13,7 +18,10 @@ import { Knowledge } from '@mastra/core/knowledge';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, AuthInitContext, IMastraAuthProvider, ServerConfig } from '@mastra/core/server';
+import { CompositeAuth } from '@mastra/core/server';
+import { createSkill } from '@mastra/core/skills';
 import { InMemoryStore } from '@mastra/core/storage';
+import { createTool } from '@mastra/core/tools';
 import type { MastraWorker } from '@mastra/core/worker';
 
 import {
@@ -26,9 +34,13 @@ import {
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { createHonoServer } from '@mastra/deployer/server';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
+import { MCPClient, MCPServer } from '@mastra/mcp';
 import { PgVector } from '@mastra/pg';
 import { Hono } from 'hono';
-import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { z } from 'zod';
+import { defineBoard } from './boards/index.js';
 import { createTestBoard } from './boards/test-utils.js';
 import type { VersionControl } from './capabilities/version-control.js';
 import { MastraFactory } from './factory.js';
@@ -48,10 +60,11 @@ import { createFactorySecretEncryption } from './secret-encryption.js';
 import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import type * as resourceMigrationModule from './session/resource-migration.js';
+import { FactoryWorkItemStateProcessor } from './session/work-item-state-processor.js';
 import type { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
-import { factoryMemorySettingsUserId } from './storage/domains/memory-settings/base.js';
 import type { MemorySettingsRecord, MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
+import { factoryProjectSettingsUserId } from './storage/domains/projects/base.js';
 import type { SourceControlStorage } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type * as reportsModule from './tools/reports.js';
@@ -76,7 +89,9 @@ const secretEncryption = createFactorySecretEncryption({
  */
 
 const controllerMock = {
-  onSessionCreated: vi.fn(),
+  onSessionCreated: vi.fn(() => () => {}),
+  onSessionDeleted: vi.fn(() => () => {}),
+  deleteSession: vi.fn(async () => false),
   setChannels: vi.fn(),
   queryThreadById: vi.fn(),
   getSession: vi.fn(),
@@ -323,6 +338,31 @@ beforeEach(() => {
   runEndReports.length = 0;
 });
 
+describe('mounted code agent scorers', () => {
+  it('leaves scorers unset by default', async () => {
+    const config = await prepareFactory({ storage: fakeStorage() });
+
+    expect(config).not.toHaveProperty('scorers');
+  });
+
+  it('forwards caller-provided scorers', async () => {
+    const scorers = () => ({});
+    const config = await prepareFactory({ storage: fakeStorage(), scorers });
+
+    expect(config.scorers).toBe(scorers);
+  });
+
+  it('discards score results by default and allows opting in', async () => {
+    const disabled = await prepareFactory({ storage: fakeStorage(), auth: null });
+    expect(disabled.disableScoreStorage).toBe(true);
+
+    vi.clearAllMocks();
+
+    const enabled = await prepareFactory({ storage: fakeStorage(), auth: null, disableScoreStorage: false });
+    expect(enabled.disableScoreStorage).toBe(false);
+  });
+});
+
 /** Serve stored threads by id for the rest of the test. */
 function threadsById(threads: Record<string, { id: string; resourceId: string; metadata: Record<string, unknown> }>) {
   controllerMock.queryThreadById.mockImplementation(
@@ -360,9 +400,6 @@ async function prepareThreadsWithTwoMemoryRows(auth: IMastraAuthProvider | null)
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    createdByUserId: 'user-1',
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/sandbox/mastra',
   });
   await sourceControl.sessions.create({
     sessionId: 'session-1',
@@ -377,7 +414,7 @@ async function prepareThreadsWithTwoMemoryRows(auth: IMastraAuthProvider | null)
   const memorySettings = storage.getDomain<MemorySettingsStorage>('memory-settings');
   await memorySettings.patch({
     orgId: 'org-1',
-    userId: factoryMemorySettingsUserId(project.id),
+    userId: factoryProjectSettingsUserId(project.id),
     patch: { observerModelId: 'anthropic/factory-observer' },
   });
   await memorySettings.patch({ orgId: 'org-1', userId: 'user-1', patch: { observerModelId: 'openai/my-observer' } });
@@ -415,6 +452,32 @@ describe('MastraFactory constructor', () => {
     expect(() => new MastraFactory({ secretEncryption } as never)).toThrow(/'storage' is required/);
   });
 
+  describe('recall embedder', () => {
+    afterEach(() => vi.unstubAllEnvs());
+    const vector = () => new PgVector({ id: 'factory-test-vectors', connectionString: 'postgres://cfg/app' });
+
+    it('refuses to start when the embedder has no API key, instead of failing at the first recall', () => {
+      vi.stubEnv('OPENAI_API_KEY', '');
+      expect(
+        () =>
+          new MastraFactory({
+            secretEncryption,
+            storage: fakeStorage(),
+            vector: vector(),
+            embedder: 'openai/text-embedding-3-small',
+          }),
+      ).toThrow(/could not build the embedder 'openai\/text-embedding-3-small'.*OPENAI_API_KEY/);
+    });
+
+    it('refuses an embedder without the store it writes to', () => {
+      vi.stubEnv('OPENAI_API_KEY', 'sk-embeddings');
+      expect(
+        () =>
+          new MastraFactory({ secretEncryption, storage: fakeStorage(), embedder: 'openai/text-embedding-3-small' }),
+      ).toThrow("'embedder' needs 'vector'");
+    });
+  });
+
   it('rejects a board id already used by an installed built-in', () => {
     expect(
       () =>
@@ -423,19 +486,76 @@ describe('MastraFactory constructor', () => {
           storage: fakeStorage(),
           boards: [createTestBoard({ id: 'work' })],
         }),
-    ).toThrow("duplicate board id 'work'");
+    ).toThrow(
+      "MastraFactory: board id 'work' is Factory's Work board, which every project has. To run your own, store it under 'work' with factory.upsertBoard(board, { projects: 'all' }).",
+    );
   });
 
-  it('allows replacing a built-in board when default boards are disabled', () => {
-    expect(
-      () =>
-        new MastraFactory({
-          secretEncryption,
-          storage: fakeStorage(),
-          includeDefaultBoards: false,
-          boards: [createTestBoard({ id: 'work' })],
-        }),
-    ).not.toThrow();
+  describe('app skills', () => {
+    const notesBoard = (skill: string, context = 'build') =>
+      defineBoard({
+        id: 'notes',
+        name: 'Notes',
+        initialPhase: 'queued',
+        phases: {
+          queued: { name: 'Queued', kind: 'resting', nextPhases: ['drafting'] },
+          drafting: { name: 'Drafting', kind: 'working', nextPhases: ['done'], runner: { skill, context } },
+          done: { name: 'Done', kind: 'terminal' },
+        },
+      });
+    const releaseNotes = createSkill({ name: 'release-notes', description: 'Draft notes', instructions: 'Draft.' });
+
+    it('rejects skills not made with createSkill() and duplicate names', () => {
+      expect(
+        () =>
+          new MastraFactory({
+            secretEncryption,
+            storage: fakeStorage(),
+            skills: [{ name: 'release-notes', instructions: 'Draft.' }] as never,
+          }),
+      ).toThrow('must be created with createSkill()');
+      expect(
+        () => new MastraFactory({ secretEncryption, storage: fakeStorage(), skills: [releaseNotes, releaseNotes] }),
+      ).toThrow("duplicate skill name 'release-notes'");
+    });
+
+    it('warns at startup when a board phase runs a skill that does not exist', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      new MastraFactory({ secretEncryption, storage: fakeStorage(), boards: [notesBoard('release-notes')] });
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("Board 'notes' phase 'drafting' runs skill 'release-notes', but no such skill exists"),
+      );
+      warn.mockClear();
+
+      new MastraFactory({
+        secretEncryption,
+        storage: fakeStorage(),
+        boards: [notesBoard('release-notes')],
+        skills: [releaseNotes],
+      });
+      new MastraFactory({ secretEncryption, storage: fakeStorage(), boards: [notesBoard('factory-plan')] });
+      expect(warn).not.toHaveBeenCalledWith(expect.stringContaining("Board 'notes'"));
+
+      new MastraFactory({ secretEncryption, storage: fakeStorage(), boards: [notesBoard('factory-review')] });
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("runs review skill 'factory-review' in the 'build' context"),
+      );
+      warn.mockRestore();
+    });
+  });
+
+  it('accepts and ignores the retired includeDefaultBoards, warning once per process', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const retired = (message: unknown) => String(message).includes('MastraFactory({ includeDefaultBoards })');
+    for (const includeDefaultBoards of [false, true, false]) {
+      expect(() => new MastraFactory({ secretEncryption, storage: fakeStorage(), includeDefaultBoards })).not.toThrow();
+    }
+    expect(warn.mock.calls.filter(([message]) => retired(message))).toEqual([
+      [
+        "[Mastra Factory] MastraFactory({ includeDefaultBoards }) is deprecated and ignored: every project gets Factory's Work board when it has no boards yet, and one that has any keeps what it has. To run your own Work board, store it under the 'work' key with factory.upsertBoard(board, { projects: 'all' }).",
+      ],
+    ]);
+    warn.mockRestore();
   });
 });
 
@@ -472,9 +592,11 @@ describe('MastraFactory.prepare', () => {
     const requestContext = new RequestContext();
 
     const first = await inputProcessors({ requestContext });
-    expect(first).toHaveLength(3);
+    expect(first).toHaveLength(4);
     expect(first[0]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
     expect(first[1]).toBeInstanceOf(FactorySessionsStateProcessor);
+    expect(first[2]).toBeInstanceOf(FactoryPhaseStateProcessor);
+    expect(first[3]).toBeInstanceOf(FactoryWorkItemStateProcessor);
     expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
       observerModelId: 'openai/observer-1',
     });
@@ -588,10 +710,31 @@ describe('MastraFactory.prepare', () => {
     ).resolves.toBe('anthropic/factory-observer');
   });
 
-  it('uses the platform bot co-author identity', async () => {
+  it('defaults the commit co-author to the platform bot', async () => {
     const config = await prepareFactory({ storage: fakeStorage(), auth: null });
 
     expect(config.coAuthor).toEqual({ name: 'mastra-platform[bot]' });
+  });
+
+  it('forwards a configured commit co-author identity', async () => {
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      auth: null,
+      coAuthor: { name: 'Acme Bot', email: 'bot@acme.dev' },
+    });
+
+    expect(config.coAuthor).toEqual({ name: 'Acme Bot', email: 'bot@acme.dev' });
+  });
+
+  it('forwards a partial commit co-author identity unchanged', async () => {
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      auth: null,
+      coAuthor: { name: 'Acme Bot' },
+    });
+
+    // The SDK fills the email it was not given; Factory only forwards.
+    expect(config.coAuthor).toEqual({ name: 'Acme Bot' });
   });
 
   it('warns and falls back to plaintext when auth is enabled without secret encryption', async () => {
@@ -610,13 +753,37 @@ describe('MastraFactory.prepare', () => {
     await expect(factory.prepare()).resolves.toBeDefined();
   });
 
-  it('passes the host-owned keyed Knowledge instance through the SDK mount', async () => {
-    const instance = new Knowledge({ id: 'mastra', description: 'Factory knowledge' });
-    const knowledge = { key: 'mastra', instance };
+  it('mounts a bare Knowledge instance and serves its reads under the instance id', async () => {
+    const knowledge = new Knowledge({ id: 'shared', description: 'Factory knowledge', scopes: {} });
 
     const config = await prepareFactory({ storage: fakeStorage(), knowledge });
+    assembleFactoryApiRoutesSpy.mockClear();
+    (config.buildApiRoutes as (deps: object) => ApiRoute[])({ controller: sessionNotifierStub, authStorage: {} });
 
-    expect(config.knowledge).toEqual(knowledge);
+    expect(config.knowledge).toBe(knowledge);
+    expect(assembleFactoryApiRoutesSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ knowledgeEnabled: true, knowledgeKey: 'shared' }),
+    );
+  });
+
+  it('still mounts the { key, instance } form and serves its reads under that key', async () => {
+    const instance = new Knowledge({ id: 'shared', description: 'Factory knowledge', scopes: {} });
+    const knowledge = { key: 'legacy', instance };
+
+    const config = await prepareFactory({ storage: fakeStorage(), knowledge });
+    assembleFactoryApiRoutesSpy.mockClear();
+    (config.buildApiRoutes as (deps: object) => ApiRoute[])({ controller: sessionNotifierStub, authStorage: {} });
+
+    expect(config.knowledge).toBe(knowledge);
+    expect(assembleFactoryApiRoutesSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ knowledgeEnabled: true, knowledgeKey: 'legacy' }),
+    );
+  });
+
+  it('turns Knowledge off in the SDK mount when the Factory has no Knowledge config', async () => {
+    const config = await prepareFactory({ storage: fakeStorage() });
+
+    expect(config.knowledge).toBe(false);
   });
 
   it('throws when called twice', async () => {
@@ -674,9 +841,6 @@ describe('MastraFactory.prepare', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/mastra',
     });
     await sourceControl.sessions.create({
       sessionId: 'session-1',
@@ -823,6 +987,13 @@ describe('MastraFactory.prepare', () => {
     });
   });
 
+  it('hands the context-left sandbox stop to the transition service when a sandbox is configured', async () => {
+    const prepared = await prepareFactory({ storage: fakeStorage(), sandbox: () => ({ id: 'sb' }) as never });
+    (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
+    expect(transitionServiceOptions).toHaveLength(1);
+    expect(transitionServiceOptions[0]!.onContextLeft).toBeTypeOf('function');
+  });
+
   it('threads the default config version when the slot is omitted', async () => {
     const prepared = await prepareFactory({ storage: fakeStorage() });
     (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
@@ -844,8 +1015,16 @@ describe('MastraFactory.prepare', () => {
     expect(() => new MastraFactory({ storage: fakeStorage(), rules: {} } as never)).toThrow(/configVersion/);
   });
 
+  it('rejects the removed intake option and points at FACTORY_INTAKE_EVALUATOR', () => {
+    const config = { storage: fakeStorage(), intake: { evaluator: 'intake-order' } };
+    expect(() => new MastraFactory(config as never)).toThrow(/FACTORY_INTAKE_EVALUATOR/);
+  });
+
   it('forwards the configured dispatcher concurrency cap to the decision dispatcher', async () => {
-    const prepared = await prepareFactory({ storage: fakeStorage(), dispatcher: { maxInFlight: 7 } });
+    const prepared = await prepareFactory({
+      storage: fakeStorage(),
+      dispatcher: { maxInFlight: 7, maxInteractiveInFlight: 3 },
+    });
     (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
 
     const onFactoryRuntime = assembleFactoryApiRoutesSpy.mock.calls[0]![0].onFactoryRuntime;
@@ -854,6 +1033,7 @@ describe('MastraFactory.prepare', () => {
 
     expect(dispatcherOptions).toHaveLength(1);
     expect(dispatcherOptions[0]?.maxInFlight).toBe(7);
+    expect(dispatcherOptions[0]?.maxInteractiveInFlight).toBe(3);
   });
 
   it('registers and initializes factory domains through the storage lifecycle', async () => {
@@ -867,14 +1047,17 @@ describe('MastraFactory.prepare', () => {
       'model-credentials',
       'model-defaults',
       'memory-settings',
+      'boards',
       'custom-providers',
+      'sandbox-envs',
       'queue-health',
       'integrations',
       'projects',
-      'filesystem',
       'source-control',
       'channel-identity',
-      'work-item-comments',
+      'skill-overrides',
+      'voice-settings',
+      'open-runs',
     ]);
     expect(storage.domainNames().every(name => storage.isDomainReady(name))).toBe(true);
   });
@@ -956,6 +1139,33 @@ describe('MastraFactory.prepare', () => {
     const config = await prepareFactory({ storage, vector });
     expect(config.storage).toBe(storage.getMastraStorage());
     expect(config.vector).toBe(vector);
+    expect(config.embedder).toBeUndefined();
+  });
+
+  it('gives the SDK mount the deployment embedder built once from its router id', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'sk-embeddings');
+    onTestFinished(() => vi.unstubAllEnvs());
+    const vector = new PgVector({ id: 'factory-test-vectors', connectionString: 'postgres://cfg/app' });
+    const embedderOptions = { headers: { 'x-team': 'factory' } };
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      vector,
+      embedder: 'openai/text-embedding-3-small',
+      embedderOptions,
+    });
+    expect(config.embedder).toMatchObject({ provider: 'openai', modelId: 'text-embedding-3-small' });
+    expect(config.embedderOptions).toBe(embedderOptions);
+  });
+
+  it('accepts a Mastra gateway embedder id, keyed by MASTRA_GATEWAY_API_KEY', async () => {
+    vi.stubEnv('MASTRA_GATEWAY_API_KEY', 'gateway-key');
+    onTestFinished(() => vi.unstubAllEnvs());
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      vector: new PgVector({ id: 'factory-test-vectors', connectionString: 'postgres://cfg/app' }),
+      embedder: 'mastra/openai/text-embedding-3-small',
+    });
+    expect(config.embedder).toMatchObject({ provider: 'mastra', modelId: 'openai/text-embedding-3-small' });
   });
 
   it('tells the SDK which backend the Mastra store uses (instanceof breaks across duplicate package copies)', async () => {
@@ -976,6 +1186,7 @@ describe('MastraFactory.prepare', () => {
     const config = await prepareFactory({ storage: fakeStorage() });
     expect(config.initialState).toMatchObject({ skipGlobalInstructions: true, factoryOrgUnresolved: true });
     expect(config.disableSettingsOmSeed).toBe(true);
+    expect(config.planApprovalStartsGoal).toBe(false);
   });
 
   it('heals a cold pull request review binding before the SDK reads repository instructions', async () => {
@@ -1248,12 +1459,12 @@ describe('MastraFactory.prepare', () => {
       mountApiRoutes(app as never, routes);
 
       const features = await (await app.request('/web/config/features')).json();
-      const mountsMcp = routes.some(route => route.path === '/web/factory/projects/:projectId/mcp');
+      const mountsMcp = routes.some(route => route.path === '/mcp');
       expect({ features: features.mcp, mountsMcp }).toEqual({ features: serves, mountsMcp: serves });
     }
   });
 
-  it('registers the Factory transition tool only for exact active bindings', async () => {
+  it('registers the Factory outcome tool only for exact active bindings', async () => {
     const storage = fakeStorage();
     const config = await prepareFactory({ storage });
     const workItems = storage.getDomain<WorkItemsStorage>('work-items');
@@ -1284,9 +1495,322 @@ describe('MastraFactory.prepare', () => {
       getState: () => ({ factoryProjectId: binding.factoryProjectId }),
     });
 
-    await expect(extraTools({ requestContext })).resolves.toHaveProperty('factory_transition_work_item');
+    await expect(extraTools({ requestContext })).resolves.toHaveProperty('factory_report_outcome');
     lookup.mockResolvedValue(null);
     await expect(extraTools({ requestContext })).resolves.toEqual({});
+  });
+
+  describe('configured tools', () => {
+    type ExtraTools = (args: { requestContext: RequestContext }) => Promise<Record<string, any>>;
+
+    /** A real MCP server over HTTP that requires a bearer token, like a hosted one. */
+    async function serveMcp(token: string): Promise<URL> {
+      const server = new MCPServer({
+        name: 'Tickets',
+        version: '1.0.0',
+        tools: {
+          lookup_ticket: createTool({
+            id: 'lookup_ticket',
+            description: 'Look up a ticket',
+            inputSchema: z.object({ id: z.string() }),
+            execute: async ({ id }) => ({ id, title: `Ticket ${id}` }),
+          }),
+        },
+      });
+      const httpServer = createServer(async (req, res) => {
+        if (req.headers.authorization !== `Bearer ${token}`) {
+          res.writeHead(401).end();
+          return;
+        }
+        await server.startHTTP({ url: new URL(req.url ?? '', 'http://localhost'), httpPath: '/mcp', req, res });
+      });
+      await new Promise<void>(resolve => httpServer.listen(0, '127.0.0.1', resolve));
+      onTestFinished(() => new Promise<void>(resolve => httpServer.close(() => resolve())));
+      return new URL(`http://127.0.0.1:${(httpServer.address() as AddressInfo).port}/mcp`);
+    }
+
+    async function mcpTools(url: URL, token: string) {
+      const mcp = new MCPClient({
+        id: `factory-tools-test-${Math.random()}`,
+        servers: { tickets: { url, requestInit: { headers: { Authorization: `Bearer ${token}` } } } },
+      });
+      onTestFinished(() => mcp.disconnect());
+      return mcp.listTools();
+    }
+
+    it('offers MCP tools connected before the factory to every run, and they call the server', async () => {
+      const url = await serveMcp('secret');
+      const config = await prepareFactory({ storage: fakeStorage(), tools: await mcpTools(url, 'secret') });
+
+      const tools = await (config.extraTools as ExtraTools)({ requestContext: new RequestContext() });
+
+      expect(Object.keys(tools)).toEqual(['tickets_lookup_ticket']);
+      const result = await tools.tickets_lookup_ticket.execute({ id: '42' }, { requestContext: new RequestContext() });
+      expect(result.structuredContent ?? JSON.parse(result.content[0].text)).toEqual({ id: '42', title: 'Ticket 42' });
+    });
+
+    it('resolves tools per run when given a function', async () => {
+      const resolver = vi.fn(async ({ requestContext }: { requestContext: RequestContext }) => ({
+        [`whoami_${requestContext.get('org')}`]: createTool({
+          id: 'whoami',
+          description: 'Who am I',
+          execute: async () => ({}),
+        }),
+      }));
+      const config = await prepareFactory({ storage: fakeStorage(), tools: resolver });
+      const extraTools = config.extraTools as ExtraTools;
+
+      for (const org of ['org-a', 'org-b']) {
+        const requestContext = new RequestContext();
+        requestContext.set('org', org);
+        expect(Object.keys(await extraTools({ requestContext }))).toEqual([`whoami_${org}`]);
+      }
+      expect(resolver).toHaveBeenCalledTimes(2);
+    });
+
+    it("keeps Factory's own tool when a configured tool reuses its name, and still offers the others", async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      onTestFinished(() => warn.mockRestore());
+      const storage = fakeStorage();
+      const config = await prepareFactory({
+        storage,
+        tools: {
+          factory_report_outcome: createTool({ id: 'impostor', description: 'x', execute: async () => ({}) }),
+          tickets_lookup: createTool({ id: 'tickets_lookup', description: 'y', execute: async () => ({}) }),
+        },
+      });
+      vi.spyOn(storage.getDomain<WorkItemsStorage>('work-items'), 'findActiveRunBinding').mockResolvedValue({
+        id: 'binding-1',
+        orgId: 'org-1',
+        factoryProjectId: '11111111-2222-4333-8444-555555555555',
+        workItemId: 'item-1',
+        role: 'work',
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        sessionId: 'session-1',
+        branch: 'factory/item',
+        status: 'active',
+        createdAt: new Date(),
+        revokedAt: null,
+      });
+      const requestContext = new RequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+      requestContext.set('controller', {
+        resourceId: 'resource-1',
+        sessionId: 'session-1',
+        threadId: 'thread-1',
+        getState: () => ({ factoryProjectId: '11111111-2222-4333-8444-555555555555' }),
+      });
+
+      const resolveTurn = () => (config.extraTools as ExtraTools)({ requestContext });
+      for (const tools of [await resolveTurn(), await resolveTurn()]) {
+        expect(tools.factory_report_outcome.id).not.toBe('impostor');
+        expect(tools.tickets_lookup.id).toBe('tickets_lookup');
+      }
+      const clashWarnings = warn.mock.calls.filter(([message]) =>
+        String(message).includes("configured tool 'factory_report_outcome'"),
+      );
+      expect(clashWarnings).toHaveLength(1);
+    });
+
+    it("never loads the host process's own MCP servers", async () => {
+      const config = await prepareFactory({ storage: fakeStorage() });
+      expect(config.disableMcp).toBe(true);
+    });
+
+    describe("from the Platform project's Mastra Connect connections", () => {
+      afterEach(() => {
+        vi.unstubAllEnvs();
+      });
+
+      async function servePlatform({ listing }: { listing: 'linear' | 'down' }) {
+        const requests: Array<{ method?: string; url?: string; authorization?: string }> = [];
+        const httpServer = createServer((req, res) => {
+          requests.push({ method: req.method, url: req.url, authorization: req.headers.authorization });
+          const json = (body: unknown) =>
+            res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(body));
+          if (req.url?.startsWith('/v2/connections?providerKey=')) {
+            json({ connections: [] });
+          } else if (req.url?.startsWith('/v2/projects/')) {
+            if (listing === 'down') res.writeHead(503).end();
+            else
+              json({
+                connections: [
+                  { id: 'conn-linear', integrationId: 'linear', status: 'active' },
+                  { id: 'conn-github', integrationId: 'github', status: 'active' },
+                ],
+              });
+          } else if (req.url === '/v2/integrations') {
+            json({ integrations: [] });
+          } else if (req.method === 'POST' && req.url === '/v2/connections/conn-linear/proxy/graphql') {
+            json({
+              data: {
+                teams: { nodes: [{ id: 'team-1', name: 'Factory', key: 'FACT' }], pageInfo: { hasNextPage: false } },
+              },
+            });
+          } else {
+            res.writeHead(404).end();
+          }
+        });
+        httpServer.listen(0, '127.0.0.1');
+        await once(httpServer, 'listening');
+        onTestFinished(async () => {
+          httpServer.close();
+          await once(httpServer, 'close');
+        });
+        const address = httpServer.address();
+        if (!address || typeof address === 'string') throw new Error('The Platform stand-in has no TCP port.');
+        return { url: `http://127.0.0.1:${address.port}`, requests };
+      }
+
+      function stubPlatform(url: string, projectId: string) {
+        vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-jwt');
+        vi.stubEnv('MASTRA_PROJECT_ID', projectId);
+        vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', url);
+      }
+
+      it('gives every session the Linear tools without destructive or GitHub ones, acting with the deploy token', async () => {
+        const platform = await servePlatform({ listing: 'linear' });
+        stubPlatform(platform.url, 'project-linear');
+        const config = await prepareFactory({ storage: fakeStorage() });
+
+        const tools = await (config.extraTools as ExtraTools)({ requestContext: new RequestContext() });
+
+        expect(Object.keys(tools)).toEqual(expect.arrayContaining(['linear_list_teams', 'linear_list_issues']));
+        expect(Object.keys(tools).filter(name => /delete|archive/i.test(name))).toEqual([]);
+        expect(Object.keys(tools).filter(name => name.startsWith('github_'))).toEqual([]);
+        const teams = await tools.linear_list_teams.execute({}, { requestContext: new RequestContext() });
+        expect(teams).toEqual({ items: [{ id: 'team-1', name: 'Factory', key: 'FACT' }] });
+        const proxied = platform.requests.find(request => request.url === '/v2/connections/conn-linear/proxy/graphql');
+        expect(proxied?.authorization).toBe('Bearer platform-jwt');
+      });
+
+      it("keeps the run going without Connect tools when the Platform can't list the connections", async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        onTestFinished(() => warn.mockRestore());
+        const platform = await servePlatform({ listing: 'down' });
+        stubPlatform(platform.url, 'project-down');
+        const config = await prepareFactory({ storage: fakeStorage() });
+
+        const tools = await (config.extraTools as ExtraTools)({ requestContext: new RequestContext() });
+
+        expect(Object.keys(tools).filter(name => name.startsWith('linear_'))).toEqual([]);
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('Mastra Connect tools are unavailable for this run'));
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('[factory] incidentio tools are unavailable for this run'),
+        );
+      });
+
+      it("offers the host's own tools instead of the project's connections", async () => {
+        const platform = await servePlatform({ listing: 'linear' });
+        stubPlatform(platform.url, 'project-host-tools');
+        const config = await prepareFactory({ storage: fakeStorage(), tools: {} });
+
+        const tools = await (config.extraTools as ExtraTools)({ requestContext: new RequestContext() });
+
+        expect(Object.keys(tools).filter(name => name.startsWith('linear_'))).toEqual([]);
+      });
+
+      // #30579: setting `tools` used to drop the project id, so Settings › Tools said Connect tools were off.
+      it('lists the connections in Settings › Tools when the tools option narrows them to read-only', async () => {
+        const platform = await servePlatform({ listing: 'linear' });
+        stubPlatform(platform.url, 'project-narrowed');
+        const config = await prepareFactory({
+          storage: fakeStorage(),
+          auth: null,
+          tools: connectTools({ providers: ['linear'], allowTools: ['linear_list_*'] }),
+        });
+
+        const tools = await (config.extraTools as ExtraTools)({ requestContext: new RequestContext() });
+        expect(Object.keys(tools)).toContain('linear_list_teams');
+        expect(
+          Object.keys(tools).filter(name => name.startsWith('linear_') && !name.startsWith('linear_list_')),
+        ).toEqual([]);
+
+        const app = new Hono();
+        mountApiRoutes(
+          app as never,
+          (config.buildApiRoutes as (deps: object) => ApiRoute[])({ controller: sessionNotifierStub, authStorage: {} }),
+        );
+        const response = await app.request('/web/integrations/platform/connect-tools');
+        expect(response.status).toBe(200);
+        await expect(response.json()).resolves.toMatchObject({
+          projectId: 'project-narrowed',
+          toolsSource: 'custom',
+          connections: [expect.objectContaining({ id: 'conn-linear', integrationId: 'linear' })],
+        });
+
+        // The panel's tool list is what the tools option gives sessions, not Factory's default.
+        const listing = await app.request('/web/integrations/platform/connect-tools/tools');
+        expect(listing.status).toBe(200);
+        const { toolsSource, tools: listed } = (await listing.json()) as {
+          toolsSource: string;
+          tools: Array<{ name: string; description: string | null; excluded?: string }>;
+        };
+        expect(toolsSource).toBe('custom');
+        expect(listed.map(tool => tool.name).sort()).toEqual(
+          Object.keys(tools)
+            .filter(name => name.startsWith('linear_'))
+            .sort(),
+        );
+        expect(listed.find(tool => tool.name === 'linear_list_teams')?.description).toEqual(expect.any(String));
+        expect(listed.filter(tool => tool.excluded)).toEqual([]);
+      });
+
+      it('lists in Settings › Tools every Connect tool sessions get, and the ones Factory leaves out', async () => {
+        const platform = await servePlatform({ listing: 'linear' });
+        stubPlatform(platform.url, 'project-default-list');
+        const config = await prepareFactory({ storage: fakeStorage(), auth: null });
+        const sessionTools = Object.keys(
+          await (config.extraTools as ExtraTools)({ requestContext: new RequestContext() }),
+        ).filter(name => name.startsWith('linear_'));
+
+        const app = new Hono();
+        mountApiRoutes(
+          app as never,
+          (config.buildApiRoutes as (deps: object) => ApiRoute[])({ controller: sessionNotifierStub, authStorage: {} }),
+        );
+        const response = await app.request('/web/integrations/platform/connect-tools/tools');
+        expect(response.status).toBe(200);
+        const { toolsSource, tools: listed } = (await response.json()) as {
+          toolsSource: string;
+          tools: Array<{ name: string; excluded?: string }>;
+        };
+
+        expect(toolsSource).toBe('default');
+        const offered = listed.filter(tool => !tool.excluded).map(tool => tool.name);
+        expect(offered.sort()).toEqual([...sessionTools].sort());
+        expect(listed).toEqual(
+          expect.arrayContaining([
+            {
+              name: 'linear_delete_issue',
+              description: expect.any(String),
+              requiresApproval: false,
+              excluded: 'destructive',
+            },
+            expect.objectContaining({ name: 'linear_archive_issue', excluded: 'destructive' }),
+          ]),
+        );
+        expect(listed.filter(tool => tool.name.startsWith('github_'))).toEqual([]);
+      });
+
+      it("says why Settings › Tools can't list the tools when the Platform is down", async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        onTestFinished(() => warn.mockRestore());
+        const platform = await servePlatform({ listing: 'down' });
+        stubPlatform(platform.url, 'project-list-down');
+        const config = await prepareFactory({ storage: fakeStorage(), auth: null });
+
+        const app = new Hono();
+        mountApiRoutes(
+          app as never,
+          (config.buildApiRoutes as (deps: object) => ApiRoute[])({ controller: sessionNotifierStub, authStorage: {} }),
+        );
+        const response = await app.request('/web/integrations/platform/connect-tools/tools');
+        expect(response.status).toBe(502);
+        await expect(response.json()).resolves.toMatchObject({ error: 'tools_unavailable' });
+      });
+    });
   });
 
   describe('Factory tools in user sessions', () => {
@@ -1318,9 +1842,6 @@ describe('MastraFactory.prepare', () => {
         orgId: 'org-1',
         connectionId: connection.id,
         repositoryId: repository.id,
-        createdByUserId: 'user-1',
-        sandboxProvider: 'local',
-        sandboxWorkdir: '/sandbox/mastra',
       });
       await sourceControl.sessions.create({
         sessionId: 'session-1',
@@ -1348,7 +1869,12 @@ describe('MastraFactory.prepare', () => {
       return requestContext;
     }
 
-    const READ_TOOLS = ['factory_list_work_items', 'factory_inspect_work_item', 'factory_list_attention'];
+    const READ_TOOLS = [
+      'factory_list_work_items',
+      'factory_inspect_work_item',
+      'factory_list_attention',
+      'factory_list_audit_events',
+    ];
     const MANAGEMENT_TOOLS = [
       'factory_create_work_item',
       'factory_update_work_item',
@@ -1383,6 +1909,7 @@ describe('MastraFactory.prepare', () => {
       'factory_subscribe_session',
       'factory_unsubscribe_session',
       'factory_recreate_sandbox',
+      'factory_sandbox_port_url',
     ];
 
     it('gives a user session every tool on every turn, and other sessions none', async () => {
@@ -1430,6 +1957,7 @@ describe('MastraFactory.prepare', () => {
       };
 
       expect(await toolsWith('platform')).toHaveProperty('factory_recreate_sandbox');
+      expect(await toolsWith('platform')).toHaveProperty('factory_sandbox_port_url');
       expect(await toolsWith('e2b')).not.toHaveProperty('factory_recreate_sandbox');
       expect(await toolsWith('local')).not.toHaveProperty('factory_recreate_sandbox');
       expect(await toolsWith(undefined)).not.toHaveProperty('factory_recreate_sandbox');
@@ -1754,13 +2282,14 @@ describe('MastraFactory.prepare', () => {
       expect(runEndReports).toHaveLength(1);
     });
 
-    it("primes the woken session org's custom providers after resolving its credential policy", async () => {
+    it("primes the woken session owner's custom providers after resolving its credential policy", async () => {
       const storage = fakeStorage();
       const config = await prepareFactory({ storage });
       await seedUserSession(storage);
-      await storage.getDomain<CustomProvidersStorage>('custom-providers').upsert({
-        orgId: 'org-1',
-        userId: 'user-1',
+      // A user session runs on its owner's credentials, so on their own endpoints.
+      await storage.getDomain<CustomProvidersStorage>('custom-providers').create({
+        owner: { orgId: 'org-1', userId: 'user-1' },
+        createdBy: 'user-1',
         input: {
           providerId: 'acme',
           name: 'Acme',
@@ -1896,6 +2425,52 @@ describe('MastraFactory.prepare', () => {
       const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
       const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
       expect(paths).toContain('/web/jira/status');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('exposes Vanta intake with Platform credentials without explicit registration', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    try {
+      const config = await prepareFactory({ storage: fakeStorage() });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+      expect(paths).toContain('/web/vanta/status');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('does not register Platform Vanta without Platform credentials', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
+    try {
+      const config = await prepareFactory({ storage: fakeStorage() });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+      expect(paths).not.toContain('/web/vanta/status');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('keeps an explicit Vanta integration instead of registering Platform Vanta', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    try {
+      const config = await prepareFactory({
+        storage: fakeStorage(),
+        integrations: [
+          fakeIntegration({
+            id: 'vanta',
+            routes: () => [{ path: '/web/custom-vanta', method: 'GET', handler: () => new Response() }],
+          }),
+        ],
+      });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+      expect(paths).toContain('/web/custom-vanta');
+      expect(paths).not.toContain('/web/vanta/status');
     } finally {
       vi.unstubAllEnvs();
     }
@@ -2091,7 +2666,7 @@ describe('MastraFactory.prepare', () => {
       authStorage: {},
     });
     const app = await createHonoServer(new Mastra({ server: { ...server, apiRoutes } }), { tools: {} });
-    const url = 'http://localhost/web/factory/projects/fp-1/mcp';
+    const url = 'http://localhost/mcp';
     const origin = 'https://inspector.example.com';
 
     const preflight = await app.request(url, {
@@ -2118,14 +2693,108 @@ describe('MastraFactory.prepare', () => {
     const challenge = anonymous.headers
       .get('WWW-Authenticate')
       ?.match(/^Bearer resource_metadata="(https?:\/\/[^/"]+)(\/\.well-known\/oauth-protected-resource\/[^"]+)"$/);
-    expect(challenge?.[2]).toBe('/.well-known/oauth-protected-resource/web/factory/projects/fp-1/mcp');
+    expect(challenge?.[2]).toBe('/.well-known/oauth-protected-resource/mcp');
 
     const metadata = await app.request(`http://localhost${challenge![2]}`, { headers: { Origin: origin } });
     expect(metadata.status).toBe(200);
     expect(await metadata.json()).toMatchObject({
-      resource: `${challenge![1]}/web/factory/projects/fp-1/mcp`,
+      resource: `${challenge![1]}/mcp`,
       authorization_servers: ['https://auth.example.com'],
     });
+  });
+
+  it('refuses tokens issued for the MCP endpoint on every other route', async () => {
+    // Like self-managed WorkOS, this provider checks a bearer's signature and issuer but not its audience.
+    const provider = fakeProvider({
+      authenticateToken: vi.fn(async (token: string) =>
+        token ? { id: 'user_1', email: 'a@b.com', organizationId: 'org_1' } : null,
+      ),
+    });
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      auth: provider,
+      publicUrl: 'https://factory.example.com',
+      mcp: { authorizationServers: ['https://auth.example.com'] },
+    });
+    const server = (config.buildServerConfig as () => ServerConfig)();
+    const apiRoutes = (config.buildApiRoutes as (deps: object) => ApiRoute[])({
+      controller: sessionNotifierStub,
+      authStorage: {},
+    });
+    const app = await createHonoServer(new Mastra({ server: { ...server, apiRoutes } }), { tools: {} });
+    const jwt = (claims: object) =>
+      ['{"alg":"none"}', JSON.stringify({ sub: 'user_1', ...claims }), 'sig']
+        .map(part => Buffer.from(part).toString('base64url'))
+        .join('.');
+    const status = async (path: string, token: string) =>
+      (await app.request(`http://localhost${path}`, { headers: { Authorization: `Bearer ${token}` } })).status;
+
+    const mcpTokens = [
+      jwt({ aud: 'https://factory.example.com/mcp' }),
+      jwt({ aud: ['https://factory.example.com/mcp', 'https://other.example.com'] }),
+    ];
+    const otherToken = jwt({ aud: 'https://other.example.com' });
+    for (const path of ['/web/factory/projects', '/api/agents']) {
+      expect(await status(path, otherToken)).toBe(200);
+      for (const token of mcpTokens) expect(await status(path, token)).toBe(401);
+    }
+    // `/auth/me` is ungated, so it authenticates for itself.
+    const me = await app.request('http://localhost/auth/me', { headers: { Authorization: `Bearer ${mcpTokens[0]}` } });
+    expect(await me.json()).toMatchObject({ authenticated: false });
+  });
+
+  it.each([
+    ['WorkOS', (workos: MastraAuthWorkos) => workos],
+    ['WorkOS inside CompositeAuth', (workos: MastraAuthWorkos) => new CompositeAuth([workos])],
+    [
+      'WorkOS inside nested CompositeAuths',
+      (workos: MastraAuthWorkos) => new CompositeAuth([new CompositeAuth([workos])]),
+    ],
+  ])('with %s, refuses tokens issued for any other resource', async (_name, wrap) => {
+    // WorkOS verifies a bearer's signature against its JWKS but never its audience.
+    const { publicKey, privateKey } = await generateKeyPair('RS256');
+    const jwks = { keys: [{ ...(await exportJWK(publicKey)), kid: 'key-1', alg: 'RS256', use: 'sig' }] };
+    const jwksServer = createServer((_req, res) =>
+      res.setHeader('content-type', 'application/json').end(JSON.stringify(jwks)),
+    );
+    jwksServer.listen(0, '127.0.0.1');
+    await once(jwksServer, 'listening');
+    onTestFinished(() => void jwksServer.close());
+    const provider = new MastraAuthWorkos({
+      apiKey: 'sk_test',
+      clientId: 'client_test',
+      redirectUri: 'https://factory.example.com/auth/callback',
+      trustJwtClaims: true,
+    });
+    vi.spyOn(provider.getWorkOS().userManagement, 'getJwksUrl').mockReturnValue(
+      `http://127.0.0.1:${(jwksServer.address() as AddressInfo).port}/jwks`,
+    );
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      auth: wrap(provider),
+      publicUrl: 'https://factory.example.com',
+      mcp: { authorizationServers: ['https://auth.example.com'] },
+    });
+    const server = (config.buildServerConfig as () => ServerConfig)();
+    const apiRoutes = (config.buildApiRoutes as (deps: object) => ApiRoute[])({
+      controller: sessionNotifierStub,
+      authStorage: {},
+    });
+    const app = await createHonoServer(new Mastra({ server: { ...server, apiRoutes } }), { tools: {} });
+    const sign = (audience?: string) => {
+      const jwt = new SignJWT({ sub: 'user_1', org_id: 'org_1' })
+        .setProtectedHeader({ alg: 'RS256', kid: 'key-1' })
+        .setIssuer('https://api.workos.com')
+        .setExpirationTime('5m');
+      return (audience ? jwt.setAudience(audience) : jwt).sign(privateKey);
+    };
+    const status = async (token: string) =>
+      (await app.request('http://localhost/api/agents', { headers: { Authorization: `Bearer ${token}` } })).status;
+
+    expect(await status(await sign())).toBe(200);
+    expect(await status(await sign('https://factory.example.com/mcp'))).toBe(401);
+    expect(await status(await sign('https://other.factory.mastra.cloud/mcp'))).toBe(401);
+    expect(await status(await sign('https://platform.mastra.ai/v1/mcp'))).toBe(401);
   });
 
   it('registers the per-tenant credential resolver when auth is configured', async () => {
@@ -2334,6 +3003,78 @@ describe('MastraFactory.prepare audit-capable integrations', () => {
   );
 });
 
+describe('MastraFactory.prepare default sandbox', () => {
+  beforeEach(() => {
+    for (const key of [
+      'MASTRA_PLATFORM_ACCESS_TOKEN',
+      'MASTRA_PLATFORM_SECRET_KEY',
+      'MASTRA_PROJECT_ID',
+      'MASTRA_ENVIRONMENT_ID',
+      'MASTRA_DEV',
+    ]) {
+      vi.stubEnv(key, '');
+    }
+    vi.stubEnv('NODE_ENV', 'production');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  function stubPlatformEnv() {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'jwt_platform');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'project-1');
+    vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'environment-1');
+  }
+
+  it('leaves sandboxes disabled without Platform credentials', async () => {
+    const ctx = await prepareIntegrationContext({ storage: fakeStorage() });
+    expect(ctx.sandbox).toBeUndefined();
+  });
+
+  it('installs a Platform sandbox in built deployments', async () => {
+    stubPlatformEnv();
+    const ctx = await prepareIntegrationContext({ storage: fakeStorage() });
+    expect(ctx.sandbox?.provider).toBe('platform');
+    expect(ctx.sandbox!.create({ sessionId: 'session-1', getRepositoryAccess: undefined }, {})).toMatchObject({
+      provider: 'platform',
+      id: 'session-1',
+      _client: { accessToken: 'jwt_platform' },
+    });
+  });
+
+  it.each([
+    ['MASTRA_DEV', 'true'],
+    ['NODE_ENV', 'development'],
+  ])('installs a local sandbox in development (%s=%s)', async (key, value) => {
+    stubPlatformEnv();
+    vi.stubEnv(key, value);
+    vi.stubEnv('MASTRACODE_LOCAL_SANDBOX_ROOT', '/tmp/mc-dev-sandboxes');
+    vi.stubEnv('DATABASE_URL', 'postgres://secret');
+    const ctx = await prepareIntegrationContext({ storage: fakeStorage() });
+    expect(ctx.sandbox?.provider).toBe('local');
+    const created = ctx.sandbox!.create({ sessionId: 'session-1', getRepositoryAccess: undefined }, {}) as LocalSandbox;
+    expect(created.workingDirectory).toBe(join('/tmp/mc-dev-sandboxes', 'session-1'));
+    expect(created.env).not.toHaveProperty('DATABASE_URL');
+    expect(created.env).not.toHaveProperty('MASTRA_PLATFORM_ACCESS_TOKEN');
+  });
+
+  it('warns and stays disabled when the Platform environment id is missing', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'project-1');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const ctx = await prepareIntegrationContext({ storage: fakeStorage() });
+    expect(ctx.sandbox).toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('MASTRA_ENVIRONMENT_ID is missing'));
+  });
+
+  it('keeps an explicit sandbox over the Platform default', async () => {
+    stubPlatformEnv();
+    const ctx = await prepareIntegrationContext({ storage: fakeStorage(), sandbox: () => ({ id: 'sb' }) as never });
+    expect(ctx.sandbox?.provider).toBe('custom');
+  });
+});
+
 describe('MastraFactory.prepare integrations', () => {
   it('rejects duplicate integration ids', async () => {
     const factory = new MastraFactory({
@@ -2356,16 +3097,14 @@ describe('MastraFactory.prepare integrations', () => {
     const github = fakeIntegration({
       id: 'github',
       sourceControlStorage,
-      listInstallationRepos: vi.fn(async () => [
-        {
-          id: 456,
-          fullName: 'acme/api',
-          name: 'api',
-          owner: 'acme',
-          defaultBranch: 'invalid branch',
-          private: false,
-        },
-      ]),
+      getInstallationRepo: vi.fn(async () => ({
+        id: 456,
+        fullName: 'acme/api',
+        name: 'api',
+        owner: 'acme',
+        defaultBranch: 'invalid branch',
+        private: false,
+      })),
     } as Partial<FactoryIntegration> & { id: string });
 
     await prepareFactory({ storage, integrations: [github] });
@@ -2379,6 +3118,39 @@ describe('MastraFactory.prepare integrations', () => {
     });
 
     expect(repository?.defaultBranch).toBe('main');
+  });
+
+  it('resolves a selected GitHub repository with one lookup and rejects a different repository at that name', async () => {
+    const storage = fakeStorage();
+    const installation = { id: 'installation-1', externalId: '123' };
+    const upsert = vi.fn(async ({ input }: { input: unknown }) => input);
+    const getInstallationRepo = vi.fn(async () => ({
+      id: 789,
+      fullName: 'acme/api',
+      name: 'api',
+      owner: 'acme',
+      defaultBranch: 'main',
+      private: false,
+    }));
+    const listInstallationRepos = vi.fn(async () => []);
+    const github = fakeIntegration({
+      id: 'github',
+      sourceControlStorage: { installations: { get: vi.fn(async () => installation) }, repositories: { upsert } },
+      getInstallationRepo,
+      listInstallationRepos,
+    } as Partial<FactoryIntegration> & { id: string });
+
+    await prepareFactory({ storage, integrations: [github] });
+    const resolveRepository = projectRouteOptions.at(-1)?.resolveRepository;
+    const input = { integrationId: 'github', orgId: 'org-1', installationId: installation.id, slug: 'acme/api' };
+
+    await expect(resolveRepository?.({ ...input, externalId: '456' })).resolves.toBeNull();
+    expect(upsert).not.toHaveBeenCalled();
+
+    await expect(resolveRepository?.({ ...input, externalId: '789' })).resolves.toMatchObject({ externalId: '789' });
+    expect(getInstallationRepo).toHaveBeenCalledWith(123, 'acme/api');
+    expect(getInstallationRepo).toHaveBeenCalledTimes(2);
+    expect(listInstallationRepos).not.toHaveBeenCalled();
   });
 
   it('initializes version-control capabilities with integration-scoped storage', async () => {
@@ -2578,6 +3350,23 @@ describe('MastraFactory.prepare integrations', () => {
     expect(ctx.storage.sourceControlOwner).toBeUndefined();
   });
 
+  it('hands workers the Not routed lookup only when the boards domain is ready', async () => {
+    const contextFor = async (boardsReady: boolean) => {
+      const storage = fakeStorage();
+      if (!boardsReady) vi.spyOn(storage, 'isDomainReady').mockImplementation(domain => domain !== 'boards');
+      const workers = vi.fn((_ctx: IntegrationContext) => [{ name: 'custom-poller' } as unknown as MastraWorker]);
+      await new MastraFactory({
+        secretEncryption,
+        storage,
+        integrations: [fakeIntegration({ id: 'custom', workers })],
+      }).prepare();
+      return workers.mock.calls[0]![0];
+    };
+
+    expect((await contextFor(true)).runtime?.notRouted).toBeDefined();
+    expect((await contextFor(false)).runtime?.notRouted).toBeUndefined();
+  });
+
   it('does not collect workers from integrations that are not ready', async () => {
     const storage = fakeStorage();
     vi.spyOn(storage, 'isDomainReady').mockReturnValue(false);
@@ -2590,6 +3379,39 @@ describe('MastraFactory.prepare integrations', () => {
     const args = await factory.prepare();
     expect(workers).not.toHaveBeenCalled();
     expect(args).not.toHaveProperty('workers');
+  });
+
+  it('runs one Platform Connect event poller, routing to the Platform integrations that read event logs', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_factory');
+    onTestFinished(() => vi.unstubAllEnvs());
+    const args = await new MastraFactory({ secretEncryption, storage: fakeStorage() }).prepare();
+
+    const names = (args.workers ?? []).map(worker => worker.name);
+    expect(names.filter(name => name === 'platform-connect-event-poller')).toHaveLength(1);
+    expect(names).not.toContain('platform-gitlab-events');
+    // Linear's events come through the shared poller; no Linear poller of its own.
+    expect(names.filter(name => name.startsWith('platform-linear'))).toEqual([]);
+    const poller = args.workers!.find(worker => worker.name === 'platform-connect-event-poller') as unknown as {
+      diagnostics(): { integrations: string[] };
+    };
+    expect(poller.diagnostics().integrations.sort()).toEqual(['gitlab', 'linear']);
+  });
+
+  it('runs no Platform Connect event poller when no installed integration reads event logs', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_factory');
+    onTestFinished(() => vi.unstubAllEnvs());
+    // Explicit integrations fill every Platform slot but Vanta, which has no events.
+    const args = await new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      integrations: ['github', 'incidentio', 'jira', 'gitlab', 'linear'].map(id => fakeIntegration({ id })),
+    }).prepare();
+
+    const names = (args.workers ?? []).map(worker => worker.name);
+    expect(names).not.toContain('platform-connect-event-poller');
+    expect(names).toContain('vanta-issue-reconcile');
   });
 
   it('omits the workers option when no integration contributes workers', async () => {
@@ -2612,7 +3434,9 @@ describe('MastraFactory.prepare integrations', () => {
     function withController() {
       const setChannels = vi.fn();
       prepareMock.mockResolvedValueOnce({
-        base: { controller: { onSessionCreated: vi.fn(), setChannels } },
+        base: {
+          controller: { onSessionCreated: vi.fn(() => () => {}), onSessionDeleted: vi.fn(() => () => {}), setChannels },
+        },
         mastraArgs: {},
         finalize: vi.fn(async () => {}),
       } as never);
@@ -2620,8 +3444,8 @@ describe('MastraFactory.prepare integrations', () => {
     }
 
     /** Minimal valid FactoryChannelsConfig (config-form adapter entry). */
-    function fakeChannelsConfig() {
-      return { adapters: { fake: { adapter: { name: 'fake' } as never } } };
+    function fakeChannelsConfig(adapter: object = { name: 'fake' }) {
+      return { adapters: { fake: { adapter: adapter as never } } };
     }
 
     it("constructs an AgentControllerChannels from a ready integration's config and attaches it", async () => {
@@ -2646,6 +3470,70 @@ describe('MastraFactory.prepare integrations', () => {
       // default model, so it reads the same model-defaults handle the web routes use.
       expect(ctx.storage.modelDefaults).toBeDefined();
       expect(ctx.auth).toBeDefined();
+    });
+
+    it('makes concurrent shutdown callers wait for the same channel disconnect', async () => {
+      withController();
+      let finishDisconnect: (() => void) | undefined;
+      const disconnect = vi.fn(
+        () =>
+          new Promise<void>(resolve => {
+            finishDisconnect = resolve;
+          }),
+      );
+      const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig({ name: 'fake', disconnect }));
+      const factory = new MastraFactory({
+        secretEncryption,
+        storage: fakeStorage(),
+        integrations: [fakeIntegration({ id: 'chat-platform', channels })],
+      });
+
+      await factory.prepare();
+      const firstShutdown = factory.shutdown();
+      const secondShutdown = factory.shutdown();
+      let secondFinished = false;
+      void secondShutdown.then(() => {
+        secondFinished = true;
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(disconnect).toHaveBeenCalledOnce();
+      expect(secondFinished).toBe(false);
+
+      finishDisconnect?.();
+      await Promise.all([firstShutdown, secondShutdown]);
+      await factory.shutdown();
+      expect(disconnect).toHaveBeenCalledOnce();
+    });
+
+    it('settles synchronous disconnect failures and retries them during the next shutdown', async () => {
+      withController();
+      const disconnect = vi
+        .fn()
+        .mockImplementationOnce(() => {
+          throw new Error('disconnect failed');
+        })
+        .mockResolvedValueOnce(undefined);
+      const otherDisconnect = vi.fn().mockResolvedValue(undefined);
+      const channels = vi.fn((_ctx: IntegrationContext) => ({
+        adapters: {
+          fake: { adapter: { name: 'fake', disconnect } as never },
+          other: { adapter: { name: 'other', disconnect: otherDisconnect } as never },
+        },
+      }));
+      const factory = new MastraFactory({
+        secretEncryption,
+        storage: fakeStorage(),
+        integrations: [fakeIntegration({ id: 'chat-platform', channels })],
+      });
+
+      await factory.prepare();
+      await expect(factory.shutdown()).rejects.toThrow('disconnect failed');
+      expect(otherDisconnect).toHaveBeenCalledOnce();
+      await expect(factory.shutdown()).resolves.toBeUndefined();
+
+      expect(disconnect).toHaveBeenCalledTimes(2);
+      expect(otherDisconnect).toHaveBeenCalledOnce();
     });
 
     it('exposes the source-control owner on the channels context when github is registered', async () => {
@@ -2745,60 +3633,6 @@ describe('MastraFactory.prepare integrations', () => {
 
       await expect(factory.prepare()).rejects.toThrow(/\[slack, discord\] all provide channels/);
     });
-
-    it("collects a ready integration's feedPublisher even when it provides no channels", async () => {
-      const setChannels = withController();
-      const feedPublisher = vi.fn((_ctx: IntegrationContext) => ({ publish: vi.fn() }) as never);
-      const factory = new MastraFactory({
-        secretEncryption,
-        storage: fakeStorage(),
-        integrations: [fakeIntegration({ id: 'mirror', feedPublisher })],
-      });
-
-      await factory.prepare();
-
-      // Decoupled from channels(): the publisher is wired even though nothing
-      // attached channels.
-      expect(setChannels).not.toHaveBeenCalled();
-      expect(feedPublisher).toHaveBeenCalledOnce();
-      // Same context shape as routes()/workers().
-      const ctx = feedPublisher.mock.calls[0]![0];
-      expect(ctx.feed).toBeDefined();
-      expect(ctx.auth).toBeDefined();
-    });
-
-    it('collects a channel integration feedPublisher exactly once', async () => {
-      withController();
-      const feedPublisher = vi.fn((_ctx: IntegrationContext) => ({ publish: vi.fn() }) as never);
-      const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig());
-      const factory = new MastraFactory({
-        secretEncryption,
-        storage: fakeStorage(),
-        integrations: [fakeIntegration({ id: 'chat-platform', channels, feedPublisher })],
-      });
-
-      await factory.prepare();
-
-      // Guards against a double-push: collection happens only in the feed pass,
-      // not also in the channels loop.
-      expect(feedPublisher).toHaveBeenCalledOnce();
-    });
-
-    it('does not collect a feedPublisher from an integration that is not ready', async () => {
-      withController();
-      const storage = fakeStorage();
-      vi.spyOn(storage, 'isDomainReady').mockReturnValue(false);
-      const feedPublisher = vi.fn((_ctx: IntegrationContext) => ({ publish: vi.fn() }) as never);
-      const factory = new MastraFactory({
-        secretEncryption,
-        storage,
-        integrations: [fakeIntegration({ id: 'mirror', feedPublisher })],
-      });
-
-      await factory.prepare();
-
-      expect(feedPublisher).not.toHaveBeenCalled();
-    });
   });
 });
 
@@ -2806,6 +3640,20 @@ describe('MastraFactory.finalize', () => {
   it('throws before prepare()', async () => {
     const factory = new MastraFactory({ secretEncryption, storage: fakeStorage() });
     await expect(factory.finalize()).rejects.toThrow(/before prepare/);
+  });
+
+  it('reports the boot time once, on the timing channel, when finalize() finishes', async () => {
+    const factory = new MastraFactory({ secretEncryption, storage: fakeStorage() });
+    const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      await factory.prepare();
+      await factory.finalize();
+      const boot = write.mock.calls.map(([line]) => String(line)).filter(line => / boot \d+ms/.test(line));
+      expect(boot).toHaveLength(1);
+      expect(boot[0]).toMatch(/^\[factory:timing\] boot \d+ms\n$/);
+    } finally {
+      write.mockRestore();
+    }
   });
 
   it('runs the prepared finalize after prepare()', async () => {
@@ -2841,11 +3689,11 @@ describe('MastraFactory.finalize', () => {
       // Both used to wait for the migration, so the server never listened until it finished.
       await factory.prepare();
       await factory.finalize();
-      expect(reconcile).toHaveBeenCalledOnce();
+      expect(reconcile).not.toHaveBeenCalled();
 
-      // Its messages moved before its run binding did, so the boot reconcile may have missed them.
+      // Its messages moved before its run binding did, so an earlier reconcile may have missed them.
       finish(1);
-      await vi.waitFor(() => expect(reconcile).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(reconcile).toHaveBeenCalledOnce());
     } finally {
       sessionMigrationOverride.current = undefined;
       reconcile.mockRestore();
@@ -2862,7 +3710,21 @@ describe('MastraFactory.finalize', () => {
       // The real migration over an empty store; give its background job time to settle.
       await new Promise(resolve => setTimeout(resolve, 50));
       expect(finalizeSettled).toHaveBeenCalledOnce();
-      expect(reconcile).toHaveBeenCalledOnce();
+      expect(reconcile).not.toHaveBeenCalled();
+    } finally {
+      reconcile.mockRestore();
+    }
+  });
+
+  it('finishes booting without waiting for a bound-thread reconcile', async () => {
+    // A walk over hundreds of active bindings took ~75s and pushed boot past the health check.
+    const reconcile = vi
+      .spyOn(FactoryPhaseStateProcessor.prototype, 'reconcileAllBoundThreads')
+      .mockImplementation(() => new Promise(() => {}));
+    try {
+      const factory = new MastraFactory({ secretEncryption, storage: fakeStorage() });
+      await factory.prepare();
+      await expect(factory.finalize()).resolves.toBeUndefined();
     } finally {
       reconcile.mockRestore();
     }

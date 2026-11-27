@@ -1,49 +1,71 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ProviderRowsSkeleton } from '../providers/ProviderRows';
+import { MODEL_DEFAULTS_ANCHORS, ModelRoutingView } from '@mastra/playground-ui/domains/factory';
+import { useLocation } from 'react-router';
+import { useState } from 'react';
 
 import {
   useFactoryProjectQuery,
+  usePendingFactoryModelScope,
   useSetFactoryModelScopeMutation,
 } from '../../../../../../hooks/useFactoryDefaultModel';
-import { SkeletonRows } from '../../../../../ui/SkeletonRows';
 import type { FactoryModelScope } from '../../../../workspaces/services/github';
-import { SettingsSubsection } from '../../SettingsSubsection';
+import { FactoryModelPacks } from '../packs/FactoryModelPacks';
+import { PersonalModelPacks } from '../packs/PersonalModelPacks';
+import { ProviderList } from '../providers/ProviderList';
 import { savedModelScope } from './model-routes';
-import { ModelRoutingMap } from './ModelRoutingMap';
-import { ModelRoutingSwitch } from './ModelRoutingSwitch';
+import { ModelRoutingChangeDialog } from './ModelRoutingChangeDialog';
 
+// Keyed by Factory so a pending request is dropped on a Factory switch and never saves or reopens elsewhere.
 export function ModelRoutingSection({ factoryId }: { factoryId: string }) {
+  return <FactoryModelRouting key={factoryId} factoryId={factoryId} />;
+}
+
+function FactoryModelRouting({ factoryId }: { factoryId: string }) {
   const projectQuery = useFactoryProjectQuery(factoryId);
   const setModelScope = useSetFactoryModelScopeMutation(factoryId);
-  const pendingScope = setModelScope.isPending ? setModelScope.variables : undefined;
+  const [requestedScope, setRequestedScope] = useState<FactoryModelScope>();
+  const pendingScope = usePendingFactoryModelScope(factoryId);
+  const saving = pendingScope !== undefined;
   const savedScope = projectQuery.data && savedModelScope(projectQuery.data);
   const modelScope = pendingScope ?? savedScope;
   const error = setModelScope.error ?? projectQuery.error;
 
   const pickScope = (scope: FactoryModelScope) => {
-    if (scope === modelScope || setModelScope.isPending) return;
+    if (scope === modelScope || saving) return;
+    setRequestedScope(scope);
+  };
+
+  const confirmScope = (scope: FactoryModelScope) => {
+    setRequestedScope(undefined);
     setModelScope.mutate(scope);
   };
 
+  const hash = useLocation().hash.slice(1);
+  const openedDefaults = (['personal', 'factory'] as const).find(d => MODEL_DEFAULTS_ANCHORS[d] === hash);
+
   return (
-    <SettingsSubsection
-      scope="factory"
-      title="Model routing"
-      description="Which defaults chats and work-item runs use. Running threads keep the model they already picked."
-      action={
-        modelScope && (
-          <ModelRoutingSwitch value={modelScope} pending={setModelScope.isPending} onValueChange={pickScope} />
-        )
-      }
+    <ModelRoutingView
+      scope={modelScope}
+      loading={projectQuery.isPending}
+      pending={saving}
+      error={error?.message}
+      onPickScope={pickScope}
+      openedDefaults={openedDefaults}
+      providersSkeleton={<ProviderRowsSkeleton />}
+      personal={{ packs: <PersonalModelPacks />, providers: <ProviderList credentialScope="user" /> }}
+      factory={{
+        packs: <FactoryModelPacks factoryId={factoryId} />,
+        providers: <ProviderList credentialScope="org" />,
+      }}
     >
-      <div className="flex flex-col gap-6">
-        {error && (
-          <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
-            {error.message}
-          </Txt>
-        )}
-        {projectQuery.isPending && <SkeletonRows label="Loading model routing" rows={2} rowClassName="h-36 w-full" />}
-        {modelScope && <ModelRoutingMap factoryId={factoryId} modelScope={modelScope} />}
-      </div>
-    </SettingsSubsection>
+      {modelScope && (
+        <ModelRoutingChangeDialog
+          from={modelScope}
+          to={requestedScope}
+          onConfirm={confirmScope}
+          onCancel={() => setRequestedScope(undefined)}
+        />
+      )}
+    </ModelRoutingView>
   );
 }

@@ -1,4 +1,3 @@
-import { FolderIcon, FolderPlusIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { Fragment, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { FilterBarChip } from './filter-bar-chip';
@@ -9,7 +8,14 @@ import type { FilterBarGroup, FilterBarLogic } from './types';
 import { isFilterBarGroup } from './types';
 import { useSettleOnLeave } from './use-settle-on-leave';
 import { Button } from '@/ds/components/Button/Button';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { Txt } from '@/ds/components/Txt';
+import { IconChainLink3 } from '@/ds/icons/central/IconChainLink3';
+import { IconCircleBanSign } from '@/ds/icons/central/IconCircleBanSign';
+import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
+import { IconFolderAddRight } from '@/ds/icons/central/IconFolderAddRight';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 import { cn } from '@/lib/utils';
 
 const connectorClass =
@@ -72,6 +78,84 @@ function FilterBarLogicSwitch({ groupId, logic }: { groupId: string; logic: Filt
         </button>
       ))}
     </div>
+  );
+}
+
+/**
+ * Segmented quantifier control of a related clause (`Has | Has no`), followed by the scope's
+ * label so the header reads as a sentence: "Has no · spans".
+ */
+export function FilterBarQuantifierSwitch({ group }: { group: FilterBarGroup }) {
+  const ctx = useFilterBarContext();
+  const scope = group.scope ? ctx.getScope(group.scope.id) : undefined;
+  if (!group.scope || !scope) return null;
+  const current = group.scope.quantifierId;
+  return (
+    <>
+      <div
+        role="radiogroup"
+        aria-label={`Quantifier of ${scope.label}`}
+        className="flex h-control-sm items-center gap-0.5 rounded-md border border-border bg-fill-subtle p-0.5"
+      >
+        {scope.quantifiers.map(q => (
+          <button
+            key={q.id}
+            type="button"
+            role="radio"
+            aria-checked={current === q.id}
+            className={cn(
+              'h-full cursor-pointer rounded-sm px-1.5 text-label outline-none focus-visible:bg-fill-hover',
+              current === q.id ? 'bg-fill-hover text-foreground' : 'text-muted-foreground hover:text-foreground',
+            )}
+            onClick={() => ctx.setQuantifier(group.id, q.id)}
+          >
+            {q.label}
+          </button>
+        ))}
+      </div>
+      <Txt as="span" variant="label" tone="ink">
+        {scope.label}
+      </Txt>
+    </>
+  );
+}
+
+/** Footer menu adding a related clause on one of the bar's scopes. */
+function FilterBarRelatedMenu({ group, canNest }: { group: FilterBarGroup; canNest: boolean }) {
+  const ctx = useFilterBarContext();
+  if (!ctx.canNestScope(group.id)) return null;
+  const disabled = !canNest || ctx.scopedGroupsFull;
+  const reason = !canNest ? `Groups can nest ${ctx.maxDepth} levels deep` : 'No more related conditions allowed';
+  return (
+    <DropdownMenu>
+      <DropdownMenu.Trigger
+        render={
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<IconChainLink3 />}
+            className="text-muted-foreground"
+            tooltip={disabled ? reason : undefined}
+            disabled={disabled}
+          >
+            Related
+          </Button>
+        }
+      />
+      <DropdownMenu.Content align="start">
+        {ctx.scopes.map(scope => (
+          <DropdownMenu.Item
+            key={scope.id}
+            onSelect={() => {
+              const quantifier = scope.quantifiers[0];
+              if (quantifier) ctx.addGroup(group.id, 'and', { id: scope.id, quantifierId: quantifier.id });
+            }}
+          >
+            {scope.label}
+          </DropdownMenu.Item>
+        ))}
+      </DropdownMenu.Content>
+    </DropdownMenu>
   );
 }
 
@@ -148,7 +232,7 @@ export function FilterBarGroupEditor({
         {connector('input')}
         <FilterBarInput
           groupId={group.id}
-          placeholder="Add condition…"
+          placeholder="Add condition"
           onLeave={() => {
             focusAddFilter.current = true;
           }}
@@ -162,7 +246,7 @@ export function FilterBarGroupEditor({
       data-slot="filter-bar-group-editor"
       data-depth={depth}
       role="group"
-      aria-label={`Conditions joined with ${group.logic}`}
+      aria-label={`Conditions joined with ${group.logic}${group.negated ? ', negated' : ''}`}
       className={cn('flex min-w-0 flex-col', className)}
     >
       {rows.length > 0 && (
@@ -177,7 +261,7 @@ export function FilterBarGroupEditor({
             ref={addFilterRef}
             variant="ghost"
             size="sm"
-            icon={<PlusIcon />}
+            icon={<IconPlusMedium />}
             onClick={() => ctx.openGroupInput(group.id)}
           >
             Condition
@@ -186,7 +270,7 @@ export function FilterBarGroupEditor({
         <Button
           variant="ghost"
           size="sm"
-          icon={<FolderPlusIcon />}
+          icon={<IconFolderAddRight />}
           className="text-muted-foreground"
           tooltip={canNest ? undefined : `Groups can nest ${ctx.maxDepth} levels deep`}
           disabled={!canNest}
@@ -194,11 +278,25 @@ export function FilterBarGroupEditor({
         >
           Group
         </Button>
+        <FilterBarRelatedMenu group={group} canNest={canNest} />
+        {ctx.negatable && (
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<IconCircleBanSign />}
+            className={group.negated ? 'text-destructive-foreground' : 'text-muted-foreground'}
+            aria-label="Negate group"
+            aria-pressed={Boolean(group.negated)}
+            onClick={() => ctx.setNegated(group.id, !group.negated)}
+          >
+            Not
+          </Button>
+        )}
         {onRemove && (
           <Button
             variant="ghost"
             size="sm"
-            icon={<Trash2Icon />}
+            icon={<TrashIcon />}
             className="ml-auto text-muted-foreground"
             aria-label={removeLabel}
             onClick={onRemove}
@@ -230,23 +328,37 @@ function NestedGroupCard({ group, depth }: { group: FilterBarGroup; depth: numbe
       )}
     >
       <div className="flex items-center gap-2 border-b border-border px-2 py-1">
-        <FolderIcon className="size-3.5 text-muted-foreground" />
-        <Txt as="span" variant="label" tone="ink">
-          Group
-        </Txt>
+        {group.scope ? (
+          <>
+            <IconChainLink3 className="size-icon-sm text-muted-foreground" />
+            {group.negated && (
+              <Txt as="span" variant="label" className="text-destructive-foreground">
+                not
+              </Txt>
+            )}
+            <FilterBarQuantifierSwitch group={group} />
+          </>
+        ) : (
+          <>
+            <IconFolder1 className="size-icon-sm text-muted-foreground" />
+            <Txt as="span" variant="label" tone="ink">
+              {group.negated ? 'Not group' : 'Group'}
+            </Txt>
+          </>
+        )}
         <Txt as="span" variant="label" tone="muted">
-          · {count} {count === 1 ? 'condition' : 'conditions'}
+          {count} {count === 1 ? 'condition' : 'conditions'}
         </Txt>
         <div className="ml-auto flex items-center gap-1">
           <FilterBarLogicSwitch groupId={group.id} logic={group.logic} />
           <Button
             variant="ghost"
             size="icon-sm"
-            tooltip="Remove group"
+            tooltip={group.scope ? 'Remove related condition' : 'Remove group'}
             disabled={leaving}
             onClick={() => ctx.removeGroup(group.id)}
           >
-            <Trash2Icon />
+            <TrashIcon />
           </Button>
         </div>
       </div>

@@ -1,16 +1,17 @@
+import type { ConnectClient } from '@mastra/connect';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
-import { Octokit } from '@octokit/rest';
-import type { Context } from 'hono';
 
+import { Octokit } from '@octokit/rest';
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
 import type {
   CreateIntakeCommentInput,
   Intake,
   IntakeIssue,
   IntakeIssueDetail,
+  ListIntakeSourcesInput,
   UpdateIntakeIssueInput,
 } from '../../../capabilities/intake.js';
 import type {
@@ -29,7 +30,9 @@ import type {
   PullRequest,
   PullRequestComment,
   PublishCommitCheckInput,
+  ResolveReviewThreadInput,
   PullRequestRef,
+  RepositoriesAccess,
   RepositoryAccess,
   Review,
   ReviewComment,
@@ -41,12 +44,16 @@ import type {
   UpdateReviewersInput,
   VersionControl,
 } from '../../../capabilities/version-control.js';
+import { loose } from '../../../routes/route.js';
 import type { IntegrationStorageHandle } from '../../../storage/domains/integrations/base.js';
 import type {
   SourceControlInstallation,
   SourceControlStorageHandle,
 } from '../../../storage/domains/source-control/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
+import { attachDependabotRules } from '../../dependabot/rules.js';
+import { createDependabotSync } from '../../dependabot/sync.js';
+import type { DependabotSync, GithubDependabotAlert } from '../../dependabot/sync.js';
 import { GithubAppIdentity } from '../../github/app-identity.js';
 import type { GithubEventRules, GithubRuleOverrides } from '../../github/default-rules.js';
 import { resolveGithubRules } from '../../github/default-rules.js';
@@ -55,12 +62,18 @@ import type {
   GithubRepositoryPermission,
   GithubTriageCommentUpsertInput,
   GithubTriageCommentUpsertResult,
+  RepoListOptions,
   RepoSummary,
 } from '../../github/integration.js';
 import { attachGithubIssueReconciler } from '../../github/issue-reconciler.js';
 import { reconcileInterval, reconciliationEnabled } from '../../github/reconciliation-config.js';
-import { buildGithubRoutes } from '../../github/routes.js';
-import { attachGithubReconciler, attachGithubRules } from '../../github/rules.js';
+import { buildGithubRoutes, ingestLinkedRepositoryBacklog } from '../../github/routes.js';
+import {
+  attachGithubPullRequestDiscovery,
+  attachGithubReconciler,
+  attachGithubRules,
+  openPullRequestLister,
+} from '../../github/rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from '../../github/rules.js';
 import type { GitIdentity } from '../../github/sandbox.js';
 import {
@@ -71,17 +84,30 @@ import {
 import { settleOrAbort } from '../../github/settle-or-abort.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
 import { parseAuthorizedBotsEnv } from '../../github/webhook.js';
-import {
-  logPlatformInfo,
-  logPlatformWarn,
-  PlatformApiClient,
-  PlatformApiError,
-  platformApiClientConfigFromEnv,
-} from '../api-client.js';
+import { logPlatformBootInfo, logPlatformInfo, logPlatformWarn } from '../logging.js';
+import { createPlatformConnectClient, platformErrorStatus } from '../platform-connect.js';
+import type { PlatformConnectOption } from '../platform-connect.js';
 import { PlatformGithubEventWorker } from './event-worker.js';
 import type { PlatformGithubEventStorage } from './event-worker.js';
 
 type GithubActor = { login: string; avatarUrl: string | null; htmlUrl: string | null } | null;
+
+/** Why Platform withheld a personal-account installation from this org's credentials. */
+type PlatformHiddenPersonalInstallReason = 'personal_install_requires_single_member_org';
+
+/**
+ * Status reason for a settled installation list. A personal install Platform withholds would otherwise
+ * read as "nothing installed", so say so; any usable installation still means ready.
+ */
+function githubStatusReason(
+  hasUsableInstallation: boolean,
+  hiddenPersonalInstallReason?: PlatformHiddenPersonalInstallReason,
+): 'ready' | 'personal_install_hidden' | 'not_connected' {
+  if (hasUsableInstallation) return 'ready';
+  return hiddenPersonalInstallReason ? 'personal_install_hidden' : 'not_connected';
+}
+
+type PlatformRepository = Omit<RepoSummary, 'installationId'>;
 
 type PlatformGithubInstallation = {
   installationId: number;
@@ -162,6 +188,8 @@ const PAGE_SIZE = 30;
 // keeps each sweep's API cost flat on repositories with a large backlog.
 const OPEN_ISSUE_DISCOVERY_MAX_PAGES = 5;
 const API_PREFIX = '/v1/server';
+/** Intake config id that opts repositories into Dependabot alert sync. */
+const DEPENDABOT_INTAKE_ID = 'dependabot';
 const CHECK_TITLE_LIMIT = 255;
 const CHECK_TEXT_LIMIT = 65_535;
 /**
@@ -179,10 +207,11 @@ const PLATFORM_GITHUB_APP_SLUG = 'mastra-platform';
 const INSTALLATION_REPOS_CACHE_TTL_MS = 30_000;
 /**
  * How long a minted repository-scoped token may be reused. GitHub
- * installation tokens live ~60 minutes; 5 minutes keeps a wide validity
- * margin while collapsing the per-session-materialization mint round trip.
+ * installation tokens live ~60 minutes. A session re-mints the token it
+ * installed after `GITHUB_TOKEN_REFRESH_AFTER_MS` (30 minutes), so a token
+ * served from this cache is at most 50 minutes old when it is replaced.
  */
-const REPOSITORY_ACCESS_CACHE_TTL_MS = 5 * 60_000;
+const REPOSITORY_ACCESS_CACHE_TTL_MS = 20 * 60_000;
 /**
  * How long a collaborator permission lookup may be reused. The reconcile
  * sweep re-stamps every open card's author and the event tail gates every
@@ -214,14 +243,14 @@ const REPOSITORY_TOKEN_PERMISSIONS = {
   contents: 'write',
   issues: 'write',
   pull_requests: 'write',
+  // Read-only CI visibility so sessions can verify checks and workflow runs.
+  checks: 'read',
+  actions: 'read',
+  statuses: 'read',
 } as const;
 
 /** The Platform mints one installation token for at most this many named repositories. */
 const MAX_REPOSITORIES_PER_TOKEN = 10;
-
-function loose(c: unknown): Context {
-  return c as Context;
-}
 
 function routeBaseUrl(ctx: IntegrationContext, requestUrl: string): string {
   return (ctx.baseUrl || new URL(requestUrl).origin).replace(/\/+$/, '');
@@ -234,7 +263,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   get rules(): GithubEventRules {
     return this.#rules;
   }
-  readonly #client: PlatformApiClient;
+  readonly #client: ConnectClient;
   readonly #endpointHost: string;
   readonly #slug: string | undefined;
   /**
@@ -254,12 +283,31 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   readonly #issueReconcileEnabled: boolean;
   readonly #pullRequestReconcileIntervalMs: number | undefined;
   readonly #issueReconcileIntervalMs: number | undefined;
+  readonly #pullRequestDiscoveryIntervalMs: number | undefined;
   #storage: SourceControlStorageHandle | undefined;
   #integrationStorage: GithubSubscriptionStorage | undefined;
+  #ingestFactoryEvent: ReturnType<typeof attachGithubRules>;
   /** installationId → cached repository listing (TTL-bounded). */
   readonly #installationReposCache = new Map<number, { repos: RepoSummary[]; expiresAt: number }>();
   /** `orgId:repositoryId` → cached repository access (TTL-bounded). */
   readonly #repositoryAccessCache = new Map<string, { access: RepositoryAccess; expiresAt: number }>();
+  /**
+   * In-flight mints by the same key as `#repositoryAccessCache`. Sessions that
+   * boot together all miss the cache at once; without this each one minted its
+   * own token and drained the Platform's per-installation mint budget.
+   */
+  readonly #repositoryAccessInFlight = new Map<string, Promise<RepositoryAccess | undefined>>();
+
+  #mintOnce<T extends RepositoryAccess | undefined>(cacheKey: string, mint: () => Promise<T>): Promise<T> {
+    const cached = this.#repositoryAccessCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return Promise.resolve(cached.access as T);
+    this.#repositoryAccessCache.delete(cacheKey);
+    const inFlight = this.#repositoryAccessInFlight.get(cacheKey);
+    if (inFlight) return inFlight as Promise<T>;
+    const pending = mint().finally(() => this.#repositoryAccessInFlight.delete(cacheKey));
+    this.#repositoryAccessInFlight.set(cacheKey, pending);
+    return pending;
+  }
   /** `owner/repo:login` → cached collaborator permission (TTL-bounded). */
   readonly #collaboratorPermissionCache = new Map<
     string,
@@ -267,6 +315,17 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   >();
   /** Same key → lookup already in flight, so overlapping callers share one request. */
   readonly #collaboratorPermissionInFlight = new Map<string, Promise<GithubRepositoryPermission | undefined>>();
+
+  /** Dependabot opt-in: its sources are the same repositories; cards arrive through the alert sync, not intake items. */
+  readonly additionalIntakes = [
+    {
+      id: DEPENDABOT_INTAKE_ID,
+      intake: {
+        listSources: (input: ListIntakeSourcesInput) => this.intake.listSources(input),
+        listItems: async () => ({ items: [], nextCursor: null }),
+      },
+    },
+  ] as const;
 
   readonly intake: Intake = {
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
@@ -358,6 +417,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
                 sourceId,
                 title: pullRequest.title,
                 status: pullRequest.state,
+                labels: pullRequest.labels,
                 createdAt: pullRequest.createdAt,
                 updatedAt: pullRequest.updatedAt,
                 metadata: {
@@ -433,108 +493,128 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       // instead of re-minting through the Platform each time. The TTL keeps
       // a wide margin under GitHub's ~60min installation-token lifetime.
       const cacheKey = `${orgId}:${repositoryId}`;
-      const cached = this.#repositoryAccessCache.get(cacheKey);
-      if (cached && cached.expiresAt > Date.now()) return cached.access;
-      this.#repositoryAccessCache.delete(cacheKey);
+      return this.#mintOnce(cacheKey, async () => {
+        const repository = await this.storage.repositories.get({ orgId, id: repositoryId });
+        if (!repository) throw new Error('Version-control repository not found.');
+        const cloneUrl = `https://github.com/${repository.slug}.git`;
+        const installation = await this.storage.installations.get({ orgId, id: repository.installationId });
+        if (!installation) throw new Error('Version-control installation not found.');
+        const installationId = parsePositiveInteger(installation.externalId);
+        if (installationId === null) throw new Error('GitHub installation id is invalid.');
+        const repositoryName = splitRepository(repository.slug).repo;
 
-      const repository = await this.storage.repositories.get({ orgId, id: repositoryId });
-      if (!repository) throw new Error('Version-control repository not found.');
-      const cloneUrl = `https://github.com/${repository.slug}.git`;
-      const installation = await this.storage.installations.get({ orgId, id: repository.installationId });
-      if (!installation) throw new Error('Version-control installation not found.');
-      const installationId = parsePositiveInteger(installation.externalId);
-      if (installationId === null) throw new Error('GitHub installation id is invalid.');
-      const repositoryName = splitRepository(repository.slug).repo;
+        try {
+          const token = await this.#client.request<{ token: string }>(
+            'POST',
+            `${API_PREFIX}/github-app/installations/${installationId}/token`,
+            { body: { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS } },
+          );
+          const access: RepositoryAccess = {
+            cloneUrl,
+            authorization: { scheme: 'bearer', token: token.token },
+          };
+          setBounded(this.#repositoryAccessCache, cacheKey, {
+            access,
+            expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
+          });
+          return access;
+        } catch (err) {
+          // Recover from stale installation: when a GitHub App is uninstalled and reinstalled,
+          // GitHub assigns a new installation ID. Platform creates a new installation row,
+          // and Factory's intake.listSources creates a new local installation row with the
+          // new externalId. Try to find the new installation by accountName.
+          if (!isDeadInstallation(err) || !installation.accountName) throw err;
+          // After several reinstalls the account can have more than one stale row. Try the
+          // newest installations first and only repoint the repository at one that works,
+          // so a dead candidate is never persisted.
+          const candidates = (await this.storage.installations.list({ orgId }))
+            .map((inst, index) => ({ inst, index }))
+            .filter(({ inst }) => inst.accountName === installation.accountName && inst.id !== installation.id)
+            .sort((a, b) => b.inst.createdAt.getTime() - a.inst.createdAt.getTime() || b.index - a.index)
+            .map(({ inst }) => inst);
 
-      try {
-        const token = await this.#client.request<{ token: string }>(
-          'POST',
-          `${API_PREFIX}/github-app/installations/${installationId}/token`,
-          { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
-        );
-        const access: RepositoryAccess = {
-          cloneUrl,
-          authorization: { scheme: 'bearer', token: token.token },
-        };
-        setBounded(this.#repositoryAccessCache, cacheKey, {
-          access,
-          expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
-        });
-        return access;
-      } catch (err) {
-        // Recover from stale installation: when a GitHub App is uninstalled and reinstalled,
-        // GitHub assigns a new installation ID. Platform creates a new installation row,
-        // and Factory's intake.listSources creates a new local installation row with the
-        // new externalId. Try to find the new installation by accountName.
-        if (!isDeadInstallation(err) || !installation.accountName) throw err;
-        const installations = await this.storage.installations.list({ orgId });
-        const newInstallation = installations.find(
-          inst => inst.accountName === installation.accountName && inst.id !== installation.id,
-        );
-        if (!newInstallation) throw err;
-        const newInstallationId = parsePositiveInteger(newInstallation.externalId);
-        if (newInstallationId === null) throw err;
+          for (const candidate of candidates) {
+            const candidateInstallationId = parsePositiveInteger(candidate.externalId);
+            if (candidateInstallationId === null) continue;
 
-        // Persist the migration so we don't hit the recovery path on every call.
-        await this.storage.repositories.migrateInstallation({
-          orgId,
-          id: repositoryId,
-          newInstallationId: newInstallation.id,
-        });
+            let token: { token: string };
+            try {
+              token = await this.#client.request<{ token: string }>(
+                'POST',
+                `${API_PREFIX}/github-app/installations/${candidateInstallationId}/token`,
+                { body: { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS } },
+              );
+            } catch (candidateErr) {
+              if (isDeadInstallation(candidateErr)) continue;
+              throw candidateErr;
+            }
 
-        const token = await this.#client.request<{ token: string }>(
-          'POST',
-          `${API_PREFIX}/github-app/installations/${newInstallationId}/token`,
-          { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
-        );
-        const access: RepositoryAccess = {
-          cloneUrl,
-          authorization: { scheme: 'bearer', token: token.token },
-        };
-        setBounded(this.#repositoryAccessCache, cacheKey, {
-          access,
-          expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
-        });
-        return access;
-      }
+            // Persist the migration so we don't hit the recovery path on every call.
+            await this.storage.repositories.migrateInstallation({
+              orgId,
+              id: repositoryId,
+              newInstallationId: candidate.id,
+            });
+
+            const access: RepositoryAccess = {
+              cloneUrl,
+              authorization: { scheme: 'bearer', token: token.token },
+            };
+            setBounded(this.#repositoryAccessCache, cacheKey, {
+              access,
+              expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
+            });
+            return access;
+          }
+          throw err;
+        }
+      });
     },
     getRepositoriesAccess: async ({ orgId, repositoryIds }) => {
       const ids = [...new Set(repositoryIds)];
       if (ids.length === 0 || ids.length > MAX_REPOSITORIES_PER_TOKEN) return undefined;
       const cacheKey = `${orgId}:${[...ids].sort().join(',')}`;
-      const cached = this.#repositoryAccessCache.get(cacheKey);
-      if (cached && cached.expiresAt > Date.now()) return cached.access;
-      this.#repositoryAccessCache.delete(cacheKey);
+      return this.#mintOnce(cacheKey, async () => {
+        const repositories = await Promise.all(ids.map(id => this.storage.repositories.get({ orgId, id })));
+        if (repositories.some(repository => !repository)) throw new Error('Version-control repository not found.');
+        const found = repositories as NonNullable<(typeof repositories)[number]>[];
+        // One token covers one installation; an environment spanning several
+        // cannot be served by a single credential.
+        const installationIds = new Set(found.map(repository => repository.installationId));
+        if (installationIds.size !== 1) return undefined;
+        const installation = await this.storage.installations.get({ orgId, id: found[0]!.installationId });
+        if (!installation) throw new Error('Version-control installation not found.');
+        const installationId = parsePositiveInteger(installation.externalId);
+        if (installationId === null) throw new Error('GitHub installation id is invalid.');
 
-      const repositories = await Promise.all(ids.map(id => this.storage.repositories.get({ orgId, id })));
-      if (repositories.some(repository => !repository)) throw new Error('Version-control repository not found.');
-      const found = repositories as NonNullable<(typeof repositories)[number]>[];
-      // One token covers one installation; an environment spanning several
-      // cannot be served by a single credential.
-      const installationIds = new Set(found.map(repository => repository.installationId));
-      if (installationIds.size !== 1) return undefined;
-      const installation = await this.storage.installations.get({ orgId, id: found[0]!.installationId });
-      if (!installation) throw new Error('Version-control installation not found.');
-      const installationId = parsePositiveInteger(installation.externalId);
-      if (installationId === null) throw new Error('GitHub installation id is invalid.');
-
-      const token = await this.#client.request<{ token: string }>(
-        'POST',
-        `${API_PREFIX}/github-app/installations/${installationId}/token`,
-        {
-          repositories: found.map(repository => splitRepository(repository.slug).repo),
-          permissions: REPOSITORY_TOKEN_PERMISSIONS,
-        },
-      );
-      const access: RepositoryAccess = {
-        cloneUrl: `https://github.com/${found[0]!.slug}.git`,
-        authorization: { scheme: 'bearer', token: token.token },
-      };
-      setBounded(this.#repositoryAccessCache, cacheKey, {
-        access,
-        expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
+        const token = await this.#client.request<{ token: string }>(
+          'POST',
+          `${API_PREFIX}/github-app/installations/${installationId}/token`,
+          {
+            body: {
+              repositories: found.map(repository => splitRepository(repository.slug).repo),
+              permissions: REPOSITORY_TOKEN_PERMISSIONS,
+            },
+          },
+        );
+        const authorization = { scheme: 'bearer' as const, token: token.token };
+        const expiresAt = Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS;
+        // Each repository's access under the shared token, handed only to the
+        // caller that asked for the set. It is never cached under a single
+        // repository's key, where it would widen that repository's own token.
+        const access: RepositoriesAccess = {
+          cloneUrl: `https://github.com/${found[0]!.slug}.git`,
+          authorization,
+          repositories: Object.fromEntries(
+            found.map(repository => [
+              repository.id,
+              { cloneUrl: `https://github.com/${repository.slug}.git`, authorization },
+            ]),
+          ),
+        };
+        setBounded(this.#repositoryAccessCache, cacheKey, { access, expiresAt });
+        return access;
       });
-      return access;
     },
     listPullRequests: input => this.#listPullRequests(input),
     getPullRequest: input => this.#getPullRequest(input),
@@ -557,6 +637,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     createReviewComment: input => this.#createReviewComment(input),
     updateReviewComment: input => this.#updateReviewComment(input),
     deleteReviewComment: input => this.#deleteReviewComment(input),
+    resolveReviewThread: input => this.#resolveReviewThread(input),
     listRequestedReviewers: input => this.#requestedReviewers('GET', input),
     requestReviewers: input => this.#requestedReviewers('POST', input),
     removeRequestedReviewers: input => this.#requestedReviewers('DELETE', input),
@@ -569,12 +650,13 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       rules?: GithubRuleOverrides;
       /** GitHub App slug used to recognize Factory's own webhook writes. */
       slug?: string;
+      /** Connect client, or options for one; defaults to the platform environment. */
+      connect?: PlatformConnectOption;
     } = {},
   ) {
     this.#rules = resolveGithubRules(options.rules);
-    const config = platformApiClientConfigFromEnv();
-    this.#client = new PlatformApiClient(config);
-    this.#endpointHost = new URL(config.baseUrl).host;
+    this.#client = createPlatformConnectClient(options.connect);
+    this.#endpointHost = new URL(this.#client.baseUrl).host;
     this.#slug = options.slug;
     // Identity is deliberately NOT taken from `options.slug`. That slug names
     // the deployment's own self-hosted GitHub App, which is a different App
@@ -603,6 +685,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     this.#issueReconcileIntervalMs =
       reconcileInterval(process.env.MASTRACODE_PLATFORM_GITHUB_ISSUE_RECONCILE_INTERVAL_MS) ??
       legacyReconcileIntervalMs;
+    this.#pullRequestDiscoveryIntervalMs = reconcileInterval(
+      process.env.MASTRACODE_PLATFORM_GITHUB_PR_DISCOVERY_INTERVAL_MS,
+    );
   }
 
   /** Commit authorship follows the Platform App's authoritative writer identity. */
@@ -659,7 +744,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   initialize({ storage }: { storage: IntegrationStorageHandle }): void {
     this.#integrationStorage = storage as unknown as GithubSubscriptionStorage;
-    logPlatformInfo('Platform GitHub integration initialized', {
+    logPlatformBootInfo('Platform GitHub integration initialized', {
       endpointHost: this.#endpointHost,
       pollingEnabled: this.#pollingEnabled,
       pollingIntervalMs: this.#pollingIntervalMs,
@@ -670,6 +755,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   routes(ctx: IntegrationContext): ApiRoute[] {
     const ingestFactoryEvent = attachGithubRules(this, ctx);
+    this.#ingestFactoryEvent = ingestFactoryEvent;
     return [
       this.#statusRoute(ctx),
       this.#connectRoute(ctx),
@@ -682,11 +768,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         stateSigner: ctx.stateSigner,
         baseUrl: ctx.baseUrl,
         controller: ctx.controller,
-        memorySettings: ctx.storage.memorySettings,
         projects: ctx.storage.projects,
         emitAudit: ctx.hooks?.emitAudit,
         ingestFactoryEvent,
-        ...(ctx.workItems ? { workItems: ctx.workItems } : {}),
       }).filter(
         route =>
           route.path !== '/web/github/status' &&
@@ -694,6 +778,18 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           !route.path.startsWith('/auth/github/'),
       ),
     ];
+  }
+
+  /**
+   * Import a newly linked repository's open issues and pull requests onto
+   * the board. No-op until routes are mounted with rules configured.
+   */
+  async ingestLinkedRepositoryBacklog(args: { orgId: string; projectRepositoryId: string }): Promise<void> {
+    await ingestLinkedRepositoryBacklog({
+      github: this as unknown as GithubIntegration,
+      ...args,
+      ingestFactoryEvent: this.#ingestFactoryEvent,
+    });
   }
 
   #statusRoute(ctx: IntegrationContext): ApiRoute {
@@ -718,7 +814,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           });
         }
 
-        const [installations, userConnection] = await Promise.all([
+        const [{ installations, hiddenPersonalInstallReason }, userConnection] = await Promise.all([
           this.#syncInstallations(tenant.orgId, tenant.userId),
           this.#fetchUserConnection(tenant.userId),
         ]);
@@ -733,7 +829,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           })),
           userConnected: userConnection.connected,
           userGithubUsername: userConnection.githubUsername,
-          reason: installations.length > 0 ? 'ready' : 'not_connected',
+          reason: githubStatusReason(installations.length > 0, hiddenPersonalInstallReason),
           diagnostics: this.diagnostics(),
         });
       },
@@ -822,15 +918,30 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     }
   }
 
-  async #syncInstallations(orgId: string, userId: string): Promise<SourceControlInstallation[]> {
+  async hasActiveConnections(): Promise<boolean> {
     const result = await this.#client.request<{ installations: PlatformGithubInstallation[] }>(
       'GET',
       `${API_PREFIX}/github-app/installations`,
     );
+    return result.installations.some(installation => installation.usable && !installation.suspendedAt);
+  }
+
+  async #syncInstallations(
+    orgId: string,
+    userId: string,
+  ): Promise<{
+    installations: SourceControlInstallation[];
+    hiddenPersonalInstallReason?: PlatformHiddenPersonalInstallReason;
+  }> {
+    const result = await this.#client.request<{
+      installations: PlatformGithubInstallation[];
+      /** Platform sends null when it withholds nothing. */
+      hiddenPersonalInstallReason?: PlatformHiddenPersonalInstallReason | null;
+    }>('GET', `${API_PREFIX}/github-app/installations`);
     const usableInstallations = result.installations.filter(
       installation => installation.usable && !installation.suspendedAt,
     );
-    return Promise.all(
+    const installations = await Promise.all(
       usableInstallations.map(installation =>
         this.versionControl.registerInstallation({
           orgId,
@@ -843,6 +954,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         }),
       ),
     );
+    return { installations, hiddenPersonalInstallReason: result.hiddenPersonalInstallReason ?? undefined };
   }
 
   workers(ctx: IntegrationContext): MastraWorker[] {
@@ -860,6 +972,10 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         reconcileFactoryState: this.#pullRequestReconcileEnabled
           ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
           : undefined,
+        discoverPullRequests: this.#pullRequestReconcileEnabled
+          ? attachGithubPullRequestDiscovery(this, ctx, openPullRequestLister(this.versionControl))
+          : undefined,
+        syncDependabotAlerts: this.#issueReconcileEnabled ? this.#dependabotSync(ctx) : undefined,
         reconcileIssuesFactoryState: this.#issueReconcileEnabled
           ? attachGithubIssueReconciler(
               this,
@@ -872,6 +988,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         intervalMs: this.#pollingIntervalMs,
         pullRequestReconcileIntervalMs: this.#pullRequestReconcileIntervalMs,
         issueReconcileIntervalMs: this.#issueReconcileIntervalMs,
+        pullRequestDiscoveryIntervalMs: this.#pullRequestDiscoveryIntervalMs,
         // Resolved lazily: workers are constructed before versionControl
         // storage is initialized, and the worker only reads these slices once
         // it is running.
@@ -884,8 +1001,46 @@ export class PlatformGithubIntegration implements FactoryIntegration {
             findByExternalId: args => this.storage.repositories.findByExternalId(args),
           },
         },
+        onRepositoriesChanged: listener => this.storage.onLinkedRepositoriesChanged(listener),
+        repositoryChangesShared: () => this.storage.linkedRepositoryChangesShared(),
       }),
     ];
+  }
+
+  #dependabotSync(ctx: IntegrationContext): DependabotSync | undefined {
+    const ingest = attachDependabotRules(ctx);
+    if (!ingest) return undefined;
+    return createDependabotSync({
+      listAlerts: input => this.listDependabotAlerts(input),
+      listProjects: args => this.storage.projectRepositories.listByExternalRepository(args),
+      // Opt-in per repo: the org's `dependabot` intake config must be enabled and list the repo.
+      repositoryEnabled: async ({ orgId, repository }) => {
+        const config = (await ctx.storage.intake.getConfig({ orgId, integrationIds: [DEPENDABOT_INTAKE_ID] }))[
+          DEPENDABOT_INTAKE_ID
+        ];
+        return Boolean(config?.enabled && config.sourceIds?.includes(repository));
+      },
+      ingest,
+      userId: 'factory-rule-dispatcher',
+    });
+  }
+
+  /** Lists a repository's Dependabot alerts in one state through the Platform GitHub proxy. */
+  async listDependabotAlerts(input: {
+    installationId: number;
+    repository: string;
+    state: 'open' | 'closed';
+  }): Promise<GithubDependabotAlert[]> {
+    const { owner, repo } = splitRepository(input.repository);
+    // GitHub has no "closed" alert state; closed covers the three terminal states. The 100 most
+    // recently updated are enough to close cards for recently fixed or dismissed alerts.
+    const state = input.state === 'open' ? 'open' : 'fixed,dismissed,auto_dismissed';
+    const query = new URLSearchParams({ state, per_page: '100', sort: 'updated', direction: 'desc' });
+    const result = await this.#client.request<{ alerts: GithubDependabotAlert[] }>(
+      'GET',
+      `${API_PREFIX}/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/dependabot/alerts?${query}`,
+    );
+    return result.alerts;
   }
 
   /**
@@ -1048,7 +1203,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       const comment = await this.#client.request<GithubComment>(
         'PATCH',
         repositoryPath(input.repository, `issues/comments/${existing.id}`),
-        { body: input.body },
+        { body: { body: input.body } },
       );
       this.#observeSelfAuthor(comment, undefined);
       return { action: 'updated', commentId: String(comment.id), url: comment.htmlUrl };
@@ -1056,7 +1211,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const comment = await this.#client.request<GithubComment>(
       'POST',
       repositoryPath(input.repository, `issues/${input.issueNumber}/comments`),
-      { body: input.body },
+      { body: { body: input.body } },
     );
     this.#observeSelfAuthor(comment, undefined);
     return { action: 'created', commentId: String(comment.id), url: comment.htmlUrl };
@@ -1094,6 +1249,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           ...(this.#pullRequestReconcileIntervalMs === undefined
             ? {}
             : { intervalMs: this.#pullRequestReconcileIntervalMs }),
+          ...(this.#pullRequestDiscoveryIntervalMs === undefined
+            ? {}
+            : { discoveryIntervalMs: this.#pullRequestDiscoveryIntervalMs }),
         },
         issues: {
           enabled: this.#issueReconcileEnabled,
@@ -1126,7 +1284,6 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         const result = await this.#client.request<{ permission: GithubRepositoryPermission }>(
           'GET',
           `${API_PREFIX}/github/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}/collaborators/${encodeURIComponent(username)}/permission`,
-          undefined,
           { signal: AbortSignal.timeout(COLLABORATOR_PERMISSION_LOOKUP_TIMEOUT_MS) },
         );
         // Failures are not cached: a rate-limited or aborted lookup must retry
@@ -1146,8 +1303,24 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return settleOrAbort(lookup, signal, undefined);
   }
 
-  async listInstallationRepos(installationId: number, options?: { fresh?: boolean }): Promise<RepoSummary[]> {
-    // Hot in two places — the repos route and token minting (which re-lists
+  async listInstallationRepos(installationId: number, options?: RepoListOptions): Promise<RepoSummary[]> {
+    // A narrowed listing (the repo picker) asks the Platform to search or
+    // trim, so accounts with hundreds of repositories never page them all.
+    if (options?.query || options?.limit) {
+      const params = new URLSearchParams();
+      if (options.query) params.set('q', options.query.slice(0, 100));
+      if (options.limit) params.set('limit', String(options.limit));
+      const result = await this.#client.request<{ repositories: PlatformRepository[] }>(
+        'GET',
+        `${API_PREFIX}/github-app/installations/${installationId}/repositories?${params}`,
+      );
+      // A refresh means the grant may have changed, so a cached full listing
+      // could now miss a repository this narrowed one shows.
+      if (options.fresh) this.#installationReposCache.delete(installationId);
+      return result.repositories.map(repository => ({ ...repository, installationId }));
+    }
+
+    // Read by single-repository lookups and token minting (which re-lists
     // only to validate the 1–10 repo rule). A short TTL collapses repeat
     // Platform round trips within one UI interaction; `fresh` skips it so an
     // explicit refresh picks up repositories just granted on GitHub.
@@ -1155,22 +1328,36 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     if (!options?.fresh && cached && cached.expiresAt > Date.now()) return cached.repos;
     this.#installationReposCache.delete(installationId);
 
-    const result = await this.#client.request<{
-      repositories: Array<{
-        id: number;
-        owner: string;
-        name: string;
-        fullName: string;
-        private: boolean;
-        defaultBranch: string;
-      }>;
-    }>('GET', `${API_PREFIX}/github-app/installations/${installationId}/repositories`);
+    const result = await this.#client.request<{ repositories: PlatformRepository[] }>(
+      'GET',
+      `${API_PREFIX}/github-app/installations/${installationId}/repositories`,
+    );
     const repos = result.repositories.map(repository => ({ ...repository, installationId }));
     setBounded(this.#installationReposCache, installationId, {
       repos,
       expiresAt: Date.now() + INSTALLATION_REPOS_CACHE_TTL_MS,
     });
     return repos;
+  }
+
+  /**
+   * The Platform has no single-repository endpoint, so use a cached full
+   * listing when one is warm and otherwise search the installation by name,
+   * which stays fast on accounts with hundreds of repositories. The search is
+   * capped, so a miss falls back to the full listing rather than answering no.
+   */
+  async getInstallationRepo(installationId: number, repoFullName: string): Promise<RepoSummary | null> {
+    const find = (repositories: RepoSummary[]) =>
+      repositories.find(repository => repository.fullName === repoFullName) ?? null;
+    const cached = this.#installationReposCache.get(installationId);
+    if (cached && cached.expiresAt > Date.now()) return find(cached.repos);
+    const searched = find(
+      await this.listInstallationRepos(installationId, {
+        query: repoFullName.split('/').pop() ?? repoFullName,
+        limit: 100,
+      }),
+    );
+    return searched ?? find(await this.listInstallationRepos(installationId));
   }
 
   async mintInstallationToken(installationId: number): Promise<string> {
@@ -1181,7 +1368,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const result = await this.#client.request<{ token: string }>(
       'POST',
       `${API_PREFIX}/github-app/installations/${installationId}/token`,
-      { repositories: repositories.map(repository => repository.name), permissions: REPOSITORY_TOKEN_PERMISSIONS },
+      {
+        body: {
+          repositories: repositories.map(repository => repository.name),
+          permissions: REPOSITORY_TOKEN_PERMISSIONS,
+        },
+      },
     );
     return result.token;
   }
@@ -1195,7 +1387,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const result = await this.#client.request<{ labels: string[] }>(
       'POST',
       repositoryPath(sourceId, `issues/${issueNumber}/labels`),
-      { labels },
+      { body: { labels } },
     );
     return result.labels;
   }
@@ -1283,10 +1475,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         'PATCH',
         repositoryPath(repository, `issues/${issueNumber}`),
         {
-          state: targetState,
-          ...(stateReason ? { state_reason: stateReason } : {}),
+          body: {
+            state: targetState,
+            ...(stateReason ? { state_reason: stateReason } : {}),
+          },
+          ...actingUser(input.actingUserId),
         },
-        { actingUserId: input.actingUserId },
       );
       return parseIntakeIssue(repository, issue);
     } catch (error) {
@@ -1313,8 +1507,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       const comment = await this.#client.request<GithubComment>(
         'POST',
         repositoryPath(repository, `issues/${issueNumber}/comments`),
-        { body: input.body },
-        { actingUserId: input.actingUserId },
+        { body: { body: input.body }, ...actingUser(input.actingUserId) },
       );
       this.#observeSelfAuthor(comment, input.actingUserId);
       return { id: String(comment.id), url: comment.htmlUrl };
@@ -1357,18 +1550,16 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   async #createPullRequest(input: CreatePullRequestInput) {
     requireGithubConnection(input.connection);
-    const result = await this.#client.request<GithubPullRequest>(
-      'POST',
-      repositoryPath(input.sourceId, 'pulls'),
-      {
+    const result = await this.#client.request<GithubPullRequest>('POST', repositoryPath(input.sourceId, 'pulls'), {
+      body: {
         head: input.headBranch,
         base: input.baseBranch,
         title: input.title,
         body: input.body,
         draft: input.draft,
       },
-      { actingUserId: input.actingUserId },
-    );
+      ...actingUser(input.actingUserId),
+    });
     const created = parsePullRequest(result);
     if (input.actingUserId && input.connection.type === 'app-installation') {
       try {
@@ -1379,7 +1570,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           const { token } = await this.#client.request<{ token: string }>(
             'POST',
             `${API_PREFIX}/github-app/installations/${input.connection.installationId}/token`,
-            { repositories: [repo], permissions: REPOSITORY_TOKEN_PERMISSIONS },
+            { body: { repositories: [repo], permissions: REPOSITORY_TOKEN_PERMISSIONS } },
           );
           const octokit = new Octokit({ auth: token, request: { timeout: 15_000 } });
           const { data } = await octokit.issues.addAssignees({
@@ -1405,17 +1596,15 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   async #updatePullRequest(input: UpdatePullRequestInput) {
-    const result = await this.#client.request<GithubPullRequest>(
-      'PATCH',
-      pullRequestPath(input, input.pullRequestId),
-      {
+    const result = await this.#client.request<GithubPullRequest>('PATCH', pullRequestPath(input, input.pullRequestId), {
+      body: {
         title: input.title,
         body: input.body === null ? '' : input.body,
         base: input.baseBranch,
         state: input.state,
       },
-      { actingUserId: input.actingUserId },
-    );
+      ...actingUser(input.actingUserId),
+    });
     return parsePullRequest(result);
   }
 
@@ -1423,8 +1612,10 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return this.#client.request<{ merged: boolean; message: string; sha: string | null }>(
       'PUT',
       `${pullRequestPath(input, input.pullRequestId)}/merge`,
-      { commitTitle: input.commitTitle, commitMessage: input.commitMessage, method: input.method },
-      { actingUserId: input.actingUserId },
+      {
+        body: { commitTitle: input.commitTitle, commitMessage: input.commitMessage, method: input.method },
+        ...actingUser(input.actingUserId),
+      },
     );
   }
 
@@ -1444,8 +1635,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const comment = await this.#client.request<GithubComment>(
       'POST',
       repositoryPath(input.sourceId, `issues/${requirePositiveId(input.pullRequestId, 'pull request')}/comments`),
-      { body: input.body },
-      { actingUserId: input.actingUserId },
+      { body: { body: input.body }, ...actingUser(input.actingUserId) },
     );
     this.#observeSelfAuthor(comment, input.actingUserId);
     return parseComment(comment);
@@ -1456,8 +1646,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const comment = await this.#client.request<GithubComment>(
       'PATCH',
       repositoryPath(input.sourceId, `issues/comments/${requirePositiveId(input.commentId, 'comment')}`),
-      { body: input.body },
-      { actingUserId: input.actingUserId },
+      { body: { body: input.body }, ...actingUser(input.actingUserId) },
     );
     return parseComment(comment);
   }
@@ -1467,8 +1656,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     await this.#client.request<void>(
       'DELETE',
       repositoryPath(input.sourceId, `issues/comments/${requirePositiveId(input.commentId, 'comment')}`),
-      undefined,
-      { actingUserId: input.actingUserId },
+      { ...actingUser(input.actingUserId) },
     );
   }
 
@@ -1502,8 +1690,10 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const review = await this.#client.request<GithubReview>(
       'POST',
       `${pullRequestPath(input, input.pullRequestId)}/reviews`,
-      { body: input.body, commitId: input.commitId, event: input.event ? reviewEvent(input.event) : undefined },
-      { actingUserId: input.actingUserId },
+      {
+        body: { body: input.body, commitId: input.commitId, event: input.event ? reviewEvent(input.event) : undefined },
+        ...actingUser(input.actingUserId),
+      },
     );
     return parseReview(review);
   }
@@ -1515,18 +1705,20 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       'POST',
       repositoryPath(input.sourceId, 'check-runs'),
       {
-        name: input.name,
-        headSha: input.headSha,
-        ...(input.status === 'in-progress'
-          ? { status: 'in_progress' }
-          : { status: 'completed', conclusion: input.status }),
-        output: {
-          title: input.title.slice(0, CHECK_TITLE_LIMIT),
-          summary: input.summary.slice(0, CHECK_TEXT_LIMIT),
-          ...(input.details ? { text: input.details.slice(0, CHECK_TEXT_LIMIT) } : {}),
+        body: {
+          name: input.name,
+          headSha: input.headSha,
+          ...(input.status === 'in-progress'
+            ? { status: 'in_progress' }
+            : { status: 'completed', conclusion: input.status }),
+          output: {
+            title: input.title.slice(0, CHECK_TITLE_LIMIT),
+            summary: input.summary.slice(0, CHECK_TEXT_LIMIT),
+            ...(input.details ? { text: input.details.slice(0, CHECK_TEXT_LIMIT) } : {}),
+          },
         },
+        ...actingUser(input.actingUserId),
       },
-      { actingUserId: input.actingUserId },
     );
     return { id: String(run.id), name: input.name, headSha: input.headSha, status: input.status, url: run.htmlUrl };
   }
@@ -1535,8 +1727,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const review = await this.#client.request<GithubReview>(
       'PUT',
       `${pullRequestPath(input, input.pullRequestId)}/reviews/${requirePositiveId(input.reviewId, 'review')}`,
-      { body: input.body },
-      { actingUserId: input.actingUserId },
+      { body: { body: input.body }, ...actingUser(input.actingUserId) },
     );
     return parseReview(review);
   }
@@ -1545,8 +1736,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const review = await this.#client.request<GithubReview>(
       'POST',
       `${pullRequestPath(input, input.pullRequestId)}/reviews/${requirePositiveId(input.reviewId, 'review')}/events`,
-      { body: input.body, event: reviewEvent(input.event) },
-      { actingUserId: input.actingUserId },
+      { body: { body: input.body, event: reviewEvent(input.event) }, ...actingUser(input.actingUserId) },
     );
     return parseReview(review);
   }
@@ -1555,8 +1745,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const review = await this.#client.request<GithubReview>(
       'PUT',
       `${pullRequestPath(input, input.pullRequestId)}/reviews/${requirePositiveId(input.reviewId, 'review')}/dismissals`,
-      { message: input.message },
-      { actingUserId: input.actingUserId },
+      { body: { message: input.message }, ...actingUser(input.actingUserId) },
     );
     return parseReview(review);
   }
@@ -1565,8 +1754,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     await this.#client.request<void>(
       'DELETE',
       `${pullRequestPath(input, input.pullRequestId)}/reviews/${requirePositiveId(input.reviewId, 'review')}`,
-      undefined,
-      { actingUserId: input.actingUserId },
+      { ...actingUser(input.actingUserId) },
     );
   }
 
@@ -1604,8 +1792,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       await this.#client.request<GithubReviewComment>(
         'POST',
         `${pullRequestPath(input, input.pullRequestId)}/comments`,
-        body,
-        { actingUserId: input.actingUserId },
+        { body: body, ...actingUser(input.actingUserId) },
       ),
     );
   }
@@ -1616,8 +1803,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       await this.#client.request<GithubReviewComment>(
         'PATCH',
         repositoryPath(input.sourceId, `pulls/comments/${requirePositiveId(input.commentId, 'review comment')}`),
-        { body: input.body },
-        { actingUserId: input.actingUserId },
+        { body: { body: input.body }, ...actingUser(input.actingUserId) },
       ),
     );
   }
@@ -1627,8 +1813,16 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     await this.#client.request<void>(
       'DELETE',
       repositoryPath(input.sourceId, `pulls/comments/${requirePositiveId(input.commentId, 'review comment')}`),
-      undefined,
-      { actingUserId: input.actingUserId },
+      { ...actingUser(input.actingUserId) },
+    );
+  }
+
+  async #resolveReviewThread(input: ResolveReviewThreadInput) {
+    requireGithubConnection(input.connection);
+    await this.#client.request<void>(
+      'PUT',
+      repositoryPath(input.sourceId, `pulls/comments/${requirePositiveId(input.commentId, 'review comment')}/thread`),
+      { body: { resolved: input.resolved }, ...actingUser(input.actingUserId) },
     );
   }
 
@@ -1637,8 +1831,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return this.#client.request<{ users: string[]; teams: string[] }>(
       method,
       `${pullRequestPath(input, input.pullRequestId)}/requested-reviewers`,
-      method === 'GET' ? undefined : { users: input.users, teams: input.teams },
-      method === 'GET' ? undefined : { actingUserId: input.actingUserId },
+      method === 'GET' ? {} : { body: { users: input.users, teams: input.teams }, ...actingUser(input.actingUserId) },
     );
   }
 }
@@ -1821,12 +2014,21 @@ function reviewEvent(event: 'approve' | 'request-changes' | 'comment') {
   return 'COMMENT' as const;
 }
 
+/**
+ * Names the Factory user a platform GitHub write acts for, so the platform
+ * authors it with that user's GitHub connection instead of the App bot.
+ */
+function actingUser(actingUserId: string | undefined): { headers?: Record<string, string> } {
+  return actingUserId ? { headers: { 'x-acting-user-id': actingUserId } } : {};
+}
+
 function isNotFound(error: unknown): boolean {
-  return error instanceof PlatformApiError && error.status === 404;
+  return platformErrorStatus(error) === 404;
 }
 
 // Platform answers 404 when the installation row is gone, 409 when it is suspended or soft-deleted.
 // A 502 also covers a dead installation but is indistinguishable from a transient GitHub outage.
 function isDeadInstallation(error: unknown): boolean {
-  return error instanceof PlatformApiError && (error.status === 404 || error.status === 409);
+  const status = platformErrorStatus(error);
+  return status === 404 || status === 409;
 }

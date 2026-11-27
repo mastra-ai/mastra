@@ -6,16 +6,31 @@
  * Events are handled as zero-duration RunTrees with matching start/end times.
  */
 
-import type { AnyExportedSpan, ModelGenerationAttributes, ScoreEvent, SpanErrorInfo } from '@mastra/core/observability';
+import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
+import type {
+  AnyExportedSpan,
+  MappingAttributes,
+  ModelGenerationAttributes,
+  ModelInferenceAttributes,
+  ModelStepAttributes,
+  ModelStepResult,
+  ScoreEvent,
+  SpanErrorInfo,
+  ToolCallAttributes,
+} from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import { omitKeys } from '@mastra/core/utils';
 import { TrackingExporter } from '@mastra/observability';
 import type { TraceData, TrackingExporterConfig } from '@mastra/observability';
 import type { ClientConfig, RunTreeConfig } from 'langsmith';
-import { Client, RunTree } from 'langsmith';
+import { Client, LS_MESSAGE_VIEW_EXCLUDE, RunTree } from 'langsmith';
 import type { KVMap } from 'langsmith/schemas';
 import type { LangSmithMetadataInput } from './helpers';
-import { formatUsageMetrics } from './metrics';
+import { messageOfCall, messagesOfCall, toChatMessages, toResultText, toText, waitsForTools } from './messages';
+import type { Conversation } from './messages';
+import { addUsage, formatUsageMetrics, usageLeft } from './metrics';
+import type { LangSmithUsageMetrics } from './metrics';
 
 export interface LangSmithExporterConfig extends ClientConfig, TrackingExporterConfig {
   /** LangSmith client instance */
@@ -27,21 +42,54 @@ export interface LangSmithExporterConfig extends ClientConfig, TrackingExporterC
    */
   projectName?: string;
   /**
-   * Maximum number of `spanId → langsmithRunId` mappings to retain for resolving
-   * `onScoreEvent` lookups. Older entries are evicted in LRU order when the cap
-   * is exceeded so long-running processes do not grow unbounded.
+   * Maximum number of `traceId → root run id` mappings to keep in memory. The
+   * cache lets a trace-level score skip the LangSmith lookup for traces this
+   * process exported; scores for traces outside the cache are still delivered.
+   * Older entries are evicted in LRU order when the cap is exceeded.
    * Defaults to 10000.
    */
   runIdCacheMaxEntries?: number;
 }
 
 const DEFAULT_RUN_ID_CACHE_MAX_ENTRIES = 10_000;
+/** Waits between LangSmith lookups for a trace another process exported (ingestion takes ~5-8 s). */
+const SCORE_LOOKUP_RETRY_DELAYS_MS = [2_000, 3_000, 5_000];
+/** Mastra trace ids are hex (`isValidTraceId` in @mastra/observability); anything else cannot match a run. */
+const HEX_TRACE_ID = /^[0-9a-f]{1,32}$/i;
+
+/** The first root run of a Mastra trace and the LangSmith project it lives in. */
+interface RootRun {
+  runId: string;
+  /** Project the root was posted to by this process; resolved to an id only when a score needs it. */
+  projectName?: string;
+  /** Project id read back from LangSmith when the root was found there. */
+  sessionId?: string;
+}
+
+/** UUID v5 namespace for Mastra → LangSmith run ids. Changing it orphans existing runs from future scores. */
+const RUN_ID_NAMESPACE = Buffer.from('a6f3c3f06b0e4a1e9f4c7e1b2d3c4f5a', 'hex');
+
+/**
+ * LangSmith run id for a Mastra span id (UUID v5). Every run, root or not, is named
+ * after its own span, so a span-level score can be routed from any process without
+ * remembering the ids LangSmith would otherwise allocate.
+ */
+export function langsmithRunIdFor(spanId: string): string {
+  const hash = createHash('sha1').update(RUN_ID_NAMESPACE).update(spanId).digest();
+  hash[6] = (hash[6]! & 0x0f) | 0x50;
+  hash[8] = (hash[8]! & 0x3f) | 0x80;
+  const hex = hash.subarray(0, 16).toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 type LangSmithRoot = undefined;
 type LangSmithSpan = RunTree;
 type LangSmithEvent = RunTree;
 type LangSmithMetadata = LangSmithMetadataInput;
 type LangSmithTraceData = TraceData<LangSmithRoot, LangSmithSpan, LangSmithEvent, LangSmithMetadata>;
+
+/** Key prefix for the per-trace `Conversation` of a MODEL_GENERATION. */
+const CONVERSATION = 'conversation:';
 
 // Default span type for all spans
 const DEFAULT_SPAN_TYPE = 'chain';
@@ -76,18 +124,21 @@ export class LangSmithExporter extends TrackingExporter<
   #client: Client | undefined;
 
   /**
-   * Maps Mastra `span.id` to the runId LangSmith allocated when the corresponding
-   * RunTree was created. LangSmith's `createFeedback` requires the LangSmith runId,
-   * not the Mastra span id, so scores submitted via `onScoreEvent` look up the
-   * LangSmith runId here before calling the API.
+   * Maps a Mastra trace id to the first root run this process exported for it, and the
+   * project it went to. A fast path for scores: a trace-level score on a miss falls back
+   * to asking LangSmith for the root run tagged with that `mastra_trace_id`.
    *
-   * Bounded LRU keyed by Mastra span id — entries are evicted oldest-first when
+   * Bounded LRU keyed by Mastra trace id — entries are evicted oldest-first when
    * size exceeds `#runIdCacheMaxEntries` so the cache cannot grow without bound.
    */
-  #langsmithRunIdBySpanId = new Map<string, string>();
+  #rootRunByTraceId = new Map<string, RootRun>();
   /** Manual-mode client flushes, chained so an overlapping flush waits for the earlier upload */
   #manualFlushChain: Promise<void> = Promise.resolve();
   #runIdCacheMaxEntries: number;
+  /** Project runs go to unless `withLangsmithMetadata({ projectName })` says otherwise. */
+  #defaultProjectName: string;
+  /** LangSmith project (session) ids by name: `createFeedback` requires one and run queries are scoped to one. */
+  #projectIdByName = new Map<string, Promise<string | undefined>>();
 
   constructor(config: LangSmithExporterConfig = {}) {
     // Resolve env vars BEFORE calling super (config is readonly in base class)
@@ -99,6 +150,8 @@ export class LangSmithExporter extends TrackingExporter<
     });
 
     this.#runIdCacheMaxEntries = Math.max(1, config.runIdCacheMaxEntries ?? DEFAULT_RUN_ID_CACHE_MAX_ENTRIES);
+    this.#defaultProjectName =
+      config.projectName ?? process.env.LANGSMITH_PROJECT ?? process.env.LANGCHAIN_PROJECT ?? 'default';
 
     if (!apiKey) {
       this.setDisabled(`Missing required credentials (apiKey: ${!!apiKey})`);
@@ -108,26 +161,24 @@ export class LangSmithExporter extends TrackingExporter<
     this.#client = config.client ?? new Client(this.config);
   }
 
-  /** Look up the LangSmith runId for a Mastra span id, refreshing its LRU position on hit. */
-  #getLangsmithRunId(spanId: string): string | undefined {
-    const runId = this.#langsmithRunIdBySpanId.get(spanId);
-    if (runId === undefined) return undefined;
+  /** Look up the root run for a Mastra trace id, refreshing its LRU position on hit. */
+  #getRootRun(traceId: string): RootRun | undefined {
+    const root = this.#rootRunByTraceId.get(traceId);
+    if (root === undefined) return undefined;
     // Re-insert to mark as most-recently-used (Map preserves insertion order).
-    this.#langsmithRunIdBySpanId.delete(spanId);
-    this.#langsmithRunIdBySpanId.set(spanId, runId);
-    return runId;
+    this.#rootRunByTraceId.delete(traceId);
+    this.#rootRunByTraceId.set(traceId, root);
+    return root;
   }
 
-  /** Remember the LangSmith runId for a Mastra span id, evicting oldest entries when full. */
-  #rememberLangsmithRunId(spanId: string, runId: string): void {
-    if (this.#langsmithRunIdBySpanId.has(spanId)) {
-      this.#langsmithRunIdBySpanId.delete(spanId);
-    }
-    this.#langsmithRunIdBySpanId.set(spanId, runId);
-    while (this.#langsmithRunIdBySpanId.size > this.#runIdCacheMaxEntries) {
-      const oldest = this.#langsmithRunIdBySpanId.keys().next().value;
+  /** Remember the first root run of a Mastra trace, evicting oldest entries when full. */
+  #rememberRootRun(traceId: string, root: RootRun): void {
+    if (this.#rootRunByTraceId.has(traceId)) return;
+    this.#rootRunByTraceId.set(traceId, root);
+    while (this.#rootRunByTraceId.size > this.#runIdCacheMaxEntries) {
+      const oldest = this.#rootRunByTraceId.keys().next().value;
       if (oldest === undefined) break;
-      this.#langsmithRunIdBySpanId.delete(oldest);
+      this.#rootRunByTraceId.delete(oldest);
     }
   }
 
@@ -168,7 +219,7 @@ export class LangSmithExporter extends TrackingExporter<
     try {
       await this.#flushClient();
     } finally {
-      this.#langsmithRunIdBySpanId.clear();
+      this.#rootRunByTraceId.clear();
     }
   }
 
@@ -176,18 +227,19 @@ export class LangSmithExporter extends TrackingExporter<
     if (!this.#client) return;
 
     const { score } = event;
-    if (!score.spanId) {
-      this.logger.warn('LangSmith exporter: dropping score with no spanId; trace-level scoring is not yet supported', {
-        scorerId: score.scorerId,
-      });
-      return;
-    }
-
-    const langsmithRunId = this.#getLangsmithRunId(score.spanId);
+    // A span-level score only needs the trace's root to know which project the run is in.
+    const root = score.spanId
+      ? score.traceId
+        ? this.#getRootRun(score.traceId)
+        : undefined
+      : score.traceId
+        ? await this.#resolveRootRun(score.traceId)
+        : undefined;
+    const langsmithRunId = score.spanId ? langsmithRunIdFor(score.spanId) : root?.runId;
     if (!langsmithRunId) {
       this.logger.warn(
-        'LangSmith exporter: dropping score for a span that was not previously emitted to LangSmith ' +
-          '(span_started must be processed before submitting a score for it)',
+        'LangSmith exporter: dropping score; no LangSmith run found for the target ' +
+          '(score has neither traceId nor spanId, the trace is not ingested yet, or it was exported by an older @mastra/langsmith)',
         {
           traceId: score.traceId,
           spanId: score.spanId,
@@ -198,9 +250,11 @@ export class LangSmithExporter extends TrackingExporter<
     }
 
     const key = score.scorerName ?? score.scorerId;
+    const sessionId = root?.sessionId ?? (await this.#getProjectId(root?.projectName ?? this.#defaultProjectName));
 
     try {
       await this.#client.createFeedback(langsmithRunId, key, {
+        ...(sessionId ? { sessionId } : {}),
         score: score.score,
         ...(score.reason ? { comment: score.reason } : {}),
         feedbackId: score.scoreId,
@@ -224,6 +278,70 @@ export class LangSmithExporter extends TrackingExporter<
     }
   }
 
+  /**
+   * A trace-level score goes to the trace's first root run. This process remembers the
+   * roots it exported; otherwise LangSmith is asked for the earliest root run tagged with
+   * the Mastra trace id.
+   */
+  async #resolveRootRun(traceId: string): Promise<RootRun | undefined> {
+    const known = this.#getRootRun(traceId);
+    if (known) return known;
+    if (!HEX_TRACE_ID.test(traceId)) return undefined;
+
+    // LangSmith makes posted runs queryable a few seconds later, so a score that
+    // arrives right after another process exported the trace has to wait for it.
+    for (let attempt = 0; ; attempt++) {
+      const found = await this.#findRootRun(traceId);
+      if (found) {
+        this.#rememberRootRun(traceId, found);
+        return found;
+      }
+      const delay = SCORE_LOOKUP_RETRY_DELAYS_MS[attempt];
+      if (delay === undefined) return undefined;
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  async #findRootRun(traceId: string): Promise<RootRun | undefined> {
+    // LangSmith only queries runs inside a project, so traces routed to another
+    // project with `withLangsmithMetadata({ projectName })` are found by this process only.
+    const projectId = await this.#getProjectId(this.#defaultProjectName);
+    if (!projectId) return undefined;
+
+    try {
+      const runs = this.#client!.listRuns({
+        projectId,
+        isRoot: true,
+        filter: `has(metadata, '${JSON.stringify({ mastra_trace_id: traceId })}')`,
+        select: ['id', 'session_id'],
+        order: 'asc',
+        limit: 1,
+      });
+      for await (const run of runs) {
+        return { runId: run.id, sessionId: run.session_id };
+      }
+    } catch (err) {
+      this.logger.debug('LangSmith exporter: root run lookup failed', { traceId, error: err });
+    }
+    return undefined;
+  }
+
+  #getProjectId(projectName: string): Promise<string | undefined> {
+    let projectId = this.#projectIdByName.get(projectName);
+    if (!projectId) {
+      projectId = Promise.resolve()
+        .then(() => this.#client!.readProject({ projectName }))
+        .then(project => project.id)
+        .catch(err => {
+          this.logger.debug('LangSmith exporter: could not resolve the project id', { projectName, error: err });
+          this.#projectIdByName.delete(projectName);
+          return undefined;
+        });
+      this.#projectIdByName.set(projectName, projectId);
+    }
+    return projectId;
+  }
+
   protected override skipBuildRootTask = true;
   protected override async _buildRoot(_args: {
     span: AnyExportedSpan;
@@ -245,15 +363,16 @@ export class LangSmithExporter extends TrackingExporter<
       return;
     }
 
+    const runId = langsmithRunIdFor(span.id);
     const payload = {
       name: span.name,
+      id: runId,
       ...this.buildRunTreePayload(span, traceData, true),
     };
 
     const langSmithSpan = span.isRootSpan ? new RunTree(payload) : parent!.createChild(payload);
-
-    if (langSmithSpan.id) {
-      this.#rememberLangsmithRunId(span.id, langSmithSpan.id);
+    if (span.isRootSpan) {
+      this.#rememberRootRun(span.traceId, { runId, projectName: payload.project_name ?? this.#defaultProjectName });
     }
 
     await langSmithSpan.postRun();
@@ -282,7 +401,10 @@ export class LangSmithExporter extends TrackingExporter<
   }
 
   protected override async _finishSpan(args: { span: AnyExportedSpan; traceData: LangSmithTraceData }): Promise<void> {
-    await this.handleSpanUpdateOrEnd({ ...args, isEnd: true });
+    const sent = this.handleSpanUpdateOrEnd({ ...args, isEnd: true });
+    // Not after `sent` settles: the next model call may start meanwhile.
+    this.recordConversation(args.span, args.traceData);
+    await sent;
   }
 
   protected override async _abortSpan(args: {
@@ -315,10 +437,20 @@ export class LangSmithExporter extends TrackingExporter<
 
     const updatePayload = this.buildRunTreePayload(span, traceData);
 
+    // LangSmith gets the inputs when a run starts. A tool result or a replayed call can arrive
+    // just after the next model call has started, so send its inputs again if they changed.
+    const resendInputs =
+      span.type === SpanType.MODEL_INFERENCE &&
+      updatePayload.inputs != null &&
+      !isDeepStrictEqual(updatePayload.inputs, langSmithSpan.inputs);
+
     langSmithSpan.metadata = {
       ...langSmithSpan.metadata,
       ...updatePayload.metadata,
     };
+    if (updatePayload.run_type != null) {
+      langSmithSpan.run_type = updatePayload.run_type;
+    }
     if (updatePayload.inputs != null) {
       langSmithSpan.inputs = updatePayload.inputs;
     }
@@ -329,9 +461,9 @@ export class LangSmithExporter extends TrackingExporter<
       langSmithSpan.error = updatePayload.error;
     }
 
-    // Add new_token event for TTFT tracking on MODEL_GENERATION spans
-    if (span.type === SpanType.MODEL_GENERATION) {
-      const modelAttr = (span.attributes ?? {}) as ModelGenerationAttributes;
+    // Add new_token event for TTFT tracking on model spans
+    if (span.type === SpanType.MODEL_GENERATION || span.type === SpanType.MODEL_INFERENCE) {
+      const modelAttr = (span.attributes ?? {}) as ModelGenerationAttributes | ModelInferenceAttributes;
       if (modelAttr.completionStartTime !== undefined) {
         langSmithSpan.addEvent({
           name: 'new_token',
@@ -349,7 +481,7 @@ export class LangSmithExporter extends TrackingExporter<
       } else {
         await langSmithSpan.end();
       }
-      await langSmithSpan.patchRun();
+      await langSmithSpan.patchRun(resendInputs ? { excludeInputs: false } : undefined);
     }
   }
 
@@ -399,6 +531,95 @@ export class LangSmithExporter extends TrackingExporter<
     return merged;
   }
 
+  /**
+   * LangSmith groups runs into a Thread only by `session_id` / `thread_id` metadata and
+   * needs it on every run of the trace. A child run follows the session its parent was
+   * built with: sub-agents and Observational Memory run on derived threads, and their
+   * own `threadId` would split the conversation into one-off Threads. The span's own
+   * `sessionId` / `threadId` applies at the root, or when no ancestor carries a session.
+   */
+  private findSessionId(span: AnyExportedSpan, traceData: LangSmithTraceData): string | undefined {
+    const inherited = span.isRootSpan ? undefined : traceData.getParent({ span })?.metadata?.session_id;
+    if (typeof inherited === 'string' && inherited) return inherited;
+    const own = span.metadata?.sessionId ?? span.metadata?.threadId;
+    return typeof own === 'string' && own ? own : undefined;
+  }
+
+  /** The conversation of the MODEL_GENERATION that `span` is or belongs to, when this process exported it. */
+  private findConversation(span: AnyExportedSpan, traceData: LangSmithTraceData): Conversation | undefined {
+    let id = span.type === SpanType.MODEL_GENERATION ? span.id : span.parentSpanId;
+    while (id) {
+      const conversation = traceData.getExtraValue(CONVERSATION + id) as Conversation | undefined;
+      if (conversation) return conversation;
+      id = traceData.getParentId({ spanId: id });
+    }
+    return undefined;
+  }
+
+  /** Keep an ended model call or tool result, so the next call of the generation can be sent with it. */
+  private recordConversation(span: AnyExportedSpan, traceData: LangSmithTraceData): void {
+    const conversation = this.findConversation(span, traceData);
+    if (!conversation) return;
+
+    switch (span.type) {
+      case SpanType.MODEL_INFERENCE: {
+        const message = !span.errorInfo && span.output ? messageOfCall(span.output as ModelStepResult) : undefined;
+        if (message) conversation.calls.push({ stepId: span.parentSpanId, message });
+        break;
+      }
+      case SpanType.MODEL_STEP:
+        // A processor rejected this step's answer, so the next call is sent without it.
+        if ((span.attributes as ModelStepAttributes | undefined)?.finishReason === 'retry') {
+          conversation.calls = conversation.calls.filter(call => call.stepId !== span.id);
+        } else if (!span.errorInfo && span.output && span.endTime) {
+          const message = messageOfCall(span.output as ModelStepResult);
+          if (message) conversation.steps.push({ id: span.id, endTime: span.endTime, message });
+        }
+        break;
+      case SpanType.TOOL_CALL:
+      case SpanType.MCP_TOOL_CALL:
+      case SpanType.PROVIDER_TOOL_CALL: {
+        const toolCallId = (span.attributes as ToolCallAttributes | undefined)?.toolCallId;
+        const result = span.errorInfo ? span.errorInfo.message : span.output;
+        if (toolCallId && result !== undefined) conversation.toolResults.set(toolCallId, toText(result));
+        break;
+      }
+      case SpanType.MAPPING: {
+        // Ends after the tool call, with what `toModelOutput` made of its result.
+        const { mappingType, toolCallId } = (span.attributes ?? {}) as MappingAttributes;
+        if (mappingType === 'toModelOutput' && toolCallId && span.output != null) {
+          conversation.toolResults.set(toolCallId, toResultText(span.output));
+        }
+      }
+    }
+  }
+
+  /**
+   * The usage a model span's run is counted with, or undefined when the run does not stand for a
+   * model call. LangSmith sums usage over nested `llm` runs, so each token belongs to one of them:
+   * to its MODEL_INFERENCE, or to the MODEL_GENERATION around it when that call was not exported
+   * (generateLegacy, SDK agents, filtered spans, another process).
+   */
+  private countedUsage(
+    span: AnyExportedSpan,
+    conversation: Conversation | undefined,
+  ): LangSmithUsageMetrics | undefined {
+    const attributes = span.attributes as ModelGenerationAttributes | ModelInferenceAttributes | undefined;
+    const usage = formatUsageMetrics(attributes?.usage);
+
+    if (span.type === SpanType.MODEL_INFERENCE) {
+      // A resumed run replays the call it was suspended on, with the usage it had and no response.
+      if (span.endTime && span.metadata?.resumed && !attributes?.completionStartTime) return undefined;
+      if (conversation?.ended) return undefined;
+      if (conversation && span.endTime) conversation.counted = addUsage(conversation.counted ?? {}, usage);
+      return usage;
+    }
+
+    if (!conversation || !span.endTime) return usage;
+    conversation.ended = true;
+    return conversation.counted ? usageLeft(usage, conversation.counted) : usage;
+  }
+
   private buildRunTreePayload(
     span: AnyExportedSpan,
     traceData: LangSmithTraceData,
@@ -414,6 +635,8 @@ export class LangSmithExporter extends TrackingExporter<
       client: this.#client,
       metadata: {
         mastra_span_type: span.type,
+        mastra_span_id: span.id,
+        mastra_trace_id: span.traceId,
         ...spanMetadata,
       },
     };
@@ -429,9 +652,11 @@ export class LangSmithExporter extends TrackingExporter<
       payload.project_name = projectName;
     }
 
-    // Add session info to metadata if provided via vendor metadata
-    if (vendorMetadata?.sessionId) {
-      payload.metadata.session_id = vendorMetadata.sessionId;
+    // Explicit vendor sessionId wins; otherwise the Mastra conversation thread, so turns
+    // on one memory thread land in one LangSmith Thread without extra setup.
+    const sessionId = vendorMetadata?.sessionId ?? this.findSessionId(span, traceData);
+    if (sessionId) {
+      payload.metadata.session_id = sessionId;
     }
     if (vendorMetadata?.sessionName) {
       payload.metadata.session_name = vendorMetadata.sessionName;
@@ -453,8 +678,54 @@ export class LangSmithExporter extends TrackingExporter<
 
     const attributes = (span.attributes ?? {}) as Record<string, any>;
 
-    if (span.type === SpanType.MODEL_GENERATION) {
-      const modelAttr = attributes as ModelGenerationAttributes;
+    if (span.type === SpanType.MODEL_GENERATION || span.type === SpanType.MODEL_INFERENCE) {
+      const modelAttr = attributes as ModelGenerationAttributes | ModelInferenceAttributes;
+      const isInference = span.type === SpanType.MODEL_INFERENCE;
+      if (isNew && !isInference) {
+        const conversation: Conversation = {
+          input: toChatMessages(span.input?.messages),
+          calls: [],
+          steps: [],
+          toolResults: new Map(),
+        };
+        traceData.setExtraValue(CONVERSATION + span.id, conversation);
+      }
+      const conversation = this.findConversation(span, traceData);
+      const usage = this.countedUsage(span, conversation);
+      payload.run_type = usage ? 'llm' : DEFAULT_SPAN_TYPE;
+      payload.metadata.usage_metadata = usage;
+
+      // Otherwise LangSmith guesses the format from the provider, whatever the messages look like.
+      payload.metadata.ls_message_format = 'completions';
+
+      if (isInference && conversation) {
+        // The span's own input is a preview that only names tool calls and results.
+        const messages = messagesOfCall(conversation, span);
+        if (messages) payload.inputs = { ...payload.inputs, messages };
+      }
+
+      // The answer as a message, which is how LangSmith recognizes it. A call that waits for tools
+      // and wrote nothing is left as it is: LangSmith pairs it with their results from the next
+      // call's input.
+      const text: unknown = payload.outputs?.text;
+      if (usage && text && !(isInference && waitsForTools(payload.outputs!))) {
+        payload.outputs = { ...payload.outputs, role: 'assistant', content: text };
+      } else if (usage && text && isInference) {
+        // Text before tool calls: one message with them, as the next call replays it.
+        payload.outputs = { ...payload.outputs, ...messageOfCall(payload.outputs as ModelStepResult) };
+      }
+
+      // Not part of the conversation: a generation whose calls already show it, and the call
+      // that names the thread, whose input is a transcript. When a filter dropped the call that
+      // gave the answer, only the generation holds it: its text, which ends with the answer, then
+      // does not end with the last exported call's.
+      const lastText = conversation?.calls.at(-1)?.message.content;
+      const isAnswerShown =
+        typeof text === 'string' && typeof lastText === 'string' && !!lastText && text.endsWith(lastText);
+      const holdsAnswer = usage && text && !isAnswerShown;
+      const isShownByCalls = !isInference && conversation?.counted && !holdsAnswer;
+      const isTitle = 'resultType' in modelAttr && modelAttr.resultType === 'title_generation';
+      if (isShownByCalls || isTitle) payload.metadata[LS_MESSAGE_VIEW_EXCLUDE] = true;
 
       // See: https://docs.langchain.com/langsmith/log-llm-trace
       if (modelAttr.model !== undefined) {
@@ -470,16 +741,20 @@ export class LangSmithExporter extends TrackingExporter<
         payload.metadata.ls_provider = modelAttr.provider;
       }
 
-      // Usage/token info goes to metrics
-      payload.metadata.usage_metadata = formatUsageMetrics(modelAttr.usage);
-
       // Model parameters go to metadata
       if (modelAttr.parameters !== undefined) {
         payload.metadata.modelParameters = modelAttr.parameters;
       }
 
       // Other LLM attributes go to metadata
-      const otherAttributes = omitKeys(attributes, ['model', 'provider', 'usage', 'parameters', 'completionStartTime']);
+      const otherAttributes = omitKeys(attributes, [
+        'model',
+        'provider',
+        'usage',
+        'parameters',
+        'completionStartTime',
+        'timeToFirstTokenMs',
+      ]);
       payload.metadata = {
         ...payload.metadata,
         ...otherAttributes,
@@ -488,7 +763,7 @@ export class LangSmithExporter extends TrackingExporter<
       // For non-LLM spans, put all attributes in metadata
       payload.metadata = {
         ...payload.metadata,
-        ...attributes,
+        ...omitKeys(attributes, ['timeToFirstTokenMs']),
       };
     }
 

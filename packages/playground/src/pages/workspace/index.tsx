@@ -1,13 +1,14 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { WorkspaceTreeView } from '@mastra/playground-ui/domains/workspace';
 import type { WorkspaceSkillInstallParams } from '@mastra/playground-ui/domains/workspace';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import {
@@ -23,7 +24,6 @@ import {
 } from '@mastra/react/hooks/workspace';
 import type { WorkspaceItem } from '@mastra/react/hooks/workspace';
 import { useQueryClient } from '@tanstack/react-query';
-import { RefreshCw } from 'lucide-react';
 import { useSearchParams, useParams, useNavigate } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
@@ -107,10 +107,17 @@ export default function Workspace() {
   const deleteFile = useDeleteWorkspaceFile();
   const createDirectory = useCreateWorkspaceDirectory();
 
-  // Skills - pass workspaceId to get skills from the selected workspace
+  const isWorkspaceConfigured = workspaceInfo?.isWorkspaceConfigured ?? false;
+  // A resolver-backed filesystem only exists per request, so the file routes can't browse it.
+  const hasDynamicFilesystem = workspaceInfo?.capabilities?.hasDynamicFilesystem ?? false;
+  const hasFilesystem = (workspaceInfo?.capabilities?.hasFilesystem ?? false) && !hasDynamicFilesystem;
+  const hasSkills = workspaceInfo?.capabilities?.hasSkills ?? false;
+
+  // Skills are only shown in the file tree. Waiting for capabilities keeps the skills route,
+  // which can call a filesystem resolver, from running for resolver-backed workspaces.
   const { data: skillsData, refetch: refetchSkills } = useWorkspaceSkills({
     workspaceId: effectiveWorkspaceId,
-    queryOptions: { enabled: !!effectiveWorkspaceId },
+    queryOptions: { enabled: !!effectiveWorkspaceId && hasFilesystem },
   });
 
   // Skills.sh hooks
@@ -167,9 +174,6 @@ export default function Workspace() {
     }
   };
 
-  const isWorkspaceConfigured = workspaceInfo?.isWorkspaceConfigured ?? false;
-  const hasFilesystem = workspaceInfo?.capabilities?.hasFilesystem ?? false;
-  const hasSkills = workspaceInfo?.capabilities?.hasSkills ?? false;
   // Check if the selected workspace is read-only
   const isReadOnly = selectedWorkspace?.safety?.readOnly ?? false;
 
@@ -220,9 +224,9 @@ export default function Workspace() {
   // Show loading while fetching workspace list
   if (isLoadingWorkspaces) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Workspaces</h1>
-        <Spinner fill />
+        <BrandLoader fill />
       </PageLayout>
     );
   }
@@ -230,7 +234,7 @@ export default function Workspace() {
   // If session expired (401 error)
   if (isSessionExpired) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Workspaces</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
@@ -240,7 +244,7 @@ export default function Workspace() {
   // If permission denied (403 error)
   if (isPermissionDenied) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Workspaces</h1>
         <PermissionDenied variant="fill" resource="workspaces" />
       </PageLayout>
@@ -250,7 +254,7 @@ export default function Workspace() {
   // If workspace v1 is not supported by the server's @mastra/core version
   if (isWorkspaceNotSupported) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Workspaces</h1>
         <WorkspaceNotSupported />
       </PageLayout>
@@ -261,7 +265,7 @@ export default function Workspace() {
   const genericError = workspacesError || workspaceInfoError;
   if (genericError) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Workspaces</h1>
         <EmptyState
           tone="error"
@@ -276,7 +280,7 @@ export default function Workspace() {
   // If the workspace feature is configured but no workspaces exist yet, show empty state
   if (!isLoadingWorkspaces && workspaces.length === 0) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Workspaces</h1>
         <NoWorkspacesInfo />
       </PageLayout>
@@ -287,7 +291,7 @@ export default function Workspace() {
   // Also wait for workspaces list to load to avoid showing this before 403 is detected
   if (!isLoadingInfo && !isLoadingWorkspaces && !isWorkspaceConfigured) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Workspaces</h1>
         <WorkspaceNotConfigured />
       </PageLayout>
@@ -314,7 +318,8 @@ export default function Workspace() {
 
   return (
     <PageLayout
-      variant="fit"
+      variant="page"
+      body="fixed"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={
         <div className="flex items-center gap-2">
@@ -326,7 +331,7 @@ export default function Workspace() {
             value={selectedWorkspace?.id}
             onValueChange={setSelectedWorkspaceId}
             placeholder="Select workspace"
-            searchPlaceholder="Search workspaces..."
+            searchPlaceholder="Search workspaces"
             emptyText="No workspaces found."
           />
           {isReadOnly && (
@@ -361,7 +366,11 @@ export default function Workspace() {
                 canWrite
                   ? async path => {
                       try {
-                        await createDirectory.mutateAsync({ path, recursive: true, workspaceId: effectiveWorkspaceId });
+                        await createDirectory.mutateAsync({
+                          path,
+                          recursive: true,
+                          workspaceId: effectiveWorkspaceId,
+                        });
                       } catch (error) {
                         toast.error(`Failed to create ${path}: ${errorMessage(error)}`);
                         throw error;
@@ -375,10 +384,10 @@ export default function Workspace() {
                     variant="ghost"
                     size="icon-sm"
                     tooltip="Update skills"
-                    disabled={updateSkills.isPending}
                     onClick={() => void handleUpdateSkills()}
+                    loading={updateSkills.isPending}
                   >
-                    <RefreshCw className={updateSkills.isPending ? 'animate-spin' : undefined} />
+                    <IconArrowRotateClockwise />
                   </Button>
                 ) : undefined
               }
@@ -401,7 +410,17 @@ export default function Workspace() {
           </div>
         )}
 
-        {!hasFilesystem && !isLoadingInfo && (
+        {hasDynamicFilesystem && !isLoadingInfo && (
+          <div className="min-h-0 flex-1">
+            <EmptyState
+              variant="fill"
+              titleSlot="Filesystem resolved per request"
+              descriptionSlot="This workspace creates its filesystem when an agent runs, so its files can't be browsed here."
+            />
+          </div>
+        )}
+
+        {!hasFilesystem && !hasDynamicFilesystem && !isLoadingInfo && (
           <div className="min-h-0 flex-1">
             <EmptyState
               variant="fill"

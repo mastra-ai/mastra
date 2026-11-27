@@ -215,7 +215,7 @@ Most processor methods receive both `messages` and `messageList`. They point to 
 - `messages`: A stage-scoped array of `MastraDBMessage` objects. For input processing, `processInput` and `processInputStep` exclude system messages. For output processing, `processOutputResult` and `processOutputStep` include the latest LLM response. The array is backed by `messageList`, so in-place edits to a message's `content.parts` remain visible to downstream processors and persistence.
 - `messageList`: The live `MessageList` instance backing the run. It exposes filtered views (input, response, remembered, all), multiple output formats (db, ui, core), and methods for mutating the conversation.
 
-Use `messages` when you only need to read, map over, or lightly edit fields on the current stage's messages. Use `messageList` when you need to:
+Use `messages` when you only need to read, map over, or make small edits to fields on the current stage's messages. Use `messageList` when you need to:
 
 - Read messages from another stage, for example input messages while processing output.
 - Add, remove, or replace whole messages.
@@ -509,8 +509,9 @@ The object form can return any combination of these properties:
   content={[
   {
     name: 'model',
-    type: 'LanguageModelV2 | string',
-    description: "Change the model for this step. Can be a model instance or router ID like 'openai/gpt-5.5'.",
+    type: 'LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModel',
+    description:
+      "Change the model for this step. Can be a model instance, a router ID like 'openai/gpt-5.5', or an OpenAI-compatible config.",
     isOptional: true,
   },
   {
@@ -574,7 +575,7 @@ The object form can return any combination of these properties:
 
 When multiple processors implement `processInputStep`, they run in order and changes chain through:
 
-```
+```text
 Processor 1: receives { model: 'gpt-5.4' } → returns { model: 'gpt-5.4-mini' }
 Processor 2: receives { model: 'gpt-5.4-mini' } → returns { toolChoice: 'none' }
 Final: model = 'gpt-5.4-mini', toolChoice = 'none'
@@ -801,9 +802,10 @@ processLLMRequest?(
 
 #### Return value
 
-`processLLMRequest` returns `ProcessLLMRequestResult`, which is `{ prompt?: LanguageModelV2Prompt } | undefined | void`.
+`processLLMRequest` returns `ProcessLLMRequestResult`, which is `{ prompt?: LanguageModelV2Prompt; response?: CachedLLMStepResponse } | undefined | void`.
 
 - Return `{ prompt }` to replace the outbound prompt for the current provider call.
+- Return `{ response }` with cached chunks to skip the model call and emit those chunks instead.
 - Return `undefined` or `void` to forward the original prompt unchanged.
 
 #### Use cases
@@ -1158,6 +1160,29 @@ processOutputStream?(args: ProcessOutputStreamArgs): Promise<ChunkType | null | 
 
 Dropping a chunk only affects that single chunk. The stream continues and the next chunk is still processed. To stop the stream entirely, call `abort()`.
 
+#### Emitting a second chunk
+
+`processOutputStream` returns one chunk, but a processor sometimes needs to emit two for one input, such as text it held back followed by the chunk that released it. Return the first chunk and set the second on `state` under `REPROCESS_PART_KEY`. Mastra emits the stashed chunk right after the returned one.
+
+The stashed chunk goes through the output processors again, including the one that stashed it, so that processor must pass it through unchanged on the second pass:
+
+```typescript title="src/mastra/processors/sign-off.ts"
+import { REPROCESS_PART_KEY } from '@mastra/core/processors'
+import type { ChunkType } from '@mastra/core/stream'
+import type { ProcessOutputStreamArgs, Processor } from '@mastra/core/processors'
+
+export class SignOff implements Processor<'sign-off'> {
+  readonly id = 'sign-off'
+
+  async processOutputStream({ part, state }: ProcessOutputStreamArgs): Promise<ChunkType> {
+    if (part.type !== 'text-end' || state.signed) return part
+    state.signed = true
+    state[REPROCESS_PART_KEY] = part
+    return { ...part, type: 'text-delta', payload: { id: part.payload.id, text: '\n\nCheers!' } }
+  }
+}
+```
+
 ---
 
 ### `processOutputResult`
@@ -1195,7 +1220,7 @@ processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
     name: 'result',
     type: 'OutputResult',
     description:
-      'Resolved generation result containing `text` (accumulated text), `usage` (token usage with inputTokens, outputTokens, totalTokens), `finishReason` (why generation ended), and `steps` (all LLM step results, each with toolCalls, toolResults, reasoning, sources, files, etc.).',
+      "Resolved generation result containing `text` (accumulated text), `usage` (token usage with inputTokens, outputTokens, totalTokens), `finishReason` (why generation ended), `steps` (all LLM step results, each with toolCalls, toolResults, reasoning, sources, files, etc.). `inputAccepted` is deprecated and no longer set; check `finishReason === 'error'` to detect failed runs.",
     isOptional: false,
   },
   {
@@ -1789,7 +1814,7 @@ The `abort` function on each method throws a `TripWire` error that stops process
 abort('Blocked content detected', { retry: false, metadata: { category: 'pii' } })
 ```
 
-- `reason`: A human-readable explanation. Appears as `tripwire.payload.reason`.
+- `reason`: A human-readable explanation. Shown as `tripwire.payload.reason`.
 - `retry`: When `true`, the agent retries the same step with `reason` fed back as feedback. Retries only run when `maxProcessorRetries` is set on the agent or call; otherwise the request aborts. The safety cap of `3` that applies when no cap is set covers only error-processor retries from `processAPIError`. It doesn't give abort retries a budget.
 - `metadata`: Optional structured data attached to the `tripwire` chunk for downstream consumers.
 
@@ -1836,7 +1861,7 @@ await writer.custom({
 
 Pass `transient` as a property of the chunk, not as the second argument to `writer.custom()`. The second argument contains writer options such as `messageId`.
 
-By default, processors **don't** see `data-*` chunks in `processOutputStream` so they don't accidentally process tool telemetry or their own output. Opt in by setting `processDataParts: true` on the processor:
+By default, processors **don't** see `data-*` chunks in `processOutputStream` so they don't process tool telemetry by mistake or their own output. Opt in by setting `processDataParts: true` on the processor:
 
 ```typescript
 class ModerationCollector implements Processor {
@@ -1902,7 +1927,7 @@ await agent.stream('Summarize this', {
 })
 ```
 
-`maxProcessorRetries` passed on the call overrides the agent default. If neither is set, processor-requested retries are treated as aborts.
+`maxProcessorRetries` passed on the call overrides the agent default. If neither is set, retries requested by input and output processors are treated as aborts, while error processors (such as [`StreamErrorRetryProcessor`](/reference/processors/stream-error-retry-processor)) are capped at 3 retries.
 
 ## Related
 

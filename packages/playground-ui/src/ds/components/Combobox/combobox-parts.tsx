@@ -2,15 +2,17 @@
 // built on Base UI like theirs, styled with our design system. The root is `ComboboxRoot` because
 // `Combobox` is the options-driven component in combobox.tsx.
 import { Combobox as BaseCombobox } from '@base-ui/react/combobox';
-import { Check, ChevronDown, ChevronsUpDown, Search, X } from 'lucide-react';
 import * as React from 'react';
 import { comboboxItemClass, comboboxStyles, comboboxTriggerClass } from './combobox-styles';
 import type { ComboboxVariant } from './combobox-styles';
-import { isIconButtonSize } from '@/ds/components/Button/Button';
+import { ButtonChevron, ButtonIcon, isIconButtonSize } from '@/ds/components/Button/Button';
 import type { ButtonSize, TextButtonSize } from '@/ds/components/Button/Button';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import { menuLabelClass, menuSeparatorClass } from '@/ds/primitives/menu-item';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { usePopupAnchor } from '@/ds/primitives/popup-anchor';
@@ -39,8 +41,7 @@ function ComboboxRoot<Value, Multiple extends boolean | undefined = false>(
 const fieldClass = (size: TextButtonSize = 'md') =>
   cn(
     comboboxTriggerClass({ variant: 'default', size }),
-    // The Button recipe brightens icons on hover; a field's chevron stays muted.
-    'cursor-text gap-2 focus-within:[--surface-rim:var(--field-rim-focus)] not-disabled:hover:[&_svg]:text-muted-foreground',
+    'cursor-text gap-2 focus-within:[--surface-rim:var(--field-rim-focus)]',
     // Disabled like other form elements (muted text, not-allowed cursor), keyed off the input.
     'has-[input:disabled]:cursor-not-allowed has-[input:disabled]:bg-field-disabled has-[input:disabled]:[&_*]:cursor-not-allowed has-[input:disabled]:[&_*]:text-muted-foreground',
     // The input inside carries `aria-invalid`; the field shows it like other invalid fields.
@@ -74,7 +75,7 @@ const chipsFieldStyle: React.CSSProperties = {
 // `w-0` + `flex-1`: an input's default width (about 20 characters) would otherwise set the field's
 // minimum width, so it couldn't shrink into a narrow column.
 const inputClass =
-  'h-full w-0 min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground';
+  'h-full w-0 min-w-0 flex-1 bg-transparent text-foreground outline-none zoom-safe-text placeholder:text-muted-foreground';
 
 /** Caret at the end of the value instead of selecting it, the way a text field behaves. */
 function moveCaretToEnd(event: React.FocusEvent<HTMLInputElement>) {
@@ -102,7 +103,7 @@ function ComboboxFieldTrigger() {
     >
       {/* Sized like Select's chevron: outside the icon rung, so it keeps Lucide's default stroke
           (1.33px at 16px) instead of the rung's 1px. */}
-      <ChevronDown className="size-4" />
+      <IconChevronDownMedium className="size-icon-md" />
     </BaseCombobox.Trigger>
   );
 }
@@ -140,23 +141,18 @@ function ComboboxTrigger({
       className={comboboxTriggerClass({ variant, size, className })}
       {...props}
     >
-      {iconOnly ? (
+      {isIconButtonSize(size) ? (
         <>
           {icon}
           <span className="sr-only">{children}</span>
         </>
       ) : (
-        <span className="flex min-w-0 flex-1 items-center gap-2">
-          {icon}
-          <span className="truncate">{children}</span>
-        </span>
+        <>
+          {icon && <ButtonIcon size={size}>{icon}</ButtonIcon>}
+          <span className="min-w-0 flex-1 truncate text-left">{children}</span>
+        </>
       )}
-      {/* Wrapped so the svg escapes Button's `[&>svg]` adornments, like today's Combobox chevron. */}
-      {showChevron ? (
-        <span className="flex shrink-0 items-center">
-          <ChevronsUpDown className={cn(comboboxStyles.chevron, iconOnly && 'ml-0')} />
-        </span>
-      ) : null}
+      {showChevron && <ButtonChevron size={size} />}
     </BaseCombobox.Trigger>
   );
 }
@@ -173,7 +169,7 @@ function ComboboxClear({ className, ...props }: BaseCombobox.Clear.Props) {
       )}
       {...props}
     >
-      <X className="size-3.5" />
+      <IconCrossMedium className="size-icon-sm" />
     </BaseCombobox.Clear>
   );
 }
@@ -230,7 +226,7 @@ function ComboboxInput({
 function ComboboxSearch({ className, ...props }: BaseCombobox.Input.Props) {
   return (
     <div data-slot="combobox-search" className={comboboxStyles.searchContainer}>
-      <Search className={comboboxStyles.searchIcon} />
+      <IconMagnifyingGlass className={comboboxStyles.searchIcon} />
       <BaseCombobox.Input
         className={cn(comboboxStyles.searchInput, className)}
         {...passwordManagerOptOutProps}
@@ -249,7 +245,8 @@ type ComboboxContentProps = BaseCombobox.Popup.Props &
 /**
  * The popup. Under a field (ComboboxInput or ComboboxChips) it opens at the field's width; under a
  * compact ComboboxTrigger it takes the trigger's width, at least 11rem. Either way the width never
- * follows the filtered items, so it holds still while you type; long labels truncate.
+ * follows the filtered items, so it holds still while you type. (`Combobox`'s `popupWidth` picks a
+ * fixed, wider width for long options instead.)
  */
 function ComboboxContent({
   className,
@@ -289,34 +286,23 @@ function ComboboxContent({
 
 /** The scrolling list. Children: a render function per item (or per group), like Base UI's List. */
 function ComboboxList({ className, ...props }: BaseCombobox.List.Props) {
-  const menu = useFluidMenu();
   return (
     <ScrollArea maxHeight="var(--spacing-dropdown)">
       <ScrollAreaViewport className="scroll-py-8">
-        <div className={menu.containerClassName} {...menu.getContainerProps({})}>
-          <FluidMenuItems menu={menu}>
-            <BaseCombobox.List data-slot="combobox-list" className={cn(comboboxStyles.list, className)} {...props} />
-          </FluidMenuItems>
-        </div>
+        <BaseCombobox.List data-slot="combobox-list" className={cn(comboboxStyles.list, className)} {...props} />
       </ScrollAreaViewport>
     </ScrollArea>
   );
 }
 
-/** One option. A check shows on the right while it's selected; the hover highlight slides between items. */
+/** One option. A check shows on the right while it's selected. */
 function ComboboxItem({ className, children, ref, ...props }: BaseCombobox.Item.Props) {
   return (
-    <BaseCombobox.Item
-      // Registers the item with the list's sliding highlight (FluidMenuItems).
-      ref={useFluidMenuItemRef(ref)}
-      data-slot="combobox-item"
-      className={cn(comboboxItemClass({}), className)}
-      {...props}
-    >
-      <span className="flex min-w-0 flex-1 items-center gap-2">{children}</span>
+    <BaseCombobox.Item ref={ref} data-slot="combobox-item" className={cn(comboboxItemClass({}), className)} {...props}>
+      <span className={comboboxStyles.itemContent}>{children}</span>
       <span className={comboboxStyles.checkContainer}>
         <BaseCombobox.ItemIndicator>
-          <Check className={comboboxStyles.checkIcon} />
+          <IconCheckmark2Medium className={comboboxStyles.checkIcon} />
         </BaseCombobox.ItemIndicator>
       </span>
     </BaseCombobox.Item>
@@ -417,7 +403,7 @@ function ComboboxChips({ className, children, 'aria-label': ariaLabel, ...props 
         'h-auto min-h-control-md items-start data-multiline:rounded-xl',
         // The chips field keeps its resting look: no open tint, no placeholder color. InputGroup sets those
         // attributes, which the trigger recipe styles.
-        'data-[placeholder]:text-foreground data-[popup-open]:[--surface-tint:transparent]',
+        'data-[placeholder]:text-foreground [&[data-popup-open]:where(:not([aria-expanded=false]))]:[--surface-tint:transparent]',
         className,
       )}
       {...props}
@@ -463,7 +449,7 @@ function ComboboxChip({
           className="flex h-full cursor-pointer items-center rounded-r-full pr-[5.5px] pl-[3.5px] text-muted-foreground not-data-disabled:hover:text-foreground"
         >
           {/* Inline so the button's color wins over the field's `[&_svg]` icon colors. */}
-          <X className="size-3" style={{ color: 'inherit' }} />
+          <IconCrossMedium className="size-icon-xs" style={{ color: 'inherit' }} />
         </BaseCombobox.ChipRemove>
       ) : null}
     </BaseCombobox.Chip>

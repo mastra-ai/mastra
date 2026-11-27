@@ -8,10 +8,11 @@
 
 import type { VersionControl } from '../capabilities/version-control.js';
 import { getBranchHead } from '../integrations/github/commits.js';
+import { groupedRepositoryAccess } from './repository-access.js';
 
 export type EnvironmentHeads = Record<string, string>;
 
-/** `owner/repo` from a clone URL in any common spelling, lower-cased, `.git` stripped; undefined when unparseable. */
+/** The repository path from a clone URL in any common spelling (`owner/repo`, or `group/subgroup/repo`), lower-cased, `.git` stripped; undefined when unparseable. */
 export function cloneUrlSlug(cloneUrl: string): string | undefined {
   let path: string;
   const scp = /^[^@/]+@[^:/]+:(.+)$/.exec(cloneUrl.trim());
@@ -29,13 +30,15 @@ export function cloneUrlSlug(cloneUrl: string): string | undefined {
     .split('/')
     .filter(Boolean);
   if (parts.length < 2) return undefined;
-  return `${parts[parts.length - 2]}/${parts[parts.length - 1]}`.toLowerCase();
+  return parts.join('/').toLowerCase();
 }
 
 /** The environment slug a clone URL names, in the environment's own spelling; undefined when none matches. */
 export function matchEnvironmentSlug(cloneUrl: string, slugs: Iterable<string>): string | undefined {
   const wanted = cloneUrlSlug(cloneUrl);
   if (!wanted) return undefined;
+  // Only the whole path names the repository: a slug that is merely the tail
+  // of a longer path (`platform/app` against `acme/platform/app`) is another one.
   for (const slug of slugs) {
     if (slug.toLowerCase() === wanted) return slug;
   }
@@ -74,12 +77,22 @@ export interface HeadRepository {
 
 /** Current head of every repository's pinned ref, keyed by slug. Throws when any lookup fails. */
 export async function resolveCurrentHeads(
-  github: { versionControl: Pick<VersionControl, 'getRepositoryAccess'> },
+  github: { versionControl: Pick<VersionControl, 'getRepositoryAccess' | 'getRepositoriesAccess'> },
   input: { orgId: string; repositories: HeadRepository[] },
 ): Promise<EnvironmentHeads> {
+  const repositoryAccess = groupedRepositoryAccess(
+    github.versionControl,
+    input.orgId,
+    input.repositories.map(repository => repository.id),
+  );
+  const grouped = {
+    versionControl: {
+      getRepositoryAccess: ({ repositoryId }: { repositoryId: string }) => repositoryAccess(repositoryId),
+    },
+  };
   const heads: EnvironmentHeads = {};
   for (const repository of input.repositories) {
-    heads[repository.slug] = await getBranchHead(github, {
+    heads[repository.slug] = await getBranchHead(grouped, {
       orgId: input.orgId,
       repository: { id: repository.id, slug: repository.slug },
       branch: repository.branch,

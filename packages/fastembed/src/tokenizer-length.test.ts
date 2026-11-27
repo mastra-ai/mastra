@@ -88,3 +88,78 @@ describe.each(cases)('$name', ({ modelLimit, maxLength, expected }) => {
     expect(result.value![0]!.values[1]).toBeCloseTo(Math.log(2));
   });
 });
+
+describe('serialized AddedToken pad_token', () => {
+  beforeEach(() => {
+    fs.writeFileSync(
+      path.join(modelDir, 'tokenizer_config.json'),
+      JSON.stringify({
+        model_max_length: 4,
+        pad_token: {
+          __type: 'AddedToken',
+          content: '[PAD]',
+          single_word: false,
+          lstrip: false,
+          rstrip: false,
+          normalized: false,
+          special: true,
+        },
+      }),
+    );
+  });
+
+  it('pads dense embeddings with the token content', async () => {
+    const embedding = await FlagEmbedding.init({
+      model: EmbeddingModel.CUSTOM,
+      modelAbsoluteDirPath: modelDir,
+      modelName: 'model.onnx',
+      maxLength: 4,
+    });
+    const result = await embedding.embed(['one', 'one two three']).next();
+    expect(result.value).toHaveLength(2);
+    for (const vector of result.value!) {
+      expect(vector.every(Number.isFinite)).toBe(true);
+    }
+  });
+
+  it('pads sparse embeddings with the token content', async () => {
+    const embedding = await SparseTextEmbedding.init({
+      model: SparseEmbeddingModel.CUSTOM,
+      modelAbsoluteDirPath: modelDir,
+      modelName: 'model.onnx',
+      maxLength: 4,
+    });
+    const result = await embedding.embed(['one', 'one two three']).next();
+    expect(result.value).toHaveLength(2);
+    expect(result.value![0]!.indices).toEqual([0, 1]);
+  });
+});
+
+describe('invalid explicit token limits', () => {
+  beforeEach(() => {
+    fs.writeFileSync(
+      path.join(modelDir, 'tokenizer_config.json'),
+      JSON.stringify({ model_max_length: 4, pad_token: '[PAD]' }),
+    );
+  });
+
+  it.each([0, 0.5, NaN, Infinity])('rejects maxLength=%s for dense and sparse models', async maxLength => {
+    const options = { modelAbsoluteDirPath: modelDir, modelName: 'model.onnx', maxLength };
+    await expect.soft(FlagEmbedding.init({ ...options, model: EmbeddingModel.CUSTOM })).rejects.toThrow(RangeError);
+    await expect
+      .soft(SparseTextEmbedding.init({ ...options, model: SparseEmbeddingModel.CUSTOM }))
+      .rejects.toThrow(RangeError);
+  });
+
+  it.each([0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])(
+    'rejects maxLength=%s before accessing model files',
+    async maxLength => {
+      const options = { modelAbsoluteDirPath: path.join(modelDir, 'missing'), modelName: 'model.onnx', maxLength };
+      const message = `maxLength must be a positive safe integer, received ${String(maxLength)}`;
+      await expect.soft(FlagEmbedding.init({ ...options, model: EmbeddingModel.CUSTOM })).rejects.toThrow(message);
+      await expect
+        .soft(SparseTextEmbedding.init({ ...options, model: SparseEmbeddingModel.CUSTOM }))
+        .rejects.toThrow(message);
+    },
+  );
+});

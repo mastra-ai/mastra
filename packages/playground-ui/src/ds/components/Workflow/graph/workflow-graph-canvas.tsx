@@ -1,13 +1,13 @@
-import { Background, BackgroundVariant, ReactFlow, useNodesInitialized, useReactFlow, useStore } from '@xyflow/react';
+import { useNodesInitialized, useReactFlow, useStore } from '@xyflow/react';
 import type { Edge, Node, ReactFlowProps } from '@xyflow/react';
-import { useContext, useEffect, useId, useRef } from 'react';
+import { useContext, useEffect, useRef } from 'react';
 import { WorkflowCanvasInsetContext, workflowFitOptions } from '../workflow-canvas-inset';
 import { workflowCameraDuration } from './workflow-camera-duration';
 import { WorkflowGraphGroups } from './workflow-graph-groups';
 import type { WorkflowGraphGroup } from './workflow-graph-groups';
 import { ZoomSlider } from './zoom-slider';
+import { GraphCanvas } from '@/ds/primitives/graph-canvas';
 import { cn } from '@/utils/cn';
-import '@xyflow/react/dist/style.css';
 
 export type { WorkflowGraphGroup } from './workflow-graph-groups';
 
@@ -32,7 +32,6 @@ export function WorkflowGraphCanvas<NodeType extends Node, EdgeType extends Edge
   variant = 'default',
 }: WorkflowGraphCanvasProps<NodeType, EdgeType>) {
   const graphRef = useRef<HTMLDivElement>(null);
-  const backgroundId = useId();
   const panelInset = useContext(WorkflowCanvasInsetContext);
   const leftInset = variant === 'default' ? panelInset : 0;
   const isInline = variant === 'inline';
@@ -88,7 +87,8 @@ export function WorkflowGraphCanvas<NodeType extends Node, EdgeType extends Edge
       data-testid="workflow-graph-viewport"
       className={cn('size-full outline-none', variant === 'nested' ? 'bg-sidebar' : 'bg-background')}
     >
-      <ReactFlow
+      <GraphCanvas
+        interactive={!isInline}
         fitView={variant === 'default'}
         fitViewOptions={workflowFitOptions(leftInset)}
         nodes={nodes}
@@ -101,13 +101,7 @@ export function WorkflowGraphCanvas<NodeType extends Node, EdgeType extends Edge
         nodesConnectable={false}
         elementsSelectable={false}
         deleteKeyCode={null}
-        panOnScroll={!isInline}
-        panOnDrag={!isInline}
-        zoomOnPinch={!isInline}
-        zoomOnDoubleClick={!isInline}
-        preventScrolling={!isInline}
         proOptions={isInline ? { hideAttribution: true } : undefined}
-        zoomOnScroll={false}
         minZoom={0.1}
         maxZoom={4}
       >
@@ -116,12 +110,11 @@ export function WorkflowGraphCanvas<NodeType extends Node, EdgeType extends Edge
             position="top-right"
             className="m-2!"
             compact={hasCompactZoom}
-            onFitView={() => fitView({ ...workflowFitOptions(leftInset), duration: workflowCameraDuration() })}
+            onFitView={duration => fitView({ ...workflowFitOptions(leftInset), duration })}
           />
         )}
         {groups && <WorkflowGraphGroups nodes={nodes ?? []} groups={groups} />}
-        {!isInline && <Background id={backgroundId} variant={BackgroundVariant.Dots} gap={12} size={0.5} />}
-      </ReactFlow>
+      </GraphCanvas>
     </div>
   );
 }

@@ -1,34 +1,53 @@
 import type { PlanResume } from '@mastra/client-js';
-import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
-import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
-import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
-import { Notice } from '@mastra/playground-ui/components/Notice';
-import { groupTurns, startsUserTurn } from '@mastra/playground-ui/components/ThreadRail';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import type { ReactNode } from 'react';
-import { memo, useCallback, useMemo, useState } from 'react';
+import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
+import { TranscriptEntries as HostTranscriptEntries } from '@mastra/playground-ui/domains/chat/transcript/components/transcript-entries';
+import { TranscriptSlotsProvider } from '@mastra/playground-ui/domains/chat/transcript/components/slots';
+import type { TranscriptSlots } from '@mastra/playground-ui/domains/chat/transcript/components/slots';
+import type { ComponentProps } from 'react';
+import { useCallback } from 'react';
 
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
-import type { ThreadOwner } from '../services/reply-credential';
 import {
   useApproveAgentControllerToolMutation,
   useRespondAgentControllerSuspensionMutation,
+  isEndedPrompt,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { replySteps } from '../services/turns';
-import { ArrivalScope, useArriving } from '@mastra/playground-ui/components/Arrival';
-import { MessageBubble } from './MessageBubble';
-import { ProviderReconnectAction } from './ProviderReconnectAction';
-import { draws, messageText, renderableParts } from './transcript-parts';
-import { isRecord } from './transcript-shared';
+import { drawsModelFallback, ModelFallbackPart } from './ModelFallbackActivity';
+import { RunErrorNotice } from './RunErrorNotice';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
 import { ApprovalCard, SubagentCard, SuspensionCard } from './TranscriptPromptCards';
-import { isTurnDivider } from './TranscriptSignals';
+import { SubmitPlanCard } from './SubmitPlanCard';
+import { FactoryKnowledgeLinks } from './knowledge/FactoryKnowledgeLinks';
 
-import type { MessageEntry, NoticeEntry, SuspensionPrompt, TimelineEntry } from '../services/transcript';
+import type { TranscriptTail } from '@mastra/playground-ui/domains/chat/transcript/components/transcript-entries';
 
-export function Transcript({ tail }: { tail?: ReactNode }) {
+export type { TranscriptTail };
+
+/** Factory's own cards for the rows that act on its backend. */
+export const FACTORY_TRANSCRIPT_SLOTS: TranscriptSlots = {
+  RunError: RunErrorNotice,
+  Notification: NotificationCard,
+  NotificationSummary: NotificationSummaryCard,
+  Approval: ApprovalCard,
+  Suspension: SuspensionCard,
+  Subagent: SubagentCard,
+  SubmitPlan: SubmitPlanCard,
+  DataPart: { draws: drawsModelFallback, Component: ModelFallbackPart },
+};
+
+export function TranscriptEntries(props: ComponentProps<typeof HostTranscriptEntries>) {
+  return (
+    <TranscriptSlotsProvider slots={FACTORY_TRANSCRIPT_SLOTS}>
+      <FactoryKnowledgeLinks>
+        <HostTranscriptEntries {...props} />
+      </FactoryKnowledgeLinks>
+    </TranscriptSlotsProvider>
+  );
+}
+
+export function Transcript({ tail }: { tail?: TranscriptTail }) {
   const { sessionId, sessionEnabled, baseUrl, owner } = useChatSessionContext();
   const { transcript, resolvePrompt, busy, viewerId } = useChatTranscript();
   const { entries } = transcript;
@@ -44,15 +63,25 @@ export function Transcript({ tail }: { tail?: ReactNode }) {
   // Pinned: these reach every entry, and a fresh pair each token would redraw the lot.
   const onApprove = useCallback(
     async (toolCallId: string, approved: boolean, promptId: string) => {
-      await approve({ toolCallId, approved });
-      resolvePrompt(promptId);
+      const done = await approve({ toolCallId, approved }).then(
+        () => true,
+        // The mutation already reported it. Drop a prompt whose run has ended;
+        // keep any other so the card stays truthful.
+        isEndedPrompt,
+      );
+      if (done) resolvePrompt(promptId);
     },
     [approve, resolvePrompt],
   );
   const onRespond = useCallback(
     async (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => {
-      await respond({ toolCallId, resumeData });
-      resolvePrompt(promptId);
+      const done = await respond({ toolCallId, resumeData }).then(
+        () => true,
+        // The mutation already reported it. Drop a prompt whose run has ended;
+        // keep any other so the card stays truthful.
+        isEndedPrompt,
+      );
+      if (done) resolvePrompt(promptId);
     },
     [respond, resolvePrompt],
   );
@@ -62,7 +91,7 @@ export function Transcript({ tail }: { tail?: ReactNode }) {
       <TranscriptEntries
         entries={entries}
         restoredHistory
-        isSubmitting={approving || responding}
+        isSubmitting={approving || responding || !sessionEnabled}
         onApprove={onApprove}
         onRespond={onRespond}
         running={busy}
@@ -71,213 +100,5 @@ export function Transcript({ tail }: { tail?: ReactNode }) {
         tail={tail}
       />
     </ArrivalScope>
-  );
-}
-
-export function TranscriptEntries({
-  entries,
-  restoredHistory = false,
-  isSubmitting = false,
-  onApprove,
-  onRespond,
-  running = false,
-  viewerId,
-  owner,
-  tail,
-}: {
-  entries: TimelineEntry[];
-  restoredHistory?: boolean;
-  isSubmitting?: boolean;
-  onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
-  onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
-  /** Holds the room open under the live turn, and releases it when the agent stops. */
-  running?: boolean;
-  /** The signed-in user; anyone else's message gets their avatar beside it. */
-  viewerId?: string;
-  /** Whose personal credentials the thread runs on; names their replies for other viewers. */
-  owner?: ThreadOwner;
-  /** Rendered inside the live turn (the activity line), so the reserved room stays under it. */
-  tail?: ReactNode;
-}) {
-  const prompts = entries.flatMap(entry => (entry.kind === 'suspension' ? [entry] : []));
-  // Keyed by the prompts on screen, not by the array holding them: a delta hands this
-  // component a new `entries` every token, and a map rebuilt each time would be a new
-  // prop on every settled entry, undoing the memo below.
-  const promptKey = prompts.map(prompt => prompt.id).join('\n');
-  const suspensions = useMemo(() => new Map(prompts.map(prompt => [prompt.toolCallId, prompt] as const)), [promptKey]);
-  const canonicalToolCallIds = new Set(
-    entries.flatMap(entry =>
-      entry.kind === 'message'
-        ? entry.message.content.parts.flatMap(part =>
-            isRecord(part) && part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : [],
-          )
-        : [],
-    ),
-  );
-
-  // Ignore echoed user signals that render nothing when opening a turn.
-  const drawsContent = (entry: MessageEntry): boolean =>
-    entry.message.content.parts.some(part => draws(part, suspensions, entry.runtimeTools));
-  const opensTurn = (entry: TimelineEntry): boolean =>
-    entry.kind === 'message' && startsUserTurn(entry.message) && drawsContent(entry);
-  // A steer interjects into a reply still being written: it keeps its turn for the
-  // rail and history, but claims no room and no trip — the reader stays with the stream.
-  const steers = (entry: TimelineEntry | undefined): boolean => entry?.kind === 'message' && Boolean(entry.steer);
-
-  const turnGroups = groupTurns(entries, { key: entry => entry.id, opensTurn, introduces: isTurnDivider });
-  const [restoredTurnKey] = useState(() => (restoredHistory ? turnGroups.at(-1)?.key : undefined));
-
-  return (
-    <>
-      {turnGroups.map((group, index) => {
-        const isLiveTurn = index === turnGroups.length - 1;
-        const runningTurn = isLiveTurn && running;
-        // The first turn opens at the top of the transcript already, so room under it
-        // would buy no travel — only empty scroll below a fresh thread.
-        const holdsRoom =
-          runningTurn && group.opensTurn && index > 0 && !steers(group.entries.find(entry => entry.id === group.key));
-
-        // One reply, however many messages the server split it into: the meta row lands
-        // once, under the last of them, and copies the whole answer. While the run is
-        // still answering there is no whole answer yet — a step ending is not the reply
-        // ending, so no stamp lands mid-turn.
-        const steps = replySteps(group);
-        const replyEnd = steps.at(-1);
-        const reply = runningTurn
-          ? undefined
-          : steps
-              .map(step => messageText(renderableParts(step)))
-              .filter(Boolean)
-              .join('\n\n');
-
-        return (
-          <ChatShell.Turn
-            key={group.key}
-            opensTurn={group.opensTurn}
-            holdsRoom={holdsRoom}
-            restored={group.key === restoredTurnKey}
-          >
-            {group.entries.map(entry => (
-              <TranscriptItem key={entry.id} entry={entry} scrollAnchor={opensTurn(entry) && !steers(entry)}>
-                <TranscriptEntryContent
-                  entry={entry}
-                  suspensions={suspensions}
-                  reply={entry === replyEnd ? reply : undefined}
-                  redundantSuspension={
-                    entry.kind === 'suspension' &&
-                    entry.toolName !== 'request_access' &&
-                    canonicalToolCallIds.has(entry.toolCallId)
-                  }
-                  isSubmitting={isSubmitting}
-                  viewerId={viewerId}
-                  owner={owner}
-                  onApprove={onApprove}
-                  onRespond={onRespond}
-                />
-              </TranscriptItem>
-            ))}
-            {isLiveTurn && tail}
-          </ChatShell.Turn>
-        );
-      })}
-      {turnGroups.length === 0 && tail}
-    </>
-  );
-}
-
-/**
- * What one entry draws. Memoized on its own props, because a token landing on the live
- * reply hands this list a new array while every settled entry in it is the same object:
- * only the entry that changed is worth drawing again.
- *
- * `redundantSuspension` arrives decided rather than as the set it was decided from —
- * the set grows with every tool call, and passing it would re-render the whole
- * transcript each time one starts.
- */
-const TranscriptEntryContent = memo(function TranscriptEntryContent({
-  entry,
-  suspensions,
-  reply,
-  redundantSuspension,
-  isSubmitting,
-  viewerId,
-  owner,
-  onApprove,
-  onRespond,
-}: {
-  entry: TimelineEntry;
-  suspensions: ReadonlyMap<string, SuspensionPrompt>;
-  reply?: string;
-  redundantSuspension: boolean;
-  isSubmitting: boolean;
-  viewerId?: string;
-  owner?: ThreadOwner;
-  onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
-  onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
-}) {
-  switch (entry.kind) {
-    case 'message':
-      return (
-        <MessageBubble
-          entry={entry}
-          suspensions={suspensions}
-          reply={reply}
-          isSubmitting={isSubmitting}
-          viewerId={viewerId}
-          owner={owner}
-          onRespond={onRespond}
-        />
-      );
-    case 'notice':
-      return <NoticeCard entry={entry} />;
-    case 'approval':
-      return <ApprovalCard prompt={entry} isSubmitting={isSubmitting} onApprove={onApprove} />;
-    case 'notification':
-      return <NotificationCard entry={entry} />;
-    case 'notification_summary':
-      return <NotificationSummaryCard entry={entry} />;
-    case 'suspension':
-      return redundantSuspension ? null : (
-        <SuspensionCard prompt={entry} isSubmitting={isSubmitting} onRespond={onRespond} />
-      );
-    case 'subagent':
-      return <SubagentCard entry={entry} />;
-    default:
-      return null;
-  }
-});
-
-function TranscriptItem({
-  entry,
-  scrollAnchor,
-  children,
-}: {
-  entry: TimelineEntry;
-  scrollAnchor: boolean;
-  children: ReactNode;
-}) {
-  const arriving = useArriving();
-
-  return (
-    <MessageScrollerItem
-      messageId={entry.id}
-      scrollAnchor={scrollAnchor}
-      // Prepend anchoring needs real item heights, not off-screen estimates.
-      className={cn('[content-visibility:visible]', arriving)}
-    >
-      <ArrivalScope>{children}</ArrivalScope>
-    </MessageScrollerItem>
-  );
-}
-
-function NoticeCard({ entry }: { entry: NoticeEntry }) {
-  return (
-    <Notice
-      className="my-2"
-      variant={entry.level === 'error' ? 'destructive' : 'info'}
-      action={entry.action === 'provider-login' ? <ProviderReconnectAction /> : undefined}
-    >
-      <MarkdownRenderer className="text-current">{entry.text}</MarkdownRenderer>
-    </Notice>
   );
 }

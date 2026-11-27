@@ -13,12 +13,11 @@ describe('AgentController Resource', () => {
   const clientOptions = { baseUrl: 'http://localhost:4111' };
 
   const mockJson = (data: any) => {
-    const response = new Response(undefined, {
+    const response = new Response(JSON.stringify(data), {
       status: 200,
       statusText: 'OK',
       headers: new Headers({ 'Content-Type': 'application/json' }),
     });
-    response.json = () => Promise.resolve(data);
     (global.fetch as any).mockResolvedValueOnce(response);
   };
 
@@ -420,6 +419,21 @@ describe('AgentController Resource', () => {
       fromOwnerId: 'owner-a',
       toOwnerId: 'owner-b',
     });
+  });
+
+  it('passes displayState=false to the session stream', async () => {
+    mockSse([]);
+    const sub = await client
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({
+        displayState: false,
+        onEvent: () => {},
+      });
+    expect(lastCall()[0]).toBe(
+      'http://localhost:4111/api/agent-controller/code/sessions/user-1/stream?displayState=false',
+    );
+    sub.unsubscribe();
   });
 
   it('hydrates message-start timestamps while preserving compact SSE lifecycle payloads', async () => {

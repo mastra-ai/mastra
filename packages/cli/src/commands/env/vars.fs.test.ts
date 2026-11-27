@@ -30,7 +30,8 @@ vi.mock('./resolve-project.js', () => ({
 
 const mockFetchEnvironmentList = vi.fn();
 
-vi.mock('./platform-api.js', () => ({
+vi.mock('./platform-api.js', async importOriginal => ({
+  ...(await importOriginal<typeof import('./platform-api.js')>()),
   fetchEnvironmentList: mockFetchEnvironmentList,
 }));
 

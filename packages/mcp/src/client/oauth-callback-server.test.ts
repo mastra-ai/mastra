@@ -122,7 +122,9 @@ describe('createOAuthCallbackServer', () => {
     const server = await startCallbackServer();
     const pending = server.waitForCode();
 
-    await fetch(`${server.url}?code=auth-code-123&state=${STATE}&iss=${encodeURIComponent('https://auth.example.com')}`);
+    await fetch(
+      `${server.url}?code=auth-code-123&state=${STATE}&iss=${encodeURIComponent('https://auth.example.com')}`,
+    );
 
     await expect(pending).resolves.toEqual({
       code: 'auth-code-123',
@@ -245,7 +247,7 @@ describe('createOAuthCallbackServer', () => {
       await pending;
 
       // close() must not wait for the keep-alive socket's timeout to release
-      // the port; without closeIdleConnections this close() hangs.
+      // the port; without dropping connections this close() hangs.
       await server.close();
       callbackServer = undefined;
 
@@ -253,6 +255,32 @@ describe('createOAuthCallbackServer', () => {
       await closeServer(reclaimed);
     } finally {
       socket.destroy();
+    }
+  });
+
+  it('finishes sign-in promptly when the browser left a spare connection open', async () => {
+    const server = await startCallbackServer();
+    const { port } = server;
+
+    // Browsers open a spare connection to the callback host alongside the
+    // real redirect and send nothing on it. Node doesn't count such a socket
+    // as idle, so closeIdleConnections leaves it open and close() would wait
+    // for the request timeout (minutes).
+    const preconnect = await new Promise<Socket>((resolve, reject) => {
+      const client = connect(port, '127.0.0.1', () => resolve(client));
+      client.once('error', reject);
+    });
+    try {
+      const pending = server.waitForCode();
+      await fetch(`${server.url}?code=auth-code-123&state=${STATE}`);
+      await pending;
+
+      const closed = server.close().then(() => 'closed');
+      const stalled = new Promise(resolve => setTimeout(() => resolve('stalled'), 1000));
+      expect(await Promise.race([closed, stalled])).toBe('closed');
+      callbackServer = undefined;
+    } finally {
+      preconnect.destroy();
     }
   });
 

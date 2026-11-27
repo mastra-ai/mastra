@@ -1,6 +1,6 @@
 extends: substitution
-message: "Use 'opens' or 'displays' instead of '%s'."
-level: warning
+message: "Use '%s' or 'displays' instead of '%s'."
+level: error
 ignorecase: true
 swap:
   appears: opens

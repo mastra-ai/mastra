@@ -92,7 +92,7 @@ vi.mock('../commands/goal.js', () => ({
   startGoalWithDefaults: mocks.startGoalWithDefaults,
 }));
 
-import { dispatchSlashCommand } from '../command-dispatch.js';
+import { dispatchSlashCommand, menuCommandName } from '../command-dispatch.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
 import { SlashCommandComponent } from '../components/slash-command.js';
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
@@ -785,5 +785,16 @@ describe('dispatchSlashCommand routing', () => {
     expect(handled).toBe(true);
     expect(mocks.processSlashCommand).toHaveBeenCalledTimes(1);
     expect(mocks.processSlashCommand).toHaveBeenCalledWith(state.customSlashCommands[0], [], process.cwd());
+  });
+});
+
+describe('menuCommandName', () => {
+  it.each(['/model', '/models', '/threads', '/api-keys'])('%s shows a loading row while its menu loads', input => {
+    expect(menuCommandName(input)).toBe(input.slice(1));
+  });
+
+  it('is undefined for a command with arguments, or one that opens no menu', () => {
+    expect(menuCommandName('/model openai/gpt-5.4')).toBeUndefined();
+    expect(menuCommandName('/new')).toBeUndefined();
   });
 });

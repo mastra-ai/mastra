@@ -27,6 +27,7 @@ export { LocalSandbox, type LocalSandboxOptions } from './sandbox';
 
 // Base Classes for External Providers
 export { MastraFilesystem, type FilesystemLifecycleHook, type MastraFilesystemOptions } from './filesystem';
+export { getMimeType } from './filesystem';
 export { MastraSandbox, SandboxProcessManager, ProcessHandle, UnsupportedStdinCloseError } from './sandbox';
 
 // Errors
@@ -76,10 +77,15 @@ export {
   searchTool,
   indexContentTool,
   executeCommandTool,
+  createRecreateSandboxTool,
+  RECREATE_SANDBOX_TOOL_ID,
+  type RecreateSandboxToolOptions,
   // Helpers
   requireWorkspace,
   requireFilesystem,
   requireSandbox,
+  truncateOutput,
+  DEFAULT_TAIL_LINES,
 } from './tools';
 
 // Lifecycle

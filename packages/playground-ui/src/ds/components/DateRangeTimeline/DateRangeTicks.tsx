@@ -1,7 +1,7 @@
-import { format } from 'date-fns';
 import { parseDate } from './lib/date-range-timeline';
 import type { TimelineTick } from './lib/date-range-timeline';
 import { Txt } from '@/ds/components/Txt/Txt';
+import { formatDate } from '@/utils/date-format';
 
 interface DateRangeTicksProps {
   ticks: TimelineTick[];
@@ -11,7 +11,7 @@ interface DateRangeTicksProps {
 
 function formatBoundaryDate(value: string) {
   const date = parseDate(value);
-  return date ? format(date, 'MMM d, yyyy') : value;
+  return formatDate(date, 'date-year') ?? value;
 }
 
 export function DateRangeTicks({ ticks, min, max }: DateRangeTicksProps) {
@@ -26,11 +26,11 @@ export function DateRangeTicks({ ticks, min, max }: DateRangeTicksProps) {
     // day; a zoomed viewport can hold one tick for any date, so stay neutral.
     const singleLabel =
       firstTick.date === min && firstTick.date === max
-        ? `Created today · ${date}`
+        ? `Created today (${date})`
         : firstTick.date === min
-          ? `Created · ${date}`
+          ? `Created ${date}`
           : firstTick.date === max
-            ? `Today · ${date}`
+            ? `Today (${date})`
             : date;
     return (
       <div role="group" aria-label={timelineLabel} className="flex h-10 items-start justify-center pt-2">
@@ -42,8 +42,8 @@ export function DateRangeTicks({ ticks, min, max }: DateRangeTicksProps) {
     );
   }
 
-  const startLabel = firstTick.date === min ? `Created · ${formatBoundaryDate(min)}` : firstTick.label;
-  const endLabel = lastTick.date === max ? `Today · ${formatBoundaryDate(max)}` : lastTick.label;
+  const startLabel = firstTick.date === min ? `Created ${formatBoundaryDate(min)}` : firstTick.label;
+  const endLabel = lastTick.date === max ? `Today (${formatBoundaryDate(max)})` : lastTick.label;
   const middleTicks = ticks.slice(1, -1);
 
   return (

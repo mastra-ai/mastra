@@ -24,7 +24,7 @@ export const StubLink = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLA
 // Every path resolves to the id-bearing route so tests can assert real hrefs
 // where they matter and simply render everywhere else.
 //
-// Typed via assertion (not annotation) on purpose: CI's Changed Test Gate
+// Typed via assertion (not annotation) on purpose: the former CI Changed Test Gate
 // typechecks this file against the base branch, whose `LinkComponentPaths`
 // may not match the head branch's exactly. The assertion tolerates extra
 // keys so the stub can carry entries for both versions.
@@ -82,13 +82,16 @@ export const stubLinkPaths = paths as LinkComponentProviderProps['paths'];
 export function TestLinkProvider({
   children,
   paths: overrides,
+  navigate = () => {},
 }: {
   children: ReactNode;
   /** Overrides individual paths, e.g. `() => ''` to simulate an app without that route. */
   paths?: Partial<LinkComponentProviderProps['paths']>;
+  /** Where the app navigates to; spy on it to assert a route a button opens. */
+  navigate?: LinkComponentProviderProps['navigate'];
 }) {
   return (
-    <LinkComponentProvider Link={StubLink} navigate={() => {}} paths={{ ...stubLinkPaths, ...overrides }}>
+    <LinkComponentProvider Link={StubLink} navigate={navigate} paths={{ ...stubLinkPaths, ...overrides }}>
       {children}
     </LinkComponentProvider>
   );

@@ -1,5 +1,4 @@
-import { Notice } from '@mastra/playground-ui/components/Notice';
-import { ArrowRight } from 'lucide-react';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Link, useLocation } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
@@ -8,6 +7,7 @@ import { sessionDefaultsAnchor, settingsSectionPath } from '../../settings/setti
 import { useChatModelScope } from '../context/useChatModelScope';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import type { ThreadOwner } from '../services/reply-credential';
+import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
 
 function teammatePayingForSession(
   modelScope: 'factory' | 'user' | undefined,
@@ -31,15 +31,18 @@ export function ProviderReconnectAction() {
   if (teammate) return <span>{teammate.name ?? 'The session owner'} needs to reconnect</span>;
 
   return (
-    <Notice.Button
+    <Button
+      variant="ghost"
+      size="sm"
       render={
         <Link
           to={settingsSectionPath(factoryId, 'models', sessionDefaultsAnchor(modelScope))}
           state={{ from: location }}
         />
       }
+      iconEnd={<IconArrowRight aria-hidden="true" />}
     >
-      Login <ArrowRight aria-hidden="true" />
-    </Notice.Button>
+      Review credentials
+    </Button>
   );
 }

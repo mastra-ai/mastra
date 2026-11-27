@@ -18,21 +18,37 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   },
   deltaPolling: false,
   traceQuery: false,
+  traceQueryAggregatedRoots: false,
+  traceQueryTokenSearch: false,
+  spanQueryTokenSearch: false,
+  spanAggregateTokenSearch: false,
+  traceAggregateTokenSearch: false,
   traceQueryRootDuration: false,
   traceQueryContextIds: false,
+  traceQueryContextFields: false,
   traceQueryTimeToFirstChunk: false,
   traceQueryRootSpanFields: false,
   traceQueryRootEntityId: false,
   traceQueryTimeToFirstChunkSort: false,
+  traceQueryTimeToFirstToken: false,
+  traceQueryTimeToFirstTokenSort: false,
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
+  traceQueryOutcomeFields: false,
   traceAggregate: false,
   threadQuery: false,
   threadQueryRows: false,
   spanQuery: false,
+  spanQueryDurationSort: false,
+  spanQueryModelProviderSort: false,
   spanQueryContextFields: false,
+  spanQueryModelFields: false,
+  spanQueryOutcomeFields: false,
   spanAggregate: false,
+  spanAggregateModelDimensions: false,
+  aggregateTimeToFirstMeasures: false,
   feedback: false,
+  feedbackReplacement: false,
 };
 
 type MockStorage = {
@@ -128,15 +144,18 @@ describe('System Handlers', () => {
       });
     });
 
-    it('should return empty array when MASTRA_PACKAGES_FILE is not set', async () => {
+    it.each([
+      ['should return empty array when MASTRA_PACKAGES_FILE is not set', false],
+      ['should return cmsEnabled true when editor is configured', true],
+    ] as const)('%s', async (_title, input) => {
       delete process.env.MASTRA_PACKAGES_FILE;
 
-      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(false) } as any);
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(input) } as any);
 
       expect(result).toEqual({
         packages: [],
         isDev: false,
-        cmsEnabled: false,
+        cmsEnabled: input,
         liveKitConnectionRouteEnabled: false,
         observabilityEnabled: false,
         storageType: undefined,
@@ -198,23 +217,6 @@ describe('System Handlers', () => {
       });
     });
 
-    it('should return cmsEnabled true when editor is configured', async () => {
-      delete process.env.MASTRA_PACKAGES_FILE;
-
-      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(true) } as any);
-
-      expect(result).toEqual({
-        packages: [],
-        isDev: false,
-        cmsEnabled: true,
-        liveKitConnectionRouteEnabled: false,
-        observabilityEnabled: false,
-        storageType: undefined,
-        observabilityStorageType: undefined,
-        observabilityRuntimeStrategy: undefined,
-      });
-    });
-
     it('advertises recording review for the exact default LiveKit GET route', async () => {
       const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
         mastra: createMockMastra(false, undefined, false, {
@@ -261,17 +263,20 @@ describe('System Handlers', () => {
       expect(result).toMatchObject({ liveKitConnectionRouteEnabled: false });
     });
 
-    it('should return filesystem capabilities for local code-source editor storage', async () => {
+    it.each([
+      ['should return filesystem capabilities for local code-source editor storage', 'code', 'filesystem'],
+      ['should return database capabilities for db-source editor storage', 'db', 'database'],
+    ] as const)('%s', async (_title, value, storage) => {
       const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
-        mastra: createMockMastra({ getSource: () => 'code' }),
+        mastra: createMockMastra({ getSource: () => value }),
       } as any);
 
       expect(result).toMatchObject({
         cmsEnabled: true,
-        editorSource: 'code',
+        editorSource: value,
         editorSourceCapabilities: {
-          source: 'code',
-          storage: 'filesystem',
+          source: value,
+          storage,
           canSave: true,
           canOpenChangeRequest: false,
         },
@@ -401,23 +406,6 @@ describe('System Handlers', () => {
           canSave: false,
           canOpenChangeRequest: false,
           unavailableReason: 'Missing source provider write permission.',
-        },
-      });
-    });
-
-    it('should return database capabilities for db-source editor storage', async () => {
-      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
-        mastra: createMockMastra({ getSource: () => 'db' }),
-      } as any);
-
-      expect(result).toMatchObject({
-        cmsEnabled: true,
-        editorSource: 'db',
-        editorSourceCapabilities: {
-          source: 'db',
-          storage: 'database',
-          canSave: true,
-          canOpenChangeRequest: false,
         },
       });
     });
@@ -656,6 +644,32 @@ describe('System Handlers', () => {
       });
 
       it.each([
+        { features: ['span-query', 'span-query-duration-sort'], supported: true },
+        { features: ['span-query'], supported: false },
+        { features: ['span-query-duration-sort'], supported: false },
+      ] as const)('reports span duration ordering for $features as $supported', async ({ features, supported }) => {
+        class DurationStore extends BaseObservabilityStore {
+          getFeatures() {
+            return features;
+          }
+        }
+        expect(await capabilitiesFor(new DurationStore())).toMatchObject({ spanQueryDurationSort: supported });
+      });
+
+      it.each([
+        { features: ['span-query', 'span-query-model-provider-sort'], supported: true },
+        { features: ['span-query'], supported: false },
+        { features: ['span-query-model-provider-sort'], supported: false },
+      ] as const)('reports model/provider ordering for $features as $supported', async ({ features, supported }) => {
+        class ModelSortStore extends BaseObservabilityStore {
+          getFeatures() {
+            return features;
+          }
+        }
+        expect(await capabilitiesFor(new ModelSortStore())).toMatchObject({ spanQueryModelProviderSort: supported });
+      });
+
+      it.each([
         { features: ['span-query', 'span-query-context-fields'], supported: true },
         { features: ['span-query'], supported: false },
         { features: ['span-query-context-fields'], supported: false },
@@ -669,6 +683,91 @@ describe('System Handlers', () => {
         expect(await capabilitiesFor(new SpanQueryStore())).toMatchObject({
           spanQueryContextFields: supported,
         });
+      });
+
+      it.each([
+        { features: ['span-query', 'span-query-model-fields'], supported: true },
+        { features: ['span-query'], supported: false },
+        { features: ['span-query-model-fields'], supported: false },
+      ] as const)(
+        'reports model and provider span filters for $features as $supported',
+        async ({ features, supported }) => {
+          class SpanQueryStore extends BaseObservabilityStore {
+            getFeatures() {
+              return features;
+            }
+          }
+
+          expect(await capabilitiesFor(new SpanQueryStore())).toMatchObject({
+            spanQueryModelFields: supported,
+          });
+        },
+      );
+
+      it.each([
+        { features: ['span-aggregate', 'span-aggregate-model-dimensions'], supported: true },
+        { features: ['span-aggregate', 'span-query-model-fields'], supported: false },
+        { features: ['span-aggregate-model-dimensions'], supported: false },
+      ] as const)(
+        'reports model and provider span aggregate dimensions for $features as $supported',
+        async ({ features, supported }) => {
+          class SpanAggregateStore extends BaseObservabilityStore {
+            getFeatures() {
+              return features;
+            }
+          }
+
+          expect(await capabilitiesFor(new SpanAggregateStore())).toMatchObject({
+            spanAggregateModelDimensions: supported,
+          });
+        },
+      );
+
+      it.each([
+        { features: ['trace-aggregate', 'aggregate-time-to-first-measures'], supported: true },
+        { features: ['span-aggregate', 'aggregate-time-to-first-measures'], supported: true },
+        { features: ['trace-aggregate', 'span-aggregate'], supported: false },
+        { features: ['aggregate-time-to-first-measures'], supported: false },
+      ] as const)(
+        'reports time-to-first aggregate measures for $features as $supported',
+        async ({ features, supported }) => {
+          class AggregateStore extends BaseObservabilityStore {
+            getFeatures() {
+              return features;
+            }
+          }
+
+          expect(await capabilitiesFor(new AggregateStore())).toMatchObject({
+            aggregateTimeToFirstMeasures: supported,
+          });
+        },
+      );
+
+      it.each([
+        {
+          features: ['span-query', 'span-query-outcome-fields'],
+          expected: { spanQueryOutcomeFields: true, traceQueryOutcomeFields: false },
+        },
+        {
+          features: ['trace-query', 'trace-query-outcome-fields'],
+          expected: { spanQueryOutcomeFields: false, traceQueryOutcomeFields: true },
+        },
+        {
+          features: ['span-query-outcome-fields', 'trace-query-outcome-fields'],
+          expected: { spanQueryOutcomeFields: false, traceQueryOutcomeFields: false },
+        },
+        {
+          features: ['span-query', 'trace-query'],
+          expected: { spanQueryOutcomeFields: false, traceQueryOutcomeFields: false },
+        },
+      ] as const)('reports outcome fields for $features as $expected', async ({ features, expected }) => {
+        class OutcomeStore extends BaseObservabilityStore {
+          getFeatures() {
+            return features;
+          }
+        }
+
+        expect(await capabilitiesFor(new OutcomeStore())).toMatchObject(expected);
       });
 
       it('reports time to first chunk only when the store also serves a trace, thread or span query', async () => {
@@ -689,6 +788,31 @@ describe('System Handlers', () => {
           traceQueryTimeToFirstChunk: true,
         });
         expect(await capabilitiesFor(new NoQueryStore())).toEqual(NO_OBSERVABILITY_CAPABILITIES);
+      });
+
+      it('reports time to first token and its sort apart from time to first chunk', async () => {
+        class TokenStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['span-query', 'trace-query-time-to-first-token', 'trace-query-time-to-first-token-sort'] as const;
+          }
+        }
+        class ThreadOnlyStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['thread-query', 'trace-query-time-to-first-token', 'trace-query-time-to-first-token-sort'] as const;
+          }
+        }
+
+        expect(await capabilitiesFor(new TokenStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          spanQuery: true,
+          traceQueryTimeToFirstToken: true,
+          traceQueryTimeToFirstTokenSort: true,
+        });
+        expect(await capabilitiesFor(new ThreadOnlyStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          threadQuery: true,
+          traceQueryTimeToFirstToken: true,
+        });
       });
 
       it('reports the time to first chunk sort only when the store also serves a trace or span query', async () => {

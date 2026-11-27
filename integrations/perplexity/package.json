@@ -1,12 +1,13 @@
 {
   "name": "@mastra/perplexity",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Perplexity Search tool for Mastra agents",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "exports": {
     ".": {

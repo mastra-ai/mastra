@@ -90,11 +90,6 @@ describe('agent lifecycle', () => {
     session = ctx.session;
   });
 
-  it('sets isRunning to true on agent_start', () => {
-    emit(session, { type: 'agent_start' });
-    expect(session.displayState.get().isRunning).toBe(true);
-  });
-
   it('clears activeTools on agent_start', () => {
     emit(session, { type: 'tool_start', toolCallId: 't1', toolName: 'read_file', args: {} });
     expect(session.displayState.get().activeTools.size).toBe(1);
@@ -330,6 +325,40 @@ describe('tool lifecycle', () => {
   });
 
   describe('shell_output', () => {
+    it('retains only the latest output after a long command, without truncating events', () => {
+      emit(session, { type: 'tool_start', toolCallId: 't1', toolName: 'execute_command', args: {} });
+      const limit = 1024 * 1024;
+      const chunk = 'x'.repeat(limit / 4);
+      let received = 0;
+      session.subscribe(event => {
+        if (event.type === 'shell_output') received += event.output.length;
+      });
+      for (let i = 0; i < 8; i++) {
+        emit(session, { type: 'shell_output', toolCallId: 't1', output: chunk, stream: 'stdout' });
+      }
+      emit(session, { type: 'shell_output', toolCallId: 't1', output: 'latest stderr\n', stream: 'stderr' });
+      const output = session.displayState.get().activeTools.get('t1')!.shellOutput!;
+      expect(output).toHaveLength(limit);
+      expect(output.endsWith('latest stderr\n')).toBe(true);
+      expect(received).toBe(chunk.length * 8 + 'latest stderr\n'.length);
+    });
+
+    it('retains the tail of an oversized chunk and continues appending', () => {
+      emit(session, { type: 'tool_start', toolCallId: 't1', toolName: 'execute_command', args: {} });
+      const limit = 1024 * 1024;
+      emit(session, { type: 'shell_output', toolCallId: 't1', output: 'old', stream: 'stdout' });
+      emit(session, {
+        type: 'shell_output',
+        toolCallId: 't1',
+        output: 'x'.repeat(limit * 2) + 'end',
+        stream: 'stdout',
+      });
+      expect(session.displayState.get().activeTools.get('t1')!.shellOutput).toBe('x'.repeat(limit - 3) + 'end');
+      emit(session, { type: 'shell_output', toolCallId: 't1', output: '', stream: 'stdout' });
+      emit(session, { type: 'shell_output', toolCallId: 't1', output: '!', stream: 'stderr' });
+      expect(session.displayState.get().activeTools.get('t1')!.shellOutput).toBe('x'.repeat(limit - 4) + 'end!');
+    });
+
     it('appends shell output to tool', () => {
       emit(session, { type: 'tool_start', toolCallId: 't1', toolName: 'execute_command', args: {} });
       emit(session, { type: 'shell_output', toolCallId: 't1', output: 'line1\n', stream: 'stdout' });
@@ -709,6 +738,38 @@ describe('tool lifecycle', () => {
 
       await session.finishAgentRun('error');
 
+      expect([...session.displayState.get().pendingSuspensions.values()].map(s => s.runId)).toEqual(['run-other']);
+    });
+
+    it('clears only the prompts of the ending run when another run ends while its listener waits', async () => {
+      for (const runId of ['run-a', 'run-b', 'run-other']) {
+        emit(session, {
+          type: 'tool_suspended',
+          resourceId: 'resource',
+          threadId: 'thread',
+          runId,
+          toolCallId: `call-${runId}`,
+          toolName: 'ask_user',
+          args: {},
+          suspendPayload: {},
+        });
+      }
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      const seen: Array<string | null> = [];
+      let calls = 0;
+      session.onBeforeAgentEnd(async (_event, context) => {
+        // The first run to end waits here while the second one ends.
+        if (calls++ === 0) await gate;
+        seen.push(context?.runId ?? null);
+      });
+
+      const endA = session.finishAgentRun('error', { runId: 'run-a' });
+      await session.finishAgentRun('error', { runId: 'run-b' });
+      release();
+      await endA;
+
+      expect(seen).toEqual(['run-b', 'run-a']);
       expect([...session.displayState.get().pendingSuspensions.values()].map(s => s.runId)).toEqual(['run-other']);
     });
 

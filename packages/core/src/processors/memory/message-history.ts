@@ -270,9 +270,7 @@ export class MessageHistory implements Processor {
     // input copy onto the stored message so memory remains the authoritative base.
     const chronologicalMessages = filteredMessages.reverse();
 
-    for (const msg of chronologicalMessages) {
-      messageList.add(msg, 'memory');
-    }
+    messageList.add(chronologicalMessages, 'memory');
 
     span?.update({ attributes: { messageCount: chronologicalMessages.length } });
 
@@ -312,15 +310,19 @@ export class MessageHistory implements Processor {
     // providerMetadata. Persisting it untransformed would leak the raw
     // payload to storage whenever this save lands after the redacting
     // save-queue flush (last-writer-wins on the message id).
-    const messagesToSave = persistenceMessageList.transformMessagesForTranscript([...newInput, ...newOutput]);
+    // Stored messages OM marked for resave (their token counts changed) go back with them.
+    const resaveIds = new Set(persistenceMessageList.getMessagesToResave().map(message => message.id));
+    const newIds = new Set([...newInput, ...newOutput].map(message => message.id));
+    const resaved = persistenceMessageList.get.all
+      .db()
+      .filter(message => resaveIds.has(message.id) && !newIds.has(message.id));
+    const messagesToSave = persistenceMessageList.transformMessagesForTranscript([
+      ...newInput,
+      ...newOutput,
+      ...resaved,
+    ]);
 
     if (messagesToSave.length === 0) {
-      return messageList;
-    }
-
-    // Don't persist an input-only failed turn: if the provider errored before
-    // producing any output, saving the user message would orphan it in history.
-    if (result?.finishReason === 'error' && newOutput.length === 0) {
       return messageList;
     }
 
@@ -329,8 +331,6 @@ export class MessageHistory implements Processor {
     span?.update({ attributes: { messageCount: messagesToSave.length } });
 
     await this.persistMessages({ messages: messagesToSave, threadId, resourceId });
-    // add extra 1ms latency to make sure the next generate has not the same input
-    await new Promise(resolve => setTimeout(resolve, 10));
 
     return messageList;
   }

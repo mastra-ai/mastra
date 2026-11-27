@@ -1,5 +1,4 @@
 import { format } from 'date-fns';
-import { CalendarDaysIcon } from 'lucide-react';
 import { useState } from 'react';
 import { parseDate } from './lib/date-range-timeline';
 import type { DateBoundary } from './lib/date-range-timeline';
@@ -7,6 +6,8 @@ import { Button } from '@/ds/components/Button/Button';
 import { DatePicker } from '@/ds/components/DateTimePicker';
 import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover/popover';
 import { Txt } from '@/ds/components/Txt/Txt';
+import { IconCalendarDays } from '@/ds/icons/central/IconCalendarDays';
+import { formatDate } from '@/utils/date-format';
 
 interface DateRangeBoundaryPickerProps {
   boundary: DateBoundary;
@@ -23,7 +24,7 @@ export function DateRangeBoundaryPicker({ boundary, value, min, max, onSelect }:
   const selectedDate = parseDate(value);
   const firstDate = parseDate(min) ?? selectedDate;
   const lastDate = parseDate(max) ?? selectedDate;
-  const formattedDate = selectedDate ? format(selectedDate, 'MMM d, yyyy') : value;
+  const formattedDate = selectedDate ? formatDate(selectedDate, 'date-year') : value;
 
   function handleSelect(date?: Date) {
     if (!date) return;
@@ -40,7 +41,7 @@ export function DateRangeBoundaryPicker({ boundary, value, min, max, onSelect }:
             aria-expanded={open}
             size="sm"
             className="h-11 w-full min-w-0 justify-start overflow-hidden px-3 sm:h-8"
-            icon={<CalendarDaysIcon aria-hidden="true" />}
+            icon={<IconCalendarDays aria-hidden="true" />}
           >
             <Txt as="span" variant="caption" tone="ink" className="truncate tabular-nums">
               {formattedDate}
@@ -53,8 +54,8 @@ export function DateRangeBoundaryPicker({ boundary, value, min, max, onSelect }:
           mode="single"
           selected={selectedDate}
           defaultMonth={selectedDate}
-          fromMonth={firstDate}
-          toMonth={lastDate}
+          startMonth={firstDate}
+          endMonth={lastDate}
           disabled={firstDate && lastDate ? { before: firstDate, after: lastDate } : undefined}
           onSelect={handleSelect}
         />

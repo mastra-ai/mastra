@@ -3,11 +3,14 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
+import type { ModelPackSet } from '@mastra/factory/model-packs';
+import type { PersonalModelDefaultsResponse } from '@mastra/factory/routes/config';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import type { FactoryProjectPayload } from '../domains/workspaces/services/github';
-import { pickModel } from '../domains/settings/components/models/defaults/__tests__/default-model-test-utils';
+import { pickPackModel } from '../domains/settings/components/models/packs/__tests__/pack-model-test-utils';
+import { environmentPayload } from '../domains/settings/components/__tests__/fixtures/environment';
 import { createAppRoutes } from '../router';
 import {
   settingsFactory,
@@ -36,11 +39,14 @@ function renderSettings(section: string, { hash = '', search = '' } = {}) {
 }
 
 beforeEach(() => {
+  window.history.replaceState(null, '', '/');
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [settingsFactory] })),
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      HttpResponse.json({ projects: [{ ...settingsFactory, repositories: [] }] }),
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () => HttpResponse.json({ project: settingsFactory })),
     http.post(`${TEST_BASE_URL}/api/agent-controller/code/sessions`, () => HttpResponse.json(settingsSession)),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/fp-1`, () => HttpResponse.json(settingsSession)),
@@ -48,7 +54,6 @@ beforeEach(() => {
       HttpResponse.json({ categories: {}, tools: {} }),
     ),
     http.get(PROVIDERS_URL, () => HttpResponse.json(settingsProviders)),
-    http.get(`${TEST_BASE_URL}/web/config/custom-providers`, () => HttpResponse.json({ providers: [] })),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json(settingsDefaultModel)),
     http.get(OM_URL, () => HttpResponse.json({ config: settingsMemory })),
   );
@@ -96,16 +101,28 @@ describe('Settings ownership', () => {
     await waitFor(() => expect(keyBody).toEqual({ key: 'sk-personal', scope: 'user' }));
   });
 
-  it('saves personal memory for the caller and Factory memory for the Factory', async () => {
+  it('addresses personal memory by the active chat thread and Factory memory by the Factory', async () => {
+    const reads: Array<Record<string, string>> = [];
     const bodies: unknown[] = [];
     server.use(
+      http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/thread-1`, () =>
+        HttpResponse.json({ ...settingsSession, sessionId: 'thread-1', resourceId: 'thread-1', threadId: 'thread-1' }),
+      ),
+      http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/thread-1/permissions`, () =>
+        HttpResponse.json({ categories: {}, tools: {} }),
+      ),
+      http.get(OM_URL, ({ request }) => {
+        reads.push(Object.fromEntries(new global.URL(request.url).searchParams));
+        return HttpResponse.json({ config: settingsMemory });
+      }),
       http.put(`${OM_URL}/thresholds`, async ({ request }) => {
         bodies.push(await request.json());
         return HttpResponse.json({ ok: true, config: settingsMemory });
       }),
     );
+    window.history.replaceState(null, '', '/?sessionId=thread-1');
     const user = userEvent.setup();
-    renderSettings('memory');
+    renderSettings('memory', { search: '?sessionId=thread-1' });
 
     for (const [memory, threshold] of [
       ['Personal memory', '3000'],
@@ -118,12 +135,19 @@ describe('Settings ownership', () => {
       await user.tab();
     }
 
-    await waitFor(() =>
+    await waitFor(() => {
+      expect(reads).toEqual(
+        expect.arrayContaining([
+          { sessionId: 'thread-1', threadId: 'thread-1', resourceId: 'thread-1' },
+          { factoryId: 'fp-1' },
+        ]),
+      );
+      expect(reads.filter(read => read.sessionId).every(read => read.threadId === 'thread-1')).toBe(true);
       expect(bodies).toEqual([
-        { sessionId: 'fp-1', observationThreshold: 3000 },
+        { sessionId: 'thread-1', threadId: 'thread-1', resourceId: 'thread-1', observationThreshold: 3000 },
         { factoryId: 'fp-1', observationThreshold: 4000 },
-      ]),
-    );
+      ]);
+    });
   });
 
   it.each([
@@ -142,6 +166,18 @@ describe('Settings ownership', () => {
     expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('aria-current', 'page');
   });
 
+  it('sends retired Preferences links to My account, where theme and completion sound now live', async () => {
+    const router = renderSettings('preferences', { search: '?from=chat' });
+
+    expect(await screen.findByRole('radiogroup', { name: 'Theme' })).toBeInTheDocument();
+    expect(router.state.location).toMatchObject({
+      pathname: '/factories/fp-1/settings/account',
+      search: '?from=chat',
+      state: { settingsReturnTo: '/factories/fp-1/work' },
+    });
+    expect(screen.getByRole('link', { name: 'My account' })).toHaveAttribute('aria-current', 'page');
+  });
+
   it('sends retired Factory memory links to Memory', async () => {
     const router = renderSettings('factory-memory');
 
@@ -150,17 +186,30 @@ describe('Settings ownership', () => {
     expect(screen.getByRole('link', { name: 'Memory' })).toHaveAttribute('aria-current', 'page');
   });
 
-  it('lets a Personal-routed Factory with no Factory default start chats once the user picks a personal default', async () => {
+  it('sends retired Environment links to Repositories, where pre-clone and repository commands now live', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/environment`, () =>
+        HttpResponse.json({ environment: environmentPayload() }),
+      ),
+    );
+    const router = renderSettings('environment');
+
+    expect(await screen.findByRole('button', { name: 'Show settings for acme/web' })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/factories/fp-1/settings/repositories');
+    expect(screen.getByRole('link', { name: 'Repositories' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('lets a Personal-routed Factory with no Factory default start chats once the user creates a personal pack', async () => {
     const project: FactoryProjectPayload = { ...settingsFactory, modelScope: 'user', defaultModelId: null };
-    let personalDefaultModelId: string | null = null;
+    let personalDefaults: PersonalModelDefaultsResponse = settingsDefaultModel;
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () => HttpResponse.json({ project })),
-      http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: personalDefaultModelId, thinkingLevel: null }),
-      ),
-      http.put<never, { modelId: string }>(`${TEST_BASE_URL}/web/config/default-model`, async ({ request }) => {
-        personalDefaultModelId = (await request.json()).modelId;
-        return HttpResponse.json({ ok: true, modelId: personalDefaultModelId });
+      http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json(personalDefaults)),
+      http.put<never, ModelPackSet>(`${TEST_BASE_URL}/web/config/model-packs`, async ({ request }) => {
+        const packs = await request.json();
+        const first = packs.modelPacks[0].models[0];
+        personalDefaults = { ...packs, modelId: first.modelId, thinkingLevel: first.thinkingLevel };
+        return HttpResponse.json(personalDefaults);
       }),
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ workItems: [] })),
       http.get(PROVIDERS_URL, () =>
@@ -181,8 +230,9 @@ describe('Settings ownership', () => {
 
     await user.click(await screen.findByRole('link', { name: 'Open Models settings' }));
     expect(router.state.location.hash).toBe('#personal-defaults');
-    await pickModel(user, 'Personal default model', 'openai/gpt-5');
-    await waitFor(() => expect(personalDefaultModelId).toBe('openai/gpt-5'));
+    const personal = await screen.findByRole('region', { name: 'Personal defaults' });
+    await pickPackModel(user, 'Choose a model', 'GPT-5', personal);
+    await waitFor(() => expect(personalDefaults.modelId).toBe('openai/gpt-5'));
     await act(() => router.navigate(-1));
 
     expect(await screen.findByLabelText('Message')).toBeInTheDocument();

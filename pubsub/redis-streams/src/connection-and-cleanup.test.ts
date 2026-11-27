@@ -256,6 +256,34 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
       await expect.poll(() => received, { timeout: 5000 }).toEqual([2]);
     }, 15_000);
 
+    it('retains final outcomes but removes saved output and answered suspensions when requested (COR-1500)', async () => {
+      const ps = createPubSub();
+      const topic = `trim-outcomes-${randomUUID()}`;
+      for (const data of [
+        { type: 'stream-part' },
+        { type: 'run-registered' },
+        { type: 'run-completed', status: 'suspended' },
+        { type: 'run-completed', status: 'success' },
+        { type: 'run-failed', error: 'failed' },
+        { type: 'run-aborted' },
+      ])
+        await ps.publish(topic, makeEvent({ runId: 'a', data }));
+      await ps.publish(topic, makeEvent({ runId: 'b', data: { type: 'stream-part' } }));
+      await ps.trimTopic(topic, { runId: 'a', retainTerminalEvents: true });
+      await ps.trimTopic(topic, { runId: 'a', retainTerminalEvents: true });
+      const inspector = await createInspector();
+      const entries = await inspector.xRange(`mastra:topic:${topic}`, '-', '+');
+      expect(entries.map(entry => JSON.parse(entry.message.event).data.type)).toEqual([
+        'run-registered',
+        'run-completed',
+        'run-failed',
+        'run-aborted',
+        'stream-part',
+      ]);
+      await ps.trimTopic(topic, { runId: 'a' });
+      expect(await inspector.xLen(`mastra:topic:${topic}`)).toBe(1);
+    }, 15_000);
+
     it('pages through streams longer than one XRANGE page', async () => {
       const ps = createPubSub();
       const topic = `trim-paged-${randomUUID()}`;
@@ -336,6 +364,85 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
     }, 20_000);
   });
 
+  describe('per-topic idle retention', () => {
+    const ONE_HOUR = 60 * 60 * 1000;
+    const ONE_DAY = 24 * 60 * 60 * 1000;
+    const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+
+    it('bounds a run’s topics by the run-log retention, not the idle backstop', async () => {
+      // A finished run whose process died before its delayed clearTopic used
+      // to sit in Redis for the full backstop. Its topics are fan-out and
+      // their replay history is bounded in the server cache, so they take the
+      // retention their cached log does: a day for run topics, matching the
+      // lifetime of the record that authorizes reading them (a run parked on
+      // a tool approval appends nothing, so this must cover the record's full
+      // window), and an hour for thread streams.
+      const ps = createPubSub();
+      const runId = randomUUID();
+      const runTopics = [`agent.stream.${runId}`, `agent.control.${runId}`, `agent.control.${runId}.ack`];
+      const threadStream = `agent.thread-stream.${randomUUID()}`;
+      const workQueue = `work-queue-${randomUUID()}`;
+      for (const topic of [...runTopics, threadStream, workQueue]) await ps.publish(topic, makeEvent());
+
+      const inspector = await createInspector();
+      for (const topic of runTopics) {
+        const pttl = await inspector.pTTL(`mastra:topic:${topic}`);
+        expect(pttl).toBeGreaterThan(ONE_HOUR);
+        expect(pttl).toBeLessThanOrEqual(ONE_DAY);
+      }
+      const threadPttl = await inspector.pTTL(`mastra:topic:${threadStream}`);
+      expect(threadPttl).toBeGreaterThan(0);
+      expect(threadPttl).toBeLessThanOrEqual(ONE_HOUR);
+      // A work queue keeps the backstop: its grouped consumers must still find
+      // their backlog after an outage.
+      expect(await inspector.pTTL(`mastra:topic:${workQueue}`)).toBeGreaterThan(ONE_DAY);
+    }, 15_000);
+
+    it('keeps a finished run’s topic bounded when a reader resubscribes to catch the tail', async () => {
+      // Subscription setup stamps the TTL because MKSTREAM may have just
+      // created the key. It must not promote a run topic to the backstop.
+      const ps = createPubSub();
+      const topic = `agent.stream.${randomUUID()}`;
+      await ps.publish(topic, makeEvent());
+      await ps.subscribe(topic, (_event, ack) => void ack?.());
+
+      const inspector = await createInspector();
+      const pttl = await inspector.pTTL(`mastra:topic:${topic}`);
+      expect(pttl).toBeGreaterThan(0);
+      expect(pttl).toBeLessThanOrEqual(ONE_DAY);
+    }, 15_000);
+
+    it('lets a shorter configured backstop cap run topics too', async () => {
+      const ps = createPubSub({ streamIdleTtlMs: 60_000 });
+      const topic = `agent.stream.${randomUUID()}`;
+      await ps.publish(topic, makeEvent());
+
+      const inspector = await createInspector();
+      const pttl = await inspector.pTTL(`mastra:topic:${topic}`);
+      expect(pttl).toBeGreaterThan(0);
+      expect(pttl).toBeLessThanOrEqual(60_000);
+    }, 15_000);
+
+    it('leaves run topics unexpiring when expiry is disabled', async () => {
+      const ps = createPubSub({ streamIdleTtlMs: 0 });
+      const topic = `agent.stream.${randomUUID()}`;
+      await ps.publish(topic, makeEvent());
+
+      const inspector = await createInspector();
+      // -1: the key exists with no TTL, as documented for streamIdleTtlMs: 0.
+      expect(await inspector.pTTL(`mastra:topic:${topic}`)).toBe(-1);
+    }, 15_000);
+
+    it('still gives non-run topics the seven-day default', async () => {
+      const ps = createPubSub();
+      const topic = `plain-${randomUUID()}`;
+      await ps.publish(topic, makeEvent());
+
+      const inspector = await createInspector();
+      expect(await inspector.pTTL(`mastra:topic:${topic}`)).toBeGreaterThan(SEVEN_DAYS - 60_000);
+    }, 15_000);
+  });
+
   describe('streamIdleTtlMs', () => {
     it('stamps a rolling TTL on the stream key when configured (atomically with the write)', async () => {
       const ps = createPubSub({ streamIdleTtlMs: 60_000 });
@@ -353,14 +460,59 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
       expect(pttl).toBeLessThanOrEqual(60_000);
     }, 15_000);
 
-    it('leaves streams persistent by default', async () => {
+    it('expires idle streams by default (7 days) on both publish- and subscribe-created keys', async () => {
+      // A deployment constructed with defaults must not accumulate immortal
+      // streams: under a volatile-* policy they can't be evicted, and under
+      // noeviction they grow until Redis rejects writes.
+      const sevenDays = 7 * 24 * 60 * 60 * 1000;
       const ps = createPubSub();
-      const topic = `nottl-${randomUUID()}`;
-      await ps.publish(topic, makeEvent());
+      const publishTopic = `default-ttl-pub-${randomUUID()}`;
+      const subscribeTopic = `default-ttl-sub-${randomUUID()}`;
+      await ps.publish(publishTopic, makeEvent());
+      await ps.subscribe(subscribeTopic, (_event, ack) => void ack?.());
+
+      const inspector = await createInspector();
+      for (const topic of [publishTopic, subscribeTopic]) {
+        const pttl = await inspector.pTTL(`mastra:topic:${topic}`);
+        expect(pttl).toBeGreaterThan(sevenDays - 60_000);
+        expect(pttl).toBeLessThanOrEqual(sevenDays);
+      }
+    }, 15_000);
+
+    it('keeps delivering to a live subscriber after its idle stream expires', async () => {
+      // Expiry, unlike clearTopic(), happens while the reader is blocked in
+      // XREADGROUP with no local cursor reset; the read loop must recreate the
+      // group and keep delivering.
+      const ps = createPubSub({ streamIdleTtlMs: 300 });
+      const topic = `ttl-expire-live-${randomUUID()}`;
+      const received: number[] = [];
+      await ps.subscribe(topic, (event, ack) => {
+        received.push((event.data as { n: number }).n);
+        void ack?.();
+      });
+      await ps.publish(topic, makeEvent({ data: { n: 1 } }));
+      await expect.poll(() => received, { timeout: 5000 }).toEqual([1]);
+
+      const inspector = await createInspector();
+      // The read loop recreates the stream right after it expires, so check that
+      // entry 1 is gone (XLEN 0) rather than racing to see the key missing.
+      await expect.poll(() => inspector.xLen(`mastra:topic:${topic}`), { timeout: 5000 }).toBe(0);
+
+      await ps.publish(topic, makeEvent({ data: { n: 2 } }));
+      await expect.poll(() => received, { timeout: 5000 }).toEqual([1, 2]);
+    }, 20_000);
+
+    it('keeps streams persistent with streamIdleTtlMs: 0', async () => {
+      const ps = createPubSub({ streamIdleTtlMs: 0 });
+      const publishTopic = `nottl-pub-${randomUUID()}`;
+      const subscribeTopic = `nottl-sub-${randomUUID()}`;
+      await ps.publish(publishTopic, makeEvent());
+      await ps.subscribe(subscribeTopic, (_event, ack) => void ack?.());
 
       const inspector = await createInspector();
       // -1 = key exists with no TTL.
-      expect(await inspector.pTTL(`mastra:topic:${topic}`)).toBe(-1);
+      expect(await inspector.pTTL(`mastra:topic:${publishTopic}`)).toBe(-1);
+      expect(await inspector.pTTL(`mastra:topic:${subscribeTopic}`)).toBe(-1);
     }, 15_000);
 
     it('rejects an invalid streamIdleTtlMs (negative, NaN, Infinity, or non-integer)', () => {

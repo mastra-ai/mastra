@@ -1054,17 +1054,12 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
             indexName: testIndexName,
             queryVector: createUnitVector(0),
             topK: 10,
-            filter: { reviews: { $elemMatch: { score: { $gte: 3, $lte: 4 } } } },
+            filter: { reviews: { $elemMatch: { score: { $gte: 4, $lte: 4 } } } },
           });
 
-          // Should return products with a review score between 3 and 4
-          expect(results.length).toBeGreaterThan(0);
-          expect(
-            results.every(r => {
-              const reviews = r.metadata?.reviews as Array<{ score: number }> | undefined;
-              return reviews?.some(review => review.score >= 3 && review.score <= 4);
-            }),
-          ).toBe(true);
+          // Product H has a score of 4; Product G has scores of 3 and 5 but no 4.
+          // This catches implementations that drop the upper bound or match different elements.
+          expect(results.map(r => r.metadata?.name)).toEqual(['Product H']);
         });
       });
     }

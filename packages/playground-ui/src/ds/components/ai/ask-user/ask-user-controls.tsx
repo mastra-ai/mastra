@@ -62,6 +62,7 @@ export interface AskUserOptionItemProps {
   value: string;
   children: ReactNode;
   description?: string;
+  recommended?: boolean;
   disabled?: boolean;
   className?: string;
 }
@@ -70,6 +71,7 @@ export function AskUserOptionItem({
   value,
   children,
   description,
+  recommended,
   disabled = false,
   className,
 }: AskUserOptionItemProps) {
@@ -84,6 +86,7 @@ export function AskUserOptionItem({
     <AskUserOptionRow
       label={children}
       description={description}
+      recommended={recommended}
       disabled={isDisabled}
       className={className}
       control={
@@ -125,7 +128,7 @@ export function AskUserTextAnswer({ disabled = false, ...props }: AskUserTextAns
     <Input
       type="text"
       aria-labelledby={props['aria-label'] ? undefined : context.questionId}
-      placeholder="Type your answer..."
+      placeholder="Type your answer"
       size="sm"
       {...props}
       disabled={context.disabled || disabled}

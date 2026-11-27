@@ -2,13 +2,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraGateway } from './mastra.js';
 
+vi.mock('../provider-registry.js', () => ({
+  PROVIDER_REGISTRY: { openrouter: { models: ['openai/test-model'] } },
+}));
+
 describe('MastraGateway', () => {
   beforeEach(() => {
     delete process.env.MASTRA_GATEWAY_API_KEY;
+    delete process.env.MASTRA_GATEWAY_VERSION;
   });
 
   afterEach(() => {
     delete process.env.MASTRA_GATEWAY_API_KEY;
+    delete process.env.MASTRA_GATEWAY_VERSION;
     vi.restoreAllMocks();
   });
 
@@ -18,12 +24,14 @@ describe('MastraGateway', () => {
     expect(gateway.shouldEnable()).toBe(false);
   });
 
-  it('returns no providers when MASTRA_GATEWAY_API_KEY is not set', async () => {
+  it('still lists the mastra provider when MASTRA_GATEWAY_API_KEY is not set', async () => {
     const gateway = new MastraGateway();
 
     const providers = await gateway.fetchProviders();
 
-    expect(providers).toEqual({});
+    expect(providers.mastra).toBeDefined();
+    expect(providers.mastra?.apiKeyEnvVar).toBe('MASTRA_GATEWAY_API_KEY');
+    expect(providers.mastra?.models.length).toBeGreaterThan(0);
   });
 
   it('returns the mastra provider when MASTRA_GATEWAY_API_KEY is set', async () => {
@@ -37,6 +45,124 @@ describe('MastraGateway', () => {
 
     expect(providers.mastra).toBeDefined();
     expect(providers.mastra?.apiKeyEnvVar).toBe('MASTRA_GATEWAY_API_KEY');
+  });
+
+  it('lists only chat models served by the selected v2 gateway', async () => {
+    process.env.MASTRA_GATEWAY_VERSION = 'v2';
+    const gatewayFetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            data: [
+              { id: 'openai/chat-model', endpoints: ['chat', 'responses'] },
+              { id: 'openai/response-only', endpoints: ['responses'] },
+              { id: 'voyage/embedding-model', endpoints: ['embeddings'] },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+    );
+    const gateway = new MastraGateway({
+      apiKey: 'deployment-key',
+      baseUrl: 'https://gateway.example/v1',
+      customFetch: gatewayFetch,
+    });
+
+    const providers = await gateway.fetchProviders();
+
+    expect(gatewayFetch).toHaveBeenCalledWith(
+      'https://gateway.example/v1/models',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'X-Memory-Gateway-Authorization': 'Bearer deployment-key' }),
+        signal: expect.any(AbortSignal),
+      }),
+    );
+    expect(providers.mastra?.models).toEqual(['openai/chat-model']);
+  });
+
+  it.each([
+    ['https://gateway.example', 'https://gateway.example/v1/models'],
+    ['https://gateway.example///', 'https://gateway.example/v1/models'],
+    ['https://gateway.example/v1///', 'https://gateway.example/v1/models'],
+    ['https://gateway.example/api/', 'https://gateway.example/api/v1/models'],
+  ])('normalizes the base URL %s', async (baseUrl, expected) => {
+    process.env.MASTRA_GATEWAY_VERSION = 'v2';
+    const customFetch = vi.fn(async () => new Response(JSON.stringify({ data: [] }), { status: 200 }));
+    await new MastraGateway({ apiKey: 'deployment-key', baseUrl, customFetch }).fetchProviders();
+    expect(customFetch).toHaveBeenCalledWith(expected, expect.anything());
+  });
+
+  it('normalizes a base URL with a pathological run of slashes in linear time', async () => {
+    process.env.MASTRA_GATEWAY_VERSION = 'v2';
+    const customFetch = vi.fn(async () => new Response(JSON.stringify({ data: [] }), { status: 200 }));
+    const slashes = '/'.repeat(100_000);
+    const baseUrl = `https://gateway.example${slashes}api${slashes}`;
+    const started = performance.now();
+    await new MastraGateway({ apiKey: 'deployment-key', baseUrl, customFetch }).fetchProviders();
+    expect(performance.now() - started).toBeLessThan(500);
+    expect(customFetch).toHaveBeenCalledWith(`https://gateway.example${slashes}api/v1/models`, expect.anything());
+  });
+
+  it('preserves the Gateway key when customFetch replaces Authorization with OAuth', async () => {
+    process.env.MASTRA_GATEWAY_VERSION = 'v2';
+    const customFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      headers.set('Authorization', 'Bearer oauth-token');
+      expect(headers.get('Authorization')).toBe('Bearer oauth-token');
+      expect(headers.get('X-Memory-Gateway-Authorization')).toBe('Bearer deployment-key');
+      return new Response(JSON.stringify({ data: [{ id: 'openai/chat-model', endpoints: ['chat'] }] }), {
+        status: 200,
+      });
+    });
+    const gateway = new MastraGateway({ apiKey: 'deployment-key', customFetch });
+
+    const providers = await gateway.fetchProviders();
+
+    expect(customFetch).toHaveBeenCalledOnce();
+    expect(providers.mastra?.models).toEqual(['openai/chat-model']);
+  });
+
+  it('aborts v2 catalog discovery when the request deadline expires', async () => {
+    process.env.MASTRA_GATEWAY_VERSION = 'v2';
+    const controller = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal);
+    const customFetch = vi.fn(
+      (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+        }),
+    );
+    const gateway = new MastraGateway({ apiKey: 'deployment-key', customFetch });
+
+    const pending = gateway.fetchProviders();
+    await vi.waitFor(() => expect(customFetch).toHaveBeenCalledOnce());
+    controller.abort(new DOMException('catalog deadline', 'TimeoutError'));
+
+    await expect(pending).rejects.toThrow('catalog deadline');
+    expect(timeout).toHaveBeenCalledWith(10_000);
+  });
+
+  it('uses the live v2 catalog when a v2 organization key is set without MASTRA_GATEWAY_VERSION', async () => {
+    const gatewayFetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ data: [{ id: 'openai/chat-model', endpoints: ['chat'] }] }), { status: 200 }),
+    );
+    const gateway = new MastraGateway({ apiKey: 'mskv2_org-key', customFetch: gatewayFetch });
+
+    const providers = await gateway.fetchProviders();
+
+    expect(gatewayFetch).toHaveBeenCalledOnce();
+    expect(providers.mastra?.models).toEqual(['openai/chat-model']);
+    expect(providers.mastra?.modelReleaseDates).toBeUndefined();
+  });
+
+  it('does not show a static v1 model list if v2 catalog loading fails', async () => {
+    process.env.MASTRA_GATEWAY_VERSION = 'v2';
+    const gateway = new MastraGateway({
+      apiKey: 'deployment-key',
+      customFetch: vi.fn(async () => new Response('unavailable', { status: 503 })),
+    });
+    await expect(gateway.fetchProviders()).rejects.toThrow('Gateway model catalog unavailable (503)');
   });
 
   describe('resolveLanguageModel gateway authorization header', () => {
@@ -62,12 +188,15 @@ describe('MastraGateway', () => {
         });
     }
 
-    it('ignores a caller header that targets the reserved gateway header', async () => {
+    it.each([
+      ['ignores a caller header that targets the reserved gateway header', 'gpt-4o', 'openai'],
+      ['ignores a caller override on the anthropic path', 'claude-sonnet-4-20250514', 'anthropic'],
+    ] as const)('%s', async (_title, modelId, providerId) => {
       const { gateway, getHeaders } = createCapturingGateway();
 
       const model = gateway.resolveLanguageModel({
-        modelId: 'gpt-4o',
-        providerId: 'openai',
+        modelId,
+        providerId,
         apiKey: 'gateway-key',
         headers: { [GATEWAY_AUTH_HEADER]: 'Bearer caller-value', 'X-Custom': 'keep' },
       });
@@ -89,21 +218,6 @@ describe('MastraGateway', () => {
       await callModel(model);
 
       expect(getHeaders()?.get(GATEWAY_AUTH_HEADER)).toBe('Bearer gateway-key');
-    });
-
-    it('ignores a caller override on the anthropic path', async () => {
-      const { gateway, getHeaders } = createCapturingGateway();
-
-      const model = gateway.resolveLanguageModel({
-        modelId: 'claude-sonnet-4-20250514',
-        providerId: 'anthropic',
-        apiKey: 'gateway-key',
-        headers: { [GATEWAY_AUTH_HEADER]: 'Bearer caller-value', 'X-Custom': 'keep' },
-      });
-      await callModel(model);
-
-      expect(getHeaders()?.get(GATEWAY_AUTH_HEADER)).toBe('Bearer gateway-key');
-      expect(getHeaders()?.get('X-Custom')).toBe('keep');
     });
 
     it('still lets callers override User-Agent', async () => {

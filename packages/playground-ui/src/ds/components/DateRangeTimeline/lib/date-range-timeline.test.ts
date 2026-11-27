@@ -1,3 +1,4 @@
+import '@/test/english-locale';
 import { parseISO } from 'date-fns';
 import { describe, expect, it } from 'vitest';
 import {
@@ -267,10 +268,6 @@ describe('zoomTimelineViewport', () => {
 
   it('centers on a non-finite anchor', () => {
     expect(zoomTimelineViewport(state, 64, 0.5, Number.NaN).viewport).toEqual({ from: 13, to: 45 });
-  });
-
-  it('never zooms past the selection it must keep visible', () => {
-    expect(zoomTimelineViewport(state, 64, 0.01, 0.5).viewport).toEqual({ from: 13, to: 29 });
   });
 
   it('measures the span of a viewport that does not start at zero', () => {

@@ -1,18 +1,82 @@
-import { CheckIcon } from 'lucide-react';
-import type { ConnectPromptPayload } from '@/domains/connect';
+import { useEffect, useRef, useState } from 'react';
+import type { MessageMetadata } from '../messages/message-metadata';
+import { toolInteraction } from './tool-card-kind';
+import { useToolCall } from '@/domains/chat/context/tool-call-context';
+import type { ConnectPromptPayload, ConnectPromptResume, SettledConnect } from '@/domains/connect';
 import { isConnectPromptPayload, ProviderLogo, usePendingConnect } from '@/domains/connect';
 import { Button } from '@/ds/components/Button';
 import { DataList } from '@/ds/components/DataList';
 import { Notice } from '@/ds/components/Notice';
 import { Txt } from '@/ds/components/Txt';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { Icon } from '@/ds/icons/Icon';
 
 export { CONNECT_PROMPT_TOOL_NAME } from './connect-prompt-tool-id';
 
 export interface ConnectPromptToolProps {
+  toolName: string;
+  toolCallId: string;
   output: unknown;
+  metadata?: MessageMetadata;
   /** Historical rendering: show the card but suppress the connect action. */
   readOnly?: boolean;
+}
+
+/**
+ * The prompt this card renders: the finished call's result, or the payload
+ * the run paused with while it waits for the user to connect.
+ */
+function connectPromptFor({
+  toolName,
+  toolCallId,
+  output,
+  metadata,
+}: Pick<ConnectPromptToolProps, 'toolName' | 'toolCallId' | 'output' | 'metadata'>):
+  | { payload: ConnectPromptPayload; paused: boolean }
+  | undefined {
+  if (isConnectPromptPayload(output)) return { payload: output, paused: false };
+  const suspendPayload = toolInteraction(metadata, toolName, toolCallId).suspended?.suspendPayload;
+  if (isConnectPromptPayload(suspendPayload)) return { payload: suspendPayload, paused: true };
+  return undefined;
+}
+
+/** The resume tool's schema accepts; longer failure reasons are cut to fit. */
+const MAX_RESUME_ERROR_LENGTH = 500;
+
+/** What the agent is told when the user cancels the prompt. */
+const CONNECT_PROMPT_CANCELLED_ERROR = 'The user cancelled connecting.';
+
+/** Marks the user cancelling the prompt as the outcome the call was resumed with. */
+const CANCELLED = Symbol('cancelled');
+
+/**
+ * What to resume the paused call with: the user cancelling, the settled flow,
+ * or a failure when the connect session couldn't even be created (e.g. the
+ * connection limit).
+ */
+function connectPromptResumeFor(
+  payload: ConnectPromptPayload,
+  cancelled: boolean,
+  settled: SettledConnect | null,
+  createError: Error | null,
+): ConnectPromptResume | undefined {
+  const failed = (provider: string, error: string): ConnectPromptResume => ({
+    provider,
+    status: 'failed',
+    error: error.slice(0, MAX_RESUME_ERROR_LENGTH),
+  });
+  if (cancelled) {
+    const provider = payload.requestedProvider ?? payload.providers[0]?.id;
+    return provider ? failed(provider, CONNECT_PROMPT_CANCELLED_ERROR) : undefined;
+  }
+  if (createError) {
+    const provider = payload.requestedProvider ?? payload.providers[0]?.id;
+    return provider ? failed(provider, createError.message) : undefined;
+  }
+  if (!settled) return undefined;
+  if (settled.status === 'active') return { provider: settled.provider, status: 'active' };
+  return failed(settled.provider, settled.message ?? 'The connection was not completed.');
 }
 
 /**
@@ -22,14 +86,43 @@ export interface ConnectPromptToolProps {
  * the mounted `/connect` routes, drives the OAuth flow in a popup through the
  * server's launch gate (which verifies this browser owns the pending session
  * before redirecting to the vendor), and polls until the connection settles.
+ *
+ * The tool pauses the agent run while the card is up. Once the connection
+ * settles, the card resumes the paused call with the outcome — connected, or
+ * the reason it failed — so the agent continues from the tool's result rather
+ * than a chat message.
  */
-export const ConnectPromptTool = ({ output, readOnly = false }: ConnectPromptToolProps) => {
-  if (!isConnectPromptPayload(output)) return null;
-  return <ConnectPromptCard payload={output} readOnly={readOnly} />;
+export const ConnectPromptTool = ({
+  toolName,
+  toolCallId,
+  output,
+  metadata,
+  readOnly = false,
+}: ConnectPromptToolProps) => {
+  const prompt = connectPromptFor({ toolName, toolCallId, output, metadata });
+  if (!prompt) return null;
+  return (
+    <ConnectPromptCard toolCallId={toolCallId} payload={prompt.payload} paused={prompt.paused} readOnly={readOnly} />
+  );
 };
 
-const ConnectPromptCard = ({ payload, readOnly }: { payload: ConnectPromptPayload; readOnly: boolean }) => {
-  const { pending, connect, connectedProviders, isCreating, createError, settled } = usePendingConnect();
+interface ConnectPromptCardProps {
+  toolCallId: string;
+  payload: ConnectPromptPayload;
+  /** The run is waiting on this call, so an activation resumes it. */
+  paused: boolean;
+  readOnly: boolean;
+}
+
+const ConnectPromptCard = ({ toolCallId, payload, paused, readOnly }: ConnectPromptCardProps) => {
+  const { pending, connect, cancel, connectedProviders, isCreating, createError, settled } = usePendingConnect();
+  const { approveToolcall, isRunning, toolCallApprovals } = useToolCall();
+  const [cancelled, setCancelled] = useState(false);
+  // The outcome (cancel, settled flow or session-creation error) this call was resumed with.
+  const resumedRef = useRef<typeof CANCELLED | SettledConnect | Error | null>(null);
+  const alreadyResumed = toolCallApprovals[toolCallId] !== undefined;
+  // A paused call holds the run until it is resumed, so the user can always back out of it.
+  const canCancel = !readOnly && paused && !alreadyResumed && !cancelled;
 
   const errorMessage =
     createError?.message ??
@@ -37,13 +130,50 @@ const ConnectPromptCard = ({ payload, readOnly }: { payload: ConnectPromptPayloa
       ? (settled.message ?? 'The connection was not completed. Try connecting again.')
       : null);
 
+  // Resume once per outcome, success or failure, so the agent sees what
+  // happened in the tool result. A run that is still streaming can't be
+  // resumed yet, so an outcome that lands mid-run waits for it to stop.
+  useEffect(() => {
+    if (readOnly || !paused || alreadyResumed || isRunning) return;
+    const outcome = cancelled ? CANCELLED : (createError ?? settled);
+    if (!outcome || resumedRef.current === outcome) return;
+    resumedRef.current = outcome;
+    const resume = connectPromptResumeFor(payload, cancelled, settled, createError);
+    if (resume) approveToolcall(toolCallId, resume);
+  }, [
+    readOnly,
+    paused,
+    alreadyResumed,
+    isRunning,
+    cancelled,
+    settled,
+    createError,
+    payload,
+    approveToolcall,
+    toolCallId,
+  ]);
+
   return (
     <section aria-label="Connect an account" className="my-2 space-y-3">
       <DataList columns="minmax(0, 1fr)" fit="container" scrollable={false}>
-        <DataList.Subheader>
+        <DataList.Subheader className="flex items-center justify-between gap-3">
           <Txt as="h4" variant="subheading" tone="ink">
             Connect an account
           </Txt>
+          {canCancel ? (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Cancel"
+              tooltip="Cancel"
+              onClick={() => {
+                cancel();
+                setCancelled(true);
+              }}
+            >
+              <IconCrossMedium aria-hidden />
+            </Button>
+          ) : null}
         </DataList.Subheader>
         {payload.providers.map(provider => {
           const isConnected = provider.connected || connectedProviders.has(provider.id);
@@ -82,7 +212,7 @@ const ConnectPromptCard = ({ payload, readOnly }: { payload: ConnectPromptPayloa
                         className="flex min-w-24 items-center justify-center gap-1"
                       >
                         <Icon size="sm">
-                          <CheckIcon aria-hidden />
+                          <IconCheckmark2Medium aria-hidden />
                         </Icon>
                         Connected
                       </Txt>
@@ -91,7 +221,8 @@ const ConnectPromptCard = ({ payload, readOnly }: { payload: ConnectPromptPayloa
                         variant="primary"
                         size="sm"
                         className="min-w-24"
-                        disabled={readOnly || isCreating || isPending}
+                        disabled={readOnly || isCreating}
+                        loading={isPending}
                         onClick={() => connect(provider)}
                       >
                         Connect
@@ -104,6 +235,11 @@ const ConnectPromptCard = ({ payload, readOnly }: { payload: ConnectPromptPayloa
           );
         })}
       </DataList>
+      {cancelled && isRunning && !alreadyResumed ? (
+        <Txt as="p" variant="body-sm" tone="muted" role="status">
+          Cancelled. The agent continues once its current response finishes.
+        </Txt>
+      ) : null}
       {errorMessage ? (
         <div role="alert">
           <Notice variant="destructive" title="Couldn't connect">

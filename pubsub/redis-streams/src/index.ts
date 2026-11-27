@@ -1,11 +1,51 @@
-import { PubSub } from '@mastra/core/events';
+import { PubSub, streamTopicIdleTtlMs } from '@mastra/core/events';
 import type { Event, EventCallback, LeaseProvider, PubSubDeliveryMode, SubscribeOptions } from '@mastra/core/events';
-import { createClient, createCluster } from 'redis';
+import {
+  ClientOfflineError,
+  ConnectionTimeoutError,
+  createClient,
+  createCluster,
+  SocketClosedUnexpectedlyError,
+  SocketTimeoutError,
+} from 'redis';
 import type { RedisClientOptions, RedisClientType, RedisClusterOptions, RedisClusterType } from 'redis';
 
 /** Page size for the reclaim loop's XPENDING scan and the max entries claimed per tick. */
 const RECLAIM_PAGE_SIZE = 100;
+const DEFAULT_STREAM_IDLE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const TRIM_PAGE_SIZE = 500;
+// A restarted Redis answers `-LOADING` until it has replayed its RDB/AOF, which
+// takes from seconds to minutes, and a dropped connection fails the commands in
+// flight on it. node-redis retries neither, so a publish that fails there loses
+// the event (e.g. a finished step's step.end, whose step then runs again).
+const PUBLISH_RETRY_BUDGET_MS = 120_000;
+const PUBLISH_RETRY_DELAY_MS = 250;
+const TRANSIENT_SOCKET_CODES = new Set(['ECONNRESET', 'EPIPE', 'ETIMEDOUT', 'ECONNREFUSED']);
+
+function isLoadingError(error: unknown): boolean {
+  return error instanceof Error && error.message.startsWith('LOADING');
+}
+
+/**
+ * Whether a publish failed for a reason that a later attempt can get past: the
+ * server is still loading, or the connection dropped. Other server replies
+ * (wrong type, OOM, auth) are not retried.
+ */
+function isTransientPublishError(error: unknown): boolean {
+  if (isLoadingError(error)) return true;
+  if (
+    error instanceof SocketClosedUnexpectedlyError ||
+    error instanceof ClientOfflineError ||
+    error instanceof ConnectionTimeoutError ||
+    error instanceof SocketTimeoutError
+  ) {
+    return true;
+  }
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === 'string' && TRANSIENT_SOCKET_CODES.has(code);
+}
+
+type XaddTrimOptions = { TRIM?: { strategy: 'MAXLEN'; strategyModifier: '~'; threshold: number } };
 
 /**
  * Heartbeat: reset a pending entry's idle time only if this consumer still
@@ -76,6 +116,90 @@ function compareStreamIds(a: string, b: string): number {
 }
 
 /**
+ * Connect a client, standalone or cluster, within its `socket.connectTimeout`
+ * (node-redis default: 5000 ms; 0 disables the bound).
+ *
+ * node-redis applies `connectTimeout` only to opening the TCP socket. The
+ * handshake that follows (CLIENT SETINFO, HELLO/AUTH, SELECT) has no deadline,
+ * and the default reconnectStrategy retries a failed attempt forever. So a
+ * server that accepts the socket but never replies (a SIGSTOPped process, or a
+ * proxy that stopped forwarding) makes `connect()` hang forever. The same
+ * budget therefore bounds the whole connect here. On expiry the client is
+ * destroyed, which stops its retry loop and lets a later call connect again.
+ *
+ * destroy() does not stop a cluster's slot discovery: once the nodes answer it
+ * still connects node clients that nothing would close. So when the abandoned
+ * connect settles, the client is destroyed again unless it is open. Until then
+ * no new connect starts on that client: a second discovery would share the
+ * first one's node entries, settle before they connect, and its destroy()
+ * would miss them. A call made meanwhile waits for the abandoned connect
+ * within its own deadline, then connects.
+ */
+const abandonedConnects = new WeakMap<object, Promise<void>>();
+
+async function connectWithin(
+  client: RedisClientType,
+  role: 'write' | 'read',
+  isReleased: () => boolean = () => false,
+): Promise<void> {
+  const cluster = client as unknown as Partial<Pick<RedisClusterType, '_options'>>;
+  const socket = cluster._options ? cluster._options.defaults?.socket : client.options?.socket;
+  const timeoutMs = socket?.connectTimeout ?? 5000;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let connecting: Promise<unknown> | undefined;
+  const timedOut = new Promise<never>((_, reject) => {
+    if (!timeoutMs) return;
+    timer = setTimeout(() => {
+      if (connecting) {
+        const settled = connecting
+          .catch(() => {})
+          .then(() => {
+            if (abandonedConnects.get(client) === settled) abandonedConnects.delete(client);
+            if (client.isOpen) return;
+            try {
+              client.destroy();
+            } catch {
+              // A standalone client's destroy() throws ClientClosedError once closed.
+            }
+          });
+        abandonedConnects.set(client, settled);
+        // close() may already have destroyed this client, and a standalone
+        // client's destroy() throws ClientClosedError when called twice.
+        if (client.isOpen) client.destroy();
+      }
+      reject(
+        new Error(
+          `redis-streams: ${role} client did not connect to Redis within ${timeoutMs}ms (socket.connectTimeout); the server is unreachable or not responding`,
+        ),
+      );
+    }, timeoutMs);
+  });
+  try {
+    const abandoned = abandonedConnects.get(client);
+    if (abandoned) {
+      await Promise.race([abandoned, timedOut]);
+      // close() may have released the client while this call waited.
+      if (isReleased()) throw new Error(`redis-streams: ${role} client closed while connecting`);
+    }
+    connecting = client.connect();
+    await Promise.race([connecting, timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Parse `maxmemory` / `maxmemory_policy` out of an `INFO memory` reply and
+ * return the policy when the server can evict keys under memory pressure.
+ */
+function evictingMaxmemoryPolicy(info: string): string | undefined {
+  const field = (name: string) => info.match(new RegExp(`^${name}:(.*)$`, 'm'))?.[1]?.trim();
+  const policy = field('maxmemory_policy');
+  if (!policy || policy === 'noeviction' || Number(field('maxmemory') ?? 0) <= 0) return undefined;
+  return policy;
+}
+
+/**
  * Disconnect a client, standalone or cluster.
  *
  * node-redis 5 `quit()` never settles on a client that is open but waiting to
@@ -143,9 +267,17 @@ export interface RedisStreamsPubSubConfig {
    * the full duration is deleted by Redis automatically — entries, consumer
    * groups and their pending lists included.
    *
-   * Defaults to 0 (disabled) to preserve existing behavior: streams live
-   * until an explicit `clearTopic`, and a stream that never reaches one stays
-   * in Redis forever. **Production deployments should set this** — see below.
+   * Defaults to 7 days (604_800_000). Set to 0 to disable expiry: streams
+   * then live until an explicit `clearTopic`, and a stream that never reaches
+   * one stays in Redis forever.
+   *
+   * Applies to every topic except those carrying a single agent run's or
+   * thread's events (`agent.stream.*`, `agent.control.*`,
+   * `agent.thread-stream.*`), which take the shorter retention their cached
+   * replay log uses — a day for run topics, matching the lifetime of the
+   * record that authorizes reading them, and an hour for thread streams.
+   * This value still caps those, so lowering it lowers them too, and `0`
+   * disables expiry for every topic.
    *
    * Why a TTL matters: topics fall into two classes.
    * - *Lifecycle-owned* topics (workflow/agent run streams, request/reply
@@ -207,6 +339,23 @@ export interface RedisStreamsPubSubConfig {
    * operators can see what's happening without noise on the happy path.
    */
   logger?: { debug?: (...args: unknown[]) => void; warn?: (...args: unknown[]) => void };
+  /**
+   * How long `publish` keeps retrying a write that failed with a transient
+   * connection error (or `-LOADING`) before giving up. Defaults to 120000.
+   */
+  publishRetryBudgetMs?: number;
+}
+
+/**
+ * Thrown when a publish could not reach Redis before the retry budget ran
+ * out, including when an attempt never settled (node-redis parks commands in
+ * its offline queue while disconnected).
+ */
+export class PublishRetryBudgetExhaustedError extends Error {
+  constructor(budgetMs: number, options?: { cause?: unknown }) {
+    super(`redis-streams: publish did not reach Redis within ${budgetMs}ms`, options);
+    this.name = 'PublishRetryBudgetExhaustedError';
+  }
 }
 
 export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
@@ -218,6 +367,16 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
 
   override get supportsOffsets(): boolean {
     return false;
+  }
+
+  /**
+   * True while the reclaim loop runs (`reclaimIntervalMs > 0`): a message a dead
+   * consumer held goes to a sibling once it has been idle for `reclaimIdleMs`.
+   * Keep `reclaimIdleMs` at 30 s or more, the evented step fence a dead worker
+   * leaves behind; a message reclaimed sooner is dropped as a duplicate.
+   */
+  override get redeliversUnacked(): boolean {
+    return this.#reclaimIntervalMs > 0;
   }
 
   protected override onUnsupportedOffset(offset: number): void {
@@ -239,6 +398,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   #reclaimIdleMs: number;
   #maxDeliveryAttempts: number;
   #inFlightTimeoutMs: number;
+  #publishRetryBudgetMs: number;
   #logger?: RedisStreamsPubSubConfig['logger'];
   // Keyed by `${topic}::${cbId}` so the same callback can be subscribed to
   // multiple topics independently. Without the topic in the key,
@@ -265,6 +425,9 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   // get consistent semantics across transports.
   #localCallbacks: Map<string, Map<EventCallback, Set<ReturnType<typeof setTimeout>>>> = new Map();
   #closed = false;
+  /** Set once close() has drained publishes and is about to release the writer. */
+  #writerReleased = false;
+  #evictionPolicyChecked = false;
 
   constructor(options: RedisStreamsPubSubConfig = {}) {
     super();
@@ -274,7 +437,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     this.#keyPrefix = options.keyPrefix ?? 'mastra:topic';
     this.#blockMs = options.blockMs ?? 1000;
     this.#maxStreamLength = options.maxStreamLength ?? 10_000;
-    const ttl = options.streamIdleTtlMs ?? 0;
+    const ttl = options.streamIdleTtlMs ?? DEFAULT_STREAM_IDLE_TTL_MS;
     // Must be a non-negative integer: node-redis serializes the PEXPIRE arg with
     // toString(), and Redis rejects a non-integer/Infinity ('value is not an
     // integer or out of range'). Without this guard a bad value would poison
@@ -304,6 +467,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
       );
     }
     this.#inFlightTimeoutMs = inFlightTimeout;
+    this.#publishRetryBudgetMs = options.publishRetryBudgetMs ?? PUBLISH_RETRY_BUDGET_MS;
   }
 
   /**
@@ -391,9 +555,13 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // second connect().
     if (!this.#writerConnecting && this.#writeClient.isOpen) return;
     if (!this.#writerConnecting) {
-      this.#writerConnecting = this.#writeClient
-        .connect()
-        .then(() => undefined)
+      this.#writerConnecting = connectWithin(this.#writeClient, 'write', () => this.#writerReleased)
+        .then(() => {
+          if (!this.#evictionPolicyChecked) {
+            this.#evictionPolicyChecked = true;
+            void this.#warnOnEvictingPolicy();
+          }
+        })
         .finally(() => {
           // Clear so a failed initial connect can be retried on the next call.
           this.#writerConnecting = undefined;
@@ -402,8 +570,75 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     return this.#writerConnecting;
   }
 
+  /**
+   * Consumer-group state, lease keys and TTL'd streams are all live data. A
+   * server with `maxmemory` set and any policy other than `noeviction` deletes
+   * them under memory pressure (silently losing events and leases), so warn
+   * once. INFO rather than CONFIG GET because managed Redis often blocks CONFIG.
+   */
+  async #warnOnEvictingPolicy(): Promise<void> {
+    try {
+      const client = this.#writeClient as unknown as Partial<Pick<RedisClusterType, 'masters'>>;
+      const reply = Array.isArray(client.masters)
+        ? await (this.#writeClient as unknown as RedisClusterType).sendCommand(undefined, true, ['INFO', 'memory'])
+        : await this.#writeClient.sendCommand(['INFO', 'memory']);
+      const policy = evictingMaxmemoryPolicy(String(reply));
+      if (!policy) return;
+      const warn = this.#logger?.warn ? this.#logger.warn.bind(this.#logger) : console.warn;
+      warn(
+        `redis-streams: Redis maxmemory-policy is "${policy}". Under memory pressure Redis will evict ` +
+          `pubsub keys (TTL'd streams, consumer groups, lease keys), losing events and leases. ` +
+          `Set maxmemory-policy to "noeviction".`,
+      );
+    } catch (err) {
+      this.#logger?.debug?.('redis-streams: maxmemory-policy check failed', {
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   #streamKey(topic: string): string {
     return `${this.#keyPrefix}:${topic}`;
+  }
+
+  /**
+   * The idle TTL to stamp on `topic`'s stream, in milliseconds (`0` = none).
+   *
+   * `streamIdleTtlMs` is sized for the topics that need it: work queues whose
+   * grouped consumers must still find their backlog after an outage. A topic
+   * belonging to one agent run or thread has no such consumer, so it takes the
+   * shorter retention its cached replay log already uses — otherwise a
+   * finished run's stream sits in Redis for the full backstop.
+   *
+   * A configured `streamIdleTtlMs` still caps every topic, so lowering it
+   * lowers these too, and `0` disables expiry everywhere as documented.
+   */
+  #idleTtlFor(topic: string): number {
+    if (this.#streamIdleTtlMs === 0) return 0;
+    const scoped = streamTopicIdleTtlMs(topic);
+    return scoped === undefined ? this.#streamIdleTtlMs : Math.min(scoped, this.#streamIdleTtlMs);
+  }
+
+  /** The Redis key of `topic`'s stream, for read-only inspection (e.g. `XINFO GROUPS`). */
+  streamKey(topic: string): string {
+    return this.#streamKey(topic);
+  }
+
+  /**
+   * A new, unconnected client with this pubsub's connection options, for health checks that must
+   * not queue behind pub/sub traffic. Commands fail fast while disconnected instead of queueing.
+   * The caller owns it: connect it, and close it when done.
+   */
+  createMonitorClient(): RedisClientType {
+    const cluster = this.#writeClient as unknown as Partial<Pick<RedisClusterType, '_options'>>;
+    if (cluster._options) {
+      // A cluster's node clients take their options from `defaults`, not the root.
+      const duplicate = (this.#writeClient as unknown as RedisClusterType).duplicate({
+        defaults: { ...cluster._options.defaults, disableOfflineQueue: true },
+      });
+      return duplicate as unknown as RedisClientType;
+    }
+    return this.#writeClient.duplicate({ disableOfflineQueue: true }) as RedisClientType;
   }
 
   async publish(
@@ -452,17 +687,50 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     };
     const xaddOptions = this.#xaddTrimOptions();
     const streamKey = this.#streamKey(topic);
+    const idleTtlMs = this.#idleTtlFor(topic);
+    // A retry after a lost reply can append the event twice. Both copies carry
+    // the same event id; a duplicate workflow.step.run is dropped by the step
+    // fence, and other events are already handled as at-least-once deliveries.
+    const budgetMs = this.#publishRetryBudgetMs;
+    const deadline = Date.now() + budgetMs;
+    let lastError: unknown;
+    for (;;) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw lastError ?? new PublishRetryBudgetExhaustedError(budgetMs);
+      // While disconnected, node-redis parks commands in its offline queue and
+      // their promises never settle, so each attempt is bounded by what is left
+      // of the budget. Running out is final: the caller nacks as before.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const budgetExhausted = new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new PublishRetryBudgetExhaustedError(budgetMs, { cause: lastError })),
+          remaining,
+        );
+      });
+      try {
+        return await Promise.race([this.#xaddEvent(streamKey, payload, xaddOptions, idleTtlMs), budgetExhausted]);
+      } catch (error) {
+        if (!isTransientPublishError(error) || this.#closed || Date.now() >= deadline) throw error;
+        lastError = error;
+        await new Promise(resolve => setTimeout(resolve, PUBLISH_RETRY_DELAY_MS));
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+  }
+
+  async #xaddEvent(streamKey: string, payload: Event, xaddOptions: XaddTrimOptions, idleTtlMs: number): Promise<void> {
     // When a TTL is configured the write and its PEXPIRE run in one MULTI
     // transaction. A detached PEXPIRE could fail or be skipped (process exit)
     // after a successful XADD — and on the *last* write before a topic is
     // abandoned there is no "next write" to self-heal, leaving an immortal
     // stream despite the TTL. Atomicity closes that window.
     const promise =
-      this.#streamIdleTtlMs > 0
+      idleTtlMs > 0
         ? this.#writeClient
             .multi()
             .xAdd(streamKey, '*', { event: JSON.stringify(payload) }, xaddOptions)
-            .pExpire(streamKey, this.#streamIdleTtlMs)
+            .pExpire(streamKey, idleTtlMs)
             .exec()
             .then(replies => {
               // XADD in the same transaction guarantees the key exists, so
@@ -479,7 +747,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     await promise;
   }
 
-  #xaddTrimOptions(): { TRIM?: { strategy: 'MAXLEN'; strategyModifier: '~'; threshold: number } } {
+  #xaddTrimOptions(): XaddTrimOptions {
     if (this.#maxStreamLength <= 0) return {};
     return { TRIM: { strategy: 'MAXLEN', strategyModifier: '~', threshold: this.#maxStreamLength } };
   }
@@ -640,8 +908,9 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // '$' with startFrom: 'latest' when they only want future events. Existing
     // groups (BUSYGROUP path) always keep their checkpoint. Stream growth is
     // bounded by the MAXLEN ~ trim applied on every publish.
+    const idleTtlMs = this.#idleTtlFor(topic);
     try {
-      if (this.#streamIdleTtlMs > 0) {
+      if (idleTtlMs > 0) {
         // MKSTREAM may create an empty stream key, so the TTL must be stamped
         // in the same MULTI — otherwise a topic that is subscribed to but
         // never published to (e.g. a per-run control topic) has no expiry and
@@ -653,7 +922,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
         await this.#writeClient
           .multi()
           .xGroupCreate(streamKey, group, groupAnchor, { MKSTREAM: true })
-          .pExpire(streamKey, this.#streamIdleTtlMs)
+          .pExpire(streamKey, idleTtlMs)
           .exec();
       } else {
         await this.#writeClient.xGroupCreate(streamKey, group, groupAnchor, { MKSTREAM: true });
@@ -669,7 +938,20 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // connection until a message arrives.
     const readClient = this.#createReadClient();
     this.#attachErrorLogger(readClient, 'read', { topic });
-    await readClient.connect();
+    try {
+      await connectWithin(readClient, 'read');
+    } catch (err) {
+      // No Subscription exists yet, so #stopSubscription will never destroy
+      // this fan-out group. Without this, every retry would leave one behind.
+      // Not awaited: if Redis froze, this command stalls too, and the caller
+      // must still get the timeout instead of hanging.
+      if (!isGrouped) {
+        void this.#writeClient.xGroupDestroy(streamKey, group).catch(destroyErr => {
+          this.#logger?.debug?.('redis-streams: xGroupDestroy failed', { topic, group, error: errorText(destroyErr) });
+        });
+      }
+      throw err;
+    }
 
     return {
       members: new Map([[cb, {}]]),
@@ -948,7 +1230,11 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
    */
   override async trimTopic(
     topic: string,
-    { runId, producedBefore }: { runId: string; producedBefore?: number },
+    {
+      runId,
+      producedBefore,
+      retainTerminalEvents,
+    }: { runId: string; producedBefore?: number; retainTerminalEvents?: boolean },
   ): Promise<void> {
     if (this.#closed) return;
     try {
@@ -963,9 +1249,15 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
           try {
             const event = JSON.parse(entry.message.event ?? '{}') as {
               runId?: string;
-              data?: { producedAt?: unknown; pinned?: unknown };
+              data?: { type?: string; status?: string; producedAt?: unknown; pinned?: unknown };
             };
             if (event.runId !== runId) continue;
+            if (
+              retainTerminalEvents &&
+              event.data?.status !== 'suspended' &&
+              ['run-registered', 'run-completed', 'run-failed', 'run-aborted'].includes(event.data?.type ?? '')
+            )
+              continue;
             if (producedBefore !== undefined) {
               const producedAt = event.data?.producedAt;
               if (typeof producedAt !== 'number' || producedAt > producedBefore || event.data?.pinned) continue;
@@ -1038,7 +1330,9 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
    * from other processes.
    */
   async releaseLease(key: string, owner: string): Promise<void> {
-    if (this.#closed) return;
+    // Not `#closed`: a nack during close() still republishes through the
+    // writer, and the redelivery must not find the lease still held.
+    if (this.#writerReleased) return;
     await this.#ensureWriterConnected();
     const script = `
       if redis.call("GET", KEYS[1]) == ARGV[1] then
@@ -1101,6 +1395,11 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     return result === 1;
   }
 
+  /** A server replaying its dataset after a restart answers `LOADING` to every client. */
+  isUnavailableToAll(error: unknown): boolean {
+    return isLoadingError(error);
+  }
+
   /**
    * Disconnect all clients and stop all subscription loops.
    */
@@ -1132,6 +1431,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // the caller with a ClosingError.
     await this.flush();
 
+    this.#writerReleased = true;
     if (this.#writeClient.isOpen) {
       try {
         await disconnect(this.#writeClient);
@@ -1164,8 +1464,9 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
           // published during recovery remain visible. Before the first delivery,
           // preserve the subscription's original earliest/latest anchor.
           const recoveryAnchor = sub.lastId ?? sub.groupAnchor;
+          const recoveryTtlMs = this.#idleTtlFor(sub.topic);
           try {
-            if (this.#streamIdleTtlMs > 0) {
+            if (recoveryTtlMs > 0) {
               // MKSTREAM recreates an (empty) stream key, so the TTL must be
               // stamped in the same MULTI — a detached PEXPIRE that fails or is
               // skipped would leave an abandoned-but-recreated topic lingering
@@ -1178,7 +1479,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
               await this.#writeClient
                 .multi()
                 .xGroupCreate(sub.streamKey, sub.group, recoveryAnchor, { MKSTREAM: true })
-                .pExpire(sub.streamKey, this.#streamIdleTtlMs)
+                .pExpire(sub.streamKey, recoveryTtlMs)
                 .exec();
             } else {
               await this.#writeClient.xGroupCreate(sub.streamKey, sub.group, recoveryAnchor, { MKSTREAM: true });
@@ -1296,8 +1597,9 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
         ...event,
         deliveryAttempt: attempt + 1,
       };
+      const republishTtlMs = this.#idleTtlFor(sub.topic);
       try {
-        if (this.#streamIdleTtlMs > 0) {
+        if (republishTtlMs > 0) {
           // A nack republish is a write that keeps this stream in use, so it
           // must refresh the TTL too — otherwise a retry near the end of the
           // original window inherits the old expiry and the stream can be
@@ -1307,7 +1609,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
           await this.#writeClient
             .multi()
             .xAdd(sub.streamKey, '*', { event: JSON.stringify(next) }, this.#xaddTrimOptions())
-            .pExpire(sub.streamKey, this.#streamIdleTtlMs)
+            .pExpire(sub.streamKey, republishTtlMs)
             .exec();
         } else {
           await this.#writeClient.xAdd(sub.streamKey, '*', { event: JSON.stringify(next) }, this.#xaddTrimOptions());
@@ -1363,7 +1665,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
             sub.consumer,
             streamId,
             payload,
-            String(this.#streamIdleTtlMs),
+            String(this.#idleTtlFor(sub.topic)),
             String(this.#maxStreamLength > 0 ? this.#maxStreamLength : 0),
           ],
         });
@@ -1531,12 +1833,13 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
         return;
       }
       const payload = { event: JSON.stringify({ ...event, deliveryAttempt: attempt + 1 } satisfies Event) };
+      const replayTtlMs = this.#idleTtlFor(sub.topic);
       try {
-        if (this.#streamIdleTtlMs > 0) {
+        if (replayTtlMs > 0) {
           await this.#writeClient
             .multi()
             .xAdd(sub.streamKey, '*', payload, this.#xaddTrimOptions())
-            .pExpire(sub.streamKey, this.#streamIdleTtlMs)
+            .pExpire(sub.streamKey, replayTtlMs)
             .exec();
         } else {
           await this.#writeClient.xAdd(sub.streamKey, '*', payload, this.#xaddTrimOptions());

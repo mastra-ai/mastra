@@ -9,7 +9,23 @@ export { ObservabilityListBody } from './components/observability-list-body';
 export type { ObservabilityListBodyProps } from './components/observability-list-body';
 export { useObservabilityViews } from './hooks/use-observability-views';
 export type { ObservabilityViewsState, UseObservabilityViewsArgs } from './hooks/use-observability-views';
+export { useTraceAsItemData } from './hooks/use-trace-as-item-data';
+export type { UseTraceAsItemDataArgs } from './hooks/use-trace-as-item-data';
 export { observabilityListQueryOptions, useObservabilityListFilters } from './hooks/use-observability-list-filters';
+export { listHeadQueryKey, useListAnchor, useListHeadPoll, windowEndingAt } from './hooks/use-list-head-poll';
+export type { ListHeadStore, ListWindow, UseListHeadPollArgs } from './hooks/use-list-head-poll';
+export { mergeHeadRows } from './merge-head-rows';
+export type { MergeHeadRowsOptions } from './merge-head-rows';
+export {
+  OBSERVABILITY_LIST_HEAD_LIMIT,
+  OBSERVABILITY_LIST_HEAD_MAX_ROWS,
+  OBSERVABILITY_LIST_HORIZON_MS,
+  OBSERVABILITY_LIST_POLL_INTERVAL_MS,
+  OBSERVABILITY_LIST_REFETCH_INTERVAL_MS,
+  fixedWindowRefetchInterval,
+  isRejectedListRequest,
+  recoveryRefetchInterval,
+} from './list-polling';
 export { OBSERVABILITY_VIEW_LABELS, observabilityViewCrumbLabel } from './observability-crumbs';
 export {
   readSpanSelection,
@@ -19,3 +35,12 @@ export {
   withThreadSelection,
 } from './observability-selection-params';
 export type { ObservabilityView } from '@/domains/traces/components/traces-spans-switch';
+export { ObservabilitySavedViews, SavedViewNameTakenError, SavedViewsProvider } from './saved-views';
+export type {
+  ObservabilitySavedViewsProps,
+  SavedViewColumnsControl,
+  SavedViewRecord,
+  SavedViewsProviderProps,
+  SavedViewsSource,
+} from './saved-views';
+export { ComputedTag } from './components/computed-tag';

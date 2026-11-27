@@ -121,6 +121,58 @@ describe('BaseResource', () => {
     });
   });
 
+  describe('method-aware retry defaults', () => {
+    const respondWith500 = () => {
+      server.on('request', (req, res) => {
+        requestCount++;
+        req.resume(); // Drain the body so the failing response is not blocked by unread input
+        res.writeHead(500, { 'Content-Type': 'text/plain' });
+        res.end('Internal Server Error');
+      });
+    };
+
+    it.each(['POST', 'PATCH', 'PUT', 'DELETE'])(
+      'does not repeat a %s after a server-side failure without an explicit retry count',
+      async method => {
+        respondWith500();
+        const defaultResource = new BaseResource({ baseUrl: serverUrl, backoffMs: 0 });
+
+        await expect(defaultResource.request('/write', { method, body: { action: 'apply' } })).rejects.toBeInstanceOf(
+          Error,
+        );
+        expect(requestCount).toBe(1);
+      },
+    );
+
+    it('keeps the default retry count for read methods', async () => {
+      respondWith500();
+      const defaultResource = new BaseResource({ baseUrl: serverUrl, backoffMs: 0 });
+
+      await expect(defaultResource.request('/read', { method: 'GET' })).rejects.toBeInstanceOf(Error);
+      expect(requestCount).toBe(4); // Initial request + 3 default retries
+    });
+
+    it('preserves an explicit client retry count for writes', async () => {
+      respondWith500();
+      const retryingResource = new BaseResource({ baseUrl: serverUrl, retries: 2, backoffMs: 0 });
+
+      await expect(
+        retryingResource.request('/write', { method: 'POST', body: { action: 'apply' } }),
+      ).rejects.toBeInstanceOf(Error);
+      expect(requestCount).toBe(3); // Initial request + 2 configured retries
+    });
+
+    it('lets a per-request retry count opt a write back in', async () => {
+      respondWith500();
+      const defaultResource = new BaseResource({ baseUrl: serverUrl, backoffMs: 0 });
+
+      await expect(
+        defaultResource.request('/write', { method: 'POST', body: { action: 'apply' }, retries: 1 }),
+      ).rejects.toBeInstanceOf(Error);
+      expect(requestCount).toBe(2); // Initial request + 1 per-request retry
+    });
+  });
+
   it('should let a request override the client retry count', async () => {
     server.on('request', (_req, res) => {
       requestCount++;
@@ -273,6 +325,37 @@ describe('BaseResource', () => {
     expect(result).toEqual({ success: true });
   });
 
+  // Fetch joins header names that differ only in case into "a, b". (#28667)
+  it('lets request headers replace client and default headers of any casing', async () => {
+    server.on('request', (req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          authorization: req.headers.authorization,
+          contentType: req.headers['content-type'],
+          client: req.headers['x-client'],
+        }),
+      );
+    });
+    const customResource = new BaseResource({
+      baseUrl: serverUrl,
+      retries: 0,
+      headers: { Authorization: 'Bearer client-token', 'X-Client': 'kept' },
+    });
+
+    const result = await customResource.request('/test', {
+      method: 'POST',
+      body: {},
+      headers: { authorization: 'Bearer request-token', 'Content-Type': 'application/vnd.example+json' },
+    });
+
+    expect(result).toEqual({
+      authorization: 'Bearer request-token',
+      contentType: 'application/vnd.example+json',
+      client: 'kept',
+    });
+  });
+
   describe('abort signals', () => {
     const okResponse = () => new Response(JSON.stringify({ ok: true }), { status: 200 });
 
@@ -320,6 +403,44 @@ describe('BaseResource', () => {
         name: 'AbortError',
       });
       expect(customFetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('empty success responses', () => {
+    it.each([200, 204, 205])('resolves a %d with an exactly empty body to undefined after one fetch', async status => {
+      const customFetch = vi.fn(async () => new Response(null, { status }));
+      // Two allowed retries make the old JSON-parse-and-retry behavior fail
+      // decisively instead of merely returning after the first attempt.
+      const customResource = new BaseResource({ baseUrl: serverUrl, retries: 2, backoffMs: 0, fetch: customFetch });
+
+      await expect(customResource.request('/empty')).resolves.toBeUndefined();
+      expect(customFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not repeat an opted-in write whose success body is empty', async () => {
+      const customFetch = vi.fn(async () => new Response(null, { status: 200 }));
+      const customResource = new BaseResource({ baseUrl: serverUrl, retries: 2, backoffMs: 0, fetch: customFetch });
+
+      await expect(
+        customResource.request('/write', { method: 'POST', body: { action: 'apply' } }),
+      ).resolves.toBeUndefined();
+      expect(customFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('treats a JSON null body as parsed null rather than an empty body', async () => {
+      const customFetch = vi.fn(async () => new Response('null', { status: 200 }));
+      const customResource = new BaseResource({ baseUrl: serverUrl, retries: 2, backoffMs: 0, fetch: customFetch });
+
+      await expect(customResource.request('/null')).resolves.toBeNull();
+      expect(customFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('still retries and rejects a non-empty success body that is malformed JSON', async () => {
+      const customFetch = vi.fn(async () => new Response('{', { status: 200 }));
+      const customResource = new BaseResource({ baseUrl: serverUrl, retries: 2, backoffMs: 0, fetch: customFetch });
+
+      await expect(customResource.request('/malformed')).rejects.toBeInstanceOf(Error);
+      expect(customFetch).toHaveBeenCalledTimes(3); // Initial request + 2 configured retries
     });
   });
 });

@@ -94,6 +94,13 @@ export const mastra = new Mastra({
     description: 'Maximum number of background tasks running concurrently for a single agent.',
   },
   {
+    name: 'perOwnerConcurrency',
+    type: 'Record<string, number>',
+    isOptional: true,
+    description:
+      "Per-owner overrides of `perAgentConcurrency`, keyed by the task's `agentId`. Non-agent owners use a namespaced key such as `'mcp-server:ops'`. Overridden owners still count toward `globalConcurrency`, so raise `globalConcurrency` if an override is larger than it.",
+  },
+  {
     name: 'backpressure',
     type: "'queue' | 'reject' | 'fallback-sync'",
     isOptional: true,
@@ -106,7 +113,8 @@ export const mastra = new Mastra({
     type: 'number',
     isOptional: true,
     defaultValue: '300000',
-    description: 'Default per-task timeout in milliseconds. Can be overridden per-tool or per-call.',
+    description:
+      'Default per-task timeout in milliseconds. `0` means no timeout. Can be overridden per-tool or per-call.',
   },
   {
     name: 'defaultRetries',
@@ -158,7 +166,8 @@ export const mastra = new Mastra({
     name: 'cleanup',
     type: 'CleanupConfig',
     isOptional: true,
-    description: 'Controls how long task records are kept and how often the cleanup process runs.',
+    description:
+      'Controls how long task records are kept and how often the cleanup process runs. Cleanup only runs when this option is set, including deletion of tasks whose `expiresAt` has passed.',
     properties: [
       {
         parameters: [
@@ -167,14 +176,16 @@ export const mastra = new Mastra({
             type: 'number',
             isOptional: true,
             defaultValue: '3600000',
-            description: 'How long to keep completed task records, in milliseconds. Default: 1 hour.',
+            description:
+              'How long to keep completed task records, in milliseconds. Default: 1 hour. Does not apply to tasks that set their own `expiresAt`; cleanup deletes those once `expiresAt` passes.',
           },
           {
             name: 'failedTtlMs',
             type: 'number',
             isOptional: true,
             defaultValue: '86400000',
-            description: 'How long to keep failed task records, in milliseconds. Default: 24 hours.',
+            description:
+              'How long to keep failed, cancelled, and timed-out task records, in milliseconds. Default: 24 hours. Does not apply to tasks that set their own `expiresAt`.',
           },
           {
             name: 'cleanupIntervalMs',
@@ -186,6 +197,22 @@ export const mastra = new Mastra({
         ],
       },
     ],
+  },
+  {
+    name: 'recoverStaleTasksOnStart',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description:
+      "Whether the manager recovers abandoned `running` and `pending` tasks on startup. A `running` task is only recovered once its owner's execution lease has expired, so this is safe when several managers share storage. When enabled, the manager scans again once the earliest live lease it found expires, and checks every `leaseDurationMs` for `running` and `pinToWorker` tasks whose worker stopped renewing their lease. See [Execution ownership and recovery](/docs/harness/background-tasks#execution-ownership-and-recovery).",
+  },
+  {
+    name: 'leaseDurationMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '30000',
+    description:
+      'Duration of the execution lease a manager holds on each task it runs, in milliseconds. The owner renews the lease every `leaseDurationMs / 3`. While the lease is live, no other manager recovers the task. Once it expires, the owner is treated as dead. Must be at least `3000`; the manager throws at construction for lower values.',
   },
   {
     name: 'waitTimeoutMs',
@@ -201,6 +228,22 @@ export const mastra = new Mastra({
     defaultValue: '300000',
     description:
       'Default idle timeout, in milliseconds, for `agent.stream(..., { untilIdle: true })` calls that do not set `maxIdleMs`. The stream closes when background tasks are still running but no event has arrived for this long. Set it above your longest expected background task so its completion still triggers a continuation turn. A per-call `untilIdle: { maxIdleMs }` takes precedence. Default: 5 minutes.',
+  },
+  {
+    name: 'notifyAgentOnFinish',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description:
+      'Whether a finished deferred task sends the agent a `background-task` signal when no `untilIdle` stream is open for its thread. Set to `false` when your app sends its own completion signal, for example from `onTaskComplete`.',
+  },
+  {
+    name: 'wokenRunsEndAfterTurn',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      "Temporary opt-in. When `true`, a run that a signal starts on an idle thread ends after its own turn instead of waiting for the background tasks it dispatched, which report back through the `background-task` signal. A signal's own `ifIdle.streamOptions.untilIdle` takes precedence. In the next major release this becomes the only behavior and the option is removed; pass `untilIdle: true` in `ifIdle.streamOptions` to keep a woken run open.",
   },
   {
     name: 'onTaskComplete',
@@ -221,7 +264,7 @@ export const mastra = new Mastra({
 
 ### deployer
 
-**Type:** `MastraDeployer`
+**Type:** `IDeployer`
 
 Deployment provider for publishing applications to cloud platforms.
 
@@ -703,7 +746,7 @@ export const mastra = new Mastra({
 **Type:** `boolean`\
 **Default:** `false`
 
-Enables source map generation for the bundled output.
+Enables source map generation for the bundled output. When it's enabled, `mastra dev` and `mastra start` run the server with Node's `--enable-source-maps` flag, so stack traces point at your source files.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -854,6 +897,76 @@ export const mastra = new Mastra({
 })
 ```
 
+### server.mcp
+
+**Type:** `object`\
+**Default:** `undefined`
+
+Configures the [built-in MCP server](/docs/server/mcp) that exposes your agents, workflows, and tools at `/api/mcp`.
+
+| Property | Type | Default | Description |
+| - | - | - | - |
+| `enabled` | `boolean \| 'dev'` | `'dev'` | `'dev'` serves the endpoint under `mastra dev`, and in production only when `server.auth` is configured. `true` always serves it and logs a warning when no auth is configured. `false` never serves it. |
+| `path` | `string` | `'/mcp'` | Path of the endpoint, mounted under the API prefix. Each segment can use letters, digits, `-`, `.`, `_`, and `~`. Invalid paths and paths that collide with the `MCPServer` routes or any other server route fall back to `/mcp` and log an error. |
+| `toolsets` | `('agents' \| 'workflows' \| 'tools' \| 'memory' \| 'observability' \| 'observability_analytics' \| 'stored_agents')[]` | All toolsets | Toolsets to serve. Clients can narrow this per request with `?toolsets=` or the `X-MCP-Toolsets` header. |
+| `enumLimit` | `number` | `25` | Up to this many visible agents or workflows are listed as an enum on the id argument, and up to this many tools get an individual `tool_<id>` tool. |
+| `featured` | `{ agents?: string[]; workflows?: string[] }` | `undefined` | Agents and workflows that also get a dedicated `agent_<id>` or `workflow_<id>` tool. |
+| `readOnly` | `boolean` | `false` | Only serve tools whose backing route is a read operation. Clients can also request this with `?readonly=1` or the `X-MCP-Readonly` header. |
+| `apps` | `boolean` | `true` | Serve [MCP Apps](/docs/server/mcp#mcp-apps), such as the trace viewer and the observability explorer (traces, logs, and metrics), to clients that render them. Needs `@mastra/mcp-apps-components` installed. |
+| `studioUrl` | `string \| false` | `undefined` | Studio's base URL, used by the MCP Apps' **Open in Studio** button. Defaults to the local Studio when using `mastra dev`. Set `false` to hide the button. |
+| `include` | `{ agents?: string[]; workflows?: string[]; tools?: string[] }` | `undefined` | When set for a primitive type, only these are exposed. Each entry matches a primitive's `id` or its registration key. |
+| `exclude` | `{ agents?: string[]; workflows?: string[]; tools?: string[] }` | `undefined` | Never exposed. Each entry matches a primitive's `id` or its registration key. Takes precedence over `include`. |
+| `serverInfo` | `{ name?: string; version?: string; title?: string; instructions?: string }` | `undefined` | Server identity reported to MCP clients. |
+| `oauth` | `{ resource?: string; requireAudience?: boolean; authorizationServers?: string[]; scopesSupported?: string[] }` | `undefined` | OAuth discovery and token audience settings. See [`server.mcp.oauth`](#servermcpoauth). |
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  server: {
+    mcp: {
+      featured: { agents: ['support-agent'] },
+      exclude: { tools: ['delete-account'] },
+    },
+  },
+})
+```
+
+{/* vale Vale.Terms = NO */}
+
+### `server.mcp.oauth`
+
+{/* vale Vale.Terms = YES */}
+
+**Type:** `object`\
+**Default:** `undefined`
+
+OAuth protected-resource metadata for the [built-in MCP server](/docs/server/mcp#oauth-discovery). Used when `server.auth` is configured.
+
+| Property | Type | Default | Description |
+| - | - | - | - |
+| `resource` | `string` | Endpoint URL derived from the request | Canonical public URL of the MCP endpoint, for example `https://my-app.example.com/api/mcp`. Setting it also requires the token's `aud` claim to include this URL on `/api/mcp`, for auth providers that support audience checks. |
+| `requireAudience` | `boolean` | `false` | Requires `resource`. Rejects MCP requests with a `401` when the auth provider that accepted the token can't check the audience, including such providers inside `CompositeAuth`. When `false`, those requests are accepted and Mastra logs a warning at startup. |
+| `authorizationServers` | `string[]` | From the auth provider | Issuer URLs of the authorization servers that MCP clients get tokens from. |
+| `scopesSupported` | `string[]` | From the auth provider | OAuth scopes advertised to MCP clients. Left out of the metadata when unset. |
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraJwtAuth } from '@mastra/auth'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraJwtAuth({
+      jwksUri: 'https://auth.example.com/.well-known/jwks.json',
+      issuer: 'https://auth.example.com/',
+    }),
+    mcp: {
+      oauth: { resource: 'https://my-app.example.com/api/mcp' },
+    },
+  },
+})
+```
+
 ### server.mcpOptions
 
 **Type:** `object`\
@@ -916,8 +1029,8 @@ CORS (Cross-Origin Resource Sharing) configuration for the server. Set to `false
 | - | - | - | - |
 | `origin` | `string \| string[]` | `'*'` | Origins for CORS requests |
 | `allowMethods` | `string[]` | `['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']` | HTTP methods |
-| `allowHeaders` | `string[]` | `['Content-Type', 'Authorization', 'x-mastra-client-type', 'x-mastra-dev-playground']` | Request headers |
-| `exposeHeaders` | `string[]` | `['Content-Length', 'X-Requested-With']` | Browser headers |
+| `allowHeaders` | `string[]` | `['Content-Type', 'Authorization', 'A2A-Version', 'x-mastra-client-type', 'x-mastra-dev-playground']` | Request headers. Custom values are added to these defaults |
+| `exposeHeaders` | `string[]` | `['Content-Length', 'X-Requested-With']` | Browser headers. Custom values are added to these defaults |
 | `credentials` | `boolean` | `false` | Credentials (cookies, authorization headers) |
 | `maxAge` | `number` | `3600` | Preflight request cache duration in seconds |
 
@@ -1172,6 +1285,8 @@ export const mastra = new Mastra({
 **Default:** `180000` (3 minutes)
 
 Request timeout in milliseconds. Requests that exceed this duration will be terminated.
+
+On serverless platforms this limit is independent of the platform's own function timeout. For example, the [Vercel deployer](/reference/deployer/vercel#request-timeouts) sets Vercel's limit with `maxDuration` (seconds) while `server.timeout` still applies, so long requests need both raised.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'

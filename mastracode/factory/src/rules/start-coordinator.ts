@@ -2,24 +2,39 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 
-import { boardForWorkItem } from '../boards/index.js';
+import type { FactoryBoardEngine } from '../board-engine/engine.js';
+import { boardForWorkItem, hasPullRequest, isPullRequestReviewPhase, REVIEW_CONTEXT } from '../boards/index.js';
+import type { BoardRegistry } from '../boards/index.js';
+import { toBoardSource } from '../boards/project-boards.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js';
 import { hydrateFactorySession, resolveFactorySessionModel } from '../session/factory-session.js';
-import { resolveWorkItemRepository } from '../session/work-item-repository.js';
+import {
+  isRunRepositoryInstruction,
+  repositoryChosenByRun,
+  resolveRunRepositoryFromIntake,
+  runRepositoryInstruction,
+} from '../session/work-item-repository.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
+import { isFactoryPrincipalId } from '../storage/domains/projects/base.js';
 import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { CreateWorkItemInput, WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import type { FactoryTransitionService } from './transition-service.js';
 import { externallyAuthoredWorkItem } from './types.js';
-import type { FactoryRuleStage, FactoryTransitionResult } from './types.js';
+import type { FactoryRuleActor, FactoryRuleStage, FactoryTransitionResult } from './types.js';
 
 export interface FactoryStartRequest {
   orgId: string;
   userId: string;
   factoryProjectId: string;
+  /**
+   * Who started the work, where that is not the session's owner: the Factory owns the
+   * sessions it runs, and the move a start makes is still the mover's.
+   */
+  startedBy?: FactoryRuleActor;
   sessionId: string;
+  expectedBindingId?: string;
   threadTitle: string;
   kickoffKey: string;
   /** Where the arrival path lands the card; a session opened on an existing card names none. */
@@ -65,9 +80,8 @@ async function runMemoryResource(
 
 export class WorkItemRepositoryError extends Error {
   constructor(
-    readonly code: 'repository_mismatch' | 'repository_ambiguous' | 'repository_unlinked',
+    readonly code: 'repository_mismatch' | 'repository_unlinked',
     message: string,
-    readonly candidates: string[] = [],
   ) {
     super(message);
     this.name = 'WorkItemRepositoryError';
@@ -118,6 +132,17 @@ async function resolveSourceSession(
   return { ...session, projectRepositoryId };
 }
 
+async function sessionRepositorySlug(
+  storage: SourceControlStorageHandle,
+  orgId: string,
+  projectRepositoryId: string,
+): Promise<string> {
+  const link = await storage.projectRepositories.get({ orgId, id: projectRepositoryId });
+  const repository = link && (await storage.repositories.get({ orgId, id: link.repositoryId }));
+  if (!repository) throw new Error('Factory session repository not found');
+  return repository.slug;
+}
+
 async function configureThread(session: FactorySession, request: FactoryStartRequest): Promise<string> {
   const threadId = session.thread.requireId();
   // Derived from the work item, not a user rename, so leave the title
@@ -130,7 +155,7 @@ async function configureThread(session: FactorySession, request: FactoryStartReq
 export class FactoryStartCoordinator {
   readonly #controller: FactoryController;
   readonly #storage: WorkItemsStorage;
-  readonly #transitionService?: Pick<FactoryTransitionService, 'transition'>;
+  readonly #boardEngine?: Pick<FactoryBoardEngine, 'requestMove'>;
   readonly #sourceControl?:
     | SourceControlStorageHandle
     | ((
@@ -139,11 +164,12 @@ export class FactoryStartCoordinator {
   readonly #intake?: IntakeStorage;
   readonly #projects?: FactoryProjectsStorage;
   readonly #modelDefaults?: ModelDefaultsStorage;
+  readonly #boards?: ProjectBoardSource;
 
   constructor(
     controller: FactoryController,
     storage: WorkItemsStorage,
-    transitionService?: Pick<FactoryTransitionService, 'transition'>,
+    boardEngine?: Pick<FactoryBoardEngine, 'requestMove'>,
     sourceControl?:
       | SourceControlStorageHandle
       | ((
@@ -151,14 +177,17 @@ export class FactoryStartCoordinator {
         ) => SourceControlStorageHandle | undefined | Promise<SourceControlStorageHandle | undefined>),
     intake?: IntakeStorage,
     sessionModel?: { projects: FactoryProjectsStorage; modelDefaults: ModelDefaultsStorage },
+    /** Tells a pull request review run from the card's other review runs; without it every review run with a pull request is untrusted. */
+    boards?: BoardRegistry | ProjectBoardSource,
   ) {
     this.#controller = controller;
     this.#storage = storage;
-    this.#transitionService = transitionService;
+    this.#boardEngine = boardEngine;
     this.#sourceControl = sourceControl;
     this.#intake = intake;
     this.#projects = sessionModel?.projects;
     this.#modelDefaults = sessionModel?.modelDefaults;
+    this.#boards = boards ? toBoardSource(boards) : undefined;
   }
 
   async prepare(request: FactoryStartRequest): Promise<FactoryStartPreparedResult> {
@@ -181,53 +210,35 @@ export class FactoryStartCoordinator {
     const storedItem = request.workItem.id
       ? await storage.get({ orgId: request.orgId, id: request.workItem.id })
       : null;
-    const intakeConfig = await this.#intake?.getConfig({ orgId: request.orgId, integrationIds: ['linear'] });
-    let repository = await resolveWorkItemRepository({
+    const runItem = storedItem ?? {
+      metadata: request.workItem.input.metadata ?? null,
+      workItem: { metadata: request.workItem.input.metadata ?? null },
+    };
+    // A card that names no repository runs in the session's own repository,
+    // and its agent determines from the card which repository to work in.
+    const repository = await resolveRunRepositoryFromIntake(this.#intake, {
       sourceControl,
       orgId: request.orgId,
       factoryProjectId: request.factoryProjectId,
-      item: storedItem ?? { metadata: request.workItem.input.metadata ?? null },
-      linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject,
+      item: runItem,
+      boundProjectRepositoryId: sourceSession.projectRepositoryId,
     });
-    if (repository.status === 'ambiguous') {
-      // A retry of this role's existing session keeps its already-chosen
-      // repository; a newly minted session must not choose for the card.
-      if (storedItem?.sessions[request.workItem.role]?.sessionId !== sourceSession.sessionId) {
-        throw new WorkItemRepositoryError(
-          'repository_ambiguous',
-          `Choose a repository for this work item: ${repository.candidates.join(', ')}.`,
-          repository.candidates,
-        );
-      }
-      const link = await sourceControl.projectRepositories.get({
-        orgId: request.orgId,
-        id: sourceSession.projectRepositoryId,
-      });
-      const linked = link && (await sourceControl.repositories.get({ orgId: request.orgId, id: link.repositoryId }));
-      const currentLinks = link
-        ? await sourceControl.projectRepositories.list({ orgId: request.orgId, connectionId: link.connectionId })
-        : [];
-      if (
-        !linked ||
-        !repository.candidates.includes(linked.slug) ||
-        !currentLinks.some(candidate => candidate.id === sourceSession.projectRepositoryId)
-      ) {
-        throw new WorkItemRepositoryError(
-          'repository_unlinked',
-          'The existing session repository is not linked to this Factory.',
-        );
-      }
-      repository = { status: 'resolved', slug: linked.slug, projectRepositoryId: sourceSession.projectRepositoryId };
-    }
     if (repository.status === 'unlinked') {
       throw new WorkItemRepositoryError('repository_unlinked', repository.hint);
     }
-    if (repository.projectRepositoryId !== sourceSession.projectRepositoryId) {
+    if (
+      repository.projectRepositoryId !== sourceSession.projectRepositoryId &&
+      !repositoryChosenByRun(runItem, repository.slug)
+    ) {
       throw new WorkItemRepositoryError(
         'repository_mismatch',
         `This run session is bound to a different repository than ${repository.slug}.`,
       );
     }
+    const ownSlug =
+      repository.projectRepositoryId === sourceSession.projectRepositoryId
+        ? repository.slug
+        : await sessionRepositorySlug(sourceControl, request.orgId, sourceSession.projectRepositoryId);
     const requestContext = request.requestContext ?? new RequestContext();
     // Preserve an authenticated caller when present. Autonomous starts still
     // need a principal so deployed credential resolution can authenticate the
@@ -243,11 +254,24 @@ export class FactoryStartCoordinator {
     // any pull-request-sourced work item) get `untrustedCheckout` so the SDK
     // never ingests the checkout's AGENTS.md/CLAUDE.md into the system prompt
     // or reminders — those files are attacker-writable in a PR branch.
-    const untrustedCheckout = request.workItem.input.externalSource?.type === 'pull-request';
+    // An issue card's PR review checks out the attached pull request's head, so it counts too.
+    // The run's stage is where the card is going: a card started from its resting phase into
+    // its board's pull request review is moved only after the session is ready.
+    const runStage = request.destinationStage ?? storedItem?.stages[0];
+    const reviewsAttachedPullRequest =
+      request.workItem.role === REVIEW_CONTEXT &&
+      storedItem != null &&
+      hasPullRequest({ workItem: storedItem.workItem }) &&
+      (!this.#boards ||
+        isPullRequestReviewPhase((await this.#boards.load(request)).get(boardForWorkItem(storedItem)), runStage));
+    const untrustedCheckout =
+      request.workItem.input.externalSource?.type === 'pull-request' || reviewsAttachedPullRequest;
     // The trusted ref the SDK may serve project instruction files from on an
     // untrusted checkout (the PR's base branch). Prefer the session record's
     // base branch; fall back to the intake metadata captured from the PR.
-    const metadataBaseBranch = request.workItem.input.metadata?.baseBranch;
+    const metadataBaseBranch = storedItem
+      ? storedItem.workItem.metadata?.baseBranch
+      : request.workItem.input.metadata?.baseBranch;
     const baseRef =
       (sourceSession.baseBranch || undefined) ??
       (typeof metadataBaseBranch === 'string' && metadataBaseBranch ? metadataBaseBranch : undefined);
@@ -284,7 +308,7 @@ export class FactoryStartCoordinator {
     // caller created without them — so autonomous runs never depend on a
     // browser connecting to populate the state. `untrustedCheckout` is a
     // boolean so it rides only on state (tags are string-valued).
-    const targetRepositoryInstruction = `Target repository: ${repository.slug}. Before editing files or creating a pull request, verify this session's checkout matches the target repository.`;
+    const targetRepositoryInstruction = runRepositoryInstruction(repository, ownSlug);
     const existingPluginInstructions = session.state.get()?.pluginInstructions ?? [];
     await session.state.set({
       ...sessionTags,
@@ -295,7 +319,7 @@ export class FactoryStartCoordinator {
       factoryModelScope: sessionModel.modelScope,
       factoryOwnerUserId: sourceSession.userId,
       pluginInstructions: [
-        ...existingPluginInstructions.filter(instruction => instruction !== targetRepositoryInstruction),
+        ...existingPluginInstructions.filter(instruction => !isRunRepositoryInstruction(instruction)),
         targetRepositoryInstruction,
       ],
       ...(untrustedCheckout ? { untrustedCheckout: true, ...(baseRef ? { baseRef } : {}) } : {}),
@@ -313,10 +337,10 @@ export class FactoryStartCoordinator {
       ownerUserId: sourceSession.userId,
       defaultModelId: sessionModel.modelId,
     });
-    // The tool is `requireApproval`, and that prompt parks the run whether or not
-    // someone pressed Start — a person is reading the plan, not an approval queue.
-    // Starting the run was already the say-so; the rules engine still governs.
-    await session.permissions.setForTool({ toolName: 'factory_transition_work_item', policy: 'allow' });
+    // Factory tools ask by default, and that prompt would park the run whether or not
+    // someone pressed Start. Reporting an outcome moves nothing until the board engine
+    // accepts the move, so the session reports without asking.
+    await session.permissions.setForTool({ toolName: 'factory_report_outcome', policy: 'allow' });
     const threadId = await configureThread(session, request);
     const prepared = await storage.prepareRunStart({
       orgId: request.orgId,
@@ -324,6 +348,7 @@ export class FactoryStartCoordinator {
       factoryProjectId: request.factoryProjectId,
       workItem: { id: request.workItem.id, input: request.workItem.input },
       role: request.workItem.role,
+      expectedBindingId: request.expectedBindingId,
       session: { sessionId: sourceSession.sessionId, branch: sourceSession.branch, threadId },
       resourceId: memoryResourceId,
       kickoffKey: request.kickoffKey,
@@ -334,20 +359,24 @@ export class FactoryStartCoordinator {
     let revision = prepared.item.revision;
     const destinationStage = request.destinationStage;
     if (destinationStage && (prepared.item.stages.length !== 1 || prepared.item.stages[0] !== destinationStage)) {
-      if (!this.#transitionService) throw new Error('Factory transition service is unavailable.');
-      const transition = await this.#transitionService.transition({
+      if (!this.#boardEngine) throw new Error('Factory board engine is unavailable.');
+      const transition = await this.#boardEngine.requestMove({
         orgId: request.orgId,
         factoryProjectId: request.factoryProjectId,
         workItemId: prepared.item.id,
         board: boardForWorkItem(prepared.item),
         stage: destinationStage,
         expectedRevision: prepared.item.revision,
-        actor: { type: 'human', id: request.userId },
+        actor:
+          request.startedBy ??
+          (isFactoryPrincipalId(request.userId)
+            ? { type: 'system', id: request.userId }
+            : { type: 'human', id: request.userId }),
         ingress: { type: 'human', identity: `start:${request.kickoffKey}:transition` },
         cause: 'run_start',
       });
       if (transition.status === 'rejected') {
-        await storage.markPendingStart(prepared.binding.id, 'failed', transition.reason);
+        await storage.markPendingStart(prepared.binding.id, 'failed');
         throw new FactoryStartTransitionError(transition);
       }
       revision = transition.revision;

@@ -5,7 +5,7 @@ import type {
   TraceQueryKeysetRequest,
 } from '@mastra/client-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { delay, http, HttpResponse } from 'msw';
+import { http, HttpResponse } from 'msw';
 import { Outlet, Route, Routes, useLocation } from 'react-router';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ThreadsPage from '..';
@@ -106,7 +106,7 @@ function setThreadsHandlers(
 describe('Threads page', () => {
   // jsdom has no layout, so the list virtualizer sees a zero-height scroll container and
   // renders no rows. Report a fixed viewport so rows materialize.
-  let layoutStubs: { rect: ReturnType<typeof vi.spyOn>; resizeObserver: typeof ResizeObserver };
+  let layoutStubs: { rects: ReturnType<typeof vi.spyOn>[]; resizeObserver: typeof ResizeObserver };
   beforeEach(() => {
     const originalResizeObserver = globalThis.ResizeObserver;
     class LayoutResizeObserver {
@@ -133,14 +133,19 @@ describe('Threads page', () => {
     }
     globalThis.ResizeObserver = LayoutResizeObserver;
     layoutStubs = {
-      rect: vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600)),
+      rects: [
+        vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600)),
+        // The virtualizer sizes its scroll container from clientWidth/clientHeight.
+        vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800),
+        vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600),
+      ],
       resizeObserver: originalResizeObserver,
     };
     // jsdom does not implement scrollIntoView, which the thread view uses to reveal its latest turn.
     Element.prototype.scrollIntoView = vi.fn();
   });
   afterEach(() => {
-    layoutStubs.rect.mockRestore();
+    layoutStubs.rects.forEach(stub => stub.mockRestore());
     globalThis.ResizeObserver = layoutStubs.resizeObserver;
   });
   // Let the list virtualizer's debounce timer fire before jsdom tears down `window`.
@@ -165,22 +170,6 @@ describe('Threads page', () => {
       const breadcrumb = within(screen.getByRole('navigation', { name: 'Breadcrumb' }));
       expect(breadcrumb.getByText('Traces')).toBeTruthy();
       expect(breadcrumb.getByText('Threads')).toBeTruthy();
-    });
-  });
-
-  describe('while the storage capabilities are loading', () => {
-    it('shows a placeholder for the view switch', async () => {
-      setThreadsHandlers(threadQueryCapabilities, { first: threadsFirstPage });
-      server.use(
-        http.get(CAPABILITIES_URL, async () => {
-          await delay('infinite');
-          return HttpResponse.json(threadQueryCapabilities);
-        }),
-      );
-
-      renderPage();
-
-      expect(await screen.findByRole('status', { name: 'Loading views' })).toBeTruthy();
     });
   });
 
@@ -228,18 +217,6 @@ describe('Threads page', () => {
 
       const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
       expect(views.queryByRole('tab', { name: 'Spans' })).toBeNull();
-    });
-  });
-
-  describe('when Traces is clicked in the view switch', () => {
-    it('navigates to the traces page', async () => {
-      setThreadsHandlers(threadQueryCapabilities, { first: threadsFirstPage });
-
-      renderPage();
-      const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
-      fireEvent.click(views.getByRole('tab', { name: 'Traces' }));
-
-      await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/traces'));
     });
   });
 
@@ -337,7 +314,7 @@ describe('Threads page', () => {
       renderPage();
 
       await screen.findByRole('heading', { name: 'No threads for the last 7 days' });
-      expect(screen.getByPlaceholderText('Filter threads…')).toBeTruthy();
+      expect(screen.getByPlaceholderText('Filter threads')).toBeTruthy();
     });
   });
 

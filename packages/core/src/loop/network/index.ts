@@ -24,6 +24,7 @@ import { getNeedsApprovalFn } from '../../tools/toolchecks';
 import type { IdGeneratorContext } from '../../types';
 import { safeStringify } from '../../utils/safe-stringify';
 import { createWorkflow } from '../../workflows/create';
+import { loadStepResults } from '../../workflows/run-journal';
 import type { Step, SuspendOptions } from '../../workflows/step';
 import { createStep } from '../../workflows/workflow';
 import { PRIMITIVE_TYPES } from '../types';
@@ -287,7 +288,7 @@ export function getLastMessage(messages: MessageListInput) {
       const parts = lastMessage.parts;
       if (Array.isArray(parts)) {
         const lastPart = parts[parts.length - 1];
-        if (lastPart?.type === 'text' && lastPart?.text) {
+        if (lastPart?.type === 'text' && 'text' in lastPart && typeof lastPart.text === 'string' && lastPart.text) {
           message = lastPart.text;
         }
       }
@@ -600,6 +601,7 @@ export async function createNetworkLoop({
           inputProcessors: [],
           logger: agent.getMastraInstance()?.getLogger() || noopLogger,
           agentName: agent.name,
+          agent,
         })
       : null;
 
@@ -1040,7 +1042,7 @@ export async function createNetworkLoop({
 
       let finalText = await result.text;
       if (toolCallDeclined) {
-        finalText = finalText + `\n\n${declineReason}`;
+        finalText += `\n\n${declineReason}`;
       }
 
       // When the sub-agent was aborted, skip saving partial results to memory
@@ -1137,35 +1139,34 @@ export async function createNetworkLoop({
             : {}),
           runId: stepId,
         });
-      } else {
-        const endPayload = {
-          task: inputData.task,
-          agentId,
-          result: finalText,
-          isComplete: false,
-          iteration: inputData.iteration,
-          runId: stepId,
-        };
-
-        await writer.write({
-          type: 'agent-execution-end',
-          payload: {
-            ...endPayload,
-            usage: await result.usage,
-          },
-          from: ChunkFrom.NETWORK,
-          runId,
-        });
-
-        return {
-          task: inputData.task,
-          primitiveId: inputData.primitiveId,
-          primitiveType: inputData.primitiveType,
-          result: finalText,
-          isComplete: false,
-          iteration: inputData.iteration,
-        };
       }
+      const endPayload = {
+        task: inputData.task,
+        agentId,
+        result: finalText,
+        isComplete: false,
+        iteration: inputData.iteration,
+        runId: stepId,
+      };
+
+      await writer.write({
+        type: 'agent-execution-end',
+        payload: {
+          ...endPayload,
+          usage: await result.usage,
+        },
+        from: ChunkFrom.NETWORK,
+        runId,
+      });
+
+      return {
+        task: inputData.task,
+        primitiveId: inputData.primitiveId,
+        primitiveType: inputData.primitiveType,
+        result: finalText,
+        isComplete: false,
+        iteration: inputData.iteration,
+      };
     },
   });
 
@@ -1253,7 +1254,12 @@ export async function createNetworkLoop({
 
       // listen for the network-level abort signal
       const networkAbortCb = async () => {
-        await run.cancel();
+        // run.cancel() rejects when the cancel can't be published; an event listener has no caller to surface it to.
+        try {
+          await run.cancel();
+        } catch (err) {
+          mastra?.getLogger()?.error(`Failed to cancel workflow "${wf.id}" run ${runId} after network abort`, err);
+        }
         await onAbort?.({
           primitiveType: 'workflow',
           primitiveId: inputData.primitiveId,
@@ -1318,7 +1324,21 @@ export async function createNetworkLoop({
 
       let runSuccess = true;
 
-      const workflowState = await stream.result;
+      const runResult = await stream.result;
+      // Aborted runs do not need their step history or a result saved to memory.
+      if (workflowCancelled && abortSignal?.aborted) {
+        return handleAbort({
+          writer,
+          eventType: 'workflow-execution-abort',
+          primitiveType: 'workflow',
+          primitiveId: inputData.primitiveId,
+          iteration: inputData.iteration,
+          task: inputData.task,
+        });
+      }
+
+      // The whole run result goes to memory and the stream, so a storage v2 result's steps are loaded back.
+      const workflowState = runResult && { ...runResult, steps: await loadStepResults(runResult.steps) };
 
       if (!workflowState?.status || workflowState?.status === 'failed') {
         runSuccess = false;
@@ -1368,18 +1388,6 @@ export async function createNetworkLoop({
 
       const memory = await agent.getMemory({ requestContext: requestContext });
       const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
-
-      // When the workflow was cancelled due to abort, skip saving results to memory
-      if (workflowCancelled && abortSignal?.aborted) {
-        return handleAbort({
-          writer,
-          eventType: 'workflow-execution-abort',
-          primitiveType: 'workflow',
-          primitiveId: inputData.primitiveId,
-          iteration: inputData.iteration,
-          task: inputData.task,
-        });
-      }
 
       await saveMessagesWithProcessors(
         memory,
@@ -1448,31 +1456,30 @@ export async function createNetworkLoop({
           runId,
         });
         return suspend({ ...toolData, workflowSuspended: suspendPayload });
-      } else {
-        const endPayload = {
-          task: inputData.task,
-          primitiveId: inputData.primitiveId,
-          primitiveType: inputData.primitiveType,
-          result: finalResult,
-          isComplete: false,
-          iteration: inputData.iteration,
-        };
-
-        await writer?.write({
-          type: 'workflow-execution-end',
-          payload: {
-            ...endPayload,
-            result: workflowState,
-            name: wf.name,
-            runId: stepId,
-            usage: await stream.usage,
-          },
-          from: ChunkFrom.NETWORK,
-          runId,
-        });
-
-        return endPayload;
       }
+      const endPayload = {
+        task: inputData.task,
+        primitiveId: inputData.primitiveId,
+        primitiveType: inputData.primitiveType,
+        result: finalResult,
+        isComplete: false,
+        iteration: inputData.iteration,
+      };
+
+      await writer?.write({
+        type: 'workflow-execution-end',
+        payload: {
+          ...endPayload,
+          result: workflowState,
+          name: wf.name,
+          runId: stepId,
+          usage: await stream.usage,
+        },
+        from: ChunkFrom.NETWORK,
+        runId,
+      });
+
+      return endPayload;
     },
   });
 
@@ -1713,68 +1720,66 @@ export async function createNetworkLoop({
               toolCallId,
             },
           });
-        } else {
-          if (rejection || !resumeData?.approved) {
-            const rejectionResult = rejection
-              ? typeof rejection.output === 'string'
-                ? rejection.output
-                : safeStringify(rejection.output)
-              : resolveDeclineReason(resumeData);
-            await saveMessagesWithProcessors(
-              memory,
-              [
-                {
-                  id: generateId(),
-                  type: 'text',
-                  role: 'assistant',
-                  content: {
-                    parts: [
-                      {
-                        type: 'text',
-                        text: JSON.stringify({
-                          isNetwork: true,
-                          selectionReason: inputData.selectionReason,
-                          primitiveType: inputData.primitiveType,
-                          primitiveId: inputData.primitiveId,
-                          finalResult: { result: rejectionResult, toolCallId },
-                          input: inputDataToUse,
-                        }),
-                      },
-                    ],
-                    format: 2,
-                    metadata: {
-                      mode: 'network',
+        } else if (rejection || !resumeData?.approved) {
+          const rejectionResult = rejection
+            ? typeof rejection.output === 'string'
+              ? rejection.output
+              : safeStringify(rejection.output)
+            : resolveDeclineReason(resumeData);
+          await saveMessagesWithProcessors(
+            memory,
+            [
+              {
+                id: generateId(),
+                type: 'text',
+                role: 'assistant',
+                content: {
+                  parts: [
+                    {
+                      type: 'text',
+                      text: JSON.stringify({
+                        isNetwork: true,
+                        selectionReason: inputData.selectionReason,
+                        primitiveType: inputData.primitiveType,
+                        primitiveId: inputData.primitiveId,
+                        finalResult: { result: rejectionResult, toolCallId },
+                        input: inputDataToUse,
+                      }),
                     },
+                  ],
+                  format: 2,
+                  metadata: {
+                    mode: 'network',
                   },
-                  createdAt: new Date(),
-                  threadId: initData.threadId || runId,
-                  resourceId: initData.threadResourceId || networkName,
                 },
-              ] as MastraDBMessage[],
-              processorRunner,
-              { requestContext },
-            );
+                createdAt: new Date(),
+                threadId: initData.threadId || runId,
+                resourceId: initData.threadResourceId || networkName,
+              },
+            ] as MastraDBMessage[],
+            processorRunner,
+            { requestContext },
+          );
 
-            const endPayload = {
-              task: inputData.task,
-              primitiveId: inputData.primitiveId,
-              primitiveType: inputData.primitiveType,
-              result: rejectionResult,
-              isComplete: false,
-              iteration: inputData.iteration,
-              toolCallId,
-              toolName: toolId,
-            };
+          const endPayload = {
+            task: inputData.task,
+            primitiveId: inputData.primitiveId,
+            primitiveType: inputData.primitiveType,
+            result: rejectionResult,
+            isComplete: false,
+            iteration: inputData.iteration,
+            toolCallId,
+            toolName: toolId,
+          };
 
-            await writer?.write({
-              type: 'tool-execution-end',
-              payload: endPayload,
-              from: ChunkFrom.NETWORK,
-              runId,
-            });
+          await writer?.write({
+            type: 'tool-execution-end',
+            payload: endPayload,
+            from: ChunkFrom.NETWORK,
+            runId,
+          });
 
-            return endPayload;
-          }
+          return endPayload;
         }
       }
 
@@ -2578,14 +2583,13 @@ export async function networkLoop<OUTPUT = undefined>({
           validationPassed: true,
           completionReason: completionResult.completionReason || 'Task complete',
         };
-      } else {
-        return {
-          ...inputData,
-          isComplete: false,
-          validationPassed: false,
-          validationFeedback: feedback,
-        };
       }
+      return {
+        ...inputData,
+        isComplete: false,
+        validationPassed: false,
+        validationFeedback: feedback,
+      };
     },
   });
 

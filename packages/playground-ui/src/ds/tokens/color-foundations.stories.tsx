@@ -8,6 +8,7 @@ import themeCss from '../../../theme.css?raw';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/Popover';
 import { Txt } from '../components/Txt/Txt';
 import { FoundationPage, FoundationSection } from './foundations-layout';
+import { SERIES_HUES } from '@/domains/metrics/lib/series-colors';
 import { cn } from '@/lib/utils';
 
 const meta = {
@@ -320,6 +321,8 @@ const surfaceRows: TokenRow[] = [
   { token: 'card', use: 'Raised container' },
   { token: 'popover', use: 'Menu, dropdown, tooltip' },
   { token: 'dialog', use: 'Dialog, drawer, alert dialog' },
+  { token: 'nested', use: 'Box inside a card or dialog' },
+  { token: 'row', use: 'Rows of a table or list' },
   { token: 'field', use: 'Text field fill' },
   { token: 'field-disabled', use: 'Disabled field fill' },
   { token: 'muted', use: 'Quiet region inside a container' },
@@ -327,9 +330,22 @@ const surfaceRows: TokenRow[] = [
 
 const textRows: TokenRow[] = [
   { token: 'foreground', use: <span className="text-foreground">Values, names, prose</span> },
-  { token: 'muted-foreground', use: <span className="text-muted-foreground">Labels, timestamps, descriptions</span> },
-  { token: 'placeholder', use: <span className="text-placeholder">Text not written yet</span> },
+  { token: 'muted-foreground', use: <span className="text-muted-foreground">Labels, descriptions</span> },
+  { token: 'subtle-foreground', use: <span className="text-subtle-foreground">Counts, timestamps, hints</span> },
+  { token: 'placeholder', use: <span className="text-placeholder">Input placeholders, disabled labels</span> },
+  { token: 'icon', use: <span className="text-icon">Icon beside foreground text</span> },
+  { token: 'muted-icon', use: <span className="text-muted-icon">Icon beside muted text</span> },
+  {
+    token: 'control-icon-rest',
+    use: <span className="text-(color:--control-icon-rest)">Icons inside a control, at rest</span>,
+  },
+  {
+    token: 'control-icon-hover',
+    use: <span className="text-(color:--control-icon-hover)">Icons inside a control, while hovered</span>,
+  },
 ];
+
+const lineRows: TokenRow[] = [{ token: 'canvas-link', use: 'Links between nodes on a board canvas' }];
 
 const productRoles = ['studio', 'server', 'observability', 'factory', 'workers', 'persistent-server'];
 
@@ -353,6 +369,11 @@ const chartRows: TokenRow[] = [
     use: step === 1 ? 'Share list rows, in rank order: green, sky, violet, teal, indigo' : '',
   })),
   { token: 'chart-share-rest', use: 'Share list rows past the colored ones, folded into one gray' },
+  ...SERIES_HUES.map((hue, i) => ({
+    token: `chart-series-${hue}`,
+    use: i === 0 ? 'Series by model, provider or key: each lab reserves one hue (seriesColors)' : '',
+  })),
+  { token: 'chart-series-neutral', use: 'xAI, and a white series in dark mode (black in light)' },
 ];
 
 const spanRows: TokenRow[] = [
@@ -437,13 +458,16 @@ export const Semantic: Story = {
       <FoundationPage
         eyebrow="Color"
         title="Semantic"
-        description="Surface and text roles. Status and badge roles live in Foundations/Status."
+        description="Surface, text and line roles. Status and badge roles live in Foundations/Status."
       >
         <FoundationSection label="Surfaces" description="Containers, outer to inner.">
           <TokenTable rows={surfaceRows} theme={theme} />
         </FoundationSection>
         <FoundationSection label="Text" description="Three tones. The distance between them is the hierarchy.">
           <TokenTable rows={textRows} theme={theme} />
+        </FoundationSection>
+        <FoundationSection label="Lines" description="Strokes that join things, never a container's edge.">
+          <TokenTable rows={lineRows} theme={theme} />
         </FoundationSection>
       </FoundationPage>
     );

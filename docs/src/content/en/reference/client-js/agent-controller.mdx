@@ -5,7 +5,7 @@ packages:
   - '@mastra/client-js'
 ---
 
-# Agent Controller API
+# Agent controller API
 
 The Agent Controller API reaches an [`AgentController`](/reference/agent-controller/agent-controller-class) registered on a Mastra instance over its HTTP routes. Use it from a browser or any other process that doesn't own the controller. A process that owns the controller uses the in-process [`Session`](/reference/agent-controller/session) instead.
 
@@ -49,6 +49,9 @@ Each entry's `id` is the key the controller is registered under in `new Mastra({
 Get an instance of an agent controller by the key it's registered under in `new Mastra({ agentControllers })`. The key can differ from the controller's `id`. In this example, pass `'coding'`, not `'coding-controller'`:
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { AgentController } from '@mastra/core/agent-controller'
+
 const codingController = new AgentController({ id: 'coding-controller', agent, modes })
 
 export const mastra = new Mastra({
@@ -170,6 +173,14 @@ Subscribes to the session's event stream over SSE. The promise resolves once the
     defaultValue: '60000',
     description:
       'Treats the stream as dropped after this many milliseconds without receiving any data. Server heartbeats, sent every 25 seconds, reset the timer, so only a silent connection, such as one left half-open by laptop sleep or a proxy timeout, trips it. A timeout is handled like any other drop: it triggers `reconnect` and `onReconnect` when reconnect is enabled, otherwise `onError`. Also bounds opening the stream: `subscribe()` rejects, and a reconnect attempt counts as failed, when no response arrives in time. Set to `0` to disable.',
+  },
+  {
+    name: 'displayState',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description:
+      'Set to `false` to receive no `display_state_changed` snapshots, including the one that opens the stream. The stream then opens with the session state as ordinary events instead: a `message_start` for the reply in flight, the latest `om_status`, and a `usage_update` carrying the token total. Use this when the client keeps its own state from events, since each snapshot carries the whole display state.',
   },
 ]}
 />
@@ -300,14 +311,16 @@ Returns: `Promise<SendNotificationResult>`
 
 | Group | Events |
 | - | - |
-| Run | `agent_start`, `agent_end`, `usage_update`, `goal_evaluation`, `follow_up_queued` |
+| Run | `agent_start`, `agent_end`, `usage_update`, `goal_evaluation`, `task_complete_evaluation`, `follow_up_queued` |
 | Messages | `message_start`, `message_update`, `message_end` |
 | Tools | `tool_input_start`, `tool_input_delta`, `tool_input_end`, `tool_start`, `tool_update`, `tool_end`, `shell_output`, `command_exit`, `tool_approval_required`, `tool_suspended`, `tool_suspension_cancelled`, `task_updated` |
-| Session | `state_changed`, `display_state_changed`, `mode_changed`, `model_changed`, `thread_changed`, `thread_created`, `thread_deleted`, `thread_title_updated` |
+| Session | `state_changed`, `display_state_changed`, `mode_changed`, `model_changed`, `thread_changed`, `thread_created`, `thread_deleted`, `thread_title_updated`, `thread_owner_changed` |
 | Subagents | `subagent_start`, `subagent_text_delta`, `subagent_tool_start`, `subagent_tool_end`, `subagent_end`, `subagent_model_changed` |
 | Memory | `om_observation_start`, `om_observation_end`, `om_observation_failed`, `om_reflection_start`, `om_reflection_end`, `om_reflection_failed`, `om_buffering_start`, `om_buffering_end`, `om_buffering_failed`, `om_model_changed`, `om_activation`, `om_status`, `om_thread_title_updated` |
 | Workspace | `workspace_ready`, `workspace_error`, `workspace_status_changed` |
 | Diagnostics | `info`, `error` |
+
+`usage_update` carries the step's `usage` and, from servers that send it, `total`: the thread's running token total after that step.
 
 Notifications are delivered as agent signals carried on messages rather than as `notification` or `notification_summary` controller events.
 

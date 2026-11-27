@@ -3,6 +3,97 @@ import { MarkdownHeaderTransformer, MarkdownTransformer } from './markdown';
 
 describe('MarkdownHeaderTransformer', () => {
   describe('table support', () => {
+    it('splits pipe-containing headings without treating them as table rows (#29178)', () => {
+      const transformer = new MarkdownHeaderTransformer([
+        ['#', 'Title'],
+        ['##', 'Section'],
+      ]);
+      const text = `# API | Reference
+## Inputs | Outputs
+| Name | Value |
+|------|-------|
+| key  | data  |
+## Next | Steps
+Follow up.`;
+
+      const result = transformer.splitText({ text });
+
+      expect(result.map(doc => [doc.text, doc.metadata])).toEqual([
+        [
+          '| Name | Value |\n|------|-------|\n| key  | data  |',
+          { Title: 'API | Reference', Section: 'Inputs | Outputs' },
+        ],
+        ['Follow up.', { Title: 'API | Reference', Section: 'Next | Steps' }],
+      ]);
+    });
+
+    it('retains pipe-containing headings and metadata when headers are not stripped (#29178)', () => {
+      const transformer = new MarkdownHeaderTransformer(
+        [
+          ['#', 'Title'],
+          ['##', 'Section'],
+        ],
+        false,
+        false,
+      );
+      const result = transformer.splitText({ text: '# API | Reference\n## Inputs | Outputs\nDetails.' });
+
+      expect(result.map(doc => [doc.text, doc.metadata])).toEqual([
+        [
+          '# API | Reference  \n## Inputs | Outputs  \nDetails.',
+          { Title: 'API | Reference', Section: 'Inputs | Outputs' },
+        ],
+      ]);
+    });
+
+    it('does not treat indented pipe-containing code as headings (#29178)', () => {
+      const transformer = new MarkdownHeaderTransformer([['##', 'Section']]);
+      const result = transformer.splitText({
+        text: '## Real | Heading\n    ## Fake | Heading\nAfter code.',
+      });
+
+      expect(result).toHaveLength(1);
+      expect(result[0]?.metadata).toEqual({ Section: 'Real | Heading' });
+      expect(result[0]?.text).toContain('    ## Fake | Heading');
+      expect(result[0]?.text).toContain('After code.');
+    });
+
+    it('does not split on pipe-containing headings inside longer fenced code (#29178)', () => {
+      const transformer = new MarkdownHeaderTransformer([['##', 'Section']]);
+      const result = transformer.splitText({
+        text: '## Real | Heading\n````markdown\n```\n## Fake | Heading\n````\nContent.',
+      });
+
+      expect(result).toHaveLength(1);
+      expect(result[0]?.metadata).toEqual({ Section: 'Real | Heading' });
+      expect(result[0]?.text).toContain('## Fake | Heading');
+      expect(result[0]?.text).toContain('Content.');
+    });
+
+    it('keeps inline backticks between configured headings from opening a fence (#29178)', () => {
+      const transformer = new MarkdownHeaderTransformer([['##', 'Section']]);
+      const result = transformer.splitText({
+        text: '## A\n```npm install```\n## B\nb text',
+      });
+
+      expect(result.map(doc => [doc.text, doc.metadata])).toEqual([
+        ['```npm install```', { Section: 'A' }],
+        ['b text', { Section: 'B' }],
+      ]);
+    });
+
+    it('does not split on pipe-containing headings inside fenced code (#29178)', () => {
+      const transformer = new MarkdownHeaderTransformer([['##', 'Section']]);
+      const result = transformer.splitText({
+        text: '## Real | Heading\n```markdown\n## Fake | Heading\n```\nContent.',
+      });
+
+      expect(result).toHaveLength(1);
+      expect(result[0]?.metadata).toEqual({ Section: 'Real | Heading' });
+      expect(result[0]?.text).toContain('## Fake | Heading');
+      expect(result[0]?.text).toContain('Content.');
+    });
+
     it('should keep tables together when splitting markdown', () => {
       const transformer = new MarkdownHeaderTransformer([
         ['#', 'Header 1'],

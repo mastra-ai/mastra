@@ -61,14 +61,17 @@ describe('InMemoryMemory listMessages include resource scope', () => {
     expect(result.messages.map(message => message.id)).toEqual(['b1']);
   });
 
-  it('still returns a cross-thread include from the same resource', async () => {
+  it.each([
+    ['still returns a cross-thread include from the same resource', 'thread-a2', 'resource-a', 'a4'],
+    ['keeps an empty resourceId in listMessages unscoped, like its main query', 'thread-b1', '', 'b1'],
+  ] as const)('%s', async (_title, threadId, resourceId, value) => {
     const result = await store.listMessages({
-      threadId: 'thread-a2',
-      resourceId: 'resource-a',
+      threadId,
+      resourceId,
       include: [{ id: 'a2', withPreviousMessages: 1, withNextMessages: 1 }],
     });
 
-    expect(result.messages.map(message => message.id)).toEqual(['a1', 'a2', 'a3', 'a4']);
+    expect(result.messages.map(message => message.id)).toEqual(['a1', 'a2', 'a3', value]);
   });
 
   it('does not return another resource on the semantic recall fast path', async () => {
@@ -141,16 +144,6 @@ describe('InMemoryMemory listMessages include resource scope', () => {
     });
 
     expect(result.messages).toEqual([]);
-  });
-
-  it('keeps an empty resourceId in listMessages unscoped, like its main query', async () => {
-    const result = await store.listMessages({
-      threadId: 'thread-b1',
-      resourceId: '',
-      include: [{ id: 'a2', withPreviousMessages: 1, withNextMessages: 1 }],
-    });
-
-    expect(result.messages.map(message => message.id)).toEqual(['a1', 'a2', 'a3', 'b1']);
   });
 });
 
@@ -266,5 +259,91 @@ describe('InMemoryMemory swapBufferedReflectionToActive under a takeover', () =>
 
     const history = await memory.getObservationalMemoryHistory(null, 'resource-1');
     expect(history.find(r => r.id === record.id)?.bufferedReflection).toBe('b reflection');
+  });
+});
+
+describe('InMemoryMemory swapBufferedReflectionToActive bufferedReflectionVerified', () => {
+  const resourceId = 'resource-1';
+
+  async function setup() {
+    const memory = new InMemoryMemory({ db: new InMemoryDB() });
+    const initial = await memory.initializeObservationalMemory({
+      threadId: null,
+      resourceId,
+      scope: 'resource',
+      config: { observationThreshold: 5000, reflectionThreshold: 40000 },
+    });
+    await memory.updateBufferedReflection({
+      id: initial.id,
+      reflection: 'a reflection',
+      tokenCount: 1,
+      inputTokenCount: 1,
+      reflectedObservationLineCount: 0,
+    });
+    const live = await memory.getObservationalMemory(null, resourceId);
+    if (!live) throw new Error('expected an observational memory head');
+    return { memory, live };
+  }
+
+  async function expectReadsUnmarked(memory: InMemoryMemory) {
+    const head = await memory.getObservationalMemory(null, resourceId);
+    expect(head?.bufferedReflectionVerified).toBeUndefined();
+    const history = await memory.getObservationalMemoryHistory(null, resourceId);
+    expect(history.length).toBe(2);
+    for (const record of history) {
+      expect(record.bufferedReflectionVerified).toBeUndefined();
+    }
+  }
+
+  it('marks the successor when the caller passes the live stored record', async () => {
+    const { memory, live } = await setup();
+    // getObservationalMemory hands out the stored object itself.
+    expect(await memory.getObservationalMemory(null, resourceId)).toBe(live);
+
+    const next = await memory.swapBufferedReflectionToActive({ currentRecord: live, tokenCount: 1 });
+
+    expect(next.id).not.toBe(live.id);
+    expect(next.activeObservations).toBe('a reflection');
+    expect(next.bufferedReflectionVerified).toBe(true);
+    await expectReadsUnmarked(memory);
+    const retired = (await memory.getObservationalMemoryHistory(null, resourceId)).find(r => r.id === live.id);
+    expect(retired?.supersededBy).toBe(next.id);
+    expect(retired?.bufferedReflection).toBeUndefined();
+    expect(retired?.reflectedObservationLineCount).toBeUndefined();
+  });
+
+  it('marks the successor when the caller passes a copied snapshot with its buffered reflection', async () => {
+    const { memory, live } = await setup();
+    const snapshot = structuredClone(live);
+
+    const next = await memory.swapBufferedReflectionToActive({ currentRecord: snapshot, tokenCount: 1 });
+
+    expect(next.id).not.toBe(live.id);
+    expect(next.bufferedReflectionVerified).toBe(true);
+    await expectReadsUnmarked(memory);
+  });
+
+  it('leaves the successor unmarked when the snapshot carries no buffered reflection', async () => {
+    const { memory, live } = await setup();
+    const { bufferedReflection: _omitted, ...unchecked } = structuredClone(live);
+
+    const next = await memory.swapBufferedReflectionToActive({ currentRecord: unchecked, tokenCount: 1 });
+
+    expect(next.id).not.toBe(live.id);
+    expect(next.activeObservations).toBe('a reflection');
+    expect(next.bufferedReflectionVerified).toBeUndefined();
+    await expectReadsUnmarked(memory);
+  });
+
+  it('leaves the head unmarked when a retry targets the superseded record', async () => {
+    const { memory, live } = await setup();
+    const snapshot = structuredClone(live);
+    const next = await memory.swapBufferedReflectionToActive({ currentRecord: snapshot, tokenCount: 1 });
+
+    const again = await memory.swapBufferedReflectionToActive({ currentRecord: snapshot, tokenCount: 1 });
+
+    expect(again.id).toBe(next.id);
+    expect(again.bufferedReflectionVerified).toBeUndefined();
+    await expectReadsUnmarked(memory);
   });
 });

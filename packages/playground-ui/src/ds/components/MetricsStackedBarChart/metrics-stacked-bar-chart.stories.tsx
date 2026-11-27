@@ -11,20 +11,16 @@ import { formatFullNumber } from '@/utils/cost';
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact' });
 
 const data: Record<string, unknown>[] = Array.from({ length: 14 }, (_, i) => ({
-  time: new Date(2026, 8, 14 + i).toLocaleDateString('en-US', { month: 'short', day: '2-digit' }),
+  time: new Date(2026, 8, 14 + i).toLocaleDateString(undefined, { month: 'short', day: '2-digit' }),
   tokens: Math.round(40 + 30 * Math.sin(i / 2)),
   storage: Math.round(12 + 6 * Math.cos(i / 3)),
   compute: i % 5 === 0 ? 0 : Math.round(8 + i),
 }));
 
-const sum = (key: string) => (points: Record<string, unknown>[]) => ({
-  value: usd.format(points.reduce<number>((total, p) => total + (typeof p[key] === 'number' ? p[key] : 0), 0)),
-});
-
 const series = [
-  { dataKey: 'tokens', label: 'Tokens', color: 'var(--chart-blue)', aggregate: sum('tokens') },
-  { dataKey: 'storage', label: 'Storage', color: 'var(--chart-green)', aggregate: sum('storage') },
-  { dataKey: 'compute', label: 'Compute', color: 'var(--chart-orange)', aggregate: sum('compute') },
+  { dataKey: 'tokens', label: 'Tokens', color: 'var(--chart-blue)' },
+  { dataKey: 'storage', label: 'Storage', color: 'var(--chart-green)' },
+  { dataKey: 'compute', label: 'Compute', color: 'var(--chart-orange)' },
 ] satisfies MetricsLineChartSeries[];
 
 const meta: Meta<typeof MetricsStackedBarChart> = {
@@ -150,7 +146,7 @@ export const WithoutYAxis: Story = {
 
 /**
  * A handful of errors next to thousands of successes, and one request in a quiet hour: every
- * non-zero value still draws a few readable pixels, zeros draw nothing.
+ * non-zero value still draws a few readable pixels.
  */
 export const TinyValues: Story = {
   args: {
@@ -165,6 +161,54 @@ export const TinyValues: Story = {
     ],
     valueFormatter: count,
     showYAxis: false,
+  },
+};
+
+const tokenSeries = [
+  { dataKey: 'input', label: 'Input', color: 'var(--chart-green)' },
+  { dataKey: 'cacheRead', label: 'Cache read', color: 'var(--chart-purple)' },
+  { dataKey: 'output', label: 'Output', color: 'var(--chart-cyan)' },
+] satisfies MetricsLineChartSeries[];
+
+/** A week in 6-hour buckets with traffic only in `busy` ones; `missing` ones have no data at all. */
+const quietWeek = (busy: number[], missing: number[] = []) =>
+  Array.from({ length: 28 }, (_, i) => {
+    const at = new Date(2026, 9, 1, i * 6);
+    const tokens = busy.includes(i) ? { input: 8_200, cacheRead: 34_000, output: 12_000 } : undefined;
+    return {
+      time: at.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+      tsMs: at.getTime(),
+      ...(missing.includes(i) ? {} : { input: 0, cacheRead: 0, output: 0, ...tokens }),
+    };
+  });
+
+/** A bucket that counted zero draws a short neutral stub, so a quiet stretch reads as "nothing happened". */
+export const QuietWeek: Story = {
+  args: { data: quietWeek([25]), series: tokenSeries, valueFormatter: count, showYAxis: false },
+};
+
+/** A bucket whose values are missing stays empty (here Oct 2): only a real zero gets a stub. */
+export const ZeroAndMissing: Story = {
+  args: {
+    data: quietWeek([3, 9, 10, 18, 25], [4, 5, 6, 7]),
+    series: tokenSeries,
+    valueFormatter: count,
+    showYAxis: false,
+  },
+};
+
+/** Columns only a few pixels wide: the stubs thin to one pixel, so they don't read as a solid bar. */
+export const ManyQuietBuckets: Story = {
+  args: {
+    data: Array.from({ length: 240 }, (_, i) => ({
+      time: `${i % 24}:00`,
+      tsMs: new Date(2026, 9, 1, i).getTime(),
+      ok: i % 24 > 8 && i % 24 < 17 ? Math.round(40 + 30 * Math.sin(i)) : 0,
+    })),
+    series: [{ dataKey: 'ok', label: 'Traces', color: 'var(--chart-blue)' }],
+    valueFormatter: count,
+    showYAxis: false,
+    showLegend: false,
   },
 };
 
@@ -190,8 +234,9 @@ export const Loading: Story = {
 };
 
 /**
- * `height="fill"` in two cards of different content heights: each chart takes its card's free
- * height (the content must be a flex column), so both cards end on one line.
+ * `height="fill"` in two cards of different content heights (the right chart's legend has an
+ * extra entry): each chart takes its card's free height (the content must be a flex column), so
+ * both cards end on one line.
  */
 export const FillHeight: Story = {
   render: () => {
@@ -199,12 +244,12 @@ export const FillHeight: Story = {
     const cards = [
       {
         title: 'Requests',
-        description: 'Responses by status class. A wrapping description makes this top bar taller.',
+        total: count(requestsByHour.reduce((sum, b) => sum + b.total, 0)),
         chart: <MetricsStackedBarChart {...fill} data={requestsByHour} series={statusSeries} />,
       },
       {
         title: 'Cold starts',
-        description: 'Requests that woke a stopped app.',
+        total: String(requestsByHour.reduce((sum, b) => sum + b.coldStarts, 0)),
         chart: (
           <MetricsStackedBarChart
             {...fill}
@@ -220,7 +265,8 @@ export const FillHeight: Story = {
         {cards.map(card => (
           <MetricsCard key={card.title} className="min-h-0! min-w-0!">
             <MetricsCard.TopBar>
-              <MetricsCard.TitleAndDescription title={card.title} description={card.description} />
+              <MetricsCard.Title>{card.title}</MetricsCard.Title>
+              <MetricsCard.Total value={card.total} />
             </MetricsCard.TopBar>
             <MetricsCard.Content className="flex h-full flex-col">{card.chart}</MetricsCard.Content>
           </MetricsCard>

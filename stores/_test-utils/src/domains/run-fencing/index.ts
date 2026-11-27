@@ -4,14 +4,16 @@ import type {
   RunFence,
   RunFenceContext,
   RunFenceScope,
+  RunOwnershipRecord,
   WorkflowsStorage,
 } from '@mastra/core/storage';
 import { isRunFenceConflictError, setRunFenceContext } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { createSampleMessageV2, createSampleThread } from '../memory/data';
+import { createSummaryListingTests } from './summary-listing';
 
 export interface RunFencingTestOptions {
   storage: MastraStorage;
@@ -107,6 +109,12 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
       expect(result.acquired).toBe(true);
       return { runId, ownerId, generation: result.record!.generation };
     };
+    /** Waits until the lease of `runId` reads as no longer live. */
+    const untilLapsed = (runId: string) =>
+      vi.waitFor(async () => expect((await workflows.getRunOwnership({ runId }))?.live).toBe(false), {
+        timeout: 5_000,
+        interval: 20,
+      });
 
     describe('ownership', () => {
       it("claims an unowned run at a generation seeded from the store's clock", async ctx => {
@@ -237,13 +245,98 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
           live: false,
         });
         expect(await workflows.releaseRunOwnership(fenceA)).toBe(true);
-        expect((await workflows.renewRunOwnership({ ...fenceA, leaseMs: LEASE_MS })).renewed).toBe(false);
+        // A renewal after release fails and returns the released record unchanged; core reads it to tell its own
+        // release from a takeover (#30206).
+        const lateRenewal = await workflows.renewRunOwnership({ ...fenceA, leaseMs: LEASE_MS });
+        expect(lateRenewal.renewed).toBe(false);
+        expect(lateRenewal.record).toMatchObject({
+          generation: fenceA.generation,
+          ownerId: 'owner-a',
+          leaseExpiresAt: null,
+          live: false,
+        });
 
         const fenceB = await claimed(runId, 'owner-b');
         expect(fenceB.generation).toBe(fenceA.generation + 1);
         expect(await workflows.releaseRunOwnership(fenceA)).toBe(false);
       });
+
+      // Core reads `leaseExpiresAt - updatedAt` as the length of a lapsed lease, to back off on the
+      // restart that takes it over. Stores that don't report `updatedAt` restart with the base length.
+      it('reports when the record last changed, so a lease reads back about its own length', async ctx => {
+        if (!(await workflows.supportsRunFencing())) return ctx.skip();
+        const runId = `run-${randomUUID()}`;
+        const claimedRecord = (await claim(runId, 'owner-a')).record!;
+        if (claimedRecord.updatedAt === undefined) return ctx.skip();
+        // Stores that read their clock once per value (pg's `clock_timestamp()`) can be a few ms off.
+        const expectLength = (record: RunOwnershipRecord | null, leaseMs: number) => {
+          const length = record!.leaseExpiresAt!.getTime() - record!.updatedAt!.getTime();
+          expect(Math.abs(length - leaseMs)).toBeLessThan(50);
+        };
+        expectLength(claimedRecord, LEASE_MS);
+        expectLength(await workflows.getRunOwnership({ runId }), LEASE_MS);
+
+        const fenceA: RunFence = { runId, ownerId: 'owner-a', generation: claimedRecord.generation };
+        await sleep(20);
+        const renewed = await workflows.renewRunOwnership({ ...fenceA, leaseMs: LEASE_MS * 2 });
+        expectLength(renewed.record, LEASE_MS * 2);
+        expect(renewed.record!.updatedAt!.getTime()).toBeGreaterThan(claimedRecord.updatedAt.getTime());
+
+        await sleep(20);
+        expect(await workflows.releaseRunOwnership(fenceA)).toBe(true);
+        const released = await workflows.getRunOwnership({ runId });
+        expect(released).toMatchObject({ leaseExpiresAt: null });
+        expect(released!.updatedAt!.getTime()).toBeGreaterThan(renewed.record!.updatedAt!.getTime());
+      });
+
+      it('reads many runs at once: live, released and expired records, and nothing for unclaimed runs', async ctx => {
+        if (!(await workflows.supportsRunFencing())) {
+          return ctx.skip();
+        }
+
+        const prefix = `run-${randomUUID()}`;
+        const live = await claimed(`${prefix}-live`, 'owner-live');
+        const released = await claimed(`${prefix}-released`, 'owner-released');
+        expect(await workflows.releaseRunOwnership(released)).toBe(true);
+        const expiredRunId = `${prefix}-expired`;
+        const expired = await workflows.claimRunOwnership({
+          runId: expiredRunId,
+          ownerId: 'owner-expired',
+          leaseMs: 1,
+        });
+        expect(expired.acquired).toBe(true);
+        await untilLapsed(expiredRunId);
+
+        // More ids than the largest chunk an adapter reads at once (MongoDB's 1,000), with claimed
+        // runs at the start, in the middle and at the end.
+        const unclaimed = Array.from({ length: 998 }, (_, i) => `${prefix}-unclaimed-${i}`);
+        const runIds = [live.runId, ...unclaimed.slice(0, 499), released.runId, ...unclaimed.slice(499), expiredRunId];
+        const records = await workflows.getRunOwnerships({ runIds });
+
+        expect([...records.keys()].sort()).toEqual([live.runId, released.runId, expiredRunId].sort());
+        expect([live.runId, released.runId, expiredRunId].map(runId => records.get(runId)?.live)).toEqual([
+          true,
+          false,
+          false,
+        ]);
+        // Every field as the single-run read returns it.
+        for (const runId of [live.runId, released.runId, expiredRunId]) {
+          expect(records.get(runId)).toEqual(await workflows.getRunOwnership({ runId }));
+        }
+
+        // Ids that differ from a claimed one only by a trailing space or case. Where the store's
+        // collation makes the single-run read match them (MySQL, MSSQL), the batch must too.
+        const lookalikes = [`${live.runId} `, live.runId.toUpperCase()];
+        const lookalikeRecords = await workflows.getRunOwnerships({ runIds: lookalikes });
+        for (const runId of lookalikes) {
+          expect(lookalikeRecords.get(runId) ?? null).toEqual(await workflows.getRunOwnership({ runId }));
+        }
+
+        expect((await workflows.getRunOwnerships({ runIds: [] })).size).toBe(0);
+      });
     });
+
+    createSummaryListingTests(() => workflows);
 
     describe('fenced writes', () => {
       const workflowName = 'run-fencing-workflow';
@@ -615,10 +708,12 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
           }),
         );
         await expectFenceConflict(memory.updateResource({ resourceId: thread.resourceId, workingMemory: 'stale' }));
+        await expectFenceConflict(memory.updateThreadMetadata({ id: thread.id, update: () => ({ stale: true }) }));
       });
       expect(scopeA.lookups.every(lookup => lookup.store === memory)).toBe(true);
-      expect(scopeA.conflicts).toEqual([fenceA, fenceA, fenceA]);
+      expect(scopeA.conflicts).toEqual([fenceA, fenceA, fenceA, fenceA]);
       expect((await memory.listMessages({ threadId: thread.id })).messages).toHaveLength(0);
+      expect((await memory.getThreadById({ threadId: thread.id }))?.metadata?.stale).toBeUndefined();
 
       // A scope that covers another store leaves this store's writes unfenced.
       const elsewhere = recordingScope(store => (store === memory ? undefined : fenceA));

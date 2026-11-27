@@ -1637,7 +1637,7 @@ describe('DurableAgent resume model metadata', () => {
 
       // The fork keeps the caller's persistence policy instead of reverting to
       // the recovery-aware default (which would persist `pending`).
-      const forkPolicy = (fork as any).resolveShouldPersistSnapshot();
+      const forkPolicy = (fork as DurableAgent).getWorkflow().options.shouldPersistSnapshot!;
       expect(forkPolicy).toBe(customPredicate);
       expect(forkPolicy({ workflowStatus: 'pending', stepResults: {} })).toBe(false);
       expect(forkPolicy({ workflowStatus: 'suspended', stepResults: {} })).toBe(true);

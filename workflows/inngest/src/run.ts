@@ -17,6 +17,7 @@ import type {
   TimeTravelContext,
   WorkflowEngineType,
   WorkflowResult,
+  WorkflowRunStatus,
   WorkflowStreamEvent,
 } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
@@ -30,6 +31,18 @@ import {
   mergeResumeRequestContext,
 } from './durable-event-payload';
 import type { InngestEngineType } from './types';
+
+// Statuses a cancel can still apply to. A finished run keeps its final status
+// (success, failed, canceled, tripwire, bailed), but cancel must still cover a
+// live run that is starting or blocked waiting for a resume.
+const CANCELABLE_RUN_STATUSES: WorkflowRunStatus[] = [
+  'running',
+  'pending',
+  'waiting',
+  'suspended',
+  'paused',
+  'skipped',
+];
 
 export class InngestRun<
   TEngineType = InngestEngineType,
@@ -250,6 +263,10 @@ export class InngestRun<
   async cancel() {
     const storage = this.#mastra?.getStorage();
 
+    // A cancel can arrive after the run already finished (a retried or late
+    // cancel event). Leave a finished run's final status and results untouched.
+    if (await this.hasReachedTerminalStatus()) return;
+
     await this.inngest.send({
       name: `cancel.workflow.${this.workflowId}`,
       data: {
@@ -272,6 +289,10 @@ export class InngestRun<
           status: 'canceled' as any,
           value: snapshot.value,
         },
+        // Only mark the run canceled while it is still live. The run can finish
+        // between the check above and this write, and the guard keeps that
+        // finishing snapshot from being rewritten back to 'canceled'.
+        expectedStatus: CANCELABLE_RUN_STATUSES,
       });
     }
   }
@@ -863,28 +884,31 @@ export class InngestRun<
 
   watch(cb: (event: WorkflowStreamEvent) => void): () => void {
     let active = true;
-    const streamPromise = subscribe(
-      {
-        channel: `workflow:${this.workflowId}:${this.runId}`,
-        topics: ['watch'],
-        app: this.inngest,
-      },
-      (message: any) => {
+    // Attach the rejection handler at creation: callers only unwatch once the run
+    // finishes, and realtime is best-effort since run completion is also polled.
+    const subscriptionPromise = subscribe({
+      channel: `workflow:${this.workflowId}:${this.runId}`,
+      topics: ['watch'],
+      app: this.inngest,
+      onMessage: (message: any) => {
         if (active) {
           cb(message.data);
         }
       },
-    );
+    }).catch(error => {
+      const message = `Inngest realtime watch subscription failed for workflow "${this.workflowId}" run "${this.runId}"`;
+      const logger = this.#mastra?.getLogger();
+      if (logger) {
+        logger.warn(message, { error });
+      } else {
+        console.warn(message, error);
+      }
+      return undefined;
+    });
 
     return () => {
       active = false;
-      streamPromise
-        .then(async (stream: Awaited<typeof streamPromise>) => {
-          return stream.cancel();
-        })
-        .catch(err => {
-          console.error(err);
-        });
+      subscriptionPromise.then(subscription => subscription?.close()).catch(() => {});
     };
   }
 

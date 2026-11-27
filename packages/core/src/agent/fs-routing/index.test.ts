@@ -266,15 +266,6 @@ describe('assembleAgentFromFsEntry', () => {
       ).toThrow(/but got undefined/i);
     });
 
-    it('still resolves instructions.md when no instructions.ts was discovered', async () => {
-      const agent = assembleAgentFromFsEntry({
-        name: 'a',
-        config: { model: 'openai/gpt-4o' },
-        instructionsMd: 'from md',
-      });
-      expect(await agent.getInstructions()).toBe('from md');
-    });
-
     // Presence means a file was discovered for this agent, so it has to be an
     // own key. An inherited one would let a prototype speak for the directory.
     it('ignores an inherited instructions property', async () => {

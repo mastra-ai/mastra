@@ -11,6 +11,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { WorkflowRunState } from '../../../workflows/types';
+import type { MastraDBMessage } from '../../message-list';
 import { DurableStepIds } from '../constants';
 
 const LETTERS = ['A', 'B', 'C', 'D'] as const;
@@ -86,7 +87,8 @@ async function startProcess() {
       },
     },
   });
-  const durableAgent = createDurableAgent({ agent });
+  // The test captures and restores runs through v1's snapshot writes.
+  const durableAgent = createDurableAgent({ agent, storageVersion: 1 });
   const mastra = new Mastra({
     agents: { durableAgent },
     storage,
@@ -151,7 +153,21 @@ describe('DurableAgent concurrent runs', () => {
     );
     const runIdOf = (letter: Letter) => runIds[LETTERS.indexOf(letter)]!;
 
-    expect(perRun(letter => secretsIn(innerPending.get(runIdOf(letter))?.snapshot))).toEqual(
+    // A snapshot holds a message memory already stores as a ref to its row.
+    const stored = new Map<string, MastraDBMessage>();
+    for (const letter of LETTERS) {
+      const { messages } = await original.memory.recall({
+        threadId: `thread-${letter}`,
+        resourceId: `resource-${letter}`,
+      });
+      for (const message of messages) stored.set(message.id, message);
+    }
+    const refRows = (snapshot: unknown) =>
+      [...JSON.stringify(snapshot ?? null).matchAll(/"__ref":"memory","id":"([^"]+)"/g)].flatMap(
+        m => stored.get(m[1]!) ?? [],
+      );
+    const withRefs = (snapshot: unknown) => [snapshot, refRows(snapshot)];
+    expect(perRun(letter => secretsIn(withRefs(innerPending.get(runIdOf(letter))?.snapshot)))).toEqual(
       perRun(letter => [letter]),
     );
 
@@ -160,11 +176,16 @@ describe('DurableAgent concurrent runs', () => {
       for (const row of atInnerPending.get(runIdOf(letter))!) {
         await recovering.workflows.persistWorkflowSnapshot(row);
       }
+      // Memory already held the rows those snapshots reference when they were written.
+      const rows = [...new Set(atInnerPending.get(runIdOf(letter))!.flatMap(row => refRows(row.snapshot)))];
+      await recovering.memory.saveMessages({ messages: rows });
       expect(await collectText(await recovering.durableAgent.recover(runIdOf(letter)))).toBe('done');
       expect(recovering.prompts.map(prompt => secretsIn(prompt))).toEqual([[letter], [letter]]);
       for (const other of LETTERS) {
         const saved = await recovering.memory.recall({ threadId: `thread-${other}`, resourceId: `resource-${other}` });
         expect(secretsIn(saved.messages)).toEqual(other === letter ? [letter] : []);
+        // The seeded input alone holds the secret; the recovered run saved its reply next to it.
+        expect(saved.messages.map(message => message.role)).toEqual(other === letter ? ['user', 'assistant'] : []);
       }
     }
   }, 30_000);

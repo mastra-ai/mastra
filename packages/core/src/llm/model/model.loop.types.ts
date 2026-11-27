@@ -10,7 +10,7 @@ import type {
 import type { JSONSchema7 } from 'json-schema';
 import type { MessageList } from '../../agent';
 import type { LoopOptions } from '../../loop/types';
-import type { ObservabilityContext, Span, SpanType } from '../../observability';
+import type { ModelGenerationAttributes, ObservabilityContext, Span, SpanType } from '../../observability';
 import type { OutputProcessorOrWorkflow } from '../../processors';
 import type { RequestContext } from '../../request-context';
 import type { StandardSchemaWithJSON, ZodSchema } from '../../schema';
@@ -34,6 +34,8 @@ export type StreamTextOnStepFinishCallback<Tools extends ToolSet> = (
 ) => Promise<void> | void;
 
 export type ModelLoopStreamArgs<TOOLS extends ToolSet, OUTPUT = undefined> = {
+  /** @internal Agent-owner notification; model usage is recorded before this callback. */
+  onTracingTripwire?: (tripwire: import('../../stream/types').StepTripwireData, text: string) => void;
   methodType: ModelMethodType;
   /** Set only by the agent's main loop so its first chunk stamps `completionStartTime` on this run. */
   agentRunSpan?: Span<SpanType.AGENT_RUN>;
@@ -44,7 +46,9 @@ export type ModelLoopStreamArgs<TOOLS extends ToolSet, OUTPUT = undefined> = {
   threadId?: string;
   returnScorerData?: boolean;
   messageList: MessageList;
+  /** What this call produces, when it is not part of the conversation. Recorded on the MODEL_GENERATION span. */
+  resultType?: ModelGenerationAttributes['resultType'];
 } & ObservabilityContext &
-  Omit<LoopOptions<TOOLS, OUTPUT>, 'models' | 'messageList'>;
+  Omit<LoopOptions<TOOLS, OUTPUT>, 'models' | 'messageList' | 'onTracingTripwire'>;
 
 export type ModelMethodType = 'generate' | 'stream';

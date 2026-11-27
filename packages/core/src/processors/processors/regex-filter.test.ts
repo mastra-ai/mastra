@@ -153,43 +153,18 @@ describe('RegexFilterProcessor', () => {
   });
 
   describe('processInput - block strategy', () => {
-    it('blocks when email detected', () => {
+    it.each([
+      ['blocks when email detected', 'Contact me at user@example.com'],
+      ['blocks when phone number detected', 'Call me at (555) 123-4567'],
+      ['blocks when SSN detected', 'SSN is 123-45-6789'],
+      ['blocks when credit card detected', 'Card: 4111 1111 1111 1111'],
+    ] as const)('%s', (_title, input) => {
       const filter = new RegexFilterProcessor({
         presets: ['pii'],
         strategy: 'block',
       });
 
-      const args = createInputArgs([createMessage('Contact me at user@example.com')]);
-      expect(() => filter.processInput(args)).toThrow(TripWire);
-    });
-
-    it('blocks when phone number detected', () => {
-      const filter = new RegexFilterProcessor({
-        presets: ['pii'],
-        strategy: 'block',
-      });
-
-      const args = createInputArgs([createMessage('Call me at (555) 123-4567')]);
-      expect(() => filter.processInput(args)).toThrow(TripWire);
-    });
-
-    it('blocks when SSN detected', () => {
-      const filter = new RegexFilterProcessor({
-        presets: ['pii'],
-        strategy: 'block',
-      });
-
-      const args = createInputArgs([createMessage('SSN is 123-45-6789')]);
-      expect(() => filter.processInput(args)).toThrow(TripWire);
-    });
-
-    it('blocks when credit card detected', () => {
-      const filter = new RegexFilterProcessor({
-        presets: ['pii'],
-        strategy: 'block',
-      });
-
-      const args = createInputArgs([createMessage('Card: 4111 1111 1111 1111')]);
+      const args = createInputArgs([createMessage(input)]);
       expect(() => filter.processInput(args)).toThrow(TripWire);
     });
 
@@ -288,17 +263,26 @@ describe('RegexFilterProcessor', () => {
       expect(text).not.toContain('1111');
     });
 
-    it('redacts a bare card number surrounded by text', () => {
-      expect(redactedText('pay 4111111111111111 now')).toBe('pay [CREDIT_CARD] now');
+    it.each([
+      ['redacts a bare card number surrounded by text', 'pay 4111111111111111 now', 'pay [CREDIT_CARD] now'],
+      [
+        'redacts non-overlapping matches independently',
+        'ssn 123-45-6789 card 4111111111111111',
+        'ssn [SSN] card [CREDIT_CARD]',
+      ],
+      [
+        'redacts several overlap groups in one message',
+        'card 4111111111111111 and card 4222222222222222',
+        'card [CREDIT_CARD] and card [CREDIT_CARD]',
+      ],
+      ['keeps offsets correct after multi-byte characters', '💳 4111111111111111 ✅', '💳 [CREDIT_CARD] ✅'],
+    ] as const)('%s', (_title, input, expected) => {
+      expect(redactedText(input)).toBe(expected);
     });
 
     it('still redacts a separated card number', () => {
       expect(redactedText('card 4111-1111-1111-1111')).toBe('card [CREDIT_CARD]');
       expect(redactedText('card 4111 1111 1111 1111')).toBe('card [CREDIT_CARD]');
-    });
-
-    it('redacts non-overlapping matches independently', () => {
-      expect(redactedText('ssn 123-45-6789 card 4111111111111111')).toBe('ssn [SSN] card [CREDIT_CARD]');
     });
 
     it('redacts a contained match as a single region', () => {
@@ -354,16 +338,6 @@ describe('RegexFilterProcessor', () => {
       const result = filter.processInput(createInputArgs([createMessage('abcd')])) as MastraDBMessage[];
 
       expect((result[0].content as any).parts[0].text).toBe('[A][B]');
-    });
-
-    it('redacts several overlap groups in one message', () => {
-      expect(redactedText('card 4111111111111111 and card 4222222222222222')).toBe(
-        'card [CREDIT_CARD] and card [CREDIT_CARD]',
-      );
-    });
-
-    it('keeps offsets correct after multi-byte characters', () => {
-      expect(redactedText('💳 4111111111111111 ✅')).toBe('💳 [CREDIT_CARD] ✅');
     });
 
     it('reports every overlapping match when blocking', () => {
@@ -513,20 +487,15 @@ describe('RegexFilterProcessor', () => {
       expect(redaction.overlappingRules).toEqual(expect.arrayContaining(['phone', 'credit-card']));
     });
 
-    it('omits overlappingRules when only one rule matched', async () => {
+    it.each([
+      ['omits overlappingRules when only one rule matched', 'overlappingRules'],
+      ['omits the redacted value by default', 'value'],
+    ] as const)('%s', async (_title, expected) => {
       const { filter, violations } = createFilter();
 
       await filter.processInput(createInputArgs([createMessage('mail a@b.com')]));
 
-      expect(violations[0].detail.redactions[0]).not.toHaveProperty('overlappingRules');
-    });
-
-    it('omits the redacted value by default', async () => {
-      const { filter, violations } = createFilter();
-
-      await filter.processInput(createInputArgs([createMessage('mail a@b.com')]));
-
-      expect(violations[0].detail.redactions[0]).not.toHaveProperty('value');
+      expect(violations[0].detail.redactions[0]).not.toHaveProperty(expected);
     });
 
     it('includes the redacted value when opted in', async () => {

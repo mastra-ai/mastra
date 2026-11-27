@@ -6,6 +6,7 @@ import type { PendingApprovalRecord } from './stream-helpers';
 import {
   ToolTracker,
   chunkToFallbackMessage,
+  cleanBufferedText,
   editOrPostMessage,
   postFileAttachment,
   postStreamError,
@@ -127,9 +128,9 @@ export async function runStaticDriver({
   const toolMessageIds = new Map<string, string | undefined>();
 
   const flushText = async () => {
-    // Strip zero-width chars (U+200B, U+200C, U+200D, U+FEFF) that LLMs
-    // sometimes emit, then post the accumulated text as a single message.
-    const cleaned = textBuffer.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+    // `cleanBufferedText` removes U+200B/U+FEFF everywhere and trims
+    // whitespace/ZWNJ/ZWJ only at the edges, so internal joiners survive.
+    const cleaned = cleanBufferedText(textBuffer);
     if (cleaned) {
       try {
         await chatThread.post(textFormat === 'plain' ? cleaned : { markdown: cleaned });
@@ -166,13 +167,6 @@ export async function runStaticDriver({
     if (chunk.type === 'text-delta') {
       const piece = chunk.payload.text;
       if (piece) textBuffer += piece;
-      continue;
-    }
-
-    if (chunk.type === 'text-end') {
-      // Flush as soon as the model finishes a text block so the message
-      // posts before any subsequent tool-call card.
-      await flushText();
       continue;
     }
 
@@ -214,7 +208,11 @@ export async function runStaticDriver({
     }
 
     if (chunk.type === 'tool-call') {
-      if (channelToolNames.has(chunk.payload.toolName)) continue;
+      if (channelToolNames.has(chunk.payload.toolName)) {
+        // Post the reply before the channel tool (e.g. a reaction) acts on it.
+        await flushText();
+        continue;
+      }
       const enr = tracker.trackStart({
         toolCallId: chunk.payload.toolCallId,
         toolName: chunk.payload.toolName,

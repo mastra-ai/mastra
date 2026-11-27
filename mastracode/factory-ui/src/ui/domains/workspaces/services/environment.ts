@@ -1,3 +1,11 @@
+import type {
+  EnvironmentBuild,
+  EnvironmentBuildState,
+  EnvironmentBuildTriggers,
+  EnvironmentBuildTriggersPatch,
+  EnvironmentLastBuild,
+} from '@mastra/playground-ui/components/EnvironmentBuild';
+
 /**
  * Browser-side helpers for a Factory's environment: the sandbox resources, the
  * ordered repository list with per-repository setup and the workspace setup
@@ -22,7 +30,6 @@ export interface FactoryEnvironmentRepository {
   teardownCommand: string | null;
   lastBuildStatus: EnvironmentRepositoryBuildStatus;
   lastBuildError: string | null;
-  lastBuiltAt: string | null;
 }
 
 /** The host's FactorySandbox as the route describes it: provider id, settings JSON Schema, capabilities. */
@@ -33,35 +40,7 @@ export interface FactoryEnvironmentSandbox {
 }
 
 /** When the environment builds on its own; present only when the sandbox can build. */
-export interface FactoryEnvironmentBuildTriggers {
-  schedule: {
-    enabled: boolean;
-    cron: string | null;
-    timezone: string | null;
-    /** False when the host's storage has no schedules domain; the cron trigger cannot be enabled then. */
-    scheduleAvailable: boolean;
-  };
-  push: { enabled: boolean; debounceMinutes: number };
-}
-
-/** The last build factory asked the provider for; its status is read live by id. */
-export interface FactoryEnvironmentLastBuild {
-  buildId: string;
-  attemptedAt: string | null;
-}
-
-export type FactoryEnvironmentBuildStatus = 'pending' | 'building' | 'ready' | 'failed' | 'unknown';
-
-export interface FactoryEnvironmentBuild {
-  buildId: string;
-  status: FactoryEnvironmentBuildStatus;
-  templateId?: string;
-  startedAt?: string;
-  finishedAt?: string;
-  error?: string;
-  /** Log lines, as the provider streams them. */
-  logs?: string[];
-}
+export type FactoryEnvironmentBuildTriggers = EnvironmentBuildTriggers;
 
 export interface FactoryEnvironmentBuildStart {
   outcome: 'started' | 'skipped' | 'unavailable' | 'failed';
@@ -80,7 +59,7 @@ export interface FactoryEnvironmentPayload {
   activeTemplateHeads: Record<string, string> | null;
   repositories: FactoryEnvironmentRepository[];
   buildTriggers?: FactoryEnvironmentBuildTriggers;
-  build?: FactoryEnvironmentLastBuild | null;
+  build?: EnvironmentLastBuild | null;
 }
 
 export interface FactoryEnvironmentResponse {
@@ -101,10 +80,7 @@ export interface FactoryEnvironmentPatch {
   settings?: Record<string, unknown | null>;
   workspaceSetupCommand?: string | null;
   /** Only accepted when the sandbox can build. */
-  buildTriggers?: {
-    schedule?: { enabled: boolean; cron?: string; timezone?: string };
-    push?: { enabled?: boolean; debounceMinutes?: number };
-  };
+  buildTriggers?: EnvironmentBuildTriggersPatch;
   /** Positions, when given, must be a permutation of 1..n over the listed repositories. */
   repositories?: FactoryEnvironmentRepositoryPatch[];
 }
@@ -151,15 +127,12 @@ export async function requestEnvironmentBuild(
   return readJsonOrThrow<FactoryEnvironmentBuildStart>(res, 'Failed to start the build');
 }
 
-export async function listEnvironmentBuilds(
-  baseUrl: string,
-  factoryProjectId: string,
-): Promise<FactoryEnvironmentBuild[]> {
+export async function listEnvironmentBuilds(baseUrl: string, factoryProjectId: string): Promise<EnvironmentBuild[]> {
   const res = await fetch(`${environmentUrl(baseUrl, factoryProjectId)}/builds`, {
     credentials: 'include',
     headers: { Accept: 'application/json' },
   });
-  const { builds } = await readJsonOrThrow<{ builds: FactoryEnvironmentBuild[] }>(res, 'Failed to load builds');
+  const { builds } = await readJsonOrThrow<{ builds: EnvironmentBuild[] }>(res, 'Failed to load builds');
   return builds;
 }
 
@@ -168,11 +141,11 @@ export async function getEnvironmentBuild(
   baseUrl: string,
   factoryProjectId: string,
   buildId: string,
-): Promise<FactoryEnvironmentBuild> {
+): Promise<EnvironmentBuild> {
   const res = await fetch(`${environmentUrl(baseUrl, factoryProjectId)}/builds/${encodeURIComponent(buildId)}`, {
     credentials: 'include',
     headers: { Accept: 'application/json' },
   });
-  const { build } = await readJsonOrThrow<{ build: FactoryEnvironmentBuild }>(res, 'Failed to load the build');
+  const { build } = await readJsonOrThrow<{ build: EnvironmentBuild }>(res, 'Failed to load the build');
   return build;
 }

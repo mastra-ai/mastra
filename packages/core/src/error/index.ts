@@ -8,3 +8,13 @@ export {
   safeParseErrorObject,
 } from '@internal/core/error';
 export type { IErrorDefinition, MastraErrorJSON, SerializableError, SerializedError } from '@internal/core/error';
+export { toPersistedErrorIdentity } from '../loop/shared/record-terminal-error-message';
+export {
+  classifyProviderError,
+  PROVIDER_CALL_ERROR_NAME,
+  PROVIDER_FAILURE_KINDS,
+  providerErrorReason,
+  providerModelId,
+  providerRequestId,
+} from './provider-error';
+export type { ProviderFailureKind } from './provider-error';

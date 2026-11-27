@@ -10,7 +10,7 @@
  * - A `buildResult` callback to construct the caller-specific return value
  * - Optional `postPipeInner` hooks for durable-specific cleanup/abort tracking
  */
-import { resolveAgentScopes } from '../../agent/scopes';
+import { incomingAgentScopes, resolveAgentScopes } from '../../agent/scopes';
 import type { BackgroundTaskManager } from '../../background-tasks/manager';
 import type { MastraMemory } from '../../memory/memory';
 import {
@@ -31,6 +31,17 @@ const ADOPT_LOOKUP_TIMEOUT_MS = 5_000;
 
 /** Inner-run chunks after which the run is parked, waiting to be resumed. */
 const PARKING_CHUNKS = new Set(['tool-call-approval', 'tool-call-suspended']);
+
+/** Step finish reasons after which the model may not have answered the background results it was sent. */
+const UNANSWERED_STEP_REASONS = new Set([
+  'tool-calls',
+  'error',
+  'tripwire',
+  'retry',
+  'abort',
+  'length',
+  'content-filter',
+]);
 
 export const TERMINAL_BG_CHUNKS = new Set([
   'background-task-completed',
@@ -64,7 +75,7 @@ export interface ResolvedScope {
 export async function resolveScope(
   agent: {
     getMemory: (opts?: any) => Promise<MastraMemory | undefined>;
-    getScopes?: (opts?: any) => Promise<string[] | undefined>;
+    getScopes?: (opts?: any) => Promise<string[]>;
   },
   mergedOptions: Record<string, any>,
 ): Promise<ResolvedScope | null> {
@@ -73,12 +84,14 @@ export async function resolveScope(
   if (!memory) return null;
 
   // With agent scopes, the run's thread/resource come from the same resolver stream() uses.
-  const agentScopes = (await agent.getScopes?.({ requestContext })) ?? [];
   const callScopes = mergedOptions?.scopes as string[] | undefined;
+  const incoming = incomingAgentScopes({ requestContext, callScopes });
+  const agentScopes = agent.getScopes ? await agent.getScopes({ requestContext, scopes: incoming }) : incoming;
   if (agentScopes.length || callScopes?.length || requestContext.has(MASTRA_SCOPES_KEY)) {
     const { threadId, resourceId } = resolveAgentScopes({
       requestContext,
       agentScopes,
+      incomingScopes: incoming,
       callScopes,
       memory: mergedOptions?.memory,
     });
@@ -258,28 +271,33 @@ export function getScopeStreamSlot(
  */
 type StreamSlotCloseReason = 'replaced' | 'sameRun';
 
+/** Closes a wrapper. A newer wrapper passes `takeTasks` to receive the tasks the closed one was waiting for. */
+type StreamSlotCloser = (reason?: StreamSlotCloseReason, takeTasks?: Set<string>) => void;
+
 /** Register the active wrapper for a memory scope, aborting the prior wrapper for that scope. */
 export function acquireStreamSlot(
-  activeStreams: Map<string, (reason?: StreamSlotCloseReason) => void>,
+  activeStreams: Map<string, StreamSlotCloser>,
   scopeKey: string | null,
-  closer: (reason?: StreamSlotCloseReason) => void,
+  closer: StreamSlotCloser,
+  takeTasks?: Set<string>,
 ): void {
   if (!scopeKey) return;
   const priorClose = activeStreams.get(scopeKey);
-  priorClose?.('replaced');
+  priorClose?.('replaced', takeTasks);
   activeStreams.set(scopeKey, closer);
 }
 
 /** Register the active wrapper under its caller-visible run ID, replacing an older wrapper for that ID. */
 export function acquireRunStreamSlot(
-  activeStreams: Map<string, (reason?: StreamSlotCloseReason) => void>,
+  activeStreams: Map<string, StreamSlotCloser>,
   runId: string | undefined,
-  closer: (reason?: StreamSlotCloseReason) => void,
+  closer: StreamSlotCloser,
+  takeTasks?: Set<string>,
 ): void {
   if (!runId) return;
   const key = runStreamSlotKey(runId);
   const priorClose = activeStreams.get(key);
-  priorClose?.('sameRun');
+  priorClose?.('sameRun', takeTasks);
   activeStreams.set(key, closer);
 }
 
@@ -305,6 +323,30 @@ export function releaseStreamSlot(
 // ---------------------------------------------------------------------------
 // Idle-loop state machine
 // ---------------------------------------------------------------------------
+
+// Tasks left running by an `untilIdle` stream its caller stopped (cancel, abort).
+// Keyed by the agent's stream registry, so each agent tracks its own.
+const callerStoppedTasks = new WeakMap<Map<string, unknown>, Set<string>>();
+
+// Consumes the mark: each finished task is checked once.
+function takeCallerStoppedTask(activeStreams: Map<string, unknown>, taskId: string): boolean {
+  return callerStoppedTasks.get(activeStreams)?.delete(taskId) ?? false;
+}
+
+/**
+ * Whether a finished background task is already handled by an `untilIdle`
+ * stream on this agent: one is open for the thread and runs its own follow-up
+ * turn, or the caller stopped the stream that was waiting for the task.
+ */
+export function untilIdleHandlesBackgroundTask(
+  activeStreams: Map<string, unknown>,
+  threadId: string,
+  resourceId: string,
+  taskId: string,
+): boolean {
+  const stopped = takeCallerStoppedTask(activeStreams, taskId);
+  return stopped || activeStreams.has(`${threadId}|${resourceId}`);
+}
 
 export interface IdleLoopDeps {
   activeStreams: Map<string, () => void>;
@@ -423,6 +465,14 @@ export async function runIdleLoop<
   /** Tasks whose terminal bg chunk this wrapper already saw — the startup
    * adoption lookup must not re-add them from a stale storage snapshot. */
   const settledTaskIds = new Set<string>();
+  /** Tasks whose outcome the model already answered in this stream, so no follow-up is sent for them. */
+  const deliveredTaskIds = new Set<string>();
+  /** Tasks whose outcome the inner run's current model request carries, until its step finishes. */
+  let requestTaskIds: string[] = [];
+  /** Whether the current step made a client tool call or reported an error. */
+  let requestUnanswered = false;
+  /** Whether the current step produced text or object output. */
+  let requestReplied = false;
   let isProcessing = false;
   let closed = false;
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -474,7 +524,7 @@ export async function runIdleLoop<
     }
   };
 
-  const abortWrapper = (reason?: StreamSlotCloseReason) => {
+  const abortWrapper: StreamSlotCloser = (reason, takeTasks) => {
     if ((closed && !detached) || aborting) return;
     // A wrapper taking over this run resumes it, so a parked run must stay resumable.
     if (parked && (reason === 'sameRun' || (reason === 'replaced' && hooks?.detachOnCancel))) {
@@ -482,6 +532,15 @@ export async function runIdleLoop<
       return;
     }
     aborting = true;
+    // The caller stopped waiting, so a task this stream was waiting for must not wake the agent later.
+    // A newer wrapper closing this one isn't a caller stop: it takes over waiting for the tasks, so its own
+    // caller stop still covers them.
+    if (reason === undefined && runningTaskIds.size > 0) {
+      let stopped = callerStoppedTasks.get(deps.activeStreams);
+      if (!stopped) callerStoppedTasks.set(deps.activeStreams, (stopped = new Set()));
+      for (const taskId of runningTaskIds) stopped.add(taskId);
+    }
+    if (takeTasks) for (const taskId of runningTaskIds) takeTasks.add(taskId);
     // External engines route abortRunStream back through this registry; release before forwarding.
     releaseWrapperSlots();
     initialAbort.abort();
@@ -523,6 +582,65 @@ export async function runIdleLoop<
     idleTimer = setTimeout(() => forceClose(), maxIdleMs);
   };
 
+  /**
+   * Records that the model answered with these tasks' outcomes in its prompt, and drops their
+   * queued completions. The completion usually arrives before the request that reports it, while the
+   * turn is still running.
+   */
+  const markDelivered = (taskIds: string[]) => {
+    if (taskIds.length === 0) return;
+    for (const taskId of taskIds) deliveredTaskIds.add(taskId);
+    for (let i = pendingCompletions.length - 1; i >= 0; i--) {
+      const taskId = (pendingCompletions[i]?.payload as { taskId?: string } | undefined)?.taskId;
+      if (taskId && deliveredTaskIds.has(taskId)) pendingCompletions.splice(i, 1);
+    }
+  };
+
+  /**
+   * Tracks which background outcomes the model answered. The inner run lists them on `step-start`.
+   * They count only when that step ends in a final reply: some text or object output, no error, no
+   * client tool call and none of {@link UNANSWERED_STEP_REASONS}. After a tool call the run can hit
+   * its step limit before the model answers, even when the provider reports `stop`, and an empty,
+   * errored, filtered or cut off reply may be unusable. The list is internal, so it is removed
+   * before the chunk reaches the caller.
+   *
+   * @returns The chunk to forward to the caller.
+   */
+  const trackDelivery = (value: any) => {
+    switch (value?.type) {
+      case 'step-start': {
+        const { backgroundResultTaskIds, ...payload } = value.payload ?? {};
+        requestTaskIds = Array.isArray(backgroundResultTaskIds) ? backgroundResultTaskIds : [];
+        requestUnanswered = false;
+        requestReplied = false;
+        return backgroundResultTaskIds === undefined ? value : { ...value, payload };
+      }
+      case 'text-delta':
+        if (value.payload?.text) requestReplied = true;
+        return value;
+      case 'object':
+        requestReplied = true;
+        return value;
+      case 'tool-call':
+        // Provider-executed calls (e.g. web search) run inside the same reply.
+        if (!value.payload?.providerExecuted) requestUnanswered = true;
+        return value;
+      case 'error':
+        requestUnanswered = true;
+        return value;
+      case 'step-finish':
+        if (requestReplied && !requestUnanswered && !UNANSWERED_STEP_REASONS.has(value.payload?.stepResult?.reason)) {
+          markDelivered(requestTaskIds);
+        }
+        requestTaskIds = [];
+        requestUnanswered = false;
+        requestReplied = false;
+        return value;
+      default:
+        return value;
+    }
+  };
+
   // --- Stream plumbing ---
   const pipeInner = async (inner: ReadableStream<any>) => {
     const reader = inner.getReader();
@@ -530,8 +648,9 @@ export async function runIdleLoop<
     try {
       while (true) {
         if (outerAbort.signal.aborted) break;
-        const { done, value } = await reader.read();
-        if (done) break;
+        const result = await reader.read();
+        if (result.done) break;
+        const value = trackDelivery(result.value);
         clearIdleTimer();
         if (value && typeof value === 'object' && PARKING_CHUNKS.has((value as any).type)) {
           parked = true;
@@ -609,7 +728,6 @@ export async function runIdleLoop<
         // already closed
       }
       forceClose();
-      return;
     } finally {
       releaseContinuationToolCallIds(continuationContext, continuationToolCallIds);
       isProcessing = false;
@@ -624,8 +742,8 @@ export async function runIdleLoop<
 
   // --- Setup ---
   // Take the run slot first: a resume detaches its parked predecessor, which frees the scope slot too.
-  acquireRunStreamSlot(deps.activeStreams, wrapperRunId, abortWrapper);
-  acquireStreamSlot(deps.activeStreams, scopeKey, abortWrapper);
+  acquireRunStreamSlot(deps.activeStreams, wrapperRunId, abortWrapper, runningTaskIds);
+  acquireStreamSlot(deps.activeStreams, scopeKey, abortWrapper, runningTaskIds);
 
   streamOptions?.abortSignal?.addEventListener('abort', detachOrAbort, { once: true });
 
@@ -692,8 +810,12 @@ export async function runIdleLoop<
         } else if (TERMINAL_BG_CHUNKS.has(chunk.type)) {
           settledTaskIds.add(taskId);
           runningTaskIds.delete(taskId);
-          pendingCompletions.push(chunk);
-          if (runningTaskIds.size === 0) void processIfIdle();
+          if (!deliveredTaskIds.has(taskId)) pendingCompletions.push(chunk);
+          if (runningTaskIds.size === 0) {
+            if (pendingCompletions.length > 0) void processIfIdle();
+            // Nothing left to report: close now instead of waiting for the idle timer.
+            else tryClose();
+          }
         }
       }
     } catch {

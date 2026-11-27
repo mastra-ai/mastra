@@ -1,7 +1,14 @@
 import React from 'react';
 
 export const ApiIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg width="17" height="16" viewBox="0 0 17 16" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+  <svg
+    width="19.125"
+    height="18"
+    viewBox="-1.0625 -1 19.125 18"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    {...props}
+  >
     <path
       d="M11.0313 7.97578C11.0313 9.34436 9.92183 10.4538 8.55324 10.4538C7.18466 10.4538 6.0752 9.34436 6.0752 7.97578C6.0752 6.60719 7.18466 5.49773 8.55324 5.49773C9.92183 5.49773 11.0313 6.60719 11.0313 7.97578ZM11.0313 7.97578H14.573"
       stroke="currentColor"

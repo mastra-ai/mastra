@@ -1,8 +1,23 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { defineConfig } from 'vitest/config';
+import {
+  countDurableAgents,
+  durableTestsWithoutDurableAgent,
+  otherStorageVersion,
+} from './vitest.durable-storage-version';
+import { isolatedTestFiles } from './vitest.isolated-tests';
 
 const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8'));
+
+const unitEnv = {
+  OPENROUTER_API_KEY: '',
+  GOOGLE_GENERATIVE_AI_API_KEY: '',
+  ANTHROPIC_API_KEY: '',
+  OPENAI_API_KEY: '',
+  // Short drain/poll/pacing waits in product code; see src/utils/test-waits.ts.
+  MASTRA_TEST_FAST_WAITS: '1',
+};
 
 export default defineConfig({
   define: {
@@ -24,12 +39,70 @@ export default defineConfig({
             '@internal/workflow-test-utils': path.resolve(__dirname, '../../workflows/_test-utils/src'),
           },
         },
+        plugins: [countDurableAgents],
         test: {
           name: 'unit:packages/core',
           execArgv: ['--expose-gc'],
           environment: 'node',
           include: ['src/**/*.test.ts'],
-          exclude: ['src/**/*.e2e.test.ts'],
+          exclude: ['src/**/*.e2e.test.ts', ...isolatedTestFiles],
+          globalSetup: [path.resolve(__dirname, 'vitest.registry-guard-global.ts')],
+          setupFiles: [
+            '@internal/test-utils/setup',
+            path.resolve(__dirname, 'vitest.no-isolate-setup.ts'),
+            path.resolve(__dirname, 'vitest.registry-guard-setup.ts'),
+            path.resolve(__dirname, 'vitest.durable-storage-version-setup.ts'),
+          ],
+          // Files share their worker's module cache, which removes most of the import cost.
+          // Files that touch process-wide state run in the isolated project below; see the header of
+          // vitest.isolated-tests.ts before adding a test that mocks modules or sets env at import.
+          // A failure here can come from an earlier file in the same worker: rerun the named file
+          // alone, then with --sequence.shuffle.files, before blaming it.
+          isolate: false,
+          testTimeout: 120000,
+          env: unitEnv,
+        },
+      },
+      {
+        define: {
+          __MASTRA_VERSION__: JSON.stringify(pkg.version),
+        },
+        resolve: {
+          alias: {
+            '@internal/workflow-test-utils': path.resolve(__dirname, '../../workflows/_test-utils/src'),
+          },
+        },
+        plugins: [countDurableAgents],
+        test: {
+          name: 'unit:packages/core-isolated',
+          environment: 'node',
+          include: isolatedTestFiles,
+          globalSetup: [path.resolve(__dirname, 'vitest.registry-guard-global.ts')],
+          setupFiles: [
+            '@internal/test-utils/setup',
+            path.resolve(__dirname, 'vitest.registry-guard-setup.ts'),
+            path.resolve(__dirname, 'vitest.durable-storage-version-setup.ts'),
+          ],
+          testTimeout: 120000,
+          env: unitEnv,
+        },
+      },
+      {
+        define: {
+          __MASTRA_VERSION__: JSON.stringify(pkg.version),
+        },
+        resolve: {
+          alias: {
+            '@internal/workflow-test-utils': path.resolve(__dirname, '../../workflows/_test-utils/src'),
+          },
+        },
+        // The second durable agent pass; see vitest.durable-storage-version.ts.
+        plugins: [otherStorageVersion],
+        test: {
+          name: 'unit:packages/core:durable-other-storage-version',
+          environment: 'node',
+          include: ['src/agent/durable/**/*.test.ts'],
+          exclude: ['src/**/*.e2e.test.ts', ...durableTestsWithoutDurableAgent],
           setupFiles: ['@internal/test-utils/setup'],
           testTimeout: 120000,
           env: {
@@ -47,6 +120,7 @@ export default defineConfig({
           include: ['src/**/*.e2e.test.ts'],
           setupFiles: ['@internal/test-utils/setup'],
           testTimeout: 120000,
+          env: { MASTRA_TEST_REAL_RETRY_DELAYS: '1' },
         },
       },
       {

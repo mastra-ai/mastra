@@ -17,7 +17,10 @@ export type ToolResultWithInput = ToolResultPart & {
 // ============================================================================
 
 /**
- * Removes provider-executed tool parts that a *different* provider produced.
+ * Removes provider-owned parts that the target provider cannot consume.
+ *
+ * Provider-executed tool payloads are removed when a different provider produced them.
+ * OpenAI Responses compaction state is removed unless the target supports that input shape.
  *
  * A provider-executed tool result is the provider's own payload, in the provider's
  * own shape, and each provider validates it against its own schema on the way back
@@ -73,10 +76,12 @@ export function dropCrossProviderExecutedParts<T extends ModelMessage>(
     }
   }
 
-  if (foreign.size === 0) return messages;
-
+  const targetSupportsOpenAICompaction = targetProvider === 'openai' || targetProvider === 'openai.responses';
   const isForeign = (part: unknown): boolean => {
-    const candidate = part as { type?: string; toolCallId?: string };
+    const candidate = part as { type?: string; toolCallId?: string; kind?: string };
+    if (candidate.type === 'custom' && candidate.kind === 'openai.compaction') {
+      return !targetSupportsOpenAICompaction;
+    }
     return (
       (candidate.type === 'tool-call' || candidate.type === 'tool-result') &&
       typeof candidate.toolCallId === 'string' &&
@@ -84,7 +89,7 @@ export function dropCrossProviderExecutedParts<T extends ModelMessage>(
     );
   };
 
-  // Warn only for parts actually present in this prompt: `dbMessages` routinely holds
+  // Warn only for tool parts actually present in this prompt: `dbMessages` routinely holds
   // more history than recall selected, so warning per stored entry would report drops
   // that never happened.
   const warned = new Set<string>();
@@ -106,13 +111,61 @@ export function dropCrossProviderExecutedParts<T extends ModelMessage>(
       ...message,
       content: message.content.filter(part => {
         if (!isForeign(part)) return true;
-        warnOnce((part as { toolCallId: string }).toolCallId);
+        const toolCallId = (part as { toolCallId?: unknown }).toolCallId;
+        if (typeof toolCallId === 'string' && foreign.has(toolCallId)) warnOnce(toolCallId);
         return false;
       }),
     } as T;
   });
 
   return dropped ? result : messages;
+}
+
+/**
+ * Builds the efficient OpenAI Responses continuation input from the latest
+ * compaction checkpoint while leaving the persisted Mastra history untouched.
+ */
+export function pruneOpenAICompactionHistory<T extends ModelMessage>(
+  messages: T[],
+  targetProvider: string | undefined,
+): T[] {
+  if (targetProvider !== 'openai' && targetProvider !== 'openai.responses') return messages;
+
+  let checkpointMessageIndex = -1;
+  let checkpointPartIndex = -1;
+
+  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex--) {
+    const message = messages[messageIndex]!;
+    if (message.role !== 'assistant' || !Array.isArray(message.content)) continue;
+
+    for (let partIndex = message.content.length - 1; partIndex >= 0; partIndex--) {
+      const part = message.content[partIndex] as { type?: string; kind?: string };
+      if (part.type === 'custom' && part.kind === 'openai.compaction') {
+        checkpointMessageIndex = messageIndex;
+        checkpointPartIndex = partIndex;
+        break;
+      }
+    }
+
+    if (checkpointMessageIndex !== -1) break;
+  }
+
+  if (checkpointMessageIndex === -1) return messages;
+
+  const checkpointMessage = messages[checkpointMessageIndex]!;
+  const checkpointContent = Array.isArray(checkpointMessage.content)
+    ? checkpointMessage.content.slice(checkpointPartIndex)
+    : checkpointMessage.content;
+  const systemMessagesBeforeCheckpoint = messages
+    .slice(0, checkpointMessageIndex)
+    .filter(message => message.role === 'system');
+  const continuationMessages = messages.slice(checkpointMessageIndex + 1);
+
+  return [
+    ...systemMessagesBeforeCheckpoint,
+    { ...checkpointMessage, content: checkpointContent } as T,
+    ...continuationMessages,
+  ];
 }
 
 // ============================================================================
@@ -135,7 +188,8 @@ export function ensureAnthropicCompatibleMessages(
   messages: ModelMessage[],
   dbMessages: MastraDBMessage[],
 ): ModelMessage[] {
-  return messages.map(msg => enrichToolResultsWithInput(msg, dbMessages));
+  const getToolCallArgs = createToolCallArgsLookup(dbMessages);
+  return messages.map(msg => enrichToolResultsWithInput(msg, getToolCallArgs));
 }
 
 /**
@@ -274,7 +328,10 @@ export function pairOrphanedToolCalls(messages: ModelMessage[]): ModelMessage[] 
 /**
  * Enriches a single message's tool-result parts with input field
  */
-function enrichToolResultsWithInput(message: ModelMessage, dbMessages: MastraDBMessage[]): ModelMessage {
+function enrichToolResultsWithInput(
+  message: ModelMessage,
+  getToolCallArgs: (toolCallId: string) => Record<string, unknown>,
+): ModelMessage {
   if (message.role !== 'tool' || !Array.isArray(message.content)) {
     return message;
   }
@@ -285,7 +342,7 @@ function enrichToolResultsWithInput(message: ModelMessage, dbMessages: MastraDBM
       if (part.type === 'tool-result') {
         return {
           ...part,
-          input: findToolCallArgs(dbMessages, part.toolCallId),
+          input: getToolCallArgs(part.toolCallId),
         } as ToolResultWithInput;
       }
       return part;
@@ -354,6 +411,41 @@ export function getResponseProviderItemIdFromPart(
 // ============================================================================
 // Tool Call Args Lookup
 // ============================================================================
+
+// Keep this lookup local to one synchronous conversion: live tool args can change between conversions.
+export function createToolCallArgsLookup(messages: MastraDBMessage[]): (toolCallId: string) => Record<string, unknown> {
+  let byId: Map<string, Record<string, unknown>> | undefined;
+  return toolCallId => {
+    if (!byId) {
+      byId = new Map();
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const message = messages[i];
+        if (!message || message.role !== 'assistant') continue;
+        const seen = new Set<string>();
+        for (const part of message.content.parts ?? []) {
+          if (part.type !== 'tool-invocation') continue;
+          const invocation = part.toolInvocation;
+          if (seen.has(invocation.toolCallId)) continue;
+          seen.add(invocation.toolCallId);
+          const args = invocation.args;
+          if (!byId.has(invocation.toolCallId) && args && typeof args === 'object' && Object.keys(args).length > 0) {
+            byId.set(invocation.toolCallId, args);
+          }
+        }
+        seen.clear();
+        for (const invocation of message.content.toolInvocations ?? []) {
+          if (seen.has(invocation.toolCallId)) continue;
+          seen.add(invocation.toolCallId);
+          const args = invocation.args;
+          if (!byId.has(invocation.toolCallId) && args && typeof args === 'object' && Object.keys(args).length > 0) {
+            byId.set(invocation.toolCallId, args);
+          }
+        }
+      }
+    }
+    return byId.get(toolCallId) ?? {};
+  };
+}
 
 /**
  * Finds the tool call args for a given toolCallId by searching through messages.

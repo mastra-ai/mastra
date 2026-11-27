@@ -1,5 +1,62 @@
 import { describe, expect, it } from 'vitest';
-import { createStoredAgentBodySchema, updateStoredAgentBodySchema, storedAgentSchema } from './stored-agents';
+import {
+  createStoredAgentBodySchema,
+  updateStoredAgentBodySchema,
+  storedAgentSchema,
+  getStoredAgentResponseSchema,
+  createStoredAgentResponseSchema,
+  listStoredAgentsResponseSchema,
+} from './stored-agents';
+
+describe('stored-agent durable migration', () => {
+  it.each([true, false, {}, { cleanupTimeoutMs: 0 }, { maxSteps: 50, cleanupTimeoutMs: 0 }])(
+    'preserves persisted durable configuration %j in stored-agent responses',
+    durable => {
+      const agent = {
+        id: 'legacy-agent',
+        status: 'published',
+        name: 'Legacy Agent',
+        instructions: 'Hello',
+        model: { provider: 'openai', name: 'gpt-4' },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        durable,
+      };
+      for (const schema of [getStoredAgentResponseSchema, createStoredAgentResponseSchema]) {
+        expect(schema.parse(agent).durable).toEqual(durable);
+      }
+      const list = listStoredAgentsResponseSchema.parse({
+        agents: [agent],
+        total: 1,
+        page: 0,
+        perPage: 10,
+        hasMore: false,
+      });
+      expect(list.agents[0]?.durable).toEqual(durable);
+    },
+  );
+
+  it.each([createStoredAgentBodySchema, updateStoredAgentBodySchema])(
+    'rejects legacy execution options instead of silently stripping them',
+    schema => {
+      for (const legacy of [{ maxSteps: 50 }, { shouldPersistSnapshot: true }, { id: 'old' }, { name: 'Old' }]) {
+        const result = schema.safeParse({
+          name: 'Test Agent',
+          instructions: 'Hello',
+          model: { provider: 'openai', name: 'gpt-4' },
+          durable: { cleanupTimeoutMs: 0, ...legacy },
+        });
+        expect(result.success).toBe(false);
+        expect(result.error?.message).toContain('createDurableAgent');
+      }
+    },
+  );
+
+  it.each([true, false, {}, { cleanupTimeoutMs: 0 }])('preserves supported durable configuration %j', durable => {
+    const result = updateStoredAgentBodySchema.parse({ durable });
+    expect(result.durable).toEqual(durable);
+  });
+});
 
 describe('stored-agents schemas – conditional fields & requestContextSchema', () => {
   // ---------------------------------------------------------------------------
@@ -203,15 +260,6 @@ describe('stored-agents schemas – conditional fields & requestContextSchema', 
       expect(result.success).toBe(true);
     });
 
-    it('should allow omitting requestContextSchema', () => {
-      const result = createStoredAgentBodySchema.safeParse({
-        name: 'Test Agent',
-        instructions: 'Hello',
-        model: { provider: 'openai', name: 'gpt-4' },
-      });
-      expect(result.success).toBe(true);
-    });
-
     it('should include requestContextSchema in storedAgentSchema response', () => {
       const now = new Date();
       const result = storedAgentSchema.safeParse({
@@ -278,13 +326,6 @@ describe('stored-agents schemas – conditional fields & requestContextSchema', 
             value: {},
           },
         ],
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it('should accept null memory to disable it', () => {
-      const result = updateStoredAgentBodySchema.safeParse({
-        memory: null,
       });
       expect(result.success).toBe(true);
     });

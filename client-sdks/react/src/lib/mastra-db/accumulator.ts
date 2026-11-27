@@ -63,6 +63,10 @@ function toolErrorText(error: unknown): string {
         }
       }
     }
+    // An Error subclass that sets `name` crosses JSON as `{ name }`, since `message` isn't enumerable.
+    // Never dump the object itself: its cause can hold private provider diagnostics.
+    if ('name' in error && typeof error.name === 'string' && error.name) return error.name;
+    return 'The tool call failed.';
   }
   return String(error);
 }

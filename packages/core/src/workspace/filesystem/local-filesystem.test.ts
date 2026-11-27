@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -705,6 +706,24 @@ describe('LocalFilesystem', () => {
       expect(exists).toBe(false);
     });
 
+    it('should allow missing paths under a basePath whose canonical spelling differs (#28957)', async () => {
+      const basePath = path.join(tempDir, 'ABCDEF~1');
+      await fs.mkdir(basePath);
+      // Windows realpath expands 8.3 short names such as ABCDEF~1, while lstat accepts them as written.
+      const native = realpathSync.native;
+      const spy = vi
+        .spyOn(realpathSync, 'native')
+        .mockImplementation(((p: string) => native(p).replace('ABCDEF~1', 'abcdefghij')) as typeof native);
+
+      try {
+        await new LocalFilesystem({ basePath }).writeFile('missing/nested/file.txt', 'content');
+      } finally {
+        spy.mockRestore();
+      }
+
+      expect(await fs.readFile(path.join(basePath, 'missing/nested/file.txt'), 'utf-8')).toBe('content');
+    });
+
     it('should block absolute paths outside base directory', async () => {
       await expect(localFs.readFile('/etc/passwd')).rejects.toThrow(PermissionError);
       await expect(localFs.writeFile('/tmp/escape.txt', 'nope')).rejects.toThrow(PermissionError);
@@ -1220,20 +1239,15 @@ describe('LocalFilesystem', () => {
   // getInstructions with custom override
   // ===========================================================================
   describe('getInstructions with custom override', () => {
-    it('should return custom instructions when provided', () => {
+    it.each([
+      ['should return custom instructions when provided', 'Custom filesystem instructions here.'],
+      ['should return empty string when override is empty string', ''],
+    ] as const)('%s', (_title, instructions) => {
       const testFs = new LocalFilesystem({
         basePath: tempDir,
-        instructions: 'Custom filesystem instructions here.',
+        instructions,
       });
-      expect(testFs.getInstructions()).toBe('Custom filesystem instructions here.');
-    });
-
-    it('should return empty string when override is empty string', () => {
-      const testFs = new LocalFilesystem({
-        basePath: tempDir,
-        instructions: '',
-      });
-      expect(testFs.getInstructions()).toBe('');
+      expect(testFs.getInstructions()).toBe(instructions);
     });
 
     it('should return auto-generated instructions when no override', () => {

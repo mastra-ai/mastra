@@ -1,9 +1,9 @@
-import { Wand2 } from 'lucide-react';
 import { useState } from 'react';
 import { useWorkspaceContext } from './use-workspace-context';
 import { WorkspaceAddSkillDialog } from './workspace-add-skill-dialog';
 import type { AddSkillDialogProps } from './workspace-add-skill-dialog';
 import { Button } from '@/ds/components/Button';
+import { IconMagicWand } from '@/ds/icons/central/IconMagicWand';
 
 export type WorkspaceSkillInstallParams = Parameters<AddSkillDialogProps['onInstall']>[0];
 
@@ -39,13 +39,12 @@ export function WorkspaceAddSkill({ labeled = false }: { labeled?: boolean }) {
   return (
     <>
       {labeled ? (
-        <Button variant="ghost" onClick={() => setOpen(true)}>
-          <Wand2 />
+        <Button icon={<IconMagicWand />} variant="ghost" onClick={() => setOpen(true)}>
           Add skill
         </Button>
       ) : (
         <Button variant="ghost" size="icon-sm" aria-label="Add skill" tooltip="Add skill" onClick={() => setOpen(true)}>
-          <Wand2 />
+          <IconMagicWand />
         </Button>
       )}
       <WorkspaceAddSkillDialog

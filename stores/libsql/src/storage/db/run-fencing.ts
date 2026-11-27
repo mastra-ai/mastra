@@ -1,6 +1,6 @@
 import type { RunFence } from '@mastra/core/storage';
 import { matchesRunFence, RunFenceConflictError } from '@mastra/core/storage';
-import type { SqliteClient, SqliteResultSet, SqliteStatement, SqliteTransaction } from './client';
+import type { SqliteClient, SqliteInValue, SqliteResultSet, SqliteStatement, SqliteTransaction } from './client';
 import { withClientWriteLock } from './write-lock';
 
 /** Runs statements against the client, or inside an open transaction. */
@@ -63,6 +63,73 @@ export async function assertRunFence(
   if (!matchesRunFence(current, fence)) {
     throw new RunFenceConflictError(fence, operation);
   }
+}
+
+/**
+ * A condition that holds while `check`'s fence is the run's current claim.
+ * Bind {@link runFenceArgs} where it appears.
+ */
+export function runFenceCondition({ claimsTable }: RunFenceCheck): string {
+  return `EXISTS (SELECT 1 FROM ${claimsTable} WHERE runId = ? AND generation = ? AND ownerId = ?)`;
+}
+
+/** The values {@link runFenceCondition} binds, in order. */
+
+export function runFenceArgs({ fence }: RunFenceCheck): SqliteInValue[] {
+  return [fence.runId, fence.generation, fence.ownerId];
+}
+
+/**
+ * `statement`, whose SQL ends in its WHERE clause and whose args are
+ * positional, written only while `check`'s fence is the run's current claim.
+ */
+export function gateOnRunFence(statement: SqliteStatement, check: RunFenceCheck): SqliteStatement {
+  return {
+    sql: `${statement.sql} AND ${runFenceCondition(check)}`,
+    args: [...((statement.args as SqliteInValue[] | undefined) ?? []), ...runFenceArgs(check)],
+  };
+}
+
+/**
+ * `serialize()` for a fenced batch write, whose values are serialized before
+ * the batch checks the fence. When serializing throws and `check`'s fence is
+ * not the run's current claim, throws {@link RunFenceConflictError} instead,
+ * as when the fence was checked first.
+ */
+export async function serializeFenced<T>(
+  client: SqliteClient,
+  check: RunFenceCheck | undefined,
+  serialize: () => T,
+): Promise<T> {
+  try {
+    return serialize();
+  } catch (error) {
+    if (check) await assertRunFence(client, check);
+    throw error;
+  }
+}
+
+/**
+ * Runs `statements` as one batch behind the client's write lock, after a
+ * statement that reads whether `check`'s fence is the run's current claim.
+ * Every statement must be gated on that claim ({@link gateOnRunFence}), so a
+ * refused write writes nothing. A batch is one request and one transaction,
+ * so unlike {@link withRunFence} no transaction stays open across round trips
+ * on a remote database. Returns the results of `statements`.
+ */
+export function runFencedBatch(
+  client: SqliteClient,
+  check: RunFenceCheck,
+  statements: SqliteStatement[],
+): Promise<SqliteResultSet[]> {
+  return withClientWriteLock(client, async () => {
+    const [report, ...results] = await client.batch(
+      [{ sql: `SELECT ${runFenceCondition(check)} AS fenced`, args: runFenceArgs(check) }, ...statements],
+      'write',
+    );
+    if (!Number(report!.rows[0]?.fenced)) throw new RunFenceConflictError(check.fence, check.operation);
+    return results;
+  });
 }
 
 /**

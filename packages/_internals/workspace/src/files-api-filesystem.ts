@@ -16,6 +16,7 @@ import {
   DirectoryNotFoundError,
   FileExistsError,
   FileNotFoundError,
+  getMimeType,
   IsDirectoryError,
   MastraFilesystem,
   NotDirectoryError,
@@ -300,6 +301,9 @@ export abstract class FilesApiFilesystem extends MastraFilesystem {
         size: info.type === 'dir' ? 0 : info.size,
         createdAt: modifiedAt,
         modifiedAt,
+        // envd reports no MIME type. Infer it from the name like LocalFilesystem:
+        // read_file decides media, binary or text from it.
+        ...(info.type !== 'dir' && { mimeType: getMimeType(abs) }),
       };
     });
   }

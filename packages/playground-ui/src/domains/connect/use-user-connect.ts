@@ -1,4 +1,5 @@
 import { useMastraClient } from '@mastra/react';
+import type { QueryClient } from '@tanstack/react-query';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -150,6 +151,23 @@ export function useConnectSurface() {
 
 const connectionsQueryKey = ['user-connect', 'connections'] as const;
 
+/**
+ * A connection that activates or goes away changes which tools resolve for
+ * this user, so the connection list and every agent / tool listing are
+ * refetched. The server drops its cached tool snapshot when it reports the
+ * change, so the refetch already sees the new tools.
+ */
+function invalidateAfterConnectionChange(queryClient: QueryClient) {
+  return Promise.all(
+    [connectionsQueryKey, ['agent'], ['agents'], ['tools']].map(async queryKey => {
+      // A first fetch still in flight would otherwise be reused by the
+      // invalidation, and its pre-change answer would land as fresh data.
+      await queryClient.cancelQueries({ queryKey });
+      await queryClient.invalidateQueries({ queryKey });
+    }),
+  );
+}
+
 /** Lists the caller's visible connections (global + their own). */
 export function useUserConnections({ enabled }: { enabled: boolean }) {
   const connectFetch = useConnectFetch();
@@ -212,7 +230,7 @@ export function useConnectionStatus({ connectionId }: { connectionId: string | n
         throw error;
       }
       if (status.status !== 'pending') {
-        void queryClient.invalidateQueries({ queryKey: connectionsQueryKey });
+        void invalidateAfterConnectionChange(queryClient);
       }
       return status;
     },
@@ -290,7 +308,7 @@ export function usePendingConnect(options: UsePendingConnectOptions = {}) {
   const [pending, setPending] = useState<PendingConnect | null>(null);
   const [settled, setSettled] = useState<SettledConnect | null>(null);
   const [connectedProviders, setConnectedProviders] = useState<ReadonlySet<string>>(new Set());
-  const popupRef = useRef<Pick<Window, 'closed'> | null>(null);
+  const popupRef = useRef<Pick<Window, 'closed' | 'close'> | null>(null);
   const headlessRef = useRef<HeadlessAuthHandle | null>(null);
   // Mirrors `pending` for async guards (the SDK promise settles outside the
   // render cycle); written directly at every transition so a cancel is never
@@ -392,6 +410,7 @@ export function usePendingConnect(options: UsePendingConnectOptions = {}) {
       const split = values ? splitHeadlessAuthValues(headlessAuthFields(provider), values) : {};
       const handle = startHeadlessAuth({
         sessionToken,
+        apiBaseUrl: created.apiBaseUrl,
         integrationId: created.integrationId,
         authType: provider.authType,
         credentials: split.credentials,
@@ -475,6 +494,7 @@ export function usePendingConnect(options: UsePendingConnectOptions = {}) {
   const cancel = useCallback(() => {
     headlessRef.current?.close();
     headlessRef.current = null;
+    popupRef.current?.close();
     popupRef.current = null;
     pendingRef.current = null;
     setPending(null);
@@ -502,6 +522,6 @@ export function useDisconnectUserConnection() {
   return useMutation<void, UserConnectRequestError, { connectionId: string }>({
     mutationFn: ({ connectionId }) =>
       connectFetch<void>(`/connections/${encodeURIComponent(connectionId)}`, { method: 'DELETE' }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: connectionsQueryKey }),
+    onSuccess: () => invalidateAfterConnectionChange(queryClient),
   });
 }

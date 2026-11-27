@@ -14,13 +14,13 @@
  * directly without going through `loop()`.
  */
 
-import type { IdGenerator, ModelMessage, ToolSet } from '@internal/ai-sdk-v5';
+import type { IdGenerator, LanguageModelRequestMetadata, ModelMessage, ToolSet } from '@internal/ai-sdk-v5';
 import type { SaveQueueManager } from '../agent/save-queue';
-import type { CreatedAgentSignal } from '../agent/signals';
+import type { PendingSignalListener, CreatedAgentSignal } from '../agent/signals';
 import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManagerConfig } from '../background-tasks';
 import { createRunScopeKey } from '../mastra/run-scope';
 import type { MastraMemory, MemoryConfigInternal } from '../memory';
-import type { LanguageModelUsage, StreamTransportRef } from '../stream/types';
+import type { LanguageModelUsage, ProviderMetadata, StreamTransportRef } from '../stream/types';
 import type { ToolPayloadTransformPolicy } from '../tools';
 import type { Workspace } from '../workspace/workspace';
 import type { EagerToolExecutionCoordinator } from './workflows/agentic-execution/eager-tool-execution';
@@ -54,7 +54,16 @@ export const TOOL_APPROVAL_VERDICTS_KEY = createRunScopeKey<Map<string, boolean>
  * suspension chunk of the step carries (and consumes) this usage instead.
  */
 export const STEP_USAGE_KEY = createRunScopeKey<LanguageModelUsage | undefined>('loop:stepUsage');
+/** Provider metadata of the current model step, carried and consumed like {@link STEP_USAGE_KEY}. */
+export const STEP_PROVIDER_METADATA_KEY = createRunScopeKey<ProviderMetadata | undefined>('loop:stepProviderMetadata');
 export const STEP_MODEL_MESSAGES_KEY = createRunScopeKey<ModelMessage[]>('loop:stepModelMessages');
+/**
+ * Response message the current step is writing into. A signal or a retry rotates the id
+ * mid-iteration, so tool-emitted data chunks must use this instead of the run-level id.
+ */
+export const STEP_RESPONSE_MESSAGE_ID_KEY = createRunScopeKey<string>('loop:stepResponseMessageId');
+/** Latest provider request for local durable callers only; never serialized with a step. */
+export const LOCAL_MODEL_REQUEST_KEY = createRunScopeKey<LanguageModelRequestMetadata>('loop:localModelRequest');
 export const EAGER_TOOL_EXECUTION_KEY = createRunScopeKey<EagerToolExecutionCoordinator>('loop:eagerToolExecution');
 
 // --- Delegation / bail flags -----------------------------------------------
@@ -76,9 +85,16 @@ export const SKIP_BG_TASK_WAIT_KEY = createRunScopeKey<boolean>('loop:skipBgTask
 export const DRAIN_PENDING_SIGNALS_KEY =
   createRunScopeKey<(runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[]>('loop:drainPendingSignals');
 export const SUBSCRIBE_PENDING_SIGNALS_KEY =
-  createRunScopeKey<(runId: string, listener: () => void) => () => void>('loop:subscribePendingSignals');
+  createRunScopeKey<(runId: string, listener: PendingSignalListener) => () => void>('loop:subscribePendingSignals');
 export const INITIAL_SIGNAL_ECHOES_KEY = createRunScopeKey<CreatedAgentSignal[]>('loop:initialSignalEchoes');
 
 // --- Tool payload transform ------------------------------------------------
 
 export const TOOL_PAYLOAD_TRANSFORM_KEY = createRunScopeKey<ToolPayloadTransformPolicy>('loop:toolPayloadTransform');
+
+export const CONTINUATION_STOP_CAUSE_KEY = createRunScopeKey<
+  import('./shared/continuation-core').ContinuationStopCause | undefined
+>('loop:continuationStopCause');
+
+export const DELEGATION_FAILURE_KEY =
+  createRunScopeKey<import('../observability/types').SpanTermination>('loop:delegationFailure');

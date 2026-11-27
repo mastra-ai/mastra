@@ -174,8 +174,12 @@ export class TeamsProvider implements ChannelProvider {
   async #doInitialize(): Promise<void> {
     const store = await this.#getStore();
     const active = (await store.list()).filter(i => i.status === 'active');
-    this.#configured = active.length > 0;
+    // Only installations with a readable secret can actually be activated.
+    this.#configured = active.some(i => !i.secretUnreadable);
     for (const installation of active) {
+      // The store already logged the actionable error; the adapter can't
+      // authenticate without the secret.
+      if (installation.secretUnreadable) continue;
       try {
         await this.#activateInstallation(installation);
       } catch (err) {
@@ -489,7 +493,7 @@ export class TeamsProvider implements ChannelProvider {
     }
     this.#adapters.delete(existing.id);
     await store.deleteByAgent(agentId);
-    this.#configured = (await store.list()).some(i => i.status === 'active');
+    this.#configured = (await store.list()).some(i => i.status === 'active' && !i.secretUnreadable);
   }
 
   /** List installations (public info only — no secrets). */
@@ -535,7 +539,7 @@ export class TeamsProvider implements ChannelProvider {
 
     const store = await this.#getStore();
     const installation = await store.getByWebhookId(webhookId);
-    if (!installation || installation.status !== 'active') {
+    if (!installation || installation.status !== 'active' || installation.secretUnreadable) {
       return c.json({ ok: false, error: 'Unknown webhook' }, 404);
     }
 

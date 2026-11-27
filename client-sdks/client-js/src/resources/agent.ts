@@ -72,7 +72,7 @@ import type {
 import { parsePartialJson, processDataStream } from '../utils/ai-sdk-v4';
 import { getClientToolModelOutput } from '../utils/client-tool-model-output';
 import { processClientTools } from '../utils/process-client-tools';
-import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
+import { isHandlerFailure, processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
 import { createSseEventSplitter } from '../utils/sse-event-splitter';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { BaseResource } from './base';
@@ -106,6 +106,31 @@ type ToolCallRespondFn<OUTPUT> = (
 ) => Promise<FullOutput<OUTPUT>>;
 
 type ClientToolObservabilityContext = { traceparent: string; tracestate?: string; baggage?: string };
+
+// Errors waiting for the consumer to read the chunks already queued on a stream,
+// because erroring a ReadableStream discards its queue. See errorAfterQueuedChunks.
+const pendingStreamErrors = new WeakMap<ReadableStreamDefaultController<Uint8Array>, unknown>();
+
+// Legacy streams report a failure after their writable closes, once the reader has every chunk.
+const legacyStreamErrors = new WeakMap<WritableStream<Uint8Array>, unknown>();
+
+/**
+ * Errors the stream once the consumer has read every chunk already enqueued, so a
+ * reader still gets the partial response before the failure. The stream's `pull`
+ * (see createCancellableStream) delivers a deferred error when its queue drains.
+ */
+function errorAfterQueuedChunks(controller: ReadableStreamDefaultController<Uint8Array>, error: unknown) {
+  if (controller.desiredSize === null || pendingStreamErrors.has(controller)) return;
+  if (controller.desiredSize > 0) {
+    try {
+      controller.error(error);
+    } catch {
+      // Already closed
+    }
+    return;
+  }
+  pendingStreamErrors.set(controller, error);
+}
 
 type ClientToolObservabilityEnvelope = {
   parentContext: ClientToolObservabilityContext;
@@ -228,6 +253,7 @@ async function executeToolCallAndRespond<OUTPUT>({
   threadId,
   requestContext,
   respondFn,
+  abortSignal,
 }: {
   params: StreamParams<OUTPUT>;
   response: Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
@@ -236,6 +262,7 @@ async function executeToolCallAndRespond<OUTPUT>({
   threadId?: string;
   requestContext?: RequestContext<any>;
   respondFn: ToolCallRespondFn<OUTPUT>;
+  abortSignal?: AbortSignal;
 }) {
   if (response.finishReason === 'tool-calls') {
     const toolCalls = (
@@ -256,7 +283,13 @@ async function executeToolCallAndRespond<OUTPUT>({
       return response;
     }
 
+    // Run every client tool the model called, then send all results back in one turn.
+    const toolResults: Record<string, unknown>[] = [];
     for (const toolCall of toolCalls) {
+      // Don't start more client tools once the caller has cancelled.
+      if (abortSignal?.aborted) {
+        throw abortSignal.reason ?? new DOMException('This operation was aborted', 'AbortError');
+      }
       const clientTool = params.clientTools?.[toolCall.payload.toolName] as Tool;
 
       if (clientTool && clientTool.execute) {
@@ -299,32 +332,36 @@ async function executeToolCallAndRespond<OUTPUT>({
           toolResultContent.__mastraObservability = observability;
         }
 
-        // Build updated messages from the response, adding the tool result
-        // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
-        // When no threadId (stateless), include full conversation history for context
-        const newMessages = [
-          ...(response.response.messages || []),
-          {
-            role: 'tool',
-            content: [toolResultContent],
-          },
-        ];
-
-        const updatedMessages = threadId
-          ? newMessages
-          : [...(Array.isArray(params.messages) ? params.messages : []), ...newMessages];
-
-        const respondOptions: StreamParamsBaseWithoutMessages<OUTPUT> & {
-          structuredOutput?: StructuredOutputOptions<OUTPUT>;
-        } = {
-          ...params,
-          clientTools: params.clientToolsResolver?.() ?? params.clientTools,
-        };
-
-        delete (respondOptions as { messages?: MessageListInput }).messages;
-
-        return respondFn(updatedMessages as MessageListInput, respondOptions);
+        toolResults.push(toolResultContent);
       }
+    }
+
+    if (toolResults.length > 0) {
+      // Build updated messages from the response, adding the tool results
+      // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
+      // When no threadId (stateless), include full conversation history for context
+      const newMessages = [
+        ...(response.response.messages || []),
+        {
+          role: 'tool',
+          content: toolResults,
+        },
+      ];
+
+      const updatedMessages = threadId
+        ? newMessages
+        : [...(Array.isArray(params.messages) ? params.messages : []), ...newMessages];
+
+      const respondOptions: StreamParamsBaseWithoutMessages<OUTPUT> & {
+        structuredOutput?: StructuredOutputOptions<OUTPUT>;
+      } = {
+        ...params,
+        clientTools: params.clientToolsResolver?.() ?? params.clientTools,
+      };
+
+      delete (respondOptions as { messages?: MessageListInput }).messages;
+
+      return respondFn(updatedMessages as MessageListInput, respondOptions);
     }
   }
 
@@ -708,23 +745,30 @@ export class Agent extends BaseResource {
     return this.requestSignalRoute(`/agents/${this.agentId}/queue-signal`, params);
   }
 
-  async subscribeToThread(params: SubscribeAgentThreadParams): Promise<
+  async subscribeToThread<WITH_RUN_STATUS extends boolean = false>(
+    params: SubscribeAgentThreadParams & { withRunStatus?: WITH_RUN_STATUS },
+  ): Promise<
     Response & {
-      processDataStream: (options: ProcessAgentThreadStreamOptions) => Promise<void>;
+      processDataStream: (options: ProcessAgentThreadStreamOptions<WITH_RUN_STATUS>) => Promise<void>;
       abort: (options?: Pick<AbortAgentThreadParams, 'clearPendingSignals'>) => Promise<boolean>;
       unsubscribe: () => void;
     }
   > {
-    const { resourceId, threadId, withInitialHistory } = params;
+    const { resourceId, threadId, withInitialHistory, withRunStatus } = params;
     const requestSubscription = () =>
       this.request(`/agents/${this.agentId}/threads/subscribe`, {
         method: 'POST',
-        body: { resourceId, threadId, ...(withInitialHistory ? { withInitialHistory } : {}) },
+        body: {
+          resourceId,
+          threadId,
+          ...(withInitialHistory ? { withInitialHistory } : {}),
+          ...(withRunStatus ? { withRunStatus } : {}),
+        },
         stream: true,
       }) as Promise<Response>;
 
     const streamResponse = (await requestSubscription()) as Response & {
-      processDataStream: (options: ProcessAgentThreadStreamOptions) => Promise<void>;
+      processDataStream: (options: ProcessAgentThreadStreamOptions<WITH_RUN_STATUS>) => Promise<void>;
       abort: (options?: Pick<AbortAgentThreadParams, 'clearPendingSignals'>) => Promise<boolean>;
       unsubscribe: () => void;
     };
@@ -749,7 +793,10 @@ export class Agent extends BaseResource {
       }
     };
 
-    streamResponse.processDataStream = async ({ onChunk, reconnect }: ProcessAgentThreadStreamOptions) => {
+    streamResponse.processDataStream = async ({
+      onChunk,
+      reconnect,
+    }: ProcessAgentThreadStreamOptions<WITH_RUN_STATUS>) => {
       if (unsubscribed) return;
       processStarted = true;
       processAbortController = new AbortController();
@@ -954,6 +1001,10 @@ export class Agent extends BaseResource {
           } catch (error) {
             agent.deleteLatestSignalRuntimeOptions({ resourceId, threadId });
             console.error('Error running client-tool continuation:', error);
+            // Surface the failure to the caller instead of swallowing it, so a
+            // rejected continuation rejects processDataStream with the original
+            // error rather than reconnecting or resolving as if it succeeded.
+            throw error;
           } finally {
             agent.deleteSignalRuntimeOptions(runId);
           }
@@ -1243,13 +1294,12 @@ export class Agent extends BaseResource {
   async generateLegacy(
     params: GenerateLegacyParams<undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateReturn<any, undefined, undefined>>;
-  // Use `any` in overload return types to avoid "Type instantiation is excessively deep" errors
   async generateLegacy<Output extends JSONSchema7 | ZodSchema>(
     params: GenerateLegacyParams<Output> & { output: Output; experimental_output?: never },
-  ): Promise<GenerateReturn<any, any, any>>;
+  ): Promise<GenerateReturn<any, Output, undefined>>;
   async generateLegacy<StructuredOutput extends JSONSchema7 | ZodSchema>(
     params: GenerateLegacyParams<StructuredOutput> & { output?: never; experimental_output: StructuredOutput },
-  ): Promise<GenerateReturn<any, any, any>>;
+  ): Promise<GenerateReturn<any, undefined, StructuredOutput>>;
   async generateLegacy<
     Output extends JSONSchema7 | ZodSchema | undefined = undefined,
     _StructuredOutput extends JSONSchema7 | ZodSchema | undefined = undefined,
@@ -1289,7 +1339,12 @@ export class Agent extends BaseResource {
         return response;
       }
 
+      const toolResults: Record<string, unknown>[] = [];
       for (const toolCall of toolCalls) {
+        // Don't start more client tools once the caller has cancelled.
+        if (abortSignal?.aborted) {
+          throw abortSignal.reason ?? new DOMException('This operation was aborted', 'AbortError');
+        }
         const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
 
         if (clientTool && clientTool.execute) {
@@ -1312,30 +1367,29 @@ export class Agent extends BaseResource {
             },
           });
 
-          // Build updated messages from the response, adding the tool result
-          // Do NOT re-include the original user message to avoid storage duplicates
-          const updatedMessages = [
-            ...(response.response as unknown as { messages: CoreMessage[] }).messages,
-            {
-              role: 'tool',
-              content: [
-                {
-                  type: 'tool-result',
-                  toolCallId: toolCall.toolCallId,
-                  toolName: toolCall.toolName,
-                  result,
-                  ...(observability ? { __mastraObservability: observability } : {}),
-                },
-              ],
-            },
-          ];
-          // Recursive call to generateLegacy with updated messages
-          // Using type assertion to handle the complex overload types
-          return (this.generateLegacy as any)({
-            ...params,
-            messages: updatedMessages,
+          toolResults.push({
+            type: 'tool-result',
+            toolCallId: toolCall.toolCallId,
+            toolName: toolCall.toolName,
+            result,
+            ...(observability ? { __mastraObservability: observability } : {}),
           });
         }
+      }
+
+      if (toolResults.length > 0) {
+        // Build updated messages from the response, adding the tool results
+        // Do NOT re-include the original user message to avoid storage duplicates
+        const updatedMessages = [
+          ...(response.response as unknown as { messages: CoreMessage[] }).messages,
+          { role: 'tool', content: toolResults },
+        ];
+        // Recursive call to generateLegacy with updated messages
+        // Using type assertion to handle the complex overload types
+        return (this.generateLegacy as any)({
+          ...params,
+          messages: updatedMessages,
+        });
       }
     }
 
@@ -1406,6 +1460,7 @@ export class Agent extends BaseResource {
         threadId,
         requestContext: requestContext as RequestContext<any>,
         respondFn: this.generate.bind(this) as ToolCallRespondFn<OUTPUT>,
+        abortSignal,
       }) as unknown as Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
     }
 
@@ -1831,7 +1886,11 @@ export class Agent extends BaseResource {
       async pull(controller) {
         const { done, value } = await innerReader.read();
         if (done) {
-          controller.close();
+          if (legacyStreamErrors.has(writable)) {
+            controller.error(legacyStreamErrors.get(writable));
+          } else {
+            controller.close();
+          }
         } else {
           controller.enqueue(value);
         }
@@ -2290,6 +2349,11 @@ export class Agent extends BaseResource {
       start(controller) {
         readableController = controller;
       },
+      pull(controller) {
+        if (pendingStreamErrors.has(controller)) {
+          controller.error(pendingStreamErrors.get(controller));
+        }
+      },
       cancel(reason) {
         abortController.abort(reason);
       },
@@ -2317,8 +2381,15 @@ export class Agent extends BaseResource {
     const detachSignal = signal;
     signal = mergeAbortSignals(detachSignal, transportAbort.signal);
     let cancellationTimer: ReturnType<typeof setTimeout> | undefined;
-    const stopCancellation = () => cancellationAbort.abort();
+    let cancelling = false;
+    // A consumer detach ends the retry; the SDK's own cancel after an onChunk failure must not end
+    // a cancellation the caller already started, which keeps running until acknowledged or the cap.
+    const keepCancelling = () => cancelling && isHandlerFailure(detachSignal?.reason);
+    const stopCancellation = () => {
+      if (!keepCancelling()) cancellationAbort.abort();
+    };
     const cancelExecution = () => {
+      cancelling = true;
       cancellationTimer = setTimeout(
         () => cancellationAbort.abort(new Error('Agent run cancellation was not acknowledged')),
         10_000,
@@ -2362,6 +2433,8 @@ export class Agent extends BaseResource {
     const cleanupCancellation = () => {
       callerSignal?.removeEventListener('abort', cancelExecution);
       detachSignal?.removeEventListener('abort', stopCancellation);
+      // The in-flight retry clears its own cap when it ends.
+      if (keepCancelling()) return;
       clearTimeout(cancellationTimer);
       stopCancellation();
     };
@@ -2406,6 +2479,8 @@ export class Agent extends BaseResource {
     const isAborted = () => Boolean(signal?.aborted || callerSignal?.aborted);
     const isAbortError = (error: unknown) => isAborted() || (error as Error)?.name === 'AbortError';
     const safeClose = () => {
+      // A failure is waiting for the consumer to drain the queue; closing would hide it.
+      if (pendingStreamErrors.has(controller)) return;
       try {
         controller.close();
       } catch {
@@ -2477,10 +2552,11 @@ export class Agent extends BaseResource {
           { signal },
         )
         .catch(error => {
-          if (!isAbortError(error)) {
-            console.error('Error piping to controller:', error);
+          if (isAbortError(error)) {
+            safeClose();
+          } else {
+            errorAfterQueuedChunks(controller, error);
           }
-          safeClose();
         });
 
       // Surface the abort to a consumer that is still reading (e.g. when a caller-provided
@@ -2666,7 +2742,7 @@ export class Agent extends BaseResource {
                   toolCallId: toolCall.toolCallId,
                   toolName: toolCall.toolName,
                   input: toolCall.args,
-                  result,
+                  output: { type: 'json', value: result as JSONValue },
                   ...(modelOutput != null
                     ? { providerOptions: { mastra: { modelOutput: modelOutput as JSONValue } } }
                     : {}),
@@ -2756,9 +2832,8 @@ export class Agent extends BaseResource {
                   signal,
                 );
               } catch (error) {
-                if (!isAbortError(error)) {
-                  console.error('Error processing recursive stream response:', error);
-                }
+                // Fail the outer stream instead of leaving it open with a half-finished reply.
+                if (!isAbortError(error)) throw error;
               }
             } else {
               // Close the controller after all processing is complete
@@ -2791,16 +2866,17 @@ export class Agent extends BaseResource {
         lastMessage: undefined,
       })
         .catch(async error => {
-          if (!isAbortError(error)) {
-            console.error('Error processing stream response:', error);
-          }
-          // On error, wait for pipe to complete then close the controller
+          // Let the pipe finish so the consumer still receives everything the server sent.
           try {
             await pipePromise;
           } catch {
             // pipePromise already has its own .catch; ignore here.
           }
-          safeClose();
+          if (isAbortError(error)) {
+            safeClose();
+          } else {
+            errorAfterQueuedChunks(controller, error);
+          }
         })
         .finally(() => {
           cleanupCancellation();
@@ -3404,20 +3480,27 @@ export class Agent extends BaseResource {
    * Use this to resume receiving events after a disconnection.
    *
    * @param params.runId - The run ID to observe
-   * @param params.offset - Optional position to resume from (0-based). If omitted, replays all events.
+   * @param params.offset - Run-log position to resume from. Chunks from `observe()`, and from `stream()` on
+   *   durable and evented agents, carry an `index`; pass the `index + 1` of the last chunk that has one. Chunks without an `index`
+   *   (`abort` and structured-output `object` chunks) are skipped when choosing the offset. If omitted,
+   *   replays the chunks still cached for the run, or only live chunks if the server's transport can't replay.
    * @returns Promise containing a streaming Response
    *
    * @example
    * ```typescript
-   * // Reconnect to a stream from a specific position
-   * const response = await client.agents('my-agent').observe({
-   *   runId: 'run-123',
-   *   offset: 42, // Resume from event 42
-   * });
+   * const agent = client.getAgent('my-agent');
+   * let offset = 0;
+   * const trackOffset = async (chunk: { index?: number }) => {
+   *   if (chunk.index === undefined) return;
+   *   offset = chunk.index + 1;
+   * };
    *
-   * await response.processDataStream({
-   *   onChunk: (chunk) => console.log('Received:', chunk),
-   * });
+   * const stream = await agent.stream(messages, { runId: 'run-123' });
+   * await stream.processDataStream({ onChunk: trackOffset });
+   *
+   * // After a dropped connection, resume where the last indexed chunk left off
+   * const response = await agent.observe({ runId: 'run-123', offset });
+   * await response.processDataStream({ onChunk: trackOffset });
    * ```
    */
   async observe(params: { runId: string; offset?: number }): Promise<
@@ -3855,7 +3938,7 @@ export class Agent extends BaseResource {
 
       // Pipe one branch to the writable stream. Passing the signal lets an abort
       // cancel this tee branch so the underlying response body is released.
-      streamForWritable
+      const pipePromise = streamForWritable
         .pipeTo(writable, {
           preventClose: true,
           signal,
@@ -3865,6 +3948,15 @@ export class Agent extends BaseResource {
             console.error('Error piping to writable stream:', error);
           }
         });
+
+      // Close the writable once everything piped has been written, marking the failure so
+      // the reader errors after the partial response instead of hanging or ending normally.
+      const failStream = async (error: unknown) => {
+        if (isAbortError(error) || legacyStreamErrors.has(writable)) return;
+        await pipePromise;
+        legacyStreamErrors.set(writable, error);
+        writable.close().catch(() => {});
+      };
 
       // Process the other branch for chat response handling
       const processingStream = signal
@@ -3982,11 +4074,7 @@ export class Agent extends BaseResource {
                   },
                   writable,
                   signal,
-                ).catch(error => {
-                  if (!isAbortError(error)) {
-                    console.error('Error processing stream response:', error);
-                  }
-                });
+                ).catch(error => failStream(error));
               }
             }
           } else {
@@ -3997,11 +4085,7 @@ export class Agent extends BaseResource {
           }
         },
         lastMessage: undefined,
-      }).catch(error => {
-        if (!isAbortError(error)) {
-          console.error('Error processing stream response:', error);
-        }
-      });
+      }).catch(error => failStream(error));
     } catch (error) {
       if (!isAbortError(error)) {
         console.error('Error processing stream response:', error);

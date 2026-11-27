@@ -61,32 +61,24 @@ describe('MigrateBundler', () => {
   });
 
   describe('getEntry', () => {
-    it('should generate entry script that imports mastra from #mastra', () => {
+    it.each([
+      ['should generate entry script that imports mastra from #mastra', "import { mastra } from '#mastra'"],
+      ['should generate entry script that calls mastra.getStorage()', 'mastra.getStorage()'],
+      [
+        'should generate entry script that accesses observabilityStore directly from storage.stores',
+        'storage.stores?.observability',
+      ],
+      [
+        'should generate entry script that calls observabilityStore.migrateSpans()',
+        'observabilityStore.migrateSpans()',
+      ],
+      ['should generate entry script that handles missing storage', 'Storage not configured'],
+      ['should generate entry script that handles missing observability store', 'Observability storage not configured'],
+    ] as const)('%s', (_title, expected) => {
       const bundler = new MigrateBundler();
       const entry = (bundler as any).getEntry();
 
-      expect(entry).toContain("import { mastra } from '#mastra'");
-    });
-
-    it('should generate entry script that calls mastra.getStorage()', () => {
-      const bundler = new MigrateBundler();
-      const entry = (bundler as any).getEntry();
-
-      expect(entry).toContain('mastra.getStorage()');
-    });
-
-    it('should generate entry script that accesses observabilityStore directly from storage.stores', () => {
-      const bundler = new MigrateBundler();
-      const entry = (bundler as any).getEntry();
-
-      expect(entry).toContain('storage.stores?.observability');
-    });
-
-    it('should generate entry script that calls observabilityStore.migrateSpans()', () => {
-      const bundler = new MigrateBundler();
-      const entry = (bundler as any).getEntry();
-
-      expect(entry).toContain('observabilityStore.migrateSpans()');
+      expect(entry).toContain(expected);
     });
 
     it('should generate entry script that outputs JSON result', () => {
@@ -99,20 +91,6 @@ describe('MigrateBundler', () => {
       expect(entry).toContain('alreadyMigrated');
       expect(entry).toContain('duplicatesRemoved');
       expect(entry).toContain('message');
-    });
-
-    it('should generate entry script that handles missing storage', () => {
-      const bundler = new MigrateBundler();
-      const entry = (bundler as any).getEntry();
-
-      expect(entry).toContain('Storage not configured');
-    });
-
-    it('should generate entry script that handles missing observability store', () => {
-      const bundler = new MigrateBundler();
-      const entry = (bundler as any).getEntry();
-
-      expect(entry).toContain('Observability storage not configured');
     });
 
     it('should generate entry script that handles missing migrateSpans method', () => {
@@ -155,17 +133,11 @@ describe('MigrateBundler', () => {
       expect(envFiles).toEqual(['.env', '.env.local', '.env.development']);
     });
 
-    it('should return empty array when MASTRA_SKIP_DOTENV is set to "true"', async () => {
-      process.env.MASTRA_SKIP_DOTENV = 'true';
-
-      const bundler = new MigrateBundler();
-      const envFiles = await bundler.getEnvFiles();
-
-      expect(envFiles).toEqual([]);
-    });
-
-    it('should return empty array when MASTRA_SKIP_DOTENV is "1"', async () => {
-      process.env.MASTRA_SKIP_DOTENV = '1';
+    it.each([
+      ['should return empty array when MASTRA_SKIP_DOTENV is set to "true"', 'true'],
+      ['should return empty array when MASTRA_SKIP_DOTENV is "1"', '1'],
+    ] as const)('%s', async (_title, value) => {
+      process.env.MASTRA_SKIP_DOTENV = value;
 
       const bundler = new MigrateBundler();
       const envFiles = await bundler.getEnvFiles();

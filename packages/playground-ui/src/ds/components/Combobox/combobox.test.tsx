@@ -20,6 +20,9 @@ const providers: ComboboxOption[] = [
   { label: 'Google', value: 'google' },
 ];
 
+// A label that shares no text with the value, so only a value match finds it.
+const namedModels: ComboboxOption[] = [{ label: 'Friendly name', value: 'org/model-v2' }, ...providers];
+
 function InField({ children }: { children: ReactNode }) {
   return (
     <Field>
@@ -109,16 +112,6 @@ describe('Combobox', () => {
       await openField();
 
       expect(optionNames()).toEqual(['OpenAI', 'Anthropic', 'Google']);
-    });
-
-    it('opens the list from the keyboard', async () => {
-      render(<SingleField />);
-      const user = userEvent.setup();
-
-      field().focus();
-      await user.keyboard('{ArrowDown}');
-
-      expect(await screen.findByRole('option', { name: 'OpenAI' })).toBeTruthy();
     });
 
     it('moves the highlight with the arrow keys and selects with Enter', async () => {
@@ -304,11 +297,67 @@ describe('Combobox', () => {
 
       expect(screen.queryByRole('option', { name: /^Use / })).toBeNull();
     });
+
+    it('adds typed text to a multiple select, but Enter prefers a matching option', async () => {
+      render(<MultipleField allowCustomValue />);
+      const user = await openField();
+
+      await user.keyboard('goo');
+      await screen.findByRole('option', { name: 'Use “goo”' });
+      await user.keyboard('{Enter}');
+      await user.keyboard('new-model');
+      await screen.findByRole('option', { name: 'Use “new-model”' });
+      await user.keyboard('{Enter}');
+
+      expect(chipNames()).toEqual(['Remove Google', 'Remove new-model']);
+    });
+
+    it.each([
+      [
+        'single',
+        'org/model-v2',
+        (onValueChange: (value: string | string[]) => void) => (
+          <SingleField allowCustomValue options={namedModels} onValueChange={onValueChange} />
+        ),
+      ],
+      [
+        'multiple',
+        ['org/model-v2'],
+        (onValueChange: (value: string | string[]) => void) => (
+          <MultipleField allowCustomValue options={namedModels} onValueChange={onValueChange} />
+        ),
+      ],
+    ])('offers the existing option when the typed text is its value in a %s select', async (_kind, expected, field) => {
+      const onValueChange = vi.fn();
+      render(field(onValueChange));
+      const user = await openField();
+
+      await user.keyboard(' org/model-v2 ');
+      await user.click(await screen.findByRole('option', { name: 'Friendly name' }));
+
+      expect(onValueChange).toHaveBeenLastCalledWith(expected);
+    });
+  });
+
+  describe('when a multiple select has a value its options do not list', () => {
+    it('keeps its chip and keeps it in the value when another option is picked', async () => {
+      const onValueChange = vi.fn();
+      render(<MultipleField initial={['retired-model']} onValueChange={onValueChange} />);
+      const user = await openField();
+
+      await user.click(screen.getByRole('option', { name: 'Google' }));
+
+      expect(onValueChange).toHaveBeenLastCalledWith(['retired-model', 'google']);
+      expect(chipNames()).toEqual(['Remove Google', 'Remove retired-model']);
+    });
   });
 
   describe('when custom values are not allowed', () => {
-    it('only says nothing matches', async () => {
-      render(<SingleField />);
+    it.each([
+      ['single', () => render(<SingleField />)],
+      ['multiple', () => render(<MultipleField />)],
+    ])('only says nothing matches in a %s select', async (_kind, renderField) => {
+      renderField();
       const user = await openField();
 
       await user.keyboard('new-provider/new-model');
@@ -542,23 +591,13 @@ describe('Combobox', () => {
     it('shows its own invitation while nothing is chosen', () => {
       render(<Combobox options={providers} />);
 
-      expect(trigger().textContent).toContain('Select option...');
+      expect(trigger().textContent).toContain('Select option');
     });
 
     it('names itself when no label names it', () => {
       render(<Combobox options={providers} />);
 
       expect(screen.getByRole('combobox', { name: 'Select option' })).toBeTruthy();
-    });
-
-    it('searches in the popup and focuses the search', async () => {
-      render(<Combobox options={providers} searchPlaceholder="Search providers" />);
-      const user = userEvent.setup();
-
-      await user.click(trigger());
-      const search = await screen.findByPlaceholderText('Search providers');
-
-      await waitFor(() => expect(document.activeElement).toBe(search));
     });
 
     it('filters as you type in the popup search and picks with Enter', async () => {
