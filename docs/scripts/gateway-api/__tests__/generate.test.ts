@@ -169,4 +169,23 @@ describe('generate', () => {
     expect(log).toHaveBeenLastCalledWith(expect.stringContaining('Generated'))
     await expect(fs.stat(page)).resolves.toBeDefined()
   })
+
+  // `SPEC_URL` in constants.ts only reaches the pages through markdown.ts, so the fingerprint has to cover it.
+  test('regenerates pages when constants.ts changes', { timeout: 120_000 }, async () => {
+    vi.stubEnv('GATEWAY_OPENAPI_SPEC', path.join(DOCS_ROOT, 'scripts/gateway-api/openapi.snapshot.json'))
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const constants = path.join(DOCS_ROOT, 'scripts/gateway-api/constants.ts')
+    const original = await fs.readFile(constants, 'utf-8')
+
+    await generate()
+    try {
+      await fs.writeFile(constants, `${original}// changed\n`)
+      await generate()
+      expect(log).toHaveBeenLastCalledWith(expect.stringContaining('Generated'))
+    } finally {
+      await fs.writeFile(constants, original)
+    }
+    await generate()
+    expect(log).toHaveBeenLastCalledWith(expect.stringContaining('Generated'))
+  })
 })

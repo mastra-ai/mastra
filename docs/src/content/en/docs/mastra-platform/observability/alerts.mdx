@@ -12,11 +12,11 @@ Observability alerts and platform alerts both send to the same destinations, but
 | Kind | Watches | Opens when |
 | - | - | - |
 | Observability alert | Traces, spans, scores, and custom metrics that your application sends to [Mastra Platform Observability](/docs/mastra-platform/observability/overview) | A measured value, such as an error rate or a day's cost, crosses a threshold you set |
-| Platform alert | Deploys, services, and usage of projects that run on Mastra platform | An event happens, such as a failed production deploy or when your server returns 4xx or 5xx status codes |
+| Platform alert | Deploys, services, and usage of projects that run on Mastra platform | An event happens, such as a failed production deploy or too many requests to your server returning 5xx errors |
 
 To be told about both an agent's error rate and a failed deploy, create one alert of each kind and point both at the same destination.
 
-This page explains the settings that decide whether an alert is useful or noisy, then covers platform alerts and destinations.
+This page explains the settings that decide whether an alert is useful or noisy.
 
 ## Before you begin
 
