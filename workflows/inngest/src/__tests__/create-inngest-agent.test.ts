@@ -2240,8 +2240,8 @@ describe('InngestAgent parity surface', () => {
       });
       const runId = 'resume-rejects-before-rebuild-run';
       const tools = { lookup: { id: 'lookup' } };
-      const baseTools = { lookup: tools.lookup };
-      globalRunRegistry.set(runId, { tools, baseTools, model: undefined } as any);
+      const requestTools = { lookup: tools.lookup };
+      globalRunRegistry.set(runId, { tools, requestTools, model: undefined } as any);
       const sendSpy = stubInngestSend();
 
       try {
@@ -2253,7 +2253,7 @@ describe('InngestAgent parity surface', () => {
         expect(sendSpy).not.toHaveBeenCalled();
         const entry = globalRunRegistry.get(runId) as any;
         expect(entry.tools).toBe(tools);
-        expect(entry.baseTools).toBe(baseTools);
+        expect(entry.requestTools).toBe(requestTools);
       } finally {
         vi.useRealTimers();
         globalRunRegistry.delete(runId);

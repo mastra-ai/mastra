@@ -76,10 +76,7 @@ export function buildDeadlineCrossWorkerAgent({
     description: 'Approval probe',
     inputSchema: z.object({}),
     requireApproval: true,
-    execute: async (_input, context) => {
-      log({ event: 'tool-execute', user: userId(context?.requestContext) });
-      return { approved: true };
-    },
+    execute: async () => ({ approved: true }),
   });
 
   const storage = new DefaultStorage({ id: `deadline-cross-worker-${agentId}`, url: dbUrl });

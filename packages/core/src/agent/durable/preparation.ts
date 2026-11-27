@@ -967,11 +967,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const registryEntry: RunRegistryEntry = {
     mastra,
     tools,
-    callToolsetToolNames: optionsAreResolved
-      ? serializeToolsetToolNames(execOptions?.toolsets)?.filter(
-          name => !serializeToolsetToolNames(defaultOptions?.toolsets)?.includes(name),
-        )
-      : serializeToolsetToolNames(rawExecOptions?.toolsets),
+    requestTools: tools,
     methodType,
     saveQueueManager,
     memory,

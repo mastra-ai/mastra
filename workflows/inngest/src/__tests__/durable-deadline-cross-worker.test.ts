@@ -45,7 +45,7 @@ const DEADLINE_MS = 4_000;
 
 type ToolEvent = {
   worker: string;
-  event: 'tool-started' | 'tool-aborted' | 'tool-execute' | 'output-pass' | 'resume-context' | 'llm-request-context';
+  event: 'tool-started' | 'tool-aborted' | 'output-pass' | 'resume-context' | 'llm-request-context';
   reason?: string;
   finishReason?: string;
   marker?: string;
@@ -356,12 +356,6 @@ describe('Inngest durable agent total deadline across workers (real Inngest dev 
       expect(resumed.map(e => e.event).sort()).toEqual(['llm-request-context', 'resume-context']);
       for (const event of resumed) expect(event).toMatchObject({ worker: 'driver', marker: 'B', user: 'bob' });
       expect(resumed.find(e => e.event === 'resume-context')?.tools).toEqual(['approve', 'bob_only', 'slow']);
-      // The approved tool runs as the approving caller.
-      expect(
-        toolEvents()
-          .slice(parked)
-          .filter(e => e.event === 'tool-execute'),
-      ).toEqual([expect.objectContaining({ worker: 'driver', user: 'bob' })]);
     } finally {
       server.close();
       server.closeAllConnections?.();

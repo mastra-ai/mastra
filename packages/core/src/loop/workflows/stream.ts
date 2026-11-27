@@ -13,9 +13,9 @@ import { safeClose, safeEnqueue } from '../../stream/base';
 import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom, isDataChunk } from '../../stream/types';
-import { refreshStepToolsForCaller } from '../../utils';
+import { rebindProcessorTools } from '../../utils';
 import { hydrateRunScopeFromInternal } from '../hydrate-run-scope';
-import { CONTINUATION_STOP_CAUSE_KEY, STEP_TOOLS_KEY } from '../run-scope-keys';
+import { CONTINUATION_STOP_CAUSE_KEY, REQUEST_TOOLS_KEY, STEP_TOOLS_KEY } from '../run-scope-keys';
 import { TOOL_ABORT_GRACE_MS, TOOL_SETTLE_MARGIN_MS } from '../shared/tool-abort-grace';
 import { createTimeoutAbortSignal, isMastraTimeoutError, settledOrElapsed } from '../timeout';
 import type { LoopRun } from '../types';
@@ -379,14 +379,29 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         // no separate release needed here.
         hydrateRunScopeFromInternal(rest.mastra, runId, _internal);
         // A scope kept alive across suspension still holds the previous request's step tools,
-        // which close over that request's requestContext. Rebuild them for this call, so the
-        // suspended call never runs with the previous caller's context. The processors do not run
-        // again before the call resumes, so the tools they added are rebuilt, not dropped (#27544).
+        // which close over that request's requestContext. Let the tools built for this call
+        // replace the ones the previous request configured, but keep the ones a processor added
+        // or swapped in, since the suspended call may be one of them and the processors do not
+        // run again before it resumes. Processor-added tools are rebuilt for this call's
+        // requestContext instead, so an approved one runs with the approver's context (#27544).
         const runScope = rest.mastra.__getRunScope(runId);
         const previousStepTools = resumeContext ? runScope?.get(STEP_TOOLS_KEY) : undefined;
         if (previousStepTools) {
-          runScope!.set(STEP_TOOLS_KEY, refreshStepToolsForCaller(previousStepTools, rest.tools ?? {}, requestContext));
+          const previousRequestTools = runScope!.get(REQUEST_TOOLS_KEY);
+          const stepTools = rebindProcessorTools({ ...previousStepTools }, requestContext);
+          for (const [name, tool] of Object.entries(rest.tools ?? {})) {
+            // A name the previous request configured but the step tools lack was withheld by a processor.
+            const refresh =
+              name in previousStepTools
+                ? previousStepTools[name] === previousRequestTools?.[name]
+                : !previousRequestTools || !(name in previousRequestTools);
+            if (refresh) {
+              stepTools[name] = tool;
+            }
+          }
+          runScope!.set(STEP_TOOLS_KEY, stepTools);
         }
+        if (rest.tools) runScope?.set(REQUEST_TOOLS_KEY, rest.tools);
       }
 
       // Once the run reaches a terminal state its snapshot rows are no longer

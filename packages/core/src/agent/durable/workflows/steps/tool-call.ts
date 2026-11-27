@@ -97,7 +97,6 @@ import {
   DURABLE_CONTEXT_SEGMENT_KEY,
   getLiveRunRequestContext,
   getRunRegistryEntry,
-  getStepSegment,
   globalRunRegistry,
   markRunActive,
 } from '../../run-registry';
@@ -113,7 +112,6 @@ import type {
 } from '../../types';
 import {
   rebuildRunToolsFromMastra,
-  rebuildToolsForSegment,
   resolveTool,
   restoreRequestContext,
   toolRequiresApproval,
@@ -725,28 +723,6 @@ export function createDurableToolCallStep() {
       const processorObservabilityContext = processorAgentSpan
         ? createObservabilityContext({ currentSpan: processorAgentSpan })
         : undefined;
-
-      // The cached tools were built for an earlier segment's caller, for example when another host
-      // resumed the run. Rebuild them for this segment's caller before resolving the approved call,
-      // so nothing built for the earlier caller runs (COR-1660). A failed rebuild fails the step.
-      const stepSegment = getStepSegment(runId, requestContext);
-      if (
-        registryEntry &&
-        mastra &&
-        stepSegment !== undefined &&
-        registryEntry.toolsSegment !== undefined &&
-        registryEntry.toolsSegment !== stepSegment
-      ) {
-        await rebuildToolsForSegment(mastra as Mastra, registryEntry, {
-          runId,
-          agentId: initData.agentId,
-          agentVersionId: initData.agentVersionId,
-          state: state as any,
-          options: agentOptions,
-          requestContext: restoreRequestContext(initData.requestContextEntries, requestContext),
-        });
-        registryEntry.toolsSegment = stepSegment;
-      }
 
       let tool = registryEntry?.tools?.[toolName];
       let mastraTools: Record<string, any> | undefined;
@@ -2406,12 +2382,7 @@ export function createDurableToolCallStep() {
         | undefined => {
         let bailed = false;
         let failure: SpanTermination | undefined;
-        for (const rc of [
-          registryEntry?.requestContext,
-          registryEntry?.toolsRequestContext,
-          rebuiltRequestContext,
-          requestContext,
-        ]) {
+        for (const rc of [registryEntry?.requestContext, rebuiltRequestContext, requestContext]) {
           if (rc?.get('__mastra_delegationBailed')) {
             bailed = true;
             rc.set('__mastra_delegationBailed', false);

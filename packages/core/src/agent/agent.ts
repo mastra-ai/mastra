@@ -182,7 +182,7 @@ import type {
 import { validateToolInput } from '../tools/validation';
 import type { DynamicArgument } from '../types';
 import type { ToolOptions } from '../utils';
-import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge, refreshStepToolsForCaller } from '../utils';
+import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge, rebindProcessorTools } from '../utils';
 import { resolveDynamicArgument } from '../utils/dynamic-argument';
 import { slugify } from '../utils/slugify';
 import type { IMastraVoice } from '../voice';
@@ -299,7 +299,6 @@ import type {
 import { DurableProcessorRebuildError } from './durable/utils/resolve-runtime';
 import { restoreCompletionPolicy } from './durable/utils/restore-completion';
 import { normalizeResumeGenerateArgs } from './durable/utils/resume-generate-args';
-import { serializeToolsetToolNames } from './durable/utils/serialize-state';
 import { deadlineMessageListState, runDurableDeadlineOutputPass } from './durable/workflows/finalize-run';
 import {
   hydrateMessageListState,
@@ -15714,11 +15713,13 @@ export class Agent<
       await executionFence.settle(async () => {});
       throw error;
     }
-    // A warm resume holds tools built for an earlier request, which close over its request context,
-    // delegation hooks, and tool hooks (#25960). Rebuild them for this call every time, so the
-    // segment never runs on tools built for anyone else. Cold resumes already rebuilt everything
-    // in prepare() above.
-    if (!coldSnapshot) {
+    // A warm resume reuses the tools built for the first request, which close
+    // over its request context, delegation hooks, and tool hooks (#25960). Rebuild them for
+    // this call and swap in only entries still holding a request-built tool, so
+    // tools a processor added or replaced are kept. Processor-added tools are
+    // rebuilt for this call's request context instead (#27544). Cold resumes already
+    // rebuilt everything in prepare() above.
+    if (!coldSnapshot && (options?.requestContext || options?.delegation || options?.hooks || droppedStartingUser)) {
       try {
         const requestTools = await this.agentForExecution.getToolsForExecution({
           toolsets: resolvedOptions.toolsets,
@@ -15742,29 +15743,27 @@ export class Agent<
           backgroundTaskPolicy: resolvedOptions.backgroundTaskPolicy,
           model: entry.model,
         });
-        // Call-time toolsets cannot be repeated by a resume over HTTP, so the earlier call's are kept
-        // unless this resume passes its own.
+        const refresh = (current: Record<string, CoreTool>, previous: Record<string, CoreTool> | undefined) => {
+          const next = { ...current };
+          for (const [name, tool] of Object.entries(requestTools)) {
+            // A name missing from current but present in previous was withheld by a processor.
+            const configured = name in current ? current[name] === previous?.[name] : !previous || !(name in previous);
+            if (configured) next[name] = tool;
+          }
+          return next;
+        };
         for (const reg of new Set([entry, getRunRegistryEntry(runId, this.#mastra)])) {
           if (!reg) continue;
-          const keep = new Set(options?.toolsets ? [] : (reg.callToolsetToolNames ?? []));
-          reg.tools = refreshStepToolsForCaller(reg.tools ?? {}, requestTools, resumeRequestContext, keep);
-          // Later steps start from this caller's build, not the earlier caller's. Input processors run
-          // again every step, so the tools they add or withhold need no carrying over.
-          const keptToolsets = Object.fromEntries(
-            [...keep].flatMap(name => {
-              const tool = reg.baseTools?.[name];
-              return tool && !(name in requestTools) ? [[name, tool] as const] : [];
-            }),
-          );
-          reg.baseTools = { ...keptToolsets, ...requestTools };
-          if (options?.toolsets) reg.callToolsetToolNames = serializeToolsetToolNames(options.toolsets);
+          reg.tools = rebindProcessorTools(refresh(reg.tools ?? {}, reg.requestTools), resumeRequestContext);
+          if (reg.baseTools)
+            reg.baseTools = rebindProcessorTools(refresh(reg.baseTools, reg.requestTools), resumeRequestContext);
+          // Tools this rebuild did not produce still hold their earlier build, so
+          // keep that as their baseline; otherwise a later resume can never refresh them.
+          reg.requestTools = { ...reg.requestTools, ...requestTools };
           if (options?.delegation) reg.delegation = resolvedOptions.delegation;
         }
       } catch (error) {
-        // The entry's tools still close over the earlier caller, so the segment must not run on them.
-        this.#mastra?.getLogger?.()?.error?.(`[DurableAgent] resume(${runId}) tool resolution failed: ${error}`);
-        await executionFence.settle(async () => {});
-        throw error;
+        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] resume(${runId}) tool resolution failed: ${error}`);
       }
     }
     setExecutionClaim(resumeRequestContext, runId, executionFence.claim);
@@ -15772,12 +15771,6 @@ export class Agent<
       if (!reg) continue;
       reg.executionFence = executionFence;
       reg.resumeToolCallId = resolvedOptions.toolCallId;
-      // This process holds tools for the resuming caller (refreshed above, or the same caller's), so the
-      // resumed segment adopts them instead of rebuilding.
-      if (!coldSnapshot) {
-        reg.toolsSegment = undefined;
-        reg.toolsRequestContext = undefined;
-      }
     }
 
     // Install a fresh abort controller for the resumed segment. The original

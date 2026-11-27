@@ -16,7 +16,6 @@ import type {
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext, withoutLiveRequestKeys } from '../../../request-context';
 import { getNeedsApprovalFn, isApprovalExempt } from '../../../tools/toolchecks';
 import type { CoreTool, RequireToolApproval, ToolApprovalContext } from '../../../tools/types';
-import { refreshStepToolsForCaller } from '../../../utils';
 import type { Workspace } from '../../../workspace';
 import type { Agent } from '../../agent';
 import type { MessageList } from '../../message-list';
@@ -102,69 +101,11 @@ export interface ResolveRuntimeOptions {
    * `requestContextEntries` snapshot. See `restoreRequestContext`.
    */
   requestContext?: RequestContext;
-  /**
-   * The run segment this step belongs to (see `getStepSegment`). When it differs from the segment
-   * the cached tools were built for, they are rebuilt for this segment's caller.
-   */
-  stepSegment?: string;
   /** Logger for debugging */
   logger?: { debug?: (...args: any[]) => void; error?: (...args: any[]) => void };
 }
 
 export { restoreRequestContext };
-
-/**
- * Rebuild a hydrated entry's request-built tools for another segment's caller. Call-time toolsets
- * only exist in the process that received them, so the earlier call's are kept.
- */
-export async function rebuildToolsForSegment(
-  mastra: Mastra,
-  entry: RunRegistryEntry,
-  {
-    runId,
-    agentId,
-    agentVersionId,
-    state,
-    options,
-    requestContext,
-  }: {
-    runId: string;
-    agentId: string;
-    agentVersionId?: string;
-    state: Pick<DurableAgenticWorkflowInput['state'], 'threadId' | 'resourceId' | 'memoryConfig'>;
-    options?: DurableAgenticWorkflowInput['options'];
-    requestContext: RequestContext;
-  },
-): Promise<Record<string, CoreTool>> {
-  const resolved = await resolveRunAgent(mastra, agentId, runId, agentVersionId);
-  const agent = isDurableAgentLike(resolved) && resolved.agent !== resolved ? resolved.agent : resolved;
-  const requestTools = await agent.getToolsForExecution({
-    runId,
-    threadId: state.threadId,
-    resourceId: state.resourceId,
-    requestContext,
-    memoryConfig: state.memoryConfig,
-    autoResumeSuspendedTools: options?.autoResumeSuspendedTools,
-    clientTools: options?.clientTools as ToolsInput | undefined,
-    delegation: entry.delegation,
-    methodType: entry.methodType ?? 'stream',
-    backgroundTaskEnabled: Boolean(entry.backgroundTaskManager),
-    backgroundTaskPolicy: options?.backgroundTaskPolicy,
-    model: entry.model,
-  });
-  const keep = new Set(entry.callToolsetToolNames ?? []);
-  // The suspended step's tools, so an approved call runs with this segment's caller too.
-  entry.tools = refreshStepToolsForCaller(entry.tools ?? {}, requestTools, requestContext, keep);
-  const keptToolsets = Object.fromEntries(
-    [...keep].flatMap(name => {
-      const tool = entry.baseTools?.[name];
-      return tool && !(name in requestTools) ? [[name, tool] as const] : [];
-    }),
-  );
-  entry.baseTools = { ...keptToolsets, ...requestTools };
-  entry.toolsRequestContext = requestContext;
-  return entry.baseTools;
-}
 
 /**
  * The run's `requestContextEntries` as handed to scorers (`customContext`), with
@@ -391,7 +332,6 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   let errorProcessors: ErrorProcessorOrWorkflow[] | undefined = globalEntry?.errorProcessors;
   let processorStates: Map<string, ProcessorState> | undefined = globalEntry?.processorStates;
   let rehydratedFromMastra = false;
-  let toolsSegment: string | undefined;
   let rebuiltAgent: Agent<any, any, any, any> | undefined;
   let backgroundTasks: ReturnType<typeof resolveBackgroundTasks> | undefined;
 
@@ -400,24 +340,6 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   // through and rebuild from the Mastra instance.
   if (hasHydratedEntry) {
     logger?.debug?.(`[DurableAgent:${agentId}] Using model and tools from global registry for run ${runId}`);
-    const { stepSegment } = options;
-    if (!globalEntry || stepSegment === undefined) {
-      // Nothing to compare: the caller passed no segment for this step.
-    } else if (globalEntry.toolsSegment === undefined) {
-      globalEntry.toolsSegment = stepSegment;
-    } else if (globalEntry.toolsSegment !== stepSegment && mastra) {
-      // The cached tools were built for the caller of an earlier segment, for example when another
-      // host resumed the run. Later steps start from this segment's caller's build instead.
-      tools = await rebuildToolsForSegment(mastra, globalEntry, {
-        runId,
-        agentId,
-        agentVersionId: input.agentVersionId,
-        state: input.state,
-        options: input.options,
-        requestContext: restoreRequestContext(input.requestContextEntries, options.requestContext),
-      });
-      globalEntry.toolsSegment = stepSegment;
-    }
   } else if (mastra) {
     try {
       const agent = await resolveRunAgent(mastra, agentId, runId, input.agentVersionId);
@@ -481,7 +403,6 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       processorStates = rebuiltProcessors.processorStates;
 
       rehydratedFromMastra = true;
-      toolsSegment = options.stepSegment;
     } catch (error) {
       if (error instanceof DurableProcessorRebuildError || error instanceof DurableAgentNotFoundError) throw error;
       if ((input.options?.toolsetToolNames?.length ?? 0) > 0) throw error;
@@ -512,8 +433,6 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       // so sibling steps in this process trust it instead of rebuilding.
       isPlaceholder: false,
       tools,
-      baseTools: tools,
-      toolsSegment,
       model,
       modelList,
       workspace,
