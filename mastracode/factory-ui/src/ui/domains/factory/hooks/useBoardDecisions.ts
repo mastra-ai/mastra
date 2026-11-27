@@ -5,7 +5,7 @@ import {
   useFactoryDecisionAction,
   useFactoryDecisionStatus,
 } from '../../../../hooks/useFactoryDecisions';
-import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../services/decisions';
+import type { FactoryDecisionStatus, FactoryDecisionSummary } from '@internal/factory-contract';
 
 const BOARD_STATUSES: FactoryDecisionStatus[] = ['pending', 'proposed', 'leased', 'retry', 'failed'];
 

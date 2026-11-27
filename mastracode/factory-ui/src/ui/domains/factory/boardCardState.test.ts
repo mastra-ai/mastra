@@ -4,7 +4,7 @@ import type { InstalledPhaseInfo } from '../../../api/types';
 import { boardCardState, canMoveTo } from './boardCardState';
 import type { BoardCardOwner, BoardCardStateInput } from './boardCardState';
 import { cardActions } from './cardPrimaryAction';
-import type { FactoryDecisionSummary } from './services/decisions';
+import type { FactoryDecisionSummary } from '@internal/factory-contract';
 
 function decision(overrides: Partial<FactoryDecisionSummary> = {}): FactoryDecisionSummary {
   return {

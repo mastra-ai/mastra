@@ -1,4 +1,4 @@
-import type { SessionRowStatus, WorkItem } from '@internal/factory-contract';
+import type { SessionRowStatus, WorkItem, FactoryDecisionSummary } from '@internal/factory-contract';
 
 import type { InstalledBoardInfo } from '../../../api/types';
 import { boardCardState } from './boardCardState';
@@ -11,7 +11,6 @@ import {
   resumeStage,
   retryButton,
 } from './cardPrimaryAction';
-import type { FactoryDecisionSummary } from './services/decisions';
 import type { BoardStageId } from './stages';
 import { movingCardStatus, nextBoardPhase, primaryCardMove, proposedCardRun } from './workItemCardPresentation';
 

@@ -1,8 +1,7 @@
-import type { FactoryRuleRejectionCode } from '@internal/factory-contract';
-import { classifyProviderError, PROVIDER_CALL_ERROR_NAME } from '@mastra/core/error';
+import type { FactoryRuleRejectionCode, FactoryDispatchFailureCode } from '@internal/factory-contract';
 
+import { classifyProviderError, PROVIDER_CALL_ERROR_NAME } from '@mastra/core/error';
 import type { ProviderFailureKind } from '@mastra/core/error';
-import type { FactoryDispatchFailureCode } from '../storage/domains/work-items/base.js';
 import { factoryDispatchFailureMetadata, FactoryRuleRejectedError } from './dispatch-errors.js';
 
 export function causeOf(error: unknown): unknown {

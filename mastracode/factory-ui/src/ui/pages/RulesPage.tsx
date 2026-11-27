@@ -19,7 +19,7 @@ import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHead
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
 import { DayHeading, RailRow, RAIL_LIST, RAIL_MARK_TONE, RAIL_ROW_BODY } from '../domains/factory/components/Timeline';
-import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../domains/factory/services/decisions';
+import type { FactoryDecisionStatus, FactoryDecisionSummary } from '@internal/factory-contract';
 import { RuleDecisionsSkeleton } from '../domains/factory/components/RuleDecisionsSkeleton';
 import { RULE_DECISION_GROUPS, ruleDecisionGroup } from '../domains/factory/ruleDecisionGroups';
 import type { RuleDecisionGroupKey } from '../domains/factory/ruleDecisionGroups';

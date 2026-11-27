@@ -191,3 +191,33 @@ export type WorkItemListResponse = z.infer<typeof workItemListResponseSchema>;
 export type WorkItemStartersResponse = z.infer<typeof workItemStartersResponseSchema>;
 export type WorkItemActivityResponse = z.infer<typeof workItemActivityResponseSchema>;
 export type WorkItemSessionRepositoryResponse = z.infer<typeof workItemSessionRepositoryResponseSchema>;
+
+/** The filters a board view picks values for; each is sent once per picked value. */
+export const BOARD_PHASES_FILTERS = [
+  'source',
+  'linearProject',
+  'label',
+  'pullRequest',
+  'trust',
+  'teammate',
+  'author',
+  'assignee',
+  'reviewer',
+  'worked',
+] as const;
+export type BoardPhasesFilter = (typeof BOARD_PHASES_FILTERS)[number];
+export type BoardPhasesSort = (typeof BOARD_PHASES_SORTS)[number];
+
+/** What the board read is asked: one view of a board, and how deep each of its phases is listed. */
+export interface BoardPhasesRequest {
+  board: string;
+  sort: BoardPhasesSort;
+  /** Empty searches nothing. */
+  q: string;
+  /** The picked values of each filter, sorted. A filter that picks nothing is left out. */
+  filters: Partial<Record<BoardPhasesFilter, readonly string[]>>;
+  /** How many cards a phase lists, for the phases listed deeper than the server's first page. */
+  windows: Readonly<Record<string, number>>;
+  /** A card to answer for apart from the listing: its body, and where each phase holding it places it. */
+  item?: string;
+}

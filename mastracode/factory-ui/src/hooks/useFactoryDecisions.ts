@@ -11,11 +11,7 @@ import {
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import { actOnFactoryDecision, fetchFactoryDecisions, fetchRunQueue } from '../ui/domains/factory/services/decisions';
-import type {
-  FactoryDecisionAction,
-  FactoryDecisionPage,
-  FactoryDecisionStatus,
-} from '../ui/domains/factory/services/decisions';
+import type { FactoryDecisionAction, FactoryDecisionPage, FactoryDecisionStatus } from '@internal/factory-contract';
 
 export function factoryDecisionStatusQueryOptions(
   baseUrl: string,

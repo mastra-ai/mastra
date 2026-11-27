@@ -31,3 +31,4 @@ export * from './boards/board-events.js';
 export * from './rules/rule-group.js';
 export * from './wire/board.js';
 export * from './work-items/card.js';
+export * from './wire/decisions.js';

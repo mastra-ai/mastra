@@ -1,7 +1,7 @@
 import { BoardCard } from '@mastra/playground-ui/domains/factory';
 import { HrefLink } from '../../../ui/HrefLink';
 import { cardThreadSession, itemThreadSession } from '@internal/factory-contract';
-import type { SessionRowStatus, WorkItem } from '@internal/factory-contract';
+import type { SessionRowStatus, WorkItem, FactoryDecisionSummary } from '@internal/factory-contract';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import type { ReactElement } from 'react';
@@ -17,7 +17,6 @@ import { itemBoard } from '../boardStages';
 import { cardControls } from '../cardControls';
 import { useBoardRepository } from '../hooks/useBoardRepository';
 import type { AuditEventPage } from '../services/audit';
-import type { FactoryDecisionSummary } from '../services/decisions';
 import { relationshipPath } from '../services/relationships';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';

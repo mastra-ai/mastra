@@ -1,3 +1,10 @@
+import type {
+  BoardPhasesFilter,
+  BoardPhasesResponse,
+  CardChangeRequest,
+  RunQueueResponse,
+  WorkItemFilterOptionsResponse,
+} from '@internal/factory-contract';
 import {
   BOARD_PHASES_SORTS,
   boardPhasesResponseSchema,
@@ -19,12 +26,6 @@ import {
   routeEventsProblem,
   ruleGroupSchema,
   STATUS_EVENTS,
-} from '@internal/factory-contract';
-import type {
-  BoardPhasesResponse,
-  CardChangeRequest,
-  RunQueueResponse,
-  WorkItemFilterOptionsResponse,
 } from '@internal/factory-contract';
 
 export {
@@ -924,6 +925,21 @@ export const boardPhasesQuerySchema = z.object({
   /** `true` also sends the body of every card the answer names. */
   cards: z.enum(['true']).optional(),
 });
+
+type BoardPhasesQueryFilter = {
+  [Field in keyof z.output<typeof boardPhasesQuerySchema>]-?: z.output<
+    typeof boardPhasesQuerySchema
+  >[Field] extends Set<string>
+    ? Field
+    : never;
+}[keyof z.output<typeof boardPhasesQuerySchema>];
+// The board's clients send BOARD_PHASES_FILTERS; this fails to compile when the query schema's filters drift from it.
+const boardPhasesFiltersMatch: [BoardPhasesQueryFilter] extends [BoardPhasesFilter]
+  ? [BoardPhasesFilter] extends [BoardPhasesQueryFilter]
+    ? true
+    : false
+  : false = true;
+void boardPhasesFiltersMatch;
 
 export type BoardPhasesQuery = z.output<typeof boardPhasesQuerySchema>;
 

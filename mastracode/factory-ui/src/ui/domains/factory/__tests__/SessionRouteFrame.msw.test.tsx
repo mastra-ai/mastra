@@ -16,7 +16,7 @@ import { sessionCardsWhileBoardLoads } from '../../../../../e2e/ui/session-cards
 import type { BoardCatalogResponse, InstalledBoardInfo } from '../../../../api/types';
 import { ChatSessionTestProvider } from '../../chat/context/ChatSessionTestProvider';
 import { SessionRouteFrame } from '../components/SessionRouteFrame';
-import type { FactoryDecisionSummary } from '../services/decisions';
+import type { FactoryDecisionSummary } from '@internal/factory-contract';
 
 const FACTORY_ID = 'factory-1';
 const REPOSITORY_ID = 'repository-1';

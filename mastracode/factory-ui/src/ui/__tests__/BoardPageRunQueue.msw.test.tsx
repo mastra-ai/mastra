@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
-import type { FactoryDecisionPage, FactoryDecisionSummary } from '../domains/factory/services/decisions';
+import type { FactoryDecisionPage, FactoryDecisionSummary } from '@internal/factory-contract';
 import { createAppRoutes } from '../router';
 import { FACTORY_ID, stubWorkBoard } from './workBoardStubs';
 

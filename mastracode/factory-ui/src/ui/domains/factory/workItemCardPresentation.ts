@@ -1,8 +1,7 @@
 import type { InstalledBoardInfo } from '../../../api/types';
 import { phaseLabel, phaseName } from './boardStages';
 import type { CardMove } from './cardPrimaryAction';
-import type { FactoryDecisionSummary } from './services/decisions';
-import type { WorkItem } from '@internal/factory-contract';
+import type { FactoryDecisionSummary, WorkItem } from '@internal/factory-contract';
 
 // The lane's own move first: clicking the button of the column a card sits in re-runs that lane.
 // Then the first lane the card has not had a run in, so a card never leads with a run it has already had.
