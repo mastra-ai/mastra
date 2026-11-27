@@ -1,5 +1,6 @@
 import { SandboxUnsupportedFeatureError, Workspace, createWorkspaceTools } from '@mastra/core/workspace';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { VercelSandboxOptions } from './index';
 import { VercelSandbox } from './index';
 
 const createMock = vi.fn();
@@ -175,6 +176,123 @@ describe('VercelSandbox', () => {
       expect(createMock).toHaveBeenCalledTimes(1);
       const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
       expect(params.name).toBeUndefined();
+    });
+  });
+
+  describe('creation controls', () => {
+    it('forwards a structured network policy through Sandbox.create unchanged', async () => {
+      createMock.mockResolvedValue(makeFakeSandbox());
+      const networkPolicy = { allow: ['*.npmjs.org', 'github.com'], subnets: { allow: ['10.0.0.0/8'] } };
+
+      const sandbox = new VercelSandbox({ networkPolicy });
+      await sandbox._start();
+
+      const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
+      // Forwarded by reference: the provider must not clone, reorder, or drop rules.
+      expect(params.networkPolicy).toBe(networkPolicy);
+    });
+
+    it('forwards a structured network policy through Sandbox.getOrCreate unchanged', async () => {
+      getOrCreateMock.mockResolvedValue(makeFakeSandbox());
+      const networkPolicy = { allow: { '*.npmjs.org': [] } };
+
+      const sandbox = new VercelSandbox({ sandboxName: 'named-box', networkPolicy });
+      await sandbox._start();
+
+      expect(createMock).not.toHaveBeenCalled();
+      const params = getOrCreateMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.name).toBe('named-box');
+      expect(params.networkPolicy).toBe(networkPolicy);
+    });
+
+    it('starts an image-only sandbox without a runtime or source key', async () => {
+      createMock.mockResolvedValue(makeFakeSandbox());
+
+      const sandbox = new VercelSandbox({ image: 'my-repo:v1' });
+      await sandbox._start();
+
+      const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.image).toBe('my-repo:v1');
+      // The SDK rejects runtime/image/source together, so a default runtime must
+      // be absent (not merely falsy) whenever an image is selected.
+      expect('runtime' in params).toBe(false);
+      expect('source' in params).toBe(false);
+    });
+
+    it('starts a snapshot-only sandbox without a runtime or image key', async () => {
+      createMock.mockResolvedValue(makeFakeSandbox());
+      const source = { type: 'snapshot', snapshotId: 'snap_123' } as const;
+
+      const sandbox = new VercelSandbox({ source });
+      await sandbox._start();
+
+      const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.source).toBe(source);
+      expect('runtime' in params).toBe(false);
+      expect('image' in params).toBe(false);
+    });
+
+    it('defaults to the legacy node24 runtime when nothing else is selected', async () => {
+      createMock.mockResolvedValue(makeFakeSandbox());
+
+      await new VercelSandbox()._start();
+
+      const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.runtime).toBe('node24');
+      expect('image' in params).toBe(false);
+      expect('source' in params).toBe(false);
+    });
+
+    it('preserves an explicitly supplied legacy runtime', async () => {
+      createMock.mockResolvedValue(makeFakeSandbox());
+
+      await new VercelSandbox({ runtime: 'python3.13' })._start();
+
+      const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.runtime).toBe('python3.13');
+      expect('image' in params).toBe(false);
+      expect('source' in params).toBe(false);
+    });
+
+    const incompatiblePairs: Array<[string, VercelSandboxOptions]> = [
+      ['runtime and image', { runtime: 'node22', image: 'my-repo:v1' }],
+      ['runtime and source', { runtime: 'node22', source: { type: 'snapshot', snapshotId: 'snap_1' } }],
+      ['image and source', { image: 'my-repo:v1', source: { type: 'snapshot', snapshotId: 'snap_1' } }],
+    ];
+
+    it.each(incompatiblePairs)('rejects %s at construction without touching the SDK', (_label, options) => {
+      expect(() => new VercelSandbox(options)).toThrow(/mutually exclusive/);
+      expect(createMock).not.toHaveBeenCalled();
+      expect(getOrCreateMock).not.toHaveBeenCalled();
+    });
+
+    it('carries image and network policy into a started clone', async () => {
+      createMock.mockResolvedValue(makeFakeSandbox());
+      const networkPolicy = 'deny-all' as const;
+      const template = new VercelSandbox({ image: 'my-repo:v1', networkPolicy, sandboxName: 'template-box' });
+
+      const child = template.clone({ id: 'child-1' });
+      await child._start();
+
+      const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.image).toBe('my-repo:v1');
+      expect(params.networkPolicy).toBe(networkPolicy);
+      expect('runtime' in params).toBe(false);
+      // clone() drops the template's name so the child is an independent sandbox.
+      expect(params.name).toBeUndefined();
+    });
+
+    it('carries a snapshot source into a started clone', async () => {
+      createMock.mockResolvedValue(makeFakeSandbox());
+      const source = { type: 'snapshot', snapshotId: 'snap_42' } as const;
+      const template = new VercelSandbox({ source, networkPolicy: { allow: ['registry.npmjs.org'] } });
+
+      const child = template.clone();
+      await child._start();
+
+      const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.source).toEqual(source);
+      expect('runtime' in params).toBe(false);
     });
   });
 

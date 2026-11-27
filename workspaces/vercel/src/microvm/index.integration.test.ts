@@ -11,18 +11,23 @@ const HAS_TOKEN_TRIPLE = Boolean(
 );
 const HAS_CREDS = HAS_OIDC || HAS_TOKEN_TRIPLE;
 
+/** Credentials for the SDK, or an empty object when authenticating via OIDC. */
+function credentialOptions() {
+  return HAS_TOKEN_TRIPLE
+    ? {
+        token: process.env.VERCEL_TOKEN,
+        teamId: process.env.VERCEL_TEAM_ID,
+        projectId: process.env.VERCEL_PROJECT_ID,
+      }
+    : {};
+}
+
 describe.skipIf(!HAS_CREDS)('VercelSandbox Integration', () => {
   let sandbox: VercelSandbox | undefined;
 
   beforeAll(async () => {
     sandbox = new VercelSandbox({
-      ...(HAS_TOKEN_TRIPLE
-        ? {
-            token: process.env.VERCEL_TOKEN,
-            teamId: process.env.VERCEL_TEAM_ID,
-            projectId: process.env.VERCEL_PROJECT_ID,
-          }
-        : {}),
+      ...credentialOptions(),
       timeout: 300_000,
     });
     await sandbox._start();
@@ -58,4 +63,32 @@ describe.skipIf(!HAS_CREDS)('VercelSandbox Integration', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('background');
   });
+
+  it('blocks the first outbound request when created with a deny-all network policy', async () => {
+    // A dedicated sandbox: the network policy is fixed at creation and cannot
+    // be changed, so it must not share the unrestricted sandbox above.
+    const restricted = new VercelSandbox({
+      ...credentialOptions(),
+      timeout: 300_000,
+      networkPolicy: 'deny-all',
+    });
+
+    try {
+      await restricted._start();
+
+      // Run the outbound attempt as the sandbox's first command. The script
+      // prints a marker before exiting so a failure can be traced to a
+      // blocked request rather than a missing binary.
+      const result = await restricted.executeCommand('node', [
+        '-e',
+        "fetch('https://example.com').then(() => { console.log('REACHED'); process.exit(0); }).catch(() => { console.log('BLOCKED'); process.exit(7); })",
+      ]);
+
+      expect(result.stdout).toContain('BLOCKED');
+      expect(result.success).toBe(false);
+      expect(result.exitCode).not.toBe(0);
+    } finally {
+      await restricted._destroy();
+    }
+  }, 180_000);
 });
