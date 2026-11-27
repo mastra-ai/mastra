@@ -8,7 +8,9 @@ import { Mastra } from '@mastra/core/mastra';
 import type { FactoryStorage } from '@mastra/core/storage';
 import { LocalFilesystem, MastraSandbox } from '@mastra/core/workspace';
 import type { ProviderStatus } from '@mastra/core/workspace';
+import { createHonoServer } from '@mastra/deployer/server';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
+import { MCPClient } from '@mastra/mcp';
 import { PgFactoryStorage, PostgresStore } from '@mastra/pg';
 import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
@@ -803,7 +805,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         await runShipyard(createWorkflowBoardEngine);
       }, 120_000);
 
-      it("keeps cards' board runs off the host's workflow routes, where no org owns them", async () => {
+      it("keeps cards' board runs off the host's workflow routes and MCP endpoint, where no org owns them", async () => {
         stubModel();
         const orgId = `org-${randomUUID()}`;
         const replica = await boot(database(), orgId, { boardEngine: createWorkflowBoardEngine });
@@ -845,6 +847,37 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
 
         expect([list.status, one.status, resume.status]).toEqual([404, 404, 404]);
         expect(await list.json()).toEqual({ error: 'Not found' });
+
+        // The host's built-in MCP endpoint reads runs in-process, past the middleware above.
+        vi.stubEnv('MASTRA_DEV', 'true');
+        const served = await createHonoServer(replica.mastra, { tools: {} });
+        const mcp = new MCPClient({
+          id: `board-runs-${randomUUID()}`,
+          servers: {
+            host: {
+              url: new URL('http://localhost/api/mcp'),
+              // The in-memory host is asked directly, so the Host header a socket would carry is added.
+              fetch: (input, init) =>
+                Promise.resolve(
+                  served.request(String(input), {
+                    ...init,
+                    headers: { ...Object.fromEntries(new Headers(init?.headers)), host: 'localhost' },
+                  }),
+                ),
+            },
+          },
+        });
+        onTestFinished(() => mcp.disconnect());
+        const tools = await mcp.listTools();
+        const read = await tools.host_get_workflow_run
+          ?.execute?.({ workflowId: 'factory-board', runId: `factory-board:${card.id}` }, {})
+          .catch((error: unknown) => ({ error: String(error) }));
+        // The tool is there for the host's other workflows, and knows no board workflow.
+        expect(read).toBeDefined();
+        const answer = JSON.stringify(read);
+        expect(answer).toContain('workflowId');
+        expect(answer).not.toContain('terminal');
+        expect(answer).not.toContain('appliedMoves');
       }, 60_000);
 
       it('leaves a card awaiting approval on the workflow board engine until a person approves its plan', async () => {

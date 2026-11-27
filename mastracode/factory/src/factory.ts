@@ -2589,6 +2589,9 @@ export class MastraFactory {
             workItems: () => (storage.isDomainReady('work-items') ? workItemsStorage : undefined),
           });
           const boardRunGuard = createBoardRunGuard(() => Object.keys(this.#boardEngineWorkflows ?? {}));
+          // The host's built-in MCP endpoint reads workflow runs without passing the guard, so
+          // the board engine's workflows are left out of it as well.
+          const boardRunsOffMcp = { mcp: { exclude: { workflows: Object.keys(this.#boardEngineWorkflows ?? {}) } } };
           if (!auth) {
             // Auth disabled: no gate. Still prime the sentinel-local custom
             // provider snapshot so model calls see DB rows, then SPA + CORS.
@@ -2604,6 +2607,7 @@ export class MastraFactory {
               ],
               ...cors,
               ...onError,
+              ...boardRunsOffMcp,
             };
           }
 
@@ -2649,6 +2653,7 @@ export class MastraFactory {
             ],
             ...cors,
             ...onError,
+            ...boardRunsOffMcp,
           };
         },
       }),
