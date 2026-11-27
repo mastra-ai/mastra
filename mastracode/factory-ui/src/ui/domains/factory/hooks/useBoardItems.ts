@@ -2,7 +2,7 @@ import { boardLoop, boardOf } from '../boardFlow';
 import { useRef, useState } from 'react';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { useDeleteWorkItemMutation, useTransitionWorkItemMutation } from '../../../../hooks/useWorkItems';
+import { useDeleteWorkItemMutation, useTransitionWorkItemMutation } from '@mastra/react/hooks/factory';
 import type { DragPayload } from '../boardDrag';
 import { itemBoard, pullRequestMayEnter } from '../boardStages';
 import type { BoardKind } from '../boardStages';

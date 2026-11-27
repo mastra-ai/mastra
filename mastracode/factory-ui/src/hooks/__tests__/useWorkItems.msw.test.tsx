@@ -17,8 +17,8 @@ import {
   useTransitionWorkItemMutation,
   useUpdateWorkItemMutation,
   useUpsertWorkItemMutation,
-} from '../useWorkItems';
-import type { BoardPhasesSnapshot } from '../useWorkItems';
+} from '@mastra/react/hooks/factory';
+import type { BoardPhasesSnapshot } from '@mastra/react/hooks/factory';
 
 const board = (workItems: WorkItem[]): BoardSnapshot => ({ workItems });
 

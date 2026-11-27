@@ -14,6 +14,8 @@ export function FactoryBasePathProvider({ basePath, children }: { basePath: stri
 }
 
 /** The Factory client for a project, or nothing before a project is picked. */
+export function useFactory(factoryProjectId: string): Factory;
+export function useFactory(factoryProjectId: string | undefined): Factory | undefined;
 export function useFactory(factoryProjectId: string | undefined): Factory | undefined {
   const client = useMastraClient();
   const basePath = useContext(FactoryBasePathContext);

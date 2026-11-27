@@ -99,8 +99,22 @@ export class Factory extends BaseResource {
     readonly factoryProjectId: string,
     { basePath = '/web/factory' }: FactoryOptions = {},
   ) {
-    super({ ...options, apiPrefix: basePath });
+    // React Query owns retries for Factory's board; one attempt per call keeps failures visible to it.
+    super({ ...options, apiPrefix: basePath, retries: options.retries ?? 0 });
     this.project = `/projects/${encodeURIComponent(factoryProjectId)}`;
+  }
+
+  /** Factory answers failures with `{ message }` or `{ error }`; that text, not the raw body, is the error's message. */
+  public override async request<T>(...args: Parameters<BaseResource['request']>): Promise<T> {
+    try {
+      return await super.request<T>(...args);
+    } catch (error) {
+      if (!(error instanceof MastraClientError)) throw error;
+      const body = error.body as { message?: unknown; error?: unknown } | undefined;
+      const said = typeof body?.message === 'string' ? body.message : body?.error;
+      const message = typeof said === 'string' && said ? said : `Request failed (${error.status})`;
+      throw new MastraClientError(error.status, error.statusText, message, error.body);
+    }
   }
 
   async listWorkItems(only: WorkItemListQuery, { signal }: Read = {}): Promise<BoardSnapshot> {

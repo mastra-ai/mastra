@@ -1,14 +1,12 @@
 import { DEFAULT_BOARD_ID } from '@internal/factory-contract';
 import { useQuery } from '@tanstack/react-query';
-import { useApiConfig } from '../../../../../api/config';
 import { useBoardCatalog } from '../../../../../hooks/useBoardCatalog';
-import { workItemStartersQueryOptions } from '../../../../../hooks/useWorkItems';
+import { useFactory, workItemStartersQueryOptions } from '@mastra/react/hooks/factory';
 import { starterPrompts } from '../../../factory/starterPrompts';
 import { StarterCard } from './StarterCard';
 
 export function StarterBoard({ factoryId }: { factoryId: string }) {
-  const { baseUrl } = useApiConfig();
-  const counts = useQuery(workItemStartersQueryOptions(baseUrl, factoryId));
+  const counts = useQuery(workItemStartersQueryOptions(useFactory(factoryId)));
   const catalog = useBoardCatalog(factoryId);
   // A server too old to count starters answers 404: the page then offers none.
   if (!counts.data || catalog.isPending) return null;

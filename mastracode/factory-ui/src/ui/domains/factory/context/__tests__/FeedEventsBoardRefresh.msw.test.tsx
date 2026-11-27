@@ -8,19 +8,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { answerBoardPhases, versionedCard } from '../../../../../../e2e/ui/board-reads';
 import { pushableFeedStream } from '../../../../../../e2e/ui/feed-stream';
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import {
+  renderHookWithProviders,
+  TEST_API,
+  TEST_BASE_URL,
+  waitForMutationsIdle,
+} from '../../../../../../e2e/ui/render';
 import { queryKeys } from '../../../../../api/keys';
 import type { SessionActivity, SessionRowsRequest, SessionRowsResponse } from '../../../../../api/types';
-import { useFactoryDecisionStatus } from '../../../../../hooks/useFactoryDecisions';
-import { useSessionActivityQuery, useSessionRowsQuery } from '../../../../../hooks/useSessionRows';
 import {
+  useFactoryDecisionStatus,
   useBoardPhasesQuery,
   useSessionCardsQuery,
   useSessionWorkItemsQuery,
   useTransitionWorkItemMutation,
   workItemActivityQueryOptions,
   workItemStartersQueryOptions,
-} from '../../../../../hooks/useWorkItems';
+} from '@mastra/react/hooks/factory';
+import { useSessionActivityQuery, useSessionRowsQuery } from '../../../../../hooks/useSessionRows';
 import { createQueryClient } from '../../../../../query-client';
 import { FeedEventsProvider } from '../FeedEventsProvider';
 
@@ -739,8 +744,8 @@ describe('FeedEventsProvider, on a draft page', () => {
     );
     const rendered = renderHookWithProviders(
       () => ({
-        starters: useQuery(workItemStartersQueryOptions(TEST_BASE_URL, PROJECT_ID)),
-        activity: useQuery(workItemActivityQueryOptions(TEST_BASE_URL, PROJECT_ID, 'week')),
+        starters: useQuery(workItemStartersQueryOptions(TEST_API.mastra.getFactory(PROJECT_ID))),
+        activity: useQuery(workItemActivityQueryOptions(TEST_API.mastra.getFactory(PROJECT_ID), 'week')),
       }),
       { inner },
     );
@@ -778,8 +783,8 @@ describe('FeedEventsProvider, on a draft page', () => {
     );
     const rendered = renderHookWithProviders(
       () => ({
-        starters: useQuery(workItemStartersQueryOptions(TEST_BASE_URL, PROJECT_ID)),
-        activity: useQuery(workItemActivityQueryOptions(TEST_BASE_URL, PROJECT_ID, 'week')),
+        starters: useQuery(workItemStartersQueryOptions(TEST_API.mastra.getFactory(PROJECT_ID))),
+        activity: useQuery(workItemActivityQueryOptions(TEST_API.mastra.getFactory(PROJECT_ID), 'week')),
         decisions: useFactoryDecisionStatus(PROJECT_ID, ['pending', 'leased']),
       }),
       { inner },

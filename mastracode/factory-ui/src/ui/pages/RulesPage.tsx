@@ -11,7 +11,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import type { LucideIcon } from 'lucide-react';
 import { useSearchParams } from 'react-router';
 
-import { useFactoryDecisionAction, useFactoryDecisionHistory } from '../../hooks/useFactoryDecisions';
+import { useFactoryDecisionAction, useFactoryDecisionHistory } from '@mastra/react/hooks/factory';
 import { relativeTime } from '../../lib/date/relativeTime';
 import { dayHeading, groupByDay } from '../domains/factory/activity';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
