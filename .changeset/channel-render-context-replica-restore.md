@@ -1,0 +1,5 @@
+---
+'@mastra/core': patch
+---
+
+Fixed channel runs crashing on a replica with `render.wrapStream is not a function` after a run was restored from a durable snapshot. The channel render context holds live adapters and driver callbacks that JSON cannot carry, so a restored copy was a method-less husk. It is no longer written into the durable request-context snapshot, and every reader that needs a live context now rebuilds it from the run's thread when it finds a husk instead of using it.

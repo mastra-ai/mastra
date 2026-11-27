@@ -56,7 +56,7 @@ import {
   normalizeInlineLinks,
 } from './inline-media';
 import type { InlineLinkRule } from './inline-media';
-import { ChatChannelOutputProcessor, CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';
+import { ChatChannelOutputProcessor, CHAT_CHANNEL_RENDER_CONTEXT_KEY, isUsableRenderContext } from './output-processor';
 import type { ChatChannelRenderContext } from './output-processor';
 import { ChatChannelProcessor } from './processor';
 import { ChannelReplyModeProcessor, channelReplyTypingStatus, threadLinkOptions } from './reply-mode';
@@ -1367,8 +1367,9 @@ export class AgentChannels {
     requestContext: RequestContext | undefined,
     state?: Record<string, unknown>,
   ): Promise<ChatChannelRenderContext | undefined> {
-    const inbound = requestContext?.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
-    if (inbound) return inbound;
+    const inbound = requestContext?.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY);
+    // A replica restores this entry from JSON as a method-less husk; rebuild from the thread instead.
+    if (isUsableRenderContext(inbound)) return inbound;
     if (state && 'render' in state) return (state.render as ChatChannelRenderContext | null) ?? undefined;
     const render = await resolveChannelRenderContext(requestContext, () => this);
     if (state) state.render = render ?? null;

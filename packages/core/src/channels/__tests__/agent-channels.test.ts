@@ -23,6 +23,7 @@ import { AgentChannels } from '../agent-channels';
 import { getChatModule } from '../chat-lazy';
 import { ChannelSessionRejectedError } from '../errors';
 import { matchesDomain, extractUrls } from '../inline-media';
+import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '../output-processor';
 import { NEW_CHANNEL_THREAD_KEY } from '../thread-link-processor';
 import type { ChannelAdapterBaseConfig, ChannelContext, ChannelHandler, ResolveResourceId } from '../types';
 
@@ -48,6 +49,15 @@ function createMockAdapter(name: string) {
     userName: 'TestBot',
   } as any;
 }
+
+// A live render context: real ones always carry `wrapStream` (issue #31310 guards on it).
+const liveRender = {
+  platform: 'slack',
+  chatThread: { post: vi.fn() },
+  wrapStream: (stream: unknown) => stream,
+} as never;
+// The method-less object a JSON snapshot round-trip leaves on a replica's request context.
+const huskRender = { platform: 'slack', chatThread: {}, streaming: { enabled: false } } as never;
 
 function createMockAgent(name = 'test-agent') {
   return {
@@ -203,6 +213,55 @@ describe('AgentChannels', () => {
 
     it('leaves out the generative UI processor by default', () => {
       expect(agentChannels.getInputProcessors().map(p => p.id)).not.toContain('chat-channel-generative-ui');
+    });
+  });
+
+  describe('resolveRunRender (reply stream)', () => {
+    function channelsForReplyMode() {
+      return new AgentChannels({
+        adapters: { slack: { adapter: createMockAdapter('slack'), replyMode: 'tool' } },
+        threadContext: { addSystemMessage: false },
+      });
+    }
+
+    it('uses the live render context a message stashed, without a thread read', async () => {
+      const channels = channelsForReplyMode();
+      const buildRenderContextForThread = vi.spyOn(channels as any, 'buildRenderContextForThread');
+      const requestContext = new RequestContext();
+      requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, liveRender);
+
+      expect(await (channels as any).resolveRunRender(requestContext)).toBe(liveRender);
+      expect(buildRenderContextForThread).not.toHaveBeenCalled();
+    });
+
+    it('rebuilds from the thread when a replica left a method-less husk (#31310)', async () => {
+      const channels = channelsForReplyMode();
+      const buildRenderContextForThread = vi
+        .spyOn(channels as any, 'buildRenderContextForThread')
+        .mockResolvedValue(liveRender);
+      const requestContext = new RequestContext();
+      requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, huskRender);
+      requestContext.set('MastraMemory', { thread: { id: 'thread-1' }, resourceId: 'resource-1' });
+
+      expect(await (channels as any).resolveRunRender(requestContext)).toBe(liveRender);
+      expect(buildRenderContextForThread).toHaveBeenCalledWith('thread-1');
+    });
+
+    it('caches the rebuilt render for later chunks instead of rebuilding per chunk (#31310)', async () => {
+      const channels = channelsForReplyMode();
+      const buildRenderContextForThread = vi
+        .spyOn(channels as any, 'buildRenderContextForThread')
+        .mockResolvedValue(liveRender);
+      const requestContext = new RequestContext();
+      requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, huskRender);
+      requestContext.set('MastraMemory', { thread: { id: 'thread-1' }, resourceId: 'resource-1' });
+      const state: Record<string, unknown> = {};
+
+      await (channels as any).resolveRunRender(requestContext, state);
+      await (channels as any).resolveRunRender(requestContext, state);
+
+      expect(state.render).toBe(liveRender);
+      expect(buildRenderContextForThread).toHaveBeenCalledTimes(1);
     });
   });
 

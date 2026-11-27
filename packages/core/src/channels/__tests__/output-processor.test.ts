@@ -2861,4 +2861,70 @@ describe('ChatChannelOutputProcessor fallback render context', () => {
     const posts = calls.filter(c => c.kind === 'post');
     expect(posts).toEqual([{ kind: 'post', arg: { markdown: 'inbound message' } }]);
   });
+
+  it('rebuilds the render context when the requestContext entry is a serialized husk (#31310)', async () => {
+    const { channels, calls, chatThread } = await makeFallbackChannels();
+
+    // What a replica restores from a durable/evented snapshot: the live render
+    // context round-tripped through JSON, so `wrapStream` and every other method
+    // is gone. It must not be used as-is -- calling `husk.wrapStream` is the
+    // `render.wrapStream is not a function` failure from the issue.
+    const live = (channels as any)._buildRenderContext(chatThread, 'test');
+    const husk = JSON.parse(JSON.stringify(live));
+    expect(typeof husk.wrapStream).toBe('undefined');
+
+    const requestContext = new Map<string, unknown>();
+    requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, husk);
+
+    const rebuild = vi.spyOn(channels as any, 'buildRenderContextForThread');
+
+    await driveFallback(channels, [{ type: 'text-delta', payload: { text: 'resumed on replica' } }], {
+      threadId: FALLBACK_THREAD_ID,
+      requestContext,
+    });
+
+    // The husk was rejected and the run rebuilt a working context from its thread.
+    expect(rebuild).toHaveBeenCalledWith(FALLBACK_THREAD_ID);
+    const posts = calls.filter(c => c.kind === 'post');
+    expect(posts).toEqual([{ kind: 'post', arg: { markdown: 'resumed on replica' } }]);
+  });
+
+  it('falls through to the non-channel path when a serialized husk has no thread to rebuild from (#31310)', async () => {
+    const { channels, calls, chatThread } = await makeFallbackChannels();
+
+    const live = (channels as any)._buildRenderContext(chatThread, 'test');
+    const husk = JSON.parse(JSON.stringify(live));
+
+    const requestContext = new Map<string, unknown>();
+    requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, husk);
+
+    // No `MastraMemory` thread id and no live render: there is nothing to rebuild
+    // from, so the run must answer into memory rather than call `husk.wrapStream`.
+    await expect(
+      driveFallback(channels, [{ type: 'text-delta', payload: { text: 'no thread to rebuild from' } }], {
+        requestContext,
+      }),
+    ).resolves.toBeUndefined();
+    expect(calls.filter(c => c.kind === 'post')).toHaveLength(0);
+  });
+
+  it('uses a live requestContext render context without rebuilding (#31310)', async () => {
+    const { channels, calls, chatThread } = await makeFallbackChannels();
+
+    const live = (channels as any)._buildRenderContext(chatThread, 'test');
+    expect(typeof live.wrapStream).toBe('function');
+
+    const requestContext = new Map<string, unknown>();
+    requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, live);
+
+    const rebuild = vi.spyOn(channels as any, 'buildRenderContextForThread');
+
+    await driveFallback(channels, [{ type: 'text-delta', payload: { text: 'live path' } }], {
+      threadId: FALLBACK_THREAD_ID,
+      requestContext,
+    });
+
+    expect(rebuild).not.toHaveBeenCalled();
+    expect(calls.filter(c => c.kind === 'post')).toEqual([{ kind: 'post', arg: { markdown: 'live path' } }]);
+  });
 });

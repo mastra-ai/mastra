@@ -1,3 +1,4 @@
+import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '../channels/output-processor';
 import {
   RequestContext,
   MASTRA_AUTH_TOKEN_KEY,
@@ -58,6 +59,12 @@ export function snapshotRequestContextEntries(
     if (key === MASTRA_DURABLE_EXECUTIONS_KEY) continue;
     // A segment's spans belong to the execution that carried them, not to the run's input.
     if (key === MASTRA_DURABLE_SEGMENTS_KEY) continue;
+    // The channel render context holds live platform adapters, the chat-SDK
+    // thread and bound driver callbacks (`wrapStream`, `post`, ...). It is
+    // per-run state, not run input: JSON has no way to carry those methods, so a
+    // replica that restored it would call `render.wrapStream` on a husk and fail.
+    // The resumed run rebuilds it from its thread instead.
+    if (key === CHAT_CHANNEL_RENDER_CONTEXT_KEY) continue;
     // Serialize each entry exactly once with a bounded pass: a shared-reference
     // graph would otherwise make JSON.stringify expand exponentially and wedge
     // the event loop on every durable step, and reading the value twice (probe
