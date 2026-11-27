@@ -4474,9 +4474,9 @@ export class WorkflowEventProcessor extends EventProcessor {
       // engine does (#29389). Waiting here rather than in a detached timer
       // keeps this delivery unacked until the retry is published, so a worker
       // that dies mid-delay gets the event redelivered instead of dropping the
-      // retry. A broker redelivery during the wait gets a `completed` conflict on
-      // the saved failed attempt, waits again and publishes a second retry; on
-      // stores with step guards the retry's start guard keeps one of the two.
+      // retry. On stores with step guards, a broker redelivery during the wait
+      // gets a `completed` conflict on the saved failed attempt, waits again and
+      // publishes a second retry. Without step guards it runs the attempt again.
       // A run canceled meanwhile drops the retry at dispatch.
       const retryDelay = workflow.retryConfig.delay ?? 0;
       if (retryDelay > 0) {
