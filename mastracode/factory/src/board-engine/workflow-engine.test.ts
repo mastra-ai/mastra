@@ -250,6 +250,45 @@ describe('the workflow board engine', () => {
     expect((await storage.get({ orgId: ORG, id: item.id }))!.stages).toEqual(['planning']);
   });
 
+  it('takes on a move that looks good and answers it later, and answers one its first checks refuse on the spot', async () => {
+    const { storage, runsUrl, item } = await setup();
+    // Holds the commits back, so a move can be asked while the one before it hasn't landed.
+    const held = Promise.withResolvers<void>();
+    let hold = false;
+    const { engine } = replica(storage, runsUrl, () => (hold ? held.promise : undefined));
+
+    // No such edge, and a revision the card has moved past: answered like any move.
+    const noEdge = await engine.submitMove(await personMove(storage, item.id, 'pr-review', 'drag-1')());
+    expect(noEdge).toMatchObject({ answered: { status: 'rejected', code: 'invalid_transition' } });
+    const stale = await engine.submitMove({
+      ...(await personMove(storage, item.id, 'done', 'drag-2')()),
+      expectedRevision: item.revision + 5,
+    });
+    expect(stale).toMatchObject({ answered: { status: 'rejected', code: 'stale' } });
+    hold = true;
+    // Two moves from the revision a person saw both look good; only the commit tells the second it lost.
+    const seen = await personMove(storage, item.id, 'execute', 'drag-3')();
+    const first = await engine.submitMove(seen);
+    const second = await engine.submitMove({
+      ...seen,
+      stage: 'done',
+      ingress: { type: 'human', identity: 'drag-4' },
+    });
+    held.resolve();
+    if (!('inputId' in first) || !('inputId' in second)) throw new Error('A move was answered on the spot.');
+    expect(second.inputId).not.toBe(first.inputId);
+    expect(await first.settled).toMatchObject({ status: 'accepted', stage: 'execute' });
+    expect(await second.settled).toMatchObject({ status: 'rejected', code: 'stale' });
+
+    // A move no person made isn't one the board waits on.
+    const ruled = await engine.submitMove({
+      ...(await personMove(storage, item.id, 'intake', 'rule-1')()),
+      actor: { type: 'system', id: 'factory' },
+      ingress: { type: 'rule', identity: 'rule-1' },
+    } as FactoryTransitionRequest);
+    expect(ruled).toHaveProperty('answered');
+  });
+
   it('stops nothing for a move the board would refuse, a move no person made, or a move to a phase that runs nothing', async () => {
     const { storage, runsUrl, item } = await setup();
     const { calls, runs } = goingRun(true);

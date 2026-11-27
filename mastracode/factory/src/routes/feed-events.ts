@@ -9,7 +9,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import { streamSSE } from 'hono/streaming';
 
-import { feedTopic } from '../feed-events.js';
+import { FEED_MOVE_EVENT, feedTopic } from '../feed-events.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import { loose } from './route.js';
 import type { RouteAuth } from './route.js';
@@ -55,10 +55,15 @@ export function buildFeedEventsRoutes({ auth, projects, pubsub }: FeedEventsRout
           // this connection — a leak that grows with every board change on
           // long-lived dashboard tabs. Frames are fire-and-forget
           // invalidations, so a delivery is acked even when the tab is gone.
-          const onEvent: EventCallback = withAck(async () => {
+          const onEvent: EventCallback = withAck(async event => {
             if (stream.aborted) return;
             try {
-              await stream.writeSSE({ event: 'feed', data: '{}' });
+              // A move's answer names the input it answers; every other frame only says "re-read".
+              if (event.type === FEED_MOVE_EVENT) {
+                await stream.writeSSE({ event: 'move', data: JSON.stringify(event.data ?? {}) });
+              } else {
+                await stream.writeSSE({ event: 'feed', data: '{}' });
+              }
             } catch {
               // A write to a half-closed socket must not reach `withAck` as a
               // rejection: the nack would republish the event to the shared

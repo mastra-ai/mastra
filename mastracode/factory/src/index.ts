@@ -47,6 +47,7 @@ export type {
   FactoryBoardEngine,
   FactoryBoardEngineContext,
   FactoryBoardEngineFactory,
+  FactorySubmittedMove,
 } from './board-engine/engine.js';
 export type { FactoryTransitionRequest } from './rules/transition-service.js';
 export type { FactoryTransitionResult } from './rules/types.js';
