@@ -1553,6 +1553,21 @@ describe('Scorer Utils', () => {
         expect(result.matchedSteps).toBe(1);
       });
 
+      it('should match toolArgs whose keys are in a different order, at any depth', () => {
+        const a = {
+          steps: [
+            { stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'hi', filter: { lang: 'en', year: 1 } } },
+          ],
+        };
+        const b = {
+          steps: [
+            { stepType: 'tool_call' as const, name: 'search', toolArgs: { filter: { year: 1, lang: 'en' }, q: 'hi' } },
+          ],
+        };
+
+        expect(compareTrajectories(a, b).score).toBe(1);
+      });
+
       it('should not match steps with different toolArgs', () => {
         const a = { steps: [{ stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'hello' } }] };
         const b = { steps: [{ stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'world' } }] };
@@ -2060,6 +2075,17 @@ describe('Scorer Utils', () => {
       expect(result.redundantCalls).toHaveLength(1);
       expect(result.redundantCalls[0]!.name).toBe('search');
       expect(result.score).toBeLessThan(1);
+    });
+
+    it('should flag a repeated tool call whose args keys are in a different order', () => {
+      const trajectory: Trajectory = {
+        steps: [
+          { stepType: 'tool_call' as const, name: 'weather', toolArgs: { city: 'NYC', unit: 'C' } },
+          { stepType: 'tool_call' as const, name: 'weather', toolArgs: { unit: 'C', city: 'NYC' } },
+        ],
+      };
+      const result = checkTrajectoryEfficiency(trajectory, { noRedundantCalls: true });
+      expect(result.redundantCalls).toEqual([{ name: 'weather', index: 1 }]);
     });
 
     it('should not flag different consecutive tool calls as redundant', () => {
