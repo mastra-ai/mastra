@@ -11,6 +11,7 @@ import { WorkflowRunContext } from '../../context/workflow-run-context';
 import { WorkflowRunProvider } from '../../context/workflow-run-provider';
 import { WorkflowTrigger } from '../workflow-trigger';
 import { twoStepWorkflow } from './fixtures/workflow-debug-step-controls';
+import { nullObjectStateWorkflow } from './fixtures/workflow-trigger-state-schema';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -64,27 +65,9 @@ describe('WorkflowTrigger on a workflow with state but no input schema', () => {
 
 describe('WorkflowTrigger on a workflow whose state has an object field that defaults to null', () => {
   it('shows the run form instead of crashing', async () => {
-    // `z.object({ section: z.object({ status: z.string() }).nullable().default(null) })`, as the server sends it.
-    const workflow = {
-      ...twoStepWorkflow,
-      inputSchema: undefined,
-      stateSchema: stringify({
-        type: 'object',
-        properties: {
-          section: {
-            default: null,
-            anyOf: [
-              { type: 'object', properties: { status: { type: 'string' } }, required: ['status'] },
-              { type: 'null' },
-            ],
-          },
-        },
-        required: ['section'],
-      }),
-    };
     server.use(
       http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({})),
-      http.get(`${BASE_URL}/api/workflows/two-step-workflow`, () => HttpResponse.json(workflow)),
+      http.get(`${BASE_URL}/api/workflows/two-step-workflow`, () => HttpResponse.json(nullObjectStateWorkflow)),
     );
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
