@@ -8885,6 +8885,7 @@ export class Agent<
     requestContext,
     toolsets,
     clientTools,
+    executableTools,
     runId,
     method,
   }: {
@@ -8894,6 +8895,8 @@ export class Agent<
     requestContext: RequestContext | undefined;
     toolsets?: Record<string, Record<string, unknown>>;
     clientTools?: Record<string, unknown>;
+    /** The tools the run will execute, keyed by the name the suspended step calls. Replaces the catalog lookup. */
+    executableTools?: Record<string, unknown>;
     runId: string;
     method: string;
   }): Promise<void> {
@@ -8911,13 +8914,16 @@ export class Agent<
           : undefined;
     if (!target?.toolName || target.requiresApproval) return;
 
-    const assigned = (await this.listTools({ requestContext, resolveWebSearch: false })) as Record<string, any>;
-    const tools: Record<string, any> = {
-      ...assigned,
-      ...Object.assign({}, ...Object.values(toolsets ?? {})),
-      ...clientTools,
-    };
-    const tool = tools[target.toolName] ?? Object.values(tools).find(t => t?.id === target.toolName);
+    let tool: any = executableTools?.[target.toolName];
+    if (!executableTools) {
+      const assigned = (await this.listTools({ requestContext, resolveWebSearch: false })) as Record<string, any>;
+      const tools: Record<string, any> = {
+        ...assigned,
+        ...Object.assign({}, ...Object.values(toolsets ?? {})),
+        ...clientTools,
+      };
+      tool = tools[target.toolName] ?? Object.values(tools).find(t => t?.id === target.toolName);
+    }
     // Tools resolved elsewhere (workspace, processors) keep the tool-call step's validation.
     if (!tool?.resumeSchema) return;
     const validation = validateToolInput(tool.resumeSchema, resumeData, target.toolName);
@@ -15685,26 +15691,25 @@ export class Agent<
           details: { agentName: this.name, runId },
         });
       }
-      // Only a run this process never executed (a cold resume, or the idle loop re-entering one)
-      // runs the tools prepare() just built from the agent and this call. A warm run keeps the
-      // tools it was registered with, whose resumeSchema is not visible here, so it is left to
-      // the tool-call step.
-      if (current && !priorExecution) {
+      if (current) {
         try {
+          // Checked against the tools the run registered, which the tool-call step executes.
           await this.#validateToolResumeData({
             snapshot: current,
             toolCallId: options?.toolCallId,
             resumeData,
             requestContext: resumeRequestContext,
-            toolsets: resolvedOptions.toolsets,
-            clientTools: resolvedOptions.clientTools,
+            executableTools: getRunRegistryEntry(runId, this.#mastra)?.tools ?? entry.tools ?? {},
             runId,
             method: 'resume',
           });
         } catch (error) {
-          // A rejected resume must not leave behind the entry prepare() registered for it.
-          this.executionRunRegistry.cleanup(runId);
-          deleteRunRegistryEntry(runId, this.#mastra);
+          // A rejected resume of a run this process never executed (a cold resume, or the idle
+          // loop re-entering one) must not leave behind the entry prepare() registered for it.
+          if (!priorExecution) {
+            this.executionRunRegistry.cleanup(runId);
+            deleteRunRegistryEntry(runId, this.#mastra);
+          }
           throw error;
         }
       }

@@ -1,7 +1,7 @@
 /**
- * Regression test for #28229: a cold durable resume with data that fails the suspended tool's
- * resumeSchema must reject before it touches the run, so a corrected retry still resumes it.
- * Warm resumes keep the tools the run was registered with and are left to the tool-call step.
+ * Regression test for #28229: a durable resume with data that fails the resumeSchema of the
+ * tool the run will execute must reject before it touches the run, so a corrected retry still
+ * resumes it. Valid data must keep resuming whatever the agent's current tool catalog says.
  */
 import type { LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
@@ -118,8 +118,9 @@ async function suspend(engine: Engine, overrides?: (seen: unknown[]) => AgentOve
   return { agent, storage, seen, runId: started.runId };
 }
 
-async function suspendCold(engine: Engine) {
+async function suspendIn(mode: 'warm' | 'cold', engine: Engine) {
   const run = await suspend(engine);
+  if (mode === 'warm') return run;
   globalRunRegistry.clear();
   return { ...run, agent: startProcess(engine, run.storage, run.seen) };
 }
@@ -132,31 +133,37 @@ afterEach(async () => {
 describe.each(['durable', 'evented'] as const)(
   '%s agent resume with data that fails the resumeSchema (#28229)',
   engine => {
-    it.each([false, true])(
-      'cold (untilIdle: %s): rejects without touching the run, and a corrected retry sees the original context',
-      async untilIdle => {
-        const run = await suspendCold(engine);
+    it.each([
+      ['warm', false],
+      ['warm', true],
+      ['cold', false],
+      ['cold', true],
+    ] as const)(
+      '%s (untilIdle: %s): rejects without touching the run, and a corrected retry sees the original context',
+      async (mode, untilIdle) => {
+        const run = await suspendIn(mode, engine);
 
         await expect(
           run.agent.resume(run.runId, { confirmed: 'yes' }, { untilIdle, requestContext: tenant('rejected') }),
         ).rejects.toMatchObject({ id: 'AGENT_RESUME_INVALID_DATA' });
         expect(run.seen).toEqual([]);
-        expect(globalRunRegistry.get(run.runId)).toBeUndefined();
+        if (mode === 'warm') expect(globalRunRegistry.get(run.runId)?.requestContext?.get('tenant')).toBe('original');
+        else expect(globalRunRegistry.get(run.runId)).toBeUndefined();
 
         expect(await drain(await run.agent.resumeStream({ confirmed: true }, { runId: run.runId }))).toBe('done');
         expect(run.seen).toEqual([{ confirmed: true, tenant: 'original' }]);
       },
     );
 
-    it('cold: reports an authorization denial before invalid resume data', async () => {
-      const run = await suspendCold(engine);
+    it.each(['warm', 'cold'] as const)('%s: reports an authorization denial before invalid resume data', async mode => {
+      const run = await suspendIn(mode, engine);
 
       await expect(
         run.agent.resumeStream({ confirmed: 'yes' }, { runId: run.runId, requestContext: tenant('other', 'denied') }),
       ).rejects.toThrow(FGADeniedError);
     });
 
-    describe('warm resumes run the tool the run was registered with', () => {
+    describe('warm resumes validate the tool the run registered, not the current catalog', () => {
       it('a call-time toolset that shadows the suspended tool', async () => {
         const run = await suspend(engine);
         const toolsets = { replacement: { confirm: confirmTool([], z.object({ confirmed: z.string() })) } };

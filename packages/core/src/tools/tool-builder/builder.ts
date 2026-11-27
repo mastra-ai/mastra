@@ -1354,6 +1354,7 @@ export class CoreToolBuilder extends MastraBase {
         return validation;
       },
       hasSuspendSchema: !!this.getSuspendSchema(),
+      resumeSchema: this.getResumeSchema() ?? undefined,
       execute: this.originalTool.execute
         ? this.createExecute(
             this.originalTool,
