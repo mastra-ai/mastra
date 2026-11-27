@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { normalizeQueryParams } from '../server-adapter/index';
-import { awaitBufferStatusResponseSchema, listMessagesQuerySchema, listThreadsQuerySchema } from './memory';
+import {
+  awaitBufferStatusResponseSchema,
+  cloneThreadBodySchema,
+  listMessagesQuerySchema,
+  listThreadsQuerySchema,
+} from './memory';
 
 /**
  * Regression tests for GitHub Issue #11761
@@ -583,5 +588,17 @@ describe('Observational Memory buffer status schema', () => {
         { slug: 'status', error: 'missing value' },
       ]);
     }
+  });
+});
+
+describe('cloneThreadBodySchema', () => {
+  it('keeps fullThread so a client can ask for every message', () => {
+    const result = cloneThreadBodySchema.parse({ options: { fullThread: true } });
+
+    expect(result.options).toEqual({ fullThread: true });
+  });
+
+  it('rejects a fullThread that is not a boolean', () => {
+    expect(cloneThreadBodySchema.safeParse({ options: { fullThread: 'yes' } }).success).toBe(false);
   });
 });

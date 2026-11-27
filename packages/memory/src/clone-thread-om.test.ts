@@ -103,7 +103,7 @@ describe('cloneThread – Observational Memory', () => {
       // Clone the thread, asking for every message so the observed ones are copied too
       const { thread: clonedThread, messageIdMap } = await memory.cloneThread({
         sourceThreadId: 'src-thread-1',
-        options: { messageFilter: {} },
+        options: { fullThread: true },
       });
 
       // Verify cloned OM exists on the new thread
@@ -698,6 +698,50 @@ describe('cloneThread – Observational Memory', () => {
       expect(textsOf(clonedMessages)).toEqual(['Message 0', 'Message 1', 'Message 2']);
     });
 
+    it('fullThread copies every message, including the observed ones', async () => {
+      withObservationalMemory('thread');
+      await seedThread('ctx-full', 4);
+      await seedThreadScopedOM(await getMemoryStore(memory), 'ctx-full', {
+        activeObservations: '* obs',
+        lastObservedAt,
+      });
+
+      const cloned = await memory.cloneThread({ sourceThreadId: 'ctx-full', options: { fullThread: true } });
+      const copied = await memory.copyThread({ sourceThreadId: 'ctx-full', options: { fullThread: true } });
+
+      expect(textsOf(cloned.clonedMessages)).toEqual(['Message 0', 'Message 1', 'Message 2', 'Message 3']);
+      expect(await storedTexts(copied.thread.id)).toEqual(['Message 0', 'Message 1', 'Message 2', 'Message 3']);
+    });
+
+    it('fullThread stays out of the storage call', async () => {
+      withObservationalMemory('thread');
+      await seedThread('ctx-full-store', 2);
+      const memoryStore = await getMemoryStore(memory);
+      const copy = vi.spyOn(memoryStore, 'copyThread');
+
+      await memory.copyThread({ sourceThreadId: 'ctx-full-store', options: { fullThread: true } });
+
+      expect(copy.mock.calls[0]![0].options ?? {}).not.toHaveProperty('fullThread');
+    });
+
+    it('fullThread cannot be combined with a message filter or limit', async () => {
+      withObservationalMemory('thread');
+      await seedThread('ctx-full-conflict', 2);
+
+      await expect(
+        memory.cloneThread({
+          sourceThreadId: 'ctx-full-conflict',
+          options: { fullThread: true, messageFilter: { messageIds: ['msg-ctx-full-conflict-0'] } },
+        }),
+      ).rejects.toThrow('fullThread');
+      await expect(
+        memory.cloneThread({ sourceThreadId: 'ctx-full-conflict', options: { fullThread: true, messageLimit: 1 } }),
+      ).rejects.toThrow('fullThread');
+      // Nothing was copied.
+      const { threads } = await (await getMemoryStore(memory)).listThreads({ filter: { resourceId } });
+      expect(threads.map(t => t.id)).toEqual(['ctx-full-conflict']);
+    });
+
     it("the caller's own message filter wins over the default", async () => {
       withObservationalMemory('thread');
       await seedThread('ctx-explicit', 4);
@@ -706,15 +750,18 @@ describe('cloneThread – Observational Memory', () => {
         lastObservedAt,
       });
 
-      const everything = await memory.cloneThread({ sourceThreadId: 'ctx-explicit', options: { messageFilter: {} } });
       const observedOnly = await memory.cloneThread({
         sourceThreadId: 'ctx-explicit',
         options: { messageFilter: { messageIds: ['msg-ctx-explicit-0'] } },
       });
+      const fromDate = await memory.cloneThread({
+        sourceThreadId: 'ctx-explicit',
+        options: { messageFilter: { startDate: new Date('2024-01-01T10:00:30Z') } },
+      });
       const lastThree = await memory.cloneThread({ sourceThreadId: 'ctx-explicit', options: { messageLimit: 3 } });
 
-      expect(everything.clonedMessages).toHaveLength(4);
       expect(await storedTexts(observedOnly.thread.id)).toEqual(['Message 0']);
+      expect(await storedTexts(fromDate.thread.id)).toEqual(['Message 1', 'Message 2', 'Message 3']);
       expect(await storedTexts(lastThree.thread.id)).toEqual(['Message 1', 'Message 2', 'Message 3']);
     });
 
