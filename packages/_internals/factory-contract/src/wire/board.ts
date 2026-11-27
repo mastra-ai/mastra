@@ -4,6 +4,7 @@
  * The server's route contracts (routes/contracts.ts) use these schemas as their responses.
  */
 import { z } from 'zod';
+import { SESSION_ROW_STATUSES } from '../session/session-row-query.js';
 
 const countSchema = z.number().int().nonnegative();
 
@@ -221,3 +222,16 @@ export interface BoardPhasesRequest {
   /** A card to answer for apart from the listing: its body, and where each phase holding it places it. */
   item?: string;
 }
+
+export const sessionActivityResponseSchema = z.object({
+  runningSessionIds: z.array(z.string()),
+  /** Sessions of a card, or of the reader, whose run waits on a person's answer. */
+  parkedSessionIds: z.array(z.string()),
+  /** The status of each card's sidebar row, by card id, for the cards neither idle nor done. */
+  cardStatuses: z.record(z.string(), z.enum(SESSION_ROW_STATUSES)),
+  /** Cards one of whose sessions is running or parked on a person: no rival run may start on them. */
+  sessionHeldCardIds: z.array(z.string()),
+  /** Cards in `cardStatuses` working, and waiting on a person. */
+  cards: z.object({ working: countSchema, waiting: countSchema }),
+});
+export type SessionActivityResponse = z.infer<typeof sessionActivityResponseSchema>;

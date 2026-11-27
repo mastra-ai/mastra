@@ -155,4 +155,15 @@ describe('Factory resource', () => {
       'http://localhost:4111/web/factory/work-items/w1',
     ]);
   });
+
+  it('pages audit events by actor and reads session activity', async () => {
+    const fetchMock = mockFetch({ body: { events: [], actors: {} } });
+    const factory = client.getFactory('fp-1');
+    await factory.auditEvents({ actorIds: ['u1', 'u2'], before: 'c1', limit: 200 });
+    await factory.sessionActivity();
+    expect(urls(fetchMock)).toEqual([
+      'http://localhost:4111/web/factory/projects/fp-1/audit?actorIds=u1%2Cu2&before=c1&limit=200',
+      'http://localhost:4111/web/factory/projects/fp-1/session-activity',
+    ]);
+  });
 });

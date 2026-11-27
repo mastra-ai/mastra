@@ -10,11 +10,15 @@ import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-val
 import { useMemo, useState } from 'react';
 import type { InstalledBoardInfo } from '../../../api/types';
 
-import { useRecentAuditEvents } from '../../../hooks/useAuditEvents';
+import {
+  useRecentAuditEvents,
+  useRunQueue,
+  useBoardPhasesQuery,
+  useWorkItemFilterOptionsQuery,
+  useCardSessions,
+} from '@mastra/react/hooks/factory';
 import { useFactoryAuth } from '../../../hooks/useFactoryAuth';
 import { useGithubStatusQuery } from '../../../hooks/useGithubStatus';
-import { useRunQueue, useBoardPhasesQuery, useWorkItemFilterOptionsQuery } from '@mastra/react/hooks/factory';
-import { useCardSessions } from '../../../hooks/useSessionRows';
 import { shownBoardPhases } from '../../domains/factory/boardPhases';
 import type { ShownPhase } from '../../domains/factory/boardPhases';
 import { boardPhasesRequest, deeperPhaseWindow } from '../../domains/factory/boardPhasesRequest';

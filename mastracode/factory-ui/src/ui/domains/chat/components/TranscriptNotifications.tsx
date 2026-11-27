@@ -23,7 +23,7 @@ import { Link, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
-import { useSessionActivityQuery } from '../../../../hooks/useSessionRows';
+import { useSessionActivityQuery } from '@mastra/react/hooks/factory';
 import { invalidateSessionQueries } from '../../../../hooks/useWorkspaces';
 import { threadPath } from '../../workspaces/services/factoryPaths';
 import { answerParkedApproval } from '../../workspaces/services/user-sessions';

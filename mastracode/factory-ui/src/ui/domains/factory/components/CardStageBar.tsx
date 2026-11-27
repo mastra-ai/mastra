@@ -4,7 +4,7 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 
 import type { InstalledBoardInfo, InstalledPhaseInfo } from '../../../../api/types';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import { useCardSessions } from '../../../../hooks/useSessionRows';
+import { useCardSessions } from '@mastra/react/hooks/factory';
 import type { FactoryProject } from '../../workspaces/services/github';
 import { BUSY_CARD_MOVE_REFUSAL, boardCardState, canMoveTo } from '../boardCardState';
 import { phaseName } from '../boardStages';

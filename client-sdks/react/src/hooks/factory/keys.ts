@@ -38,6 +38,10 @@ export const factoryKeys = {
   // Outside `workItems`: a rewrite of the cached cards must not reach these, which hold no card.
   sessionRowsRoot: (factoryProjectId: string | undefined) =>
     ['factory', 'session-rows', factoryProjectId ?? null] as const,
+  audit: (factoryProjectId: string | undefined, group: string, actorKey?: string) =>
+    ['factory', 'audit', factoryProjectId ?? null, group, actorKey ?? null] as const,
+  sessionActivity: (factoryProjectId: string | undefined) =>
+    ['factory', 'session-activity', factoryProjectId ?? null] as const,
   cardWrite: (factoryProjectId: string | undefined) => ['factory', 'write-work-item', factoryProjectId] as const,
   cardMove: (factoryProjectId: string | undefined) =>
     [...factoryKeys.cardWrite(factoryProjectId), 'transition'] as const,

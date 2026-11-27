@@ -1,8 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import type { SessionActivity, WorkItemActivity } from '../../../../api/types';
-import { useSessionActivityQuery } from '../../../../hooks/useSessionRows';
-import { useFactory, workItemActivityQueryOptions } from '@mastra/react/hooks/factory';
+import { useSessionActivityQuery, useFactory, workItemActivityQueryOptions } from '@mastra/react/hooks/factory';
 import { activityDepth, periodActivity } from '../periodActivity';
 import type { ActivityPeriod, RunStarts } from '../periodActivity';
 import { useRunStarts } from './useRunStarts';

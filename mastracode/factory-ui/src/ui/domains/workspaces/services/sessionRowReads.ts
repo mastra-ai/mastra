@@ -4,7 +4,7 @@ import {
   SESSION_ROW_WINDOW_MAX,
   SESSION_ROW_WINDOWS_MAX,
 } from '@internal/factory-contract';
-import type { SessionActivity, SessionRowsRequest, SessionRowsResponse } from '../../../../api/types';
+import type { SessionRowsRequest, SessionRowsResponse } from '../../../../api/types';
 import { requestJson } from '../../factory/services/request';
 import type { SessionFiltersState } from './sessionFilters';
 import type { SessionGroupBy } from './sessionGroups';
@@ -64,17 +64,6 @@ export function fetchSessionRows(
   }
   return requestJson<SessionRowsResponse>(
     `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/session-rows?${params}`,
-    { signal },
-  );
-}
-
-export function fetchSessionActivity(
-  baseUrl: string,
-  factoryProjectId: string,
-  signal?: AbortSignal,
-): Promise<SessionActivity> {
-  return requestJson<SessionActivity>(
-    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/session-activity`,
     { signal },
   );
 }

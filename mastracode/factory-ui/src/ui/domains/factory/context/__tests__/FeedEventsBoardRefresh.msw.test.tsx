@@ -24,8 +24,9 @@ import {
   useTransitionWorkItemMutation,
   workItemActivityQueryOptions,
   workItemStartersQueryOptions,
+  useSessionActivityQuery,
 } from '@mastra/react/hooks/factory';
-import { useSessionActivityQuery, useSessionRowsQuery } from '../../../../../hooks/useSessionRows';
+import { useSessionRowsQuery } from '../../../../../hooks/useSessionRows';
 import { createQueryClient } from '../../../../../query-client';
 import { FeedEventsProvider } from '../FeedEventsProvider';
 

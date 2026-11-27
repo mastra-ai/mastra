@@ -9,6 +9,7 @@ export {
 };
 export type { BoardPhasesResponse, RunQueueResponse, WorkItemFilterOptionsResponse };
 import {
+  sessionActivityResponseSchema,
   BOARD_IDENTIFIER_RE,
   BOARD_PHASES_SORTS,
   boardPhasesResponseSchema,
@@ -47,6 +48,7 @@ import {
   workItemStartersResponseSchema,
 } from '@internal/factory-contract';
 import type {
+  SessionActivityResponse,
   BoardPhasesFilter,
   BoardPhasesResponse,
   CardChangeRequest,
@@ -1079,22 +1081,9 @@ export const sessionRowsResponseSchema = z.object({
   owners: z.array(z.object({ userId: z.string(), name: z.string().optional(), avatarUrl: z.string().optional() })),
 });
 
-export const sessionActivityResponseSchema = z.object({
-  runningSessionIds: z.array(z.string()),
-  /** Sessions of a card, or of the reader, whose run waits on a person's answer. */
-  parkedSessionIds: z.array(z.string()),
-  /** The status of each card's sidebar row, by card id, for the cards neither idle nor done. */
-  cardStatuses: z.record(z.string(), sessionRowStatusSchema),
-  /** Cards one of whose sessions is running or parked on a person: no rival run may start on them. */
-  sessionHeldCardIds: z.array(z.string()),
-  /** Cards in `cardStatuses` working, and waiting on a person. */
-  cards: z.object({ working: countSchema, waiting: countSchema }),
-});
-
 export type SessionRowsQuery = z.output<typeof sessionRowsQuerySchema>;
 export type SessionRow = z.infer<typeof sessionRowSchema>;
 export type SessionRowsResponse = z.infer<typeof sessionRowsResponseSchema>;
-export type SessionActivityResponse = z.infer<typeof sessionActivityResponseSchema>;
 
 const sessionsSchema = z.record(z.string().min(1).max(64), sessionSchema);
 const metadataSchema = z
@@ -1944,3 +1933,6 @@ export const FACTORY_ROUTE_CONTRACTS = {
 } as const satisfies Record<string, FactoryRouteContract>;
 
 export type FactoryRouteContractKey = keyof typeof FACTORY_ROUTE_CONTRACTS;
+
+export { sessionActivityResponseSchema };
+export type { SessionActivityResponse };
