@@ -111,6 +111,29 @@ const files = await project.filesystems.create({ environmentId: production.id, n
 
 Creating Memory instances, Knowledge instances, and databases requires the `admin` role.
 
+### Gateway
+
+`project.gateway` manages the project's [Mastra Gateway](https://mastra.ai/docs/mastra-platform/gateway/overview) keys and reports their usage. An agent calls Gateway models as `mastra/<model>` with a key in `MASTRA_GATEWAY_API_KEY`.
+
+```ts
+const { keyId, apiKey } = await project.gateway.createKey({
+  label: 'support-backend',
+  allowedModels: ['openai/gpt-5-mini'],
+  spendLimit: { limitUsd: '50', reset: { every: 1, unit: 'month' } },
+});
+// `apiKey` is only returned now: store it as MASTRA_GATEWAY_API_KEY.
+
+const { remainingUsd } = await project.gateway.keyBudget(keyId);
+await project.gateway.updateKey(keyId, { spendLimit: { limitUsd: '100' } });
+
+const byModel = await project.gateway.usage({ from: '2026-11-01', to: '2026-11-30', groupBy: 'model' });
+const models = await project.gateway.listModels({ region: 'eu' });
+
+await project.gateway.revokeKey(keyId);
+```
+
+`updateKey` applies on top of the key's current settings. Pass `expectedRevision` (a key's `policyRevision`) to have it refused when someone changed the key since you read it.
+
 ### Hosted browser
 
 Create a hosted browser from your Mastra Platform project's browser page, then pass its CDP URL to `PlatformBrowser`. Treat the CDP URL as a secret: anyone holding it can connect to that browser. Keep it server-side, do not commit it, and use a secure environment variable such as `MASTRA_BROWSER_CDP_URL`.
