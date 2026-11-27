@@ -16889,8 +16889,8 @@
     },
     "packages/core/src/mastra/recover-all-durable-agents.test.ts": {
       "tier": "in",
-      "since": "2026-11-26",
-      "last_failure": "2026-11-26",
+      "since": "2026-11-27",
+      "last_failure": "2026-11-27",
       "reason": "versioning-fail",
       "pr_failures": {
         "138652181110": {
