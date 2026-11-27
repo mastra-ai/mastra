@@ -8,3 +8,4 @@ export * from './models';
 export * from './preferences';
 export * from './intake';
 export * from './session';
+export * from './activity';
