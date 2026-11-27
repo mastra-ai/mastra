@@ -311,7 +311,7 @@ Runs started on older versions can finish after upgrading, but don't have guaran
 
 Worker takeover needs a pubsub that delivers each event to one worker of a consumer group and redelivers the events a stopped worker held, as Redis Streams does. See [evented workflows and agents](/docs/server/pubsub#evented-workflows-and-agents) for the backends and storage adapters that qualify.
 
-An interrupted step can execute again, so make external side effects idempotent. Completed step occurrences are protected against stale redeliveries, and a completed loop iteration reuses its saved result and loop decision. Guarded execution persists the records needed for recovery even when `shouldPersistSnapshot` returns `false`. A `restart()` takes the run over through these guards, so a worker that was running a restarted step can't save it. Individual `foreach` items aren't covered by these occurrence guards. See [make tools safe to repeat](/docs/harness/durable-agents#make-tools-safe-to-repeat) for agent tools.
+An interrupted step can execute again, so make external side effects idempotent. Completed step occurrences are protected against stale redeliveries, and a completed loop iteration reuses its saved result and loop decision. Guarded execution persists the records needed for recovery even when `shouldPersistSnapshot` returns `false`. A `restart()` takes the run over through these guards, so a worker that was running a restarted step can't save it. Steps a restart can't claim, such as sleeps, and individual `foreach` items aren't covered by these occurrence guards. See [make tools safe to repeat](/docs/harness/durable-agents#make-tools-safe-to-repeat) for agent tools.
 
 ## Distributed leasing
 
