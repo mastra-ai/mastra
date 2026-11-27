@@ -67,11 +67,13 @@ describe('toChatMessages', () => {
 describe('messagesOfCall', () => {
   it('keeps the text of a call that also requested tools, and skips a result that never arrived', () => {
     const call = (toolCallId: string) => ({ toolCallId, toolName: 'getWeather', args: { city: toolCallId } });
-    const messages = messagesOfCall({
+    const conversation = {
       input: [{ role: 'user', content: 'Hi' }],
       calls: [{ stepId: '0', message: messageOfCall({ text: 'Let me check.', toolCalls: [call('a'), call('b')] })! }],
+      steps: [],
       toolResults: new Map([['b', 'city not found']]),
-    }) as any[];
+    };
+    const messages = messagesOfCall(conversation, { startTime: new Date() }) as any[];
 
     expect(messages.map(({ role, content, tool_call_id }) => [role, content, tool_call_id])).toEqual([
       ['user', 'Hi', undefined],

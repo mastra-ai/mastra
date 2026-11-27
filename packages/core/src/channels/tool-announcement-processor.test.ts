@@ -11,6 +11,9 @@ function toolResult(payload: Record<string, unknown>): ChunkType {
 const announce = ({ toolName, result }: { toolName: string; result: unknown }) =>
   toolName === 'open_pr' ? `Pull request opened: ${(result as { url: string }).url}` : undefined;
 
+/** A render context as it lives on the request context: it carries the chat drivers, so it is never a JSON husk. */
+const liveRender = (fields: Record<string, unknown>) => ({ wrapStream: (stream: unknown) => stream, ...fields });
+
 async function run(part: ChunkType, requestContext = new RequestContext(), channels?: () => never) {
   const processor = new ChannelToolAnnouncementProcessor({ announce, channels });
   const out = await processor.processOutputStream({ part, requestContext, state: {} } as never);
@@ -22,7 +25,7 @@ describe('ChannelToolAnnouncementProcessor', () => {
   it("posts the host's announcement into the run's thread and passes the chunk through", async () => {
     const post = vi.fn(async () => ({}));
     const requestContext = new RequestContext();
-    requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, { chatThread: { post } });
+    requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, liveRender({ chatThread: { post } }));
     const part = toolResult({ toolName: 'open_pr', result: { url: 'https://github.com/a/b/pull/1' } });
 
     expect(await run(part, requestContext)).toBe(part);
@@ -42,7 +45,7 @@ describe('ChannelToolAnnouncementProcessor', () => {
   it('stays quiet for failed, partial or unannounced calls, and when the thread is gone', async () => {
     const post = vi.fn(async () => ({}));
     const requestContext = new RequestContext();
-    requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, { chatThread: { post } });
+    requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, liveRender({ chatThread: { post } }));
 
     await run(toolResult({ toolName: 'open_pr', result: { url: 'u' }, isError: true }), requestContext);
     await run(toolResult({ toolName: 'open_pr', result: { url: 'u' }, preliminary: true }), requestContext);
@@ -54,9 +57,10 @@ describe('ChannelToolAnnouncementProcessor', () => {
   it("doesn't fail the run when the post fails", async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const requestContext = new RequestContext();
-    requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, {
-      chatThread: { post: async () => Promise.reject(new Error('down')) },
-    });
+    requestContext.set(
+      CHAT_CHANNEL_RENDER_CONTEXT_KEY,
+      liveRender({ chatThread: { post: async () => Promise.reject(new Error('down')) } }),
+    );
     const part = toolResult({ toolName: 'open_pr', result: { url: 'u' } });
 
     expect(await run(part, requestContext)).toBe(part);

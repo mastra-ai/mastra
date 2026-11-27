@@ -3,7 +3,10 @@ import { RequestContext } from '../request-context';
 import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';
 import { resolveChannelRenderContext } from './thread-lookup';
 
-const render = { platform: 'slack' } as never;
+/** A live render context: real ones always carry `wrapStream` (issue #31310 guards on it). */
+const render = { platform: 'slack', wrapStream: (stream: unknown) => stream } as never;
+/** The method-less object a JSON snapshot round-trip leaves on a replica's request context. */
+const husk = { platform: 'slack' } as never;
 
 function channelsFor(threadId: string) {
   const buildRenderContextForThread = vi.fn(async (id: string) => (id === threadId ? render : null));
@@ -44,5 +47,22 @@ describe('resolveChannelRenderContext', () => {
     expect(await resolveChannelRenderContext(new RequestContext(), channelsFor('thread-1').channels)).toBeUndefined();
     expect(await resolveChannelRenderContext(linked)).toBeUndefined();
     expect(await resolveChannelRenderContext(undefined, channelsFor('thread-1').channels)).toBeUndefined();
+  });
+
+  it('rebuilds from the thread when a replica restored the entry as a method-less husk (#31310)', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, husk);
+    requestContext.set('controller', { threadId: 'thread-1' });
+    const { channels, buildRenderContextForThread } = channelsFor('thread-1');
+
+    expect(await resolveChannelRenderContext(requestContext, channels)).toBe(render);
+    expect(buildRenderContextForThread).toHaveBeenCalledWith('thread-1');
+  });
+
+  it('resolves nothing for a husk on a run with no thread, rather than handing back the husk (#31310)', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, husk);
+
+    expect(await resolveChannelRenderContext(requestContext, channelsFor('thread-1').channels)).toBeUndefined();
   });
 });
