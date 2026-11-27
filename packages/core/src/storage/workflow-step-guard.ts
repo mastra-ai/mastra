@@ -8,6 +8,12 @@ export type WorkflowStepStartGuard = {
    * started by `expectedStartedBy`: a worker that resumed the step without a guard leaves one.
    */
   resumeClaim?: boolean;
+  /**
+   * A restart's claim of a step it takes over. It takes a `running` record started by
+   * `expectedStartedBy`, so the worker that started it can no longer save it. A record of that
+   * occurrence that already finished is answered `completed`, so its result is kept.
+   */
+  takeover?: boolean;
   /** Prune the predecessor only after this delivery has durably claimed its input. */
   previousStep?: { stepId: string; eventId: string; result: StepResult<any, any, any, any> };
 };
@@ -63,6 +69,10 @@ export function assertWorkflowStepGuard({
     throw new WorkflowStepConflictError('completed', stored, snapshot.requestContext, snapshot);
   }
   if (startGuard) {
+    if (startGuard.takeover && stored && startedBy === startGuard.expectedStartedBy) {
+      if (stored.status === 'running') return;
+      throw new WorkflowStepConflictError('completed', stored, snapshot.requestContext, snapshot);
+    }
     if (!stored && startGuard.expectedStartedBy === undefined) return;
     if (
       stored &&
