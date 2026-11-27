@@ -2,7 +2,7 @@ import net from 'node:net';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { PoolAdapter, TransactionDeadlineError } from './client';
+import { PoolAdapter, TransactionDeadlineError, trustedTransactionClient } from './client';
 import type { TransactionClient, TxClient } from './client';
 import { connectionString, TEST_CONFIG } from './test-utils';
 import { PostgresStore } from '.';
@@ -74,9 +74,10 @@ describe('PG transaction timeout headroom', () => {
     const deadlineAt = Date.now() + 45_000;
     await withHeadroom(1_000).tx(
       async t => {
-        const fresh = await installed(t, deadlineAt);
+        const store = trustedTransactionClient(t);
+        const fresh = await installed(store, deadlineAt);
         expect(fresh.excess).toBeLessThanOrEqual(-1_000 + TOLERANCE_MS);
-        const reused = await installed(t, deadlineAt);
+        const reused = await installed(store, deadlineAt);
         expect(reused.value).toBe(fresh.value);
         expect(reused.excess).toBeLessThan(0);
       },
@@ -124,7 +125,7 @@ describe('PG transaction timeout headroom', () => {
       await new PoolAdapter(slowPool, undefined, { timeoutHeadroomMs: 10 }).tx(
         async t => {
           for (let i = 0; i < 5; i++) {
-            const { excess, tookMs } = await installed(t, deadlineAt);
+            const { excess, tookMs } = await installed(trustedTransactionClient(t), deadlineAt);
             // The refresh before this read took about as long as the read (`tookMs` includes both).
             expect(excess).toBeLessThanOrEqual(tookMs - 10 + TOLERANCE_MS);
           }
@@ -145,15 +146,16 @@ describe('PG transaction timeout headroom', () => {
     const outcome = await withHeadroom(1_000)
       .tx(
         async t => {
+          const store = trustedTransactionClient(t);
           // Outer refresh: installs about 7,000 and records it.
-          await t.query('SELECT 1');
+          await store.query('SELECT 1');
           await (t as TransactionClient)
             // SAVEPOINT is bounded too: it reuses the outer record, so nothing inside refreshes yet.
             .savepoint('sp_headroom', async () => {
               // Still within the headroom of the outer refresh: reuses about 7,000.
-              await t.query('SELECT pg_sleep(3)');
+              await store.query('SELECT pg_sleep(3)');
               // The record has expired: refreshes to about 4,000, records it, then fails.
-              await t.query('SELECT 1 / 0');
+              await store.query('SELECT 1 / 0');
             })
             .catch((error: unknown) => {
               innerError = error;
@@ -172,21 +174,22 @@ describe('PG transaction timeout headroom', () => {
     expect(Date.now() - started).toBeLessThan(8_000 + 500);
   }, 15_000);
 
-  it('refreshes after a caller rolls back to its own savepoint through query()', async () => {
+  it('refreshes after a raw rollback to a savepoint in store SQL', async () => {
     const started = Date.now();
     const deadlineAt = started + 8_000;
     let afterRollback: Awaited<ReturnType<typeof installed>> | undefined;
     const outcome = await withHeadroom(1_000)
       .tx(
         async t => {
+          const store = trustedTransactionClient(t);
           // Outer refresh: installs about 7,000 and records it; the savepoint keeps that setting.
-          await t.query('SAVEPOINT sp_raw');
-          await t.query('SELECT pg_sleep(3)');
+          await store.query('SAVEPOINT sp_raw');
+          await store.query('SELECT pg_sleep(3)');
           // The record has expired: refreshes to about 4,000 inside the savepoint.
-          await t.query('SELECT 1');
+          await store.query('SELECT 1');
           // Puts the server back at about 7,000 with about 5,000 left.
-          await t.query('/* caller cleanup */ rollback to savepoint sp_raw');
-          afterRollback = await installed(t, deadlineAt);
+          await store.query('/* cleanup */ rollback to savepoint sp_raw');
+          afterRollback = await installed(store, deadlineAt);
           await t.query('SELECT pg_sleep(30)');
         },
         { deadlineAt },
@@ -197,6 +200,31 @@ describe('PG transaction timeout headroom', () => {
     expect(outcome).toBeInstanceOf(TransactionDeadlineError);
     expect(Date.now() - started).toBeLessThan(8_000 + 500);
   }, 15_000);
+
+  it.each([
+    ['a function', 'SELECT pg_temp.r483_lengthen()'],
+    [
+      'a DO block running EXECUTE',
+      `DO $$ BEGIN EXECUTE 'SET LOCAL statement' || '_timeout = 600000'; EXECUTE 'SET LOCAL lock' || '_timeout = 600000'; END $$`,
+    ],
+  ])("keeps the bound after the caller's own SQL lengthens the timeouts in %s", async (_label, lengthen) => {
+    const deadlineAt = Date.now() + 45_000;
+    await withHeadroom(1_000).tx(
+      async t => {
+        await t.query(
+          `CREATE OR REPLACE FUNCTION pg_temp.r483_lengthen() RETURNS void LANGUAGE sql AS $f$ SELECT set_config('statement_timeout', '600000', true), set_config('lock_timeout', '600000', true) $f$`,
+        );
+        // Records a fresh setting the caller's statement then replaces.
+        await installed(trustedTransactionClient(t), deadlineAt);
+        await t.query(lengthen);
+        const caller = await installed(t, deadlineAt);
+        expect(caller.excess).toBeLessThan(0);
+        const store = await installed(trustedTransactionClient(t), deadlineAt);
+        expect(store.excess).toBeLessThan(0);
+      },
+      { deadlineAt },
+    );
+  });
 });
 
 describe('PostgresStore transactionTimeoutHeadroomMs', () => {

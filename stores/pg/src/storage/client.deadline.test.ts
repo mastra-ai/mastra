@@ -1,7 +1,7 @@
 import type { Pool, PoolClient, QueryResult } from 'pg';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
-import { PinnedClientAdapter, PoolAdapter, TransactionDeadlineError } from './client';
+import { PinnedClientAdapter, PoolAdapter, TransactionDeadlineError, trustedTransactionClient } from './client';
 import type { TransactionClient } from './client';
 
 /**
@@ -76,13 +76,13 @@ describe('transaction deadline: timeout headroom', () => {
   const setCalls = (sent: string[]) => sent.filter(sql => sql.startsWith('SET LOCAL statement_timeout'));
   const installed = (sql: string) => Number(/statement_timeout = (\d+)/.exec(sql)![1]);
 
-  it('refreshes the timeouts once per headroom window instead of before every statement', async () => {
+  it("refreshes the timeouts once per headroom window for the store's own SQL", async () => {
     const { client, sent } = recordingClient();
     const adapter = new PoolAdapter(poolOf(client), undefined, { timeoutHeadroomMs: 1_000 });
     const started = Date.now();
     await adapter.tx(
       async t => {
-        for (let i = 0; i < 50; i++) await t.query(`SELECT ${i}`);
+        for (let i = 0; i < 50; i++) await trustedTransactionClient(t).query(`SELECT ${i}`);
       },
       { deadlineAt: started + 45_000 },
     );
@@ -120,7 +120,7 @@ describe('transaction deadline: timeout headroom', () => {
     const { client, sent } = recordingClient([[/^SET LOCAL statement_timeout/, 30]]);
     await new PoolAdapter(poolOf(client), undefined, { timeoutHeadroomMs: 10 }).tx(
       async t => {
-        for (let i = 0; i < 5; i++) await t.query(`SELECT ${i}`);
+        for (let i = 0; i < 5; i++) await trustedTransactionClient(t).query(`SELECT ${i}`);
       },
       { deadlineAt: Date.now() + 45_000 },
     );
@@ -135,7 +135,7 @@ describe('transaction deadline: timeout headroom', () => {
     onTestFinished(() => vi.restoreAllMocks());
     await new PoolAdapter(poolOf(client), undefined, { timeoutHeadroomMs: 1_000 }).tx(
       async t => {
-        for (let i = 0; i < 3; i++) await t.query(`SELECT ${i}`);
+        for (let i = 0; i < 3; i++) await trustedTransactionClient(t).query(`SELECT ${i}`);
       },
       { deadlineAt: now + 1_500 },
     );
@@ -162,8 +162,9 @@ describe('transaction deadline: timeout headroom', () => {
     await new PoolAdapter(poolOf(flaky), undefined, { timeoutHeadroomMs: 1_000 })
       .tx(
         async t => {
-          await t.query('SELECT a').catch(() => undefined);
-          await t.query('SELECT b');
+          const store = trustedTransactionClient(t);
+          await store.query('SELECT a').catch(() => undefined);
+          await store.query('SELECT b');
         },
         { deadlineAt: Date.now() + 45_000 },
       )
@@ -177,14 +178,15 @@ describe('transaction deadline: timeout headroom', () => {
     const { client, sent } = recordingClient();
     await new PoolAdapter(poolOf(client), undefined, { timeoutHeadroomMs: 1_000 }).tx(
       async t => {
-        await t.query('SELECT outer');
+        const store = trustedTransactionClient(t);
+        await store.query('SELECT outer');
         await (t as TransactionClient)
           .savepoint('sp_1', async () => {
-            await t.query('SELECT inner');
+            await store.query('SELECT inner');
             throw new Error('refused');
           })
           .catch(() => undefined);
-        await t.query('SELECT after');
+        await store.query('SELECT after');
       },
       { deadlineAt: Date.now() + 45_000 },
     );
@@ -200,14 +202,15 @@ describe('transaction deadline: timeout headroom', () => {
     ['a caller setting its own statement timeout', "SELECT set_config('statement_timeout', '0', true)"],
     ['a caller SET with a comment before the name', 'SET LOCAL /* mine */ lock_timeout = 0'],
     ['a reset', 'RESET ALL'],
-  ])('refreshes after %s sent through query()', async (_label, raw) => {
+  ])("refreshes after %s in the store's own SQL", async (_label, raw) => {
     const { client, sent } = recordingClient();
     await new PoolAdapter(poolOf(client), undefined, { timeoutHeadroomMs: 1_000 }).tx(
       async t => {
-        await t.query('SAVEPOINT sp_raw');
-        await t.query('SELECT inner');
-        await t.query(raw);
-        await t.query('SELECT after');
+        const store = trustedTransactionClient(t);
+        await store.query('SAVEPOINT sp_raw');
+        await store.query('SELECT inner');
+        await store.query(raw);
+        await store.query('SELECT after');
       },
       { deadlineAt: Date.now() + 45_000 },
     );
@@ -219,13 +222,70 @@ describe('transaction deadline: timeout headroom', () => {
     const { client, sent } = recordingClient();
     await new PoolAdapter(poolOf(client), undefined, { timeoutHeadroomMs: 1_000 }).tx(
       async t => {
-        await t.query('SELECT 1');
-        await t.query('UPDATE pages SET name = $1', ['x']);
-        await t.query("SELECT current_setting('statement_timeout')");
-        await t.query('SELECT 2');
+        const store = trustedTransactionClient(t);
+        await store.query('SELECT 1');
+        await store.query('UPDATE pages SET name = $1', ['x']);
+        await store.query("SELECT current_setting('statement_timeout')");
+        await store.query('SELECT 2');
       },
       { deadlineAt: Date.now() + 45_000 },
     );
     expect(setCalls(sent)).toHaveLength(1);
+  });
+
+  it.each([
+    ['a function call', 'SELECT my_lengthen_timeouts()'],
+    ['a DO block running EXECUTE', "DO $$ BEGIN EXECUTE 'SET LOCAL statement' || '_timeout = 0'; END $$"],
+    ['an ordinary statement', 'SELECT 1'],
+  ])("sets the timeouts again after %s sent through the caller's client", async (_label, raw) => {
+    const { client, sent } = recordingClient();
+    await new PoolAdapter(poolOf(client), undefined, { timeoutHeadroomMs: 1_000 }).tx(
+      async t => {
+        const store = trustedTransactionClient(t);
+        await store.query('SELECT store_before');
+        await t.query(raw);
+        await t.query('SELECT caller_after');
+        await store.query('SELECT store_after');
+        await store.query('SELECT store_reused');
+      },
+      { deadlineAt: Date.now() + 45_000 },
+    );
+    const names = sent.slice(1, -1).map(sql => (sql.startsWith('SET LOCAL') ? 'SET' : sql));
+    expect(names).toEqual([
+      'SET',
+      'SELECT store_before',
+      raw,
+      'SET',
+      'SELECT caller_after',
+      'SET',
+      'SELECT store_after',
+      'SELECT store_reused',
+    ]);
+  });
+
+  it("gives the store's shaped reads the same rows through its own client", async () => {
+    const rows = [{ id: 1 }];
+    const client = {
+      async query() {
+        return { rows, rowCount: 1, command: 'SELECT', oid: 0, fields: [] } as unknown as QueryResult;
+      },
+      release() {},
+    } as unknown as PoolClient;
+    await new PoolAdapter(poolOf(client), undefined, { timeoutHeadroomMs: 1_000 }).tx(
+      async t => {
+        const store = trustedTransactionClient(t);
+        expect(await store.one('SELECT 1')).toEqual({ id: 1 });
+        expect(await store.oneOrNone('SELECT 1')).toEqual({ id: 1 });
+        expect(await store.many('SELECT 1')).toEqual(rows);
+        expect(await store.any('SELECT 1')).toEqual(rows);
+        expect(await store.none('SELECT 1')).toBeNull();
+      },
+      { deadlineAt: Date.now() + 45_000 },
+    );
+  });
+
+  it('is the client itself outside a pg transaction', () => {
+    const plain = { query: vi.fn() } as never;
+    expect(trustedTransactionClient(plain)).toBe(plain);
   });
 });

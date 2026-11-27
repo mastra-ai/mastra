@@ -96,8 +96,10 @@ export interface TransactionTimeoutOptions {
    * never gives a statement more time than is left; a statement may be stopped up to this much
    * earlier than with `0`. A setting is reused only within this long of reading the clock for it,
    * never after a refresh that took this long or failed, and never after `ROLLBACK TO SAVEPOINT`
-   * (which restores the earlier setting) or a caller's own SQL that may change the timeouts
-   * (`RESET`, `SET ... statement_timeout`, `set_config`). `0` (the default) sets them before every statement.
+   * (which restores the earlier setting). Only this package's own SQL reuses a setting: any
+   * statement sent through the `TxClient` a caller gets (from `tx()` or
+   * `pgKnowledgeTransactionClient`) may change the timeouts, in a function or `DO` block for
+   * example, so the next statement sets them again. `0` (the default) sets them before every statement.
    */
   timeoutHeadroomMs?: number;
 }
@@ -115,10 +117,21 @@ export class TransactionDeadlineError extends Error {
 const DEADLINE_SQLSTATES = new Set(['57014', '55P03']);
 
 /**
- * SQL that may restore or change `statement_timeout`/`lock_timeout`. Matched anywhere in the text,
- * so comments and multi-statement strings can't hide it; a false match only costs one more refresh.
+ * Store SQL that may restore or change `statement_timeout`/`lock_timeout`. Matched anywhere in the
+ * text, so comments and multi-statement strings can't hide it; a false match only costs one more refresh.
  */
 const MAY_CHANGE_TIMEOUTS = /rollback|\breset\b|set_config|\bset\b[\s\S]*\b(statement_timeout|lock_timeout)\b/i;
+
+const trustedViews = new WeakMap<TransactionClient, TxClient>();
+
+/**
+ * The same transaction as `tx`, for this package's own SQL: its statements may reuse the timeouts
+ * set within the headroom, where the caller's `tx` sets them again after each of its statements.
+ * Not exported from the package. Returns `tx` itself when it is not a {@link TransactionClient}.
+ */
+export function trustedTransactionClient(tx: TxClient): TxClient {
+  return (tx instanceof TransactionClient && trustedViews.get(tx)) || tx;
+}
 
 function remainingMs(deadlineAt: number): number {
   return Math.ceil(deadlineAt - Date.now());
@@ -324,7 +337,22 @@ export class TransactionClient implements TxClient {
     private readonly client: PoolClient,
     private readonly deadlineAt?: number,
     private readonly timeoutHeadroomMs = 0,
-  ) {}
+  ) {
+    const statement =
+      <T>(read: (result: QueryResult, query: string) => T) =>
+      (query: string, values?: QueryValues): Promise<T> =>
+        this.#enqueue(async () => read(await this.#run(query, values, true), query));
+    trustedViews.set(this, {
+      none: statement(() => null),
+      one: statement(oneRow),
+      oneOrNone: statement(oneOrNoneRow),
+      any: statement(result => result.rows),
+      manyOrNone: statement(result => result.rows),
+      many: statement(manyRows),
+      query: statement(result => result),
+      batch: promises => this.batch(promises),
+    } as TxClient);
+  }
 
   /** Throws {@link TransactionDeadlineError} once the transaction's deadline has passed. */
   assertWithinDeadline(): void {
@@ -332,7 +360,7 @@ export class TransactionClient implements TxClient {
   }
 
   /** One statement, bounded by what is left of the deadline (statement time and lock waits). */
-  async #run(query: string, values?: QueryValues): Promise<QueryResult> {
+  async #run(query: string, values?: QueryValues, trusted = false): Promise<QueryResult> {
     if (this.deadlineAt === undefined) return this.client.query(query, values);
     if (!this.#timeoutsReusable()) await this.#setTimeouts(this.deadlineAt);
     // Setting the timeouts is itself a round trip; don't send the statement if it used up the rest.
@@ -345,9 +373,9 @@ export class TransactionClient implements TxClient {
         throw new TransactionDeadlineError({ cause: error });
       throw error;
     } finally {
-      // A caller's own SQL may restore or change the timeouts (`ROLLBACK TO SAVEPOINT`, `RESET`,
-      // `SET statement_timeout`), anywhere in a multi-statement string or after a comment.
-      if (MAY_CHANGE_TIMEOUTS.test(query)) this.#timeoutsReadAt = undefined;
+      // A caller's SQL may change the timeouts where no text shows it (a function, a `DO` block),
+      // so only this package's own SQL reuses them, and not after its own rollback or reset.
+      if (!trusted || MAY_CHANGE_TIMEOUTS.test(query)) this.#timeoutsReadAt = undefined;
     }
   }
 
@@ -401,11 +429,11 @@ export class TransactionClient implements TxClient {
    */
   async savepoint<T>(name: string, callback: () => Promise<T>): Promise<T> {
     await this.drain();
-    await this.none(`SAVEPOINT ${name}`);
+    await trustedViews.get(this)!.none(`SAVEPOINT ${name}`);
     try {
       const result = await callback();
       await this.drain();
-      await this.none(`RELEASE SAVEPOINT ${name}`);
+      await trustedViews.get(this)!.none(`RELEASE SAVEPOINT ${name}`);
       return result;
     } catch (error) {
       await this.drain().catch(() => undefined);
@@ -426,29 +454,11 @@ export class TransactionClient implements TxClient {
   }
 
   one<T = any>(query: string, values?: QueryValues): Promise<T> {
-    return this.#enqueue(async () => {
-      const result = await this.#run(query, values);
-      if (result.rows.length === 0) {
-        throw new Error(`No data returned from query: ${truncateQuery(query)}`);
-      }
-      if (result.rows.length > 1) {
-        throw new Error(`Multiple rows returned when one was expected: ${truncateQuery(query)}`);
-      }
-      return result.rows[0] as T;
-    });
+    return this.#enqueue(async () => oneRow<T>(await this.#run(query, values), query));
   }
 
   oneOrNone<T = any>(query: string, values?: QueryValues): Promise<T | null> {
-    return this.#enqueue(async () => {
-      const result = await this.#run(query, values);
-      if (result.rows.length === 0) {
-        return null;
-      }
-      if (result.rows.length > 1) {
-        throw new Error(`Multiple rows returned when one or none was expected: ${truncateQuery(query)}`);
-      }
-      return result.rows[0] as T;
-    });
+    return this.#enqueue(async () => oneOrNoneRow<T>(await this.#run(query, values), query));
   }
 
   any<T = any>(query: string, values?: QueryValues): Promise<T[]> {
@@ -463,13 +473,7 @@ export class TransactionClient implements TxClient {
   }
 
   many<T = any>(query: string, values?: QueryValues): Promise<T[]> {
-    return this.#enqueue(async () => {
-      const result = await this.#run(query, values);
-      if (result.rows.length === 0) {
-        throw new Error(`No data returned from query: ${truncateQuery(query)}`);
-      }
-      return result.rows as T[];
-    });
+    return this.#enqueue(async () => manyRows<T>(await this.#run(query, values), query));
   }
 
   query(query: string, values?: QueryValues): Promise<QueryResult> {
@@ -481,6 +485,33 @@ export class TransactionClient implements TxClient {
     // methods above; awaiting them together is fine.
     return Promise.all(promises);
   }
+}
+
+function oneRow<T>(result: QueryResult, query: string): T {
+  if (result.rows.length === 0) {
+    throw new Error(`No data returned from query: ${truncateQuery(query)}`);
+  }
+  if (result.rows.length > 1) {
+    throw new Error(`Multiple rows returned when one was expected: ${truncateQuery(query)}`);
+  }
+  return result.rows[0] as T;
+}
+
+function oneOrNoneRow<T>(result: QueryResult, query: string): T | null {
+  if (result.rows.length === 0) {
+    return null;
+  }
+  if (result.rows.length > 1) {
+    throw new Error(`Multiple rows returned when one or none was expected: ${truncateQuery(query)}`);
+  }
+  return result.rows[0] as T;
+}
+
+function manyRows<T>(result: QueryResult, query: string): T[] {
+  if (result.rows.length === 0) {
+    throw new Error(`No data returned from query: ${truncateQuery(query)}`);
+  }
+  return result.rows as T[];
 }
 
 /**
