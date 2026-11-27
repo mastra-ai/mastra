@@ -35,5 +35,5 @@ describe.each([1, 2] as const)('LibSQL evented occurrence replay on storage v%i'
   };
   describeOccurrenceReplayCases({ getStorage: () => storage, storageVersion, countV1Snapshots });
   describeResumeOccurrenceCases({ getStorage: () => storage, storageVersion, countV1Snapshots });
-  describeRestartOccurrenceCases({ getStorage: () => storage, storageVersion });
+  describeRestartOccurrenceCases({ getStorage: () => storage, storageVersion, countV1Snapshots });
 });

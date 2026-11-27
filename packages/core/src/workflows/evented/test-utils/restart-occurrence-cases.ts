@@ -7,7 +7,7 @@
  * claim keeps it, and each step after the restart point runs once.
  */
 import { randomUUID } from 'node:crypto';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { MockInstance } from 'vitest';
 import { z } from 'zod/v4';
 import type { Event } from '../../../events/types';
@@ -74,14 +74,24 @@ function holdableSteps() {
 export function describeRestartOccurrenceCases({
   getStorage,
   storageVersion,
+  countV1Snapshots,
 }: {
   getStorage: () => MastraStorage;
   storageVersion: 1 | 2;
+  /**
+   * Counts the rows of the store's v1 snapshot table. Omit it when the caller checks the table
+   * itself.
+   */
+  countV1Snapshots?: () => Promise<number>;
 }) {
   describe('evented restarts of a live run (COR-1620)', () => {
     let storage: MastraStorage;
     beforeAll(() => {
       storage = getStorage();
+    });
+    // A v2 run must never fall back to the v1 snapshot table.
+    afterAll(async () => {
+      if (storageVersion === 2 && countV1Snapshots) expect(await countV1Snapshots()).toBe(0);
     });
     const createWorkflow = ((params: Parameters<typeof createEventedWorkflow>[0]) => {
       const options: WorkflowOptions<any> = { ...params.options, storageVersion };
