@@ -210,6 +210,39 @@ export function describeResumeOccurrenceCases({
       });
     }, 20_000);
 
+    // T3. A resume event delivered again rewrote the run's snapshot from its own data: on storage
+    // v1 that set the resumed step back to suspended and dropped the steps after it, and on both
+    // versions the resumed step and the steps after it ran again.
+    it('keeps the progress of a resumed run when the resume event is delivered again', async () => {
+      const wf = linearWorkflow();
+      await withHost({ [wf.workflow.id]: wf.workflow }, async ({ driver }) => {
+        try {
+          const run = await wf.workflow.createRun();
+          expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'suspended' });
+          wf.arm('next');
+          const result = run.resume({ step: 'gate', resumeData: { ok: true } });
+          await wf.entered.next.promise;
+          const before = await storedSteps(wf.workflow.id, run.runId);
+          expect(before).toMatchObject({ gate: { status: 'success' }, after: { status: 'success' } });
+          const trigger = driver.events.find(
+            event =>
+              event.type === 'workflow.resume' && event.runId === run.runId && event.data.workflowId === wf.workflow.id,
+          )!;
+          await driver.redeliverEvent(trigger);
+          const after = await storedSteps(wf.workflow.id, run.runId);
+          expect(after?.gate).toEqual(before?.gate);
+          expect(after?.after).toEqual(before?.after);
+          await settle(driver);
+          wf.held.next.resolve();
+          expect(await result).toMatchObject({ status: 'success', result: { n: 2 } });
+          await settle(driver);
+          expect(wf.calls).toEqual({ gate: 1, after: 1, next: 1 });
+        } finally {
+          wf.releaseAll();
+        }
+      });
+    }, 20_000);
+
     // T4 (T1 after a time travel). Time travel carries its flag on every later step, so without the
     // guards nothing told the two copies of a duplicated step apart and the step after it ran twice.
     it('runs the step after a time-travelled step once when that step is delivered twice', async () => {
@@ -257,6 +290,38 @@ export function describeResumeOccurrenceCases({
           expect(await result).toMatchObject({ status: 'success', result: { n: 2 } });
           await settle(driver);
           expect(wf.calls).toEqual({ gate: 2, after: 1, next: 1 });
+        } finally {
+          wf.releaseAll();
+        }
+      });
+    }, 20_000);
+
+    // T4 (T3 after a time travel). The repeated time travel event reset the run's step results and
+    // ran the time-travelled steps again.
+    it('keeps the progress of a time-travelled run when the time travel event is delivered again', async () => {
+      const wf = plainWorkflow();
+      await withHost({ [wf.workflow.id]: wf.workflow }, async ({ driver }) => {
+        try {
+          const run = await wf.workflow.createRun();
+          expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'success' });
+          wf.arm('next');
+          const from = driver.events.length;
+          const result = run.timeTravel({ step: 'first', inputData: { n: 10 } });
+          await wf.entered.next.promise;
+          const before = await storedSteps(wf.workflow.id, run.runId);
+          expect(before).toMatchObject({ first: { status: 'success' }, after: { status: 'success' } });
+          const trigger = driver.events
+            .slice(from)
+            .find(event => event.type === 'workflow.start' && event.runId === run.runId && event.data.timeTravel)!;
+          await driver.redeliverEvent(trigger);
+          const after = await storedSteps(wf.workflow.id, run.runId);
+          expect(after?.first).toEqual(before?.first);
+          expect(after?.after).toEqual(before?.after);
+          await settle(driver);
+          wf.held.next.resolve();
+          expect(await result).toMatchObject({ status: 'success', result: { n: 13 } });
+          await settle(driver);
+          expect(wf.calls).toEqual({ first: 2, after: 2, next: 2 });
         } finally {
           wf.releaseAll();
         }

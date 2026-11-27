@@ -1299,9 +1299,42 @@ export class WorkflowEventProcessor extends EventProcessor {
     // resume keeps the row it resumes; a nested run started after one inherits the resume and has none.
     const guardsSteps = this.#guardsSteps(await this.mastra.getStorage()?.getStore('workflows'));
     const requiresGuardedSnapshot = guardsSteps && !restart && (!header || (!timeTravel && !resumeSteps?.length));
+
+    // A resume or time travel event is applied once. Delivered again, it must not rewrite the run
+    // from its own data, which would undo the progress made since. Its first step event goes out
+    // again only while the step it targets is still as this event wrote it; the guards then decide.
+    const targetId = timeTravel ? timeTravel.steps?.[0] : resumeSteps?.[0];
+    const trigger =
+      guardsSteps &&
+      !restart &&
+      !!eventId &&
+      !!targetId &&
+      getStepId(workflow, executionPath ?? [0]) === targetId &&
+      (!!timeTravel || !!resumeSteps?.length);
+    const alreadyApplied = trigger && header?.appliedTriggerEventId === eventId;
+    if (alreadyApplied) {
+      const stored = (await runStorage.loadStep(targetId!))?.context?.[targetId!];
+      const written = timeTravel
+        ? timeTravel.stepResults?.[targetId!]
+        : { status: 'suspended', metadata: { startedBy: stepResults?.[targetId!]?.metadata?.startedBy } };
+      if (
+        header.status !== 'running' ||
+        stored?.status !== written?.status ||
+        stored?.metadata?.startedBy !== written?.metadata?.startedBy
+      ) {
+        this.mastra.getLogger()?.debug('Ignoring a repeated workflow trigger: the run already went past it', {
+          workflowId,
+          runId,
+          eventId,
+          storedStatus: header.status,
+        });
+        return;
+      }
+    }
+
     // Time travel rewrites the run's history, so its reset step results are stored even when running
     // snapshots are declined. Otherwise the old results stay stored and replayed steps merge into them.
-    if (shouldPersist || requiresGuardedSnapshot || timeTravel) {
+    if (!alreadyApplied && (shouldPersist || requiresGuardedSnapshot || timeTravel)) {
       const runningSnapshot: WorkflowRunState = {
         activePaths: restart ? (executionPath ?? restart.activePaths) : [],
         parentWorkflow: parentWorkflow
@@ -1323,6 +1356,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         status: 'running',
         // Stored only because guards or storage v2 need it, so a suspend that declines its snapshot removes it.
         guardedOnlySnapshot: !persistRequested,
+        ...(trigger ? { appliedTriggerEventId: eventId } : {}),
         value: initialState,
         // A cancel sent before the first step result reads its execution claim from here.
         requestContext: withoutAuthToken(requestContext),

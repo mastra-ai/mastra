@@ -462,6 +462,11 @@ export interface WorkflowRunState {
    * runs; the workflow's `shouldPersistSnapshot` declined it.
    */
   guardedOnlySnapshot?: boolean;
+  /**
+   * @internal The resume or time travel event the evented start handler last applied to this run,
+   * so a repeated delivery of it does not rewrite the run again.
+   */
+  appliedTriggerEventId?: string;
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;
   stepExecutionPath?: string[];
