@@ -43,6 +43,8 @@ export type {
   ConnectEventWorkerOptions,
 } from './event-worker.js';
 export type { ConnectEventFilter, ConnectEventFilterOptions, FilteredConnectEvent } from './event-filter.js';
+export { connectEventFields, matchesConnectEventFields, unknownConnectEventFields } from './event-fields.js';
+export type { ConnectEventFieldFilters, ConnectEventFieldValue } from './event-fields.js';
 export type {
   ConnectEvent,
   ConnectEventEnvelope,
