@@ -3677,6 +3677,8 @@ export class WorkflowEventProcessor extends EventProcessor {
 
         // Auto-detect the suspended step within the nested workflow
         const suspendedStepId = Object.keys(snapshot?.suspendedPaths ?? {})?.[0];
+        // Another copy of this delivery already resumed the nested run.
+        if (!suspendedStepId && snapshot && snapshot.status !== 'suspended') return;
         if (!suspendedStepId) {
           return this.errorWorkflow(
             {

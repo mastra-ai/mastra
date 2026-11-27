@@ -984,6 +984,45 @@ export function describeResumeOccurrenceCases({
       });
     }, 20_000);
 
+    // The parent's resume of its nested step is delivered again once the nested run has resumed. The
+    // copy finds no suspended step left in the nested run and must not fail the parent.
+    it('finishes a resumed nested workflow when the parent resume step is delivered again', async () => {
+      const entered = deferred();
+      const held = deferred();
+      const child = createWorkflow({ id: `resume-copy-child-${randomUUID()}`, inputSchema: Num, outputSchema: Num })
+        .then(
+          createStep({
+            id: 'inner-ask',
+            inputSchema: Num,
+            outputSchema: Num,
+            resumeSchema: Approval,
+            execute: async ({ inputData, resumeData, suspend }) => {
+              if (!resumeData) return suspend({});
+              entered.resolve();
+              await held.promise;
+              return { n: inputData.n + 1 };
+            },
+          }),
+        )
+        .commit();
+      const parent = createWorkflow({ id: `resume-copy-parent-${randomUUID()}`, inputSchema: Num, outputSchema: Num })
+        .then(child)
+        .commit();
+      await withHost({ [child.id]: child, [parent.id]: parent }, async ({ driver }) => {
+        try {
+          const run = await parent.createRun();
+          expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'suspended' });
+          const resumed = run.resume({ step: child.id, resumeData: { ok: true } });
+          await entered.promise;
+          await driver.redeliverEvent(driver.stepRuns({ spec: `${parent.id}@0`, runId: run.runId }).at(-1)!);
+          held.resolve();
+          expect(await resumed).toMatchObject({ status: 'success', result: { n: 1 } });
+        } finally {
+          held.resolve();
+        }
+      });
+    }, 20_000);
+
     // Resuming the child run directly leaves the parent's nested step as the suspension stored it.
     // The child's hand-back then completes that step under its stored occurrence, so the record
     // must read as running again or the guard keeps the suspension and the parent never continues.
