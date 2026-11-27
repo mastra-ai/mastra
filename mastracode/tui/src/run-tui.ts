@@ -713,7 +713,8 @@ export interface RunTuiOptions {
    * Extra options for the local session's `createMastraCode()` call, such as `knowledge` and
    * `scopes`. They are applied last, so a key given here replaces the value Mastra Code would
    * otherwise pass for it (including `initialState`, `subagents`, `memory` and the
-   * `MASTRACODE_DISABLE_*` toggles). Only the interactive local TUI uses them: Factory mode
+   * `MASTRACODE_DISABLE_*` toggles), except that `--new` always sets `createInitialThread` and
+   * `resumeLatestThread` to `false`. Only the interactive local TUI uses them: Factory mode
    * (settings connect the TUI to a Factory), headless runs and `--acp` create their sessions
    * without them.
    */
