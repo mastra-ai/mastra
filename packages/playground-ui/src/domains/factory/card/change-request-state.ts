@@ -1,6 +1,17 @@
 import type { CardChangeRequest, PullRequestStatus } from '@internal/factory-contract';
 
-import type { ChangeRequestProvider, PullRequestSubscription } from './services/githubSubscriptions';
+/** Which source-control provider serves the subscriptions route. */
+export type ChangeRequestProvider = 'github' | 'gitlab';
+
+export interface PullRequestSubscription {
+  id: string;
+  repoFullName: string;
+  pullRequestNumber: number;
+  status: 'open' | 'closed' | 'merged';
+  /** Absent on older servers. */
+  updatedAt?: string;
+  url: string;
+}
 
 interface ChangeRequestTerms {
   kind: 'PR' | 'MR';

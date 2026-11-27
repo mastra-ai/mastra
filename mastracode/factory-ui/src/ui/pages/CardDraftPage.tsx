@@ -15,7 +15,7 @@ import { EmptyThreadState, emptyThreadClass } from '../domains/chat/components/E
 import { SessionView } from '../domains/chat/components/SessionView';
 import { useContinueIntoThread } from '../domains/chat/context/transcriptKey';
 import { useDraftModelGuards } from '../domains/chat/hooks/useDraftModelGuards';
-import { currentItemStage } from '../domains/factory/boardStages';
+import { currentItemStage } from '@mastra/playground-ui/domains/factory';
 import { CardDraftActions } from '../domains/factory/components/CardDraftActions';
 import { useCardSessionRepository } from '../domains/factory/hooks/useCardSessionRepository';
 import { useDraftCard } from '../domains/factory/hooks/useDraftCard';

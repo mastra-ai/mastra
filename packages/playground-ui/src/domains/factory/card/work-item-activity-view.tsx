@@ -1,13 +1,13 @@
 import { isAuditAction } from '@internal/factory-contract';
 import type { AuditAction } from '@internal/factory-contract';
-import { CardActivity, relativeTime } from '@mastra/playground-ui/domains/factory';
-import type { CardActivityEntry } from '@mastra/playground-ui/domains/factory';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { SYSTEM_ACTOR_NAME } from '../auditPresentation';
-import type { BoardInfo } from '../boardFlow';
-import type { AuditActorProfile, AuditEvent } from '../services/audit';
-import { ASSIGNED_ACTION, CREATED_ACTION } from '../workItemActivity';
-import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
+import { CardActivity, relativeTime } from '../board';
+import type { CardActivityEntry } from '../board';
+import type { AuditActorProfile, AuditEvent } from './audit';
+import { SYSTEM_ACTOR_NAME } from './audit-presentation';
+import type { BoardInfo } from './board-flow';
+import { ASSIGNED_ACTION, CREATED_ACTION } from './work-item-activity';
+import type { WorkItemActivity as WorkItemActivityData } from './work-item-activity';
+import { cn } from '@/utils/cn';
 
 const timestampFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'medium',
@@ -109,7 +109,7 @@ function activityEntry(
   };
 }
 
-export function WorkItemActivity({
+export function WorkItemActivityView({
   activity,
   actors,
   board,

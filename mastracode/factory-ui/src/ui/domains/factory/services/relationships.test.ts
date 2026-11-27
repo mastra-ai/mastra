@@ -1,13 +1,13 @@
+import { relationshipPath } from './relationshipPath';
 import { describe, expect, it } from 'vitest';
 
 import {
   relatedCardName,
   relatedWorkItemIndex,
   relationshipLabel,
-  relationshipPath,
   workItemReference,
   workItemShortReference,
-} from './relationships';
+} from '@mastra/playground-ui/domains/factory';
 import type { WorkItem } from '@internal/factory-contract';
 
 function workItem(overrides: Partial<WorkItem> & Pick<WorkItem, 'id' | 'source'>): WorkItem {

@@ -15,7 +15,7 @@ import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { stashHandoffFiles } from '../../chat/services/handoffFiles';
 import type { FactoryProject } from '../../workspaces/services/github';
 import { createUserSession, getUserSession } from '../../workspaces/services/user-sessions';
-import { itemSessionSpec } from '../boardItems';
+import { itemSessionSpec } from '@mastra/playground-ui/domains/factory';
 import { startFactoryRun } from '../services/workItems';
 import type { WorkItem } from '@internal/factory-contract';
 

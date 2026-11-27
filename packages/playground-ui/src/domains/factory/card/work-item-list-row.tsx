@@ -1,31 +1,32 @@
-import { useBoardCatalog } from '@mastra/react/hooks/factory';
-import type { ActivityStatus } from '@mastra/playground-ui/components/Activity';
-import { ListRowLabels, ListRowLinks, ListRowStatus, ListRowTitle } from '@mastra/playground-ui/domains/factory';
-import type { ReactNode } from 'react';
-
-import type { BoardCardStatus } from '../boardCardState';
-import { boardOf } from '../boardFlow';
-import type { DragPayload } from '../boardDrag';
-import { sourceCreatedAt, sourceMetadata } from '../boardItems';
-import type { CardAction } from '../cardPrimaryAction';
-import type { AuditActorProfile } from '../services/audit';
-import { workItemShortReference } from '../services/relationships';
 import type { WorkItem } from '@internal/factory-contract';
-import type { BoardStageId } from '../stages';
-import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
+import { useBoardCatalog } from '@mastra/react/hooks/factory';
+import type { ReactNode } from 'react';
+import { ListRowLabels, ListRowLinks, ListRowStatus, ListRowTitle } from '../board';
+
+import type { DragPayload } from '../board/board-drag';
+import type { AuditActorProfile } from './audit';
 import {
   CardActions,
   CardStatus,
-  MetadataLabels,
+  CardMetadataLabels,
   SessionBadge,
   SourceTitle,
   WorkItemSourceIcon,
-} from './BoardCardParts';
-import { BoardListRow } from './BoardListRow';
-import { SourceStateBadge } from './SourceStateBadge';
-import { WorkItemActivity } from './WorkItemActivity';
-import type { ReworkReason } from '../reworkReason';
-import { columnReviewVerdict, ReviewVerdictBadge, ReworkLine } from './WorkItemCardRows';
+} from './board-card-parts';
+import type { BoardCardStatus } from './board-card-state';
+import { boardOf } from './board-flow';
+import { sourceCreatedAt, sourceMetadata } from './board-items';
+import { WorkItemBoardListRow } from './board-list-row';
+import type { CardAction } from './card-primary-action';
+import { workItemShortReference } from './relationships';
+import { columnReviewVerdict } from './review-verdict';
+import type { ReworkReason } from './rework-reason';
+import { WorkItemSourceStateBadge } from './source-state-badge';
+import type { BoardStageId } from './stages';
+import type { WorkItemActivity as WorkItemActivityData } from './work-item-activity';
+import { WorkItemActivityView } from './work-item-activity-view';
+import { ReviewVerdictBadge, ReworkLine } from './work-item-card-rows';
+import type { ActivityStatus } from '@/ds/components/Activity';
 
 export function WorkItemListRow({
   item,
@@ -71,7 +72,7 @@ export function WorkItemListRow({
   // Native cards have no upstream link to carry their key, so the row shows it as text.
   const nativeKey = item.url === null ? workItemShortReference(item) : undefined;
   return (
-    <BoardListRow
+    <WorkItemBoardListRow
       title={item.title}
       href={href}
       linkRef={deepLinkRef}
@@ -97,8 +98,8 @@ export function WorkItemListRow({
         ),
         labels: (
           <ListRowLabels author={item.workItem?.author}>
-            <SourceStateBadge item={item} />
-            <MetadataLabels metadata={sourceMetadata(item)} />
+            <WorkItemSourceStateBadge item={item} />
+            <CardMetadataLabels metadata={sourceMetadata(item)} />
           </ListRowLabels>
         ),
         status: (status.kind !== 'idle' || hasSession || verdict || rework) && (
@@ -110,7 +111,7 @@ export function WorkItemListRow({
           </ListRowStatus>
         ),
         action: <CardActions actions={actions} />,
-        activity: <WorkItemActivity activity={activity} actors={actors} board={board} showName={false} />,
+        activity: <WorkItemActivityView activity={activity} actors={actors} board={board} showName={false} />,
       }}
     />
   );

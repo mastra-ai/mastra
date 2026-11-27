@@ -1,6 +1,12 @@
 import {
   CardOverview as SharedCardOverview,
   OverviewSkeleton as SharedOverviewSkeleton,
+  boardOf,
+  changeRequestsNoun,
+  ownChangeRequest,
+  sessionChangeRequests,
+  relatedWorkItemIndex,
+  genericExternalWorkItemUrl,
 } from '@mastra/playground-ui/domains/factory';
 import { useClock } from '@mastra/playground-ui/hooks/use-clock';
 
@@ -9,14 +15,9 @@ import { useFactoryQuery } from '../../../../hooks/useFactories';
 import type { WorkspaceSlot } from '../../workspace-viewer/context/WorkspacePanelContext';
 import { WorkspaceSectionSkeleton } from '../../workspace-viewer/components/WorkspaceSection';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
-import { boardOf } from '../boardFlow';
 import { repositoryProvider } from '../hooks/useSessionRepository';
 import { cardProjectRepositoryId } from '../boardRepository';
-import { changeRequestsNoun } from '../changeRequestState';
-import { ownChangeRequest, sessionChangeRequests } from '../sessionChangeRequests';
 import type { PullRequestSubscription } from '../services/githubSubscriptions';
-import { relatedWorkItemIndex } from '../services/relationships';
-import { genericExternalWorkItemUrl } from '../services/workItemPresentation';
 import type { WorkItem } from '@internal/factory-contract';
 import { toMinute } from '../stageStays';
 import { CardDescription } from './CardDescription';

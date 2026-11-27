@@ -1,30 +1,29 @@
-import { useBoardCatalog } from '@mastra/react/hooks/factory';
-import { BoardCard, useBoardNavigation } from '@mastra/playground-ui/domains/factory';
 import { cardThreadSession, itemThreadSession } from '@internal/factory-contract';
 import type { SessionRowStatus, WorkItem, FactoryDecisionSummary } from '@internal/factory-contract';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { useBoardCatalog } from '@mastra/react/hooks/factory';
 import type { ReactElement } from 'react';
+import { BoardCard, useBoardNavigation } from '../board';
+import type { DragPayload } from '../board/board-drag';
+import type { BoardLayout } from '../board/board-layout';
 
-import type { BoardCardOwner } from '../boardCardState';
-import type { DragPayload } from '../boardDrag';
-import { reworkReason } from '../reworkReason';
-import type { BoardLayout } from '../boardLayout';
-import { itemBoard } from '../boardStages';
-import { cardControls } from '../cardControls';
-import { useBoardRepository } from '../hooks/useBoardRepository';
-import type { AuditEventPage } from '../services/audit';
-import { relationshipBoardId } from '../services/relationships';
-import type { BoardStageId } from '../stages';
-import { workItemActivity } from '../workItemActivity';
-import { REVEAL_ON_CARD_HOVER } from './BoardCardParts';
-import { RelatedWorkItemLink } from './RelatedWorkItemLink';
-import { WorkItemCardRows } from './WorkItemCardRows';
-import { WorkItemListRow } from './WorkItemListRow';
-import type { WorkItemMenuProps } from './WorkItemMenuItems';
-import { WorkItemMenuItems } from './WorkItemMenuItems';
-import { WorkItemUpstreamLinks } from './WorkItemUpstreamLinks';
-import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
+import type { AuditEventPage } from './audit';
+import { REVEAL_ON_CARD_HOVER } from './board-card-parts';
+import type { BoardCardOwner } from './board-card-state';
+import { itemBoard } from './board-stages';
+import { cardControls } from './card-controls';
+import { RelatedWorkItemLink } from './related-work-item-link';
+import { relationshipBoardId } from './relationships';
+import { reworkReason } from './rework-reason';
+import type { BoardStageId } from './stages';
+import { workItemActivity } from './work-item-activity';
+import { WorkItemCardRows } from './work-item-card-rows';
+import { WorkItemListRow } from './work-item-list-row';
+import type { WorkItemMenuProps } from './work-item-menu-items';
+import { WorkItemMenuItems } from './work-item-menu-items';
+import { WorkItemUpstreamLinks } from './work-item-upstream-links';
+import { Button } from '@/ds/components/Button';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { IconDotGrid1x3Vertical } from '@/ds/icons/central/IconDotGrid1x3Vertical';
 
 export function WorkItemCard({
   item,
@@ -50,6 +49,7 @@ export function WorkItemCard({
   onMoveToBoard,
   onRemove,
   layout,
+  repository,
 }: {
   item: WorkItem;
   // Hands the card's own control to the board, which scrolls to it and focuses it when the card is deeplinked.
@@ -86,10 +86,11 @@ export function WorkItemCard({
   onMoveToBoard: (toBoard: string, toStage: string) => void;
   onRemove: () => void;
   layout: BoardLayout;
+  /** The project's repository when it has exactly one, so references to it drop the repo name. */
+  repository?: string;
 }) {
   const { LinkComponent, cardHref, sessionHref, boardHref } = useBoardNavigation();
   const catalog = useBoardCatalog(item.githubProjectId);
-  const repository = useBoardRepository(item.githubProjectId);
   const boardId = itemBoard(item);
   const definition = catalog.data?.find(board => board.id === boardId);
   const {
@@ -232,6 +233,7 @@ export function WorkItemCard({
     >
       <WorkItemCardRows
         item={item}
+        repository={repository}
         columnStage={columnStage}
         relatedLinks={relatedLinks}
         upstreamLinks={upstreamLinks}

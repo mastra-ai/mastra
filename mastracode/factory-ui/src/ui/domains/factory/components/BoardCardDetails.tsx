@@ -11,7 +11,7 @@ import {
   jiraIssueRefForItem,
   linearIdentifierForItem,
   linearIssueIdForItem,
-} from '../boardItems';
+} from '@mastra/playground-ui/domains/factory';
 import type { WorkItem } from '@internal/factory-contract';
 
 /** The card's source and metadata — a work item or an unfiled candidate. */

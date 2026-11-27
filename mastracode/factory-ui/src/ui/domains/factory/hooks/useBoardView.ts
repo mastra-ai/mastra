@@ -18,7 +18,7 @@ import { BOARD_VIEW_QUERY, boardViewSettingsSchema, savedBoardViewsStorageKey } 
 import type { BoardViewSettings } from '../boardSavedViews';
 import { boardSortFromParams, boardSortParams, DEFAULT_BOARD_SORT } from '../boardSort';
 import type { BoardSort } from '../boardSort';
-import type { BoardKind } from '../boardStages';
+import type { BoardKind } from '@mastra/playground-ui/domains/factory';
 import { saveBoardView } from '../services/boardViews';
 
 export const BOARD_SEARCH_QUERY = 'search';

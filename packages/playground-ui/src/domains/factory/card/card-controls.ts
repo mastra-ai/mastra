@@ -1,8 +1,12 @@
-import type { SessionRowStatus, WorkItem, FactoryDecisionSummary } from '@internal/factory-contract';
+import type {
+  SessionRowStatus,
+  WorkItem,
+  FactoryDecisionSummary,
+  InstalledBoardInfo,
+} from '@internal/factory-contract';
 
-import type { InstalledBoardInfo } from '../../../api/types';
-import { boardCardState } from './boardCardState';
-import { boardLoop } from './boardFlow';
+import { boardCardState } from './board-card-state';
+import { boardLoop } from './board-flow';
 import {
   awaitsTriageDecision,
   cardActions,
@@ -10,9 +14,9 @@ import {
   cardPrimaryAction,
   resumeStage,
   retryButton,
-} from './cardPrimaryAction';
+} from './card-primary-action';
 import type { BoardStageId } from './stages';
-import { movingCardStatus, nextBoardPhase, primaryCardMove, proposedCardRun } from './workItemCardPresentation';
+import { movingCardStatus, nextBoardPhase, primaryCardMove, proposedCardRun } from './work-item-card-presentation';
 
 interface CardControlsInput {
   item: WorkItem;

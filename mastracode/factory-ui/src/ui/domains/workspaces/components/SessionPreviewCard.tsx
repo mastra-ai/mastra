@@ -8,8 +8,7 @@ import { useClock } from '@mastra/playground-ui/hooks/use-clock';
 import type { RefObject } from 'react';
 
 import { useBoardCatalog, useSessionWorkItemsQuery } from '@mastra/react/hooks/factory';
-import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
-import { RelatedWorkItemLink } from '../../factory/components/RelatedWorkItemLink';
+import { PullRequestStatusIcon, RelatedWorkItemLink } from '@mastra/playground-ui/domains/factory';
 import { toMinute } from '../../factory/stageStays';
 import type { TrailPerson } from '../hooks/useSessionTrail';
 import type { PullRequestSubscription } from '../../factory/services/githubSubscriptions';

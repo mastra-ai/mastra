@@ -1,4 +1,11 @@
-import { CardStageBar as SharedCardStageBar } from '@mastra/playground-ui/domains/factory';
+import {
+  CardStageBar as SharedCardStageBar,
+  BUSY_CARD_MOVE_REFUSAL,
+  boardCardState,
+  canMoveTo,
+  installedPhaseName,
+  phaseIconKind,
+} from '@mastra/playground-ui/domains/factory';
 import type { CardStagePhase } from '@mastra/playground-ui/domains/factory';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 
@@ -6,15 +13,12 @@ import type { InstalledBoardInfo, InstalledPhaseInfo } from '../../../../api/typ
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useCardSessions } from '@mastra/react/hooks/factory';
 import type { FactoryProject } from '../../workspaces/services/github';
-import { BUSY_CARD_MOVE_REFUSAL, boardCardState, canMoveTo } from '../boardCardState';
-import { phaseName } from '../boardStages';
 import { cardStages, elapsedLabel, enteredCurrentStageAt, stageBlockReason, stageDescription } from '../cardStageBar';
 import type { StageStep } from '../cardStageBar';
 import { useItemDecisions } from '../hooks/useBoardDecisions';
 import { useBoardItems } from '../hooks/useBoardItems';
 import { useSessionSubscriptions } from '../hooks/useSessionSubscriptions';
 import type { WorkItem } from '@internal/factory-contract';
-import { phaseIconKind } from './BoardIcons';
 
 export function CardStageBar({
   item,
@@ -51,7 +55,7 @@ export function CardStageBar({
   const held = (phase: InstalledPhaseInfo) => !canMoveTo(owner.kind, phase.kind);
   const shared = (phase: InstalledPhaseInfo, blockedReason?: string): CardStagePhase => ({
     id: phase.id,
-    name: phaseName(phase),
+    name: installedPhaseName(phase),
     kind: phaseIconKind(board.id, phase.kind),
     description: stageDescription(board, item, phase, openContext, { repository: repository?.slug, subscriptions }),
     ...(blockedReason === undefined ? {} : { blockedReason }),

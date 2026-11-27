@@ -17,9 +17,8 @@ import { Link } from 'react-router';
 
 import type { FactorySkillInfo, InstalledBoardInfo } from '../../../../../api/types';
 import { useFactorySkillsQuery } from '../../../../../hooks/useFactorySkills';
-import { boardName } from '@mastra/playground-ui/domains/factory';
+import { boardName, installedPhaseName } from '@mastra/playground-ui/domains/factory';
 import { orderedBoards } from '../../../factory/boardCatalog';
-import { phaseName } from '../../../factory/boardStages';
 import { SettingsSubsection } from '../../../settings/components/SettingsSubsection';
 import { useSettingsLinkState } from '../../../settings/hooks/useSettingsOpen';
 import { newSkillPath, skillPath } from '../../../settings/settingsSections';
@@ -35,7 +34,7 @@ function skillUses(boards: readonly InstalledBoardInfo[]): Map<string, SkillUse[
   for (const board of orderedBoards(boards)) {
     for (const phase of board.phases) {
       if (!phase.skill) continue;
-      const use = { boardId: board.id, board: boardName(board), phaseKey: phase.id, phase: phaseName(phase) };
+      const use = { boardId: board.id, board: boardName(board), phaseKey: phase.id, phase: installedPhaseName(phase) };
       uses.set(phase.skill, [...(uses.get(phase.skill) ?? []), use]);
     }
   }

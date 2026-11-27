@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import type { BoardStageId } from '../stages';
+import type { BoardStageId } from '@mastra/playground-ui/domains/factory';
 
 type CollapseRevealTarget = { itemId: string; stages: BoardStageId[] };
 

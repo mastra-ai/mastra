@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { changeRequestReference, changeRequestRepository } from './sessionChangeRequests';
+import { changeRequestReference, changeRequestRepository } from '@mastra/playground-ui/domains/factory';
 
 describe('changeRequestRepository', () => {
   it.each([

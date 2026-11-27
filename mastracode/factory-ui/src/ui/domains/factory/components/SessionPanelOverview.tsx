@@ -1,10 +1,13 @@
 import { useParams } from 'react-router';
 
 import type { WorkspaceSlot } from '../../workspace-viewer/context/WorkspacePanelContext';
-import { changeRequestsHeading, changeRequestsNoun } from '../changeRequestState';
+import {
+  changeRequestsHeading,
+  changeRequestsNoun,
+  sessionChangeRequests,
+} from '@mastra/playground-ui/domains/factory';
 import { useSessionCard } from '../hooks/useSessionCard';
 import { useSessionSubscriptions } from '../hooks/useSessionSubscriptions';
-import { sessionChangeRequests } from '../sessionChangeRequests';
 import { CardOverview, OverviewSkeleton, overviewSectionClass } from './CardOverview';
 import { ChangeRequestList } from './ChangeRequestList';
 import { SectionLoadError } from './SectionLoadError';

@@ -1,9 +1,9 @@
-import { SourceStateBadge as SharedSourceStateBadge } from '@mastra/playground-ui/domains/factory';
-
-import { sourceState } from '../services/workItemPresentation';
 import type { WorkItem } from '@internal/factory-contract';
 
-export function SourceStateBadge({
+import { SourceStateBadge as SharedSourceStateBadge } from '../board';
+import { sourceState } from './work-item-presentation';
+
+export function WorkItemSourceStateBadge({
   item,
   className,
 }: {

@@ -1,6 +1,7 @@
 import { boardIdOf, DEFAULT_BOARD_ID } from '@internal/factory-contract';
+import type { BoardPhaseKind, InstalledBoardInfo } from '@internal/factory-contract';
 
-import type { InstalledBoardInfo } from '../../../api/types';
+import { phaseIconKind } from '../board/board-icons';
 
 /** A board as the catalog sends it: its phases, and which of them plays each part of the pull request loop. */
 export type BoardInfo = Pick<InstalledBoardInfo, 'id' | 'title' | 'initialPhase' | 'phases'> &
@@ -78,4 +79,9 @@ export function boardLoop(board: BoardInfo | undefined): BoardLoop | undefined {
     ...(flow.canceled ? { canceled: flow.canceled } : {}),
     working: board.phases.filter(phase => phase.kind === 'working').map(phase => phase.id),
   };
+}
+
+export function boardPhaseIconKind(board: BoardInfo | undefined, stage: string): BoardPhaseKind | undefined {
+  const kind = phaseKindOf(board, stage);
+  return board && kind ? phaseIconKind(board.id, kind) : undefined;
 }

@@ -7,9 +7,9 @@ import {
   workItemBranch,
   workItemThreadTitle,
 } from '@internal/factory-contract';
-import { isValid } from 'date-fns';
-
 import type { WorkItem } from '@internal/factory-contract';
+
+import { isValid } from 'date-fns';
 
 const HIDDEN_CARD_LABELS = new Set([AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL]);
 

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import type { AuditEventPage } from './services/audit';
+import type { AuditEventPage } from '@mastra/playground-ui/domains/factory';
 import type { WorkItem } from '@internal/factory-contract';
-import { workItemActivity } from './workItemActivity';
+import { workItemActivity } from '@mastra/playground-ui/domains/factory';
 
 const item: WorkItem = {
   id: 'item-1',

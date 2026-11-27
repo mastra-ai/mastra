@@ -1,14 +1,14 @@
 import { cardChangeRequests } from '@internal/factory-contract';
-import { UpstreamLinks } from '@mastra/playground-ui/domains/factory';
-import type { UpstreamLink } from '@mastra/playground-ui/domains/factory';
-
-import { CARD_SOURCES } from '../cardSources';
-import { CHANGE_REQUEST_TERMS, changeRequestStatus } from '../changeRequestState';
-import { changeRequestLinkLabel, changeRequestRepository } from '../sessionChangeRequests';
-import { workItemIdentifier, workItemShortReference } from '../services/relationships';
 import type { WorkItem } from '@internal/factory-contract';
-import { SourceIcon } from './BoardIcons';
-import { PullRequestStatusIcon } from './PullRequestStatusIcon';
+import { UpstreamLinks } from '../board';
+
+import type { UpstreamLink } from '../board';
+import { CARD_SOURCES } from '../board/card-sources';
+import { SourceIcon } from './board-icons';
+import { CHANGE_REQUEST_TERMS, changeRequestStatus } from './change-request-state';
+import { PullRequestStatusIcon } from './pull-request-status-icon';
+import { workItemIdentifier, workItemShortReference } from './relationships';
+import { changeRequestLinkLabel, changeRequestRepository } from './session-change-requests';
 
 function upstreamLinks(item: WorkItem, shownAsRelated: readonly string[], short: boolean): UpstreamLink[] {
   const origin = item.url;

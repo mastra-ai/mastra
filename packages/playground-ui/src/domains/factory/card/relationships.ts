@@ -1,10 +1,9 @@
 import { DEFAULT_BOARD_ID, relatedCardIndex, isPullRequestSource } from '@internal/factory-contract';
 import type { PullRequestFacts, WorkItem, WorkItemBoardSource as WorkItemSource } from '@internal/factory-contract';
-import { githubNumberForItem, sourceCreatedAt, sourceMetadata, workItemKey } from '../boardItems';
-import { CARD_SOURCES } from '../cardSources';
-import { CHANGE_REQUEST_TERMS } from '../changeRequestState';
-import { relativeTime } from '@mastra/playground-ui/domains/factory';
-import { rememberedBoardPath } from './boardViews';
+import { relativeTime } from '../board';
+import { CARD_SOURCES } from '../board/card-sources';
+import { githubNumberForItem, sourceCreatedAt, sourceMetadata, workItemKey } from './board-items';
+import { CHANGE_REQUEST_TERMS } from './change-request-state';
 
 /** Intake candidates carry a source and metadata but no card, so identifiers work on both. */
 type IdentifiableItem = Pick<WorkItem, 'source' | 'workItem' | 'metadata' | 'sourceKey'>;
@@ -39,13 +38,6 @@ export function relatedWorkItemIndex(allItems: readonly WorkItem[]): (item: Work
 export function relationshipBoardId(item: Pick<WorkItem, 'source'> & { readonly board?: string | null }): string {
   if (!isPullRequestSource(item.source) || item.board === undefined) return DEFAULT_BOARD_ID;
   return item.board ?? DEFAULT_BOARD_ID;
-}
-
-export function relationshipPath(
-  item: Pick<WorkItem, 'source'> & { readonly board?: string | null },
-  factoryId: string,
-): string {
-  return rememberedBoardPath(factoryId, relationshipBoardId(item));
 }
 
 export function relationshipLabel(item: WorkItem, contextRepository?: string): string {
@@ -109,7 +101,8 @@ const CODE_HOST_REFERENCES: Partial<Record<WorkItemSource, Pick<CodeHostReferenc
 function codeHostReference(item: IdentifiableItem, identifier: string): CodeHostReference | undefined {
   const codeHost = CODE_HOST_REFERENCES[item.source];
   const key = codeHost && /^(.+\/[^#!/]+)?[#!](\d+)$/.exec(identifier);
-  return codeHost && key ? { ...codeHost, number: key[2], repository: key[1] } : undefined;
+  const number = key?.[2];
+  return codeHost && key && number ? { ...codeHost, number, repository: key[1] } : undefined;
 }
 
 export function workItemReference(item: IdentifiableItem, contextRepository?: string): string | undefined {

@@ -1,21 +1,22 @@
+import type { FactoryDecisionSummary, WorkItem } from '@internal/factory-contract';
 import { useBoardCatalog } from '@mastra/react/hooks/factory';
-import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import type { ReactElement } from 'react';
 
-import { boardLoop } from '../boardFlow';
-import { itemBoard, itemStageOptions } from '../boardStages';
-import { canMoveTo, canStartRun } from '../boardCardState';
-import type { BoardCardOwner } from '../boardCardState';
-import { awaitsTriageDecision, triageDecisions } from '../cardPrimaryAction';
-import type { CardMove } from '../cardPrimaryAction';
-import { CARD_SOURCES } from '../cardSources';
-import type { FactoryDecisionSummary, WorkItem } from '@internal/factory-contract';
-import type { BoardStageId } from '../stages';
-import { BoardStageIcon, actionIcon } from './BoardIcons';
-import { IconArrowBoxRight } from '@mastra/playground-ui/icons/central/IconArrowBoxRight';
-import { IconArrowUpRight } from '@mastra/playground-ui/icons/central/IconArrowUpRight';
-import { IconCircleBanSign } from '@mastra/playground-ui/icons/central/IconCircleBanSign';
-import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
+import { BoardStageIcon } from '../board';
+import { CARD_SOURCES } from '../board/card-sources';
+import { canMoveTo, canStartRun } from './board-card-state';
+import type { BoardCardOwner } from './board-card-state';
+import { boardLoop } from './board-flow';
+import { ActionIcon } from './board-icons';
+import { itemBoard, itemStageOptions } from './board-stages';
+import { awaitsTriageDecision, triageDecisions } from './card-primary-action';
+import type { CardMove } from './card-primary-action';
+import type { BoardStageId } from './stages';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { IconArrowBoxRight } from '@/ds/icons/central/IconArrowBoxRight';
+import { IconArrowUpRight } from '@/ds/icons/central/IconArrowUpRight';
+import { IconCircleBanSign } from '@/ds/icons/central/IconCircleBanSign';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 
 export interface WorkItemMenuProps {
   item: WorkItem;
@@ -39,7 +40,7 @@ export interface WorkItemMenuProps {
 function moveItem(move: CardMove, onMove: WorkItemMenuProps['onMove'], disabled: boolean): ReactElement {
   return (
     <DropdownMenu.Item key={move.label} disabled={disabled} onClick={() => onMove(move.stage)}>
-      {actionIcon(move.label)}
+      <ActionIcon label={move.label} />
       <span>{move.label}</span>
     </DropdownMenu.Item>
   );
@@ -99,7 +100,7 @@ export function WorkItemMenuItems({
           disabled={runsBlocked || !ownerCurrent}
           onClick={() => onApproveProposal(suggestionForThisBoard.id)}
         >
-          {actionIcon(proposedRunLabel ?? 'Start run')}
+          <ActionIcon label={proposedRunLabel ?? 'Start run'} />
           <span>{approvingDecisionId === suggestionForThisBoard.id ? 'Starting…' : 'Start suggested run'}</span>
         </DropdownMenu.Item>
       )}

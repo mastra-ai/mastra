@@ -1,9 +1,9 @@
 import { isHumanActorId } from '@internal/factory-contract';
 import type { AuditAction, WorkItem } from '@internal/factory-contract';
 
-import { sourceMetadata } from './boardItems';
-import { githubAvatarUrl } from './githubAvatar';
-import type { AuditActorProfile, AuditEvent, AuditEventPage } from './services/audit';
+import type { AuditActorProfile, AuditEvent, AuditEventPage } from './audit';
+import { sourceMetadata } from './board-items';
+import { githubAvatarUrl } from './github-avatar';
 
 export interface WorkItemActivity {
   events: AuditEvent[];

@@ -1,16 +1,16 @@
 import { cardChangeRequest, isPullRequestSource } from '@internal/factory-contract';
-import { RelatedItemLink } from '@mastra/playground-ui/domains/factory';
-
-import type { BoardNavigation } from '@mastra/playground-ui/domains/factory';
-import { CARD_SOURCES } from '../cardSources';
-import { changeRequestStatus, changeRequestStatusLabel } from '../changeRequestState';
-import type { PullRequestSubscription } from '../services/githubSubscriptions';
-import { relatedCardName, relationshipLabel, workItemReference } from '../services/relationships';
 import type { WorkItem } from '@internal/factory-contract';
-import { SourceIcon } from './BoardIcons';
-import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 
-export { RELATED_ITEM_LINK_CLASS } from '@mastra/playground-ui/domains/factory';
+import { RelatedItemLink } from '../board';
+import type { BoardNavigation } from '../board';
+import { CARD_SOURCES } from '../board/card-sources';
+import { SourceIcon } from './board-icons';
+import { changeRequestStatus, changeRequestStatusLabel } from './change-request-state';
+import type { PullRequestSubscription } from './change-request-state';
+import { PullRequestStatusIcon } from './pull-request-status-icon';
+import { relatedCardName, relationshipLabel, workItemReference } from './relationships';
+
+export { RELATED_ITEM_LINK_CLASS } from '../board';
 
 export function RelatedWorkItemLink({
   item,

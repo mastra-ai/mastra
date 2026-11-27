@@ -6,7 +6,7 @@ import { ConnectRepositoryEmptyState } from '../domains/factory/components/Conne
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
-import type { BoardKind } from '../domains/factory/boardStages';
+import type { BoardKind } from '@mastra/playground-ui/domains/factory';
 import type { FactoryProject } from '../domains/workspaces/services/github';
 import { BoardNavigationProvider } from '@mastra/playground-ui/domains/factory';
 import { BoardContent } from './board/BoardContent';

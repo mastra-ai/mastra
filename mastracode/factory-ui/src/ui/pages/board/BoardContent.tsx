@@ -6,9 +6,14 @@ import {
   ConfigureBoardButton,
   BoardEmptyStateActions,
   RunQueueIndicator,
+  boardLoop,
+  boardLoadingStages,
+  BUSY_CARD_MOVE_REFUSAL,
+  canMoveTo,
+  relatedWorkItemIndex,
+  WorkItemCard,
 } from '@mastra/playground-ui/domains/factory';
 import { createHoverCardHandle } from '@mastra/playground-ui/components/HoverCard';
-import { boardLoop } from '../../domains/factory/boardFlow';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
@@ -27,8 +32,7 @@ import { useGithubStatusQuery } from '../../../hooks/useGithubStatus';
 import { shownBoardPhases } from '../../domains/factory/boardPhases';
 import type { ShownPhase } from '../../domains/factory/boardPhases';
 import { boardPhasesRequest, deeperPhaseWindow } from '../../domains/factory/boardPhasesRequest';
-import { boardLoadingStages } from '../../domains/factory/boardStages';
-import type { BoardKind } from '../../domains/factory/boardStages';
+import type { BoardKind } from '@mastra/playground-ui/domains/factory';
 import { BoardItemsSkeleton } from '../../domains/factory/components/BoardItemsSkeleton';
 import { BoardStageCards } from '../../domains/factory/components/BoardStageCards';
 import { BoardViewControls } from '../../domains/factory/components/BoardViewControls';
@@ -42,13 +46,11 @@ import { useBoardItems } from '../../domains/factory/hooks/useBoardItems';
 import { boardParticipants, boardPersonIdentity, withPeopleUnfolded } from '../../domains/factory/boardPeople';
 import { boardFiltersActive } from '../../domains/factory/boardFilters';
 import { useBoardView } from '../../domains/factory/hooks/useBoardView';
-import { BUSY_CARD_MOVE_REFUSAL, canMoveTo } from '../../domains/factory/boardCardState';
 import type { DragPayload } from '../../domains/factory/boardDrag';
-import { relatedWorkItemIndex } from '../../domains/factory/services/relationships';
 import type { FactoryProject } from '../../domains/workspaces/services/github';
 
 import { VirtualBoardItems } from '../../domains/factory/components/VirtualBoardItems';
-import { WorkItemCard } from '../../domains/factory/components/WorkItemCard';
+import { useBoardRepository } from '../../domains/factory/hooks/useBoardRepository';
 import { InlineWorkItemComposer } from '../../domains/factory/components/InlineWorkItemComposer';
 import { BoardStages } from './BoardStages';
 
@@ -72,6 +74,7 @@ export function BoardContent({
   definition: InstalledBoardInfo;
 }) {
   const factoryProjectId = factory.id;
+  const repository = useBoardRepository(factoryProjectId);
   // A board with a pull request loop runs Factory's automation; the default board keeps its own column icons.
   const loop = boardLoop(definition);
   const runsLoop = loop !== undefined;
@@ -284,6 +287,7 @@ export function BoardContent({
             renderItem={item => (
               <WorkItemCard
                 layout={layout}
+                repository={repository}
                 item={item}
                 deepLinkRef={registerDeepLinkedCard(item.id)}
                 highlighted={targetItemId === item.id}

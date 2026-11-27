@@ -1,7 +1,6 @@
-import type { InstalledBoardInfo } from '../../../api/types';
-import { phaseLabel, phaseName } from './boardStages';
-import type { CardMove } from './cardPrimaryAction';
-import type { FactoryDecisionSummary, WorkItem } from '@internal/factory-contract';
+import type { InstalledBoardInfo, FactoryDecisionSummary, WorkItem } from '@internal/factory-contract';
+import { phaseLabel, installedPhaseName } from './board-stages';
+import type { CardMove } from './card-primary-action';
 
 // The lane's own move first: clicking the button of the column a card sits in re-runs that lane.
 // Then the first lane the card has not had a run in, so a card never leads with a run it has already had.
@@ -39,7 +38,7 @@ export function proposedCardRun(
     const phase = definition?.phases.find(phase => phase.role === proposal.role);
     // A proposal for a role this board never declares is a leftover from another board.
     if (!phase) return undefined;
-    return { decisionId: proposal.id, label: phaseName(phase) };
+    return { decisionId: proposal.id, label: installedPhaseName(phase) };
   }
   const proposedMove = moves.find(move => move.role === proposal.role);
   const label = proposedMove?.label ?? primaryMove?.label ?? 'Start run';

@@ -1,9 +1,7 @@
 import { phaseMayStartRun } from '@internal/factory-contract';
-import type { SessionRowStatus, FactoryDecisionSummary } from '@internal/factory-contract';
+import type { SessionRowStatus, FactoryDecisionSummary, InstalledPhaseInfo } from '@internal/factory-contract';
 export { BUSY_CARD_MOVE_REFUSAL } from '@internal/factory-contract';
-import type { BoardCardStatus } from '@mastra/playground-ui/domains/factory';
-
-import type { InstalledPhaseInfo } from '../../../api/types';
+import type { BoardCardStatus } from '../board';
 
 export type { BoardCardStatus };
 

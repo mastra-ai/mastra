@@ -2,19 +2,18 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowUpRight } from '@mastra/playground-ui/icons/central/IconArrowUpRight';
 
-import { CHANGE_REQUEST_TERMS } from '../changeRequestState';
 import {
+  CHANGE_REQUEST_TERMS,
   changeRequestLinkLabel,
   changeRequestNumberLabel,
   changeRequestReference,
   changeRequestRepository,
-} from '../sessionChangeRequests';
-import type { SessionChangeRequest } from '../sessionChangeRequests';
-import { repositoryElsewhere } from '../services/relationships';
-import { SourceIcon } from './BoardIcons';
-import { PullRequestStatusIcon } from './PullRequestStatusIcon';
-
-import { outboundArrowClass } from '@mastra/playground-ui/domains/factory';
+  repositoryElsewhere,
+  SourceIcon,
+  PullRequestStatusIcon,
+  outboundArrowClass,
+} from '@mastra/playground-ui/domains/factory';
+import type { SessionChangeRequest } from '@mastra/playground-ui/domains/factory';
 
 export { outboundArrowClass };
 

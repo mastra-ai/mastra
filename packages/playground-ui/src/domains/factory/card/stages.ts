@@ -1,4 +1,5 @@
 import type { FactoryRuleStage } from '@internal/factory-contract';
+import type { BoardStage, BoardStageId } from '../board';
 
 /**
  * The default board's phases, in column order: its columns' labels and colours when no catalog
@@ -18,13 +19,6 @@ const BOARD_STAGE_LABELS = {
   canceled: 'Canceled',
 } satisfies Record<(typeof WORK_STAGES)[number], string>;
 
-export type BoardStageId = FactoryRuleStage;
-
-export interface BoardStage {
-  id: BoardStageId;
-  label: string;
-}
-
 export const BOARD_STAGES: ReadonlyArray<BoardStage> = WORK_STAGES.map(id => ({
   id,
   label: BOARD_STAGE_LABELS[id],
@@ -41,4 +35,6 @@ export function stageOrder(stage: string): number {
   return index === -1 ? BOARD_STAGES.length : index;
 }
 
-export { stageTone } from '@mastra/playground-ui/domains/factory';
+export { stageTone } from '../board';
+
+export type { BoardStage, BoardStageId };

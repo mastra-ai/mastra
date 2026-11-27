@@ -3,9 +3,13 @@ import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
-import { changeRequestLinkLabel, changeRequestNumberLabel, changeRequestReference } from '../sessionChangeRequests';
-import type { SessionChangeRequest } from '../sessionChangeRequests';
-import { PullRequestStatusIcon } from './PullRequestStatusIcon';
+import {
+  changeRequestLinkLabel,
+  changeRequestNumberLabel,
+  changeRequestReference,
+  PullRequestStatusIcon,
+} from '@mastra/playground-ui/domains/factory';
+import type { SessionChangeRequest } from '@mastra/playground-ui/domains/factory';
 
 const STATUS_TONES: Record<PullRequestStatus, string> = {
   open: 'bg-badge-green-subtle text-badge-green-foreground',

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { reviewVerdict, selfReviewVerdict } from './reviewVerdict';
+import { reviewVerdict, selfReviewVerdict } from '@mastra/playground-ui/domains/factory';
 
 describe('reviewVerdict', () => {
   it('labels a recorded verdict without the reviewed commit', () => {

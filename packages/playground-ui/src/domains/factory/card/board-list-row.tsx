@@ -1,13 +1,9 @@
-import {
-  BoardListRow as SharedBoardListRow,
-  useBoardNavigation,
-  relativeTime,
-} from '@mastra/playground-ui/domains/factory';
 import type { ComponentProps } from 'react';
+import { BoardListRow as SharedBoardListRow, useBoardNavigation, relativeTime } from '../board';
 
 type SharedProps = ComponentProps<typeof SharedBoardListRow>;
 
-export function BoardListRow({
+export function WorkItemBoardListRow({
   createdAt,
   ...props
 }: Omit<SharedProps, 'createdAt' | 'LinkComponent' | 'onOpen'> & { createdAt?: string }) {

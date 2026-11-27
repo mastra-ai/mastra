@@ -1,5 +1,5 @@
 import { useBoardCatalog, useWorkItemQuery } from '@mastra/react/hooks/factory';
-import { boardOf } from '../boardFlow';
+import { boardOf } from '@mastra/playground-ui/domains/factory';
 
 export function useDraftCard(factoryId: string | undefined, workItemId: string | undefined) {
   const card = useWorkItemQuery(factoryId, workItemId);

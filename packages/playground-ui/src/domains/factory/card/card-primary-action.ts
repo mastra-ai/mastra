@@ -6,11 +6,11 @@ import {
   isPullRequestSource,
 } from '@internal/factory-contract';
 
-import type { BoardCardState, BoardCardStatus } from './boardCardState';
-import { allowsMove, boardLoop, phaseKindOf } from './boardFlow';
-import type { BoardInfo, BoardLoop } from './boardFlow';
-import { changeRequestStatus, isOpenChangeRequest } from './changeRequestState';
 import type { WorkItem, WorkItemSessionRef } from '@internal/factory-contract';
+import type { BoardCardState, BoardCardStatus } from './board-card-state';
+import { allowsMove, boardLoop, phaseKindOf } from './board-flow';
+import type { BoardInfo, BoardLoop } from './board-flow';
+import { changeRequestStatus, isOpenChangeRequest } from './change-request-state';
 import type { BoardStageId } from './stages';
 
 type FactoryRole = 'triage' | 'plan' | 'work' | 'review';

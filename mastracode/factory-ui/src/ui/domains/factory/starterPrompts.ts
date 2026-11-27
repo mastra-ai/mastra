@@ -1,7 +1,6 @@
 import type { WorkItemStarters } from '../../../api/types';
-import type { BoardInfo } from './boardFlow';
-import { phaseLabel } from './boardStages';
-import { triageDecisions } from './cardPrimaryAction';
+import type { BoardInfo } from '@mastra/playground-ui/domains/factory';
+import { phaseLabel, triageDecisions } from '@mastra/playground-ui/domains/factory';
 
 export type StarterKind = 'unblock' | 'feedback' | 'review' | 'decide' | 'triage' | 'bug' | 'sweep' | 'stale';
 

@@ -2,12 +2,19 @@ import { cardChangeRequest, contextLabel, phaseContext, isPullRequestSource } fr
 
 import type { InstalledPhaseInfo } from '../../../api/types';
 import { formatDuration } from '../../../lib/date/formatDuration';
-import { allowsMove, boardLoop, phaseOf } from './boardFlow';
-import type { BoardInfo } from './boardFlow';
-import { currentItemStage, phaseName, pullRequestMayEnter } from './boardStages';
-import { changeRequestStatus, isOpenChangeRequest } from './changeRequestState';
+import {
+  allowsMove,
+  boardLoop,
+  phaseOf,
+  currentItemStage,
+  installedPhaseName,
+  pullRequestMayEnter,
+  changeRequestStatus,
+  isOpenChangeRequest,
+  changeRequestReference,
+} from '@mastra/playground-ui/domains/factory';
+import type { BoardInfo } from '@mastra/playground-ui/domains/factory';
 import type { PullRequestSubscription } from './services/githubSubscriptions';
-import { changeRequestReference } from './sessionChangeRequests';
 import type { WorkItem } from '@internal/factory-contract';
 
 type Phase = InstalledPhaseInfo;
@@ -70,7 +77,7 @@ export function cardStages(item: WorkItem, board: BoardInfo | undefined): CardSt
 }
 
 export function stageBlockReason(step: StageStep): string | undefined {
-  return step.blocked === 'pull-request' ? `${phaseName(step.phase)} needs a pull request` : undefined;
+  return step.blocked === 'pull-request' ? `${installedPhaseName(step.phase)} needs a pull request` : undefined;
 }
 
 interface StageSession {
@@ -93,7 +100,7 @@ export function stageDescription(
     const status = pullRequest && changeRequestStatus(pullRequest, session.subscriptions);
     return pullRequest?.number !== undefined && isOpenChangeRequest(status)
       ? `Usually automatic when ${changeRequestReference(pullRequest, session.repository)} merges`
-      : `Marks it ${phaseName(phase).toLowerCase()}`;
+      : `Marks it ${installedPhaseName(phase).toLowerCase()}`;
   }
   if (phase.kind === 'resting') return 'Parks it until someone moves it on';
   const context = phaseContext(phase);

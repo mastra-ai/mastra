@@ -1,8 +1,8 @@
 import type { PullRequestStatus } from '@internal/factory-contract';
-import { PullRequestIcon } from '@mastra/playground-ui/components/PullRequestIcon';
+import { CHANGE_REQUEST_TERMS, changeRequestStatusLabel } from './change-request-state';
 
-import { CHANGE_REQUEST_TERMS, changeRequestStatusLabel } from '../changeRequestState';
-import type { ChangeRequestProvider } from '../services/githubSubscriptions';
+import type { ChangeRequestProvider } from './change-request-state';
+import { PullRequestIcon } from '@/ds/components/PullRequestIcon';
 
 export function PullRequestStatusIcon({
   status,

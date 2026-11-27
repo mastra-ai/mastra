@@ -8,7 +8,7 @@ import { useRouteSessionId } from '../../../../hooks/useRouteSessionId';
 import { updateCachedSessionTitle } from '../../../../hooks/useWorkspaces';
 import { useSessionCard } from '../../factory/hooks/useSessionCard';
 import { useSessionRepository } from '../../factory/hooks/useSessionRepository';
-import { workItemReference } from '../../factory/services/relationships';
+import { workItemReference } from '@mastra/playground-ui/domains/factory';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 

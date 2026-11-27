@@ -1,8 +1,7 @@
 import { isHumanActorId } from '@internal/factory-contract';
-import type { AuditActorType, WorkItem } from '@internal/factory-contract';
+import type { AuditActorType, WorkItem, InstalledPhaseInfo } from '@internal/factory-contract';
 
-import type { InstalledPhaseInfo } from '../../../api/types';
-import type { AuditEvent } from './services/audit';
+import type { AuditEvent } from './audit';
 
 const STAGE_MOVED_ACTION = 'factory.work_item.stage_moved';
 /** Actor id prefix of a session agent moving the card through Factory's tools, not the bound transition tool. */
@@ -96,8 +95,9 @@ function latestStageMove(itemId: string, events: readonly AuditEvent[] | undefin
 function historyMove(item: Pick<WorkItem, 'stageHistory'>, current: string) {
   const entered = item.stageHistory.findLastIndex(entry => entry.stage === current);
   const previous = entered > 0 ? item.stageHistory[entered - 1] : undefined;
-  if (!previous) return undefined;
-  const by: string = item.stageHistory[entered].by;
+  const enteredEntry = item.stageHistory[entered];
+  if (!previous || !enteredEntry) return undefined;
+  const by: string = enteredEntry.by;
   const movedBy: AuditActorType = by.startsWith('agent:') ? 'agent' : isHumanActorId(by) ? 'human' : 'system';
   return { from: previous.stage, to: current, movedBy, cause: undefined };
 }

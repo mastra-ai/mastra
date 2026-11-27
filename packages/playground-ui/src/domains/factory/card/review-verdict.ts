@@ -1,3 +1,7 @@
+import type { WorkItem } from '@internal/factory-contract';
+import { boardLoop } from './board-flow';
+import type { BoardInfo } from './board-flow';
+import type { BoardStageId } from './stages';
 export type ReviewVerdict = { approved: boolean; outdated: boolean; label: string };
 
 /**
@@ -27,4 +31,14 @@ export function selfReviewVerdict(
   const rounds = typeof metadata.selfReviewRounds === 'number' ? metadata.selfReviewRounds : 0;
   const label = `Self-review: ${verdict === 'approve' ? 'approved' : 'changes requested'}${rounds > 0 ? ` (round ${rounds})` : ''}`;
   return { approved: verdict === 'approve', outdated: false, label };
+}
+
+/** The verdict a column shows: the pull request's in its review, the builder's own in self-review and building. */
+export function columnReviewVerdict(item: WorkItem, columnStage: BoardStageId, board: BoardInfo | undefined) {
+  const loop = boardLoop(board);
+  if (loop === undefined) return undefined;
+  if (columnStage === loop.selfReview) return reviewVerdict(item.metadata) ?? selfReviewVerdict(item.metadata);
+  if (columnStage === loop.pullRequestReview) return reviewVerdict(item.metadata);
+  if (columnStage === loop.build?.phase) return selfReviewVerdict(item.metadata);
+  return undefined;
 }

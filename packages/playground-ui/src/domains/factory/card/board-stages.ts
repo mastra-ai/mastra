@@ -1,9 +1,8 @@
-import type { InstalledPhaseInfo } from '../../../api/types';
 import { boardIdOf, cardHasPullRequest, isPullRequestSource } from '@internal/factory-contract';
+import type { InstalledPhaseInfo, WorkItem } from '@internal/factory-contract';
 
-import { boardLoop, phaseKindOf, phaseOf } from './boardFlow';
-import type { BoardInfo } from './boardFlow';
-import type { WorkItem } from '@internal/factory-contract';
+import { boardLoop, phaseKindOf, phaseOf } from './board-flow';
+import type { BoardInfo } from './board-flow';
 import { stageLabel } from './stages';
 import type { BoardStage, BoardStageId } from './stages';
 
@@ -68,13 +67,13 @@ export function pullRequestMayEnter(
   return stage !== review || cardHasPullRequest(item);
 }
 
-export function phaseName(phase: Pick<InstalledPhaseInfo, 'name' | 'title'>): string {
+export function installedPhaseName(phase: Pick<InstalledPhaseInfo, 'name' | 'title'>): string {
   return phase.name ?? phase.title;
 }
 
 export function phaseLabel(board: BoardInfo | undefined, stage: string): string {
   const phase = phaseOf(board, stage);
-  return phase ? phaseName(phase) : stageLabel(stage);
+  return phase ? installedPhaseName(phase) : stageLabel(stage);
 }
 
 /** Furthest phase the item currently sits in; items with no known phase read as the board's first, like its columns. */

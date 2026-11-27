@@ -1,35 +1,34 @@
-import { useBoardCatalog } from '@mastra/react/hooks/factory';
-import { BoardCardRows } from '@mastra/playground-ui/domains/factory';
-import { Badge } from '@mastra/playground-ui/components/Badge';
-import type { ReactNode } from 'react';
-
-import type { BoardCardStatus } from '../boardCardState';
-import { boardLoop, boardOf } from '../boardFlow';
-import type { BoardInfo } from '../boardFlow';
-import type { CardAction } from '../cardPrimaryAction';
-import { sourceMetadata } from '../boardItems';
-import { phaseLabel } from '../boardStages';
-import { reviewVerdict, selfReviewVerdict } from '../reviewVerdict';
-import { reasonSummary } from '../reworkReason';
-import type { ReworkReason } from '../reworkReason';
-import type { ReviewVerdict } from '../reviewVerdict';
-import { useBoardRepository } from '../hooks/useBoardRepository';
-import type { AuditActorProfile } from '../services/audit';
-import { workItemMeta } from '../services/relationships';
 import type { WorkItem } from '@internal/factory-contract';
-import type { BoardStageId } from '../stages';
-import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
+import { useBoardCatalog } from '@mastra/react/hooks/factory';
+import type { ReactNode } from 'react';
+import { BoardCardRows } from '../board';
+
+import type { AuditActorProfile } from './audit';
 import {
   CardActions,
   CardStatus,
-  MetadataLabels,
+  CardMetadataLabels,
   SessionBadge,
   SourceTitle,
   WorkItemSourceIcon,
-} from './BoardCardParts';
-import { WorkItemActivity } from './WorkItemActivity';
-import { SourceStateBadge } from './SourceStateBadge';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+} from './board-card-parts';
+import type { BoardCardStatus } from './board-card-state';
+import { boardLoop, boardOf } from './board-flow';
+import type { BoardInfo } from './board-flow';
+import { sourceMetadata } from './board-items';
+import { phaseLabel } from './board-stages';
+import type { CardAction } from './card-primary-action';
+import { workItemMeta } from './relationships';
+import { columnReviewVerdict } from './review-verdict';
+import type { ReviewVerdict } from './review-verdict';
+import { reasonSummary } from './rework-reason';
+import type { ReworkReason } from './rework-reason';
+import { WorkItemSourceStateBadge } from './source-state-badge';
+import type { BoardStageId } from './stages';
+import type { WorkItemActivity as WorkItemActivityData } from './work-item-activity';
+import { WorkItemActivityView } from './work-item-activity-view';
+import { Badge } from '@/ds/components/Badge';
+import { Txt } from '@/ds/components/Txt';
 
 export function WorkItemCardRows({
   item,
@@ -43,6 +42,7 @@ export function WorkItemCardRows({
   hasSession,
   controls,
   rework,
+  repository,
 }: {
   item: WorkItem;
   columnStage: BoardStageId;
@@ -57,9 +57,9 @@ export function WorkItemCardRows({
   /** The top-right group: the card's menu. */
   controls: ReactNode;
   rework?: ReworkReason;
+  repository?: string;
 }) {
   const board = boardOf(useBoardCatalog(item.githubProjectId).data, item);
-  const repository = useBoardRepository(item.githubProjectId);
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const verdict = columnReviewVerdict(item, columnStage, board);
 
@@ -82,8 +82,8 @@ export function WorkItemCardRows({
       details={
         <>
           {upstreamLinks}
-          <SourceStateBadge item={item} />
-          <MetadataLabels metadata={sourceMetadata(item)} className="max-w-full min-w-0" />
+          <WorkItemSourceStateBadge item={item} />
+          <CardMetadataLabels metadata={sourceMetadata(item)} className="max-w-full min-w-0" />
         </>
       }
       otherStages={otherStages.map(stage => phaseLabel(board, stage))}
@@ -91,21 +91,11 @@ export function WorkItemCardRows({
       footer={
         <CardActions
           actions={actions}
-          trailing={<WorkItemActivity activity={activity} actors={actors} board={board} />}
+          trailing={<WorkItemActivityView activity={activity} actors={actors} board={board} />}
         />
       }
     />
   );
-}
-
-/** The verdict a column shows: the pull request's in its review, the builder's own in self-review and building. */
-export function columnReviewVerdict(item: WorkItem, columnStage: BoardStageId, board: BoardInfo | undefined) {
-  const loop = boardLoop(board);
-  if (loop === undefined) return undefined;
-  if (columnStage === loop.selfReview) return reviewVerdict(item.metadata) ?? selfReviewVerdict(item.metadata);
-  if (columnStage === loop.pullRequestReview) return reviewVerdict(item.metadata);
-  if (columnStage === loop.build?.phase) return selfReviewVerdict(item.metadata);
-  return undefined;
 }
 
 /** "Back from Review: <first line of why>", the whole reason on hover. */
@@ -115,7 +105,7 @@ export function ReworkLine({ rework }: { rework: ReworkReason }) {
     <Txt
       as="span"
       variant="caption"
-      className="text-badge-orange-indicator max-w-full min-w-0 truncate"
+      className="max-w-full min-w-0 truncate text-badge-orange-indicator"
       title={rework.reason ?? text}
     >
       {text}

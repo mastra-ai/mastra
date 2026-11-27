@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../e2e/ui/render';
-import { CardStatus } from './BoardCardParts';
+import { CardStatus } from '@mastra/playground-ui/domains/factory';
 
 const label =
   'The GitHub Issues board does not allow moving from build to triage. Next stages declared from build: done, cancelled.';

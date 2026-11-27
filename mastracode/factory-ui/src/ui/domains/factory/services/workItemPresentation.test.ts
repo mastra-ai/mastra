@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { genericExternalWorkItemUrl } from './workItemPresentation';
+import { genericExternalWorkItemUrl } from '@mastra/playground-ui/domains/factory';
 
 describe('genericExternalWorkItemUrl', () => {
   it.each([

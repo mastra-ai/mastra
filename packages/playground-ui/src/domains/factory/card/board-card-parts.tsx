@@ -1,17 +1,17 @@
 import { cardChangeRequest, isPullRequestSource } from '@internal/factory-contract';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
-import type { ReactNode } from 'react';
-
-import { cardLabels, metadataLabelColors } from '../boardItems';
-import type { CardAction } from '../cardPrimaryAction';
-import { CARD_SOURCES } from '../cardSources';
-import { changeRequestStatus } from '../changeRequestState';
-import type { PullRequestSubscription } from '../services/githubSubscriptions';
 import type { WorkItem, WorkItemBoardSource as WorkItemSource } from '@internal/factory-contract';
-import { SourceIcon } from './BoardIcons';
-import { PullRequestStatusIcon } from './PullRequestStatusIcon';
-import { MetadataLabels as SharedMetadataLabels } from '@mastra/playground-ui/domains/factory';
+import type { ReactNode } from 'react';
+import { MetadataLabels as SharedMetadataLabels } from '../board';
+
+import { CARD_SOURCES } from '../board/card-sources';
+import { SourceIcon } from './board-icons';
+import { cardLabels, metadataLabelColors } from './board-items';
+import type { CardAction } from './card-primary-action';
+import { changeRequestStatus } from './change-request-state';
+import type { PullRequestSubscription } from './change-request-state';
+import { PullRequestStatusIcon } from './pull-request-status-icon';
+import { Button } from '@/ds/components/Button';
+import { TooltipProvider } from '@/ds/components/Tooltip';
 import './card-actions.css';
 
 export function SourceTitle({ source, title }: { source: WorkItemSource; title: string }) {
@@ -48,9 +48,9 @@ export function BoardTooltipDelay({ children }: { children: ReactNode }) {
   return <TooltipProvider delay={400}>{children}</TooltipProvider>;
 }
 
-export { CardStatus, REVEAL_ON_CARD_HOVER, SessionBadge } from '@mastra/playground-ui/domains/factory';
+export { CardStatus, REVEAL_ON_CARD_HOVER, SessionBadge } from '../board';
 
-export function MetadataLabels({ metadata, className }: { metadata: Record<string, unknown>; className?: string }) {
+export function CardMetadataLabels({ metadata, className }: { metadata: Record<string, unknown>; className?: string }) {
   return (
     <SharedMetadataLabels labels={cardLabels(metadata)} colors={metadataLabelColors(metadata)} className={className} />
   );
