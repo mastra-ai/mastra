@@ -302,6 +302,97 @@ export function describeRestartOccurrenceCases({
       });
     }, 20_000);
 
+    /** A parent running `child` (one step, `inner`) and then `after`. */
+    function nestedChain() {
+      const steps = holdableSteps();
+      const child = createWorkflow({ id: `restart-start-child-${randomUUID()}`, inputSchema: Num, outputSchema: Num })
+        .then(steps.step('inner'))
+        .commit();
+      const workflow = createWorkflow({
+        id: `restart-start-parent-${randomUUID()}`,
+        inputSchema: Num,
+        outputSchema: Num,
+      })
+        .then(child)
+        .then(steps.step('after'))
+        .commit();
+      return { ...steps, child, workflow, workflows: { [child.id]: child, [workflow.id]: workflow } };
+    }
+
+    // A restart took the parent's nested step over while the old occurrence's start of the nested run
+    // was still in flight. That start wrote the parent's step back and ran the nested run for the
+    // occurrence the restart replaced.
+    it('does not run a nested workflow for a parent step a restart took over while its start was in flight', async () => {
+      const wf = nestedChain();
+      await withHost(wf.workflows, wf.releaseAll, async ({ driver }) => {
+        const held = holdPublishes(
+          driver,
+          event =>
+            (event.type === 'workflow.start' && event.data?.workflowId === wf.child.id && !event.data.restart) ||
+            (isStepRun(event, wf.workflow.id, [0]) && !!event.data.restart),
+        );
+        try {
+          const run = await wf.workflow.createRun();
+          const started = run.start({ inputData: { n: 0 } });
+          await held.count(1);
+          const restarted = restartRun(wf.workflow, run.runId);
+          await held.count(2);
+
+          await held.release(0);
+          await drainHandlers();
+          // Storage v2: the start's descriptor carries no step results, so it can't tell which
+          // occurrence dispatched it. The old occurrence's nested run finishes the step and the run;
+          // the restart's delivery then finds the step finished. Each step still runs once.
+          expect(wf.calls).toEqual(storageVersion === 1 ? {} : { inner: 1, after: 1 });
+
+          await held.release(1);
+          expect(await restarted).toMatchObject({ status: 'success', result: { n: 2 } });
+          await drainHandlers();
+          expect(await started).toMatchObject({ status: 'success', result: { n: 2 } });
+          expect(wf.calls).toEqual({ inner: 1, after: 1 });
+        } finally {
+          held.restore();
+        }
+      });
+    }, 20_000);
+
+    // Pins what a nested start delivered again after the parent's step finished does: the occurrence
+    // that dispatched it already finished the step, so the parent's step keeps its result. The start
+    // writes the nested run from its own data, so the nested run's step runs again, and its hand-back
+    // continues the parent from the result already saved; the parent's next step still runs once.
+    it('keeps the parent step when its nested start is delivered again after the step finished', async () => {
+      const wf = nestedChain();
+      await withHost(wf.workflows, wf.releaseAll, async ({ driver }) => {
+        const next = holdPublishes(driver, event => isStepRun(event, wf.workflow.id, [1]));
+        try {
+          const run = await wf.workflow.createRun();
+          const started = run.start({ inputData: { n: 0 } });
+          await next.count(1);
+          const before = (await storedRun(wf.workflow.id, run.runId))?.context[wf.child.id];
+          expect(before).toMatchObject({ status: 'success' });
+
+          const childStart = driver.events.find(
+            event => event.type === 'workflow.start' && event.data.workflowId === wf.child.id,
+          )!;
+          await driver.redeliverEvent(childStart);
+          await next.count(2);
+          const kept = (await storedRun(wf.workflow.id, run.runId))?.context[wf.child.id];
+          expect(kept).toMatchObject({ status: 'success', metadata: { startedBy: before?.metadata?.startedBy } });
+
+          const after = wf.holdAt('after');
+          await next.release(0);
+          await after.entered;
+          await settleDeliveries([await next.release(1)]);
+          after.release();
+          expect(await started).toMatchObject({ status: 'success', result: { n: 2 } });
+          await drainHandlers();
+          expect(wf.calls).toEqual({ inner: 2, after: 1 });
+        } finally {
+          next.restore();
+        }
+      });
+    }, 20_000);
+
     // R3 for a restart with nothing to claim: a sleep's record carries no occurrence. Delivered again,
     // the restart event set the run's cursor back to the sleep and slept again.
     it('keeps the progress of a run restarted in a sleep when the restart event is delivered again', async () => {

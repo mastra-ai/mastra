@@ -1497,10 +1497,15 @@ export class WorkflowEventProcessor extends EventProcessor {
         const writeParentStep = parentIsForeach
           ? parentStorage.mergeStepResult.bind(parentStorage)
           : parentStorage.writeStepResult.bind(parentStorage);
-        // The parent's step was read above. Write it back only while the same occurrence still runs
-        // it: a restart of the parent may have taken it over since.
+        // Write the parent's step back only while the occurrence that dispatched this child still owns
+        // it: a restart of the parent may have taken it over since. On storage v1 the descriptor names
+        // that occurrence. On storage v2 the descriptor carries no step results, so only the occurrence
+        // read above is known, and only a takeover between that read and this write is caught.
         const parentStartedBy =
-          guardsSteps && !parentIsForeach && existing?.status === 'running' ? existing.metadata?.startedBy : undefined;
+          guardsSteps && !parentIsForeach
+            ? (parentWorkflow.stepResults?.[workflowId]?.metadata?.startedBy ??
+              (existing?.status === 'running' ? existing.metadata?.startedBy : undefined))
+            : undefined;
         try {
           await writeParentStep({
             stepId: workflowId,
@@ -1524,7 +1529,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           });
         } catch (error) {
           if (!isWorkflowStepConflictError(error) || error.reason === 'missing') throw error;
-          // Another occurrence of the parent's step owns it now, so this child run is not its.
+          // `completed`: the occurrence that dispatched this child already finished the step (a start
+          // delivered again). The step keeps its result, and the start goes on as it did unguarded.
+          // `stale`: another occurrence of the parent's step owns it now, so this child run is not its.
           if (error.reason === 'stale') {
             this.mastra.getLogger()?.warn('Not starting a nested workflow run: its parent step was taken over', {
               workflowId,
