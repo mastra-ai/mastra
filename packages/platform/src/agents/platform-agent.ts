@@ -5,12 +5,14 @@ import type {
   StreamParamsBaseWithoutMessages,
 } from '@mastra/client-js';
 import { Agent, MessageList } from '@mastra/core/agent';
-import type { AgentExecutionOptionsBase, PublicStructuredOutputOptions } from '@mastra/core/agent';
-import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { AgentExecutionOptionsBase, PublicStructuredOutputOptions, ToolsInput } from '@mastra/core/agent';
+import type { AIV5ResponseMessage, MessageListInput } from '@mastra/core/agent/message-list';
 import type { LanguageModel } from '@mastra/core/llm';
+import type { MastraMemory } from '@mastra/core/memory';
 import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { MastraModelOutput } from '@mastra/core/stream';
 import type { ChunkType, FullOutput } from '@mastra/core/stream';
+import { createTool } from '@mastra/core/tools';
 
 type ClientAgent = ReturnType<MastraClient['getAgent']>;
 
@@ -44,13 +46,28 @@ export interface PlatformAgentRecord {
   [key: string]: unknown;
 }
 
+/** One of a managed agent's tools, as the Platform describes it. */
+export interface PlatformAgentToolInfo {
+  id: string;
+  description?: string;
+  /** JSON Schema of the tool's input, serialized as the Platform sends it. */
+  inputSchema?: string;
+  outputSchema?: string;
+  requireApproval?: boolean;
+}
+
 /** What a `PlatformAgent` knows about its managed agent before it runs. */
 export interface PlatformAgentConfig {
   id: string;
   name: string;
   description?: string;
   instructions?: string;
+  /** Gateway model as `provider/model`, e.g. `openai/gpt-5-mini`. */
   model?: string;
+  /** The agent's tools, keyed by name, as the Platform's agent details list them. */
+  tools?: Record<string, PlatformAgentToolInfo>;
+  /** Resolves the Memory the agent's conversations are kept in. */
+  memory?: () => Promise<MastraMemory | undefined>;
 }
 
 /**
@@ -91,21 +108,36 @@ export function toAgentBody(input: UpdatePlatformAgentInput): Record<string, unk
 }
 
 /**
- * The agent's model as the framework sees it. Inference runs on the Platform, so calling it locally
- * is a bug; it only reports which Gateway model the agent uses.
+ * The agent's model as the framework sees it: the same Gateway model the Platform runs. With
+ * `MASTRA_GATEWAY_API_KEY` set it runs locally through the Mastra Gateway, billed to that key;
+ * without one it reports the model and refuses to be called.
  */
-function platformModel(modelId: string): LanguageModel {
-  const refuse = () => {
-    throw new Error(`Managed agent model ${modelId} runs on Mastra Platform and cannot be called locally`);
+function platformModel(model: string | undefined) {
+  return (): LanguageModel | string => {
+    if (model && process.env.MASTRA_GATEWAY_API_KEY) return `mastra/${model}`;
+    const id = model ?? 'platform-default';
+    const slash = id.indexOf('/');
+    const refuse = () => {
+      throw new Error(
+        `Set MASTRA_GATEWAY_API_KEY to call managed agent model ${id} locally through the Mastra Gateway`,
+      );
+    };
+    return {
+      specificationVersion: 'v2',
+      provider: slash > 0 ? id.slice(0, slash) : 'mastra-platform',
+      modelId: slash > 0 ? id.slice(slash + 1) : id,
+      supportedUrls: {},
+      doGenerate: refuse,
+      doStream: refuse,
+    };
   };
-  return {
-    specificationVersion: 'v2',
-    provider: 'mastra-platform',
-    modelId,
-    supportedUrls: {},
-    doGenerate: refuse,
-    doStream: refuse,
-  };
+}
+
+/** A schema the Platform sent through superjson; plain JSON Schema keeps its body under `json`. */
+function wireSchema(serialized: string | undefined) {
+  if (!serialized) return undefined;
+  const parsed = JSON.parse(serialized) as { json?: unknown };
+  return (parsed && typeof parsed === 'object' && 'json' in parsed ? parsed.json : parsed) as never;
 }
 
 /**
@@ -138,6 +170,7 @@ function wireRequestContext(context: AgentExecutionOptionsBase<unknown>['request
 export class PlatformAgent extends Agent<string> {
   readonly #client: MastraClient;
   readonly #remote: ClientAgent;
+  readonly #memory: PlatformAgentConfig['memory'];
 
   constructor(client: MastraClient, config: PlatformAgentConfig) {
     super({
@@ -145,10 +178,45 @@ export class PlatformAgent extends Agent<string> {
       name: config.name,
       description: config.description,
       instructions: config.instructions ?? '',
-      model: platformModel(config.model ?? 'platform-default'),
+      model: platformModel(config.model),
     });
     this.#client = client;
     this.#remote = client.getAgent(config.id);
+    this.#memory = config.memory;
+    this.__setTools(this.#tools(config.tools ?? {}));
+  }
+
+  /**
+   * The agent's tools, described as the Platform reports them. Calling one runs it on the Platform
+   * with the agent's own connections, for the end user named by the calling agent's
+   * `resourceId`, or the request context's `mastra__resourceId`.
+   */
+  #tools(infos: Record<string, PlatformAgentToolInfo>): ToolsInput {
+    const tools: ToolsInput = {};
+    for (const [name, info] of Object.entries(infos)) {
+      tools[name] = createTool({
+        id: info.id,
+        description: info.description ?? '',
+        inputSchema: wireSchema(info.inputSchema),
+        outputSchema: wireSchema(info.outputSchema),
+        requireApproval: info.requireApproval,
+        execute: async (data, context) => {
+          const contextResourceId = context?.requestContext?.get(MASTRA_RESOURCE_ID_KEY);
+          const resourceId =
+            context?.agent?.resourceId ?? (typeof contextResourceId === 'string' ? contextResourceId : undefined);
+          const requestContext = wireRequestContext(context?.requestContext);
+          return this.#client.request(`${this.#path}/tools/${encodeURIComponent(info.id)}/execute`, {
+            method: 'POST',
+            body: {
+              data,
+              ...(resourceId && { resourceId }),
+              ...(requestContext && Object.keys(requestContext).length > 0 && { requestContext }),
+            },
+          });
+        },
+      });
+    }
+    return tools;
   }
 
   /** The agent's resolved configuration on the Platform: instructions, model, tools, and skills. */
@@ -165,6 +233,10 @@ export class PlatformAgent extends Agent<string> {
     if (input.name !== undefined) this.name = input.name;
     if (input.instructions !== undefined) this.__updateInstructions(input.instructions);
     if (input.model !== undefined) this.__updateModel({ model: platformModel(input.model) });
+    // Connections, skills, and built-in tools change the agent's tools.
+    if (input.connectionIds || input.skillIds || input.builtinTools || input.codeMode !== undefined) {
+      this.__setTools(this.#tools((await this.details()).tools ?? {}));
+    }
     return record;
   }
 
@@ -255,18 +327,48 @@ export class PlatformAgent extends Agent<string> {
 
     const response = await this.#remote.stream(messages, body as StreamParamsBaseWithoutMessages);
 
-    const messageList = new MessageList({ threadId, resourceId });
+    let replyId: string | undefined;
+    const messageList = new MessageList({
+      threadId,
+      resourceId,
+      generateMessageId: () => replyId ?? crypto.randomUUID(),
+    });
     messageList.add(messages, 'input');
+
+    // Each part of the reply keeps the ID the Platform saved it under, so saving the reply again
+    // (as a supervisor does with a sub-agent's transcript) updates those messages instead of
+    // adding copies. Observational Memory can move the reply to a new message between steps; each
+    // step reports the message its output went to and the reply so far, tool results included.
+    const steps: { messageId?: string; replied: number }[] = [];
+    const addReply = (reply: AIV5ResponseMessage[]) => {
+      let from = 0;
+      for (const [index, step] of steps.entries()) {
+        const to = index === steps.length - 1 ? reply.length : step.replied;
+        if (index > 0 && step.messageId !== steps[index - 1]!.messageId) messageList.markResponseMessageBoundary();
+        replyId = step.messageId;
+        if (to > from) messageList.add(reply.slice(from, to), 'response');
+        from = Math.max(from, to);
+      }
+      replyId = undefined;
+      if (from < reply.length) messageList.add(reply.slice(from), 'response');
+    };
     const { onChunk } = options;
     const chunks = new ReadableStream<ChunkType<any>>({
       start(controller) {
         response
           .processDataStream({
             onChunk: async chunk => {
+              if (chunk.type === 'step-finish') {
+                const { messageId } = chunk.payload;
+                steps.push({
+                  messageId: typeof messageId === 'string' ? messageId : undefined,
+                  replied: chunk.payload.messages?.nonUser.length ?? 0,
+                });
+              }
               // Mastra's output reads the run's reply from its message list, which the Platform
               // filled on its side; the finish chunk carries it.
               if (chunk.type === 'finish' && chunk.payload.messages?.nonUser) {
-                messageList.add(chunk.payload.messages.nonUser, 'response');
+                addReply(chunk.payload.messages.nonUser);
               }
               await onChunk?.(chunk as never);
               controller.enqueue(chunk as ChunkType<any>);
@@ -295,6 +397,19 @@ export class PlatformAgent extends Agent<string> {
         onStepFinish: options.onStepFinish,
       },
     });
+  }
+
+  /** A managed agent always keeps its conversations on the Platform. */
+  override hasOwnMemory(): boolean {
+    return true;
+  }
+
+  /**
+   * The Platform Memory the agent's conversations are kept in, to read its threads directly.
+   * `undefined` until the project's agent memory is ready.
+   */
+  override async getMemory(): Promise<MastraMemory | undefined> {
+    return this.#memory?.();
   }
 
   get #path() {

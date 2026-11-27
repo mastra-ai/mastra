@@ -5,6 +5,7 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { MastraClient } from '@mastra/client-js';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
+import type { ProcessInputStepArgs } from '@mastra/core/processors';
 import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
@@ -12,9 +13,10 @@ import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { MastraServer } from '@mastra/hono';
 import { Memory } from '@mastra/memory';
 import { Hono } from 'hono';
+import type { Context, Next } from 'hono';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { MastraPlatform, PlatformAgent } from './index';
+import { MastraPlatform, PlatformAgent, PlatformMemory } from './index';
 
 const PROJECT_ID = 'proj_123';
 // A project access token is a JWT naming its project; the Platform verifies the signature.
@@ -69,14 +71,38 @@ const lookupInvoice = createTool({
   execute: async ({ month }) => ({ month, location: 'Billing > Invoices' }),
 });
 
-function invoiceAgent(id: string, name: string, instructions: string, storage: InMemoryStore, prompts?: unknown[]) {
+function invoiceAgent(
+  id: string,
+  { name, description, instructions }: { name: string; description?: string; instructions: string },
+  storage: InMemoryStore,
+  prompts?: unknown[],
+  observe?: 'turn' | 'mid-run',
+) {
   return new Agent({
     id,
     name,
+    description,
     instructions,
     model: invoiceModel(prompts),
     tools: { lookupInvoice },
-    memory: new Memory({ storage }),
+    // Like hosted Platform Memory, Observational Memory saves each turn whatever the caller's
+    // `lastMessages`.
+    memory: new Memory({
+      storage,
+      ...(observe && { options: { observationalMemory: { model: invoiceModel() as never } } }),
+    }),
+    // Observing partway through a run seals the reply so far and starts a new message after it.
+    ...(observe === 'mid-run' && {
+      inputProcessors: [
+        {
+          id: 'observe-mid-run',
+          processInputStep: ({ stepNumber, messageList, rotateResponseMessageId }: ProcessInputStepArgs) => {
+            if (stepNumber === 1) rotateResponseMessageId?.();
+            return messageList;
+          },
+        },
+      ],
+    }),
   });
 }
 
@@ -101,17 +127,23 @@ async function startPlatform() {
     return next();
   });
   // A project access token carries no user, so a run must name the end user it acts for.
-  app.post(`${prefix}/agents/:agentId/:run{stream|generate}`, async (c, next) => {
+  const requireEndUser = async (c: Context, next: Next) => {
     const body = (await c.req.raw.clone().json()) as Record<string, unknown>;
     runs.push(body);
     if (typeof body.resourceId !== 'string') return c.json({ error: 'resourceId is required' }, 400);
     return next();
-  });
+  };
+  app.post(`${prefix}/agents/:agentId/:run{stream|generate}`, requireEndUser);
+  app.post(`${prefix}/agents/:agentId/tools/:toolId/execute`, requireEndUser);
+  const setup: { memoryInstanceId?: string; observe?: 'turn' | 'mid-run' } = {};
+  app.get(`${prefix}/agents/setup`, c =>
+    c.json({ status: 'ready', ...(setup.memoryInstanceId && { memoryInstanceId: setup.memoryInstanceId }) }),
+  );
   app.post(`${prefix}/agents`, async c => {
     const body = await c.req.json();
     created.push(body);
     const id = `agent_${created.length}`;
-    mastra.addAgent(invoiceAgent(id, body.name, body.instructions, storage, prompts), id);
+    mastra.addAgent(invoiceAgent(id, body, storage, prompts, setup.observe), id);
     return c.json({ id, name: body.name, instructions: body.instructions }, 201);
   });
   app.patch(`${prefix}/agents/:agentId`, async c => {
@@ -131,6 +163,8 @@ async function startPlatform() {
   const { port } = server.address() as AddressInfo;
   return {
     apiUrl: `http://127.0.0.1:${port}`,
+    storage,
+    setup,
     prompts,
     created,
     updated,
@@ -189,7 +223,11 @@ describe('MastraPlatform managed agents', () => {
 
   it('returns the same output a local run of the agent returns', async () => {
     const agent = await platform().createAgent({ name: 'Support', instructions: 'Answer billing questions.' });
-    const local = invoiceAgent('local', 'Support', 'Answer billing questions.', new InMemoryStore());
+    const local = invoiceAgent(
+      'local',
+      { name: 'Support', instructions: 'Answer billing questions.' },
+      new InMemoryStore(),
+    );
     const memory = { thread: 'thread-same', resource: 'user-same' };
 
     const remote = await agent.stream('Where is my invoice?', { memory });
@@ -349,6 +387,97 @@ describe('PlatformAgent as a Mastra agent', () => {
     expect(JSON.stringify(supervisorPrompts[0])).toContain('Answers billing questions');
   });
 
+  it("returns the project's agent memory once the Platform has it ready", async () => {
+    const billing = await platform().createAgent({ name: 'Billing', instructions: 'Answer billing questions.' });
+
+    expect(billing.hasOwnMemory()).toBe(true);
+    await expect(billing.getMemory()).resolves.toBeUndefined();
+
+    platformApi.setup.memoryInstanceId = 'mem_managed-agents_1';
+    try {
+      const memory = await billing.getMemory();
+      expect(memory).toBeInstanceOf(PlatformMemory);
+      expect((memory as PlatformMemory).client.instanceId).toBe('mem_managed-agents_1');
+    } finally {
+      delete platformApi.setup.memoryInstanceId;
+    }
+  });
+
+  // The Platform saves the delegated run, then the supervisor saves the transcript again to the
+  // sub-agent's memory, which for a managed agent is the same Platform Memory.
+  it.each([
+    ['turn', ['user', 'assistant']],
+    // The lookup, then the reply in the message started after observing.
+    ['mid-run', ['user', 'assistant', 'assistant']],
+  ] as const)(
+    "keeps one copy of a sub-agent's conversation in the memory the Platform saved it to (observed %s)",
+    async (observe, roles) => {
+      platformApi.setup.observe = observe;
+      const { id } = await platform()
+        .createAgent({ name: 'Billing', instructions: 'Answer billing questions.' })
+        .finally(() => delete platformApi.setup.observe);
+      const memory = new Memory({ storage: platformApi.storage });
+      const client = new MastraClient({
+        baseUrl: platformApi.apiUrl,
+        apiPrefix: `/v1/server/projects/${PROJECT_ID}`,
+        headers: { authorization: `Bearer ${ACCESS_TOKEN}` },
+      });
+      // The memory the Platform saves the agent's conversations to.
+      const billing = new PlatformAgent(client, {
+        id,
+        name: 'Billing',
+        description: 'Answers billing questions',
+        memory: async () => memory,
+      });
+      const supervisor = new Agent({
+        id: 'supervisor',
+        name: 'Supervisor',
+        instructions: 'Delegate billing questions.',
+        agents: { billing },
+        memory: new Memory({ storage: new InMemoryStore() }),
+        model: new MockLanguageModelV2({
+          doStream: async options =>
+            options.prompt.at(-1)?.role === 'tool'
+              ? streamOf([
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: 'It is under Billing.' },
+                  { type: 'text-end', id: 'text-1' },
+                  { type: 'finish', finishReason: 'stop', usage: USAGE },
+                ])
+              : streamOf([
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'delegate-1',
+                    toolName: 'agent-billing',
+                    input: JSON.stringify({ prompt: 'Where is my invoice?' }),
+                  },
+                  { type: 'finish', finishReason: 'tool-calls', usage: USAGE },
+                ]),
+        }),
+      });
+
+      const stream = await supervisor.stream('Where is my invoice?', {
+        memory: { thread: 'supervised-2', resource: 'user-12' },
+      });
+      const output = await stream.getFullOutput();
+      const { subAgentThreadId } = output.toolResults[0]!.payload.result as { subAgentThreadId: string };
+      const { messages } = await memory.recall({ threadId: subAgentThreadId });
+
+      // The prompt, then the reply with its invoice lookup, each saved once.
+      const parts = messages.flatMap(message => message.content.parts);
+      expect(messages.map(message => message.role)).toEqual(roles);
+      expect(parts.filter(part => part.type === 'tool-invocation')).toEqual([
+        expect.objectContaining({
+          toolInvocation: expect.objectContaining({
+            state: 'result',
+            result: { month: 'May', location: 'Billing > Invoices' },
+          }),
+        }),
+      ]);
+      expect(parts.filter(part => part.type === 'text' && part.text === REPLY)).toHaveLength(1);
+    },
+  );
+
   it('runs as a workflow step for the end user in the request context', async () => {
     const billing = await platform().createAgent({ name: 'Billing', instructions: 'Answer billing questions.' });
     const workflow = createWorkflow({
@@ -368,13 +497,45 @@ describe('PlatformAgent as a Mastra agent', () => {
     expect(platformApi.runs.at(-1)).toMatchObject({ resourceId: 'user-9' });
   });
 
-  it('refuses to call its model locally', async () => {
+  it("reports the Platform's model and refuses to call it without a Gateway key", async () => {
+    delete process.env.MASTRA_GATEWAY_API_KEY;
     const client = new MastraClient({ baseUrl: platformApi.apiUrl });
-    const agent = new PlatformAgent(client, { id: 'a', name: 'A', model: 'openai/gpt-5-mini' });
-    const model = await agent.getModel();
+    const model = await new PlatformAgent(client, { id: 'a', name: 'A', model: 'openai/gpt-5-mini' }).getModel();
 
-    expect(model.modelId).toBe('openai/gpt-5-mini');
-    await expect(model.doStream({ prompt: [] } as never)).rejects.toThrow(/runs on Mastra Platform/);
+    expect([model.provider, model.modelId]).toEqual(['openai', 'gpt-5-mini']);
+    await expect(model.doStream({ prompt: [] } as never)).rejects.toThrow(/MASTRA_GATEWAY_API_KEY/);
+  });
+
+  it('runs its model locally through the Mastra Gateway when a Gateway key is set', async () => {
+    process.env.MASTRA_GATEWAY_API_KEY = 'msk_test';
+    const client = new MastraClient({ baseUrl: platformApi.apiUrl });
+    const model = await new PlatformAgent(client, { id: 'a', name: 'A', model: 'openai/gpt-5-mini' }).getModel();
+
+    expect([model.provider, model.modelId, (model as { gatewayId?: string }).gatewayId]).toEqual([
+      'openai',
+      'gpt-5-mini',
+      'mastra',
+    ]);
+  });
+
+  it("lists the Platform agent's tools and runs them on the Platform for the end user", async () => {
+    const billing = await platform().createAgent({ name: 'Billing', instructions: 'Answer billing questions.' });
+    const tools = await billing.listTools();
+    const lookup = tools.lookupInvoice!;
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-11');
+
+    expect(lookup.description).toBe('Finds an invoice');
+    const result = await lookup.execute!({ month: 'June' }, { requestContext } as never);
+
+    expect(result).toEqual({ month: 'June', location: 'Billing > Invoices' });
+    expect(platformApi.runs.at(-1)).toMatchObject({ data: { month: 'June' }, resourceId: 'user-11' });
+    // Validated against the schema the Platform reported, before any request.
+    const runs = platformApi.runs.length;
+    await expect(lookup.execute!({ month: 6 } as never, { requestContext } as never)).resolves.toMatchObject({
+      error: true,
+    });
+    expect(platformApi.runs).toHaveLength(runs);
   });
 });
 

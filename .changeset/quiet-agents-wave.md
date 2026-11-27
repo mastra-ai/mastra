@@ -24,6 +24,8 @@ const { messages } = await agent.listMessages('thread-1', { resourceId: 'user-1'
 
 A managed agent is a Mastra `Agent`: register it in `new Mastra({ agents })`, give it to another agent as a sub-agent, or run it as a workflow step. Agents can also be read, listed, updated, and deleted. Each run acts for an end user: pass `memory.resource` or `resourceId`.
 
+A managed agent also reports what it runs with on the Platform. `listTools()` returns its tools; calling one runs it on the Platform for the end user. `getModel()` returns its model, which runs locally through the Mastra Gateway when `MASTRA_GATEWAY_API_KEY` is set. `getMemory()` returns the Platform Memory its conversations are saved in. When a managed agent runs as a sub-agent, its conversation is saved once, not again by the supervisor.
+
 ```ts
 const memory = platform.getMemory({ instanceId: 'mem_123' });
 const knowledge = platform.getKnowledge({ instanceId: 'kn_123' });
