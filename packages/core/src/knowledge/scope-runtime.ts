@@ -435,6 +435,20 @@ export class KnowledgeScopeRuntime {
     for (const address of addresses) await this.#materialize(address, principals, provenance, [], run);
   }
 
+  /**
+   * The parent address a first write would place a not-yet-created scope under, as `#materialize`
+   * chooses it: a template child's own parent, or the one held `belongsTo` candidate. Undefined when
+   * the scope would stay unlinked.
+   */
+  firstWriteParentAddress(address: string, principals: readonly string[]): string | undefined {
+    const match = this.compiled.match(address);
+    if (!match) return undefined;
+    if (match.compiled.child) return address.slice(0, address.lastIndexOf('/'));
+    if (!match.compiled.belongsTo) return undefined;
+    const candidates = this.#belongsToCandidates(match, this.#held(principals));
+    return candidates.length === 1 && candidates[0] !== address ? candidates[0] : undefined;
+  }
+
   /** The run's distinct principals grouped by declaration key, matched once. */
   #held(principals: readonly string[]): HeldPrincipals {
     const held: HeldPrincipals = new Map();
