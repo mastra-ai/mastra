@@ -278,7 +278,7 @@ Only the current (most recent) OM generation is cloned. Older history generation
 
 ### Messages copied with Observational Memory
 
-When OM is configured on the `Memory` instance, the source thread has observations, and you pass neither `messageLimit` nor `messageFilter`, `cloneThread()` copies only the messages in the context window: those created after `lastObservedAt` on the OM record the configured scope reads. The observations already carry the earlier messages, so the clone starts with the same context as the source. The source thread keeps all of its messages. When records exist for both scopes, the clone carries the one the configured scope reads.
+When OM is configured on the `Memory` instance, the source thread has observations, and you pass neither `messageLimit` nor `messageFilter`, `cloneThread()` copies only the messages in the context window: those created after `lastObservedAt` on the OM record the configured scope reads. The observations already carry the earlier messages. The clone starts with the same context as the source. The source thread keeps all of its messages. When records exist for both scopes, the clone carries the one the configured scope reads.
 
 Without OM configured, or when OM hasn't observed anything yet, every message is still copied. To copy every message from a thread with observations, pass an empty filter:
 
