@@ -15592,32 +15592,6 @@ export class Agent<
     // Scoped runs execute on a run-scoped copy of the request context.
     resumeRequestContext = (resolvedOptions.requestContext as typeof resumeRequestContext) ?? resumeRequestContext;
 
-    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const resumeSnapshot =
-      coldSnapshot ??
-      (await workflowsStore?.loadWorkflowSnapshot({ workflowName: DurableStepIds.AGENTIC_LOOP, runId }));
-    if (resumeSnapshot) {
-      try {
-        await this.#validateToolResumeData({
-          snapshot: resumeSnapshot,
-          toolCallId: options?.toolCallId,
-          resumeData,
-          requestContext: resumeRequestContext,
-          toolsets: resolvedOptions.toolsets,
-          clientTools: resolvedOptions.clientTools,
-          runId,
-          method: 'resume',
-        });
-      } catch (error) {
-        // A rejected cold resume must not leave behind the entry prepare() registered for it.
-        if (coldSnapshot) {
-          this.executionRunRegistry.cleanup(runId);
-          deleteRunRegistryEntry(runId, this.#mastra);
-        }
-        throw error;
-      }
-    }
-
     // Delegate to the idle-loop wrapper when `untilIdle` is set. Strip
     // `untilIdle` before passing to the wrapper so the inner agent.resume()
     // call (and subsequent agent.stream([]) continuations) don't recurse.
@@ -15682,6 +15656,7 @@ export class Agent<
     try {
       // A concurrent resume of the same suspension may have claimed and run it while this one
       // waited for the execution claim. Report that as a lost race, not a generic failure.
+      const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
       const current = await workflowsStore?.loadWorkflowSnapshot({
         workflowName: DurableStepIds.AGENTIC_LOOP,
         runId,
@@ -15709,6 +15684,27 @@ export class Agent<
           text: `DurableAgent "${this.name}" resume(${runId}) cannot resume the run because another resume of it already ran.`,
           details: { agentName: this.name, runId },
         });
+      }
+      if (current) {
+        try {
+          await this.#validateToolResumeData({
+            snapshot: current,
+            toolCallId: options?.toolCallId,
+            resumeData,
+            requestContext: resumeRequestContext,
+            toolsets: resolvedOptions.toolsets,
+            clientTools: resolvedOptions.clientTools,
+            runId,
+            method: 'resume',
+          });
+        } catch (error) {
+          // A rejected cold resume must not leave behind the entry prepare() registered for it.
+          if (coldSnapshot) {
+            this.executionRunRegistry.cleanup(runId);
+            deleteRunRegistryEntry(runId, this.#mastra);
+          }
+          throw error;
+        }
       }
       if (resumeRequestContext) await this.coverMemory(executionFence, resumeRequestContext);
       ({ toolCalls: initialToolCalls, resumedText } = await this.#loadSuspendedIteration(runId));

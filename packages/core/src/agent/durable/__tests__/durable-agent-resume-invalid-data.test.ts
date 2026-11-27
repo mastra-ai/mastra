@@ -2,13 +2,17 @@
  * Regression test for #28229: a durable resume with data that fails the suspended tool's
  * resumeSchema must reject before it touches the run, so a corrected retry still resumes it.
  */
+import type { LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { FGADeniedError } from '../../../auth/ee/fga-check';
+import type { IFGAProvider } from '../../../auth/ee/interfaces/fga';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import { RequestContext } from '../../../request-context';
 import { InMemoryStore } from '../../../storage';
+import type { ChunkType } from '../../../stream/types';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { DurableStepIds } from '../constants';
@@ -18,11 +22,18 @@ import { globalRunRegistry } from '../run-registry';
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 const pubsubs: EventEmitterPubSub[] = [];
+const fga: IFGAProvider = {
+  check: async () => true,
+  require: async (user, input) => {
+    if (user.id === 'denied') throw new FGADeniedError(user, input.resource, input.permission);
+  },
+  filterAccessible: async () => [],
+};
 
 function startProcess(engine: 'durable' | 'evented', storage: InMemoryStore, seen: unknown[]) {
   const model = new MockLanguageModelV2({
     doStream: async ({ prompt }) => {
-      const parts = prompt.some(message => message.role === 'tool')
+      const parts: LanguageModelV2StreamPart[] = prompt.some(message => message.role === 'tool')
         ? [
             { type: 'text-start', id: 't' },
             { type: 'text-delta', id: 't', delta: 'done' },
@@ -34,7 +45,10 @@ function startProcess(engine: 'durable' | 'evented', storage: InMemoryStore, see
             { type: 'finish', finishReason: 'tool-calls', usage },
           ];
       return {
-        stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }, ...parts] as any[]),
+        stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
+          { type: 'stream-start', warnings: [] },
+          ...parts,
+        ]),
         rawCall: { rawPrompt: null, rawSettings: {} },
       };
     },
@@ -54,17 +68,18 @@ function startProcess(engine: 'durable' | 'evented', storage: InMemoryStore, see
   const pubsub = new EventEmitterPubSub();
   pubsubs.push(pubsub);
   const durable = engine === 'durable' ? createDurableAgent({ agent, pubsub }) : createEventedAgent({ agent, pubsub });
-  new Mastra({ agents: { confirmer: durable }, storage, logger: false });
+  new Mastra({ agents: { confirmer: durable }, storage, logger: false, server: { fga } });
   return durable;
 }
 
-function tenant(name: string) {
-  const requestContext = new RequestContext();
-  requestContext.set('tenant', name);
-  return requestContext;
+function tenant(name: string, userId = 'allowed') {
+  return new RequestContext<unknown>([
+    ['tenant', name],
+    ['user', { id: userId }],
+  ]);
 }
 
-async function drain(stream: { fullStream: AsyncIterable<any> }) {
+async function drain(stream: { fullStream: AsyncIterable<ChunkType> }) {
   const text: string[] = [];
   for await (const chunk of stream.fullStream) if (chunk.type === 'text-delta') text.push(chunk.payload.text);
   return text.join('');
@@ -117,6 +132,14 @@ describe.each(['durable', 'evented'] as const)(
         expect(run.seen).toEqual([{ confirmed: true, tenant: 'original' }]);
       },
     );
+
+    it('reports an authorization denial before invalid resume data', async () => {
+      const run = await suspend(engine);
+
+      await expect(
+        run.agent.resumeStream({ confirmed: 'yes' }, { runId: run.runId, requestContext: tenant('other', 'denied') }),
+      ).rejects.toThrow(FGADeniedError);
+    });
 
     it('rejects the outer call when untilIdle is set', async () => {
       const run = await suspend(engine);
