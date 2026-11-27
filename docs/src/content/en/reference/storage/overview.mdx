@@ -65,16 +65,15 @@ The schema definitions below cover the built-in database-backed tables documente
   {
     name: 'thread_id',
     type: 'text',
-    description: 'Parent thread reference',
-    constraints: [
-      { type: 'foreignKey', value: 'threads.id' },
-      { type: 'nullable', value: false },
-    ],
+    description:
+      'Parent thread reference (`threads.id`). Postgres and libSQL store `mastra-queue:pending:<threadId>` or `mastra-queue:taken:<threadId>` instead while the row is a queued [pending signal](/docs/server/pubsub#signals-sent-to-a-running-evented-agent), which no read by thread or resource returns, so that value matches no thread.',
+    constraints: [{ type: 'nullable', value: false }],
   },
   {
     name: 'resourceId',
     type: 'text',
-    description: 'ID of the resource that owns this message',
+    description:
+      'ID of the resource that owns this message. Postgres and libSQL store `NULL` while the row is a pending signal.',
     constraints: [{ type: 'nullable', value: true }],
   },
   {
@@ -94,19 +93,6 @@ The schema definitions below cover the built-in database-backed tables documente
     type: 'timestamp',
     description: 'Used for thread message ordering',
     constraints: [{ type: 'nullable', value: false }],
-  },
-  {
-    name: 'signalStatus',
-    type: 'text',
-    description:
-      'Postgres and libSQL only. Set while the row is a [pending signal](/docs/server/pubsub#signals-sent-to-a-running-evented-agent) that message reads skip. See the [PostgreSQL](/integrations/databases/postgresql#pending-signals) and [libSQL](/integrations/databases/libsql#pending-signals) pages for the migration.',
-    constraints: [{ type: 'nullable', value: true }],
-  },
-  {
-    name: 'signalClaimedBy',
-    type: 'text',
-    description: 'Postgres and libSQL only. ID of the run that took the pending signal.',
-    constraints: [{ type: 'nullable', value: true }],
   },
 ]}
     />

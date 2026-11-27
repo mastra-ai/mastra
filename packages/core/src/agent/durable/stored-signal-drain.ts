@@ -110,10 +110,11 @@ export function durableRunSignalsStore({
 }
 
 /**
- * Close a storage-backed run that ended: the store deletes the rows it consumed
- * that never reached memory and gives its other claimed rows back to the
- * thread. Safe to repeat. Returns nothing to wait for when the run's signals
- * are not stored, so other runs end without waiting on it.
+ * Close a storage-backed run that ended: the store deletes the taken rows it
+ * consumed and, while the run is still the thread's signal run, gives the
+ * other taken rows back to pending. Safe to repeat. Returns nothing to wait
+ * for when the run's signals are not stored, so other runs end without
+ * waiting on it.
  *
  * A failed close doesn't fail the run's ending: the thread keeps the run as
  * its signal run until the thread's next run is prepared.
@@ -171,9 +172,10 @@ export type StoredSignalDrain = {
 
 /**
  * One drain of a storage-backed run: claim the thread's pending rows and get
- * back every row the run claimed that its saved state doesn't list as
- * consumed. A step that fails before saving its result gets the same rows
- * again from its retry, and a step that saved it never gets them again.
+ * back every taken row of the thread that the run's saved state doesn't list
+ * as consumed. A step that fails before saving its result gets the same rows
+ * again from its retry, except a row saved into the thread inside that step,
+ * and a step that saved its result never gets them again.
  */
 export async function claimStoredSignals({
   queue: { store, threadId },

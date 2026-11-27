@@ -309,43 +309,78 @@ export abstract class MemoryStorage extends StorageDomain {
   // ============================================
   // Pending Agent Signals
   //
-  // A pending signal is the signal's message row with two extra fields: a
-  // signal status and a claimant run id. Row states:
-  // - pending: status `pending`, no claimant. Not visible as a message.
-  // - claimed: status `claimed`, claimant is the run that claimed it. Not
-  //   visible as a message.
-  // - saved: no status. A normal message, and the claimant is kept until the
-  //   claimant's run closes.
-  // Normal messages have neither field set. The thread row records the
-  // thread's signal run, the only run allowed to insert for a run or claim.
-  // The methods below act on a thread's rows whatever resource they carry.
+  // A queued signal is the signal's message row, stored with no `resourceId`
+  // under a reserved thread id (see `queue-thread.ts`). The thread id is the
+  // row's state. For a thread T:
+  // - pending: under `pendingQueueThreadId(T)`, sent and not taken.
+  // - taken: under `takenQueueThreadId(T)`, taken by a run of T and not yet
+  //   saved or given back by a close of T's signal run.
+  // - message: under T, saved like any other message.
+  // Taken rows belong to T, not to the run that took them. The thread lease
+  // lets one run of T take signals at a time; a second live run taking on T
+  // is a bug outside storage, and nothing here guards against it. So a claim
+  // by T's signal run also returns rows that an earlier run took and never
+  // closed. The thread row records T's signal run, the only run allowed to
+  // insert for a run or claim. A signal sent to T belongs to T whatever
+  // resource its message named.
   //
   // Rules for the existing methods:
-  // - `saveMessages` on an existing id: a row with a status loses the status,
-  //   keeps its claimant and takes the saved message's `createdAt`. A row
-  //   without a status is saved as before and keeps its claimant. When the
-  //   saved message names another thread than a row with a status, the store
-  //   leaves that row unchanged and saves the rest of the batch as usual.
-  // - Every message read, including include windows and their neighbor
-  //   counts, skips rows with a status.
-  // - `updateMessages` treats a row with a status as a missing id.
-  // - `copyThread` and `cloneThread` skip rows with a status. The copy has no
-  //   signal run, and its rows have no claimant.
-  // - `updateThreadResourceId` moves rows with a status too.
-  // - `deleteThread` deletes rows with a status and the signal run.
+  // - `saveMessages` saves an existing id under the given thread, as for any
+  //   message. A row moved from one of T's reserved ids into T takes the saved
+  //   message's `createdAt`.
+  // - Reads by thread or by resource never match a queued row. Reads by
+  //   message id, `listMessages` include targets among them, return whatever
+  //   row has the id; an include without a resource also returns the other
+  //   rows under the same reserved id as its neighbors.
+  // - `updateMessages` treats a queued row as a missing id.
+  // - `deleteMessages` deletes nothing for a queued row's id;
+  //   `cancelPendingSignals` removes a pending signal.
+  // - `copyThread` and `cloneThread` copy only T's rows. The copy has no
+  //   signal run.
+  // - `updateThreadResourceId` moves T's rows; queued rows carry no resource.
+  // - `deleteThread` deletes T's pending and taken rows and its signal run.
+  // - `saveThread`, `copyThread` and `cloneThread` (target id),
+  //   `saveMessages`, `updateMessages` (a `threadId` in an update) and
+  //   `listMessages` reject a thread id that starts with
+  //   `QUEUE_THREAD_PREFIX` (`assertNotQueueThreadId`). `deleteThread` given
+  //   such an id changes nothing, as for a thread that does not exist.
   // - The signal run survives `saveThread` and `updateThread`.
   //
-  // None of the methods below changes a thread's `updatedAt`.
+  // Every method below rejects a reserved thread id and changes no thread's
+  // `updatedAt`. Each change to a row is an update of its thread id or its
+  // delete, so a store needs no transaction across rows for it.
   //
   // `enqueuePendingSignal` with `toRunId`, `claimPendingSignals` and
   // `closeSignalRun` are linearizable with respect to the thread's signal run:
   // each takes effect at one instant between its call and its return. An
   // insert accepted for a run is visible to every close or list that starts
-  // after the insert or that run's close returned, and a claim never marks
+  // after the insert or that run's close returned, and a claim never takes
   // rows for a run whose close has completed.
   //
   // Rows are returned ordered by `createdAt`, then by `id` in code unit order,
-  // in the shape message reads return, without the status or claimant.
+  // in the shape message reads return. Their `threadId` is T and their
+  // `resourceId` is the thread's current one.
+  //
+  // Deliberate limits of this layout:
+  // - Delivery after an unsettled end is at least once. A run whose close
+  //   failed or never ran leaves its taken rows, and the next claim by T's
+  //   signal run returns them, including a transient signal or a failed
+  //   turn's signal that the ended run already gave to its model. A row marked
+  //   with its run would stay out of reach until T is deleted when that run
+  //   never closes.
+  // - A signal saved inside a step whose state write then fails is a message
+  //   of T, so the retried step's claim does not return it and history holds
+  //   it once. Telling it apart needs a per-run mark on a saved message row.
+  // - Message and signal ids are assumed unique. A close deletes taken rows by
+  //   the ids in `consumedIds`, and `deleteMessages` and `updateMessages`
+  //   decide from a read and then write by id. When an id is deleted and sent
+  //   again as a signal, a late repeated close of the earlier run, or a delete
+  //   or update between its read and its write, can act on the new row.
+  //   Closing that window needs a per-run mark on the row or a prefix test in
+  //   SQL, and the layout has neither.
+  // - No store filters queued rows out of reads by message id. A caller that
+  //   must not treat one as a message checks
+  //   `isQueueThreadId(message.threadId)`, as `dbMessagesToStateSignals` does.
   // ============================================
 
   /**
@@ -377,9 +412,10 @@ export abstract class MemoryStorage extends StorageDomain {
    * Without `toRunId` the thread is not read and need not exist. The row
    * belongs to whichever run becomes the signal run of a thread with that id.
    *
-   * Then, when a row with the message's id exists in any thread and state,
+   * Then, when a row with the message's id exists under any thread id,
    * nothing is written. Otherwise the row is inserted as pending with the
-   * message's `createdAt`. Both cases answer `accepted`.
+   * message's `createdAt` and without its `resourceId`. Both cases answer
+   * `accepted`.
    * @experimental
    */
   async enqueuePendingSignal(_args: {
@@ -390,9 +426,11 @@ export abstract class MemoryStorage extends StorageDomain {
   }
 
   /**
-   * When the thread's signal run is `runId`: mark the thread's pending rows as
-   * claimed by `runId`, then return every row of the thread whose claimant is
-   * `runId`, whatever its status, except the ids in `consumedIds`.
+   * When the thread's signal run is `runId`: move the thread's pending rows
+   * to taken, then return every taken row of the thread except the ids in
+   * `consumedIds`. Taken rows belong to the thread, so this includes rows an
+   * earlier run took and never closed, those it consumed among them. Saved
+   * rows are messages and are not returned.
    * Otherwise, including for a missing thread, return nothing and change
    * nothing. Does not change any `createdAt`.
    * @experimental
@@ -406,13 +444,13 @@ export abstract class MemoryStorage extends StorageDomain {
   }
 
   /**
-   * For each row of the thread whose claimant is `runId`:
-   * - status `claimed`, id in `consumedIds`: delete the row;
-   * - status `claimed`, id not in `consumedIds`: status `pending`, no claimant;
-   * - no status: no claimant.
-   * Then clear the thread's signal run if it is still `runId`. Runs whatever
-   * the thread's signal run is, leaves rows of other claimants and unclaimed
-   * rows untouched, and is idempotent.
+   * Delete the thread's taken rows whose id is in `consumedIds`. Then, if the
+   * thread's signal run is still `runId`, move its other taken rows back to
+   * pending and clear the signal run. A close that comes after another run
+   * became the signal run deletes only what it consumed and leaves the other
+   * taken rows to that run. Pending rows and messages are untouched. The
+   * delete goes by id, so repeating a close changes nothing while no consumed
+   * id is sent again.
    * @experimental
    */
   async closeSignalRun(_args: { threadId: string; runId: string; consumedIds: string[] }): Promise<void> {
@@ -420,9 +458,8 @@ export abstract class MemoryStorage extends StorageDomain {
   }
 
   /**
-   * Delete the rows of the thread named in `ids` whose status is `pending`.
-   * Claimed rows, rows without a status and unknown ids are skipped. Returns
-   * the ids deleted, in the order given.
+   * Delete the thread's pending rows named in `ids`. Taken rows, messages and
+   * unknown ids are skipped. Returns the ids deleted, in the order given.
    * @experimental
    */
   async cancelPendingSignals(_args: { threadId: string; ids: string[] }): Promise<string[]> {
@@ -430,7 +467,7 @@ export abstract class MemoryStorage extends StorageDomain {
   }
 
   /**
-   * The thread's rows whose status is `pending`.
+   * The thread's pending rows. Without a thread row, they carry no `resourceId`.
    * @experimental
    */
   async listPendingSignals(_args: { threadId: string }): Promise<MastraDBMessage[]> {

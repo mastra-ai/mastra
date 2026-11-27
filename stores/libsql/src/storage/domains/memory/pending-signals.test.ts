@@ -136,20 +136,24 @@ function recordingClient(url: string, afterStatement?: (statement: Statement) =>
   return { client, statements };
 }
 
+/** The stored thread and resource of each row; reads by thread or resource never return a queued row. */
 async function signalColumns(url: string, ids: string[]) {
   const client = createClient({ url });
   try {
     const result = await client.execute({
-      sql: `SELECT id, "signalStatus", "signalClaimedBy" FROM mastra_messages WHERE id IN (SELECT value FROM json_each(?))`,
+      sql: `SELECT id, thread_id, "resourceId" FROM mastra_messages WHERE id IN (SELECT value FROM json_each(?))`,
       args: [JSON.stringify(ids)],
     });
     return Object.fromEntries(
-      result.rows.map(row => [row.id as string, { status: row.signalStatus, claimedBy: row.signalClaimedBy }]),
+      result.rows.map(row => [row.id as string, { threadId: row.thread_id, resourceId: row.resourceId }]),
     );
   } finally {
     client.close();
   }
 }
+
+const pendingThreadOf = (thread: { id: string }) => `mastra-queue:pending:${thread.id}`;
+const takenThreadOf = (thread: { id: string }) => `mastra-queue:taken:${thread.id}`;
 
 describe('LibSQL pending signals', () => {
   describe('schema', () => {
@@ -202,9 +206,8 @@ describe('LibSQL pending signals', () => {
 
       const { store, memory } = await openMemory(url);
       try {
-        expect(await columnsOf(url, 'mastra_messages')).toEqual(
-          expect.arrayContaining(['signalStatus', 'signalClaimedBy']),
-        );
+        const messageColumns = await columnsOf(url, 'mastra_messages');
+        expect(messageColumns.filter(name => name.startsWith('signal'))).toEqual([]);
         expect(await columnsOf(url, 'mastra_threads')).toContain('signalRunId');
 
         const listed = await memory.listMessages({
@@ -240,10 +243,7 @@ describe('LibSQL pending signals', () => {
         await second!.init();
 
         const columns = await columnsOf(url, 'mastra_messages');
-        expect(columns.filter(name => name === 'signalStatus' || name === 'signalClaimedBy')).toEqual([
-          'signalStatus',
-          'signalClaimedBy',
-        ]);
+        expect(columns.filter(name => name.startsWith('signal'))).toEqual([]);
         expect((await columnsOf(url, 'mastra_threads')).filter(name => name === 'signalRunId')).toEqual([
           'signalRunId',
         ]);
@@ -254,22 +254,49 @@ describe('LibSQL pending signals', () => {
       }
     });
 
-    it('creates a partial index on the thread and claim order', async () => {
+    // A store created with `disableInit` serves message reads and saves before its migration ran.
+    it('reads, saves, updates and deletes messages on a database without the signal columns', async () => {
       const url = tempDbUrl();
-      const { store } = await openMemory(url);
-      await store.close();
+      const { thread, messageIds } = await createDatabaseWithoutSignalColumns(url);
       const client = createClient({ url });
       try {
-        const indexes = await client.execute(`PRAGMA index_list("mastra_messages")`);
-        expect(indexes.rows.find(row => row.name === 'idx_messages_thread_signal')).toMatchObject({ partial: 1 });
-        const columns = await client.execute(`PRAGMA index_info("idx_messages_thread_signal")`);
-        expect(columns.rows.map(row => row.name)).toEqual(['thread_id', 'createdAt', 'id']);
+        const memory = new MemoryLibSQL({ client });
+        const scope = { threadId: thread.id, resourceId: thread.resourceId };
+        const added = createSampleMessageV2({ ...scope, createdAt: new Date('2025-01-01T00:00:03.000Z') });
+        await memory.saveMessages({ messages: [added] });
+        const [first] = (await memory.listMessagesById({ messageIds: [messageIds[0]!] })).messages;
+        await memory.saveMessages({ messages: [{ ...first!, content: { ...first!.content, content: 'resaved' } }] });
+        await memory.updateMessages({
+          messages: [{ id: messageIds[1]!, content: { content: 'updated' } as MastraDBMessage['content'] }],
+        });
+
+        const listed = await memory.listMessages({ ...scope, perPage: false });
+        expect(listed.messages.map(message => message.id)).toEqual([...messageIds, added.id]);
+        expect(listed.total).toBe(3);
+        expect(listed.messages.map(message => message.content.content)).toEqual([
+          'resaved',
+          'updated',
+          added.content.content,
+        ]);
+        const byResource = await memory.listMessagesByResourceId({ resourceId: thread.resourceId, perPage: 1 });
+        expect(byResource.total).toBe(3);
+        const window = await memory.listMessages({
+          threadId: thread.id,
+          perPage: 0,
+          include: [{ id: messageIds[1]!, withPreviousMessages: 1, withNextMessages: 1 }],
+        });
+        expect(window.messages.map(message => message.id)).toEqual([...messageIds, added.id]);
+
+        await memory.deleteMessages([added.id]);
+        expect((await memory.listMessages({ ...scope, perPage: false })).total).toBe(2);
+        expect(await columnsOf(url, 'mastra_threads')).not.toContain('signalRunId');
       } finally {
         client.close();
       }
     });
 
-    it('serves the statements claim, close, cancel and list send from the partial index, without a sort', async () => {
+    // The statements carry no ORDER BY (the store sorts the rows), so only index use is checked.
+    it('serves the statements claim, close, cancel and list send from an index', async () => {
       const url = tempDbUrl();
       const { client, statements } = recordingClient(url);
       const store = new LibSQLStore({ id: 'plans', client });
@@ -291,16 +318,15 @@ describe('LibSQL pending signals', () => {
         const onMessages = statements.filter(({ sql }) =>
           /^\s*(SELECT|UPDATE|DELETE)[\s\S]*"mastra_messages"/.test(sql),
         );
-        // Claim: update and select. Close: delete, re-pend, release. Cancel: select and delete. List: select.
-        expect(onMessages).toHaveLength(8);
+        // Pending and taken rows are found through either thread index under their own thread id.
+        const byThread =
+          /SEARCH mastra_messages USING (COVERING )?INDEX idx_messages_thread_(resource_)?created_at \(thread_id=\?/;
+        // Claim: take and read. Close: delete and give back. Cancel: select and delete. List: select.
+        expect(onMessages).toHaveLength(7);
         for (const { sql, args } of onMessages) {
           const plan = await client.execute({ sql: `EXPLAIN QUERY PLAN ${sql}`, args: args as never });
           const details = plan.rows.map(row => String(row.detail)).join('\n');
-          expect({ sql, details }).toEqual({
-            sql,
-            details: expect.stringContaining('USING INDEX idx_messages_thread_signal'),
-          });
-          expect({ sql, details }).toEqual({ sql, details: expect.not.stringContaining('TEMP B-TREE') });
+          expect({ sql, details }).toEqual({ sql, details: expect.stringMatching(byThread) });
         }
       } finally {
         await store.close();
@@ -382,6 +408,11 @@ describe('LibSQL pending signals', () => {
         await memory.claimPendingSignals({ threadId: thread.id, runId, consumedIds: [] });
         const pending = signalFor(thread);
         await memory.enqueuePendingSignal({ message: pending });
+        // Until the save, the rows sit under the thread's taken and pending ids, without a resource.
+        expect(await signalColumns(url, [claimed.id, pending.id])).toEqual({
+          [claimed.id]: { threadId: takenThreadOf(thread), resourceId: null },
+          [pending.id]: { threadId: pendingThreadOf(thread), resourceId: null },
+        });
         const originalAt = new Date('2025-01-01T00:00:00.000Z');
         const existing = createSampleMessageV2({ ...scope, content: { content: 'before' }, createdAt: originalAt });
         await memory.saveMessages({ messages: [existing] });
@@ -405,45 +436,21 @@ describe('LibSQL pending signals', () => {
           [fresh.id, fresh.createdAt.toISOString()],
         ]);
         expect(listed[0]!.content.content).toBe('after');
+        const inThread = { threadId: thread.id, resourceId: thread.resourceId };
         expect(await signalColumns(url, [pending.id, existing.id, claimed.id, fresh.id])).toEqual({
-          [pending.id]: { status: null, claimedBy: null },
-          [existing.id]: { status: null, claimedBy: null },
-          [claimed.id]: { status: null, claimedBy: runId },
-          [fresh.id]: { status: null, claimedBy: null },
+          [pending.id]: inThread,
+          [existing.id]: inThread,
+          [claimed.id]: inThread,
+          [fresh.id]: inThread,
         });
         expect(await memory.listPendingSignals({ threadId: thread.id })).toEqual([]);
-        // The run still gets the row it claimed, in the shape message reads return.
-        expect(await memory.claimPendingSignals({ threadId: thread.id, runId, consumedIds: [] })).toEqual(
-          listed.filter(message => message.id === claimed.id),
-        );
+        expect(await memory.claimPendingSignals({ threadId: thread.id, runId, consumedIds: [] })).toEqual([]);
       } finally {
         await store.close();
       }
     });
 
-    it('keeps a row with a signal status in its own thread when it is saved under another thread', async () => {
-      const url = tempDbUrl();
-      const { store, memory } = await openMemory(url);
-      try {
-        const thread = await newThread(memory);
-        const other = await memory.saveThread({
-          thread: createSampleThread({ resourceId: thread.resourceId }) as StorageThreadType,
-        });
-        const pending = signalFor(thread);
-        await memory.enqueuePendingSignal({ message: pending });
-
-        await memory.saveMessages({ messages: [{ ...pending, threadId: other.id }] });
-
-        expect((await memory.listPendingSignals({ threadId: thread.id })).map(message => message.id)).toEqual([
-          pending.id,
-        ]);
-        expect((await memory.listMessages({ threadId: other.id, perPage: false })).messages).toEqual([]);
-      } finally {
-        await store.close();
-      }
-    });
-
-    it('counts only messages, for every filter, with pending and claimed rows that match it', async () => {
+    it('counts only messages, for every filter, with pending and taken rows that match it', async () => {
       const url = tempDbUrl();
       const { store, memory } = await openMemory(url);
       try {
@@ -460,10 +467,10 @@ describe('LibSQL pending signals', () => {
           createSampleMessageV2({ ...scope, createdAt: at(second), content: second % 2 === 0 ? tagged : {} }),
         );
         await memory.saveMessages({ messages });
-        // Rows with a status that match every filter below: one claimed at 1.5 s, one pending at 3.5 s.
+        // Queued rows that match every filter below: one taken at 1.5 s, one pending at 3.5 s.
         const claimed = createSampleMessageV2({ ...scope, createdAt: at(1.5), content: tagged });
         await memory.enqueuePendingSignal({ message: claimed });
-        // A row claimed and then saved is a message, still claimed by the run, at 2.5 s.
+        // A row taken and then saved is a message, at 2.5 s.
         const saved = createSampleMessageV2({ ...scope, createdAt: at(2.5), content: tagged });
         await memory.enqueuePendingSignal({ message: saved });
         await memory.claimPendingSignals({ threadId: thread.id, runId, consumedIds: [] });
@@ -514,7 +521,7 @@ describe('LibSQL pending signals', () => {
       let toSave: MastraDBMessage | undefined;
       // Right after the count statement, another connection saves the claimed signal as a message.
       const { client } = recordingClient(url, async ({ sql }) => {
-        if (!toSave || !sql.includes('SELECT (SELECT COUNT(*)')) return;
+        if (!toSave || !sql.includes('SELECT COUNT(*)')) return;
         const message = toSave;
         toSave = undefined;
         await peer.memory.saveMessages({ messages: [message] });
@@ -556,7 +563,7 @@ describe('LibSQL pending signals', () => {
       let sent: { id: string; result: string } | undefined;
       // Sends from another connection right after the statement that deletes the thread's messages.
       const { client } = recordingClient(url, async ({ sql }) => {
-        if (sent || !/^DELETE FROM mastra_messages WHERE thread_id = \?$/.test(sql)) return;
+        if (sent || !/^DELETE FROM mastra_messages WHERE thread_id IN \(\?, \?, \?\)$/.test(sql)) return;
         const message = signalFor(thread);
         sent = { id: message.id, result: await peer.memory.enqueuePendingSignal({ message, toRunId: runId }) };
       });
@@ -705,9 +712,9 @@ describe('LibSQL pending signals', () => {
       expect((await memory.listPendingSignals({ threadId: thread.id })).map(message => message.id)).toEqual(
         sent.slice(1),
       );
-      // Rows put back to pending carry no claimant, and the consumed row is gone.
+      // Rows given back are under the pending id again, and the consumed row is gone.
       expect(await signalColumns(url, sent)).toEqual(
-        Object.fromEntries(sent.slice(1).map(id => [id, { status: 'pending', claimedBy: null }])),
+        Object.fromEntries(sent.slice(1).map(id => [id, { threadId: pendingThreadOf(thread), resourceId: null }])),
       );
 
       // Neither the send order nor its reverse.
@@ -772,7 +779,7 @@ describe('LibSQL pending signals', () => {
         (await second.memory.claimPendingSignals({ threadId: thread.id, runId, consumedIds: [] })).map(
           message => message.id,
         ),
-      ).toEqual([claimed.id, saved.id, pending.id]);
+      ).toEqual([claimed.id, pending.id]);
     } finally {
       await second.store.close();
     }

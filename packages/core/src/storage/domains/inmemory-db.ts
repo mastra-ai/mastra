@@ -47,14 +47,10 @@ import type { WorkspaceVersion } from './workspaces';
 export class InMemoryDB {
   readonly threads = new Map<string, StorageThreadType>();
   /**
-   * Message rows. `signalStatus` is set while a row is a pending agent signal
-   * and `signalClaimedBy` names the run that claimed it. Rows written before
-   * these fields existed lack them, which means the same as null.
+   * Message rows. A row under `pendingQueueThreadId(T)` or `takenQueueThreadId(T)` is an agent
+   * signal queued for thread T, not part of any thread.
    */
-  readonly messages = new Map<
-    string,
-    StorageMessageType & { signalStatus?: 'pending' | 'claimed' | null; signalClaimedBy?: string | null }
-  >();
+  readonly messages = new Map<string, StorageMessageType>();
   /** Each thread's signal run id, keyed by thread id. Kept apart from `threads` so thread reads never return it. */
   readonly signalRunIds = new Map<string, string>();
   readonly resources = new Map<string, StorageResourceType>();
