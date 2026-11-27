@@ -168,7 +168,7 @@ const sandbox = new VercelSandbox({
 })
 ```
 
-Both options are passed to `Sandbox.create()` and `Sandbox.getOrCreate()`, so a sandbox that is created by a later process with the same sandbox name lands in the same regions. Passing an empty `failoverRegions` array creates the sandbox without failover. Read the region a sandbox is configured for from the SDK instance; when failover is involved, the SDK's session object reports the region the running VM landed in:
+Both options are passed to `Sandbox.create()` and `Sandbox.getOrCreate()`, so a later process starting a sandbox with the same name creates it in the same regions. An empty `failoverRegions` array creates the sandbox without failover. Read the region a sandbox is configured for from the SDK instance; when Vercel fails over, the SDK's session object reports the region the running VM uses:
 
 ```typescript
 await sandbox.start()
@@ -214,7 +214,7 @@ const result = await reader.executeCommand('cat', ['/data/marker.txt'])
 console.log(result.stdout) // hello
 ```
 
-Mounts are applied when the sandbox starts. A sandbox that is already running keeps the mounts it started with.
+Mounts are applied when the sandbox starts. A sandbox already running keeps the mounts it started with.
 
 ### Constructor parameters
 
