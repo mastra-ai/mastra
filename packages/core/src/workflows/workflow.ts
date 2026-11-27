@@ -2694,7 +2694,7 @@ export class Workflow<
   map<TMapOutput>(
     mappingConfig: (
       params: ExecuteFunctionParams<TState, TPrevSchema, any, any, any, TEngineType, TRequestContext>,
-    ) => Promise<TMapOutput | InnerOutput> | TMapOutput,
+    ) => Promise<TMapOutput | InnerOutput> | TMapOutput | InnerOutput,
     stepOptions?: { id?: string | null; description?: string; metadata?: StepMetadata },
   ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TMapOutput, TRequestContext, TStorageVersion>;
   map(
@@ -3013,11 +3013,12 @@ export class Workflow<
     >;
   }
 
-  dowhile<TStepState, TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut, TStepRC>(
+  dowhile<TStepState, TStepInputSchema, TStepId extends string, TSchemaOut, TStepRC>(
     step: Step<
       TStepId,
       SubsetOf<TStepState, TState>,
-      TStepInputSchema,
+      // Same check as `.then()`: the previous output must satisfy the step's input.
+      TPrevSchema extends TStepInputSchema ? TStepInputSchema : TPrevSchema,
       TSchemaOut,
       any,
       any,
@@ -3067,11 +3068,12 @@ export class Workflow<
     >;
   }
 
-  dountil<TStepState, TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut, TStepRC>(
+  dountil<TStepState, TStepInputSchema, TStepId extends string, TSchemaOut, TStepRC>(
     step: Step<
       TStepId,
       SubsetOf<TStepState, TState>,
-      TStepInputSchema,
+      // Same check as `.then()`: the previous output must satisfy the step's input.
+      TPrevSchema extends TStepInputSchema ? TStepInputSchema : TPrevSchema,
       TSchemaOut,
       any,
       any,
@@ -3124,7 +3126,7 @@ export class Workflow<
   foreach<
     TPrevIsArray extends (TPrevSchema extends any[] ? true : false),
     TStepState,
-    TStepInputSchema extends (TPrevSchema extends (infer TElement)[] ? TElement : never),
+    TStepInputSchema,
     TStepId extends string,
     TSchemaOut,
     TStepRC,
@@ -3133,7 +3135,12 @@ export class Workflow<
       ? Step<
           TStepId,
           SubsetOf<TStepState, TState>,
-          TStepInputSchema,
+          // Same check as `.then()`: each element must satisfy the step's input.
+          TPrevSchema extends (infer TElement)[]
+            ? TElement extends TStepInputSchema
+              ? TStepInputSchema
+              : TElement
+            : never,
           TSchemaOut,
           any,
           any,

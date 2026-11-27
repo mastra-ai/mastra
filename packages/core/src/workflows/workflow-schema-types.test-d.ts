@@ -383,10 +383,50 @@ describe('Workflow schema type inference', () => {
       expectTypeOf(wf).not.toBeNever();
     });
 
+    it('keeps bail out of a synchronous mapper output', () => {
+      createMapWorkflow()
+        .map(({ inputData, bail }) => {
+          if (inputData.value < 0) return bail({ ok: false });
+          return { name: String(inputData.value) };
+        })
+        .map(async ({ inputData }) => {
+          expectTypeOf(inputData).toEqualTypeOf<{ name: string }>();
+          return inputData;
+        });
+    });
+
     it('rejects a next step whose input the mapped value does not satisfy', () => {
       const mapped = createMapWorkflow().map(async ({ inputData }) => ({ wrong: inputData.value }));
       // @ts-expect-error - { wrong: number } is not assignable to { name: string }
       mapped.then(needsName);
+    });
+
+    const optionalName = createStep({
+      id: 'optional-name',
+      inputSchema: z.object({ name: z.string().optional() }),
+      outputSchema: z.object({ name: z.string().optional() }),
+      execute: async ({ inputData }) => inputData,
+    });
+
+    it('accepts a loop step whose input the mapped value satisfies', () => {
+      const mapped = createMapWorkflow().map(async () => ({ name: undefined as string | undefined }));
+      expectTypeOf(mapped.dountil(optionalName, async () => true)).not.toBeNever();
+      expectTypeOf(mapped.dowhile(optionalName, async () => false)).not.toBeNever();
+    });
+
+    it('rejects a loop step whose input the mapped value does not satisfy', () => {
+      const mapped = createMapWorkflow().map(async ({ inputData }) => ({ wrong: inputData.value }));
+      // @ts-expect-error - { wrong: number } is not assignable to { name: string }
+      mapped.dountil(needsName, async () => true);
+      // @ts-expect-error - { wrong: number } is not assignable to { name: string }
+      mapped.dowhile(needsName, async () => false);
+    });
+
+    it('checks each mapped array element against a foreach step', () => {
+      const mapped = createMapWorkflow().map(async () => [{ name: undefined as string | undefined }]);
+      expectTypeOf(mapped.foreach(optionalName)).not.toBeNever();
+      // @ts-expect-error - { name: string | undefined } is not assignable to { name: string }
+      mapped.foreach(needsName);
     });
   });
 
