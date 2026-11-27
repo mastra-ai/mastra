@@ -5,7 +5,7 @@ import type { InstalledBoardInfo } from '../../../api/types';
 import { phaseOf } from './boardFlow';
 import { phaseLabel } from './boardStages';
 import { boardPhaseIconKind } from './components/BoardIcons';
-import type { WorkItemStageEntry } from './services/workItems';
+import type { WorkItemStageEntry } from '@internal/factory-contract';
 
 /**
  * The board's phases as the shared graph reads them, then any stage the card visited that the board no

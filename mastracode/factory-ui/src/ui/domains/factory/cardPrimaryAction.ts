@@ -1,11 +1,16 @@
-import { cardChangeRequest, metadataLabels, needsApproval } from '@internal/factory-contract';
+import {
+  cardChangeRequest,
+  metadataLabels,
+  needsApproval,
+  cardHasPullRequest,
+  isPullRequestSource,
+} from '@internal/factory-contract';
 
 import type { BoardCardState, BoardCardStatus } from './boardCardState';
 import { allowsMove, boardLoop, phaseKindOf } from './boardFlow';
 import type { BoardInfo, BoardLoop } from './boardFlow';
 import { changeRequestStatus, isOpenChangeRequest } from './changeRequestState';
-import { cardHasPullRequest, isPullRequestSource } from './services/workItems';
-import type { WorkItem, WorkItemSessionRef } from './services/workItems';
+import type { WorkItem, WorkItemSessionRef } from '@internal/factory-contract';
 import type { BoardStageId } from './stages';
 
 type FactoryRole = 'triage' | 'plan' | 'work' | 'review';

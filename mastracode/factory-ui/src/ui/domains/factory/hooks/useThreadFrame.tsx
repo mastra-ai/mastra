@@ -1,5 +1,5 @@
 import { cardContextSessions, phaseContext } from '@internal/factory-contract';
-import type { CardContextSession } from '@internal/factory-contract';
+import type { CardContextSession, WorkItem, WorkItemSessionRef } from '@internal/factory-contract';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
 import { Link, useParams } from 'react-router';
@@ -12,7 +12,6 @@ import { threadPath } from '../../workspaces/services/factoryPaths';
 import type { WorkspacePanelPage } from '../../workspace-viewer/context/WorkspacePanelContext';
 import { useThreadWorkspacePath } from '../../workspace-viewer/hooks/useThreadWorkspacePath';
 import { currentItemStage } from '../boardStages';
-import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 import { CardStageBar } from '../components/CardStageBar';
 import { CardStageSummary } from '../components/CardStageSummary';
 import { SessionContextMenu } from '../components/SessionContextMenu';

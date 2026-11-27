@@ -1,4 +1,13 @@
-import type { FactoryRuleStage } from '@internal/factory-contract';
+import type {
+  FactoryRuleStage,
+  BoardSnapshot,
+  CreateWorkItemInput,
+  FactoryBoard,
+  TransitionOutcome,
+  UpdateWorkItemInput,
+  WorkItem,
+  WorkItemStageEntry,
+} from '@internal/factory-contract';
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import {
   keepPreviousData,
@@ -29,15 +38,6 @@ import {
   updateWorkItem,
 } from '../ui/domains/factory/services/workItems';
 import { awaitMoveAnswer, moveAnswerStream } from '../ui/domains/factory/services/submittedMoves';
-import type {
-  BoardSnapshot,
-  CreateWorkItemInput,
-  FactoryBoard,
-  TransitionOutcome,
-  UpdateWorkItemInput,
-  WorkItem,
-  WorkItemStageEntry,
-} from '../ui/domains/factory/services/workItems';
 
 /**
  * How long a submitted move waits for its answer. The server may hold a move for two minutes

@@ -1,5 +1,5 @@
 import { DEFAULT_BOARD_ID } from '@internal/factory-contract';
-import type { ProviderPerson } from '@internal/factory-contract';
+import type { ProviderPerson, WorkItem } from '@internal/factory-contract';
 import { PhaseSetup } from '../../domains/factory/components/PhaseSetup';
 import { PhaseSetupHoverCard } from '../../domains/factory/components/PhaseSetupHoverCard';
 import { createHoverCardHandle } from '@mastra/playground-ui/components/HoverCard';
@@ -39,7 +39,6 @@ import { boardFiltersActive } from '../../domains/factory/boardFilters';
 import { useBoardView } from '../../domains/factory/hooks/useBoardView';
 import { BUSY_CARD_MOVE_REFUSAL, canMoveTo } from '../../domains/factory/boardCardState';
 import type { DragPayload } from '../../domains/factory/boardDrag';
-import type { WorkItem } from '../../domains/factory/services/workItems';
 import { relatedWorkItemIndex } from '../../domains/factory/services/relationships';
 import type { FactoryProject } from '../../domains/workspaces/services/github';
 

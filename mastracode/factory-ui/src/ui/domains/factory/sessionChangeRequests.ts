@@ -1,11 +1,9 @@
-import { cardChangeRequest, cardChangeRequests } from '@internal/factory-contract';
-import type { CardChangeRequest, PullRequestStatus } from '@internal/factory-contract';
+import { cardChangeRequest, cardChangeRequests, isPullRequestSource } from '@internal/factory-contract';
+import type { CardChangeRequest, PullRequestStatus, WorkItem } from '@internal/factory-contract';
 
 import { CHANGE_REQUEST_TERMS, changeRequestKey, changeRequestStatus, isOpenChangeRequest } from './changeRequestState';
 import type { ChangeRequestProvider, PullRequestSubscription } from './services/githubSubscriptions';
 import { referenceLabel } from './services/relationships';
-import type { WorkItem } from './services/workItems';
-import { isPullRequestSource } from './services/workItems';
 
 export interface SessionChangeRequest {
   url: string;

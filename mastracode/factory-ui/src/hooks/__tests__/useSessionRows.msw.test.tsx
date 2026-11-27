@@ -7,7 +7,7 @@ import { workBoardCatalog } from '../../../e2e/ui/board-catalog';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import type { SessionRowsRequest, SessionRowWire } from '../../api/types';
-import type { WorkItem } from '../../ui/domains/factory/services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import { useFactoryDecisionAction } from '../useFactoryDecisions';
 import { useSessionRowsQuery } from '../useSessionRows';
 import { removeCachedSession, updateCachedSessionTitle } from '../useWorkspaces';

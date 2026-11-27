@@ -10,7 +10,7 @@ import { sourceCreatedAt, sourceMetadata } from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
 import type { AuditActorProfile } from '../services/audit';
 import { workItemShortReference } from '../services/relationships';
-import type { WorkItem } from '../services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import type { BoardStageId } from '../stages';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
 import {

@@ -1,4 +1,4 @@
-import type { WorkItem, WorkItemStageEntry } from './services/workItems';
+import type { WorkItem, WorkItemStageEntry } from '@internal/factory-contract';
 
 export interface StageStay {
   entry: WorkItemStageEntry;

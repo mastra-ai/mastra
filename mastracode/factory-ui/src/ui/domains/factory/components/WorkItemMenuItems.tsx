@@ -10,7 +10,7 @@ import { awaitsTriageDecision, triageDecisions } from '../cardPrimaryAction';
 import type { CardMove } from '../cardPrimaryAction';
 import { CARD_SOURCES } from '../cardSources';
 import type { FactoryDecisionSummary } from '../services/decisions';
-import type { WorkItem } from '../services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import type { BoardStageId } from '../stages';
 import { BoardStageIcon, actionIcon } from './BoardIcons';
 import { IconArrowBoxRight } from '@mastra/playground-ui/icons/central/IconArrowBoxRight';

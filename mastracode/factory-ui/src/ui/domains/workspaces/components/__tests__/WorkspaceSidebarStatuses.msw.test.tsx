@@ -8,7 +8,7 @@ import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../../../factory/services/decisions';
 import type { PullRequestSubscription } from '../../../factory/services/githubSubscriptions';
-import type { WorkItemSessionRef } from '../../../factory/services/workItems';
+import type { WorkItemSessionRef } from '@internal/factory-contract';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { SessionsSection } from '../SessionsSection';
 import { LIVE_SESSION, testChatSession } from './fixtures/sessionsSection';

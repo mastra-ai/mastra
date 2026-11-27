@@ -8,7 +8,7 @@ import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, waitForMutationsIdle, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { queryKeys } from '../../api/keys';
 import type { BoardPhasesRequest } from '../../api/types';
-import type { BoardSnapshot, WorkItem } from '../../ui/domains/factory/services/workItems';
+import type { BoardSnapshot, WorkItem } from '@internal/factory-contract';
 import {
   useBoardPhasesQuery,
   useDeleteWorkItemMutation,

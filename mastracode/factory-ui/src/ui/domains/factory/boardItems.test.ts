@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { isPersistedCandidate, itemSessionSpec, metadataLabelColors, persistedSourceKeys } from './boardItems';
 import { workItemMeta } from './services/relationships';
-import type { WorkItem } from './services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 
 function workItem(overrides: Partial<WorkItem> = {}): WorkItem {
   return {

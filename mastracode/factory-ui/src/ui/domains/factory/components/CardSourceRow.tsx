@@ -4,7 +4,7 @@ import { cardLabels, sourceMetadata } from '../boardItems';
 import { CARD_SOURCES } from '../cardSources';
 import { workItemReference } from '../services/relationships';
 import { sourceState } from '../services/workItemPresentation';
-import type { WorkItem } from '../services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import { MetadataLabels } from './BoardCardParts';
 
 export function CardSourceRow({

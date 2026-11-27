@@ -6,7 +6,7 @@ import type { ComponentType } from 'react';
 import { phaseKindOf } from '../boardFlow';
 import type { BoardInfo } from '../boardFlow';
 import { CARD_SOURCES } from '../cardSources';
-import type { WorkItemSource } from '../services/workItems';
+import type { WorkItemBoardSource as WorkItemSource } from '@internal/factory-contract';
 import { IconEyeOpen } from '@mastra/playground-ui/icons/central/IconEyeOpen';
 import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';
 import { IconPlay } from '@mastra/playground-ui/icons/central/IconPlay';

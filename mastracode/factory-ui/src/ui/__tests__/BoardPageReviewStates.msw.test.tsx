@@ -11,7 +11,7 @@ import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../
 import { queryKeys } from '../../api/keys';
 import type { FactoryDecisionPage, FactoryDecisionSummary } from '../domains/factory/services/decisions';
 import type { GithubPullRequestDetail } from '../domains/factory/services/factory';
-import type { FactoryTransitionResult } from '../domains/factory/services/workItems';
+import type { FactoryTransitionResult } from '@internal/factory-contract';
 import { createAppRoutes } from '../router';
 import { reviewCandidate, reviewDecision, reviewItem } from './fixtures/reviewCard';
 

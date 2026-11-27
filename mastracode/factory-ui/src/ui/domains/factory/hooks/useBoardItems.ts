@@ -6,7 +6,7 @@ import { useDeleteWorkItemMutation, useTransitionWorkItemMutation } from '../../
 import type { DragPayload } from '../boardDrag';
 import { itemBoard, pullRequestMayEnter } from '../boardStages';
 import type { BoardKind } from '../boardStages';
-import type { WorkItem } from '../services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import type { BoardStageId } from '../stages';
 
 interface MoveOptions {

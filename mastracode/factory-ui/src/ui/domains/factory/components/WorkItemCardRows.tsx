@@ -16,7 +16,7 @@ import type { ReviewVerdict } from '../reviewVerdict';
 import { useBoardRepository } from '../hooks/useBoardRepository';
 import type { AuditActorProfile } from '../services/audit';
 import { workItemMeta } from '../services/relationships';
-import type { WorkItem } from '../services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import type { BoardStageId } from '../stages';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
 import {
