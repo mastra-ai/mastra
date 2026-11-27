@@ -432,16 +432,19 @@ export function createKnowledgeImportersStorageTests(createFixture: () => Promis
     });
 
     describe('nodes', () => {
-      it("reads many of a binding's nodes in one call, each as getNode returns it", async () => {
+      it("reads many of a binding's nodes in one call, each as getNode returns it", async ctx => {
+        // Optional: adapters written before it leave it out, and the importer reads one getNode each.
+        if (!importers.getNodes) ctx.skip();
+        const getNodes = importers.getNodes!.bind(importers);
         await importers.registerBinding({ id: 'b2', importer: 'notion', target: 'org:acme#other' });
         await importers.saveNode(node('a', 'page-a', { links: [{ sourceId: 'b', rel: 'see' }] }));
         await importers.saveNode(node('b', 'page-b', { aliases: ['old-b'] }));
         await importers.saveNode(node('c', 'b2-c', { bindingId: 'b2' }));
-        const found = await importers.getNodes('b1', ['b', 'missing', 'a', 'b', 'c']);
+        const found = await getNodes('b1', ['b', 'missing', 'a', 'b', 'c']);
         expect(found.map(n => n.sourceId).sort()).toEqual(['a', 'b']);
         for (const each of found) expect(each).toEqual(await importers.getNode('b1', each.sourceId));
-        expect(await importers.getNodes('b1', [])).toEqual([]);
-        expect((await importers.getNodes('b2', ['a', 'c'])).map(n => n.sourceId)).toEqual(['c']);
+        expect(await getNodes('b1', [])).toEqual([]);
+        expect((await getNodes('b2', ['a', 'c'])).map(n => n.sourceId)).toEqual(['c']);
       });
 
       it('maps source IDs to pages, by page and by alias, and pages through them in byte order', async () => {

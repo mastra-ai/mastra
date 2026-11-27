@@ -2,12 +2,12 @@ import { randomUUID } from 'node:crypto';
 
 import { KnowledgeUnsupportedCapabilityError } from '../../storage/domains/knowledge/base';
 import type { KnowledgeStorage } from '../../storage/domains/knowledge/base';
-import { KnowledgeImportersStorage } from '../../storage/domains/knowledge/importers';
 import type {
   KnowledgeImporterBindingRecord,
   KnowledgeImporterChangeKind,
   KnowledgeImporterNodeLink,
   KnowledgeImporterNodeRecord,
+  KnowledgeImportersStorage,
 } from '../../storage/domains/knowledge/importers';
 import type { KnowledgePage, KnowledgeProvenance } from '../../storage/domains/knowledge/pages';
 import {
@@ -493,16 +493,18 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     // Where the targets are, in one read before the pages and one after: another binding's flush
     // can take a target over and commit while this renders, and its node is then gone. A link
     // whose node did not survive to the second read waits, as it would have had it been read
-    // last. A store that only implements getNode (it predates getNodes) gets the base class's loop.
-    const getNodes =
-      (importers as Partial<KnowledgeImportersStorage>).getNodes ?? KnowledgeImportersStorage.prototype.getNodes;
-    const read = async (sourceIds: string[]) =>
-      new Map(
-        (sourceIds.length ? await getNodes.call(importers, binding.id, sourceIds) : []).map(node => [
-          node.sourceId,
-          node,
-        ]),
-      );
+    // last. A store without getNodes (it predates it) reads one getNode per target.
+    const getNodes = async (sourceIds: string[]): Promise<KnowledgeImporterNodeRecord[]> => {
+      if (!sourceIds.length) return [];
+      if (importers.getNodes) return importers.getNodes(binding.id, sourceIds);
+      const nodes: KnowledgeImporterNodeRecord[] = [];
+      for (const sourceId of new Set(sourceIds)) {
+        const node = await importers.getNode(binding.id, sourceId);
+        if (node) nodes.push(node);
+      }
+      return nodes;
+    };
+    const read = async (sourceIds: string[]) => new Map((await getNodes(sourceIds)).map(node => [node.sourceId, node]));
     const before = await read(links.map(link => link.sourceId));
     const rendered: { link: KnowledgeImporterNodeLink; line: string | null; pageId?: string }[] = [];
     for (const link of links) {

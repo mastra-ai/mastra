@@ -80,7 +80,7 @@ describe("importer links read their targets' nodes in one call", () => {
     try {
       expect(await run([upsert({ sourceId: 'l', links })])).toMatchObject({ outcome: 'succeeded' });
       expect(await body('notion/l')).toBe(expected);
-      // The base class's loop read each target, the missing one included.
+      // The importer's own loop read each target, the missing one included.
       expect(getNode.mock.calls.some(([, id]) => id === 'missing')).toBe(true);
     } finally {
       Object.defineProperty(InMemoryKnowledgeImportersStorage.prototype, 'getNodes', own);
