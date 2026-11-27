@@ -28,16 +28,3 @@ export function SectionHeader({ title, subtitle, icon, className }: SectionHeade
     </header>
   );
 }
-
-export function SubSectionHeader({ title, icon }: SectionHeaderProps) {
-  return (
-    <Txt as="h4" variant="caption" tone="faint" className="flex items-center gap-1 uppercase">
-      {icon && (
-        <Icon size="xs" className="text-muted-foreground">
-          {icon}
-        </Icon>
-      )}
-      {title}
-    </Txt>
-  );
-}

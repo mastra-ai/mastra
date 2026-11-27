@@ -1,7 +1,7 @@
 import { ChartCard } from '../../metrics/components/chart-card';
 import { unsupportedMessage } from '../lib/chrome';
 import type { ViewHeading } from '../lib/chrome';
-import type { PendingGate } from './view-gate';
+import type { PendingGate } from '../lib/gate';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 
 /** A chart widget while its aggregate gates aren't ready, as `TraceAggregateCard` shows it. */

@@ -4,7 +4,6 @@ export type { PreparedWidget } from './lib/prepare-widget';
 export type { DashboardRendererProps } from './components/dashboard-renderer';
 export { DashboardGrid, DashboardGridCell, DashboardGridRow } from './components/dashboard-grid';
 export type { DashboardSpan } from './components/dashboard-grid';
-export { ViewGate } from './components/view-gate';
 export { WidgetError } from './components/widget-error';
 export { AlertAction, AlertMenu, DrilldownAction } from './components/widget-controls';
 export type { AlertEntry } from './components/widget-controls';
