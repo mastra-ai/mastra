@@ -1029,6 +1029,56 @@ export function describeOccurrenceReplayCases({
         }
       }
 
+      // Two copies of a step run at once. The first fails and saves its attempt; the second then
+      // succeeds and finds that failure saved. The run follows the failed attempt's retry.
+      it('retries a step whose overlapping copy failed first instead of failing the run', async () => {
+        const held = [gate(), gate()];
+        let calls = 0;
+        const workflow = createWorkflow({
+          id: `overlap-fail-${randomUUID()}`,
+          inputSchema: schema,
+          outputSchema: schema,
+          retryConfig: { attempts: 1, delay: 200 },
+        })
+          .then(
+            createStep({
+              id: 'flaky',
+              inputSchema: schema,
+              outputSchema: schema,
+              execute: async ({ inputData }) => {
+                const call = ++calls;
+                await held[call - 1]?.promise;
+                if (call === 1) throw new Error('Transient failure');
+                return inputData;
+              },
+            }),
+          )
+          .commit();
+        await withWorkflow(workflow, async driver => {
+          try {
+            const run = await workflow.createRun();
+            const result = run.start({ inputData: { n: 0 } });
+            await expect.poll(() => calls).toBe(1);
+            void driver.redeliverEvent(driver.stepRuns({ spec: '0', runId: run.runId })[0]!);
+            await expect.poll(() => calls).toBe(2);
+            held[0]!.resolve();
+            const store = (await storage.getStore('workflows'))!;
+            await expect
+              .poll(
+                async () =>
+                  (await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId }))?.context.flaky
+                    ?.status,
+              )
+              .toBe('failed');
+            held[1]!.resolve();
+            expect(await result).toMatchObject({ status: 'success', result: { n: 0 } });
+            expect(calls).toBe(3);
+          } finally {
+            held.forEach(h => h.resolve());
+          }
+        });
+      }, 20_000);
+
       // The copy of the block's dispatch publishes every branch again. Each branch's start guard
       // refuses the second start: one branch is still in its body, the other already finished.
       // Storage v2 reads the expected occurrence from the stored branch, so the finished branch is

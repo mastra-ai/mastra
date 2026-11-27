@@ -5429,6 +5429,9 @@ export class WorkflowEventProcessor extends EventProcessor {
         }
       } catch (error) {
         if (!isWorkflowStepConflictError(error) || error.reason !== 'completed') throw error;
+        // Another copy of this step saved a failed attempt. Its own delivery retries or fails the
+        // run, so a copy that did not fail publishes nothing.
+        if (error.storedResult?.status === 'failed' && prevResult?.status !== 'failed') return;
         // Only the committed winner's values may drive a reclaimed continuation.
         newStepResults = storedContext(error.storedSnapshot);
         storedResult = error.storedResult!;
