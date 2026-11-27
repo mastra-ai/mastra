@@ -1089,9 +1089,9 @@ export class EventedAgentExecutionEngine extends DefaultAgentExecutionEngine {
   /**
    * Closes the run with what it consumed, read from its latest committed
    * state. When that state can't be determined the run is left open: closing
-   * it with a guessed set would delete a signal it took and saved, or give it
-   * to the next run again. Its claimed rows then stay hidden and its pending
-   * rows wait for the thread's next run.
+   * it with a guessed set would delete a taken signal it never delivered, or
+   * give one it delivered to the next run again. Its taken rows then go to the
+   * thread's next signal run, with the thread's pending rows.
    */
   async #closeParkedRunSignals(runId: string): Promise<void> {
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');

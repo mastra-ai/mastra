@@ -1250,7 +1250,7 @@ function observerModel() {
 }
 
 describe('a storage-backed run with observational memory', () => {
-  it('delivers a signal once when the step that saved it to memory is delivered again', async () => {
+  it('keeps a signal that observational memory saved in a step whose state write failed in history, without giving it to the retried step', async () => {
     const memoryStore = new ObservedMemory();
     const pubsub = new RefusingPubSub();
     const { agent, scope, prompts, toolGate, start, savedMessages } = setup({
@@ -1295,7 +1295,7 @@ describe('a storage-backed run with observational memory', () => {
     expect(refused).toEqual({ visible: true });
     expect(prompts).toHaveLength(3);
     expect(occurrences(prompts[1], 'SAVED_BEFORE_THE_STATE')).toBe(1);
-    expect(occurrences(prompts[2], 'SAVED_BEFORE_THE_STATE')).toBe(1);
+    expect(occurrences(prompts[2], 'SAVED_BEFORE_THE_STATE')).toBe(0);
     expect((await savedMessages()).filter(message => message.id === sent!.signal.id)).toHaveLength(1);
     expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
     expect(await memoryStore.getSignalRun({ threadId: scope.threadId })).toBeNull();

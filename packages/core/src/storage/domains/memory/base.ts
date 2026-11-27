@@ -309,57 +309,55 @@ export abstract class MemoryStorage extends StorageDomain {
   // ============================================
   // Pending Agent Signals
   //
-  // A pending signal is the signal's message row stored under the thread id
-  // `pendingSignalThreadId(T)` (see `pending-signal-thread.ts`) with no
-  // `resourceId`, plus a claimant run id. Row states for a thread T:
-  // - pending: under the pending-signal id of T, no claimant. Not part of any
-  //   thread, so no message read returns it.
-  // - taken: under the pending-signal id of T, claimant is the run that took
-  //   it. Not visible as a message.
-  // - saved: under T, a normal message. The claimant is kept until the
-  //   claimant's run closes.
-  // Normal messages have no claimant. The thread row records the thread's
-  // signal run, the only run allowed to insert for a run or claim. A pending
-  // signal sent to T belongs to T whatever resource its message named.
+  // A queued signal is the signal's message row, stored with no `resourceId`
+  // under a reserved thread id (see `queue-thread.ts`). The thread id is the
+  // row's state. For a thread T:
+  // - pending: under `pendingQueueThreadId(T)`, sent and not taken.
+  // - taken: under `takenQueueThreadId(T)`, taken by a run of T and not yet
+  //   saved or given back by a close of T's signal run.
+  // - message: under T, saved like any other message.
+  // Taken rows belong to T, not to the run that took them. The thread lease
+  // lets one run of T take signals at a time; a second live run taking on T
+  // is a bug outside storage, and nothing here guards against it. So a claim
+  // by T's signal run also returns rows that an earlier run took and never
+  // closed. The thread row records T's signal run, the only run allowed to
+  // insert for a run or claim. A signal sent to T belongs to T whatever
+  // resource its message named.
   //
   // Rules for the existing methods:
-  // - `saveMessages` on an existing id: a pending or taken row saved under its
-  //   own thread T moves to T, takes the saved message's `createdAt` and
-  //   `resourceId`, and keeps its claimant. A row already in a thread is saved
-  //   as before and keeps its claimant. A pending or taken row saved under
-  //   another thread is left unchanged; the rest of the batch is saved as usual.
-  // - Reads by thread or by resource never match a pending or taken row.
-  //   Reads by message id (`listMessagesById`, include targets, the rows
-  //   `updateMessages` reads) skip rows under a pending-signal id.
-  // - `updateMessages` treats a pending or taken row as a missing id.
+  // - `saveMessages` saves an existing id under the given thread, as for any
+  //   message. A row moved from one of T's reserved ids into T takes the saved
+  //   message's `createdAt`.
+  // - Reads by thread or by resource never match a queued row. Reads by
+  //   message id return whatever row has the id.
+  // - `updateMessages` treats a queued row as a missing id.
+  // - `deleteMessages` deletes nothing for a queued row's id;
+  //   `cancelPendingSignals` removes a pending signal.
   // - `copyThread` and `cloneThread` copy only T's rows. The copy has no
-  //   signal run, and its rows have no claimant.
-  // - `updateThreadResourceId` moves T's rows; pending and taken rows carry
-  //   no resource and need nothing.
-  // - `deleteThread` deletes T's pending and taken rows and the signal run.
-  // - `deleteMessages` of a pending or taken row acts on T as for any of T's
-  //   messages.
+  //   signal run.
+  // - `updateThreadResourceId` moves T's rows; queued rows carry no resource.
+  // - `deleteThread` deletes T's pending and taken rows and its signal run.
   // - `saveThread`, `copyThread` and `cloneThread` (target id),
   //   `saveMessages`, `updateMessages` (a `threadId` in an update) and
-  //   `listMessages` reject a thread id that starts with the pending-signal
-  //   prefix (`assertNotPendingSignalThreadId`). `deleteThread` given such an
-  //   id changes nothing, as for a thread that does not exist.
+  //   `listMessages` reject a thread id that starts with
+  //   `QUEUE_THREAD_PREFIX` (`assertNotQueueThreadId`). `deleteThread` given
+  //   such an id changes nothing, as for a thread that does not exist.
   // - The signal run survives `saveThread` and `updateThread`.
   //
-  // Every method below rejects a thread id with the reserved prefix.
-  //
-  // None of the methods below changes a thread's `updatedAt`.
+  // Every method below rejects a reserved thread id and changes no thread's
+  // `updatedAt`. Each change to a row is an update of its thread id or its
+  // delete, so a store needs no transaction across rows for it.
   //
   // `enqueuePendingSignal` with `toRunId`, `claimPendingSignals` and
   // `closeSignalRun` are linearizable with respect to the thread's signal run:
   // each takes effect at one instant between its call and its return. An
   // insert accepted for a run is visible to every close or list that starts
-  // after the insert or that run's close returned, and a claim never marks
+  // after the insert or that run's close returned, and a claim never takes
   // rows for a run whose close has completed.
   //
   // Rows are returned ordered by `createdAt`, then by `id` in code unit order,
-  // in the shape message reads return, without the claimant. Their `threadId`
-  // is T and their `resourceId` is the thread's current one.
+  // in the shape message reads return. Their `threadId` is T and their
+  // `resourceId` is the thread's current one.
   // ============================================
 
   /**
@@ -391,7 +389,7 @@ export abstract class MemoryStorage extends StorageDomain {
    * Without `toRunId` the thread is not read and need not exist. The row
    * belongs to whichever run becomes the signal run of a thread with that id.
    *
-   * Then, when a row with the message's id exists in any thread and state,
+   * Then, when a row with the message's id exists under any thread id,
    * nothing is written. Otherwise the row is inserted as pending with the
    * message's `createdAt` and without its `resourceId`. Both cases answer
    * `accepted`.
@@ -405,10 +403,11 @@ export abstract class MemoryStorage extends StorageDomain {
   }
 
   /**
-   * When the thread's signal run is `runId`: mark the thread's pending rows as
-   * taken by `runId`, then return every taken or saved row of the thread whose
-   * claimant is `runId`, except the ids in `consumedIds`. Rows another run
-   * took stay with that run.
+   * When the thread's signal run is `runId`: move the thread's pending rows
+   * to taken, then return every taken row of the thread except the ids in
+   * `consumedIds`. Taken rows belong to the thread, so this includes rows an
+   * earlier run took and never closed. Saved rows are messages and are not
+   * returned.
    * Otherwise, including for a missing thread, return nothing and change
    * nothing. Does not change any `createdAt`.
    * @experimental
@@ -422,13 +421,12 @@ export abstract class MemoryStorage extends StorageDomain {
   }
 
   /**
-   * For each row of the thread whose claimant is `runId`:
-   * - taken, id in `consumedIds`: delete the row;
-   * - taken, id not in `consumedIds`: pending again, no claimant;
-   * - saved: no claimant.
-   * Then clear the thread's signal run if it is still `runId`. Runs whatever
-   * the thread's signal run is, leaves rows of other claimants and unclaimed
-   * rows untouched, and is idempotent.
+   * Delete the thread's taken rows whose id is in `consumedIds`. Then, if the
+   * thread's signal run is still `runId`, move its other taken rows back to
+   * pending and clear the signal run. A close that comes after another run
+   * became the signal run deletes only what it consumed and leaves the other
+   * taken rows to that run. Pending rows and messages are untouched. Repeating
+   * a close changes nothing.
    * @experimental
    */
   async closeSignalRun(_args: { threadId: string; runId: string; consumedIds: string[] }): Promise<void> {
@@ -436,9 +434,8 @@ export abstract class MemoryStorage extends StorageDomain {
   }
 
   /**
-   * Delete the pending rows of the thread named in `ids`. Taken rows, saved
-   * rows, messages and unknown ids are skipped. Returns the ids deleted, in
-   * the order given.
+   * Delete the thread's pending rows named in `ids`. Taken rows, messages and
+   * unknown ids are skipped. Returns the ids deleted, in the order given.
    * @experimental
    */
   async cancelPendingSignals(_args: { threadId: string; ids: string[] }): Promise<string[]> {

@@ -81,8 +81,8 @@ export type AgentSignalInput =
        *
        * A transient signal is delivered to the model for the current call, but it is never saved as a
        * message of the conversation, so later turns don't find it in the history. When the run keeps
-       * its signals in memory storage, the signal waits there as a hidden row until a run takes it, and
-       * the row is deleted when the run that took it ends. One no run took waits for the thread's next
+       * its signals in memory storage, the signal waits there as a row that no read by thread or resource
+       * returns, and the row is deleted when the run that took it ends. One no run took waits for the thread's next
        * turn. A run whose failure carries no saved progress, such as a step that runs out of deliveries
        * with `storageVersion: 2`, gives back the signals it took, and the thread's next turn receives
        * them again, so a transient signal can be seen twice. Re-send it each turn from a processor to

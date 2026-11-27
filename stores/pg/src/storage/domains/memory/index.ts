@@ -14,15 +14,14 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
-  assertNotPendingSignalThreadId,
+  assertNotQueueThreadId,
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
-  isPendingSignalThreadId,
+  isQueueThreadId,
   OBSERVATIONAL_MEMORY_TABLE_SCHEMA,
-  PENDING_SIGNAL_THREAD_PREFIX,
-  pendingSignalThreadId,
-  threadIdOfPendingSignalRow,
+  pendingQueueThreadId,
+  takenQueueThreadId,
   RUN_FENCING_TABLE_SCHEMAS,
   TABLE_MEMORY_RUN_FENCES,
   TABLE_MESSAGES,
@@ -84,32 +83,16 @@ export const OM_MIGRATION_COLUMNS: string[] = [
 ];
 
 /**
- * Pending-signal columns. They are not part of core's shared table schemas, so
- * `init()` adds them to new and existing tables alike. A pending signal is a
- * message row under the thread id `pendingSignalThreadId(threadId)` with a NULL
- * `resourceId`, so it is not part of any thread until `saveMessages` moves it to
- * its thread.
+ * Pending-signal columns of the threads table. They are not part of core's
+ * shared table schemas, so `init()` adds them to new and existing tables alike.
+ * A queued signal is a message row with a NULL `resourceId` under
+ * `pendingQueueThreadId(threadId)` until a run takes it and
+ * `takenQueueThreadId(threadId)` after, so it is not part of any thread until
+ * `saveMessages` moves it to one.
  */
-const SIGNAL_MESSAGE_COLUMNS: Record<string, StorageColumn> = {
-  /**
-   * The run that took the signal. It stays after the save moves the row to its
-   * thread, until that run closes. A row under the pending-signal prefix is not
-   * part of any thread: every read by message id must exclude it, and nothing
-   * but the save may move it to a real thread.
-   */
-  signalClaimedBy: { type: 'text', nullable: true },
-};
 const SIGNAL_THREAD_COLUMNS: Record<string, StorageColumn> = {
   signalRunId: { type: 'text', nullable: true },
 };
-/**
- * Reads by message id skip pending-signal rows. The prefix is compared exactly, as
- * in the other stores, so no pattern is ever built from a caller's thread id.
- */
-function notPendingSignalRow(threadIdColumn = 'thread_id'): string {
-  return `left(${threadIdColumn}, ${PENDING_SIGNAL_THREAD_PREFIX.length}) <> '${PENDING_SIGNAL_THREAD_PREFIX}'`;
-}
-const NOT_PENDING_SIGNAL_ROW = notPendingSignalRow();
 
 /**
  * Lock order of message rows. Every statement that locks several message rows
@@ -353,11 +336,6 @@ export class MemoryPG extends MemoryStorage {
       ifNotExists: ['resourceId'],
     });
     await this.#db.alterTable({
-      tableName: TABLE_MESSAGES,
-      schema: SIGNAL_MESSAGE_COLUMNS,
-      ifNotExists: Object.keys(SIGNAL_MESSAGE_COLUMNS),
-    });
-    await this.#db.alterTable({
       tableName: TABLE_THREADS,
       schema: SIGNAL_THREAD_COLUMNS,
       ifNotExists: Object.keys(SIGNAL_THREAD_COLUMNS),
@@ -431,14 +409,6 @@ export class MemoryPG extends MemoryStorage {
         table: TABLE_MESSAGES,
         columns: ['thread_id', 'createdAt DESC'],
       },
-      // Claims and closes look up the rows a run took or saved and still claims. Pending rows have no
-      // claimant and are found through the thread index under their own thread id.
-      {
-        name: `${schemaPrefix}mastra_messages_signal_claimed_idx`,
-        table: TABLE_MESSAGES,
-        columns: ['thread_id'],
-        where: '"signalClaimedBy" IS NOT NULL',
-      },
     ];
   }
 
@@ -463,10 +433,7 @@ export class MemoryPG extends MemoryStorage {
         }),
       );
     }
-    for (const [tableName, columns] of [
-      [TABLE_MESSAGES, SIGNAL_MESSAGE_COLUMNS],
-      [TABLE_THREADS, SIGNAL_THREAD_COLUMNS],
-    ] as const) {
+    for (const [tableName, columns] of [[TABLE_THREADS, SIGNAL_THREAD_COLUMNS]] as const) {
       const fullTableName = dbGetTableName({ indexName: tableName, schemaName: quotedSchemaName });
       for (const column of Object.keys(columns)) {
         statements.push(`ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${column}" TEXT;`);
@@ -975,7 +942,7 @@ export class MemoryPG extends MemoryStorage {
   }
 
   async saveThread({ thread, fence }: { thread: StorageThreadType; fence?: RunFence }): Promise<StorageThreadType> {
-    assertNotPendingSignalThreadId(thread.id, 'saveThread');
+    assertNotQueueThreadId(thread.id, 'saveThread');
     try {
       const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
       const createdAt = toUtcISOString(thread.createdAt);
@@ -1234,9 +1201,9 @@ export class MemoryPG extends MemoryStorage {
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    // No thread has a reserved id; deleting by it would remove another thread's pending signals
+    // No thread has a reserved id; deleting by it would remove another thread's queued signals
     // without that thread's lock.
-    if (isPendingSignalThreadId(threadId)) return;
+    if (isQueueThreadId(threadId)) return;
     try {
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
       const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
@@ -1249,7 +1216,7 @@ export class MemoryPG extends MemoryStorage {
              SELECT id FROM ${tableName} WHERE thread_id = ANY($1::text[]) ORDER BY ${MESSAGE_LOCK_ORDER} FOR UPDATE
            )
            DELETE FROM ${tableName} m USING locked WHERE m.id = locked.id`,
-          [[threadId, pendingSignalThreadId(threadId)]],
+          [[threadId, pendingQueueThreadId(threadId), takenQueueThreadId(threadId)]],
         );
 
         const schemaName = this.#schema || 'public';
@@ -1353,7 +1320,7 @@ export class MemoryPG extends MemoryStorage {
       thread_id: string;
       createdAt: Date | string;
     }>(
-      `SELECT id, thread_id, "createdAt" FROM ${tableName} WHERE id IN (${idPlaceholders}) AND ${NOT_PENDING_SIGNAL_ROW}${targetResourceCondition}`,
+      `SELECT id, thread_id, "createdAt" FROM ${tableName} WHERE id IN (${idPlaceholders})${targetResourceCondition}`,
       resourceId ? [...targetIds, resourceId] : targetIds,
     );
 
@@ -1468,7 +1435,7 @@ export class MemoryPG extends MemoryStorage {
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
       const query = `
         ${selectStatement} FROM ${tableName}
-        WHERE id IN (${inPlaceholders(messageIds.length)}) AND ${NOT_PENDING_SIGNAL_ROW}
+        WHERE id IN (${inPlaceholders(messageIds.length)})
         ORDER BY "createdAt" DESC
       `;
       const resultRows = await this.#db.readClient.manyOrNone(query, messageIds);
@@ -1608,7 +1575,7 @@ export class MemoryPG extends MemoryStorage {
         new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
     }
-    for (const id of threadIds) assertNotPendingSignalThreadId(id, 'listMessages');
+    for (const id of threadIds) assertNotQueueThreadId(id, 'listMessages');
 
     if (page < 0) {
       throw new MastraError({
@@ -2016,7 +1983,7 @@ export class MemoryPG extends MemoryStorage {
     fence?: RunFence;
   }): Promise<{ messages: MastraDBMessage[] }> {
     if (messages.length === 0) return { messages: [] };
-    for (const message of messages) assertNotPendingSignalThreadId(message.threadId, 'saveMessages');
+    for (const message of messages) assertNotQueueThreadId(message.threadId, 'saveMessages');
     const fence = resolveRunFence(this, explicitFence);
 
     const threadId = messages[0]?.threadId;
@@ -2097,11 +2064,9 @@ export class MemoryPG extends MemoryStorage {
             })
             .join(', ');
 
-          // A pending signal saved under its own thread moves into the thread, where it is a message
-          // that takes the saved createdAt; any other row keeps its createdAt. Claimants are left as
-          // they are until the claiming run closes. A pending signal saved under another thread stays
-          // as it is.
-          const ownPendingThread = `'${PENDING_SIGNAL_THREAD_PREFIX}' || EXCLUDED.thread_id`;
+          // A queued signal saved under its own thread becomes a message that takes the saved
+          // createdAt; any other existing row keeps its createdAt.
+          const ownQueueThread = `m.thread_id IN ('${pendingQueueThreadId('')}' || EXCLUDED.thread_id, '${takenQueueThreadId('')}' || EXCLUDED.thread_id)`;
           await t.none(
             `INSERT INTO ${tableName} AS m (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId")
              VALUES ${valuePlaceholders}
@@ -2111,9 +2076,8 @@ export class MemoryPG extends MemoryStorage {
               role = EXCLUDED.role,
               type = EXCLUDED.type,
               "resourceId" = EXCLUDED."resourceId",
-              "createdAt" = CASE WHEN m.thread_id = ${ownPendingThread} THEN EXCLUDED."createdAt" ELSE m."createdAt" END,
-              "createdAtZ" = CASE WHEN m.thread_id = ${ownPendingThread} THEN EXCLUDED."createdAtZ" ELSE m."createdAtZ" END
-             WHERE ${notPendingSignalRow('m.thread_id')} OR m.thread_id = ${ownPendingThread}`,
+              "createdAt" = CASE WHEN ${ownQueueThread} THEN EXCLUDED."createdAt" ELSE m."createdAt" END,
+              "createdAtZ" = CASE WHEN ${ownQueueThread} THEN EXCLUDED."createdAtZ" ELSE m."createdAtZ" END`,
             values,
           );
         }
@@ -2179,15 +2143,17 @@ export class MemoryPG extends MemoryStorage {
     if (messages.length === 0) {
       return [];
     }
-    for (const message of messages) assertNotPendingSignalThreadId(message.threadId, 'updateMessages');
+    for (const message of messages) assertNotQueueThreadId(message.threadId, 'updateMessages');
     const fence = resolveRunFence(this, explicitFence);
 
     const messageIds = messages.map(m => m.id);
 
-    // A pending signal is not a message yet, so it counts as missing.
-    const selectQuery = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId" FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) })} WHERE id IN (${inPlaceholders(messageIds.length)}) AND ${NOT_PENDING_SIGNAL_ROW}`;
+    const selectQuery = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId" FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) })} WHERE id IN (${inPlaceholders(messageIds.length)})`;
 
-    const existingMessagesDb = await this.#db.client.manyOrNone(selectQuery, messageIds);
+    // A queued signal is not a message yet, so it counts as missing.
+    const existingMessagesDb = (await this.#db.client.manyOrNone(selectQuery, messageIds)).filter(
+      row => !isQueueThreadId(row.threadId),
+    );
 
     if (existingMessagesDb.length === 0) {
       return [];
@@ -2264,8 +2230,7 @@ export class MemoryPG extends MemoryStorage {
 
         if (setClauses.length > 0) {
           values.push(id);
-          // The read above holds no lock: the id may have become a pending signal since.
-          const sql = `UPDATE ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) })} SET ${setClauses.join(', ')} WHERE id = $${paramIndex} AND ${NOT_PENDING_SIGNAL_ROW}`;
+          const sql = `UPDATE ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) })} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`;
           queries.push(t.none(sql, values));
         }
       }
@@ -2285,7 +2250,9 @@ export class MemoryPG extends MemoryStorage {
       }
     }, READ_COMMITTED);
 
-    const updatedMessages = await this.#db.client.manyOrNone<MessageRowFromDB>(selectQuery, messageIds);
+    const updatedMessages = (await this.#db.client.manyOrNone<MessageRowFromDB>(selectQuery, messageIds)).filter(
+      row => !isQueueThreadId(row.threadId),
+    );
 
     return (updatedMessages || []).map((row: MessageRowFromDB) => {
       const message = this.normalizeMessageRow(row);
@@ -2313,25 +2280,24 @@ export class MemoryPG extends MemoryStorage {
       await this.#db.client.tx(async t => {
         if (fence) await assertRunFence(t, this.#runFencesTable(), fence, 'deleteMessages');
         const placeholders = messageIds.map((_, idx) => `$${idx + 1}`).join(',');
-        const messages = await t.manyOrNone(
-          `SELECT DISTINCT thread_id FROM ${messageTableName} WHERE id IN (${placeholders})`,
-          messageIds,
-        );
+        // A queued signal is not a message; `cancelPendingSignals` removes a pending one.
+        const kept = (
+          await t.manyOrNone<{ id: string; thread_id: string | null }>(
+            `SELECT id, thread_id FROM ${messageTableName} WHERE id IN (${placeholders})`,
+            messageIds,
+          )
+        ).filter(row => !isQueueThreadId(row.thread_id));
+        if (kept.length === 0) return;
 
-        // A pending signal's row belongs to the thread it was sent to.
-        const threadIds =
-          messages
-            ?.map(msg => msg.thread_id)
-            .filter(Boolean)
-            .map(id => threadIdOfPendingSignalRow(id)) || [];
+        const threadIds = [...new Set(kept.flatMap(row => (row.thread_id ? [row.thread_id] : [])))];
 
         await this.#lockThreads(t, threadIds);
         await t.none(
           `WITH locked AS (
-             SELECT id FROM ${messageTableName} WHERE id IN (${placeholders}) ORDER BY ${MESSAGE_LOCK_ORDER} FOR UPDATE
+             SELECT id FROM ${messageTableName} WHERE id = ANY($1::text[]) ORDER BY ${MESSAGE_LOCK_ORDER} FOR UPDATE
            )
            DELETE FROM ${messageTableName} m USING locked WHERE m.id = locked.id`,
-          messageIds,
+          [kept.map(row => row.id)],
         );
 
         if (threadIds.length > 0) {
@@ -2401,7 +2367,7 @@ export class MemoryPG extends MemoryStorage {
   }
 
   async setSignalRun({ threadId, runId }: { threadId: string; runId: string }): Promise<void> {
-    assertNotPendingSignalThreadId(threadId, 'setSignalRun');
+    assertNotQueueThreadId(threadId, 'setSignalRun');
     const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
     try {
       await this.#db.client.tx(async t => {
@@ -2413,7 +2379,7 @@ export class MemoryPG extends MemoryStorage {
   }
 
   async getSignalRun({ threadId }: { threadId: string }): Promise<string | null> {
-    assertNotPendingSignalThreadId(threadId, 'getSignalRun');
+    assertNotQueueThreadId(threadId, 'getSignalRun');
     const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
     try {
       const row = await this.#db.client.oneOrNone<{ signalRunId: string | null }>(
@@ -2436,7 +2402,7 @@ export class MemoryPG extends MemoryStorage {
     const { threadId, resourceId } = message;
     if (!threadId) throw new Error('Thread ID is required');
     if (!resourceId) throw new Error('Resource ID is required');
-    assertNotPendingSignalThreadId(threadId, 'enqueuePendingSignal');
+    assertNotQueueThreadId(threadId, 'enqueuePendingSignal');
     const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
     const messagesTable = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
     const createdAt = toUtcISOString(message.createdAt || new Date());
@@ -2448,7 +2414,7 @@ export class MemoryPG extends MemoryStorage {
          ON CONFLICT (id) DO NOTHING`,
         [
           message.id,
-          pendingSignalThreadId(threadId),
+          pendingQueueThreadId(threadId),
           typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
           createdAt,
           createdAt,
@@ -2487,10 +2453,10 @@ export class MemoryPG extends MemoryStorage {
     runId: string;
     consumedIds: string[];
   }): Promise<MastraDBMessage[]> {
-    assertNotPendingSignalThreadId(threadId, 'claimPendingSignals');
+    assertNotQueueThreadId(threadId, 'claimPendingSignals');
     const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
     const messagesTable = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
-    const pendingThreadId = pendingSignalThreadId(threadId);
+    const takenThreadId = takenQueueThreadId(threadId);
     try {
       const { resourceId, rows } = await this.#db.client.tx(async t => {
         const thread = await t.oneOrNone<{ resourceId: string; signalRunId: string | null }>(
@@ -2498,23 +2464,21 @@ export class MemoryPG extends MemoryStorage {
           [threadId],
         );
         if (thread?.signalRunId !== runId) return { resourceId: undefined, rows: [] };
-        // Only rows no run took: a row another run took stays with that run.
+        // Taken rows belong to the thread, not to a run. A second live run taking on this thread is
+        // a bug outside storage; this does not guard against it.
         await t.none(
           `WITH locked AS (
-             SELECT id FROM ${messagesTable}
-             WHERE thread_id = $1 AND "signalClaimedBy" IS NULL
-             ORDER BY ${MESSAGE_LOCK_ORDER} FOR UPDATE
+             SELECT id FROM ${messagesTable} WHERE thread_id = $1 ORDER BY ${MESSAGE_LOCK_ORDER} FOR UPDATE
            )
-           UPDATE ${messagesTable} m SET "signalClaimedBy" = $2
+           UPDATE ${messagesTable} m SET thread_id = $2
            FROM locked WHERE m.id = locked.id`,
-          [pendingThreadId, runId],
+          [pendingQueueThreadId(threadId), takenThreadId],
         );
-        // Taken rows, and rows the run saved into the thread since.
         const claimed = await t.manyOrNone<MessageRowFromDB>(
           `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"
            FROM ${messagesTable}
-           WHERE thread_id = ANY($1::text[]) AND "signalClaimedBy" = $2 AND id <> ALL($3::text[])`,
-          [[threadId, pendingThreadId], runId, consumedIds],
+           WHERE thread_id = $1 AND id <> ALL($2::text[])`,
+          [takenThreadId, consumedIds],
         );
         return { resourceId: thread.resourceId, rows: claimed };
       }, READ_COMMITTED);
@@ -2533,33 +2497,41 @@ export class MemoryPG extends MemoryStorage {
     runId: string;
     consumedIds: string[];
   }): Promise<void> {
-    assertNotPendingSignalThreadId(threadId, 'closeSignalRun');
+    assertNotQueueThreadId(threadId, 'closeSignalRun');
     const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
     const messagesTable = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
     try {
       await this.#db.client.tx(async t => {
         // Before any message row: a claim holding the shared lock commits first and its rows are
-        // settled below, and a claim that comes later finds the signal run cleared.
-        await t.none(`SELECT 1 FROM ${threadsTable} WHERE id = $1 FOR UPDATE`, [threadId]);
-        // One statement locks the run's rows in the thread and under its pending-signal id, in lock
-        // order. Consumed rows still under the pending-signal id were never saved and are deleted.
+        // settled below. If this run is the signal run, a claim that comes later finds it cleared.
+        const thread = await t.oneOrNone<{ signalRunId: string | null }>(
+          `SELECT "signalRunId" FROM ${threadsTable} WHERE id = $1 FOR UPDATE`,
+          [threadId],
+        );
+        // Taken rows belong to the thread. Only its signal run gives them back to pending; a later
+        // close of an earlier run deletes what that run consumed. A second live run taking on this
+        // thread is a bug outside storage; this does not guard against it.
+        const current = thread?.signalRunId === runId;
+        // One statement locks the thread's taken rows in lock order.
         await t.none(
           `WITH locked AS (
-             SELECT id, (thread_id = $4 AND id = ANY($3::text[])) AS consumed
+             SELECT id, id = ANY($2::text[]) AS consumed
              FROM ${messagesTable}
-             WHERE thread_id = ANY($1::text[]) AND "signalClaimedBy" = $2
+             WHERE thread_id = $1
              ORDER BY ${MESSAGE_LOCK_ORDER} FOR UPDATE
            ), deleted AS (
              DELETE FROM ${messagesTable} m USING locked WHERE m.id = locked.id AND locked.consumed
            )
-           UPDATE ${messagesTable} m SET "signalClaimedBy" = NULL
-           FROM locked WHERE m.id = locked.id AND NOT locked.consumed`,
-          [[threadId, pendingSignalThreadId(threadId)], runId, consumedIds, pendingSignalThreadId(threadId)],
+           UPDATE ${messagesTable} m SET thread_id = $3
+           FROM locked WHERE m.id = locked.id AND NOT locked.consumed AND $4::boolean`,
+          [takenQueueThreadId(threadId), consumedIds, pendingQueueThreadId(threadId), current],
         );
-        await t.none(`UPDATE ${threadsTable} SET "signalRunId" = NULL WHERE id = $1 AND "signalRunId" = $2`, [
-          threadId,
-          runId,
-        ]);
+        if (current) {
+          await t.none(`UPDATE ${threadsTable} SET "signalRunId" = NULL WHERE id = $1 AND "signalRunId" = $2`, [
+            threadId,
+            runId,
+          ]);
+        }
       }, READ_COMMITTED);
     } catch (error) {
       throw this.#signalError('CLOSE_SIGNAL_RUN', error, { threadId, runId });
@@ -2567,7 +2539,7 @@ export class MemoryPG extends MemoryStorage {
   }
 
   async cancelPendingSignals({ threadId, ids }: { threadId: string; ids: string[] }): Promise<string[]> {
-    assertNotPendingSignalThreadId(threadId, 'cancelPendingSignals');
+    assertNotQueueThreadId(threadId, 'cancelPendingSignals');
     if (ids.length === 0) return [];
     const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
     const messagesTable = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
@@ -2579,11 +2551,11 @@ export class MemoryPG extends MemoryStorage {
         return t.manyOrNone<{ id: string }>(
           `WITH locked AS (
              SELECT id FROM ${messagesTable}
-             WHERE thread_id = $1 AND "signalClaimedBy" IS NULL AND id = ANY($2::text[])
+             WHERE thread_id = $1 AND id = ANY($2::text[])
              ORDER BY ${MESSAGE_LOCK_ORDER} FOR UPDATE
            )
            DELETE FROM ${messagesTable} m USING locked WHERE m.id = locked.id RETURNING m.id`,
-          [pendingSignalThreadId(threadId), ids],
+          [pendingQueueThreadId(threadId), ids],
         );
       }, READ_COMMITTED);
       const deletedIds = new Set(deleted.map(row => row.id));
@@ -2595,7 +2567,7 @@ export class MemoryPG extends MemoryStorage {
   }
 
   async listPendingSignals({ threadId }: { threadId: string }): Promise<MastraDBMessage[]> {
-    assertNotPendingSignalThreadId(threadId, 'listPendingSignals');
+    assertNotQueueThreadId(threadId, 'listPendingSignals');
     const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
     const messagesTable = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
     try {
@@ -2605,8 +2577,8 @@ export class MemoryPG extends MemoryStorage {
         `SELECT m.id, m.content, m.role, m.type, m."createdAt", m."createdAtZ", m.thread_id AS "threadId",
                 t."resourceId" AS "threadResourceId"
          FROM ${messagesTable} m LEFT JOIN ${threadsTable} t ON t.id = $2
-         WHERE m.thread_id = $1 AND m."signalClaimedBy" IS NULL`,
-        [pendingSignalThreadId(threadId), threadId],
+         WHERE m.thread_id = $1`,
+        [pendingQueueThreadId(threadId), threadId],
       );
       return this.#toSignalMessages(threadId, rows[0]?.threadResourceId, rows);
     } catch (error) {
@@ -2812,7 +2784,7 @@ export class MemoryPG extends MemoryStorage {
 
     // Use provided ID or generate a new one
     const newThreadId = providedThreadId || crypto.randomUUID();
-    assertNotPendingSignalThreadId(newThreadId, 'copyThread');
+    assertNotQueueThreadId(newThreadId, 'copyThread');
 
     // Check if the new thread ID already exists
     const existingThread = await this.#getThreadById(this.#db.client, { threadId: newThreadId });

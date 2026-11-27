@@ -46,17 +46,16 @@ import type {
   TABLE_NAMES,
 } from '@mastra/core/storage';
 import {
-  assertNotPendingSignalThreadId,
+  assertNotQueueThreadId,
   createStorageErrorId,
   isRunFenceConflictError,
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
-  isPendingSignalThreadId,
+  isQueueThreadId,
   OBSERVATIONAL_MEMORY_TABLE_SCHEMA,
-  PENDING_SIGNAL_THREAD_PREFIX,
-  pendingSignalThreadId,
-  threadIdOfPendingSignalRow,
+  pendingQueueThreadId,
+  takenQueueThreadId,
   resolveRunFence,
   RUN_FENCING_TABLE_SCHEMAS,
   TABLE_MEMORY_RUN_FENCES,
@@ -99,34 +98,15 @@ import { withClientWriteLock } from '../../db/write-lock';
 import { runPrune, resolveTargets } from '../../retention';
 
 /**
- * Pending agent signals live in the messages table, under the thread id
- * `pendingSignalThreadId(threadId)` and without a resource id, so they are not part of any thread
- * until `saveMessages` moves them to their thread. These columns are not in core's shared schema,
- * so `init()` adds them here. The thread's `signalRunId` is the only run allowed to insert for a
- * run or to claim.
+ * Queued agent signals live in the messages table without a resource id, under
+ * `pendingQueueThreadId(threadId)` until a run takes them and `takenQueueThreadId(threadId)` after,
+ * so they are not part of any thread until `saveMessages` moves them to one. The thread's
+ * `signalRunId`, not in core's shared schema, is the only run allowed to insert for a run or to
+ * claim; `init()` adds it here.
  */
-const SIGNAL_MESSAGE_COLUMNS = {
-  /**
-   * The run that took the signal. It stays after the save moves the row to its thread, until that
-   * run closes. A row under the pending-signal prefix is not part of any thread: every read by
-   * message id must exclude it, and nothing but the save may move it to a real thread.
-   */
-  signalClaimedBy: { type: 'text', nullable: true },
-} satisfies Record<string, StorageColumn>;
 const SIGNAL_THREAD_COLUMNS = {
   signalRunId: { type: 'text', nullable: true },
 } satisfies Record<string, StorageColumn>;
-/**
- * Rows a run took, or saved and still claims, and the predicate of their partial index. SQLite uses
- * a partial index only for a query whose WHERE clause implies its condition, so the queries meant
- * for the index state the condition itself rather than rely on the planner proving it.
- */
-const CLAIMED_ROW_CONDITION = `"signalClaimedBy" IS NOT NULL`;
-/**
- * Reads by message id skip pending-signal rows. The prefix is compared exactly because SQLite's
- * `LIKE` ignores ASCII case.
- */
-const NOT_PENDING_SIGNAL_ROW_CONDITION = `substr(thread_id, 1, ${PENDING_SIGNAL_THREAD_PREFIX.length}) <> '${PENDING_SIGNAL_THREAD_PREFIX}'`;
 /** The thread's current resource id, read in the same statement as its signal rows. Binds the thread id. */
 const THREAD_RESOURCE_ID_COLUMN = `(SELECT "resourceId" FROM "${TABLE_THREADS}" WHERE id = ?) AS "threadResourceId"`;
 
@@ -296,11 +276,11 @@ export class MemoryLibSQL extends MemoryStorage {
         ],
       });
     }
-    // Add resourceId column for backwards compatibility, and the pending-signal columns to new and existing tables
+    // Add resourceId column for backwards compatibility
     await this.#db.alterTable({
       tableName: TABLE_MESSAGES,
-      schema: { ...TABLE_SCHEMAS[TABLE_MESSAGES], ...SIGNAL_MESSAGE_COLUMNS },
-      ifNotExists: ['resourceId', ...Object.keys(SIGNAL_MESSAGE_COLUMNS)],
+      schema: TABLE_SCHEMAS[TABLE_MESSAGES],
+      ifNotExists: ['resourceId'],
     });
     await this.#db.alterTable({
       tableName: TABLE_THREADS,
@@ -316,12 +296,6 @@ export class MemoryLibSQL extends MemoryStorage {
         },
         {
           sql: `CREATE INDEX IF NOT EXISTS idx_messages_thread_resource_created_at ON ${TABLE_MESSAGES} (thread_id, "resourceId", "createdAt")`,
-          args: [],
-        },
-        // Only rows a run took or saved and still claims, so it stays small. It serves the claim's read
-        // and the close. Pending rows are found through the thread index under their own thread id.
-        {
-          sql: `CREATE INDEX IF NOT EXISTS idx_messages_signal_claimed ON ${TABLE_MESSAGES} (thread_id, "createdAt", id) WHERE ${CLAIMED_ROW_CONDITION}`,
           args: [],
         },
       ],
@@ -497,7 +471,7 @@ export class MemoryLibSQL extends MemoryStorage {
     const resourceCondition = resourceId ? ` AND "resourceId" = ?` : '';
     const idPlaceholders = targetIds.map(() => '?').join(', ');
     const targetResult = await this.#client.execute({
-      sql: `SELECT id, thread_id, "createdAt" FROM "${TABLE_MESSAGES}" WHERE id IN (${idPlaceholders}) AND ${NOT_PENDING_SIGNAL_ROW_CONDITION}${resourceCondition}`,
+      sql: `SELECT id, thread_id, "createdAt" FROM "${TABLE_MESSAGES}" WHERE id IN (${idPlaceholders})${resourceCondition}`,
       args: resourceId ? [...targetIds, resourceId] : targetIds,
     });
 
@@ -581,7 +555,7 @@ export class MemoryLibSQL extends MemoryStorage {
           thread_id,
           "resourceId"
         FROM "${TABLE_MESSAGES}"
-        WHERE id IN (${messageIds.map(() => '?').join(', ')}) AND ${NOT_PENDING_SIGNAL_ROW_CONDITION}
+        WHERE id IN (${messageIds.map(() => '?').join(', ')})
         ORDER BY "createdAt" DESC
       `;
       const result = await this.#client.execute({ sql, args: messageIds });
@@ -619,7 +593,7 @@ export class MemoryLibSQL extends MemoryStorage {
         new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
     }
-    for (const id of threadIds) assertNotPendingSignalThreadId(id, 'listMessages');
+    for (const id of threadIds) assertNotQueueThreadId(id, 'listMessages');
 
     if (page < 0) {
       throw new MastraError(
@@ -954,7 +928,7 @@ export class MemoryLibSQL extends MemoryStorage {
     fence?: RunFence;
   }): Promise<{ messages: MastraDBMessage[] }> {
     if (messages.length === 0) return { messages };
-    for (const message of messages) assertNotPendingSignalThreadId(message.threadId, 'saveMessages');
+    for (const message of messages) assertNotQueueThreadId(message.threadId, 'saveMessages');
 
     try {
       const threadId = messages[0]?.threadId;
@@ -975,11 +949,8 @@ export class MemoryLibSQL extends MemoryStorage {
             `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
           );
         }
-        // Saving a pending signal under its own thread moves the row into the thread, where it is a
-        // message that takes the saved createdAt; a row that already is a message keeps its createdAt.
-        // Both keep the claimant until the claiming run closes. A pending signal saved under another
-        // thread is left alone.
-        const pendingThreadId = pendingSignalThreadId(message.threadId);
+        // A queued signal saved under its own thread becomes a message that takes the saved
+        // createdAt; any other existing row keeps its createdAt.
         return {
           sql: `INSERT INTO "${TABLE_MESSAGES}" (id, thread_id, content, role, type, "createdAt", "resourceId") 
                   VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -989,8 +960,7 @@ export class MemoryLibSQL extends MemoryStorage {
                     role=excluded.role,
                     type=excluded.type,
                     "resourceId"=excluded."resourceId",
-                    "createdAt"=CASE WHEN thread_id = ? THEN excluded."createdAt" ELSE "createdAt" END
-                  WHERE ${NOT_PENDING_SIGNAL_ROW_CONDITION} OR thread_id = ?
+                    "createdAt"=CASE WHEN thread_id IN (?, ?) THEN excluded."createdAt" ELSE "createdAt" END
                 `,
           args: [
             message.id,
@@ -1000,8 +970,8 @@ export class MemoryLibSQL extends MemoryStorage {
             message.type || 'v2',
             time instanceof Date ? time.toISOString() : time,
             message.resourceId,
-            pendingThreadId,
-            pendingThreadId,
+            pendingQueueThreadId(message.threadId),
+            takenQueueThreadId(message.threadId),
           ],
         };
       });
@@ -1063,7 +1033,7 @@ export class MemoryLibSQL extends MemoryStorage {
     if (messages.length === 0) {
       return [];
     }
-    for (const message of messages) assertNotPendingSignalThreadId(message.threadId, 'updateMessages');
+    for (const message of messages) assertNotQueueThreadId(message.threadId, 'updateMessages');
 
     // Read, merge and write under one write lock, so the merge can't be
     // based on rows another write changes in between.
@@ -1082,10 +1052,12 @@ export class MemoryLibSQL extends MemoryStorage {
     const messageIds = messages.map(m => m.id);
     const placeholders = messageIds.map(() => '?').join(',');
 
-    // A pending signal is not a message yet, so it counts as missing.
-    const selectSql = `SELECT * FROM ${TABLE_MESSAGES} WHERE id IN (${placeholders}) AND ${NOT_PENDING_SIGNAL_ROW_CONDITION}`;
+    // A queued signal is not a message yet, so it counts as missing.
+    const selectSql = `SELECT * FROM ${TABLE_MESSAGES} WHERE id IN (${placeholders})`;
     const existingResult = await writer.execute({ sql: selectSql, args: messageIds });
-    const existingMessages: MastraDBMessage[] = existingResult.rows.map(row => this.parseRow(row));
+    const existingMessages: MastraDBMessage[] = existingResult.rows
+      .map(row => this.parseRow(row))
+      .filter(message => !isQueueThreadId(message.threadId));
 
     if (existingMessages.length === 0) {
       return [];
@@ -1171,7 +1143,7 @@ export class MemoryLibSQL extends MemoryStorage {
     await writer.batch(batchStatements);
 
     const updatedResult = await writer.execute({ sql: selectSql, args: messageIds });
-    return updatedResult.rows.map(row => this.parseRow(row));
+    return updatedResult.rows.map(row => this.parseRow(row)).filter(message => !isQueueThreadId(message.threadId));
   }
 
   async deleteMessages(messageIds: string[], options?: { fence?: RunFence }): Promise<void> {
@@ -1195,20 +1167,22 @@ export class MemoryLibSQL extends MemoryStorage {
               const batch = messageIds.slice(i, i + BATCH_SIZE);
               const placeholders = batch.map(() => '?').join(',');
 
-              // Get thread IDs for this batch
+              // A queued signal is not a message; `cancelPendingSignals` removes a pending one.
               const result = await tx.execute({
-                sql: `SELECT DISTINCT thread_id FROM "${TABLE_MESSAGES}" WHERE id IN (${placeholders})`,
+                sql: `SELECT id, thread_id FROM "${TABLE_MESSAGES}" WHERE id IN (${placeholders})`,
                 args: batch,
               });
+              const kept = (result.rows ?? []).filter(row => !isQueueThreadId(row.thread_id as string | null));
+              if (kept.length === 0) continue;
 
-              result.rows?.forEach(row => {
-                if (row.thread_id) threadIds.add(threadIdOfPendingSignalRow(row.thread_id as string));
-              });
+              for (const row of kept) {
+                if (row.thread_id) threadIds.add(row.thread_id as string);
+              }
 
               // Delete messages in this batch
               await tx.execute({
-                sql: `DELETE FROM "${TABLE_MESSAGES}" WHERE id IN (${placeholders})`,
-                args: batch,
+                sql: `DELETE FROM "${TABLE_MESSAGES}" WHERE id IN (${kept.map(() => '?').join(',')})`,
+                args: kept.map(row => row.id as string),
               });
             }
 
@@ -1613,7 +1587,7 @@ export class MemoryLibSQL extends MemoryStorage {
   }
 
   async saveThread({ thread, fence }: { thread: StorageThreadType; fence?: RunFence }): Promise<StorageThreadType> {
-    assertNotPendingSignalThreadId(thread.id, 'saveThread');
+    assertNotQueueThreadId(thread.id, 'saveThread');
     try {
       // The thread's signal run is not part of the thread, so saving the thread keeps it.
       await this.#db.insertPreserving({
@@ -1707,8 +1681,8 @@ export class MemoryLibSQL extends MemoryStorage {
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    // No thread has a reserved id; deleting by it would remove another thread's pending signals.
-    if (isPendingSignalThreadId(threadId)) return;
+    // No thread has a reserved id; deleting by it would remove another thread's queued signals.
+    if (isQueueThreadId(threadId)) return;
     try {
       // Delete messages and pending signals first (child records), then thread, in one write batch: a
       // single request and transaction, not an interactive one held across awaits. A run-scoped
@@ -1718,8 +1692,8 @@ export class MemoryLibSQL extends MemoryStorage {
         this.#client.batch(
           [
             {
-              sql: `DELETE FROM ${TABLE_MESSAGES} WHERE thread_id IN (?, ?)`,
-              args: [threadId, pendingSignalThreadId(threadId)],
+              sql: `DELETE FROM ${TABLE_MESSAGES} WHERE thread_id IN (?, ?, ?)`,
+              args: [threadId, pendingQueueThreadId(threadId), takenQueueThreadId(threadId)],
             },
             { sql: `DELETE FROM ${TABLE_THREADS} WHERE id = ?`, args: [threadId] },
           ],
@@ -1756,7 +1730,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
     // Use provided ID or generate a new one
     const newThreadId = providedThreadId || crypto.randomUUID();
-    assertNotPendingSignalThreadId(newThreadId, 'copyThread');
+    assertNotQueueThreadId(newThreadId, 'copyThread');
 
     // Check if the new thread ID already exists
     const existingThread = await this.getThreadById({ threadId: newThreadId });
@@ -1916,7 +1890,7 @@ export class MemoryLibSQL extends MemoryStorage {
   // ============================================
 
   async setSignalRun({ threadId, runId }: { threadId: string; runId: string }): Promise<void> {
-    assertNotPendingSignalThreadId(threadId, 'setSignalRun');
+    assertNotQueueThreadId(threadId, 'setSignalRun');
     try {
       await this.#write('setSignalRun', () =>
         this.#client.execute({
@@ -1930,7 +1904,7 @@ export class MemoryLibSQL extends MemoryStorage {
   }
 
   async getSignalRun({ threadId }: { threadId: string }): Promise<string | null> {
-    assertNotPendingSignalThreadId(threadId, 'getSignalRun');
+    assertNotQueueThreadId(threadId, 'getSignalRun');
     try {
       const result = await this.#client.execute({
         sql: `SELECT "signalRunId" FROM "${TABLE_THREADS}" WHERE id = ?`,
@@ -1952,13 +1926,13 @@ export class MemoryLibSQL extends MemoryStorage {
   }): Promise<'accepted' | 'run-closed' | 'thread-not-found'> {
     if (!message.threadId) throw new Error('Thread ID is required');
     if (!message.resourceId) throw new Error('Resource ID is required');
-    assertNotPendingSignalThreadId(message.threadId, 'enqueuePendingSignal');
+    assertNotQueueThreadId(message.threadId, 'enqueuePendingSignal');
 
     const createdAt = message.createdAt || new Date();
     // The row has no resource until the save moves it to its thread.
     const row: InValue[] = [
       message.id,
-      pendingSignalThreadId(message.threadId),
+      pendingQueueThreadId(message.threadId),
       typeof message.content === 'object' ? JSON.stringify(message.content) : message.content,
       message.role,
       message.type || 'v2',
@@ -2013,26 +1987,26 @@ export class MemoryLibSQL extends MemoryStorage {
     runId: string;
     consumedIds: string[];
   }): Promise<MastraDBMessage[]> {
-    assertNotPendingSignalThreadId(threadId, 'claimPendingSignals');
+    assertNotQueueThreadId(threadId, 'claimPendingSignals');
     const isSignalRun = `EXISTS (SELECT 1 FROM "${TABLE_THREADS}" WHERE id = ? AND "signalRunId" = ?)`;
-    const pendingThreadId = pendingSignalThreadId(threadId);
+    const takenThreadId = takenQueueThreadId(threadId);
     try {
+      // Taken rows belong to the thread, not to a run. A second live run taking on this thread is a
+      // bug outside storage; this does not guard against it.
       const [, claimed] = await this.#write('claimPendingSignals', () =>
         this.#client.batch(
           [
             {
-              sql: `UPDATE "${TABLE_MESSAGES}" SET "signalClaimedBy" = ?
-                    WHERE thread_id = ? AND "signalClaimedBy" IS NULL AND ${isSignalRun}`,
-              args: [runId, pendingThreadId, threadId, runId],
+              sql: `UPDATE "${TABLE_MESSAGES}" SET thread_id = ? WHERE thread_id = ? AND ${isSignalRun}`,
+              args: [takenThreadId, pendingQueueThreadId(threadId), threadId, runId],
             },
             {
-              // Taken rows and rows the run saved since. consumedIds can hold every signal a long run
-              // consumed, so it is bound as one JSON array. Rows are sorted after the read.
+              // consumedIds can hold every signal a long run consumed, so it is bound as one JSON
+              // array. Rows are sorted after the read.
               sql: `SELECT id, content, role, type, "createdAt", thread_id, ${THREAD_RESOURCE_ID_COLUMN}
                     FROM "${TABLE_MESSAGES}"
-                    WHERE thread_id IN (?, ?) AND ${CLAIMED_ROW_CONDITION} AND "signalClaimedBy" = ?
-                      AND id NOT IN (SELECT value FROM json_each(?)) AND ${isSignalRun}`,
-              args: [threadId, threadId, pendingThreadId, runId, JSON.stringify(consumedIds), threadId, runId],
+                    WHERE thread_id = ? AND id NOT IN (SELECT value FROM json_each(?)) AND ${isSignalRun}`,
+              args: [threadId, takenThreadId, JSON.stringify(consumedIds), threadId, runId],
             },
           ],
           'write',
@@ -2053,23 +2027,24 @@ export class MemoryLibSQL extends MemoryStorage {
     runId: string;
     consumedIds: string[];
   }): Promise<void> {
-    assertNotPendingSignalThreadId(threadId, 'closeSignalRun');
-    const pendingThreadId = pendingSignalThreadId(threadId);
+    assertNotQueueThreadId(threadId, 'closeSignalRun');
+    const takenThreadId = takenQueueThreadId(threadId);
     try {
+      // Taken rows belong to the thread. Only its signal run gives them back to pending; a later
+      // close of an earlier run deletes what that run consumed. A second live run taking on this
+      // thread is a bug outside storage; this does not guard against it.
+      // The move reads the signal run before the last statement clears it.
       await this.#write('closeSignalRun', () =>
         this.#client.batch(
           [
             {
-              // Consumed rows still under the pending-signal id were never saved.
-              sql: `DELETE FROM "${TABLE_MESSAGES}"
-                    WHERE thread_id = ? AND ${CLAIMED_ROW_CONDITION} AND "signalClaimedBy" = ?
-                      AND id IN (SELECT value FROM json_each(?))`,
-              args: [pendingThreadId, runId, JSON.stringify(consumedIds)],
+              sql: `DELETE FROM "${TABLE_MESSAGES}" WHERE thread_id = ? AND id IN (SELECT value FROM json_each(?))`,
+              args: [takenThreadId, JSON.stringify(consumedIds)],
             },
             {
-              sql: `UPDATE "${TABLE_MESSAGES}" SET "signalClaimedBy" = NULL
-                    WHERE thread_id IN (?, ?) AND ${CLAIMED_ROW_CONDITION} AND "signalClaimedBy" = ?`,
-              args: [threadId, pendingThreadId, runId],
+              sql: `UPDATE "${TABLE_MESSAGES}" SET thread_id = ?
+                    WHERE thread_id = ? AND EXISTS (SELECT 1 FROM "${TABLE_THREADS}" WHERE id = ? AND "signalRunId" = ?)`,
+              args: [pendingQueueThreadId(threadId), takenThreadId, threadId, runId],
             },
             {
               sql: `UPDATE "${TABLE_THREADS}" SET "signalRunId" = NULL WHERE id = ? AND "signalRunId" = ?`,
@@ -2085,10 +2060,10 @@ export class MemoryLibSQL extends MemoryStorage {
   }
 
   async cancelPendingSignals({ threadId, ids }: { threadId: string; ids: string[] }): Promise<string[]> {
-    assertNotPendingSignalThreadId(threadId, 'cancelPendingSignals');
+    assertNotQueueThreadId(threadId, 'cancelPendingSignals');
     if (ids.length === 0) return [];
-    const named = `thread_id = ? AND "signalClaimedBy" IS NULL AND id IN (SELECT value FROM json_each(?))`;
-    const args = [pendingSignalThreadId(threadId), JSON.stringify(ids)];
+    const named = `thread_id = ? AND id IN (SELECT value FROM json_each(?))`;
+    const args = [pendingQueueThreadId(threadId), JSON.stringify(ids)];
     try {
       const [found] = await this.#write('cancelPendingSignals', () =>
         this.#client.batch(
@@ -2107,12 +2082,12 @@ export class MemoryLibSQL extends MemoryStorage {
   }
 
   async listPendingSignals({ threadId }: { threadId: string }): Promise<MastraDBMessage[]> {
-    assertNotPendingSignalThreadId(threadId, 'listPendingSignals');
+    assertNotQueueThreadId(threadId, 'listPendingSignals');
     try {
       const result = await this.#client.execute({
         sql: `SELECT id, content, role, type, "createdAt", thread_id, ${THREAD_RESOURCE_ID_COLUMN}
-              FROM "${TABLE_MESSAGES}" WHERE thread_id = ? AND "signalClaimedBy" IS NULL`,
-        args: [threadId, pendingSignalThreadId(threadId)],
+              FROM "${TABLE_MESSAGES}" WHERE thread_id = ?`,
+        args: [threadId, pendingQueueThreadId(threadId)],
       });
       return this.#parseSignalRows(threadId, result.rows);
     } catch (error) {
