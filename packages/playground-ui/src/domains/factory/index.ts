@@ -4,3 +4,5 @@ export * from './canvas';
 export * from './factory-sessions-nav';
 export * from './session-belt-label';
 export * from './sidebar-list-states';
+export * from './models';
+export * from './preferences';
