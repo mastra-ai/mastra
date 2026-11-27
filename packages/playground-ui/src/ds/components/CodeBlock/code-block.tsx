@@ -56,6 +56,7 @@ export function CodeBlock({
 
   return (
     <figure
+      data-slot="code-block"
       // A scrolling `pre` still reports its longest line as an intrinsic width, which
       // grows every ancestor; containment keeps the block inside the width it is given.
       className={cn(
