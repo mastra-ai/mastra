@@ -142,7 +142,7 @@ export interface FactoryBoardEngineContext {
   transitionService: Pick<FactoryTransitionService, 'transition'>;
   /** Reads the card a run ended on, with the outcome its session reported. */
   workItems: Pick<WorkItemsStorage, 'get'> &
-    Partial<Pick<WorkItemsStorage, 'getTransitionResultByIngress' | 'listActiveRunBindings'>>;
+    Partial<Pick<WorkItemsStorage, 'getTransitionResultByIngress' | 'listActiveRunBindings' | 'listDeferredDecisions'>>;
   /** The boards cards are filed on, built in and stored. */
   boards: BoardRegistry | ProjectBoardSource;
   /** The runs on a card's sessions, for an engine that stops them when a person moves the card. */

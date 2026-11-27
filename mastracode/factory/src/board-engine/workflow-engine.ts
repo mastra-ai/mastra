@@ -50,6 +50,8 @@ const INTERRUPT_WAIT_MS = 120_000;
 /** How long a card may be `running` or `probing` before the sweeper looks at it. */
 const RUNNING_DEADLINE_MS = 6 * 60 * 60_000;
 const PROBING_DEADLINE_MS = 30 * 60_000;
+/** A phase run the dispatcher still has to start, start again, or see end. */
+const UNSETTLED_DECISIONS = ['pending', 'leased', 'retry'] as const;
 /** How many board runs a sweep reads at a time. */
 const SWEEP_PAGE = 100;
 /** What a card that needs attention tells the person looking at it. */
@@ -726,14 +728,24 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     const role = board?.roleForPhase(previous.phase);
     const binding = pending.bindings.find(seat => seat.role === role);
     if (!binding) return undefined;
+    const later = { ...previous, deadlineAt: Date.now() + this.#deadlines.probing };
     if (await runs.inFlight(card)) {
+      // A probe is the phase run once more, and gets as long as any run of the phase.
+      if (previous.state === 'probing') return { ...previous, deadlineAt: Date.now() + this.#deadlines.running };
       const { deadlineAt: _expired, ...kept } = previous;
       if (await runs.stop(card)) {
         return { ...kept, state: 'needs_attention', failure: 'run_overdue', reason: failureLabel('run_overdue') };
       }
       // Its process's own watch gives the run up; look again once that had time to land.
-      return { ...previous, deadlineAt: Date.now() + this.#deadlines.probing };
+      return later;
     }
+    // A run waiting for its turn, or one whose watch died with its lease, is still the dispatcher's
+    // to start or take over; it hears that run's end.
+    const decisions = await this.#context.workItems.listDeferredDecisions?.(card.orgId, card.factoryProjectId, {
+      workItemId: card.workItemId,
+      statuses: UNSETTLED_DECISIONS,
+    });
+    if (decisions?.some(record => record.decision.type === 'invokeSkill')) return later;
     const ended: FactoryRunEndedBinding = {
       id: binding.id,
       role: binding.role,

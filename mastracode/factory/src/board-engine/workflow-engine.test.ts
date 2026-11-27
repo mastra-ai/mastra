@@ -801,6 +801,40 @@ describe('the workflow board engine', () => {
     expect(JSON.stringify(run)).not.toContain(ORG);
   });
 
+  it('gives a probe as long as a phase run, and leaves a run the dispatcher still has to start or take over to it', async () => {
+    const going = { inFlight: true, stops: true };
+    const { runs, stopped } = sweptRuns(going);
+    const { storage, engine, item, binding } = await setup({ runs });
+    await engine.runEnded({ ...binding, runEnd: 'run-1' }, engine);
+
+    // The probe is the phase run once more: still going past half an hour, it is left to run.
+    await engine.sweep(Date.now() + HOUR, engine);
+    const probing = await engine.describe({ workItemId: item.id });
+    expect(probing).toMatchObject({ state: 'probing', probes: 1 });
+    expect(probing!.deadlineAt).toBeGreaterThan(Date.now() + 5 * HOUR);
+    expect(stopped).toEqual([]);
+
+    // Its run waits for its turn (or for another worker to take over the one whose watch died).
+    going.inFlight = false;
+    const card = (await storage.get({ orgId: ORG, id: item.id }))!;
+    await storage.commitRuleEvaluation({
+      orgId: ORG,
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      ingress: { identity: 'rule-1' },
+      expectedRevision: card.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'invokeSkill', role: 'work', skillName: 'factory-plan', idempotencyKey: 'rule-1' }],
+      causalChain: [],
+      now: new Date(),
+    });
+    await engine.sweep(Date.now() + 7 * HOUR, engine);
+    const waiting = await engine.describe({ workItemId: item.id });
+    expect(waiting).toMatchObject({ state: 'probing', probes: 1 });
+    expect(waiting!.deadlineAt).toBeLessThan(probing!.deadlineAt!);
+  });
+
   it('acts on nothing for a deadline the card has since moved past', async () => {
     const { runs } = sweptRuns({ inFlight: false });
     const { engine, item, binding } = await setup({ runs });
