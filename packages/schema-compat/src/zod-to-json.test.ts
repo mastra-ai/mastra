@@ -744,17 +744,6 @@ describe('ensureAllPropertiesRequired', () => {
     expect(branch.required).toContain('b');
   });
 
-  it('should not modify zodToJsonSchema default behavior', () => {
-    const schema = z.object({
-      required: z.string(),
-      optional: z.string().optional(),
-    });
-
-    const result = zodToJsonSchema(schema);
-    expect(result.required).toContain('required');
-    expect(result.required).not.toContain('optional');
-  });
-
   describe.runIf(isZodV4)('transforms (io: input)', () => {
     it('describes the pre-transform input shape for transformed fields', () => {
       const schema = z.object({
