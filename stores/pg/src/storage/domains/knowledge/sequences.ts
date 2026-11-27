@@ -7,8 +7,10 @@ import type {
   KnowledgeSequenceItemUpsertResult,
   KnowledgeSequenceOrderBy,
   KnowledgeSequencePurgeResult,
+  KnowledgeSequenceRecord,
   KnowledgeSequencesStorage,
   ListKnowledgeSequenceItemsInput,
+  MarkKnowledgeSequenceInput,
   SearchKnowledgeSequenceItemsInput,
   UpsertKnowledgeSequenceItemInput,
 } from '@mastra/core/storage';
@@ -47,7 +49,9 @@ export function pgKnowledgeSequencesDDL(schemaName?: string): string[] {
     `CREATE TABLE IF NOT EXISTS ${t.sequences} (
       "pageId" text PRIMARY KEY,
       "createdAt" timestamptz NOT NULL DEFAULT now(),
-      "orderBy" text NOT NULL
+      "orderBy" text NOT NULL,
+      "propertiesSchema" json,
+      "itemTypes" json
     )`,
     `CREATE TABLE IF NOT EXISTS ${t.items} (
       "id" text COLLATE "C" PRIMARY KEY,
@@ -83,6 +87,13 @@ const loadCore = () => (core ??= import('@mastra/core/storage'));
 
 type Row = Record<string, any>;
 const date = (value: unknown) => (value === null || value === undefined ? null : new Date(value as string | Date));
+
+const toSequence = (row: Row): KnowledgeSequenceRecord => ({
+  pageId: row.pageId,
+  orderBy: row.orderBy,
+  propertiesSchema: row.propertiesSchema ?? null,
+  itemTypes: row.itemTypes ?? null,
+});
 
 const toItem = (row: Row): KnowledgeSequenceItemRecord => ({
   id: row.id,
@@ -156,14 +167,14 @@ export class PgKnowledgeSequences implements KnowledgeSequencesStorage {
     await this.#client.query(`TRUNCATE ${this.#t.items}, ${this.#t.sequences}`);
   }
 
-  /** Locks the sequence row, refusing when it isn't a live sequence; returns its order mode. */
-  async #lockLive(tx: Queryable, sequenceId: string): Promise<KnowledgeSequenceOrderBy> {
+  /** Locks the sequence row, refusing when it isn't a live sequence; returns what it was marked with. */
+  async #lockLive(tx: Queryable, sequenceId: string): Promise<KnowledgeSequenceRecord> {
     const row = await tx.oneOrNone(
-      `SELECT t."orderBy" FROM ${this.#t.sequences} t JOIN ${this.#t.pages} p ON p."id" = t."pageId" WHERE t."pageId" = $1 AND p."deletedAt" IS NULL FOR UPDATE OF t`,
+      `SELECT t.* FROM ${this.#t.sequences} t JOIN ${this.#t.pages} p ON p."id" = t."pageId" WHERE t."pageId" = $1 AND p."deletedAt" IS NULL FOR UPDATE OF t`,
       [sequenceId],
     );
     if (!row) throw new (await loadCore()).KnowledgeSequenceNotFoundError(sequenceId);
-    return row.orderBy;
+    return toSequence(row);
   }
 
   /** The key `input` places its item at; reads its neighbours under the sequence row lock. */
@@ -224,20 +235,35 @@ export class PgKnowledgeSequences implements KnowledgeSequencesStorage {
   async markSequence({
     pageId,
     orderBy = 'timeline',
-  }: {
-    pageId: string;
-    orderBy?: KnowledgeSequenceOrderBy;
-  }): Promise<{ status: 'created' | 'unchanged' }> {
-    const { KnowledgeNotFoundError, KnowledgeSequenceNotLeafError, KnowledgeSequenceOrderByChangeError } =
-      await loadCore();
+    ...schemas
+  }: MarkKnowledgeSequenceInput): Promise<{ status: 'created' | 'unchanged' | 'updated' }> {
+    const {
+      checkKnowledgeSequenceDeclaration,
+      KnowledgeNotFoundError,
+      KnowledgeSequenceNotLeafError,
+      KnowledgeSequenceOrderByChangeError,
+      sameKnowledgeSequenceDeclaration,
+    } = await loadCore();
+    const declaration = checkKnowledgeSequenceDeclaration(schemas);
+    // Stored as `json` text, not `jsonb`, so a schema keeps its property order (the viewer's columns).
+    const stored = [
+      declaration.propertiesSchema === null ? null : JSON.stringify(declaration.propertiesSchema),
+      declaration.itemTypes === null ? null : JSON.stringify(declaration.itemTypes),
+    ];
     return this.#client.tx(async tx => {
       const page = await tx.oneOrNone(`SELECT "deletedAt" FROM ${this.#t.pages} WHERE "id" = $1 FOR UPDATE`, [pageId]);
       if (!page || page.deletedAt) throw new KnowledgeNotFoundError('page', pageId);
       // The page-row lock above is what makes select-then-insert safe: a second markSequence waits on it.
-      const marked = await tx.oneOrNone(`SELECT "orderBy" FROM ${this.#t.sequences} WHERE "pageId" = $1`, [pageId]);
-      if (marked) {
+      const row = await tx.oneOrNone(`SELECT * FROM ${this.#t.sequences} WHERE "pageId" = $1 FOR UPDATE`, [pageId]);
+      if (row) {
+        const marked = toSequence(row);
         if (marked.orderBy !== orderBy) throw new KnowledgeSequenceOrderByChangeError(pageId, marked.orderBy);
-        return { status: 'unchanged' as const };
+        if (sameKnowledgeSequenceDeclaration(marked, declaration)) return { status: 'unchanged' as const };
+        await tx.none(
+          `UPDATE ${this.#t.sequences} SET "propertiesSchema" = $2::json, "itemTypes" = $3::json WHERE "pageId" = $1`,
+          [pageId, ...stored],
+        );
+        return { status: 'updated' as const };
       }
       // Known window: createPage doesn't lock the parent row, so a child created after this check
       // commits alongside the mark. That leaves a sequence with children; reads are unaffected.
@@ -246,9 +272,17 @@ export class PgKnowledgeSequences implements KnowledgeSequencesStorage {
         [pageId],
       );
       if (child) throw new KnowledgeSequenceNotLeafError(pageId);
-      await tx.none(`INSERT INTO ${this.#t.sequences} ("pageId", "orderBy") VALUES ($1, $2)`, [pageId, orderBy]);
+      await tx.none(
+        `INSERT INTO ${this.#t.sequences} ("pageId", "orderBy", "propertiesSchema", "itemTypes") VALUES ($1, $2, $3::json, $4::json)`,
+        [pageId, orderBy, ...stored],
+      );
       return { status: 'created' as const };
     });
+  }
+
+  async getSequence({ pageId }: { pageId: string }): Promise<KnowledgeSequenceRecord | null> {
+    const row = await this.#client.oneOrNone(`SELECT * FROM ${this.#t.sequences} WHERE "pageId" = $1`, [pageId]);
+    return row ? toSequence(row) : null;
   }
 
   async listSequenceIds({ pageIds }: { pageIds: string[] }): Promise<string[]> {
@@ -270,8 +304,9 @@ export class PgKnowledgeSequences implements KnowledgeSequencesStorage {
       sameKnowledgeSequenceItem,
     } = await loadCore();
     return this.#client.tx(async tx => {
-      const orderBy = await this.#lockLive(tx, input.sequenceId);
-      checkKnowledgeSequenceItemInput(input, orderBy);
+      const sequence = await this.#lockLive(tx, input.sequenceId);
+      checkKnowledgeSequenceItemInput(input, sequence);
+      const { orderBy } = sequence;
       const stored = await this.#item(tx, input.sequenceId, input.externalId);
       const position = orderBy === 'position' ? await this.#position(tx, input, stored) : null;
       const content = knowledgeSequenceItemContent(input);

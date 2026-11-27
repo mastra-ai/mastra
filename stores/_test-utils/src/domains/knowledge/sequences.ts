@@ -2,12 +2,14 @@ import type { KnowledgeStorage, KnowledgeSequencesStorage } from '@mastra/core/s
 import {
   KnowledgeNotFoundError,
   KnowledgeSequenceItemInvalidError,
+  KnowledgeSequenceItemPropertiesError,
   KnowledgeSequenceNotFoundError,
   KnowledgeSequenceNotLeafError,
   KnowledgeSequenceOrderByChangeError,
   KnowledgeSequenceParentNestedError,
   KnowledgeSequenceParentNotFoundError,
   KnowledgeSequencePurgeRefusedError,
+  KnowledgeSequenceSchemaInvalidError,
 } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
@@ -781,6 +783,239 @@ export function createKnowledgeSequenceTests(createStore: () => Promise<Knowledg
         ).rejects.toBeInstanceOf(KnowledgeSequenceItemInvalidError);
         const created = await item('dated', 1);
         expect(created).toMatchObject({ status: 'created', item: { position: null } });
+      });
+    });
+
+    describe('property schemas and item types', () => {
+      const untypedSchema = {
+        type: 'object' as const,
+        properties: { channel: { type: 'string' as const } },
+        required: ['channel'],
+      };
+      const deploySchema = {
+        type: 'object' as const,
+        properties: {
+          env: { type: 'string' as const, enum: ['staging', 'production'] },
+          at: { type: 'date' as const },
+          ok: { type: 'boolean' as const },
+          ms: { type: 'number' as const },
+          failed: { type: 'array' as const, items: { type: 'string' as const }, maxItems: 3 },
+        },
+        required: ['env'],
+      };
+      const itemTypes = {
+        deploy: { label: 'Deploy', description: 'A release to an environment', propertiesSchema: deploySchema },
+        note: { label: 'Note' },
+      };
+
+      async function typed() {
+        const { store, scope, sequences } = await setup();
+        const page = await store.createPage({ parentId: scope.id, name: 'Releases', provenance: host });
+        expect(await sequences.markSequence({ pageId: page.id, propertiesSchema: untypedSchema, itemTypes })).toEqual({
+          status: 'created',
+        });
+        const put = (externalId: string, extra: Record<string, unknown>) =>
+          sequences.upsertItem({
+            sequenceId: page.id,
+            externalId,
+            occurredAt: at(1),
+            title: externalId,
+            writtenBy: importer,
+            ...extra,
+          });
+        return { store, sequences, page, put };
+      }
+
+      async function refusedBySchema(write: Promise<unknown>, itemType: string | null, key: string) {
+        const error = await write.then(
+          () => undefined,
+          (e: unknown) => e,
+        );
+        expect(error).toBeInstanceOf(KnowledgeSequenceItemPropertiesError);
+        expect(error).toBeInstanceOf(KnowledgeSequenceItemInvalidError);
+        expect(error).toMatchObject({ itemType, key });
+      }
+
+      it('stores the schemas on the sequence and reads them back', async () => {
+        const { sequences, page } = await typed();
+        expect(await sequences.getSequence({ pageId: page.id })).toEqual({
+          pageId: page.id,
+          orderBy: 'timeline',
+          propertiesSchema: untypedSchema,
+          itemTypes,
+        });
+        expect(await sequences.getSequence({ pageId: 'no-such-page' })).toBeNull();
+      });
+
+      it('checks an untyped item against the sequence schema', async () => {
+        const { sequences, page, put } = await typed();
+        expect((await put('ok', { properties: { channel: 'general', extra: [1, { a: 2 }] } })).status).toBe('created');
+        await refusedBySchema(put('missing', { properties: { other: 'x' } }), null, 'channel');
+        await refusedBySchema(put('wrong', { properties: { channel: 3 } }), null, 'channel');
+        await refusedBySchema(put('none', {}), null, 'channel');
+        const { items } = await sequences.listItems({ sequenceId: page.id, read: acme, limit: 10 });
+        expect(items.map(item => item.externalId)).toEqual(['ok']);
+      });
+
+      it("checks a typed item against its type's schema only, not the sequence schema", async () => {
+        const { put } = await typed();
+        const deploy = {
+          env: 'production',
+          at: '2026-11-23T12:00:00Z',
+          ok: true,
+          ms: 1.5,
+          failed: ['a', 'b'],
+          free: { any: 'json' },
+        };
+        expect((await put('d1', { type: 'deploy', properties: deploy })).status).toBe('created');
+        await refusedBySchema(put('d2', { type: 'deploy', properties: { env: 'dev' } }), 'deploy', 'env');
+        await refusedBySchema(put('d3', { type: 'deploy', properties: { at: 'yesterday' } }), 'deploy', 'env');
+        await refusedBySchema(
+          put('d4', { type: 'deploy', properties: { env: 'staging', at: '2026-02-30T00:00:00Z' } }),
+          'deploy',
+          'at',
+        );
+        await refusedBySchema(put('d5', { type: 'deploy', properties: { env: 'staging', ok: 'yes' } }), 'deploy', 'ok');
+        await refusedBySchema(put('d6', { type: 'deploy', properties: { env: 'staging', ms: '1' } }), 'deploy', 'ms');
+        await refusedBySchema(
+          put('d7', { type: 'deploy', properties: { env: 'staging', failed: ['a', 'b', 'c', 'd'] } }),
+          'deploy',
+          'failed',
+        );
+        await refusedBySchema(
+          put('d8', { type: 'deploy', properties: { env: 'staging', failed: ['a', 2] } }),
+          'deploy',
+          'failed',
+        );
+        await refusedBySchema(
+          put('d9', { type: 'deploy', properties: { env: 'staging', failed: 'a' } }),
+          'deploy',
+          'failed',
+        );
+      });
+
+      it('leaves a type without a schema, or an undeclared type, free-form within the common limits', async () => {
+        const { put } = await typed();
+        const wouldFailEverySchema = { env: 'dev', channel: 3 };
+        expect((await put('n1', { type: 'note', properties: wouldFailEverySchema })).status).toBe('created');
+        expect((await put('u1', { type: 'unknown-kind', properties: wouldFailEverySchema })).status).toBe('created');
+        await expect(put('n2', { type: 'note', properties: { big: 'x'.repeat(17 * 1024) } })).rejects.toBeInstanceOf(
+          KnowledgeSequenceItemInvalidError,
+        );
+        await expect(put('n3', { type: 'Not A Key', properties: {} })).rejects.toBeInstanceOf(
+          KnowledgeSequenceItemInvalidError,
+        );
+      });
+
+      it('checks an edit against its new type, and clearing the type falls back to the sequence schema', async () => {
+        const { put } = await typed();
+        await put('e', { type: 'note', properties: { anything: 1 } });
+        await refusedBySchema(
+          put('e', { type: 'deploy', properties: { anything: 1 }, editedAt: at(2) }),
+          'deploy',
+          'env',
+        );
+        expect((await put('e', { type: 'deploy', properties: { env: 'staging' }, editedAt: at(3) })).item.type).toBe(
+          'deploy',
+        );
+        await refusedBySchema(put('e', { properties: { env: 'staging' }, editedAt: at(4) }), null, 'channel');
+        expect((await put('e', { properties: { channel: 'c' }, editedAt: at(5) })).item.type).toBeNull();
+      });
+
+      it('lets a sequence with no schemas take any properties', async () => {
+        const { item } = await setup();
+        expect((await item('free', 1, { type: 'deploy', properties: { env: 3 } })).status).toBe('created');
+        expect((await item('free2', 2, { properties: { channel: 3 } })).status).toBe('created');
+      });
+
+      it('refuses a bad schema or item-type map when marking, and writes nothing', async () => {
+        const { store, scope, sequences } = await setup();
+        const page = await store.createPage({ parentId: scope.id, name: 'Bad', provenance: host });
+        const manyProps = Object.fromEntries(
+          Array.from({ length: 51 }, (_, i) => [`p${i}`, { type: 'string' as const }]),
+        );
+        const manyTypes = Object.fromEntries(Array.from({ length: 51 }, (_, i) => [`t${i}`, {}]));
+        const hugeTypes = Object.fromEntries(
+          Array.from({ length: 49 }, (_, i) => [`t${i}`, { description: 'x'.repeat(500), label: 'y'.repeat(80) }]),
+        );
+        const bigEnum = { type: 'object', properties: { e: { type: 'string', enum: ['x'.repeat(70 * 1024)] } } };
+        for (const declaration of [
+          { propertiesSchema: { type: 'object', properties: manyProps } },
+          { itemTypes: { deploy: { propertiesSchema: { type: 'object', properties: manyProps } } } },
+          { itemTypes: manyTypes },
+          { itemTypes: { ...hugeTypes, big: { propertiesSchema: bigEnum } } },
+          { itemTypes: { 'Bad Key': {} } },
+          { itemTypes: { deploy: { label: 'x'.repeat(81) } } },
+          { itemTypes: { deploy: { description: 'x'.repeat(501) } } },
+          { propertiesSchema: { type: 'array' } },
+          { propertiesSchema: { type: 'object', properties: { a: { type: 'object' } } } },
+          { propertiesSchema: { type: 'object', properties: { a: { type: 'array', items: { type: 'boolean' } } } } },
+          {
+            propertiesSchema: {
+              type: 'object',
+              properties: { a: { type: 'array', items: { type: 'string' }, maxItems: 1001 } },
+            },
+          },
+          { propertiesSchema: { type: 'object', properties: { a: { type: 'string', enum: [1] } } } },
+          { propertiesSchema: { type: 'object', properties: { a: { type: 'string', enum: [] } } } },
+          { propertiesSchema: { type: 'object', properties: { a: { type: 'string' } }, required: ['b'] } },
+          { propertiesSchema: { type: 'object', properties: { a: { type: 'string', pattern: '.*' } } } },
+          { propertiesSchema: { type: 'object', properties: {}, $ref: '#' } },
+        ]) {
+          await expect(sequences.markSequence({ pageId: page.id, ...(declaration as object) })).rejects.toBeInstanceOf(
+            KnowledgeSequenceSchemaInvalidError,
+          );
+        }
+        expect(await sequences.getSequence({ pageId: page.id })).toBeNull();
+        expect(await sequences.listSequenceIds({ pageIds: [page.id] })).toEqual([]);
+      });
+
+      it('re-declares: same schemas in another key order write nothing, changed ones replace in place', async () => {
+        const { sequences, page, put } = await typed();
+        await put('kept', { type: 'deploy', properties: { env: 'production' } });
+        const reordered = {
+          note: { label: 'Note' },
+          deploy: {
+            propertiesSchema: { required: ['env'], properties: deploySchema.properties, type: 'object' as const },
+            description: 'A release to an environment',
+            label: 'Deploy',
+          },
+        };
+        expect(
+          await sequences.markSequence({ pageId: page.id, itemTypes: reordered, propertiesSchema: untypedSchema }),
+        ).toEqual({ status: 'unchanged' });
+
+        const loose = { deploy: { label: 'Deploy' } };
+        expect(await sequences.markSequence({ pageId: page.id, itemTypes: loose })).toEqual({ status: 'updated' });
+        expect(await sequences.getSequence({ pageId: page.id })).toMatchObject({
+          propertiesSchema: null,
+          itemTypes: loose,
+        });
+        expect(await sequences.markSequence({ pageId: page.id, itemTypes: loose })).toEqual({ status: 'unchanged' });
+        await expect(
+          sequences.markSequence({ pageId: page.id, orderBy: 'position', itemTypes: loose }),
+        ).rejects.toBeInstanceOf(KnowledgeSequenceOrderByChangeError);
+        expect(await sequences.getSequence({ pageId: page.id })).toMatchObject({
+          orderBy: 'timeline',
+          itemTypes: loose,
+        });
+
+        const { items } = await sequences.listItems({ sequenceId: page.id, read: acme, limit: 10 });
+        expect(items.map(item => [item.externalId, item.type, item.properties])).toEqual([
+          ['kept', 'deploy', { env: 'production' }],
+        ]);
+        expect((await put('loose', { type: 'deploy', properties: { env: 1 } })).status).toBe('created');
+
+        // Tightening again checks new writes only; items already stored stay as they are.
+        expect(await sequences.markSequence({ pageId: page.id, itemTypes: reordered })).toEqual({ status: 'updated' });
+        const after = await sequences.listItems({ sequenceId: page.id, read: acme, limit: 10 });
+        expect(after.items.map(item => [item.externalId, item.properties]).sort()).toEqual([
+          ['kept', { env: 'production' }],
+          ['loose', { env: 1 }],
+        ]);
+        await expect(put('loose', { type: 'deploy', properties: { env: 2 } })).rejects.toBeInstanceOf(
+          KnowledgeSequenceItemPropertiesError,
+        );
       });
     });
   });

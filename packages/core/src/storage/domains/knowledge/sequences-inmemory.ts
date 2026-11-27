@@ -2,6 +2,7 @@ import { knowledgeSearchWords } from '@internal/core/knowledge-compat';
 import { createKnowledgeUlid, KnowledgeNotFoundError } from './base';
 import type { KnowledgePage, KnowledgeReadScope } from './pages';
 import {
+  checkKnowledgeSequenceDeclaration,
   checkKnowledgeSequenceItemInput,
   checkKnowledgeSequenceReadLimit,
   decodeKnowledgeSequenceCursor,
@@ -19,10 +20,12 @@ import {
   KnowledgeSequenceParentNotFoundError,
   KnowledgeSequencePurgeRefusedError,
   KnowledgeSequencesStorage,
+  sameKnowledgeSequenceDeclaration,
   sameKnowledgeSequenceItem,
 } from './sequences';
 import type {
-  KnowledgeSequenceOrderBy,
+  KnowledgeSequenceRecord,
+  MarkKnowledgeSequenceInput,
   KnowledgeSequenceItemsPage,
   KnowledgeSequenceItemRecord,
   KnowledgeSequenceItemRemoveResult,
@@ -34,7 +37,7 @@ import type {
 } from './sequences';
 
 interface State {
-  sequences: Map<string, { createdAt: Date; orderBy: KnowledgeSequenceOrderBy }>;
+  sequences: Map<string, KnowledgeSequenceRecord & { createdAt: Date }>;
   /** By `JSON.stringify([sequenceId, externalId])`. */
   items: Map<string, KnowledgeSequenceItemRecord>;
 }
@@ -93,30 +96,38 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
     this.#s = { sequences: new Map(), items: new Map() };
   }
 
-  #liveSequence(sequenceId: string): KnowledgeSequenceOrderBy {
+  #liveSequence(sequenceId: string): KnowledgeSequenceRecord {
     const found = this.lookup(sequenceId);
     const sequence = this.#s.sequences.get(sequenceId);
     if (!sequence || !found || found.page.deletedAt) throw new KnowledgeSequenceNotFoundError(sequenceId);
-    return sequence.orderBy;
+    return sequence;
   }
 
   async markSequence({
     pageId,
     orderBy = 'timeline',
-  }: {
-    pageId: string;
-    orderBy?: KnowledgeSequenceOrderBy;
-  }): Promise<{ status: 'created' | 'unchanged' }> {
+    ...schemas
+  }: MarkKnowledgeSequenceInput): Promise<{ status: 'created' | 'unchanged' | 'updated' }> {
+    const declaration = checkKnowledgeSequenceDeclaration(schemas);
     const found = this.lookup(pageId);
     if (!found || found.page.deletedAt) throw new KnowledgeNotFoundError('page', pageId);
     const marked = this.#s.sequences.get(pageId);
     if (marked) {
       if (marked.orderBy !== orderBy) throw new KnowledgeSequenceOrderByChangeError(pageId, marked.orderBy);
-      return { status: 'unchanged' };
+      if (sameKnowledgeSequenceDeclaration(marked, declaration)) return { status: 'unchanged' };
+      this.#s.sequences.set(pageId, { ...marked, ...structuredClone(declaration) });
+      return { status: 'updated' };
     }
     if (found.hasChildren) throw new KnowledgeSequenceNotLeafError(pageId);
-    this.#s.sequences.set(pageId, { createdAt: new Date(), orderBy });
+    this.#s.sequences.set(pageId, { pageId, createdAt: new Date(), orderBy, ...structuredClone(declaration) });
     return { status: 'created' };
+  }
+
+  async getSequence({ pageId }: { pageId: string }): Promise<KnowledgeSequenceRecord | null> {
+    const marked = this.#s.sequences.get(pageId);
+    if (!marked) return null;
+    const { createdAt: _createdAt, ...record } = structuredClone(marked);
+    return record;
   }
 
   #positioned(sequenceId: string, skip: string): KnowledgeSequenceItemRecord[] {
@@ -161,8 +172,9 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
   }
 
   async #upsertItem(input: UpsertKnowledgeSequenceItemInput): Promise<KnowledgeSequenceItemUpsertResult> {
-    const orderBy = this.#liveSequence(input.sequenceId);
-    checkKnowledgeSequenceItemInput(input, orderBy);
+    const sequence = this.#liveSequence(input.sequenceId);
+    checkKnowledgeSequenceItemInput(input, sequence);
+    const { orderBy } = sequence;
     const key = keyOf(input.sequenceId, input.externalId);
     const stored = this.#s.items.get(key);
     const position = orderBy === 'position' ? await this.#position(input, stored) : null;

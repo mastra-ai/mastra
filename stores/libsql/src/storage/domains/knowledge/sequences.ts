@@ -7,8 +7,10 @@ import type {
   KnowledgeSequenceItemUpsertResult,
   KnowledgeSequenceOrderBy,
   KnowledgeSequencePurgeResult,
+  KnowledgeSequenceRecord,
   KnowledgeSequencesStorage,
   ListKnowledgeSequenceItemsInput,
+  MarkKnowledgeSequenceInput,
   SearchKnowledgeSequenceItemsInput,
   UpsertKnowledgeSequenceItemInput,
 } from '@mastra/core/storage';
@@ -38,7 +40,9 @@ export const KNOWLEDGE_SEQUENCE_DDL = [
   `CREATE TABLE IF NOT EXISTS "${T.sequences}" (
     pageId TEXT PRIMARY KEY,
     createdAt INTEGER NOT NULL,
-    "orderBy" TEXT NOT NULL
+    "orderBy" TEXT NOT NULL,
+    propertiesSchema TEXT,
+    itemTypes TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS "${T.items}" (
     id TEXT PRIMARY KEY,
@@ -100,6 +104,13 @@ const toItem = (row: Row): KnowledgeSequenceItemRecord => ({
   writtenBy: String(row.writtenBy),
 });
 
+const toSequence = (row: Row): KnowledgeSequenceRecord => ({
+  pageId: String(row.pageId),
+  orderBy: String(row.orderBy) as KnowledgeSequenceOrderBy,
+  propertiesSchema: row.propertiesSchema === null ? null : JSON.parse(String(row.propertiesSchema)),
+  itemTypes: row.itemTypes === null ? null : JSON.parse(String(row.itemTypes)),
+});
+
 /** The `types`/`untyped` filter as a predicate on `type`. */
 function typeSql(alias: string, filter: { types: string[]; untyped: boolean }): { sql: string; args: InValue[] } {
   const terms: string[] = [];
@@ -151,13 +162,13 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
     return row ? { deletedAt: row.deletedAt ? Date.parse(String(row.deletedAt)) : null } : undefined;
   }
 
-  async #liveSequence(tx: Executor, sequenceId: string): Promise<KnowledgeSequenceOrderBy> {
+  async #liveSequence(tx: Executor, sequenceId: string): Promise<KnowledgeSequenceRecord> {
     const { rows } = await tx.execute({
-      sql: `SELECT t."orderBy" FROM "${T.sequences}" t JOIN "${PAGES}" p ON p.id = t.pageId WHERE t.pageId = ? AND p.deletedAt IS NULL`,
+      sql: `SELECT t.* FROM "${T.sequences}" t JOIN "${PAGES}" p ON p.id = t.pageId WHERE t.pageId = ? AND p.deletedAt IS NULL`,
       args: [sequenceId],
     });
     if (rows.length === 0) throw new (await loadCore()).KnowledgeSequenceNotFoundError(sequenceId);
-    return String(rows[0]!.orderBy) as KnowledgeSequenceOrderBy;
+    return toSequence(rows[0]!);
   }
 
   /** The key `input` places its item at; reads its neighbours inside the write transaction. */
@@ -230,22 +241,34 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
   async markSequence({
     pageId,
     orderBy = 'timeline',
-  }: {
-    pageId: string;
-    orderBy?: KnowledgeSequenceOrderBy;
-  }): Promise<{ status: 'created' | 'unchanged' }> {
-    const { KnowledgeNotFoundError, KnowledgeSequenceNotLeafError, KnowledgeSequenceOrderByChangeError } =
-      await loadCore();
+    ...schemas
+  }: MarkKnowledgeSequenceInput): Promise<{ status: 'created' | 'unchanged' | 'updated' }> {
+    const {
+      checkKnowledgeSequenceDeclaration,
+      KnowledgeNotFoundError,
+      KnowledgeSequenceNotLeafError,
+      KnowledgeSequenceOrderByChangeError,
+      sameKnowledgeSequenceDeclaration,
+    } = await loadCore();
+    const declaration = checkKnowledgeSequenceDeclaration(schemas);
+    const stored = [
+      declaration.propertiesSchema === null ? null : JSON.stringify(declaration.propertiesSchema),
+      declaration.itemTypes === null ? null : JSON.stringify(declaration.itemTypes),
+    ];
     return this.#transaction(async tx => {
       const page = await this.#page(tx, pageId);
       if (!page || page.deletedAt !== null) throw new KnowledgeNotFoundError('page', pageId);
-      const marked = (
-        await tx.execute({ sql: `SELECT "orderBy" FROM "${T.sequences}" WHERE pageId = ?`, args: [pageId] })
-      ).rows[0];
-      if (marked) {
-        const current = String(marked.orderBy) as KnowledgeSequenceOrderBy;
-        if (current !== orderBy) throw new KnowledgeSequenceOrderByChangeError(pageId, current);
-        return { status: 'unchanged' as const };
+      const row = (await tx.execute({ sql: `SELECT * FROM "${T.sequences}" WHERE pageId = ?`, args: [pageId] }))
+        .rows[0];
+      if (row) {
+        const marked = toSequence(row);
+        if (marked.orderBy !== orderBy) throw new KnowledgeSequenceOrderByChangeError(pageId, marked.orderBy);
+        if (sameKnowledgeSequenceDeclaration(marked, declaration)) return { status: 'unchanged' as const };
+        await tx.execute({
+          sql: `UPDATE "${T.sequences}" SET propertiesSchema = ?, itemTypes = ? WHERE pageId = ?`,
+          args: [...stored, pageId],
+        });
+        return { status: 'updated' as const };
       }
       const child = await tx.execute({
         sql: `SELECT 1 FROM "${PAGES}" WHERE parentId = ? AND deletedAt IS NULL LIMIT 1`,
@@ -253,11 +276,17 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
       });
       if (child.rows.length > 0) throw new KnowledgeSequenceNotLeafError(pageId);
       await tx.execute({
-        sql: `INSERT INTO "${T.sequences}" (pageId, createdAt, "orderBy") VALUES (?, ?, ?)`,
-        args: [pageId, Date.now(), orderBy],
+        sql: `INSERT INTO "${T.sequences}" (pageId, createdAt, "orderBy", propertiesSchema, itemTypes) VALUES (?, ?, ?, ?, ?)`,
+        args: [pageId, Date.now(), orderBy, ...stored],
       });
       return { status: 'created' as const };
     });
+  }
+
+  async getSequence({ pageId }: { pageId: string }): Promise<KnowledgeSequenceRecord | null> {
+    const row = (await this.#read.execute({ sql: `SELECT * FROM "${T.sequences}" WHERE pageId = ?`, args: [pageId] }))
+      .rows[0];
+    return row ? toSequence(row) : null;
   }
 
   async listSequenceIds({ pageIds }: { pageIds: string[] }): Promise<string[]> {
@@ -280,8 +309,9 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
       sameKnowledgeSequenceItem,
     } = await loadCore();
     return this.#transaction(async tx => {
-      const orderBy = await this.#liveSequence(tx, input.sequenceId);
-      checkKnowledgeSequenceItemInput(input, orderBy);
+      const sequence = await this.#liveSequence(tx, input.sequenceId);
+      checkKnowledgeSequenceItemInput(input, sequence);
+      const { orderBy } = sequence;
       const stored = await this.#item(tx, input.sequenceId, input.externalId);
       const position = orderBy === 'position' ? await this.#position(tx, input, stored) : null;
       const content = knowledgeSequenceItemContent(input);

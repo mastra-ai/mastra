@@ -41,6 +41,73 @@ export type KnowledgeSequenceOrderBy = 'timeline' | 'position';
 /** A position key: `[0-9a-z]`, never ending in `0`, as `knowledgePositionBetween` makes. */
 export const KNOWLEDGE_SEQUENCE_POSITION = /^[0-9a-z]*[1-9a-z]$/;
 
+/** At most this many properties in one properties schema. */
+export const MAX_KNOWLEDGE_SEQUENCE_SCHEMA_PROPERTIES = 50;
+/** At most this many entries in a scalar array property, and the largest `maxItems`. */
+export const MAX_KNOWLEDGE_SEQUENCE_SCHEMA_ARRAY_ITEMS = 1000;
+/** At most this many declared item types on one sequence. */
+export const MAX_KNOWLEDGE_SEQUENCE_ITEM_TYPES = 50;
+/** At most this many bytes for a sequence's `itemTypes`, and for its `propertiesSchema`, as JSON. */
+export const MAX_KNOWLEDGE_SEQUENCE_DECLARATION_BYTES = 64 * 1024;
+export const MAX_KNOWLEDGE_SEQUENCE_ITEM_TYPE_LABEL = 80;
+export const MAX_KNOWLEDGE_SEQUENCE_ITEM_TYPE_DESCRIPTION = 500;
+
+/** One property of a properties schema: a scalar, an ISO 8601 `date` string, or an array of scalars. */
+export type KnowledgeSequencePropertySchema =
+  | { type: 'string'; enum?: string[]; description?: string }
+  | { type: 'number'; enum?: number[]; description?: string }
+  | { type: 'boolean'; description?: string }
+  | { type: 'date'; description?: string }
+  | {
+      type: 'array';
+      items: { type: 'string' | 'number' };
+      /** At most {@link MAX_KNOWLEDGE_SEQUENCE_SCHEMA_ARRAY_ITEMS}, which is also the default. */
+      maxItems?: number;
+      description?: string;
+    };
+
+/**
+ * A small JSON Schema subset for item properties, the same one page properties will use. Keys it
+ * doesn't name are allowed and unchecked (`additionalProperties` is always true).
+ */
+export interface KnowledgeSequencePropertiesSchema {
+  type: 'object';
+  /** At most {@link MAX_KNOWLEDGE_SEQUENCE_SCHEMA_PROPERTIES}. */
+  properties: Record<string, KnowledgeSequencePropertySchema>;
+  /** Keys of `properties` an item must have. */
+  required?: string[];
+}
+
+/** A declared item type: how to show it, and the schema its items' properties must meet, if any. */
+export interface KnowledgeSequenceItemType {
+  label?: string;
+  description?: string;
+  propertiesSchema?: KnowledgeSequencePropertiesSchema;
+}
+
+/** Declared item types by type key. Items may also use types that aren't declared; those are free-form. */
+export type KnowledgeSequenceItemTypes = Record<string, KnowledgeSequenceItemType>;
+
+/** What a sequence was marked with. */
+export interface KnowledgeSequenceRecord {
+  pageId: string;
+  orderBy: KnowledgeSequenceOrderBy;
+  /** The schema for untyped items; null for none. */
+  propertiesSchema: KnowledgeSequencePropertiesSchema | null;
+  itemTypes: KnowledgeSequenceItemTypes | null;
+}
+
+/** The input to {@link KnowledgeSequencesStorage.markSequence}. */
+export interface MarkKnowledgeSequenceInput {
+  pageId: string;
+  /** Default `timeline`. Fixed once marked. */
+  orderBy?: KnowledgeSequenceOrderBy;
+  /** The schema for untyped items. Left out means none. */
+  propertiesSchema?: KnowledgeSequencePropertiesSchema | null;
+  /** Left out means none. */
+  itemTypes?: KnowledgeSequenceItemTypes | null;
+}
+
 export interface KnowledgeSequenceItemLink {
   /** An http(s) URL. */
   url: string;
@@ -232,6 +299,35 @@ export class KnowledgeSequenceItemInvalidError extends TypeError {
   }
 }
 
+/**
+ * The item's properties don't meet the schema that applies to it: its type's, or the sequence's for
+ * an untyped item. Names the type (null when untyped) and the first failing key. Nothing was written.
+ */
+export class KnowledgeSequenceItemPropertiesError extends KnowledgeSequenceItemInvalidError {
+  constructor(
+    readonly itemType: string | null,
+    readonly key: string,
+    problem: string,
+  ) {
+    super(
+      'properties',
+      `A sequence item's ${JSON.stringify(key)} property ${problem} (${itemType ? `type ${JSON.stringify(itemType)}` : 'untyped item'}).`,
+    );
+    this.name = 'KnowledgeSequenceItemPropertiesError';
+  }
+}
+
+/** A sequence's `propertiesSchema` or `itemTypes` breaks the schema rules or a limit. Nothing was written. */
+export class KnowledgeSequenceSchemaInvalidError extends TypeError {
+  constructor(
+    readonly path: string,
+    message: string,
+  ) {
+    super(`A sequence's ${path} ${message}`);
+    this.name = 'KnowledgeSequenceSchemaInvalidError';
+  }
+}
+
 /** `externalParentId` names no item of the item's own sequence. Nothing was written. */
 export class KnowledgeSequenceParentNotFoundError extends Error {
   constructor(
@@ -265,13 +361,15 @@ export class KnowledgeSequencePurgeRefusedError extends Error {
 export abstract class KnowledgeSequencesStorage {
   /**
    * Makes a live page a sequence. Refuses with {@link KnowledgeSequenceNotLeafError} when it has
-   * live child pages, and `KnowledgeNotFoundError` when it isn't live. Repeating it is `unchanged`;
-   * repeating it with another `orderBy` (default `timeline`) is {@link KnowledgeSequenceOrderByChangeError}.
+   * live child pages, `KnowledgeNotFoundError` when it isn't live, and
+   * {@link KnowledgeSequenceSchemaInvalidError} for a bad schema. Marking it again is a whole
+   * re-declaration: the same `orderBy` and schemas (key order aside) are `unchanged` and write
+   * nothing; changed schemas replace the stored ones in place (`updated`), checking no existing item;
+   * another `orderBy` (default `timeline`) is {@link KnowledgeSequenceOrderByChangeError}.
    */
-  abstract markSequence(input: {
-    pageId: string;
-    orderBy?: KnowledgeSequenceOrderBy;
-  }): Promise<{ status: 'created' | 'unchanged' }>;
+  abstract markSequence(input: MarkKnowledgeSequenceInput): Promise<{ status: 'created' | 'unchanged' | 'updated' }>;
+  /** What the page was marked with, live or deleted, or null when it isn't a sequence. For the host; no read scope. */
+  abstract getSequence(input: { pageId: string }): Promise<KnowledgeSequenceRecord | null>;
   /** The sequences among `pageIds`, live or deleted. */
   abstract listSequenceIds(input: { pageIds: string[] }): Promise<string[]>;
   /**
@@ -387,6 +485,216 @@ export function knowledgeSequenceItemSearchText(
   return parts.join('\n').toLowerCase();
 }
 
+function schemaInvalid(path: string, message: string): never {
+  throw new KnowledgeSequenceSchemaInvalidError(path, message);
+}
+
+function checkKeys(value: object, allowed: string[], path: string): void {
+  for (const key of Object.keys(value))
+    if (!allowed.includes(key)) schemaInvalid(path, `takes no ${JSON.stringify(key)}.`);
+}
+
+function checkDescription(value: unknown, path: string): void {
+  if (value === undefined) return;
+  if (typeof value !== 'string' || value.length > MAX_KNOWLEDGE_SEQUENCE_ITEM_TYPE_DESCRIPTION) {
+    schemaInvalid(path, `must be a string of at most ${MAX_KNOWLEDGE_SEQUENCE_ITEM_TYPE_DESCRIPTION} characters.`);
+  }
+}
+
+function checkPropertySchema(value: unknown, path: string): void {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) schemaInvalid(path, 'must be an object.');
+  const property = value as Record<string, unknown>;
+  checkDescription(property.description, `${path}.description`);
+  switch (property.type) {
+    case 'string':
+    case 'number': {
+      checkKeys(property, ['type', 'enum', 'description'], path);
+      if (property.enum === undefined) return;
+      if (
+        !Array.isArray(property.enum) ||
+        property.enum.length === 0 ||
+        !property.enum.every(entry =>
+          property.type === 'string' ? typeof entry === 'string' : typeof entry === 'number' && Number.isFinite(entry),
+        )
+      ) {
+        schemaInvalid(`${path}.enum`, `must be a non-empty list of ${property.type}s.`);
+      }
+      return;
+    }
+    case 'boolean':
+    case 'date':
+      checkKeys(property, ['type', 'description'], path);
+      return;
+    case 'array': {
+      checkKeys(property, ['type', 'items', 'maxItems', 'description'], path);
+      const items = property.items as Record<string, unknown> | undefined;
+      if (!items || typeof items !== 'object' || (items.type !== 'string' && items.type !== 'number')) {
+        schemaInvalid(`${path}.items`, "must be { type: 'string' } or { type: 'number' }.");
+      }
+      checkKeys(items, ['type'], `${path}.items`);
+      const { maxItems } = property;
+      if (
+        maxItems !== undefined &&
+        (!Number.isInteger(maxItems) ||
+          (maxItems as number) < 0 ||
+          (maxItems as number) > MAX_KNOWLEDGE_SEQUENCE_SCHEMA_ARRAY_ITEMS)
+      ) {
+        schemaInvalid(
+          `${path}.maxItems`,
+          `must be a whole number from 0 to ${MAX_KNOWLEDGE_SEQUENCE_SCHEMA_ARRAY_ITEMS}.`,
+        );
+      }
+      return;
+    }
+    default:
+      schemaInvalid(`${path}.type`, "must be 'string', 'number', 'boolean', 'date' or 'array'.");
+  }
+}
+
+function checkPropertiesSchema(value: unknown, path: string): void {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) schemaInvalid(path, 'must be an object.');
+  const schema = value as Record<string, unknown>;
+  checkKeys(schema, ['type', 'properties', 'required'], path);
+  if (schema.type !== 'object') schemaInvalid(`${path}.type`, "must be 'object'.");
+  const properties = schema.properties;
+  if (!properties || typeof properties !== 'object' || Array.isArray(properties)) {
+    schemaInvalid(`${path}.properties`, 'must be an object.');
+  }
+  const keys = Object.keys(properties);
+  if (keys.length > MAX_KNOWLEDGE_SEQUENCE_SCHEMA_PROPERTIES) {
+    schemaInvalid(`${path}.properties`, `are at most ${MAX_KNOWLEDGE_SEQUENCE_SCHEMA_PROPERTIES}.`);
+  }
+  for (const key of keys)
+    checkPropertySchema((properties as Record<string, unknown>)[key], `${path}.properties.${key}`);
+  if (schema.required !== undefined) {
+    if (
+      !Array.isArray(schema.required) ||
+      !schema.required.every(key => typeof key === 'string' && keys.includes(key))
+    ) {
+      schemaInvalid(`${path}.required`, 'must list keys of properties.');
+    }
+  }
+}
+
+function checkDeclarationSize(value: unknown, path: string): void {
+  if (new TextEncoder().encode(JSON.stringify(value)).length > MAX_KNOWLEDGE_SEQUENCE_DECLARATION_BYTES) {
+    schemaInvalid(path, `is at most ${MAX_KNOWLEDGE_SEQUENCE_DECLARATION_BYTES} bytes as JSON.`);
+  }
+}
+
+/**
+ * Checks a sequence declaration's `propertiesSchema` and `itemTypes` (plain JSON, the schema subset,
+ * the limits) and returns them in stored form: absent and null both become null.
+ * Refuses with {@link KnowledgeSequenceSchemaInvalidError}.
+ */
+export function checkKnowledgeSequenceDeclaration(
+  input: Pick<MarkKnowledgeSequenceInput, 'propertiesSchema' | 'itemTypes'>,
+): Pick<KnowledgeSequenceRecord, 'propertiesSchema' | 'itemTypes'> {
+  const propertiesSchema = input.propertiesSchema ?? null;
+  const itemTypes = input.itemTypes ?? null;
+  if (propertiesSchema !== null) {
+    if (!isJsonValue(propertiesSchema)) schemaInvalid('propertiesSchema', 'must be plain JSON.');
+    checkDeclarationSize(propertiesSchema, 'propertiesSchema');
+    checkPropertiesSchema(propertiesSchema, 'propertiesSchema');
+  }
+  if (itemTypes !== null) {
+    if (!itemTypes || typeof itemTypes !== 'object' || Array.isArray(itemTypes) || !isJsonValue(itemTypes)) {
+      schemaInvalid('itemTypes', 'must be a plain JSON object.');
+    }
+    checkDeclarationSize(itemTypes, 'itemTypes');
+    const keys = Object.keys(itemTypes);
+    if (keys.length > MAX_KNOWLEDGE_SEQUENCE_ITEM_TYPES) {
+      schemaInvalid('itemTypes', `are at most ${MAX_KNOWLEDGE_SEQUENCE_ITEM_TYPES}.`);
+    }
+    for (const key of keys) {
+      const path = `itemTypes.${key}`;
+      if (!KNOWLEDGE_SEQUENCE_ITEM_TYPE.test(key)) schemaInvalid(path, 'must be keyed by an item type key.');
+      const entry = itemTypes[key] as unknown;
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) schemaInvalid(path, 'must be an object.');
+      const declared = entry as Record<string, unknown>;
+      checkKeys(declared, ['label', 'description', 'propertiesSchema'], path);
+      if (
+        declared.label !== undefined &&
+        (typeof declared.label !== 'string' || declared.label.length > MAX_KNOWLEDGE_SEQUENCE_ITEM_TYPE_LABEL)
+      ) {
+        schemaInvalid(
+          `${path}.label`,
+          `must be a string of at most ${MAX_KNOWLEDGE_SEQUENCE_ITEM_TYPE_LABEL} characters.`,
+        );
+      }
+      checkDescription(declared.description, `${path}.description`);
+      if (declared.propertiesSchema !== undefined)
+        checkPropertiesSchema(declared.propertiesSchema, `${path}.propertiesSchema`);
+    }
+  }
+  return { propertiesSchema, itemTypes };
+}
+
+/** Whether two stored declarations are the same, key order aside. */
+export function sameKnowledgeSequenceDeclaration(
+  a: Pick<KnowledgeSequenceRecord, 'propertiesSchema' | 'itemTypes'>,
+  b: Pick<KnowledgeSequenceRecord, 'propertiesSchema' | 'itemTypes'>,
+): boolean {
+  return (
+    canonicalJson(a.propertiesSchema) === canonicalJson(b.propertiesSchema) &&
+    canonicalJson(a.itemTypes) === canonicalJson(b.itemTypes)
+  );
+}
+
+/**
+ * The one schema an item's properties must meet: its type's when that type is declared with one;
+ * the sequence's for an untyped item; otherwise none (free-form).
+ */
+export function knowledgeSequenceItemSchema(
+  sequence: Pick<KnowledgeSequenceRecord, 'propertiesSchema' | 'itemTypes'>,
+  type: string | null,
+): KnowledgeSequencePropertiesSchema | null {
+  if (type === null) return sequence.propertiesSchema;
+  return sequence.itemTypes?.[type]?.propertiesSchema ?? null;
+}
+
+function checkItemProperties(
+  schema: KnowledgeSequencePropertiesSchema,
+  type: string | null,
+  properties: Record<string, unknown> | null,
+): void {
+  const required = new Set(schema.required ?? []);
+  for (const [key, property] of Object.entries(schema.properties)) {
+    const fail = (problem: string): never => {
+      throw new KnowledgeSequenceItemPropertiesError(type, key, problem);
+    };
+    if (!properties || !Object.hasOwn(properties, key)) {
+      if (required.has(key)) fail('is required');
+      continue;
+    }
+    const value = properties[key];
+    switch (property.type) {
+      case 'string':
+      case 'number':
+        if (property.type === 'string' ? typeof value !== 'string' : typeof value !== 'number') {
+          fail(`must be a ${property.type}`);
+        }
+        if (property.enum && !(property.enum as unknown[]).includes(value)) fail('is not one of its allowed values');
+        break;
+      case 'boolean':
+        if (typeof value !== 'boolean') fail('must be a boolean');
+        break;
+      case 'date':
+        if (typeof value !== 'string' || !parseKnowledgeSequenceTime(value)) fail('must be an ISO 8601 date');
+        break;
+      case 'array': {
+        const max = property.maxItems ?? MAX_KNOWLEDGE_SEQUENCE_SCHEMA_ARRAY_ITEMS;
+        if (!Array.isArray(value)) fail(`must be a list of ${property.items.type}s`);
+        if ((value as unknown[]).length > max) fail(`takes at most ${max} entries`);
+        if (!(value as unknown[]).every(entry => typeof entry === property.items.type)) {
+          fail(`must be a list of ${property.items.type}s`);
+        }
+        break;
+      }
+    }
+  }
+}
+
 /**
  * Whether `value` survives JSON unchanged, so what's validated, measured, compared and stored is
  * the same value: plain objects and arrays of own, enumerable data properties (no getters, symbol
@@ -418,10 +726,16 @@ function invalid(field: string, message: string): never {
   throw new KnowledgeSequenceItemInvalidError(field, `A sequence item's ${field} ${message}`);
 }
 
+/**
+ * Checks an item against the item rules and the schema that applies to it
+ * ({@link knowledgeSequenceItemSchema}). Refuses with {@link KnowledgeSequenceItemInvalidError}, or
+ * {@link KnowledgeSequenceItemPropertiesError} for the schema.
+ */
 export function checkKnowledgeSequenceItemInput(
   input: UpsertKnowledgeSequenceItemInput,
-  orderBy: KnowledgeSequenceOrderBy,
+  sequence: Pick<KnowledgeSequenceRecord, 'orderBy' | 'propertiesSchema' | 'itemTypes'>,
 ): void {
+  const { orderBy } = sequence;
   if (!input.externalId) throw new TypeError('A sequence item needs an externalId.');
   const placements = [input.position, input.after, input.before].filter(value => value !== undefined);
   if (orderBy === 'timeline') {
@@ -486,6 +800,8 @@ export function checkKnowledgeSequenceItemInput(
   if (!content.title && !content.body && content.links.length === 0 && !content.properties) {
     invalid('content', 'needs a title, body, link or property.');
   }
+  const schema = knowledgeSequenceItemSchema(sequence, content.type);
+  if (schema) checkItemProperties(schema, content.type, content.properties);
 }
 
 /**
