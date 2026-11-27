@@ -761,31 +761,41 @@ export function describeRestartOccurrenceCases({
         });
       }, 20_000);
 
-      // The old worker's sleep timer stays live and publishes the next step too. The first of the two
-      // deliveries claims it, and its guard refuses the other.
+      // The old worker's sleep timer stays live and publishes the next step too. Here the restart's
+      // timer fires first, and the old timer's copy of the next step arrives while the restart's runs
+      // it: the guard refuses the old copy.
       it('restarted while it sleeps', async () => {
         const steps = holdableSteps();
         const workflow = createWorkflow({ id: `restart-sleep-${randomUUID()}`, inputSchema: Num, outputSchema: Num })
           .then(steps.step('a'))
-          .sleep(500)
+          .sleep(10)
           .then(steps.step('after'))
           .commit();
         await withHost({ [workflow.id]: workflow }, steps.releaseAll, async ({ driver }) => {
-          const run = await workflow.createRun();
-          const firstAfter = steps.holdAt('after');
-          const started = run.start({ inputData: { n: 0 } });
-          await expect
-            .poll(async () => (await storedRun(workflow.id, run.runId))?.activePaths, { timeout: 5_000 })
-            .toEqual([1]);
-          const restarted = restartRun(workflow, run.runId);
-          await firstAfter.entered;
-          await expect.poll(() => stepRuns(driver, run.runId, workflow.id, [2]).length, { timeout: 5_000 }).toBe(2);
-          await settleDeliveries(stepRuns(driver, run.runId, workflow.id, [2]).slice(1));
-          firstAfter.release();
-          expect(await restarted).toMatchObject({ status: 'success', result: { n: 2 } });
-          await drainHandlers();
-          expect(await started).toMatchObject({ status: 'success', result: { n: 2 } });
-          expect(steps.calls).toEqual({ a: 1, after: 1 });
+          const oldWake = holdPublishes(driver, event => isStepRun(event, workflow.id, [2]) && !event.data.restart);
+          try {
+            const run = await workflow.createRun();
+            const started = run.start({ inputData: { n: 0 } });
+            await oldWake.count(1);
+
+            const after = steps.holdAt('after');
+            const restarted = restartRun(workflow, run.runId);
+            await after.entered;
+            const restartDelivery = stepRuns(driver, run.runId, workflow.id, [2]).at(-1)!;
+            await settleDeliveries([await oldWake.release(0)]);
+            expect((await storedRun(workflow.id, run.runId))?.context.after).toMatchObject({
+              status: 'running',
+              metadata: { startedBy: restartDelivery.id },
+            });
+
+            after.release();
+            expect(await restarted).toMatchObject({ status: 'success', result: { n: 2 } });
+            await drainHandlers();
+            expect(await started).toMatchObject({ status: 'success', result: { n: 2 } });
+            expect(steps.calls).toEqual({ a: 1, after: 1 });
+          } finally {
+            oldWake.restore();
+          }
         });
       }, 20_000);
     });
