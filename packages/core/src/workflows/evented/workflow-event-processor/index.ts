@@ -1322,8 +1322,9 @@ export class WorkflowEventProcessor extends EventProcessor {
     // longer save it. (On storage v2 a step event of that occurrence delivered again reads the claim
     // as the occurrence it expects and can take the step back, COR-1666.) It then updates only the
     // run's header: rewriting the run from what the caller read would undo results saved since, and
-    // would reopen a run that ended since. The run's stored request context is written only by the
-    // claims, so a restart that claims nothing leaves the old one there.
+    // would reopen a run that ended since. The run's stored request context is written by the claims,
+    // or by the header update when every claimed step had saved; a restart with nothing to claim
+    // leaves the old one there.
     const takesOver = guardsSteps && !!restart && !completed && !restart.isPreFirstStepRestart && !!header && !!eventId;
     // On stores with step guards, a restart leaves a run that ended or suspended since its caller read
     // it as it is, also where it writes the run whole. A nested run that has not started yet is still
@@ -1371,9 +1372,16 @@ export class WorkflowEventProcessor extends EventProcessor {
           return;
         }
       }
-      // When every claimed step had saved its result, the header is left as it is: the finished-step
-      // check reads from it whether the run already went past those steps.
-      if (!applied && claim.outcome !== 'all saved') {
+      // When every claimed step had saved its result, the header's cursor is left as it is: the
+      // finished-step check reads from it whether the run already went past those steps. Only the
+      // restart's request context is written, which the continuation from those results reads.
+      if (claim.outcome === 'all saved') {
+        await runStorage.updateHeader({
+          status: header.status,
+          requestContext: withoutAuthToken(requestContext),
+          expectedStatus: header.status,
+        });
+      } else if (!applied) {
         const updated = await runStorage.updateHeader({
           status: 'running',
           activePaths: executionPath ?? restart.activePaths,

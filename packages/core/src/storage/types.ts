@@ -2380,6 +2380,8 @@ export interface UpdateWorkflowStateOptions {
   resumeClaimIntent?: WorkflowRunState['resumeClaimIntent'];
   /** @internal See `WorkflowRunState.appliedTriggerEventId`. */
   appliedTriggerEventId?: string;
+  /** @internal Replaces the run's stored request context. */
+  requestContext?: Record<string, any>;
   /**
    * Optional compare-and-set guard. When provided, the update is applied only if the
    * persisted snapshot's status matches one of these values. Otherwise the update is a

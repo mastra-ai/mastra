@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { MockInstance } from 'vitest';
 import { z } from 'zod/v4';
+import { RequestContext } from '../../../di';
 import type { Event } from '../../../events/types';
 import { Mastra } from '../../../mastra';
 import type { MastraStorage } from '../../../storage';
@@ -42,6 +43,8 @@ function within<T>(promise: Promise<T>, what: string, ms = 5_000): Promise<T> {
 /** Steps that count their executions and can be held inside their body at a given execution. */
 function holdableSteps() {
   const calls: Record<string, number> = {};
+  /** The `restartedBy` request context value each step's last execution saw. */
+  const restartedBy: Record<string, string | undefined> = {};
   const holds = new Map<
     string,
     { at: number; entered: ReturnType<typeof deferred>; released: ReturnType<typeof deferred> }
@@ -57,8 +60,9 @@ function holdableSteps() {
       id,
       inputSchema: Num,
       outputSchema: Num,
-      execute: async ({ inputData }) => {
+      execute: async ({ inputData, requestContext }) => {
         const call = (calls[id] = (calls[id] ?? 0) + 1);
+        restartedBy[id] = requestContext.get('restartedBy') as string | undefined;
         const hold = holds.get(id);
         if (hold?.at === call) {
           hold.entered.resolve();
@@ -68,7 +72,7 @@ function holdableSteps() {
       },
     });
   const releaseAll = () => holds.forEach(hold => hold.released.resolve());
-  return { calls, step, holdAt, releaseAll };
+  return { calls, restartedBy, step, holdAt, releaseAll };
 }
 
 export function describeRestartOccurrenceCases({
@@ -138,8 +142,11 @@ export function describeRestartOccurrenceCases({
     }
 
     /** `restart()` called on a run object of its own, as another caller would. */
-    const restartRun = async (workflow: { createRun: (options: { runId: string }) => Promise<any> }, runId: string) =>
-      (await workflow.createRun({ runId })).restart();
+    const restartRun = async (
+      workflow: { createRun: (options: { runId: string }) => Promise<any> },
+      runId: string,
+      requestContext?: RequestContext,
+    ) => (await workflow.createRun({ runId })).restart({ requestContext });
 
     /**
      * Keeps the next `count` restart events from reaching the workers, after their callers read the
@@ -775,7 +782,7 @@ export function describeRestartOccurrenceCases({
           const run = await wf.workflow.createRun();
           const started = run.start({ inputData: { n: 0 } });
           await held.count(1);
-          const restarted = restartRun(wf.workflow, run.runId);
+          const restarted = restartRun(wf.workflow, run.runId, new RequestContext([['restartedBy', 'B']]));
           await held.count(2);
           // b's save lands; the old worker stops before c's event goes out.
           await held.release(0);
@@ -787,6 +794,8 @@ export function describeRestartOccurrenceCases({
           await drainHandlers();
           expect(await started).toMatchObject({ status: 'success', result: { n: 3 } });
           expect(wf.calls).toEqual({ a: 1, b: 1, c: 1 });
+          // The step after the kept result runs with the request context the restart was given.
+          expect(wf.restartedBy.c).toBe('B');
         } finally {
           held.restore();
         }

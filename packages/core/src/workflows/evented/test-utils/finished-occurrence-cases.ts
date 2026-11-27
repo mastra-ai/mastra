@@ -10,6 +10,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
+import { RequestContext } from '../../../di';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { PubSub } from '../../../events/pubsub';
 import type { Event } from '../../../events/types';
@@ -547,7 +548,12 @@ export function describeFinishedOccurrenceCases({
       {
         beforeRestart,
         stopA,
-      }: { beforeRestart?: (runId: string) => Promise<void>; stopA?: (event: Event) => boolean } = {},
+        requestContext,
+      }: {
+        beforeRestart?: (runId: string) => Promise<void>;
+        stopA?: (event: Event) => boolean;
+        requestContext?: RequestContext;
+      } = {},
     ) {
       // The id the broker gives a held event once it is published. `randomUUID()` repeats across tests.
       let published = 0;
@@ -583,7 +589,7 @@ export function describeFinishedOccurrenceCases({
         return 'drop';
       });
       // B's own pubsub never sees the run end, so the restart only settles if it throws.
-      void (await b.workflow.createRun({ runId: run.runId })).restart().catch(restartEvent.reject);
+      void (await b.workflow.createRun({ runId: run.runId })).restart({ requestContext }).catch(restartEvent.reject);
       await restartEvent.promise;
       const handleNext = async () => {
         const event = queue.shift()!;
@@ -602,7 +608,8 @@ export function describeFinishedOccurrenceCases({
     }
 
     // #30275 with step guards: A saved the step's result before B's restart claimed it, and stopped
-    // before the next step. The claim keeps the saved result, and B continues the run from it.
+    // before the next step. The claim keeps the saved result, and B continues the run from it with
+    // the request context the restart was given.
     it.runIf(stepGuards)(
       'continues from a step result saved just before a restart claimed the step',
       async () => {
@@ -610,16 +617,27 @@ export function describeFinishedOccurrenceCases({
         const build = (replica: string) =>
           createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
             .then(work('first', async id => void executions.push(`${replica}:${id}`)))
-            .then(work('second', async id => void executions.push(`${replica}:${id}`)))
+            .then(
+              createStep({
+                id: 'second',
+                inputSchema: Num,
+                outputSchema: Num,
+                execute: async ({ inputData, requestContext }) => {
+                  executions.push(`${replica}:second:${requestContext.get('restartedBy') ?? 'none'}`);
+                  return inputData;
+                },
+              }),
+            )
             .commit();
         const { run, pump, saveOnA } = await restartAroundStepSave(build, [0], {
           stopA: event => event.type === 'workflow.step.run' && samePath(event, [1]),
+          requestContext: new RequestContext([['restartedBy', 'B']]),
         });
 
         await saveOnA();
         await pump();
         await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
-        expect(executions).toEqual(['A:first', 'B:second']);
+        expect(executions).toEqual(['A:first', 'B:second:B']);
       },
       20_000,
     );
