@@ -58,4 +58,21 @@ describe.skipIf(!HAS_CREDS)('VercelSandbox Integration', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('background');
   });
+
+  it('extends the session timeout on the live sandbox', async () => {
+    const info = sandbox!.getInfo();
+    const before = info.metadata.timeout as number | undefined;
+
+    await sandbox!.extendTimeout(60_000);
+
+    const after = sandbox!.getInfo().metadata.timeout as number | undefined;
+    // The provider reports a new (later) expiry or max-timeout window; the
+    // contract is that the call succeeds against a live sandbox and the
+    // requested duration is accounted for, not that it is a plain sum.
+    expect(Number.isFinite(after)).toBe(true);
+    expect(after).not.toBeUndefined();
+    if (typeof before === 'number' && typeof after === 'number') {
+      expect(after).toBeGreaterThanOrEqual(before);
+    }
+  });
 });

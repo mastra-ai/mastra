@@ -295,6 +295,20 @@ await handle.kill()
 
 See the [`SandboxProcessManager` reference](/reference/workspace/process-manager) for the full API.
 
+### Extending the timeout
+
+A running sandbox expires when its timeout elapses. `extendTimeout(ms)` asks Vercel to keep the session alive for `ms` more milliseconds, so a long agent run can outlive the timeout it was created with:
+
+```typescript
+const sandbox = new VercelSandbox({ timeout: 300_000 })
+await sandbox.start()
+
+// Keeps the same session alive for another 10 minutes.
+await sandbox.extendTimeout(600_000)
+```
+
+If the sandbox isn't running yet, `extendTimeout()` starts it first. Repeated calls reuse the same session instead of creating a new one. Vercel caps the total session duration by plan, so extending past that limit rejects with the provider error unchanged.
+
 :::note
 
 The Vercel Sandbox SDK doesn't expose a stdin channel for running commands, so `handle.sendStdin()` throws.

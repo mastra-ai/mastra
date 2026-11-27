@@ -320,6 +320,20 @@ export class VercelSandbox extends MastraSandbox {
     await this.sandbox.writeFiles(files.map(f => ({ path: f.path, content: f.content })));
   }
 
+  /**
+   * Extend the running sandbox's lifetime by `ms` milliseconds.
+   *
+   * Lazily starts the sandbox if it is not running yet — a stopped sandbox has
+   * no live session to extend, and the SDK's `extendTimeout` only applies to a
+   * running instance. Repeated calls reuse the same sandbox rather than
+   * creating a new one. The SDK enforces the provider's maximum timeout and
+   * any rejection is surfaced unchanged.
+   */
+  async extendTimeout(ms: number): Promise<void> {
+    await this.ensureRunning();
+    await this.sandbox.extendTimeout(ms);
+  }
+
   // ---------------------------------------------------------------------------
   // Command Execution
   // ---------------------------------------------------------------------------
