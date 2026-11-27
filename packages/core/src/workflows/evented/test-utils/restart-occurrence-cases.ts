@@ -578,22 +578,53 @@ export function describeRestartOccurrenceCases({
       });
     }, 20_000);
 
-    // R6. A restarted run still finishes once its steps are guarded, whatever entry it is in. The
-    // old worker's delivery is held in the entry while the restart runs it again.
+    // R6. A restarted run still finishes once its steps are guarded, whatever entry it is in. As in
+    // R1, the old worker's copy of the step returns while the restart's copy is still inside it, and
+    // its save is refused: the step stays the restart's.
     describe('finishes a restarted run', () => {
+      // Storage v2: a step end carries no step results, so the old copy's save is checked against the
+      // occurrence stored when it lands, the restart's own while its copy still runs, and is accepted
+      // (COR-1666). The restart's copy then continues from that result. A loop body is not affected:
+      // it completes under the occurrence its delivery passes on.
+      const savedOverRestart = storageVersion === 2;
+
+      /** The step ends published for `workflowId`'s step at `path` since event index `from`. */
+      const stepEndsSince = (driver: RedeliveryDriver, from: number, workflowId: string, path: number[]) =>
+        driver.events
+          .slice(from)
+          .filter(
+            event =>
+              event.type === 'workflow.step.end' &&
+              event.data.workflowId === workflowId &&
+              JSON.stringify(event.data.executionPath) === JSON.stringify(path),
+          );
+
       it('restarted inside a loop body', async () => {
         const steps = holdableSteps();
         const workflow = createWorkflow({ id: `restart-loop-${randomUUID()}`, inputSchema: Num, outputSchema: Num })
           .dountil(steps.step('body'), async ({ inputData }) => inputData.n >= 3)
           .then(steps.step('after'))
           .commit();
-        await withHost({ [workflow.id]: workflow }, steps.releaseAll, async () => {
+        await withHost({ [workflow.id]: workflow }, steps.releaseAll, async ({ driver }) => {
           const run = await workflow.createRun();
           const oldIteration = steps.holdAt('body', 2);
           const started = run.start({ inputData: { n: 0 } });
           await oldIteration.entered;
-          expect(await restartRun(workflow, run.runId)).toMatchObject({ status: 'success', result: { n: 4 } });
+          const oldDelivery = stepRuns(driver, run.runId, workflow.id, [0]).at(-1)!;
+
+          const restartIteration = steps.holdAt('body', 3);
+          const restarted = restartRun(workflow, run.runId);
+          await restartIteration.entered;
+          const restartDelivery = stepRuns(driver, run.runId, workflow.id, [0]).at(-1)!;
           oldIteration.release();
+          await settleDeliveries([oldDelivery]);
+          expect((await storedRun(workflow.id, run.runId))?.context.body).toMatchObject({
+            status: 'running',
+            metadata: { startedBy: restartDelivery.id },
+          });
+
+          restartIteration.release();
+          expect(await restarted).toMatchObject({ status: 'success', result: { n: 4 } });
           await drainHandlers();
           expect(await started).toMatchObject({ status: 'success', result: { n: 4 } });
           // Iterations 1 and 2 on the old worker, 2 and 3 under the restart.
@@ -610,13 +641,28 @@ export function describeRestartOccurrenceCases({
           .then(child)
           .then(steps.step('after'))
           .commit();
-        await withHost({ [child.id]: child, [workflow.id]: workflow }, steps.releaseAll, async () => {
+        await withHost({ [child.id]: child, [workflow.id]: workflow }, steps.releaseAll, async ({ driver }) => {
           const run = await workflow.createRun();
           const oldInner = steps.holdAt('inner');
           const started = run.start({ inputData: { n: 0 } });
           await oldInner.entered;
-          expect(await restartRun(workflow, run.runId)).toMatchObject({ status: 'success', result: { n: 2 } });
+
+          const restartInner = steps.holdAt('inner');
+          const from = driver.events.length;
+          const restarted = restartRun(workflow, run.runId);
+          await restartInner.entered;
+          const restartDelivery = driver.stepRuns({ spec: `${child.id}@0` }).at(-1)!;
           oldInner.release();
+          await expect.poll(() => stepEndsSince(driver, from, child.id, [0]).length).toBe(1);
+          await settleDeliveries(stepEndsSince(driver, from, child.id, [0]));
+          const childRunId = (await storedRun(workflow.id, run.runId))?.context[child.id]?.metadata?.nestedRunId;
+          expect((await storedRun(child.id, childRunId))?.context.inner).toMatchObject({
+            status: savedOverRestart ? 'success' : 'running',
+            metadata: { startedBy: restartDelivery.id },
+          });
+
+          restartInner.release();
+          expect(await restarted).toMatchObject({ status: 'success', result: { n: 2 } });
           await drainHandlers();
           expect(await started).toMatchObject({ status: 'success', result: { n: 2 } });
           expect(steps.calls).toEqual({ inner: 2, after: 1 });
@@ -688,13 +734,27 @@ export function describeRestartOccurrenceCases({
           .map(async ({ inputData }) => ({ n: inputData.yes!.n }))
           .then(steps.step('after'))
           .commit();
-        await withHost({ [workflow.id]: workflow }, steps.releaseAll, async () => {
+        await withHost({ [workflow.id]: workflow }, steps.releaseAll, async ({ driver }) => {
           const run = await workflow.createRun();
           const oldYes = steps.holdAt('yes');
           const started = run.start({ inputData: { n: 0 } });
           await oldYes.entered;
-          expect(await restartRun(workflow, run.runId)).toMatchObject({ status: 'success', result: { n: 2 } });
+
+          const restartYes = steps.holdAt('yes');
+          const from = driver.events.length;
+          const restarted = restartRun(workflow, run.runId);
+          await restartYes.entered;
+          const restartDelivery = stepRuns(driver, run.runId, workflow.id, [0, 0]).at(-1)!;
           oldYes.release();
+          await expect.poll(() => stepEndsSince(driver, from, workflow.id, [0, 0]).length).toBe(1);
+          await settleDeliveries(stepEndsSince(driver, from, workflow.id, [0, 0]));
+          expect((await storedRun(workflow.id, run.runId))?.context.yes).toMatchObject({
+            status: savedOverRestart ? 'success' : 'running',
+            metadata: { startedBy: restartDelivery.id },
+          });
+
+          restartYes.release();
+          expect(await restarted).toMatchObject({ status: 'success', result: { n: 2 } });
           await drainHandlers();
           expect(await started).toMatchObject({ status: 'success', result: { n: 2 } });
           expect(steps.calls).toEqual({ yes: 2, after: 1 });
