@@ -16,7 +16,7 @@ const IMPORT_SPECIFIER_RE = /(\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\bvi\.mock\
  * @returns {import('vite').Plugin}
  */
 export function workspaceSourceResolver(options = {}) {
-  const disabled = options.disabled ?? Boolean(process.env.CI);
+  const disabled = options.disabled ?? Boolean(process.env.MASTRA_TEST_DIST);
   const workspaceRoot = options.root ? resolve(options.root) : findWorkspaceRoot();
 
   const getIndex = () => {

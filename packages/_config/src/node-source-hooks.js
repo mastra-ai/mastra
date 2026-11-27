@@ -2,7 +2,7 @@
 // package imports to source the same way the Vitest plugin does. The Vitest wrapper passes it to
 // spawned processes through NODE_OPTIONS. It only applies where tsx is loaded, since plain Node
 // (including Vitest's own workers) can't run the TypeScript source.
-// Does nothing in CI, where children load built packages.
+// Does nothing with MASTRA_TEST_DIST=1, where children load built packages.
 import { registerHooks } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -11,7 +11,7 @@ import { createWorkspacePackageIndex, findWorkspaceRoot, resolveWorkspaceSource 
 const nodeArgs = [...process.execArgv, ...(process.env.NODE_OPTIONS ?? '').split(/\s+/)];
 const loadsTsx = nodeArgs.some(arg => /[\\/=]tsx(?:[\\/@]|$)|^tsx(?:\/|$)/.test(arg));
 
-if (!process.env.CI && loadsTsx) {
+if (!process.env.MASTRA_TEST_DIST && loadsTsx) {
   const index = createWorkspacePackageIndex(findWorkspaceRoot());
 
   registerHooks({

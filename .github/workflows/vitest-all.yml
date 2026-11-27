@@ -20,10 +20,6 @@ jobs:
       fail-fast: false
       matrix:
         shard: [1, 2, 3, 4]
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: remote:r
     # Minimal permissions - read-only access
     permissions:
       contents: read
@@ -40,15 +36,10 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Build packages
-        run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
-        env:
-          NODE_OPTIONS: '--max_old_space_size=8192'
-
       - name: Run all tests (Shard ${{ matrix.shard }}/4)
         run: |
           pnpm vitest run \
-            --project 'unit:*' --project 'typecheck:*' \
+            --project 'unit:*' \
             --reporter=blob \
             --reporter=verbose \
             --reporter=github-actions \
@@ -88,10 +79,6 @@ jobs:
           - workflows/*
           # Pubsub
           - pubsub/*
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: remote:r
     # Minimal permissions - read-only access
     permissions:
       contents: read
@@ -107,11 +94,6 @@ jobs:
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
-
-      - name: Build packages
-        run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
-        env:
-          NODE_OPTIONS: '--max_old_space_size=8192'
 
       - name: Normalize project name
         id: normalize
@@ -153,10 +135,71 @@ jobs:
           include-hidden-files: true
           retention-days: 1
 
+  # Typecheck projects read built .d.ts files, and vitest.dist-tests.json lists the suites that
+  # test build output; both run here after a build, beside the source jobs above.
+  build-required-test:
+    name: Build-required UNIT Test
+    runs-on: starsling-ubuntu-26.04
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    timeout-minutes: 45
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+      NODE_OPTIONS: '--max_old_space_size=8192'
+    # Minimal permissions - read-only access
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Build packages
+        run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
+
+      - name: Run typecheck tests
+        run: |
+          pnpm vitest run \
+            --project 'typecheck:*' \
+            --reporter=blob \
+            --reporter=verbose \
+            --reporter=github-actions \
+            --outputFile.blob=.vitest-reports/blob-typecheck.json \
+            --passWithNoTests
+
+      - name: Run dist tests
+        if: ${{ !cancelled() }}
+        env:
+          MASTRA_TEST_DIST: '1'
+        run: |
+          mapfile -t test_files < <(jq -r 'keys[]' vitest.dist-tests.json)
+          pnpm vitest run \
+            --project 'unit:*' \
+            --reporter=blob \
+            --reporter=verbose \
+            --reporter=github-actions \
+            --outputFile.blob=.vitest-reports/blob-dist.json \
+            --passWithNoTests \
+            "${test_files[@]}"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: vitest-blob-build-required
+          path: .vitest-reports/
+          include-hidden-files: true
+          retention-days: 1
+
   merge-reports:
     name: Merge Test Reports
     runs-on: starsling-ubuntu-26.04
-    needs: [test, e2e-test]
+    needs: [test, e2e-test, build-required-test]
     if: always()
     # Minimal permissions - read-only access
     permissions:

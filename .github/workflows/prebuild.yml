@@ -316,10 +316,12 @@ jobs:
           path: /tmp/affected-outputs/
           retention-days: 1
 
+  # Starts beside the build instead of after it: tests resolve workspace packages from source, and
+  # the suites that need build output build in their own job (test-suite.yml).
   test-suite:
     name: Unit and E2E Tests
-    needs: [changes, prebuild, affected-tests]
-    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && needs.changes.result == 'success' && (needs.changes.outputs.has_code != 'true' || needs.prebuild.result == 'success') }}
+    needs: [changes, affected-tests]
+    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && needs.changes.result == 'success' }}
     uses: ./.github/workflows/test-suite.yml
     permissions:
       actions: read

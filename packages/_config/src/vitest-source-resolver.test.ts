@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   createWorkspacePackageIndex,
@@ -408,26 +408,21 @@ describe('workspace source resolver', () => {
     expect(packages.has('@mastra/e2e-fixture')).toBe(false);
   });
 
-  it('creates a disabled plugin in CI mode by default', async () => {
+  it('creates a disabled plugin in dist mode by default', async () => {
     const root = makeWorkspace();
     writePackage(root, 'packages/core', { name: '@mastra/core', exports: { '.': './dist/index.js' } }, [
       'src/index.ts',
     ]);
 
-    const previousCi = process.env.CI;
-    process.env.CI = 'true';
+    vi.stubEnv('MASTRA_TEST_DIST', '1');
     try {
       await expect(resolveId(workspaceSourceResolver({ root }), '@mastra/core')).resolves.toBeNull();
     } finally {
-      if (previousCi === undefined) {
-        delete process.env.CI;
-      } else {
-        process.env.CI = previousCi;
-      }
+      vi.unstubAllEnvs();
     }
   });
 
-  it('can be disabled explicitly outside CI', async () => {
+  it('can be disabled explicitly', async () => {
     const root = makeWorkspace();
     writePackage(root, 'packages/core', { name: '@mastra/core', exports: { '.': './dist/index.js' } }, [
       'src/index.ts',

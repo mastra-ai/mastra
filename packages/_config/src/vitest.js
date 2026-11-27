@@ -16,7 +16,7 @@ let workspacePackageIndex;
 const NODE_SOURCE_HOOKS = `--import=${new URL('./node-source-hooks.js', import.meta.url).href}`;
 
 export function defineConfig(config) {
-  if (process.env.CI) return vitestDefineConfig(config);
+  if (process.env.MASTRA_TEST_DIST) return vitestDefineConfig(config);
 
   return vitestDefineConfig(wrapConfig(config));
 }

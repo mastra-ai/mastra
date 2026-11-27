@@ -12,7 +12,7 @@ describe('defineConfig', () => {
   });
 
   it('adds the resolver once and lets inline projects inherit it', () => {
-    vi.stubEnv('CI', '');
+    vi.stubEnv('MASTRA_TEST_DIST', '');
 
     const config = defineConfig({
       test: {
@@ -26,7 +26,7 @@ describe('defineConfig', () => {
   });
 
   it('drops resolver copies from projects that inherit one', () => {
-    vi.stubEnv('CI', '');
+    vi.stubEnv('MASTRA_TEST_DIST', '');
     const loadedProject = defineConfig({ test: { name: 'loaded' } }) as any;
 
     const config = defineConfig({ test: { projects: [loadedProject] } }) as any;
@@ -35,7 +35,7 @@ describe('defineConfig', () => {
   });
 
   it('passes the Node source hooks to spawned processes once', () => {
-    vi.stubEnv('CI', '');
+    vi.stubEnv('MASTRA_TEST_DIST', '');
     vi.stubEnv('NODE_OPTIONS', '--max-old-space-size=4096');
 
     const config = defineConfig({ test: { env: { OTHER: '1' } } }) as any;
@@ -47,8 +47,8 @@ describe('defineConfig', () => {
     expect((defineConfig(config) as any).test.env.NODE_OPTIONS).toBe(nodeOptions);
   });
 
-  it('leaves the config untouched in CI', () => {
-    vi.stubEnv('CI', 'true');
+  it('leaves the config untouched in dist mode', () => {
+    vi.stubEnv('MASTRA_TEST_DIST', '1');
     const input = { test: { name: 'ci' } };
 
     expect(defineConfig(input)).toEqual(input);

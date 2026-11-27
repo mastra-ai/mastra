@@ -21,7 +21,7 @@ import { Worker } from 'node:worker_threads';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 // Locally children load source; CI loads the built dist.
-const workerExecArgv = process.env.CI ? [] : ['--import', import.meta.resolve('tsx')];
+const workerExecArgv = process.env.MASTRA_TEST_DIST ? [] : ['--import', import.meta.resolve('tsx')];
 
 interface WorkerMessage {
   type: 'ready' | 'event-received' | 'status' | 'error';
@@ -78,7 +78,7 @@ describe('UnixSocketPubSub - multi-process per-thread isolation', () => {
     workerScript = join(tempDir, 'worker.mjs');
     const eventsPath = join(
       __dirname,
-      process.env.CI ? '../../../dist/events/index.js' : '../unix-socket-pubsub.ts',
+      process.env.MASTRA_TEST_DIST ? '../../../dist/events/index.js' : '../unix-socket-pubsub.ts',
     ).replace(/\\/g, '/');
     await writeFile(
       workerScript,

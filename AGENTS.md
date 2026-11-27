@@ -7,7 +7,7 @@ Turborepo pnpm workspace; packages use strict TypeScript; Vitest tests are coloc
 For schema-backed execution, put deterministic input/output constraints (shape, types, ranges, formats, cross-field invariants) in schemas, not `execute`. Keep runtime/external checks (authorization, existence, conflicts, API responses) in `execute`.
 Use literal model names/IDs from `docs/src/plugins/remark-model-tokens/models.ts` in changesets/comments; placeholders are not replaced.
 
-Use the narrowest package build/test/lint/typecheck; run unit/integration before E2E. Prefer targeted `pnpm --filter` or `pnpm turbo build --filter` commands; avoid root setup/build scripts unless needed. Local Vitest resolves exported workspace imports from source via `@internal/lint/vitest`, so don't prebuild for local unit/integration/e2e runs; build only for dist consumers (Verdaccio e2e, CLI/bin tests). CI builds and tests dist. Some integration tests need `pnpm i --ignore-workspace`.
+Use the narrowest package build/test/lint/typecheck (`pnpm --filter`); run unit/integration before E2E; avoid root setup/build scripts. Vitest resolves workspace imports from source, so don't prebuild for tests. Suites in `vitest.dist-tests.json` test build output: build, then run with `MASTRA_TEST_DIST=1`. Some integration tests need `pnpm i --ignore-workspace`.
 
 Features/new packages need docs; follow `docs/AGENTS.md` and styleguides, then run `pnpm check` in `docs/`. After code changes, read `@.mastracode/commands/changeset.md`.
 

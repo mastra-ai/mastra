@@ -3,7 +3,7 @@ import { defineConfig } from '@internal/lint/vitest';
 
 // `@mastra/server` loads its MCP Apps from `@mastra/mcp-apps-components`, an optional peer that the server's
 // workspace doesn't install (see `pnpm-workspace.yaml`). Point its imports at this package's copy, so the MCP Apps
-// tests serve the real apps. Locally the workspace source resolver maps them to source instead. Locally the workspace source resolver already maps them to source.
+// tests serve the real apps. In source mode the workspace source resolver maps them to source instead.
 const appsDist = fileURLToPath(new URL('./node_modules/@mastra/mcp-apps-components/dist/', import.meta.url));
 
 export default defineConfig({
@@ -14,7 +14,9 @@ export default defineConfig({
     // in the worker, so tests that spy on the `Request.prototype` (e.g. middleware-body-read) silently
     // stop counting calls and fail depending on worker packing.
     isolate: true,
-    alias: process.env.CI ? [{ find: /^@mastra\/mcp-apps-components\/(.+)$/, replacement: `${appsDist}$1.js` }] : [],
+    alias: process.env.MASTRA_TEST_DIST
+      ? [{ find: /^@mastra\/mcp-apps-components\/(.+)$/, replacement: `${appsDist}$1.js` }]
+      : [],
     environment: 'node',
     include: ['src/**/*.test.ts'],
     coverage: {
