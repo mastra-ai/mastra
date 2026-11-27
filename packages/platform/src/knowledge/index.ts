@@ -62,6 +62,7 @@ export interface PlatformKnowledgeOptions extends Omit<
 // These are the schema-v4 page-store methods, not arbitrary object properties or storage lifecycle methods.
 // `renameScopeDeclaration` is left to the base class, which rejects it: its `check` callback can't be
 // serialized, so the hosted store couldn't validate affected scopes before re-keying them.
+// `getPageParents` is left to the base class, which walks the chain with the forwarded `getPage`.
 const operations = [
   'materializeScope',
   'getScopesByAddress',
@@ -101,8 +102,8 @@ const operations = [
 
 // Fails to compile when a page-store method is neither forwarded nor deliberately left to the base class.
 type UnforwardedOperation = Exclude<keyof KnowledgePageStore, (typeof operations)[number]>;
-const operationsAreExhaustive: [UnforwardedOperation] extends ['renameScopeDeclaration']
-  ? ['renameScopeDeclaration'] extends [UnforwardedOperation]
+const operationsAreExhaustive: [UnforwardedOperation] extends ['renameScopeDeclaration' | 'getPageParents']
+  ? ['renameScopeDeclaration' | 'getPageParents'] extends [UnforwardedOperation]
     ? true
     : never
   : never = true;

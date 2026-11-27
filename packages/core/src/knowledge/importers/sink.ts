@@ -269,14 +269,15 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
   const keyPath = async (page: KnowledgePage): Promise<{ keys: string[]; ids: string[] } | null> => {
     const keys: string[] = [];
     const ids: string[] = [];
-    let at: KnowledgePage | null = page;
-    while (at && !at.isScope) {
+    if (page.isScope) return page.id === scope.id ? { keys, ids } : null;
+    const parents = page.parentId ? await storage.getPageParents({ parentId: page.parentId, read: 'all' }) : [];
+    for (const at of [page, ...parents]) {
+      if (at.isScope) return at.id === scope.id ? { keys, ids } : null;
       if (!live(at) || at.key === undefined) return null;
       keys.unshift(at.key);
       ids.unshift(at.id);
-      at = at.parentId ? await storage.getPage({ id: at.parentId, read: 'all' }) : null;
     }
-    return at?.id === scope.id ? { keys, ids } : null;
+    return null;
   };
   const sameKeys = (a: string[], b: string[]) => a.length === b.length && a.every((key, i) => key === b[i]);
 

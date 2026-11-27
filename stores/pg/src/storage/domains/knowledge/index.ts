@@ -311,6 +311,12 @@ export class KnowledgePG extends KnowledgeStorage {
     return this.#pages.getPage(input);
   }
 
+  override getPageParents(
+    input: Parameters<KnowledgePageStore['getPageParents']>[0],
+  ): ReturnType<KnowledgePageStore['getPageParents']> {
+    return this.#pages.getPageParents(input);
+  }
+
   override getPageByPath(
     input: Parameters<KnowledgePageStore['getPageByPath']>[0],
   ): ReturnType<KnowledgePageStore['getPageByPath']> {

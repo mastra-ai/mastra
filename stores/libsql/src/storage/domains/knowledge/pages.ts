@@ -724,6 +724,24 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     return rows[0] ? toPage(rows[0]) : null;
   }
 
+  /** One recursive query; each row passes the same read filter as {@link getPage}. */
+  async getPageParents(input: { parentId: string; read: KnowledgeReadScope }): Promise<KnowledgePage[]> {
+    const core = await loadPagesCore();
+    const readable = pageReadable('p', input.read);
+    const rows = await this.#query(
+      this.#read,
+      `WITH RECURSIVE chain AS (
+         SELECT p.*, 1 AS __depth FROM "${T.pages}" p WHERE p.id = ? AND ${readable.sql}
+         UNION ALL
+         SELECT p.*, c.__depth + 1 FROM chain c JOIN "${T.pages}" p ON p.id = c.parentId
+         WHERE c.isScope = 0 AND c.__depth <= ? AND ${readable.sql}
+       )
+       SELECT * FROM chain ORDER BY __depth`,
+      [input.parentId, ...readable.args, core.MAX_KNOWLEDGE_PAGE_DEPTH, ...readable.args],
+    );
+    return rows.map(toPage);
+  }
+
   async getPages(input: { ids: string[]; read: KnowledgeReadScope }): Promise<KnowledgePage[]> {
     const ids = [...new Set(input.ids)];
     if (ids.length === 0) return [];
