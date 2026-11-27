@@ -19,7 +19,8 @@ import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { boardRunId } from './board-workflow.js';
 import { DispatcherBoardEngine } from './engine.js';
 import type { FactoryBoardEngine, FactoryCardRuns } from './engine.js';
-import { WorkflowBoardEngine } from './workflow-engine.js';
+import { createWorkflowBoardEngine, WorkflowBoardEngine } from './workflow-engine.js';
+import type { WorkflowBoardEngineOptions } from './workflow-engine.js';
 
 const ORG = 'org-1';
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
@@ -31,6 +32,7 @@ function replica(
   before?: () => Promise<void>,
   runs?: FactoryCardRuns,
   interruptWaitMs?: number,
+  deadlines?: WorkflowBoardEngineOptions['deadlines'],
 ) {
   const boards = createBoardRegistry();
   const transitionService = new FactoryTransitionService({
@@ -43,10 +45,10 @@ function replica(
     await before?.();
     return transitionService.transition(request);
   };
-  const engine = new WorkflowBoardEngine(
-    { transitionService: { transition }, workItems: storage, boards, ...(runs ? { runs } : {}) },
-    { interruptWaitMs },
-  );
+  const context = { transitionService: { transition }, workItems: storage, boards, ...(runs ? { runs } : {}) };
+  const engine = deadlines
+    ? createWorkflowBoardEngine({ deadlines })(context)
+    : new WorkflowBoardEngine(context, { interruptWaitMs });
   const mastra = new Mastra({
     storage: new LibSQLStore({ id: `board-runs-${randomUUID()}`, url: runsUrl }),
     workflows: engine.workflows,
@@ -57,12 +59,15 @@ function replica(
 }
 
 /** A Work card in Planning with a bound planning session, and an engine whose workflow Mastra runs. */
-async function setup() {
+async function setup({
+  deadlines,
+  runs,
+}: { deadlines?: WorkflowBoardEngineOptions['deadlines']; runs?: FactoryCardRuns } = {}) {
   const storage = (await createFactoryStorageForTests()).workItems;
   const dir = mkdtempSync(join(tmpdir(), 'factory-board-runs-'));
   onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
   const runsUrl = `file:${join(dir, 'runs.db')}`;
-  const { engine, mastra } = replica(storage, runsUrl);
+  const { engine, mastra } = replica(storage, runsUrl, undefined, runs, undefined, deadlines);
   const prepared = await storage.prepareRunStart({
     orgId: ORG,
     userId: 'user-1',
@@ -414,6 +419,7 @@ describe('the workflow board engine', () => {
     await expect(engine.runEnded(binding, engine)).resolves.toBe(true);
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
       state: 'running',
+      deadlineAt: expect.any(Number),
       phase: 'execute',
       probes: 0,
       lastOutcome: 'advance',
@@ -424,7 +430,7 @@ describe('the workflow board engine', () => {
     const { engine, item, binding } = await setup();
     const chat = { ...binding, runsAgain: undefined };
     await engine.runEnded({ ...binding, runEnd: 'run-1' }, engine);
-    const probing = { state: 'probing', phase: 'planning', probes: 1 };
+    const probing = { state: 'probing', deadlineAt: expect.any(Number), phase: 'planning', probes: 1 };
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual(probing);
 
     await expect(engine.runEnded({ ...chat, runEnd: 'run-2' }, engine)).resolves.toBe(false);
@@ -486,7 +492,11 @@ describe('the workflow board engine', () => {
     });
     await storage.update({ orgId: ORG, id: item.id, userId: 'user-1', patch: { stages: ['planning'] } });
     await engine.runEnded({ ...binding, runEnd: 'run-1', runsAgain: true }, engine);
-    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'probing', probes: 1 });
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({
+      state: 'probing',
+      deadlineAt: expect.any(Number),
+      probes: 1,
+    });
 
     const move = await personMove(storage, item.id, 'planning', 'drag-1')();
     await expect(engine.requestMove({ ...move, board: 'parked' })).resolves.toMatchObject({ status: 'accepted' });
@@ -508,7 +518,11 @@ describe('the workflow board engine', () => {
     };
     const first = await engine.requestMove(byAgent);
     expect(first).toMatchObject({ status: 'accepted' });
-    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'running', probes: 0 });
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({
+      state: 'running',
+      deadlineAt: expect.any(Number),
+      probes: 0,
+    });
     await engine.runEnded({ ...binding, runEnd: 'run-1' }, engine);
     await engine.runEnded({ ...binding, runEnd: 'run-2' }, engine);
     const flagged = await engine.describe({ workItemId: item.id });
@@ -540,6 +554,7 @@ describe('the workflow board engine', () => {
     await expect(engine.runEnded({ ...binding, runEnd: 'run-1' }, engine)).resolves.toBe(false);
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
       state: 'probing',
+      deadlineAt: expect.any(Number),
       phase: 'planning',
       probes: 1,
     });
@@ -575,6 +590,7 @@ describe('the workflow board engine', () => {
     await engine.runFailed(card, { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' });
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
       state: 'running',
+      deadlineAt: expect.any(Number),
       phase: 'planning',
       probes: 0,
       attempts: 1,
@@ -582,7 +598,11 @@ describe('the workflow board engine', () => {
 
     // The run that ran again ended without an outcome: probing keeps the attempts counted.
     await engine.runEnded({ ...binding, runEnd: 'run-2' }, engine);
-    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'probing', attempts: 1 });
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({
+      state: 'probing',
+      deadlineAt: expect.any(Number),
+      attempts: 1,
+    });
 
     await engine.runFailed(card, { code: 'run_failed', attempt: 2, terminal: true, decisionId: 'decision-1' });
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
@@ -614,6 +634,304 @@ describe('the workflow board engine', () => {
     });
   });
 
+  it('gives a running or probing card a deadline, keeps it while the card stays so, and drops it otherwise', async () => {
+    const { storage, engine, item, binding } = await setup({ deadlines: { runningMs: 60_000, probingMs: 5_000 } });
+    const card = { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role };
+    const deadline = async () => (await engine.describe({ workItemId: item.id }))?.deadlineAt;
+    const within = async (ms: number, ask: () => Promise<unknown>) => {
+      const from = Date.now();
+      await ask();
+      const at = await deadline();
+      expect(at).toBeGreaterThanOrEqual(from + ms);
+      expect(at).toBeLessThanOrEqual(Date.now() + ms);
+      return at;
+    };
+
+    const running = await within(60_000, () =>
+      engine.runFailed(card, { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' }),
+    );
+    // A retry of the same phase run is the same stretch of running.
+    await engine.runFailed(card, { code: 'run_failed', attempt: 2, terminal: false, decisionId: 'decision-1' });
+    await expect(deadline()).resolves.toBe(running);
+
+    await within(5_000, () => engine.runEnded({ ...binding, runEnd: 'run-1' }, engine));
+    await engine.runPaused(binding);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'awaiting_approval' });
+    await expect(deadline()).resolves.toBeUndefined();
+
+    await engine.runEnded({ ...binding, runEnd: 'run-2' }, engine);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'needs_attention' });
+    await expect(deadline()).resolves.toBeUndefined();
+
+    // Start runs the phase again: a new stretch of running with a deadline of its own.
+    await within(60_000, async () =>
+      engine.requestMove({ ...(await personMove(storage, item.id, 'planning', 'start-1')()), reenter: true }),
+    );
+    await engine.requestMove(await personMove(storage, item.id, 'intake', 'drag-1')());
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'resting' });
+    await expect(deadline()).resolves.toBeUndefined();
+  });
+
+  it('gives a running card six hours and a probing card half an hour by default', async () => {
+    const { engine, item, binding } = await setup();
+    const from = Date.now();
+    await engine.runEnded({ ...binding, runEnd: 'run-1' }, engine);
+    expect((await engine.describe({ workItemId: item.id }))?.deadlineAt).toBeGreaterThanOrEqual(from + 30 * 60_000);
+    expect((await engine.describe({ workItemId: item.id }))?.deadlineAt).toBeLessThanOrEqual(Date.now() + 30 * 60_000);
+
+    await engine.runFailed(
+      { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role },
+      { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' },
+    );
+    expect((await engine.describe({ workItemId: item.id }))?.deadlineAt).toBeGreaterThanOrEqual(from + 6 * 3_600_000);
+  });
+
+  /** Runs on the card's sessions as a sweep finds them: ended, or still going and stoppable or not. */
+  function sweptRuns(state: { inFlight: boolean; stops?: boolean }) {
+    const stopped: ({ userId: string } | undefined)[] = [];
+    const runs: FactoryCardRuns = {
+      inFlight: async () => state.inFlight,
+      stop: async (_card, by) => {
+        stopped.push(by);
+        return state.stops ?? false;
+      },
+    };
+    return { runs, stopped };
+  }
+  const HOUR = 3_600_000;
+
+  it('flags a running card whose run ended unseen once its deadline passed, since nothing runs its phase again', async () => {
+    const { runs } = sweptRuns({ inFlight: false });
+    const { storage, engine, item, binding } = await setup({ runs });
+    const card = { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role };
+    await engine.runFailed(card, { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' });
+
+    // Not due yet: nothing changes.
+    await engine.sweep(Date.now() + HOUR, engine);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'running', probes: 0 });
+
+    // No run is going and none is queued: probing would wait on a run nobody starts.
+    await engine.sweep(Date.now() + 7 * HOUR, engine);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'needs_attention',
+      phase: 'planning',
+      probes: 1,
+      attempts: 1,
+      reason: "The agent's run ended without reporting how the phase ended, and it will not be run again.",
+    });
+    expect((await storage.get({ orgId: ORG, id: item.id }))!.stages).toEqual(['planning']);
+  });
+
+  it('flags a probing card once its probe ended unseen', async () => {
+    const { runs } = sweptRuns({ inFlight: false });
+    const { engine, item, binding } = await setup({ runs });
+    await engine.runFailed(
+      { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role },
+      { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' },
+    );
+    await engine.runEnded({ ...binding, runEnd: 'end-1' }, engine);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'probing', probes: 1 });
+
+    await engine.sweep(Date.now() + HOUR, engine);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'needs_attention',
+      phase: 'planning',
+      probes: 2,
+      attempts: 1,
+      reason: "The agent's run ended twice without reporting how the phase ended.",
+    });
+  });
+
+  it('looks again later at a card past its deadline that a sweep cannot settle, instead of on every sweep', async () => {
+    const { runs } = sweptRuns({ inFlight: false });
+    const { storage, engine, item, binding } = await setup({ runs });
+    await engine.runFailed(
+      { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role },
+      { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' },
+    );
+    const before = (await engine.describe({ workItemId: item.id }))!.deadlineAt!;
+    // The card left its phase without its run hearing of it: a run end says nothing there.
+    await storage.update({ orgId: ORG, id: item.id, userId: 'user-1', patch: { stages: ['intake'] } });
+
+    await engine.sweep(Date.now() + 7 * HOUR, engine);
+    const after = await engine.describe({ workItemId: item.id });
+    expect(after).toMatchObject({ state: 'running', phase: 'planning', probes: 0 });
+    expect(after!.deadlineAt).toBeGreaterThan(Date.now() + 29 * 60_000);
+    expect(after!.deadlineAt).not.toBe(before);
+  });
+
+  it('moves a running card past its deadline by the outcome its agent reported, through the engine Factory holds', async () => {
+    const { runs } = sweptRuns({ inFlight: false });
+    const { storage, engine, item, binding } = await setup({ runs });
+    await engine.runFailed(
+      { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role },
+      { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' },
+    );
+    // The agent reported the phase's end, but nobody heard its run end.
+    await storage.update({
+      orgId: ORG,
+      id: item.id,
+      userId: 'agent:binding',
+      patch: {
+        metadata: {
+          [PHASE_EXIT_METADATA_KEY]: { phase: 'planning', tool: 'submit_plan', at: new Date().toISOString() },
+        },
+      },
+    });
+    const seen: string[] = [];
+    const held: Pick<FactoryBoardEngine, 'requestMove'> = {
+      requestMove: request => {
+        seen.push(request.stage);
+        return engine.requestMove(request);
+      },
+    };
+
+    await engine.sweep(Date.now() + 7 * HOUR, held);
+
+    expect(seen).toEqual(['execute']);
+    expect((await storage.get({ orgId: ORG, id: item.id }))!.stages).toEqual(['execute']);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({
+      state: 'running',
+      phase: 'execute',
+      lastOutcome: 'advance',
+    });
+  });
+
+  it('stops a run still going past its deadline and flags the card as overdue, or looks again when the run is out of reach', async () => {
+    const going = { inFlight: true, stops: false };
+    const { runs, stopped } = sweptRuns(going);
+    const { engine, mastra, item, binding } = await setup({ runs });
+    await engine.runFailed(
+      { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role },
+      { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' },
+    );
+    const first = (await engine.describe({ workItemId: item.id }))!.deadlineAt!;
+
+    // Another process holds the run: its own watch gives it up, so the card is looked at later.
+    await engine.sweep(Date.now() + 7 * HOUR, engine);
+    const later = await engine.describe({ workItemId: item.id });
+    expect(later).toMatchObject({ state: 'running', probes: 0 });
+    expect(later!.deadlineAt).toBeGreaterThan(Date.now() + 29 * 60_000);
+    expect(later!.deadlineAt).toBeLessThan(first);
+
+    going.stops = true;
+    await engine.sweep(Date.now() + 7 * HOUR, engine);
+    // Stopped by Factory itself, for no person.
+    expect(stopped).toEqual([undefined, undefined]);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'needs_attention',
+      phase: 'planning',
+      probes: 0,
+      attempts: 1,
+      failure: 'run_overdue',
+      reason: 'Agent run is overdue',
+    });
+    const run = await mastra.getWorkflow('factory-board').getWorkflowRunById(boardRunId(item.id));
+    expect(JSON.stringify(run)).not.toContain('user-1');
+    expect(JSON.stringify(run)).not.toContain(ORG);
+  });
+
+  it('gives a probe as long as a phase run, and leaves a run the dispatcher still has to start or take over to it', async () => {
+    const going = { inFlight: true, stops: true };
+    const { runs, stopped } = sweptRuns(going);
+    const { storage, engine, item, binding } = await setup({ runs });
+    await engine.runEnded({ ...binding, runEnd: 'run-1' }, engine);
+
+    // The probe is the phase run once more: still going past half an hour, it is left to run.
+    await engine.sweep(Date.now() + HOUR, engine);
+    const probing = await engine.describe({ workItemId: item.id });
+    expect(probing).toMatchObject({ state: 'probing', probes: 1 });
+    expect(probing!.deadlineAt).toBeGreaterThan(Date.now() + 5 * HOUR);
+    expect(stopped).toEqual([]);
+
+    // Its run waits for its turn (or for another worker to take over the one whose watch died).
+    going.inFlight = false;
+    const card = (await storage.get({ orgId: ORG, id: item.id }))!;
+    await storage.commitRuleEvaluation({
+      orgId: ORG,
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      ingress: { identity: 'rule-1' },
+      expectedRevision: card.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'invokeSkill', role: 'work', skillName: 'factory-plan', idempotencyKey: 'rule-1' }],
+      causalChain: [],
+      now: new Date(),
+    });
+    await engine.sweep(Date.now() + 7 * HOUR, engine);
+    const waiting = await engine.describe({ workItemId: item.id });
+    expect(waiting).toMatchObject({ state: 'probing', probes: 1 });
+    expect(waiting!.deadlineAt).toBeLessThan(probing!.deadlineAt!);
+  });
+
+  it("leaves a run going past its deadline to the dispatcher while it still holds the run's decision", async () => {
+    const { runs, stopped } = sweptRuns({ inFlight: true, stops: true });
+    const { storage, engine, item, binding } = await setup({ runs });
+    await engine.runFailed(
+      { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role },
+      { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' },
+    );
+    const first = (await engine.describe({ workItemId: item.id }))!.deadlineAt!;
+    // The retry started late, and the dispatcher's own watch of it has time to run.
+    const card = (await storage.get({ orgId: ORG, id: item.id }))!;
+    await storage.commitRuleEvaluation({
+      orgId: ORG,
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      ingress: { identity: 'rule-1' },
+      expectedRevision: card.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'invokeSkill', role: 'work', skillName: 'factory-plan', idempotencyKey: 'rule-1' }],
+      causalChain: [],
+      now: new Date(),
+    });
+
+    await engine.sweep(Date.now() + 7 * HOUR, engine);
+    expect(stopped).toEqual([]);
+    const later = await engine.describe({ workItemId: item.id });
+    expect(later).toMatchObject({ state: 'running', probes: 0, attempts: 1 });
+    expect(later!.deadlineAt).toBeLessThan(first);
+  });
+
+  it('acts on nothing for a deadline the card has since moved past', async () => {
+    const { runs } = sweptRuns({ inFlight: false });
+    const { engine, item, binding } = await setup({ runs });
+    const card = { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role };
+    await engine.runEnded({ ...binding, runEnd: 'run-1' }, engine);
+    // What a sweep read while the card was probing, before the next attempt ran.
+    const read = await engine.workflow.listWorkflowRuns({ status: 'suspended' });
+    await engine.runFailed(card, { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' });
+    const running = await engine.describe({ workItemId: item.id });
+    expect(running).toMatchObject({ state: 'running', probes: 1 });
+
+    const list = vi.spyOn(engine.workflow, 'listWorkflowRuns').mockResolvedValueOnce(read);
+    await engine.sweep(Date.now() + 7 * HOUR, engine);
+
+    expect(list).toHaveBeenCalled();
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual(running);
+  });
+
+  it('counts one expiry once when every process sweeps it', async () => {
+    const { runs } = sweptRuns({ inFlight: false });
+    const { storage, engine, runsUrl, item, binding } = await setup({ runs });
+    const other = replica(storage, runsUrl, undefined, runs).engine;
+    await engine.runFailed(
+      { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role },
+      { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' },
+    );
+
+    const now = Date.now() + 7 * HOUR;
+    await Promise.all([engine.sweep(now, engine), other.sweep(now, other), engine.sweep(now, engine)]);
+
+    // Counted twice, the run would read as having ended twice.
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({
+      state: 'needs_attention',
+      probes: 1,
+    });
+  });
+
   it('counts a failed attempt once, however many times it is told', async () => {
     const { engine, item, binding } = await setup();
     const card = { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role };
@@ -623,7 +941,7 @@ describe('the workflow board engine', () => {
 
     await engine.runFailed(card, { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' });
 
-    expect(probing).toMatchObject({ state: 'probing', attempts: 1 });
+    expect(probing).toMatchObject({ state: 'probing', deadlineAt: expect.any(Number), attempts: 1 });
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual(probing);
   });
 
@@ -664,7 +982,10 @@ describe('the workflow board engine', () => {
     await engine.runFailed(seat, { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' });
     // A session working another role's phase doesn't stop this one.
     await engine.runStopped({ ...seat, role: 'review' });
-    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'running' });
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({
+      state: 'running',
+      deadlineAt: expect.any(Number),
+    });
 
     await engine.runStopped(seat);
     await engine.runStopped(seat);
@@ -684,6 +1005,7 @@ describe('the workflow board engine', () => {
     await engine.requestMove({ ...(await personMove(storage, item.id, 'planning', 'start-1')()), reenter: true });
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
       state: 'running',
+      deadlineAt: expect.any(Number),
       phase: 'planning',
       probes: 0,
     });
@@ -702,6 +1024,7 @@ describe('the workflow board engine', () => {
     expect(told).toEqual([false, false]);
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
       state: 'probing',
+      deadlineAt: expect.any(Number),
       phase: 'planning',
       probes: 1,
     });
@@ -762,6 +1085,7 @@ describe('the workflow board engine', () => {
 
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
       state: 'probing',
+      deadlineAt: expect.any(Number),
       phase: 'planning',
       probes: 1,
     });
@@ -800,6 +1124,7 @@ describe('the workflow board engine', () => {
     await expect(engine.runEnded({ ...binding, runEnd: 'run-2' }, engine)).resolves.toBe(false);
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
       state: 'probing',
+      deadlineAt: expect.any(Number),
       phase: 'execute',
       probes: 1,
       lastOutcome: 'advance',
@@ -861,6 +1186,7 @@ describe('the workflow board engine', () => {
 
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
       state: 'running',
+      deadlineAt: expect.any(Number),
       phase: 'execute',
       probes: 0,
       lastOutcome: 'advance',
@@ -974,6 +1300,7 @@ describe('the workflow board engine', () => {
     await engine.runEnded({ ...binding, runEnd: 'run-4' }, engine);
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
       state: 'probing',
+      deadlineAt: expect.any(Number),
       phase: 'planning',
       probes: 1,
     });
@@ -1004,6 +1331,7 @@ describe('the workflow board engine', () => {
     await expect(engine.runEnded({ ...binding, runEnd: 'run-2' }, engine)).resolves.toBe(true);
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
       state: 'running',
+      deadlineAt: expect.any(Number),
       phase: 'execute',
       probes: 0,
       lastOutcome: 'advance',
@@ -1043,6 +1371,7 @@ describe('the workflow board engine', () => {
 
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
       state: 'running',
+      deadlineAt: expect.any(Number),
       phase: 'execute',
       probes: 0,
       lastOutcome: 'advance',

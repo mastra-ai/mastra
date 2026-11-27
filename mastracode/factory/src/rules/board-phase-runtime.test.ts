@@ -17,7 +17,7 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { FactoryBoardEngine, FactoryBoardEngineFactory } from '../board-engine/engine.js';
-import { createWorkflowBoardEngine } from '../board-engine/workflow-engine.js';
+import { createWorkflowBoardEngine, WorkflowBoardEngine } from '../board-engine/workflow-engine.js';
 import { defineBoard } from '../boards/index.js';
 import { MastraFactory } from '../factory.js';
 import { GithubIntegration } from '../integrations/github/integration.js';
@@ -587,6 +587,61 @@ it('flags a card on the workflow engine on its first attempt when a board rule r
     expect((await decisionsFor(feature)).map(record => [record.decision.type, record.status, record.attempts])).toEqual(
       [['invokeSkill', 'failed', 1]],
     );
+  } finally {
+    await runtime.close();
+  }
+}, 90_000);
+
+/** The engine Factory holds, deaf to run ends: as if the process that watched each run died with it. */
+function deafToRunEnds(engine: WorkflowBoardEngine): FactoryBoardEngine {
+  return {
+    workflows: engine.workflows,
+    requestMove: request => engine.requestMove(request),
+    requestPlacement: placement => engine.requestPlacement(placement),
+    runEnded: async () => false,
+    runPaused: (binding, reason) => engine.runPaused(binding, reason),
+    runFailed: (seat, failure) => engine.runFailed(seat, failure),
+    runStopped: seat => engine.runStopped(seat),
+    describe: card => engine.describe(card),
+    submitMove: request => engine.submitMove(request),
+    cardDeleted: card => engine.cardDeleted(card),
+    sweep: (now, held) => engine.sweep(now, held),
+  };
+}
+
+it("moves a card on the workflow engine by its agent's reported outcome once a sweep finds its run ended unseen", async () => {
+  const requests: string[] = [];
+  fakeModel(requests, builder());
+  let held: FactoryBoardEngine | undefined;
+  const runtime = await startFactory(delivery, 'planning', deliverySkills, {
+    boardEngine: context => (held = deafToRunEnds(new WorkflowBoardEngine(context))),
+  });
+  try {
+    const { card, read, decisionsFor } = runtime;
+    const feature = await card('a feature', []);
+
+    // The agent reported Building and its run ended, but no one told the card's run.
+    await vi.waitFor(
+      async () =>
+        expect((await decisionsFor(feature)).map(record => [record.decision.type, record.status])).toEqual([
+          ['invokeSkill', expect.stringMatching(/^(succeeded|failed)$/)],
+        ]),
+      { timeout: 45_000, interval: 250 },
+    );
+    expect((await read(feature)).stages).toEqual(['planning']);
+    expect(await held!.describe!({ workItemId: feature.id })).toMatchObject({ state: 'running', phase: 'planning' });
+
+    // Not due yet, the sweep leaves it be; past the running deadline, it hears the run's end.
+    await held!.sweep!(Date.now(), held!);
+    expect((await read(feature)).stages).toEqual(['planning']);
+    await held!.sweep!(Date.now() + 7 * 3_600_000, held!);
+
+    expect((await read(feature)).stages).toEqual(['building']);
+    expect(await held!.describe!({ workItemId: feature.id })).toMatchObject({
+      state: 'running',
+      phase: 'building',
+      lastOutcome: 'building',
+    });
   } finally {
     await runtime.close();
   }
