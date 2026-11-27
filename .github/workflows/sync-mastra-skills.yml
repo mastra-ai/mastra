@@ -41,6 +41,7 @@ jobs:
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
           repositories: ${{ github.event.repository.name }}
           permission-contents: write
+          permission-pull-requests: write
 
       - name: Re-checkout with app token
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
@@ -48,9 +49,7 @@ jobs:
         with:
           ref: main
           token: ${{ steps.app-auth.outputs.token }}
-          # Full history (without old file contents), so `git pull --rebase` finds a merge base when main moves.
-          fetch-depth: 0
-          filter: blob:none
+          fetch-depth: 1
           persist-credentials: true
 
       - name: Setup pnpm and Node.js
@@ -84,16 +83,35 @@ jobs:
             echo "CHANGESET_FILE=${CHANGESET_FILE}" >> $GITHUB_ENV
           fi
 
-      - name: Commit and push changes
+      # Synced skills are served to every agent connecting to the built-in MCP server, so they land
+      # through a pull request that CI checks and a maintainer reviews, never by pushing to main.
+      # Each run rebuilds the branch from main, so the open PR always shows one fresh sync.
+      - name: Open or update the sync pull request
         if: steps.git-check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-auth.outputs.token }}
+          BRANCH: ci/sync-mastra-skills
         run: |
+          COMMIT=$(grep -o '"commit":"[0-9a-f]*"' packages/server/src/server/mcp/official-skills.generated.ts | cut -d'"' -f4)
+          git config user.name 'dane-ai-mastra[bot]'
+          git config user.email 'dane-ai-mastra[bot]@users.noreply.github.com'
+          git switch -c "${BRANCH}"
           git add packages/server/src/server/mcp/official-skills.generated.ts
           if [ -n "${CHANGESET_FILE}" ]; then
             git add "${CHANGESET_FILE}"
           fi
-          git commit -m "chore: sync official Mastra skills [skip ci]"
-          git pull --rebase --autostash
-          git push
+          git commit -m "chore: sync official Mastra skills from mastra-ai/skills@${COMMIT}"
+          git push --force origin "HEAD:refs/heads/${BRANCH}"
+
+          BODY="Updates the official Mastra skills served by the built-in MCP server to [mastra-ai/skills@${COMMIT}](https://github.com/mastra-ai/skills/commit/${COMMIT}).
+
+          Review the diff of \`official-skills.generated.ts\` before merging: it is served as-is to every agent that connects to \`/api/mcp\`."
+          if [ -n "$(gh pr list --head "${BRANCH}" --state open --json number --jq '.[].number')" ]; then
+            gh pr edit "${BRANCH}" --body "${BODY}"
+          else
+            gh pr create --base main --head "${BRANCH}" \
+              --title "chore: sync official Mastra skills" --body "${BODY}"
+          fi
 
       - name: Log no changes
         if: steps.git-check.outputs.changed != 'true'
