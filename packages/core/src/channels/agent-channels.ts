@@ -1406,8 +1406,13 @@ export class AgentChannels {
     if (Object.values(this.adapterConfigs).some(cfg => cfg.threadLink) && !has(THREAD_LINK_PROCESSOR_ID)) {
       processors.push(
         new ChannelThreadLinkProcessor(requestContext => {
-          const render = requestContext.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
-          return render && threadLinkOptions(this.adapterConfigs[render.platform]?.threadLink);
+          // `channel` survives the request-context snapshot a replica restores; the
+          // render context does not, so read the platform from the entry that does
+          // and a restored run still links the thread it answers in (#31310).
+          const platform =
+            (requestContext.get('channel') as ChannelContext | undefined)?.platform ??
+            (requestContext.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined)?.platform;
+          return platform ? threadLinkOptions(this.adapterConfigs[platform]?.threadLink) : undefined;
         }),
       );
     }

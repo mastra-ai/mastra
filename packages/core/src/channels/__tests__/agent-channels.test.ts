@@ -314,6 +314,44 @@ describe('AgentChannels', () => {
       expect(agentChannels.getInputProcessors().map(p => p.id)).not.toContain('channel-reply-mode');
       expect(agentChannels.getOutputProcessors().map(p => p.id)).toEqual(['chat-channel-render']);
     });
+
+    it('links a restored run whose render context did not survive the request-context snapshot (#31310)', async () => {
+      const channels = new AgentChannels({
+        adapters: {
+          slack: {
+            adapter: createMockAdapter('slack'),
+            replyMode: 'tool',
+            threadLink: ({ threadId }) => `https://app.test/threads/${threadId}`,
+          },
+        },
+        threadContext: { addSystemMessage: false },
+      });
+      // `channel` is plain data and survives the snapshot; the render context (live chat drivers) does not.
+      const requestContext = new RequestContext();
+      requestContext.set('channel', { platform: 'slack', isDM: false } as ChannelContext);
+      requestContext.set('MastraMemory', { thread: { id: 't1' }, resourceId: 'slack:U1' });
+      requestContext.set(NEW_CHANNEL_THREAD_KEY, true);
+      const state: Record<string, unknown> = {};
+      const part = (type: string, payload: Record<string, unknown> = {}) => ({
+        type,
+        runId: 'r',
+        from: 'AGENT',
+        payload,
+      });
+      const link = channels.getOutputProcessors().find(p => p.id === 'channel-thread-link')!;
+
+      await link.processOutputStream({
+        part: part('text-delta', { id: 'b1', text: 'Hi' }),
+        state,
+        requestContext,
+      } as any);
+      const linked = await link.processOutputStream({ part: part('step-finish'), state, requestContext } as any);
+
+      expect(linked).toMatchObject({
+        type: 'text-delta',
+        payload: { text: '\n\n[Open thread ↗](https://app.test/threads/t1)' },
+      });
+    });
   });
 
   describe('channelConfig', () => {
