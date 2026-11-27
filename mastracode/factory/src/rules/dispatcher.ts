@@ -90,6 +90,7 @@ import {
 } from './dispatch-errors.js';
 import { isStatusEventDecision } from './event-rules.js';
 import { endPhaseGoal, PHASE_GOAL_METADATA_KEY, phaseGoalOf, startPhaseGoal } from './phase-goal.js';
+import { latestRunEnd } from './phase-outcome-move.js';
 import { causeOf, isProviderCallError, publicFailureReason } from './public-failure-reason.js';
 import { isRunBearingDecision } from './run-bearing.js';
 import type { FactoryTransitionService } from './transition-service.js';
@@ -2005,7 +2006,10 @@ export class FactoryDecisionDispatcher {
                   // results before applying the run's outcome or deciding the unchanged card means
                   // the run did no work.
                   await this.#reconcileRunBinding?.(binding);
-                  if (await this.#boardEngine.runEnded(binding, this.#boardEngine)) return;
+                  // The ledger's row names the run for every worker; without a ledger only this
+                  // process tells of the end.
+                  const ended = { ...binding, runEnd: this.#openRuns ? deliveryId : latestRunEnd(session) };
+                  if (await this.#boardEngine.runEnded(ended, this.#boardEngine)) return;
                   if (workingRevision === null) return;
                   const after = await this.#storage.get({ orgId: record.orgId, id: record.workItemId! });
                   if (after?.revision === workingRevision && !(await kickoffStale())) {
@@ -2023,6 +2027,10 @@ export class FactoryDecisionDispatcher {
                       return review?.kind === 'working' && review.runner.context === 'review';
                     });
                     if (ownCardHandOff) return;
+                    // Only here is the phase run again, or given up on after its last attempt: the
+                    // engine hears of this end once more, with which of the two it is.
+                    const runsAgain = !isTerminalFailure(record.attempts, 'run_incomplete');
+                    if (await this.#boardEngine.runEnded({ ...ended, runsAgain }, this.#boardEngine)) return;
                     throw new FactoryDispatchError(
                       'run_incomplete',
                       'Factory skill run ended before completing the working phase.',

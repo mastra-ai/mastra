@@ -15,7 +15,7 @@ import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { FactoryBoardEngineFactory } from '../board-engine/engine.js';
+import type { FactoryBoardEngine, FactoryBoardEngineFactory } from '../board-engine/engine.js';
 import { createWorkflowBoardEngine } from '../board-engine/workflow-engine.js';
 import { defineBoard } from '../boards/index.js';
 import { MastraFactory } from '../factory.js';
@@ -405,6 +405,48 @@ function builder(): (text: string) => ToolCall | undefined {
     return { name: 'factory_report_outcome', args: { outcome: next, reason: `Ready for ${next}.` } };
   };
 }
+
+it("flags a card on the workflow engine when its phase's agent ends two runs without reporting an outcome", async () => {
+  const requests: string[] = [];
+  // The agent answers in words and never reports how the phase ended.
+  fakeModel(requests, () => undefined);
+  let engine: FactoryBoardEngine | undefined;
+  const runtime = await startFactory(release, 'build', [publishSkill], {
+    boardEngine: context => (engine = createWorkflowBoardEngine(context)),
+  });
+  try {
+    const { card, read, decisionsFor } = runtime;
+    const quick = await card('quick fix', ['effort:low']);
+
+    // The dispatcher runs the phase once more after the first run ends with nothing reported; the
+    // second such end is the card's to show a person.
+    await vi.waitFor(
+      async () =>
+        expect(await engine!.describe!({ workItemId: quick.id })).toEqual({
+          state: 'needs_attention',
+          phase: 'build',
+          probes: 2,
+          reason: "The agent's run ended twice without reporting how the phase ended.",
+        }),
+      { timeout: 45_000, interval: 250 },
+    );
+    expect((await read(quick)).stages).toEqual(['build']);
+    expect(requests.filter(text => text.includes(PUBLISH) && text.includes('quick fix')).length).toBeGreaterThanOrEqual(
+      2,
+    );
+    await vi.waitFor(
+      async () =>
+        expect((await decisionsFor(quick)).map(record => [record.decision.type, record.status])).toEqual(
+          expect.arrayContaining([['invokeSkill', 'failed']]),
+        ),
+      { timeout: 15_000 },
+    );
+    // Nothing ran a third time, and each run end was counted once however many told of it.
+    expect(await engine!.describe!({ workItemId: quick.id })).toMatchObject({ probes: 2 });
+  } finally {
+    await runtime.close();
+  }
+}, 90_000);
 
 describe.each([
   ['dispatcher', undefined],

@@ -5174,6 +5174,59 @@ describe('FactoryDecisionDispatcher', () => {
       expect(decision).toMatchObject({ status: 'succeeded' });
       expect(requestMove).not.toHaveBeenCalled();
     });
+    it('tells the board engine a run ends unanswered only when the phase is run again', async () => {
+      const tellings = async (boards: ReturnType<typeof autoStartingBoards>, key: string) => {
+        const storage = (await createFactoryStorageForTests()).workItems;
+        const { item, transitionService } = await queueDecision(storage, {
+          type: 'invokeSkill',
+          role: 'work',
+          skillName: 'factory-build',
+          arguments: 'Continue building',
+          idempotencyKey: key,
+        });
+        await bindWorkRun(storage, item.id);
+        const runEnded = vi.fn<FactoryBoardEngine['runEnded']>(async () => false);
+        const { controller } = createSession(undefined, {
+          signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+          emitAgentEndDuringSignal: true,
+          agentEndReason: 'complete',
+        });
+        const dispatcher = new FactoryDecisionDispatcher({
+          controller: controller as never,
+          boards,
+          transitionService,
+          boardEngine: { requestMove: vi.fn(), requestPlacement: vi.fn(), runEnded },
+          storage,
+          ownerId: 'worker-1',
+        });
+        await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+        const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+        const told = () => runEnded.mock.calls.map(([binding]) => binding.runsAgain ?? 'unmarked');
+        const first = { decision, told: told() };
+        await dispatcher.runOnce(new Date('2030-01-01T00:10:00Z'));
+        const [last] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+        return { ...first, last: { decision: last, told: told().slice(first.told.length) } };
+      };
+
+      // Building names how it ends: an unchanged card is a run to do again, and only then is it marked.
+      const building = await tellings(autoStartingBoards(), 'run-end-marked');
+      expect(building.decision).toMatchObject({ status: 'retry', failureCode: 'run_incomplete' });
+      expect(building.told).toEqual(['unmarked', true]);
+      // Its second run is its last: the engine hears that no third follows.
+      expect(building.last.decision).toMatchObject({ status: 'failed', failureCode: 'run_incomplete' });
+      expect(building.last.told).toEqual(['unmarked', false]);
+
+      // A phase that doesn't name how it ends is never run again.
+      const open = await tellings(
+        autoStartingBoards(
+          createLifecycleTestRegistry({ execute: { runner: { skill: 'factory-build', context: 'work' } } }),
+        ),
+        'run-end-unmarked',
+      );
+      expect(open.decision).toMatchObject({ status: 'succeeded' });
+      expect(open.told).toEqual(['unmarked']);
+      expect(open.last.told).toEqual([]);
+    });
   });
 
   it('accepts clean completion in a working phase without a goal or exit tool', async () => {
