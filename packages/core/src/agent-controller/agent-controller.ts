@@ -71,6 +71,8 @@ import type {
   ToolCategory,
 } from './types';
 import { createEmptyTokenUsage } from './types';
+import type { ControllerRunBinding } from './worker-run-binding';
+import { CONTROLLER_RUN_BINDING_KEY, restoredWorkerControllerContexts } from './worker-run-binding';
 
 function validateModes(modes: AgentControllerMode[]): void {
   const modeIds = new Set<string>();
@@ -2335,6 +2337,15 @@ export class AgentController<TState = {}> {
       ...(callTimeInstructions && { instructions: callTimeInstructions }),
     };
     streamOptions.toolsets = await this.buildToolsets(session, requestContext);
+    requestContext.setRaw(CONTROLLER_RUN_BINDING_KEY, {
+      controllerId: this.id,
+      agentId: this.getCurrentAgent(session).id,
+      sessionId: session.identity.getId(),
+      ownerId: session.identity.getOwnerId(),
+      resourceId,
+      threadId: runThreadId,
+      modeId,
+    } satisfies ControllerRunBinding);
 
     // Apply mode-level tool visibility via `activeTools` — the same mechanism
     // the execution pipeline already enforces at tool-call time.  Only set
@@ -2637,6 +2648,52 @@ export class AgentController<TState = {}> {
     }
 
     return result;
+  }
+
+  /** @internal Restore the run's execution view without opening an interactive session. */
+  async __restoreWorkerRequestContext(
+    requestContext: RequestContext,
+    binding: ControllerRunBinding,
+    abortSignal: AbortSignal,
+    runId: string | undefined,
+  ): Promise<RequestContext> {
+    const { sessionId, resourceId, threadId, ownerId, modeId } = binding;
+    const thread = await this.queryThreadById({ threadId });
+    const mode = this.config.modes.find(candidate => candidate.id === modeId);
+    if (!thread || thread.resourceId !== resourceId || !mode || this.getAgentForMode(mode).id !== binding.agentId) {
+      throw new Error('Cannot restore controller context for this durable run');
+    }
+    const previous = runId ? this.getMastra()?.__getRunScope(runId)?.get(this.#executionViewKey) : undefined;
+    const session =
+      previous?.session.identity.getId() === sessionId &&
+      previous.view.resourceId === resourceId &&
+      previous.view.threadId === threadId
+        ? previous.session
+        : this.#wireSession(
+            new Session({
+              id: sessionId,
+              resourceId,
+              ownerId,
+              state: { initialState: this.config.initialState, stateSchema: this.config.stateSchema },
+            }),
+          );
+    const restored = await this.buildRequestContext(session, requestContext, {
+      resourceId,
+      threadId,
+      modeId,
+      runId,
+      abortSignal,
+    });
+    const context = restored.get('controller') as AgentControllerRequestContext<TState>;
+    restoredWorkerControllerContexts.add(context);
+    return restored;
+  }
+
+  /** @internal Rebuild worker tools from the controller's local configuration. */
+  async __restoreWorkerToolsets(requestContext: RequestContext): Promise<ToolsetsInput | undefined> {
+    const context = requestContext.get('controller') as AgentControllerRequestContext<TState> | undefined;
+    const execution = context && this.#executionViews.get(context);
+    if (execution) return this.buildToolsets(execution.session, requestContext);
   }
 
   /**

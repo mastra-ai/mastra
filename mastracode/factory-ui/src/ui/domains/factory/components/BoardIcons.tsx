@@ -1,5 +1,5 @@
 import type { BoardPhaseKind } from '@mastra/factory/boards';
-import { phaseIconKind } from '@mastra/playground-ui/domains/factory';
+import { CardSourceIcon, phaseIconKind } from '@mastra/playground-ui/domains/factory';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ComponentType } from 'react';
 
@@ -24,8 +24,7 @@ export {
 } from '@mastra/playground-ui/domains/factory';
 
 export function SourceIcon({ source, className }: { source: WorkItemSource; className?: string }) {
-  const { Icon, iconClassName } = CARD_SOURCES[source];
-  return <Icon data-source={source} className={cn('size-4 shrink-0', iconClassName, className)} aria-hidden />;
+  return <CardSourceIcon source={source} className={className} />;
 }
 
 /** Icon for each known run-action label; `Play` is the fallback for anything else. */

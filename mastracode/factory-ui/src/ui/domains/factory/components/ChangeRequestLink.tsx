@@ -14,8 +14,9 @@ import { repositoryElsewhere } from '../services/relationships';
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 
-export const outboundArrowClass =
-  'text-muted-foreground ml-auto size-3.5 shrink-0 opacity-0 transition-opacity group-hover/outbound:opacity-100 group-focus-visible/outbound:opacity-100';
+import { outboundArrowClass } from '@mastra/playground-ui/domains/factory';
+
+export { outboundArrowClass };
 
 export function ChangeRequestLink({
   request,

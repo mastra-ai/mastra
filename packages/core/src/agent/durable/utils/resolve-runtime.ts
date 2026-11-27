@@ -1,4 +1,6 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
+import type { AgentControllerRequestContext } from '../../../agent-controller/types';
+import { isRestoredWorkerControllerContext } from '../../../agent-controller/worker-run-binding';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { resolveModelConfig } from '../../../llm/model/resolve-model';
 import type { MastraLanguageModel } from '../../../llm/model/shared.types';
@@ -22,7 +24,7 @@ import type { Agent } from '../../agent';
 import type { MessageList } from '../../message-list';
 import { liveRequestEntries, restoreRequestContext } from '../../request-context-snapshot';
 import { SaveQueueManager } from '../../save-queue';
-import type { ToolsInput } from '../../types';
+import type { ToolsInput, ToolsetsInput } from '../../types';
 import { isDurableAgentLike } from '../../types';
 import { recordRunSavedMessages } from '../run-message-refs';
 import { getRunRegistryEntry, globalRunRegistry, setRunRegistryEntry } from '../run-registry';
@@ -37,6 +39,22 @@ import type {
   RegistryModelListEntry,
 } from '../types';
 import { createRunMessageList } from './run-message-list';
+
+async function restoreWorkerToolsets(
+  mastra: Mastra,
+  context: RequestContext,
+  names?: string[],
+): Promise<ToolsetsInput | undefined> {
+  const controller = context.get('controller') as AgentControllerRequestContext | undefined;
+  if (!isRestoredWorkerControllerContext(controller) || !names?.length) return;
+  const toolsets = await mastra.getAgentControllerById(controller.controllerId)?.__restoreWorkerToolsets(context);
+  if (!toolsets) return;
+  const allowed = new Set(names);
+  for (const [key, tools] of Object.entries(toolsets)) {
+    if (tools) toolsets[key] = Object.fromEntries(Object.entries(tools).filter(([name]) => allowed.has(name)));
+  }
+  return toolsets;
+}
 
 /**
  * Runtime dependencies that need to be resolved at step execution time.
@@ -425,6 +443,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
 
       tools = await agent.getToolsForExecution({
         runId,
+        toolsets: await restoreWorkerToolsets(mastra, resolveRequestContext, input.options?.toolsetToolNames),
         threadId: input.state.threadId,
         resourceId: input.state.resourceId,
         requestContext: resolveRequestContext,
@@ -637,6 +656,7 @@ export async function rebuildRunToolsFromMastra(options: {
 
     const tools = await agent.getToolsForExecution({
       runId,
+      toolsets: await restoreWorkerToolsets(mastra, resolveRequestContext, execOptions?.toolsetToolNames),
       threadId: state.threadId,
       resourceId: state.resourceId,
       requestContext: resolveRequestContext,
