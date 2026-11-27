@@ -76,6 +76,12 @@ export function getRunRegistryEntry(runId: string, mastra: Mastra | undefined): 
  */
 export const DURABLE_CONTEXT_SEGMENT_KEY = '__mastra_durableContextSegment';
 
+/** The run segment a step belongs to: its Core execution claim, or the engine's segment id. */
+export function getStepSegment(runId: string, stepContext: RequestContext | undefined): string | undefined {
+  const segment = getExecutionClaim(stepContext, runId)?.executionId ?? stepContext?.get(DURABLE_CONTEXT_SEGMENT_KEY);
+  return typeof segment === 'string' ? segment : undefined;
+}
+
 /**
  * The registry's live request context, when it belongs to the execution running this step. Once
  * another process claims the run (for example an approval from another host), the context cached

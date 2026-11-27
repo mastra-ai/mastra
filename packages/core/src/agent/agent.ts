@@ -15755,8 +15755,9 @@ export class Agent<
         for (const reg of new Set([entry, getRunRegistryEntry(runId, this.#mastra)])) {
           if (!reg) continue;
           reg.tools = rebindProcessorTools(refresh(reg.tools ?? {}, reg.requestTools), resumeRequestContext);
-          if (reg.baseTools)
-            reg.baseTools = rebindProcessorTools(refresh(reg.baseTools, reg.requestTools), resumeRequestContext);
+          // Later steps start from this caller's build alone. Processors add or withhold tools
+          // again on every step, so nothing from the earlier build needs carrying over.
+          reg.baseTools = requestTools;
           // Tools this rebuild did not produce still hold their earlier build, so
           // keep that as their baseline; otherwise a later resume can never refresh them.
           reg.requestTools = { ...reg.requestTools, ...requestTools };
@@ -15771,6 +15772,9 @@ export class Agent<
       if (!reg) continue;
       reg.executionFence = executionFence;
       reg.resumeToolCallId = resolvedOptions.toolCallId;
+      // This process holds the resume's live request, so its steps adopt the tools built here
+      // instead of rebuilding them from the snapshot.
+      if (!coldSnapshot) reg.toolsSegment = undefined;
     }
 
     // Install a fresh abort controller for the resumed segment. The original

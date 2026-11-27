@@ -101,11 +101,46 @@ export interface ResolveRuntimeOptions {
    * `requestContextEntries` snapshot. See `restoreRequestContext`.
    */
   requestContext?: RequestContext;
+  /**
+   * The run segment this step belongs to (see `getStepSegment`). When it differs from the segment
+   * the cached tools were built for, they are rebuilt for this segment's caller.
+   */
+  stepSegment?: string;
   /** Logger for debugging */
   logger?: { debug?: (...args: any[]) => void; error?: (...args: any[]) => void };
 }
 
 export { restoreRequestContext };
+
+/** Rebuild a hydrated entry's starting tools for the caller of the segment now running. */
+async function rebuildToolsForSegment(
+  mastra: Mastra,
+  entry: RunRegistryEntry,
+  {
+    runId,
+    agentId,
+    input,
+    requestContext,
+  }: { runId: string; agentId: string; input: DurableAgenticWorkflowInput; requestContext: RequestContext },
+): Promise<Record<string, CoreTool>> {
+  const resolved = await resolveRunAgent(mastra, agentId, runId, input.agentVersionId);
+  const agent = isDurableAgentLike(resolved) && resolved.agent !== resolved ? resolved.agent : resolved;
+  entry.baseTools = await agent.getToolsForExecution({
+    runId,
+    threadId: input.state.threadId,
+    resourceId: input.state.resourceId,
+    requestContext,
+    memoryConfig: input.state.memoryConfig,
+    autoResumeSuspendedTools: input.options?.autoResumeSuspendedTools,
+    clientTools: input.options?.clientTools as ToolsInput | undefined,
+    delegation: entry.delegation,
+    methodType: entry.methodType ?? 'stream',
+    backgroundTaskEnabled: Boolean(entry.backgroundTaskManager),
+    backgroundTaskPolicy: input.options?.backgroundTaskPolicy,
+    model: entry.model,
+  });
+  return entry.baseTools;
+}
 
 /**
  * The run's `requestContextEntries` as handed to scorers (`customContext`), with
@@ -332,6 +367,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   let errorProcessors: ErrorProcessorOrWorkflow[] | undefined = globalEntry?.errorProcessors;
   let processorStates: Map<string, ProcessorState> | undefined = globalEntry?.processorStates;
   let rehydratedFromMastra = false;
+  let toolsSegment: string | undefined;
   let rebuiltAgent: Agent<any, any, any, any> | undefined;
   let backgroundTasks: ReturnType<typeof resolveBackgroundTasks> | undefined;
 
@@ -340,6 +376,22 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   // through and rebuild from the Mastra instance.
   if (hasHydratedEntry) {
     logger?.debug?.(`[DurableAgent:${agentId}] Using model and tools from global registry for run ${runId}`);
+    const { stepSegment } = options;
+    if (!globalEntry || stepSegment === undefined) {
+      // No segment to compare against.
+    } else if (globalEntry.toolsSegment === undefined) {
+      globalEntry.toolsSegment = stepSegment;
+    } else if (globalEntry.toolsSegment !== stepSegment && mastra) {
+      // The cached tools were built for the caller of an earlier segment, for example when another
+      // host resumed the run. Later steps start from this segment's caller's build instead.
+      tools = await rebuildToolsForSegment(mastra, globalEntry, {
+        runId,
+        agentId,
+        input,
+        requestContext: restoreRequestContext(input.requestContextEntries, options.requestContext),
+      });
+      globalEntry.toolsSegment = stepSegment;
+    }
   } else if (mastra) {
     try {
       const agent = await resolveRunAgent(mastra, agentId, runId, input.agentVersionId);
@@ -403,6 +455,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       processorStates = rebuiltProcessors.processorStates;
 
       rehydratedFromMastra = true;
+      toolsSegment = options.stepSegment;
     } catch (error) {
       if (error instanceof DurableProcessorRebuildError || error instanceof DurableAgentNotFoundError) throw error;
       if ((input.options?.toolsetToolNames?.length ?? 0) > 0) throw error;
@@ -433,6 +486,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       // so sibling steps in this process trust it instead of rebuilding.
       isPlaceholder: false,
       tools,
+      toolsSegment,
       model,
       modelList,
       workspace,

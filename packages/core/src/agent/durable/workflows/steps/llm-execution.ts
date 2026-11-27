@@ -83,7 +83,13 @@ import { isSupportedLanguageModel } from '../../../utils';
 import { ensureRemoteAbortListener, readRunDeadline } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
 import { ExecutionFence, getExecutionOwnershipGuard } from '../../execution-fence';
-import { endRunSpansWithError, getLiveRunRequestContext, getRunRegistryEntry, markRunActive } from '../../run-registry';
+import {
+  endRunSpansWithError,
+  getLiveRunRequestContext,
+  getRunRegistryEntry,
+  getStepSegment,
+  markRunActive,
+} from '../../run-registry';
 import { segmentSpanData } from '../../segment-spans';
 import {
   createStepStartChunk,
@@ -326,6 +332,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         agentId,
         input: { ...typedInput, messageListState: await readMessageListState(params, typedInput) },
         requestContext,
+        stepSegment: getStepSegment(runId, params.requestContext),
         logger,
       });
 

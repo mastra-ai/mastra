@@ -158,17 +158,9 @@ describe.each(['default', 'evented'] as const)('resume by another caller (%s)', 
         }),
       );
 
-      // Bob's agent and default tools, and the resume's own toolsets. A resume cannot repeat call-time
-      // toolsets over HTTP, so without them the same process keeps the starting call's; another process
-      // never had them.
-      const keepsStartingToolsets = !resumeToolsets && path === 'same process';
-      expect(log.offered[1]).toEqual([
-        ...(keepsStartingToolsets ? ['alice_call'] : []),
-        'approve',
-        'bob_agent',
-        ...(resumeToolsets ? ['bob_call'] : []),
-        'bob_default',
-      ]);
+      // Bob's agent and default tools, and the resume's own toolsets only, as a plain Agent resume
+      // already offers. The starting call's toolsets are not carried over.
+      expect(log.offered[1]).toEqual(['approve', 'bob_agent', ...(resumeToolsets ? ['bob_call'] : []), 'bob_default']);
     },
   );
 });
