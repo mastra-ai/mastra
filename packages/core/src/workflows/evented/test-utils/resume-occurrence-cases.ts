@@ -403,16 +403,22 @@ export function describeResumeOccurrenceCases({
       });
     }, 20_000);
 
-    /** gate suspends; once resumed its first attempt fails and the retry succeeds. */
+    /**
+     * gate suspends; once resumed its first attempt fails and the retry succeeds. `suspendData`
+     * records what each resumed attempt received of the data it suspended with.
+     */
     function retryingGateWorkflow() {
       const attempts: string[] = [];
+      const suspendData: unknown[] = [];
       const gate = createStep({
         id: 'gate',
         inputSchema: Num,
         outputSchema: Num,
         resumeSchema: Approval,
-        execute: async ({ inputData, resumeData, suspend }) => {
-          if (!resumeData) return suspend({});
+        suspendSchema: z.object({ question: z.string() }),
+        execute: async ({ inputData, resumeData, suspend, suspendData: received }) => {
+          if (!resumeData) return suspend({ question: 'approve?' });
+          suspendData.push(received);
           attempts.push(attempts.length === 0 ? 'failed' : 'succeeded');
           if (attempts.length === 1) throw new Error('Transient failure');
           return { n: inputData.n + 1 };
@@ -426,13 +432,21 @@ export function describeResumeOccurrenceCases({
       })
         .then(gate)
         .commit();
-      return { workflow, attempts };
+      return { workflow, attempts, suspendData };
     }
 
+    // Storage v1 hands every attempt the suspended record, so each one sees its suspend data. On
+    // storage v2 the retry loads the step from the stored run, where it is the failed attempt, so
+    // the retry sees none; that was already so on main.
+    const suspendDataPerAttempt =
+      storageVersion === 1
+        ? [{ question: 'approve?' }, { question: 'approve?' }]
+        : [{ question: 'approve?' }, undefined];
+
     // T5. Guards a hang: a retry of a resumed step must claim the step again, or its completion is
-    // refused and the run stays running.
+    // refused and the run stays running. The retry also keeps the step's suspend data.
     it('finishes a resumed step that fails once and is retried', async () => {
-      const { workflow, attempts } = retryingGateWorkflow();
+      const { workflow, attempts, suspendData } = retryingGateWorkflow();
       await withHost({ [workflow.id]: workflow }, async () => {
         const run = await workflow.createRun();
         expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'suspended' });
@@ -441,12 +455,13 @@ export function describeResumeOccurrenceCases({
           result: { n: 1 },
         });
         expect(attempts).toEqual(['failed', 'succeeded']);
+        expect(suspendData).toEqual(suspendDataPerAttempt);
       });
     }, 20_000);
 
     // T6. The same for a time travel into a suspended step.
     it('finishes a time travel into a suspended step that fails once and is retried', async () => {
-      const { workflow, attempts } = retryingGateWorkflow();
+      const { workflow, attempts, suspendData } = retryingGateWorkflow();
       await withHost({ [workflow.id]: workflow }, async () => {
         const run = await workflow.createRun();
         expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'suspended' });
@@ -455,6 +470,7 @@ export function describeResumeOccurrenceCases({
           result: { n: 1 },
         });
         expect(attempts).toEqual(['failed', 'succeeded']);
+        expect(suspendData).toEqual(suspendDataPerAttempt);
       });
     }, 20_000);
 

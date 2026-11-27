@@ -4041,7 +4041,13 @@ export class WorkflowEventProcessor extends EventProcessor {
           completionGuard: { eventId: args.eventId! },
         });
       }
-      if (guardStart) stepResults[leafId] = stepResult;
+      // The retry's claim expects this attempt's stamp. A resumed step keeps its suspended record
+      // with that stamp, so the retry still reads its suspend data from it.
+      if (guardStart) {
+        stepResults[leafId] = isResumedEntry
+          ? { ...stepResults[leafId]!, metadata: { ...stepResults[leafId]?.metadata, startedBy: args.eventId } }
+          : stepResult;
+      }
       // Wait `retryConfig.delay` before the next attempt, as the default
       // engine does (#29389). Waiting here rather than in a detached timer
       // keeps this delivery unacked until the retry is published, so a worker
