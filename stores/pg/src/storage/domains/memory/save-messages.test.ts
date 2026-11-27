@@ -479,8 +479,14 @@ describe('MemoryPG.copyThread', () => {
     expect(messageInsert.query).toContain('mastra_messages');
     // INSERT … SELECT carries createdAt/createdAtZ (and content) verbatim from the source row.
     expect(messageInsert.query).toMatch(/INSERT INTO [\s\S]*SELECT \$1, \$2, content, "createdAt", "createdAtZ"/);
-    // Only ids and the target resource are bound; no timestamps or content cross into JS.
-    expect(messageInsert.values).toEqual([result.messageIdMap!['message-1'], 'thread-2', 'resource-1', 'message-1']);
+    // Only ids, the target resource and the source thread are bound; no timestamps or content cross into JS.
+    expect(messageInsert.values).toEqual([
+      result.messageIdMap!['message-1'],
+      'thread-2',
+      'resource-1',
+      'message-1',
+      'thread-1',
+    ]);
     expect(messageInsert.values!.some(v => v instanceof Date || (typeof v === 'string' && v.includes('T')))).toBe(
       false,
     );
