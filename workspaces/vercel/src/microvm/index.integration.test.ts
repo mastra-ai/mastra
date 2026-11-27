@@ -59,20 +59,25 @@ describe.skipIf(!HAS_CREDS)('VercelSandbox Integration', () => {
     expect(result.stdout).toContain('background');
   });
 
-  it('extends the session timeout on the live sandbox', async () => {
-    const info = sandbox!.getInfo();
-    const before = info.metadata.timeout as number | undefined;
+  it('extends the live session deadline by the requested duration', async () => {
+    // `expiresAt` is the live deadline of the running session (session start
+    // time plus its current timeout). getInfo().metadata.timeout would only
+    // echo the constructor-derived `_timeout`, which this PR deliberately
+    // leaves untouched, so it cannot prove the session actually got more time.
+    const before = sandbox!.sandbox.expiresAt;
+    expect(before).toBeInstanceOf(Date);
 
     await sandbox!.extendTimeout(60_000);
 
-    const after = sandbox!.getInfo().metadata.timeout as number | undefined;
-    // The provider reports a new (later) expiry or max-timeout window; the
-    // contract is that the call succeeds against a live sandbox and the
-    // requested duration is accounted for, not that it is a plain sum.
-    expect(Number.isFinite(after)).toBe(true);
-    expect(after).not.toBeUndefined();
-    if (typeof before === 'number' && typeof after === 'number') {
-      expect(after).toBeGreaterThanOrEqual(before);
-    }
+    const after = sandbox!.sandbox.expiresAt;
+    expect(after).toBeInstanceOf(Date);
+
+    // The SDK replaces its session snapshot with the extended one, so the live
+    // deadline must move forward by the requested duration. Assert the full
+    // minute landed (not a no-op or a partial extension) while tolerating a
+    // second or two of provider-side rounding.
+    const delta = after!.getTime() - before!.getTime();
+    expect(delta).toBeGreaterThanOrEqual(58_000);
+    expect(delta).toBeLessThanOrEqual(62_000);
   });
 });
