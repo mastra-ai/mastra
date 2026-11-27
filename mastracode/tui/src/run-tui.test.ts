@@ -85,11 +85,16 @@ describe('runTui', () => {
     expect(config.resumeLatestThread).toBe(false);
   });
 
+  it('keeps --new last over a launcher’s thread options', async () => {
+    process.argv = ['node', 'mastracode', '--new'];
+
+    const config = await bootConfig({ createMastraCode: { createInitialThread: true, resumeLatestThread: true } });
+
+    expect(config).toMatchObject({ createInitialThread: false, resumeLatestThread: false });
+  });
+
   it('rejects --new where it would be ignored', async () => {
     const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-    const exit = vi.spyOn(process, 'exit').mockImplementation(code => {
-      throw new Error(`exit ${code}`);
-    });
     try {
       createMastraCode.mockReset();
       process.argv = ['node', 'mastracode', 'resume', 'thread-123', '--new'];
@@ -100,7 +105,7 @@ describe('runTui', () => {
 
       process.argv = ['node', 'mastracode', '--new', '--continue', '--prompt', 'hello'];
       await runTui();
-      expect(exit).toHaveBeenCalledWith(1);
+      expect(process.exitCode).toBe(1);
       expect(stderr).toHaveBeenCalledWith(
         '--new starts the interactive TUI; headless runs already start a new thread unless --continue or --thread is passed\n',
       );
@@ -108,7 +113,6 @@ describe('runTui', () => {
     } finally {
       process.exitCode = undefined;
       stderr.mockRestore();
-      exit.mockRestore();
     }
   });
 
