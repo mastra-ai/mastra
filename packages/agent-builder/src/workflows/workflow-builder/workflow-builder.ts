@@ -9,7 +9,7 @@ import { AgentBuilder } from '../../agent';
 import { AgentBuilderDefaults } from '../../defaults';
 import { resolveModel } from '../../utils';
 import { createPlanningAndApprovalWorkflow } from '../task-planning/task-planning';
-import { workflowBuilderPrompts, workflowResearch as research } from './prompts';
+import { workflowBuilderPrompts } from './prompts';
 import {
   WorkflowBuilderInputSchema,
   WorkflowBuilderResultSchema,
@@ -550,7 +550,7 @@ export function createWorkflowBuilderWorkflow() {
       const initData = getInitData<WorkflowBuilderInputSchemaType>();
       const discoveryResult = getStepResult(workflowDiscoveryStep);
       const projectResult = getStepResult(projectDiscoveryStep);
-      // const researchResult = getStepResult(workflowResearchStep);
+      const researchResult = getStepResult(workflowResearchStep);
 
       return {
         action: initData.action,
@@ -559,8 +559,7 @@ export function createWorkflowBuilderWorkflow() {
         requirements: initData.requirements,
         discoveredWorkflows: discoveryResult.workflows,
         projectStructure: projectResult,
-        // research: researchResult,
-        research,
+        research: researchResult,
 
         userAnswers: undefined,
       };
@@ -576,7 +575,7 @@ export function createWorkflowBuilderWorkflow() {
       const initData = getInitData<WorkflowBuilderInputSchemaType>();
       const discoveryResult = getStepResult(workflowDiscoveryStep);
       const projectResult = getStepResult(projectDiscoveryStep);
-      // const researchResult = getStepResult(workflowResearchStep);
+      const researchResult = getStepResult(workflowResearchStep);
       const subWorkflowResult = getStepResult(planningAndApprovalWorkflow);
 
       return {
@@ -587,8 +586,7 @@ export function createWorkflowBuilderWorkflow() {
         tasks: subWorkflowResult.tasks,
         discoveredWorkflows: discoveryResult.workflows,
         projectStructure: projectResult,
-        // research: researchResult,
-        research,
+        research: researchResult,
         projectPath: initData.projectPath || process.cwd(),
       };
     })
