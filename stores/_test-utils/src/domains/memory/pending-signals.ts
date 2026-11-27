@@ -290,7 +290,7 @@ export function createPendingSignalsTest({ storage, peerStorage }: PendingSignal
         expect(await hasNoRow(thread, message.id)).toBe(true);
       });
 
-      it('acts on the rows of the thread, whatever resource they carry, and on no other thread', async () => {
+      it('acts on the rows sent to the thread, whatever resource they named, and on no other thread', async () => {
         const thread = await newThread();
         const runId = await startRun(thread);
         const own = await send(thread);
@@ -473,7 +473,7 @@ export function createPendingSignalsTest({ storage, peerStorage }: PendingSignal
         expect(await claim(clone, runId)).toEqual([]);
       });
 
-      it('moves rows with a status when the thread changes resource', async () => {
+      it('returns pending and taken rows with the thread current resource after a transfer', async () => {
         const thread = await newThread();
         const runId = await startRun(thread);
         const claimed = await send(thread);
@@ -504,6 +504,11 @@ export function createPendingSignalsTest({ storage, peerStorage }: PendingSignal
         const claimed = await send(thread);
         await claim(thread, runId);
         const pending = await send(thread);
+        const sibling = await newThread();
+        const siblingRun = await startRun(sibling);
+        const siblingClaimed = await send(sibling);
+        await claim(sibling, siblingRun);
+        const siblingPending = await send(sibling);
 
         await memory.deleteThread({ threadId: thread.id });
         await memory.saveThread({ thread });
@@ -512,6 +517,7 @@ export function createPendingSignalsTest({ storage, peerStorage }: PendingSignal
         expect(await pendingIds(thread)).toEqual([]);
         expect(await hasNoRow(thread, claimed.id)).toBe(true);
         expect(await hasNoRow(thread, pending.id)).toBe(true);
+        expect(ids(await claim(sibling, siblingRun))).toEqual([siblingClaimed.id, siblingPending.id]);
       });
 
       it('deletes a row with a status by id', async () => {
@@ -520,6 +526,140 @@ export function createPendingSignalsTest({ storage, peerStorage }: PendingSignal
 
         await memory.deleteMessages([pending.id]);
         expect(await hasNoRow(thread, pending.id)).toBe(true);
+      });
+
+      it.each(['pending', 'claimed'] as const)(
+        'counts the delete of a %s row by id as a change to its thread',
+        async state => {
+          const thread = await newThread();
+          const runId = await startRun(thread);
+          const signal = await send(thread);
+          if (state === 'claimed') expect(ids(await claim(thread, runId))).toEqual([signal.id]);
+          const before = (await memory.getThreadById({ threadId: thread.id }))!;
+
+          await memory.deleteMessages([signal.id]);
+
+          const after = (await memory.getThreadById({ threadId: thread.id }))!;
+          expect(new Date(after.updatedAt).getTime()).toBeGreaterThan(new Date(before.updatedAt).getTime());
+          expect(await claim(thread, runId)).toEqual([]);
+          expect(await hasNoRow(thread, signal.id)).toBe(true);
+        },
+      );
+
+      it('hides a send that named another resource from reads of that resource and of the thread', async () => {
+        const thread = await newThread();
+        const foreignResource = `resource-${randomUUID()}`;
+        const foreign = signalFor({ ...thread, resourceId: foreignResource });
+        expect(await memory.enqueuePendingSignal({ message: foreign })).toBe('accepted');
+        const own = await send(thread);
+        // A thread of the foreign resource, so reads of that resource have a message to return.
+        const foreignThread = await memory.saveThread({
+          thread: createSampleThread({ resourceId: foreignResource }) as StorageThreadType,
+        });
+        const foreignMessage = createSampleMessageV2({ ...scope(foreignThread) });
+        await memory.saveMessages({ messages: [foreignMessage] });
+
+        for (const resourceId of [undefined, thread.resourceId, foreignResource]) {
+          const byThread = await memory.listMessages({ threadId: thread.id, resourceId, perPage: false });
+          expect({ resourceId, ids: ids(byThread.messages), total: byThread.total }).toEqual({
+            resourceId,
+            ids: [],
+            total: 0,
+          });
+        }
+        const byForeign = await memory.listMessagesByResourceId({ resourceId: foreignResource, perPage: false });
+        expect(ids(byForeign.messages)).toEqual([foreignMessage.id]);
+        expect(byForeign.total).toBe(1);
+        const byOwn = await memory.listMessagesByResourceId({ resourceId: thread.resourceId, perPage: false });
+        expect(byOwn.messages).toEqual([]);
+        expect(byOwn.total).toBe(0);
+        const included = await memory.listMessagesByResourceId({
+          resourceId: foreignResource,
+          perPage: 0,
+          include: [{ id: foreign.id }, { id: own.id }],
+        });
+        expect(included.messages).toEqual([]);
+
+        expect(await pendingIds(thread)).toEqual([foreign.id, own.id]);
+      });
+    });
+
+    describe('reserved thread ids', () => {
+      // The prefix is persisted in every pending row, so it is pinned here rather than imported.
+      const reservedFor = (thread: StorageThreadType) => `mastra-pending-signals:${thread.id}`;
+
+      it('rejects a thread id with the pending-signal prefix wherever a caller chooses one', async () => {
+        const thread = await newThread();
+        const reserved = reservedFor(thread);
+        const pending = await send(thread);
+        const message = createSampleMessageV2({ ...scope(thread) });
+        await memory.saveMessages({ messages: [message] });
+        const before = await memory.getThreadById({ threadId: thread.id });
+
+        const rejected = [
+          () => memory.saveThread({ thread: { ...thread, id: reserved } }),
+          () =>
+            memory.saveThread({ thread: createSampleThread({ id: `mastra-pending-signals:` }) as StorageThreadType }),
+          () => memory.copyThread({ sourceThreadId: thread.id, newThreadId: reserved }),
+          () => memory.cloneThread({ sourceThreadId: thread.id, newThreadId: reserved }),
+          () => memory.saveMessages({ messages: [{ ...pending, threadId: reserved }] }),
+          () =>
+            memory.saveMessages({
+              messages: [createSampleMessageV2({ ...scope(thread) }), { ...message, threadId: reserved }],
+            }),
+          () => memory.updateMessages({ messages: [{ id: message.id, threadId: reserved }] }),
+          () => memory.listMessages({ threadId: reserved }),
+          () => memory.listMessages({ threadId: [thread.id, reserved] }),
+        ];
+        for (const [index, call] of rejected.entries()) {
+          await expect(call(), `call ${index}`).rejects.toThrow(/reserved/);
+        }
+
+        expect(await memory.getThreadById({ threadId: reserved })).toBeNull();
+        const { threads } = await memory.listThreads({ filter: { resourceId: thread.resourceId } });
+        expect(threads.map(listed => listed.id)).toEqual([thread.id]);
+        expect(await memory.getThreadById({ threadId: thread.id })).toEqual(before);
+        expect(await visibleIds(thread)).toEqual([message.id]);
+        expect(await memory.listPendingSignals(onThread(thread))).toMatchObject([
+          { id: pending.id, content: pending.content },
+        ]);
+      });
+
+      // SQL LIKE treats `_` as a wildcard, and SQLite's LIKE ignores ASCII case.
+      it.each([
+        'MASTRA-PENDING-SIGNALS:',
+        'mastra_pending_signals:',
+        'mastra-pending-signals-',
+        'mastra-pending-signals',
+      ])('treats a thread id starting with %s as an ordinary thread', async lookalike => {
+        const thread = await memory.saveThread({
+          thread: createSampleThread({ id: `${lookalike}${randomUUID()}` }) as StorageThreadType,
+        });
+        const message = createSampleMessageV2({ ...scope(thread), createdAt: new Date(Date.now() - 10_000) });
+        const next = createSampleMessageV2({ ...scope(thread), createdAt: new Date(Date.now() - 9_000) });
+        await memory.saveMessages({ messages: [message, next] });
+
+        expect(await visibleIds(thread)).toEqual([message.id, next.id]);
+        expect(sorted(ids((await memory.listMessagesById({ messageIds: [message.id, next.id] })).messages))).toEqual(
+          sorted([message.id, next.id]),
+        );
+        const window = await memory.listMessages({
+          threadId: thread.id,
+          perPage: 0,
+          include: [{ id: message.id, withNextMessages: 1 }],
+        });
+        expect(ids(window.messages)).toEqual([message.id, next.id]);
+        const updated = await memory.updateMessages({
+          messages: [{ id: message.id, content: { content: 'edited' } as MastraDBMessage['content'] }],
+        });
+        expect(ids(updated)).toEqual([message.id]);
+
+        const runId = await startRun(thread);
+        const signal = await send(thread);
+        expect(await pendingIds(thread)).toEqual([signal.id]);
+        expect(ids(await claim(thread, runId))).toEqual([signal.id]);
+        await memory.saveMessages({ messages: [{ ...signal, createdAt: new Date() }] });
+        expect(await visibleIds(thread)).toEqual([message.id, next.id, signal.id]);
       });
     });
 
@@ -617,6 +757,37 @@ export function createPendingSignalsTest({ storage, peerStorage }: PendingSignal
         expect(await visibleIds(thread)).toEqual([claimed.id]);
         await startRun(thread, runId);
         expect(await claim(thread, runId)).toEqual([]);
+      });
+
+      it('keeps a saved row claimed through a second save and a transfer, and returns it once until close', async () => {
+        const thread = await newThread();
+        const runId = await startRun(thread);
+        const taken = await send(thread, { createdAt: new Date(Date.now() - 10_000) });
+        expect(ids(await claim(thread, runId))).toEqual([taken.id]);
+
+        await memory.saveMessages({ messages: [{ ...taken, createdAt: new Date(Date.now() - 5_000) }] });
+        // The save gives the row the saved message's resource.
+        expect(ids((await memory.listMessagesByResourceId({ resourceId: thread.resourceId })).messages)).toEqual([
+          taken.id,
+        ]);
+        const edited = {
+          ...taken,
+          createdAt: new Date(Date.now() - 4_000),
+          content: { ...taken.content, content: 'x' },
+        };
+        await memory.saveMessages({ messages: [edited] });
+        const resourceId = `resource-${randomUUID()}`;
+        const moved = await memory.updateThreadResourceId({ threadId: thread.id, resourceId });
+
+        expect(await claim(thread, runId)).toMatchObject([{ id: taken.id, threadId: thread.id, resourceId }]);
+        expect(ids((await memory.listMessagesByResourceId({ resourceId })).messages)).toEqual([taken.id]);
+        expect(await visibleIds(moved)).toEqual([taken.id]);
+        expect(await pendingIds(thread)).toEqual([]);
+
+        await close(thread, runId);
+        await startRun(thread, runId);
+        expect(await claim(thread, runId)).toEqual([]);
+        expect(await visibleIds(moved)).toEqual([taken.id]);
       });
 
       it.each(['pending', 'claimed'] as const)(
