@@ -49,6 +49,7 @@ export type {
   FactoryBoardEngineContext,
   FactoryBoardEngineFactory,
   FactoryCardSeat,
+  FactoryStoppedBy,
   FactoryRunFailure,
   FactorySubmittedMove,
 } from './board-engine/engine.js';

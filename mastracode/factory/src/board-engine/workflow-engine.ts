@@ -29,6 +29,7 @@ import type {
   FactoryCardPlacementResult,
   FactoryRunEndedBinding,
   FactoryCardSeat,
+  FactoryStoppedBy,
   FactoryRunFailure,
   FactorySubmittedMove,
 } from './engine.js';
@@ -88,7 +89,7 @@ type PendingInput =
   | {
       runStopped: FactoryCardSeat;
       /** Who stopped it: for the audit trail only, never the run's record. */
-      by?: { userId: string };
+      by?: FactoryStoppedBy;
       answer?: { heard: true } | { error: unknown };
     }
   | {
@@ -438,7 +439,7 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
    * Tells the card's run that a person stopped its phase's run: the card stays where it is and
    * needs attention until someone starts the phase again. Who stopped it isn't the run's to keep.
    */
-  async runStopped(seat: FactoryCardSeat, by?: { userId: string }): Promise<void> {
+  async runStopped(seat: FactoryCardSeat, by?: FactoryStoppedBy): Promise<void> {
     const pending = { runStopped: seat, ...(by ? { by } : {}) } satisfies PendingInput as Extract<
       PendingInput,
       { runStopped: unknown }
@@ -680,7 +681,12 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
         orgId: card.orgId,
         factoryProjectId: card.factoryProjectId,
         ...(by
-          ? { actorId: by.userId, actorType: 'human' as const }
+          ? {
+              actorId: by.userId,
+              actorType: 'human' as const,
+              ...(by.actorProfile ? { actorProfile: by.actorProfile } : {}),
+              ...(by.context ? { context: by.context } : {}),
+            }
           : { actorId: 'factory', actorType: 'system' as const }),
         action: 'factory.work_item.needs_attention',
         // The input that flagged the card. One entry per time the card comes to need attention is
@@ -866,12 +872,15 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
         const run = await this.workflow.createRun({ runId });
         try {
           const result = await run.resume({ step: 'phase', resumeData: { inputId } });
+          // A flag the run didn't keep is no entry on the card's trail: the input that flags it next is.
+          if (result.status !== 'suspended') this.#flagged.delete(pending);
           // Once the move was applied its answer stands, however the run fared after it.
           if (pending.answer) return;
           if (result.status === 'suspended') throw new Error("The card's board run did not apply its input.");
           // The run this process held ended without taking the input (another process may have
           // replaced it since); read what the card's run is now.
         } catch (error) {
+          this.#flagged.delete(pending);
           // Applied, then the run could not be saved: another process replaced it meanwhile. The
           // move committed, and the run holds nothing the card needs.
           if (pending.answer) return;

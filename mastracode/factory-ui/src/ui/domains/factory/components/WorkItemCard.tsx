@@ -99,7 +99,12 @@ export function WorkItemCard({
   const boardId = itemBoard(item);
   const definition = catalog.data?.find(board => board.id === boardId);
   // Only a card whose automation failed asks its board run why: one read per such card, not per card.
-  const { data: runState } = useCardRunState(factoryId, item.id, decision?.status === 'failed');
+  const { data: runState } = useCardRunState(
+    factoryId,
+    item.id,
+    // Only a failed phase run is the card's run's to explain; a failed move or sync is not.
+    decision?.status === 'failed' && decision.type === 'invokeSkill',
+  );
   const {
     moves,
     proposedRunLabel,

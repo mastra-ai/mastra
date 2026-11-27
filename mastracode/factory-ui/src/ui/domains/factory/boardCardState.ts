@@ -118,7 +118,7 @@ function automationOnCard(
     return {
       status: {
         kind: 'error',
-        label: attentionReason ?? copy.failed,
+        label: (decision.type === 'invokeSkill' ? attentionReason : undefined) ?? copy.failed,
         ...(decision.canRetry ? { retryDecisionId: decision.id } : {}),
         detail,
       },

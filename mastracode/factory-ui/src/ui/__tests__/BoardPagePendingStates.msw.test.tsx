@@ -1,6 +1,6 @@
 import type { FactoryTransitionResultRejected } from '@mastra/factory/rules/types';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
 import { createMemoryRouter, matchRoutes, RouterProvider } from 'react-router';
@@ -457,9 +457,10 @@ describe('Board card pending states', () => {
       completedAt: null,
     };
     let runState: Record<string, unknown> | undefined;
+    let decision: Record<string, unknown> = failed;
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
-        HttpResponse.json({ decisions: [failed] }),
+        HttpResponse.json({ decisions: [decision] }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/${ITEM_ID}/run-state`, () =>
         HttpResponse.json(runState ? { runState } : {}),
@@ -485,6 +486,14 @@ describe('Board card pending states', () => {
     expect(await within(flagged).findByText('Agent run ended in error')).toBeVisible();
     expect(within(flagged).queryByText('Automated run could not start')).not.toBeInTheDocument();
     expect(within(flagged).getByRole('button', { name: 'Retry' })).toBeVisible();
+    cleanup();
+
+    // A failed automatic move is not the run's to explain, whatever the run records.
+    decision = { ...failed, id: 'decision-2', type: 'transition', failureCode: 'stale' };
+    renderWorkBoard();
+    const moved = await screen.findByRole('article', { name: 'Fix login bug' });
+    expect(await within(moved).findByText('Automatic move failed')).toBeVisible();
+    expect(within(moved).queryByText('Agent run ended in error')).not.toBeInTheDocument();
   });
 
   it('opens the session a card shows from the card itself', async () => {

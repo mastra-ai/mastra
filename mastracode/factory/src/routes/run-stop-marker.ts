@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from 'hono';
 
-import type { FactoryBoardEngine } from '../board-engine/engine.js';
+import type { FactoryBoardEngine, FactoryStoppedBy } from '../board-engine/engine.js';
+import { auditRequestOrigin } from '../storage/domains/audit/domain.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { RouteAuth } from './route.js';
 import { SESSION_PATH } from './session-access.js';
@@ -41,11 +42,11 @@ export function createRunStopMarker({
     const sessionId = decodeURIComponent(match[1]!);
     const engine = boardEngine();
     let stopped: Parameters<NonNullable<FactoryBoardEngine['runStopped']>>[0][] = [];
-    let by: { userId: string } | undefined;
+    let by: FactoryStoppedBy | undefined;
     try {
       const orgId = await callerOrgId(c);
       const userId = auth.enabled() ? auth.tenant(c)?.userId : undefined;
-      if (userId) by = { userId };
+      if (userId) by = { userId, ...auditRequestOrigin(c) };
       if (orgId) {
         await storage.requestRunBindingStop({ orgId, sessionId, at: new Date() });
         // The seats the stop is for, read before the abort can end them.

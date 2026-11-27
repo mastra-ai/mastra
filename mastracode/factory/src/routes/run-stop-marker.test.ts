@@ -137,12 +137,15 @@ describe('createRunStopMarker', () => {
     expect(heard).toEqual([]);
 
     running = true;
-    await app.request('/api/agent-controller/code/sessions/session-1/abort', { method: 'POST' });
+    await app.request('/api/agent-controller/code/sessions/session-1/abort', {
+      method: 'POST',
+      headers: { 'user-agent': 'test-browser' },
+    });
     await vi.waitFor(() =>
       expect(heard).toEqual([
         {
           seat: { orgId: ORG_ID, factoryProjectId: 'project-1', workItemId: binding.workItemId, role: 'work' },
-          by: { userId: 'user-1' },
+          by: { userId: 'user-1', actorProfile: undefined, context: { userAgent: 'test-browser' } },
         },
       ]),
     );
