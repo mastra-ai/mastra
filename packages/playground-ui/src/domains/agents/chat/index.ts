@@ -10,7 +10,5 @@ export { Thread } from './thread';
 export type { ThreadProps } from './thread';
 export type { AgentSettingsType, ChatProps, ModelSettings } from './types';
 export { AgentChatFeaturesProvider, useAgentThreadInput } from './features';
-export { SpeechInputButton } from './speech-input-button';
-export type { SpeechInputButtonProps } from './speech-input-button';
 export { ThreadsPanelContext } from './use-threads-panel';
 export type { AgentChatFeatures, AgentChatSlots, AgentChatThreadInput } from './features';

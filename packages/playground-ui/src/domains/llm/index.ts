@@ -8,7 +8,7 @@ export { ModelPicker } from './model-picker';
 export type { ModelPickerProps } from './model-picker';
 export { catalogModelPickerValue, findCatalogModel, modelPickerProviders } from './model-picker-catalog';
 export type { ModelPickerCatalogModel } from './model-picker-catalog';
-export { MissingProviderKeyNotice, ModelNotice, ModelNoticeCode } from './model-notice';
+export { MissingProviderKeyNotice, ModelNotice } from './model-notice';
 export type {
   ModelPickerAddProvider,
   ModelPickerModel,

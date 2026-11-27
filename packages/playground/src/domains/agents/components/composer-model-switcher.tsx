@@ -1,12 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import {
-  MissingProviderKeyNotice,
-  ModelNotice,
-  ModelNoticeCode,
-  ModelPicker,
-  cleanProviderId,
-} from '@mastra/playground-ui/domains/llm';
+import { MissingProviderKeyNotice, ModelNotice, ModelPicker, cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import type { ModelPickerProvider } from '@mastra/playground-ui/domains/llm';
 import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
 import { useLLMProviders } from '@mastra/react/hooks/llm';
@@ -114,9 +108,9 @@ export const ComposerModelWarning = () => {
         <ModelNotice data-testid="composer-model-stale-warning" role="alert">
           {modelWarning || (
             <>
-              <ModelNoticeCode>
+              <code>
                 {provider}/{selectedModel}
-              </ModelNoticeCode>{' '}
+              </code>{' '}
               is no longer allowed by admin policy. Pick a different model.
             </>
           )}
