@@ -1,13 +1,13 @@
-import { z } from 'zod';
+import { FACTORY_TRIAGE_TYPES } from '@internal/factory-contract';
 
-import { FACTORY_TRIAGE_TYPES } from '../rules/types.js';
 import type {
   FactoryRuleContextBase,
   FactoryRuleItemContext,
   FactoryRuleRejectionCode,
   FactoryRuleSource,
   FactoryTriageType,
-} from '../rules/types.js';
+} from '@internal/factory-contract';
+import { z } from 'zod';
 
 type Immutable<T> = T extends string | number | boolean | bigint | null | undefined
   ? T

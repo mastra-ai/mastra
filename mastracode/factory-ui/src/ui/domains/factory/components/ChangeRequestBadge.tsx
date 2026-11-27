@@ -1,4 +1,4 @@
-import type { PullRequestStatus } from '@mastra/factory/work-items/change-requests';
+import type { PullRequestStatus } from '@internal/factory-contract';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';

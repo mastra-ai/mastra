@@ -6,12 +6,14 @@
  * org-wide, so every member of the org reads and moves the same cards.
  */
 
-import { externalSourceForWorkItem } from '@mastra/factory/rules/types';
-import type { FactoryRuleStage, FactoryTriageType } from '@mastra/factory/rules/types';
-import type { ExternalWorkItemSource } from '@mastra/factory/storage/domains/work-items/base';
-import type { WorkItemRow } from '@mastra/factory/storage/domains/work-items/work-item-schema';
-import { workItemBoardSource } from '@mastra/factory/work-item-branch';
-import type { WorkItemBranchSource } from '@mastra/factory/work-item-branch';
+import { externalSourceForWorkItem, workItemBoardSource } from '@internal/factory-contract';
+import type {
+  ExternalWorkItemSource,
+  FactoryRuleStage,
+  FactoryTriageType,
+  WorkItemBranchSource,
+  WorkItemRow,
+} from '@internal/factory-contract';
 
 import type {
   WorkItemActivity,

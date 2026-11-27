@@ -1,14 +1,14 @@
-import type { RuleFacts } from '../rules/rule-group.js';
-import { authorTrusted } from '../rules/types.js';
-import type { Card } from '../storage/domains/work-items/base.js';
 import {
+  authorTrusted,
   isOpenPullRequestSource,
   pointedPullRequest,
   pullRequestSourceNumber,
   pullRequestSources,
   trustedPullRequestSource,
   workingPullRequest,
-} from '../work-items/change-requests.js';
+} from '@internal/factory-contract';
+import type { RuleFacts } from '@internal/factory-contract';
+import type { Card } from '../storage/domains/work-items/base.js';
 import { workItemProviderAdapter } from '../work-items/providers/index.js';
 import { stringList, stringValue } from '../work-items/providers/metadata-keys.js';
 

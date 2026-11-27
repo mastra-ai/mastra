@@ -3,11 +3,11 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import type { RuleGroup } from '@internal/factory-contract';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
-import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
-import type { RuleGroup } from '../rules/rule-group.js';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { StoredBoardInput, StoredBoardScope } from '../storage/domains/boards/base.js';
 import { codeBoardOf, compileBoardDefinition } from './define-board.js';

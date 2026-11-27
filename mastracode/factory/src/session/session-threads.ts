@@ -1,7 +1,7 @@
-import type { AgentController, AgentControllerThread } from '@mastra/core/agent-controller';
+import { SLACK_SESSION_BRANCH_PREFIX } from '@internal/factory-contract';
 
+import type { AgentController, AgentControllerThread } from '@mastra/core/agent-controller';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { SLACK_SESSION_BRANCH_PREFIX } from '../work-item-branch.js';
 
 /** The Factory session row fields that say which memory resource it uses. */
 export interface FactorySessionOwnership {

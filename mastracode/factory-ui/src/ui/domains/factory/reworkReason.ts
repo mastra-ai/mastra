@@ -1,5 +1,5 @@
-import { isHumanActorId } from '@mastra/factory/storage/domains/audit/actors';
-import type { AuditActorType } from '@mastra/factory/storage/domains/audit/actors';
+import { isHumanActorId } from '@internal/factory-contract';
+import type { AuditActorType } from '@internal/factory-contract';
 
 import type { InstalledPhaseInfo } from '../../../api/types';
 import type { AuditEvent } from './services/audit';

@@ -34,13 +34,13 @@ export default defineConfig({
   clean: true,
   dts: false,
   deps: {
-    alwaysBundle: ['@mastra/libsql', '@internal/workspace'],
+    alwaysBundle: ['@mastra/libsql', '@internal/workspace', '@internal/factory-contract'],
     neverBundle: [/^@mastra\//, '@octokit/auth-app', '@octokit/rest', 'chat', 'hono', /^hono\//, 'zod'],
   },
   inputOptions: {
     plugins: [rewriteRelativeSpecifiersPlugin],
   },
   onSuccess: async () => {
-    await generateTypes(process.cwd());
+    await generateTypes(process.cwd(), new Set(['@internal/factory-contract']));
   },
 });

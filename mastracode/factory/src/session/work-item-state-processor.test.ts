@@ -5,15 +5,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
+import type { ExternalWorkItemSource } from '@internal/factory-contract';
 import { RequestContext } from '@mastra/core/request-context';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
-import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createBoardRegistry } from '../boards/index.js';
 import { ProjectBoardCache } from '../boards/project-boards.js';
 import { workSeedWithSelfReview } from '../boards/work-migrations.js';
 import { createFactoryOutcomeTools } from '../rules/tools.js';
-import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../storage/test-utils.js';
 import { FactoryWorkItemStateProcessor } from './work-item-state-processor.js';
 

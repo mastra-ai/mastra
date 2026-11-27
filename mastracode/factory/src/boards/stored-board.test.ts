@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import type { FactoryRuleItemContext, FactoryStageRuleContext } from '@internal/factory-contract';
 
+import { describe, expect, it } from 'vitest';
 import { FactoryTransitionService } from '../rules/transition-service.js';
-import type { FactoryRuleItemContext, FactoryStageRuleContext } from '../rules/types.js';
 import type { StoredBoardInput, StoredPhaseInput } from '../storage/domains/boards/base.js';
 import { createFactoryStorageForTests, createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { BoardDefinitionError, codeBoardOf, declarationOf, defineBoard } from './define-board.js';

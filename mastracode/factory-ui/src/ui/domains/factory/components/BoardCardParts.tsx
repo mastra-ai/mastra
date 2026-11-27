@@ -1,4 +1,4 @@
-import { cardChangeRequest } from '@mastra/factory/work-items/change-requests';
+import { cardChangeRequest } from '@internal/factory-contract';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import type { ReactNode } from 'react';

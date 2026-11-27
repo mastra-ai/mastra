@@ -1,4 +1,4 @@
-import type { ExternalWorkItemSource } from './storage/domains/work-items/base.js';
+import type { ExternalWorkItemSource } from './work-items/external-source.js';
 
 /**
  * Where a card came from, in the vocabulary branch naming reads. Server rows

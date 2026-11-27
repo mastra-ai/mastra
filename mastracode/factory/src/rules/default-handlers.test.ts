@@ -1,3 +1,12 @@
+import { externalSourceForWorkItem } from '@internal/factory-contract';
+import type {
+  FactoryGithubRuleContext,
+  FactoryGitLabRuleContext,
+  FactoryIncidentioRuleContext,
+  FactoryJiraRuleContext,
+  FactoryLinearRuleContext,
+  FactoryRuleItemContext,
+} from '@internal/factory-contract';
 import { describe, expect, it, vi } from 'vitest';
 import { defineBoard } from '../boards/define-board.js';
 import { phaseRunDecision } from '../boards/phase-runner.js';
@@ -12,15 +21,6 @@ import { defaultJiraRules } from '../integrations/jira/default-rules.js';
 import { defaultLinearRules } from '../integrations/linear/default-rules.js';
 import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { splitCardMetadata, workItemProviderAdapter } from '../work-items/providers/index.js';
-import { externalSourceForWorkItem } from './types.js';
-import type {
-  FactoryRuleItemContext,
-  FactoryGithubRuleContext,
-  FactoryGitLabRuleContext,
-  FactoryIncidentioRuleContext,
-  FactoryJiraRuleContext,
-  FactoryLinearRuleContext,
-} from './types.js';
 
 function ruleItem(
   input: Omit<FactoryRuleItemContext, 'workItem' | 'acceptedAt'> &

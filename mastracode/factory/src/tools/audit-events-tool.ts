@@ -1,16 +1,15 @@
+import { auditActionsInNamespaces, auditNamespaces, isAuditAction } from '@internal/factory-contract';
+import type { AuditEventRow, AuditNamespace } from '@internal/factory-contract';
+
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
-import { auditActionsInNamespaces, auditNamespaces, isAuditAction } from '../storage/domains/audit/actions.js';
-import type { AuditNamespace } from '../storage/domains/audit/actions.js';
 import {
   ACTOR_PROFILE_METADATA_KEY,
   auditCursorAt,
   decodeAuditAfterCursor,
   encodeAuditCursor,
 } from '../storage/domains/audit/base.js';
-import type { AuditEventRow } from '../storage/domains/audit/base.js';
 import type { FactoryReadToolDependencies } from './read-tools.js';
 import { MAX_LIST, MAX_TEXT, findWorkItem, truncate, workItemNotFound, workItemRefSchema } from './read-tools.js';
 import type { FactoryToolScope } from './scope.js';

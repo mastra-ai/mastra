@@ -1,12 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
+import { AUTO_TRIAGED_LABEL } from '@internal/factory-contract';
 
+import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { autoStartingBoards, createTestBoard, createTriageWorkRegistry } from '../boards/test-utils.js';
 import type { Intake, IntakeIssueDetail } from '../capabilities/intake.js';
 import { FactoryDecisionDispatcher } from '../rules/dispatcher.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
-import { AUTO_TRIAGED_LABEL } from '../rules/types.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { defaultGithubRules, resolveGithubRules } from './github/default-rules.js';
 import type { GithubRuleOverrides } from './github/default-rules.js';

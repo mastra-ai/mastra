@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 
+import type { ExternalWorkItemSource } from '@internal/factory-contract';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
-import { describe, expect, it, onTestFinished } from 'vitest';
 
+import { describe, expect, it, onTestFinished } from 'vitest';
 import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../../test-utils.js';
 import { WorkItemSourceConflictError } from './base.js';
-import type { ExternalWorkItemSource } from './base.js';
 import { FACTORY_BOARD_ITEMS_SCHEMA, FACTORY_WORK_ITEM_SOURCES_SCHEMA } from './work-item-schema.js';
 import type { WorkItemSourceDbRecord } from './work-item-schema.js';
 

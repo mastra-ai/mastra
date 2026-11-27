@@ -1,4 +1,4 @@
-import { boardSource, matchesSourceFilters } from '@mastra/factory/work-items/card-source-filters';
+import { boardSource, matchesSourceFilters } from '@internal/factory-contract';
 import { describe, expect, it } from 'vitest';
 import { boardFilterFields } from './components/boardFilterFields';
 import {

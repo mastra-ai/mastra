@@ -10,11 +10,17 @@
 
 import { createHash } from 'node:crypto';
 
+import { externalSourceForWorkItem, FACTORY_TRIAGE_TYPES, primarySource } from '@internal/factory-contract';
+import type {
+  ExternalWorkItemSource,
+  FactoryTriageType,
+  WorkItemRow as ProviderWorkItemRow,
+  WorkItemSource,
+  WorkItemSourceRow,
+} from '@internal/factory-contract';
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 import { factoryDispatchFailureMetadata } from '../../../rules/dispatch-errors.js';
-import { externalSourceForWorkItem, FACTORY_TRIAGE_TYPES } from '../../../rules/types.js';
-import type { FactoryTriageType, WorkItemSource } from '../../../rules/types.js';
 import { splitCardMetadata, workItemProviderAdapter } from '../../../work-items/providers/index.js';
 import {
   copyLegacyRows,
@@ -48,14 +54,8 @@ import {
   releaseLegacyReviewCards,
 } from './legacy-review.js';
 import type { ReviewBoardInUse, ReviewBoardScope } from './legacy-review.js';
-import type {
-  WorkItemRow as ProviderWorkItemRow,
-  WorkItemDbRecord,
-  WorkItemSourceDbRecord,
-  WorkItemSourceRow,
-} from './work-item-schema.js';
+import type { WorkItemDbRecord, WorkItemSourceDbRecord } from './work-item-schema.js';
 import {
-  primarySource,
   FACTORY_BOARD_ITEMS_SCHEMA,
   FACTORY_WORK_ITEMS_SCHEMA,
   FACTORY_WORK_ITEM_SOURCES_SCHEMA,
@@ -105,19 +105,6 @@ function isWorkItemSource(value: unknown): value is WorkItemSource {
     value === 'detail-finding' ||
     value === 'manual'
   );
-}
-
-export interface ExternalWorkItemSource {
-  integrationId: string;
-  type: string;
-  /**
-   * The tenant on the platform, never ours: a Slack team (`T0ABC…`), a Discord
-   * guild. Scopes the key, because a platform id such as a channel or a message
-   * `ts` is only unique inside the workspace that issued it.
-   */
-  workspaceId?: string;
-  externalId: string;
-  url?: string;
 }
 
 /** Dispatcher upsert idempotency token — server bookkeeping, dropped from the read wire. */

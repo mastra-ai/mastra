@@ -1,6 +1,5 @@
-import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
-import { relatedCardIndex } from '@mastra/factory/work-items/related-cards';
-import type { PullRequestFacts } from '@mastra/factory/work-items/related-cards';
+import { DEFAULT_BOARD_ID, relatedCardIndex } from '@internal/factory-contract';
+import type { PullRequestFacts } from '@internal/factory-contract';
 import { githubNumberForItem, sourceCreatedAt, sourceMetadata, workItemKey } from '../boardItems';
 import { CARD_SOURCES } from '../cardSources';
 import { CHANGE_REQUEST_TERMS } from '../changeRequestState';

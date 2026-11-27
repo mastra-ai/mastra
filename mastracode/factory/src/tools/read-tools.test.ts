@@ -1,14 +1,14 @@
+import type { AuditEventRow } from '@internal/factory-contract';
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
 import { boardRegistryOf } from '../boards/registry.js';
 import { compileStoredBoard } from '../boards/stored-board.js';
 import { createTriageWorkRegistry } from '../boards/test-utils.js';
 import { workSeedWithTriage } from '../boards/work-seeds.js';
-import { workBoard } from '../boards/work.js';
 
+import { workBoard } from '../boards/work.js';
 import { LiveSessions } from '../session/live-sessions.js';
 import type { LiveSession } from '../session/live-sessions.js';
-import type { AuditEventRow } from '../storage/domains/audit/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type {
   FactoryDeferredDecisionRecord,

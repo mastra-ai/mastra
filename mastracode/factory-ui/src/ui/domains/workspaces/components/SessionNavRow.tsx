@@ -1,5 +1,4 @@
-import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
-import type { CardChangeRequest, PullRequestStatus } from '@mastra/factory/work-items/change-requests';
+import type { CardChangeRequest, PullRequestStatus, SessionRowStatus } from '@internal/factory-contract';
 import { ContextMenu } from '@mastra/playground-ui/components/ContextMenu';
 import { HoverCard, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
 import { Sidebar, useMaybeSidebar } from '@mastra/playground-ui/components/Sidebar';

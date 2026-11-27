@@ -1,5 +1,6 @@
 import { gunzipSync } from 'node:zlib';
 
+import type { FactoryRuleActor } from '@internal/factory-contract';
 import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,7 +14,6 @@ import { createTestBoard, createTriageWorkRegistry, triageWorkBoard } from '../b
 import type { FeedMove } from '../feed-events.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryTransitionRequest } from '../rules/transition-service.js';
-import type { FactoryRuleActor } from '../rules/types.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
 import {
   FACTORY_PULL_REQUEST_RECONCILIATION_KEY,

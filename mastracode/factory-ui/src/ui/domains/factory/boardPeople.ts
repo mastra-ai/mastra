@@ -1,6 +1,5 @@
-import { isHumanActorId } from '@mastra/factory/storage/domains/audit/actors';
-import { BOARD_PERSON_FIELDS, factoryParticipantId } from '@mastra/factory/work-items/card-people';
-import type { ProviderPerson } from '@mastra/factory/work-items/card-people';
+import { BOARD_PERSON_FIELDS, factoryParticipantId, isHumanActorId } from '@internal/factory-contract';
+import type { ProviderPerson } from '@internal/factory-contract';
 
 import type { BoardFilterFieldId, BoardFilterState } from './boardFilters';
 import { githubAvatarUrl } from './githubAvatar';

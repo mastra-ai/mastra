@@ -1,4 +1,4 @@
-import { searchQuery } from '@mastra/factory/work-items/search-words';
+import { searchQuery } from '@internal/factory-contract';
 
 import type { BoardPhasesRequest } from '../../../api/types';
 import { BOARD_FILTER_FIELDS } from './boardFilters';

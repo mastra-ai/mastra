@@ -1,6 +1,6 @@
 import type { ActivityEvent, BoardEventFacts } from '../boards/board-events.js';
-import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
-import type { WorkItemRow } from '../storage/domains/work-items/work-item-schema.js';
+import type { ExternalWorkItemSource } from '../work-items/external-source.js';
+import type { WorkItemRow } from '../work-items/work-item-rows.js';
 
 export type WorkItemSource =
   | 'github-issue'

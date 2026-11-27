@@ -1,4 +1,4 @@
-import { cardChangeRequest } from '@mastra/factory/work-items/change-requests';
+import { cardChangeRequest } from '@internal/factory-contract';
 import { RelatedItemLink } from '@mastra/playground-ui/domains/factory';
 
 import { HrefLink } from '../../../ui/HrefLink';

@@ -1,4 +1,4 @@
-import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
+import { DEFAULT_BOARD_ID } from '@internal/factory-contract';
 import { useQuery } from '@tanstack/react-query';
 import { useApiConfig } from '../../../../../api/config';
 import { useBoardCatalog } from '../../../../../hooks/useBoardCatalog';

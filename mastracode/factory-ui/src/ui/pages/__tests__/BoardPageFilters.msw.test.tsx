@@ -14,7 +14,7 @@ import {
   togglePropertyOption,
 } from '../../../../e2e/ui/properties-menu';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
-import { PULL_REQUEST_SOURCE_FILTER } from '@mastra/factory/work-items/card-source-filters';
+import { PULL_REQUEST_SOURCE_FILTER } from '@internal/factory-contract';
 import type { WorkItem } from '../../domains/factory/services/workItems';
 import { FactoryLayout } from '../../domains/workspaces/components/FactoryLayout';
 import { OverlaysProvider } from '../../lib/overlays';

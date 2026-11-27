@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { WorkItemSourceRow } from '../storage/domains/work-items/work-item-schema.js';
 import { cardChangeRequest, cardChangeRequests, changeRequestNumber } from './change-requests.js';
+import type { WorkItemSourceRow } from './work-item-rows.js';
 
 const AT = new Date('2026-07-01T00:00:00.000Z');
 

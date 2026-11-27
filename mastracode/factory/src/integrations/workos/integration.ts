@@ -1,9 +1,9 @@
+import type { AuditEventRow } from '@internal/factory-contract';
 import { WorkOSAdminPortal } from '@mastra/auth-workos';
 import type { ApiRoute } from '@mastra/core/server';
-import { registerApiRoute } from '@mastra/core/server';
 
+import { registerApiRoute } from '@mastra/core/server';
 import { loose } from '../../routes/route.js';
-import type { AuditEventRow } from '../../storage/domains/audit/base.js';
 import type { FactoryIntegration, IntegrationContext } from '../base.js';
 
 type WorkOSClient = ConstructorParameters<typeof WorkOSAdminPortal>[0];

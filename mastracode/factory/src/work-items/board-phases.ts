@@ -4,13 +4,17 @@
  * so it reads plain values only.
  */
 
+import {
+  BOARD_PERSON_FIELDS,
+  hasEveryLabel,
+  matchesPeople,
+  matchesSourceFilters,
+  matchesYesNo,
+} from '@internal/factory-contract';
 import { boardForWorkItem } from '../boards/semantics.js';
 import type { BoardPhasesQuery, BoardPhasesResponse } from '../routes/contracts.js';
 import type { Card } from '../storage/domains/work-items/base.js';
 import { cardFacts } from './card-facts.js';
-import { hasEveryLabel } from './card-labels.js';
-import { BOARD_PERSON_FIELDS, matchesPeople } from './card-people.js';
-import { matchesSourceFilters, matchesYesNo } from './card-source-filters.js';
 import { closingLinksIn } from './closing-pull-requests.js';
 import { relatedCardsIn } from './list-related-cards.js';
 import { matchesSearch, searchTerms } from './search-terms.js';

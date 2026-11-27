@@ -1,8 +1,8 @@
-import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
+import { DEFAULT_BOARD_ID } from '@internal/factory-contract';
+import type { ProviderPerson } from '@internal/factory-contract';
 import { PhaseSetup } from '../../domains/factory/components/PhaseSetup';
 import { PhaseSetupHoverCard } from '../../domains/factory/components/PhaseSetupHoverCard';
 import { createHoverCardHandle } from '@mastra/playground-ui/components/HoverCard';
-import type { ProviderPerson } from '@mastra/factory/work-items/card-people';
 import { boardLoop } from '../../domains/factory/boardFlow';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { toast } from '@mastra/playground-ui/components/Toaster';

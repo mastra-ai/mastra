@@ -1,4 +1,4 @@
-import type { RuleCondition, RuleGroup } from '@mastra/factory/rules/rule-group';
+import type { RuleCondition, RuleGroup } from '@internal/factory-contract';
 import type { FilterBarField, FilterBarOperator, FilterBarOption } from '@mastra/playground-ui/components/FilterBar';
 import type { RuleBuilderProps } from '@mastra/playground-ui/components/RuleBuilder';
 

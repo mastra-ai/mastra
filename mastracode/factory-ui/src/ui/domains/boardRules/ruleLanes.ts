@@ -1,5 +1,4 @@
-import { SETTLING_PULL_REQUEST_EVENTS, STATUS_EVENTS, testsField } from '@mastra/factory/boards/board-events';
-import { kindsTakenWhole } from '@mastra/factory/boards/intake-order';
+import { kindsTakenWhole, SETTLING_PULL_REQUEST_EVENTS, STATUS_EVENTS, testsField } from '@internal/factory-contract';
 import {
   CircleCheck,
   CircleDot,

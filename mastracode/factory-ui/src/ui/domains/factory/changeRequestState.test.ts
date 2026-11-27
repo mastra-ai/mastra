@@ -1,4 +1,4 @@
-import type { CardChangeRequest } from '@mastra/factory/work-items/change-requests';
+import type { CardChangeRequest } from '@internal/factory-contract';
 import { describe, expect, it } from 'vitest';
 
 import { changeRequestStatus } from './changeRequestState';
