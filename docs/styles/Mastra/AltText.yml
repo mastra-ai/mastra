@@ -2,7 +2,7 @@
 # word or a filename. Covers Markdown images and <img> tags, including tags
 # that span several lines, so it matches against the raw source. An empty alt
 # is allowed when the tag marks the image as decorative with aria-hidden="true"
-# or role="presentation".
+# or role="presentation". Single and double quotes are both checked.
 extends: existence
 message: "Describe the image in its alt text: '%s'."
 level: error
@@ -12,11 +12,11 @@ ignorecase: true
 tokens:
   # No alt text
   - '!\[\]\('
-  - '<[a-z][\w.]*\b(?![^>]*\b(?:aria-hidden\s*=\s*"true"|role\s*=\s*"presentation"))[^>]*\balt\s*=\s*""[^>]*>'
+  - '<[a-z][\w.]*\b(?![^>]*\b(?:aria-hidden\s*=\s*["'']true["'']|role\s*=\s*["'']presentation["'']))[^>]*\balt\s*=\s*(?:""|'''')[^>]*>'
   - '<img\b(?:(?!\balt\s*=)[^>])*/?>'
   # Placeholder word
   - '!\[(?:image|img|screenshot|diagram|picture|photo|logo)\]\('
-  - 'alt\s*=\s*"(?:image|img|screenshot|diagram|picture|photo|logo)"'
-  # Filename
-  - '!\[[^\]]*\.(?:png|jpe?g|gif|svg|webp)\]\('
-  - 'alt\s*=\s*"[^"]*\.(?:png|jpe?g|gif|svg|webp)"'
+  - 'alt\s*=\s*(?:"(?:image|img|screenshot|diagram|picture|photo|logo)"|''(?:image|img|screenshot|diagram|picture|photo|logo)'')'
+  # Filename only. A description that mentions a filename is fine.
+  - '!\[[^\]\s]*\.(?:png|jpe?g|gif|svg|webp)\]\('
+  - 'alt\s*=\s*(?:"[^"\s]*\.(?:png|jpe?g|gif|svg|webp)"|''[^''\s]*\.(?:png|jpe?g|gif|svg|webp)'')'
