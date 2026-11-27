@@ -1,16 +1,18 @@
-import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { IconChevronGrabberVertical } from '@mastra/playground-ui/icons/central/IconChevronGrabberVertical';
 import { IconPlugin1 } from '@mastra/playground-ui/icons/central/IconPlugin1';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import type { ProviderInfo } from '../../../../../api/types';
+import { useCustomProviderSavePending } from '../../../../../hooks/use-custom-providers';
 import { CustomProviderForm } from '../../../settings/components/CustomProviderForm';
 import type { OnboardingModelLane } from '../../hooks/useOnboardingModelLane';
 import { CONNECTION_METHOD_LABEL, matchesProviderQuery } from '../../hooks/useProviderConnection';
@@ -37,7 +39,9 @@ export function OnboardingProviderPicker({
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<ProviderConnectionMethod>('api_key');
   const [addingCustom, setAddingCustom] = useState(false);
+  const savingCustom = useCustomProviderSavePending();
   const { connection, connectedProvider } = lane;
+  const customReasonId = useId();
 
   const close = () => {
     setOpen(false);
@@ -151,37 +155,45 @@ export function OnboardingProviderPicker({
             onPick={pick}
           />
           {shownTab === 'api_key' && (
-            <OnboardingProviderOption
-              icon={<IconPlusMedium aria-hidden="true" />}
-              title="Add a custom provider"
-              // A sign-in still starting would open its dialog over this one.
-              disabled={connection.pending}
-              onClick={() => {
-                close();
-                // Closing programmatically skips onOpenChange, so the hovered provider's preview stays otherwise.
-                restorePreview();
-                setAddingCustom(true);
-              }}
-            />
+            <>
+              <OnboardingProviderOption
+                icon={<IconPlusMedium aria-hidden="true" />}
+                title="Add a custom provider"
+                reasonId={connection.canWriteAtScope ? undefined : customReasonId}
+                // A sign-in still starting would open its dialog over this one.
+                disabled={connection.pending || !connection.canWriteAtScope}
+                onClick={() => {
+                  close();
+                  // Closing programmatically skips onOpenChange, so the hovered provider's preview stays otherwise.
+                  restorePreview();
+                  setAddingCustom(true);
+                }}
+              />
+              {!connection.canWriteAtScope && (
+                <Txt id={customReasonId} variant="meta" tone="muted" className="px-2 py-1.5">
+                  Only an organization admin can add a custom provider for the company account.
+                </Txt>
+              )}
+            </>
           )}
         </PopoverContent>
       </Popover>
-      <Dialog open={addingCustom} onOpenChange={setAddingCustom}>
+      {/* Closing mid-save is refused, so a save that lands always belongs to an open dialog. */}
+      <Dialog open={addingCustom} onOpenChange={setAddingCustom} pending={savingCustom}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add a custom provider</DialogTitle>
           </DialogHeader>
-          <DialogBody>
-            <CustomProviderForm
-              requireModels
-              onCancel={() => setAddingCustom(false)}
-              onSaved={provider => {
-                setAddingCustom(false);
-                connection.chooseCustomProvider(provider.id);
-                onPreviewProvider(provider.id, 'api_key');
-              }}
-            />
-          </DialogBody>
+          <CustomProviderForm
+            requireModels
+            scope={connection.credentialScope}
+            onCancel={() => setAddingCustom(false)}
+            onSaved={provider => {
+              setAddingCustom(false);
+              connection.chooseCustomProvider(provider.id);
+              onPreviewProvider(provider.id, 'api_key');
+            }}
+          />
         </DialogContent>
       </Dialog>
     </>

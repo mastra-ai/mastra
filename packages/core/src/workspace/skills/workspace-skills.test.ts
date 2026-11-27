@@ -2320,7 +2320,10 @@ Instructions here.`;
       expect(result[0]?.name).toBe('test-skill');
     });
 
-    it('should discover skills with skills/** glob', async () => {
+    it.each([
+      ['should discover skills with skills/** glob', 'skills/**'],
+      ['should discover skills with trailing slash skills/', 'skills/'],
+    ] as const)('%s', async (_title, value) => {
       const filesystem = createMockFilesystem({
         'skills/test-skill/SKILL.md': VALID_SKILL_MD,
         'skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
@@ -2328,7 +2331,7 @@ Instructions here.`;
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skills: ['skills/**'],
+        skills: [value],
       });
 
       const result = await skills.list();
@@ -2398,22 +2401,6 @@ Instructions here.`;
       const result = await skills.list();
       expect(result).toHaveLength(1);
       expect(result[0]?.name).toBe('test-skill');
-    });
-
-    it('should discover skills with trailing slash skills/', async () => {
-      const filesystem = createMockFilesystem({
-        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
-        'skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
-      });
-
-      const skills = new WorkspaceSkillsImpl({
-        source: filesystem,
-        skills: ['skills/'],
-      });
-
-      const result = await skills.list();
-      expect(result).toHaveLength(2);
-      expect(result.map(s => s.name).sort()).toEqual(['api-skill', 'test-skill']);
     });
 
     it('should not produce duplicate skills when multiple patterns match the same skill', async () => {
@@ -2502,6 +2489,98 @@ Shadow instructions.`;
 
       const shadow = await skills.get('custom-skills/test-skill');
       expect(shadow?.instructions).toContain('Shadow instructions.');
+    });
+
+    it.each([
+      ['BM25', () => new SearchEngine({ bm25: {} })],
+      ['simple search', () => undefined],
+    ])('search() keeps working with two distinct local skills of the same name (%s)', async (_label, engine) => {
+      const copy = (description: string, body: string) =>
+        `---\nname: label-bugs\ndescription: ${description}\n---\n\n${body}`;
+      const searchEngine = engine();
+      const skills = new WorkspaceSkillsImpl({
+        source: createMockFilesystem({
+          'mastra/.claude/skills/label-bugs/SKILL.md': copy('Label core bugs', 'Apply the core label.'),
+          'mastra/.agents/skills/label-bugs/SKILL.md': copy('Label core bugs again', 'Apply the core label too.'),
+          'mastra/.claude/skills/label-bugs/references/triage.md': 'Triage label rules.',
+          'mastra/.agents/skills/label-bugs/references/triage.md': 'Triage label rules too.',
+          'node_modules/@company/skills/label-bugs/SKILL.md': copy('Vendored label skill', 'Zebra label.'),
+          'skills/pr-review/SKILL.md':
+            '---\nname: pr-review\ndescription: Review pull requests for correctness\n---\n\nRead the diff.',
+        }),
+        skills: ['mastra/.claude/skills', 'mastra/.agents/skills', 'skills', 'node_modules/@company/skills'],
+        ...(searchEngine ? { searchEngine } : {}),
+      });
+
+      const [review] = await skills.search('correctness');
+      expect(review?.skillName).toBe('pr-review');
+
+      const labelHits = await skills.search('label');
+      expect(new Set(labelHits.map(r => r.skillPath))).toEqual(
+        new Set(['mastra/.claude/skills/label-bugs', 'mastra/.agents/skills/label-bugs']),
+      );
+
+      // Reference reads must target each copy by path, not the ambiguous name.
+      const referenceHits = await skills.search('triage', { includeReferences: true });
+      expect(new Set(referenceHits.map(r => `${r.skillPath}/${r.source}`))).toEqual(
+        new Set([
+          'mastra/.claude/skills/label-bugs/references/triage.md',
+          'mastra/.agents/skills/label-bugs/references/triage.md',
+        ]),
+      );
+      if (!searchEngine) {
+        // Simple search lists every skill and reference for an empty query.
+        expect(await skills.search('', { includeReferences: true })).not.toHaveLength(0);
+      }
+
+      // The losing external copy is not attributed to either local copy.
+      const vendored = await skills.search('zebra');
+      expect(vendored.filter(r => r.content.includes('Zebra'))).toEqual([]);
+
+      await expect(skills.get('label-bugs')).rejects.toThrow('multiple local skills found');
+    });
+
+    it.each([
+      ['BM25', () => new SearchEngine({ bm25: {} })],
+      ['simple search', () => undefined],
+    ])('search() reads references when a skill path equals a duplicated name (%s)', async (_label, engine) => {
+      const copy = (body: string) => `---\nname: label-bugs\ndescription: Label bugs\n---\n\n${body}`;
+      const searchEngine = engine();
+      const skills = new WorkspaceSkillsImpl({
+        source: createMockFilesystem({
+          'label-bugs/SKILL.md': copy('Direct copy.'),
+          'label-bugs/references/triage.md': 'Triage rules, direct.',
+          'skills/label-bugs/SKILL.md': copy('Nested copy.'),
+          'skills/label-bugs/references/triage.md': 'Triage rules, nested.',
+        }),
+        skills: ['label-bugs', 'skills'],
+        ...(searchEngine ? { searchEngine } : {}),
+      });
+
+      const hits = await skills.search('triage', { includeReferences: true });
+      expect(new Set(hits.map(r => `${r.skillPath}/${r.source}`))).toEqual(
+        new Set(['label-bugs/references/triage.md', 'skills/label-bugs/references/triage.md']),
+      );
+    });
+
+    it.each([
+      ['BM25', () => new SearchEngine({ bm25: {} })],
+      ['simple search', () => undefined],
+    ])('search() does not credit a losing external copy to the local winner (%s)', async (_label, engine) => {
+      const searchEngine = engine();
+      const skills = new WorkspaceSkillsImpl({
+        source: createMockFilesystem({
+          'skills/label-bugs/SKILL.md': '---\nname: label-bugs\ndescription: Label bugs\n---\n\nApply labels.',
+          'node_modules/@company/skills/label-bugs/SKILL.md':
+            '---\nname: label-bugs\ndescription: Vendored label skill\n---\n\nZebra label.',
+        }),
+        skills: ['skills', 'node_modules/@company/skills'],
+        ...(searchEngine ? { searchEngine } : {}),
+      });
+
+      expect((await skills.search('zebra')).filter(r => r.content.includes('Zebra'))).toEqual([]);
+      const [local] = await skills.search('apply labels');
+      expect(local?.skillPath).toBe('skills/label-bugs');
     });
 
     it('should prefer local skills over external skills with same name', async () => {
@@ -2643,32 +2722,17 @@ Shadow instructions.`;
   });
 
   describe('direct skill path discovery', () => {
-    it('should discover a skill when path points to a directory containing SKILL.md', async () => {
+    it.each([
+      ['should discover a skill when path points to a directory containing SKILL.md', 'test-skill'],
+      ['should discover a skill when path points directly to SKILL.md', 'test-skill/SKILL.md'],
+    ] as const)('%s', async (_title, value) => {
       const filesystem = createMockFilesystem({
         'test-skill/SKILL.md': VALID_SKILL_MD,
       });
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skills: ['test-skill'],
-      });
-
-      const result = await skills.list();
-      expect(result).toHaveLength(1);
-      expect(result[0]?.name).toBe('test-skill');
-
-      const skill = await skills.get('test-skill');
-      expect(skill?.path).toBe('test-skill');
-    });
-
-    it('should discover a skill when path points directly to SKILL.md', async () => {
-      const filesystem = createMockFilesystem({
-        'test-skill/SKILL.md': VALID_SKILL_MD,
-      });
-
-      const skills = new WorkspaceSkillsImpl({
-        source: filesystem,
-        skills: ['test-skill/SKILL.md'],
+        skills: [value],
       });
 
       const result = await skills.list();
@@ -2695,24 +2759,15 @@ Shadow instructions.`;
       expect(result.map(s => s.name).sort()).toEqual(['api-skill', 'test-skill']);
     });
 
-    it('should gracefully handle non-existent direct skill path', async () => {
+    it.each([
+      ['should gracefully handle non-existent direct skill path', 'non-existent/SKILL.md'],
+      ['should gracefully handle non-existent direct directory path', 'non-existent-dir'],
+    ] as const)('%s', async (_title, value) => {
       const filesystem = createMockFilesystem({});
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skills: ['non-existent/SKILL.md'],
-      });
-
-      const result = await skills.list();
-      expect(result).toEqual([]);
-    });
-
-    it('should gracefully handle non-existent direct directory path', async () => {
-      const filesystem = createMockFilesystem({});
-
-      const skills = new WorkspaceSkillsImpl({
-        source: filesystem,
-        skills: ['non-existent-dir'],
+        skills: [value],
       });
 
       const result = await skills.list();

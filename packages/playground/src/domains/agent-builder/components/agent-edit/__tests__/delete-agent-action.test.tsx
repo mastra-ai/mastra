@@ -279,8 +279,19 @@ describe('DeleteAgentDialog impact warnings', () => {
     expect((await screen.findByTestId('agent-impact-dependents-more')).textContent).toContain('2 more');
   });
 
-  it('surfaces hiddenCount for cross-workspace private dependents', async () => {
-    stubAgentDependents('agent-123', { dependents: [], hiddenCount: 3 });
+  it.each([
+    [
+      'surfaces hiddenCount for cross-workspace private dependents',
+      3,
+      '3 other private agents also reference this agent.',
+    ],
+    [
+      'singularizes the hiddenCount line when exactly one private dependent',
+      1,
+      '1 other private agent also references this agent.',
+    ],
+  ] as const)('%s', async (_title, hiddenCount, expected) => {
+    stubAgentDependents('agent-123', { dependents: [], hiddenCount });
 
     render(
       <Wrapper>
@@ -291,21 +302,6 @@ describe('DeleteAgentDialog impact warnings', () => {
     fireEvent.click(screen.getByTestId('agent-builder-delete-agent'));
 
     const hidden = await screen.findByTestId('agent-impact-hidden-warning');
-    expect(hidden.textContent).toContain('3 other private agents also reference this agent.');
-  });
-
-  it('singularizes the hiddenCount line when exactly one private dependent', async () => {
-    stubAgentDependents('agent-123', { dependents: [], hiddenCount: 1 });
-
-    render(
-      <Wrapper>
-        <DeleteAgentPanelButton agentId="agent-123" agentName="My Agent" />
-      </Wrapper>,
-    );
-
-    fireEvent.click(screen.getByTestId('agent-builder-delete-agent'));
-
-    const hidden = await screen.findByTestId('agent-impact-hidden-warning');
-    expect(hidden.textContent).toContain('1 other private agent also references this agent.');
+    expect(hidden.textContent).toContain(expected);
   });
 });

@@ -10,7 +10,7 @@ import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-const emptyThreadClass =
+export const emptyThreadClass =
   'flex w-full min-w-0 max-w-full flex-1 flex-col items-center justify-center px-6 py-12 text-center';
 
 function FactoryMetadata({ label, value, font = 'mono' }: { label: string; value: string; font?: 'body' | 'mono' }) {
@@ -67,7 +67,7 @@ export function EmptyThreadState() {
         </Button>
       </div>
 
-      <details className="text-muted-foreground group mt-8 w-full max-w-lg min-w-0">
+      <details className="text-muted-foreground mt-8 w-full max-w-lg min-w-0">
         <summary
           className={`hover:text-foreground flex cursor-pointer list-none items-center justify-center gap-1.5 rounded-full px-3 py-2 transition-colors [&::-webkit-details-marker]:hidden ${focusRing}`}
         >
@@ -77,7 +77,7 @@ export function EmptyThreadState() {
               {activeFactory.name}
             </Txt>
           </Txt>
-          <DisclosureChevron className="size-3.5 group-open:rotate-180" />
+          <DisclosureChevron className="size-3.5" />
         </summary>
         <dl className="mx-auto mt-3 grid w-full min-w-0 gap-1 text-left">
           <FactoryMetadata label="Factory" value={activeFactory.name} font="body" />

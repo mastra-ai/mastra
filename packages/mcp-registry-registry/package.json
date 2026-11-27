@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp-registry-registry",
-  "version": "1.1.7",
+  "version": "1.1.8",
   "description": "MCP server for registry registry services.",
   "type": "module",
   "main": "dist/index.js",
@@ -8,6 +8,7 @@
   "bin": "dist/stdio.js",
   "files": [
     "dist",
+    "!dist/**/*.d.*ts.map",
     "README.md"
   ],
   "exports": {

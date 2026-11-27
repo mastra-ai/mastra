@@ -8,6 +8,8 @@ import { createWorkflow } from './create';
 import { DefaultExecutionEngine } from './default';
 import { createWorkflow as createEventedWorkflow } from './evented';
 import { withoutNestedRunStartState } from './nested-state';
+import { loadStepResults } from './run-journal';
+import type { Step } from './step';
 import { createStep } from './workflow';
 import type { AnyWorkflow } from './workflow';
 
@@ -39,31 +41,64 @@ function host(storage: InstanceType<typeof MockStore>, workflow: ReturnType<type
   return new Mastra({ logger: false, storage, workflows: { gated: workflow } });
 }
 
-describe('storageVersion guards', () => {
-  it('rejects storageVersion: 2 together with pruneSnapshot at construction', () => {
-    expect(() =>
-      createWorkflow({
-        id: 'pruned',
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        options: { storageVersion: 2, pruneSnapshot: ({ snapshot }) => snapshot },
-      }),
-    ).toThrow(/storageVersion: 2 and pruneSnapshot/);
-  });
+function eventedGateWorkflow(storageVersion?: 1 | 2) {
+  return createEventedWorkflow({
+    id: 'gated',
+    inputSchema: z.object({}),
+    outputSchema: z.object({ approved: z.boolean() }),
+    options: { storageVersion },
+  })
+    .then(gateStep())
+    .commit();
+}
 
-  it('rejects storageVersion: 2 on the evented engine at registration', () => {
-    const workflow = createEventedWorkflow({
-      id: 'evented-v2',
-      inputSchema: z.object({}),
-      outputSchema: z.object({}),
-      options: { storageVersion: 2 },
-    })
-      .then(createStep({ id: 's', inputSchema: z.object({}), outputSchema: z.object({}), execute: async () => ({}) }))
-      .commit();
+describe('storageVersion guards', () => {
+  it('rejects storageVersion: 2 at registration on an engine without storage v2 support', () => {
+    const workflow = gateWorkflow(2);
+    workflow.engineType = 'other';
 
     expect(() => new Mastra({ logger: false, storage: new MockStore(), workflows: { workflow } })).toThrow(
-      /evented engine doesn't support yet/,
+      /other engine doesn't support yet/,
     );
+  });
+
+  it('accepts storageVersion: 2 on the evented engine', async () => {
+    const workflow = eventedGateWorkflow(2);
+    const storage = new MockStore();
+    new Mastra({ logger: false, storage, workflows: { workflow } });
+
+    const run = await workflow.createRun();
+
+    expect(run.storageVersion).toBe(2);
+    const store = (await storage.getStore('workflows'))!;
+    expect((await store.getWorkflowRunById({ runId: run.runId, workflowName: 'gated' }))?.storageVersion).toBe(2);
+  });
+
+  it('rejects storageVersion: 2 at evented createRun when the store has no journal support', async () => {
+    const workflow = eventedGateWorkflow(2);
+    const storage = new MockStore();
+    new Mastra({ logger: false, storage, workflows: { workflow } });
+    const store = (await storage.getStore('workflows'))!;
+    vi.spyOn(store, 'supportsRunJournal').mockReturnValue(false);
+
+    await expect(workflow.createRun()).rejects.toThrow(/storage adapter doesn't support yet/);
+  });
+
+  it('keeps a stored evented run on the version it was created with', async () => {
+    const storage = new MockStore();
+    const v1 = eventedGateWorkflow();
+    new Mastra({ logger: false, storage, workflows: { v1 } });
+    const v1RunId = (await v1.createRun()).runId;
+    const v2 = eventedGateWorkflow(2);
+    new Mastra({ logger: false, storage, workflows: { v2 } });
+    const v2RunId = (await v2.createRun()).runId;
+
+    const v2Definition = eventedGateWorkflow(2);
+    new Mastra({ logger: false, storage, workflows: { v2Definition } });
+    expect((await v2Definition.createRun({ runId: v1RunId })).storageVersion).toBe(1);
+    const v1Definition = eventedGateWorkflow();
+    new Mastra({ logger: false, storage, workflows: { v1Definition } });
+    expect((await v1Definition.createRun({ runId: v2RunId })).storageVersion).toBe(2);
   });
 
   it('rejects storageVersion: 2 at createRun when the store has no journal support', async () => {
@@ -108,6 +143,193 @@ describe('storageVersion guards', () => {
     } finally {
       await mastra.stopWorkers();
     }
+  });
+});
+
+describe('storage v2 pruneSnapshot', () => {
+  const BIG = 'x'.repeat(1000);
+  type Engine = 'default' | 'evented';
+
+  /** `big` → `between` → `last`, pruned to a summary of `big`'s output. */
+  function prunedWorkflow(engine: Engine, last: Step<string, any, any, any, any, any, any>) {
+    const create = engine === 'default' ? createWorkflow : createEventedWorkflow;
+    const prune = vi.fn(({ snapshot }) => ({
+      ...snapshot,
+      context: { ...snapshot.context, big: { ...snapshot.context.big, output: { text: 'pruned' } } },
+    }));
+    const step = (id: string) =>
+      createStep({ id, inputSchema: z.any(), outputSchema: z.any(), execute: async () => ({ text: BIG }) });
+    const workflow = create({
+      id: 'pruned',
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+      options: { storageVersion: 2, pruneSnapshot: prune },
+    })
+      .then(step('big'))
+      .then(step('between'))
+      .then(last)
+      .commit();
+    return { workflow, prune };
+  }
+
+  async function host(
+    engine: Engine,
+    workflow: AnyWorkflow,
+    run: (storage: InstanceType<typeof MockStore>) => Promise<void>,
+  ) {
+    const storage = new MockStore();
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      pubsub: new EventEmitterPubSub(),
+      workflows: { pruned: workflow },
+    });
+    if (engine === 'evented') await mastra.startWorkers();
+    try {
+      await run(storage);
+    } finally {
+      if (engine === 'evented') await mastra.stopWorkers();
+    }
+  }
+
+  async function storedBig(storage: InstanceType<typeof MockStore>, runId: string) {
+    const snapshot = await storage.stores.workflows!.loadWorkflowSnapshot({
+      workflowName: 'pruned',
+      runId,
+      storageVersion: 2,
+    });
+    return snapshot?.context.big;
+  }
+
+  it.each(['default', 'evented'] as const)(
+    'prunes a %s run once it finishes, from every step result, and returns the unpruned results',
+    async engine => {
+      const { workflow, prune } = prunedWorkflow(engine, gateStep());
+      await host(engine, workflow, async storage => {
+        const run = await workflow.createRun();
+        expect((await run.start({ inputData: {} })).status).toBe('suspended');
+        expect(prune).not.toHaveBeenCalled();
+        expect(await storedBig(storage, run.runId)).toMatchObject({ output: { text: BIG } });
+
+        const resumed = await (
+          await workflow.createRun({ runId: run.runId })
+        ).resume({ step: 'gate', resumeData: true });
+
+        expect(resumed.status).toBe('success');
+        expect(prune).toHaveBeenCalledTimes(1);
+        expect(prune.mock.calls[0]![0]).toMatchObject({
+          workflowStatus: 'success',
+          snapshot: { context: { big: { output: { text: BIG } }, between: { output: { text: BIG } } } },
+        });
+        // The gate step finished in this drive, so the hook sees its result too.
+        expect(prune.mock.calls[0]![0].snapshot.context.gate).toMatchObject({
+          status: 'success',
+          output: { approved: true },
+        });
+        expect(await storedBig(storage, run.runId)).toMatchObject({ status: 'success', output: { text: 'pruned' } });
+        const steps = await loadStepResults(resumed.steps);
+        expect(steps.big).toMatchObject({ status: 'success', output: { text: BIG } });
+        expect(steps.gate).toMatchObject({ status: 'success', output: { approved: true } });
+      });
+    },
+  );
+
+  it('keeps showing shouldPersistSnapshot evicted results as stubs when the run prunes', async () => {
+    // Technical: the last write hydrates evicted results so the prune hook sees them in full. The
+    // predicate's documented view (successful steps without `output`) must not change with it:
+    // a predicate that skips large snapshots would otherwise skip the terminal write, leaving a
+    // finished run stored as `running`, which a boot restart sweep would re-drive.
+    const views: { workflowStatus: string; big?: Record<string, unknown> }[] = [];
+    const prune = vi.fn(({ snapshot }) => ({
+      ...snapshot,
+      context: { ...snapshot.context, big: { ...snapshot.context.big, output: { text: 'pruned' } } },
+    }));
+    const step = (id: string) =>
+      createStep({ id, inputSchema: z.any(), outputSchema: z.any(), execute: async () => ({ text: BIG }) });
+    const workflow = createWorkflow({
+      id: 'pruned',
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+      options: {
+        storageVersion: 2,
+        pruneSnapshot: prune,
+        shouldPersistSnapshot: ({ stepResults, workflowStatus }) => {
+          // The live object is mutated later, so record a copy of what this call saw.
+          views.push({ workflowStatus, big: stepResults.big && { ...stepResults.big } });
+          return true;
+        },
+      },
+    })
+      .then(step('big'))
+      .then(step('between'))
+      .then(gateStep())
+      .commit();
+    await host('default', workflow, async storage => {
+      const run = await workflow.createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+      const resumed = await (await workflow.createRun({ runId: run.runId })).resume({ step: 'gate', resumeData: true });
+      expect(resumed.status).toBe('success');
+
+      const terminal = views.findLast(view => view.workflowStatus === 'success')!;
+      expect(terminal.big).toMatchObject({ status: 'success' });
+      expect(terminal.big).not.toHaveProperty('output');
+      // The hook and the store still see and keep the full, then pruned, results.
+      expect(prune.mock.calls[0]![0].snapshot.context.big).toMatchObject({ output: { text: BIG } });
+      expect(await storedBig(storage, run.runId)).toMatchObject({ status: 'success', output: { text: 'pruned' } });
+    });
+  });
+
+  it.each(['default', 'evented'] as const)('prunes a failed %s run', async engine => {
+    const fail = createStep({
+      id: 'fail',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async () => {
+        throw new Error('boom');
+      },
+    });
+    const { workflow, prune } = prunedWorkflow(engine, fail);
+    await host(engine, workflow, async storage => {
+      const run = await workflow.createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('failed');
+
+      expect(prune).toHaveBeenCalledTimes(1);
+      expect(prune.mock.calls[0]![0]).toMatchObject({
+        workflowStatus: 'failed',
+        snapshot: { context: { big: { output: { text: BIG } } } },
+      });
+      expect(await storedBig(storage, run.runId)).toMatchObject({ status: 'success', output: { text: 'pruned' } });
+    });
+  });
+
+  it.each(['default', 'evented'] as const)('prunes a canceled %s run from every step result', async engine => {
+    let started!: () => void;
+    const running = new Promise<void>(resolve => (started = resolve));
+    const slow = createStep({
+      id: 'slow',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async ({ abortSignal }) => {
+        started();
+        await new Promise(resolve => abortSignal.addEventListener('abort', resolve));
+        return {};
+      },
+    });
+    const { workflow, prune } = prunedWorkflow(engine, slow);
+    await host(engine, workflow, async storage => {
+      const run = await workflow.createRun();
+      const result = run.start({ inputData: {} });
+      await running;
+      await run.cancel();
+
+      expect((await result).status).toBe('canceled');
+      expect(prune).toHaveBeenCalledTimes(1);
+      expect(prune.mock.calls[0]![0]).toMatchObject({
+        workflowStatus: 'canceled',
+        snapshot: { context: { big: { output: { text: BIG } } } },
+      });
+      expect(await storedBig(storage, run.runId)).toMatchObject({ status: 'success', output: { text: 'pruned' } });
+    });
   });
 });
 
@@ -326,7 +548,8 @@ describe('storageVersion per run', () => {
             inputSchema: num,
             outputSchema: num,
             stateSchema: seen,
-            execute: async ({ inputData, state, setState }) => {
+            execute: async ({ inputData, getState, setState }) => {
+              const state = await getState();
               if (inputData.n === hang?.at) {
                 hang.reached();
                 await new Promise(() => {});
@@ -476,12 +699,10 @@ describe('storageVersion per run', () => {
     expect(started).toEqual(['a', 'a', 'b']);
   });
 
-  it.each([
-    { endsFirst: 'hung', storedLast: { n: 22 } },
-    { endsFirst: 'restarted', storedLast: { n: 12 } },
-  ] as const)(
-    'stores the writes of a hung execution and the restart that replaced it as they come ($endsFirst ends first), as v1 does',
-    async ({ endsFirst, storedLast }) => {
+  // The restart claims the run, so storage refuses the hung execution's saves whichever ends first.
+  it.each(['hung', 'restarted'] as const)(
+    "keeps the restart's result over a hung execution it replaced (%s ends first), as v1 does",
+    async endsFirst => {
       async function restartWhileStepHangs(storageVersion: 1 | 2) {
         const gates: (() => void)[] = [];
         let calls = 0;
@@ -523,11 +744,16 @@ describe('storageVersion per run', () => {
           { gate: gates[1]!, done: restarted },
         ];
         if (endsFirst === 'restarted') executions.reverse();
-        const results = [];
+        const results: { status: string; steps: Record<string, any> }[] = [];
+        let hungError: unknown;
         for (const { gate, done } of executions) {
           gate();
           // Read this execution's steps before the other execution writes a newer result.
-          results.push(await withLoadedSteps(await done));
+          try {
+            results.push(await withLoadedSteps(await done));
+          } catch (error) {
+            hungError = error;
+          }
         }
 
         // The snapshot resume, restart and time travel continue from.
@@ -539,6 +765,7 @@ describe('storageVersion per run', () => {
         const outputs = (steps: Record<string, any>) =>
           Object.fromEntries(Object.entries(steps).map(([id, step]) => [id, step.output ?? step]));
         return {
+          hungError: (hungError as { id?: string } | undefined)?.id,
           returned: results.map(result => ({ status: result.status, steps: outputs(result.steps) })),
           stored: { status: stored.status, result: stored.result, steps: outputs(stored.context) },
           read: { status: read.status, result: read.result, steps: outputs(read.steps ?? {}) },
@@ -548,8 +775,10 @@ describe('storageVersion per run', () => {
 
       const v1 = await restartWhileStepHangs(1);
       expect(v1).toMatchObject({
-        stored: { status: 'success', result: storedLast },
-        read: { result: storedLast },
+        hungError: 'STORAGE_RUN_FENCE_CONFLICT',
+        returned: [{ status: 'success' }],
+        stored: { status: 'success', result: { n: 22 } },
+        read: { result: { n: 22 } },
         listed: 1,
       });
       expect(await restartWhileStepHangs(2)).toEqual(v1);
@@ -578,6 +807,152 @@ describe('storageVersion per run', () => {
     const result = await (await workflow.createRun()).start({ inputData: {} });
     expect(result.status).toBe('failed');
     expect((result as any).error.message).toMatch(/Use `await getStepResultAsync\("a"\)` instead/);
+  });
+
+  it('makes reading state throw inside v2 steps and conditions, but not spreading their params', async () => {
+    let conditionError: unknown;
+    const workflow = createWorkflow({
+      id: 'state-read',
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+      options: { storageVersion: 2 },
+    })
+      .then(
+        createStep({
+          id: 'spreads',
+          inputSchema: z.object({}),
+          outputSchema: z.any(),
+          execute: async params => ({ spreadHasState: 'state' in { ...params } }),
+        }),
+      )
+      .branch([
+        [
+          async (params: { state: unknown }) => {
+            try {
+              return !!params.state;
+            } catch (error) {
+              conditionError = error;
+              return false;
+            }
+          },
+          createStep({ id: 'never', inputSchema: z.any(), outputSchema: z.any(), execute: async () => ({}) }),
+        ],
+        [
+          async () => true,
+          createStep({
+            id: 'reads',
+            inputSchema: z.any(),
+            outputSchema: z.any(),
+            execute: async params => params.state,
+          }),
+        ],
+      ])
+      .commit();
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { workflow } });
+
+    const result = await withLoadedSteps(
+      await (await workflow.createRun()).start({ inputData: {}, initialState: { a: 1 } }),
+    );
+    expect(result.steps.spreads).toMatchObject({ status: 'success', output: { spreadHasState: false } });
+    expect((conditionError as Error).message).toMatch(/Use `await getState\(\)` instead/);
+    expect(result.status).toBe('failed');
+    expect((result as any).error.message).toMatch(/Use `await getState\(\)` instead/);
+  });
+
+  it('merges updateState into the v2 state, deleting keys set to undefined', async () => {
+    const storage = new MockStore();
+    const workflow = createWorkflow({
+      id: 'merge-state',
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+      options: { storageVersion: 2 },
+    })
+      .then(
+        createStep({
+          id: 'write',
+          inputSchema: z.object({}),
+          outputSchema: z.any(),
+          execute: async ({ getState, updateState }) => {
+            await updateState({ a: 10, b: undefined });
+            await updateState({ d: 4 });
+            return { ...(await getState()) };
+          },
+        }),
+      )
+      .then(
+        createStep({
+          id: 'read',
+          inputSchema: z.any(),
+          outputSchema: z.any(),
+          execute: async ({ getState }) => ({ ...(await getState()) }),
+        }),
+      )
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { workflow } });
+
+    const run = await workflow.createRun();
+    const result = await withLoadedSteps(
+      await run.start({
+        inputData: {},
+        initialState: { a: 1, b: 2, c: { x: 1 } },
+        outputOptions: { includeState: true },
+      }),
+    );
+    const merged = { a: 10, c: { x: 1 }, d: 4 };
+    expect(result.status).toBe('success');
+    // toStrictEqual fails on a `b: undefined` left behind instead of deleted.
+    expect((result.steps.write as any).output).toStrictEqual(merged);
+    expect((result.steps.read as any).output).toStrictEqual(merged);
+    expect(result.state).toStrictEqual(merged);
+    const stored = await storage.stores.workflows!.loadWorkflowRun({
+      workflowName: 'merge-state',
+      runId: run.runId,
+      successfulSteps: 'full',
+    });
+    expect(stored!.state).toStrictEqual(merged);
+  });
+
+  it("validates the merged v2 state against the step's stateSchema", async () => {
+    const stateSchema = z.object({ a: z.number(), b: z.string() });
+    const runWith = async (update: Record<string, unknown>) => {
+      const workflow = createWorkflow({
+        id: 'validate-state',
+        inputSchema: z.object({}),
+        outputSchema: z.any(),
+        stateSchema,
+        options: { storageVersion: 2 },
+      })
+        .then(
+          createStep({
+            id: 'write',
+            inputSchema: z.object({}),
+            outputSchema: z.any(),
+            stateSchema,
+            execute: async ({ updateState }) => {
+              await updateState(update as any);
+              return {};
+            },
+          }),
+        )
+        .commit();
+      new Mastra({ logger: false, storage: new MockStore(), workflows: { workflow } });
+      return (await workflow.createRun()).start({
+        inputData: {},
+        initialState: { a: 1, b: 'x' },
+        outputOptions: { includeState: true },
+      });
+    };
+
+    // A partial update is valid once merged, though on its own it misses the required `b`.
+    const partial = await runWith({ a: 2 });
+    expect(partial.status).toBe('success');
+    expect(partial.state).toStrictEqual({ a: 2, b: 'x' });
+
+    for (const update of [{ b: undefined }, { a: 'not a number' }]) {
+      const result = await runWith(update);
+      expect(result.status).toBe('failed');
+      expect((result as any).error.message).toMatch(/Step state data validation failed/);
+    }
   });
 
   it('finishes a v2 run resumed through a v1 definition in v2', async () => {
@@ -666,25 +1041,77 @@ describe('autoStorageVersion', () => {
     ).toBe('suspended');
   });
 
-  it('stores a new run as v1 on the evented engine', async () => {
-    const workflow = createEventedWorkflow({
-      id: 'evented-auto',
+  function autoEventedGated() {
+    return createEventedWorkflow({
+      id: 'gated',
       inputSchema: z.object({}),
-      outputSchema: z.object({}),
+      outputSchema: z.object({ approved: z.boolean() }),
       options: { autoStorageVersion: true },
     })
-      .then(createStep({ id: 's', inputSchema: z.object({}), outputSchema: z.object({}), execute: async () => ({}) }))
+      .then(gateStep())
       .commit();
+  }
+
+  it.each([
+    ['v2 on a store with run journals', true, 2],
+    ['v1 on a store without run journals', false, 1],
+  ] as const)('stores a new evented run as %s', async (_, journal, version) => {
     const storage = new MockStore();
-    const mastra = new Mastra({ logger: false, storage, pubsub: new EventEmitterPubSub(), workflows: { workflow } });
+    const workflow = autoEventedGated();
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      pubsub: new EventEmitterPubSub(),
+      workflows: { gated: workflow },
+    });
+    const store = (await storage.getStore('workflows'))!;
+    vi.spyOn(store, 'supportsRunJournal').mockReturnValue(journal);
     await mastra.startWorkers();
     try {
       const run = await workflow.createRun();
-      expect(run.storageVersion).toBe(1);
-      expect((await run.start({ inputData: {} })).status).toBe('success');
-      expect((storage.stores.workflows as any).db.workflowRunHeaders.size).toBe(0);
+      expect(run.storageVersion).toBe(version);
+      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+      const db = (storage.stores.workflows as any).db;
+      expect(db.workflowRunHeaders.size).toBe(version === 2 ? 1 : 0);
+      expect(await store.loadWorkflowSnapshot({ workflowName: 'gated', runId: run.runId, storageVersion: 1 })).toEqual(
+        version === 1 ? expect.objectContaining({ status: 'suspended' }) : null,
+      );
+      expect((await run.resume({ step: 'gate', resumeData: true })).status).toBe('success');
     } finally {
       await mastra.stopWorkers();
+    }
+  });
+
+  it('finishes a v1 evented run stored before it was set in v1', async () => {
+    const storage = new MockStore();
+    const before = eventedGateWorkflow();
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      pubsub: new EventEmitterPubSub(),
+      workflows: { gated: before },
+    });
+    await mastra.startWorkers();
+    let runId: string;
+    try {
+      const run = await before.createRun();
+      runId = run.runId;
+      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+    } finally {
+      await mastra.stopWorkers();
+    }
+
+    const after = autoEventedGated();
+    const host = new Mastra({ logger: false, storage, pubsub: new EventEmitterPubSub(), workflows: { gated: after } });
+    await host.startWorkers();
+    try {
+      const continued = await after.createRun({ runId });
+      expect(continued.storageVersion).toBe(1);
+      expect((await continued.resume({ step: 'gate', resumeData: true })).status).toBe('success');
+      expect((storage.stores.workflows as any).db.workflowRunHeaders.size).toBe(0);
+      expect((await after.createRun()).storageVersion).toBe(2);
+    } finally {
+      await host.stopWorkers();
     }
   });
 
@@ -739,7 +1166,8 @@ function appendItem(id: string, { suspends = false, onRun }: { suspends?: boolea
     outputSchema: num,
     stateSchema: items,
     resumeSchema: z.boolean(),
-    execute: async ({ inputData, state, setState, resumeData, suspend }) => {
+    execute: async ({ inputData, getState, setState, resumeData, suspend }) => {
+      const state = await getState();
       if (suspends && resumeData === undefined) return suspend({});
       await onRun?.();
       await setState({ items: [...state.items, `${id}:${inputData.n}`] });
@@ -786,7 +1214,7 @@ function recordV2Writes(storage: InstanceType<typeof MockStore>) {
   const append = store.appendWorkflowRunEntries.bind(store);
   store.appendWorkflowRunEntries = async args => {
     writes.push({
-      status: args.header.status,
+      status: args.header?.status,
       changes: { stepIds: Object.keys(args.steps), state: args.state !== undefined || args.statePatch !== undefined },
     });
     return append(args);
@@ -832,9 +1260,9 @@ describe('storage v2 write volume', () => {
       { status: 'running', changes: { stepIds: ['s10'], state: true } },
     ]);
 
-    // One entry per step start and finish, plus the input, plus state at the checkpoint and after setState.
+    // A step's finish replaces its start, so one entry per step plus the input, plus state at the checkpoint and after setState.
     const stored = entries('sequential', run.runId);
-    expect(stored.filter(e => e.kind === 'step')).toHaveLength(2 * STEPS + 1);
+    expect(stored.filter(e => e.kind === 'step')).toHaveLength(STEPS + 1);
     expect(stored.filter(e => e.kind === 'state' || e.kind === 'state-patch')).toHaveLength(2);
   });
 
@@ -857,9 +1285,9 @@ describe('storage v2 write volume', () => {
       Array.from({ length: STEPS + 1 }, () => ({ stepIds: ['count'], state: false })),
     );
 
-    // The checkpoint holds the input and the state; then one entry per append above. The state never changes.
+    // The checkpoint holds the input and the state; each append above replaces the step's previous entry. The state never changes.
     const stored = entries('loop', run.runId);
-    expect(stored.filter(e => e.kind === 'step')).toHaveLength(STEPS + 2);
+    expect(stored.filter(e => e.kind === 'step')).toHaveLength(2);
     expect(stored.filter(e => e.kind === 'state' || e.kind === 'state-patch')).toHaveLength(1);
   });
 
@@ -883,7 +1311,8 @@ describe('storage v2 write volume', () => {
         inputSchema: num,
         outputSchema: num,
         stateSchema: items,
-        execute: async ({ inputData, state, setState }) => {
+        execute: async ({ inputData, getState, setState }) => {
+          const state = await getState();
           await setState({ items: [...state.items, String(inputData.n % 10).repeat(1024)] });
           return { n: inputData.n + 1 };
         },
@@ -1031,7 +1460,8 @@ describe('storage v2 write volume', () => {
       inputSchema: num,
       outputSchema: num,
       stateSchema: quarters,
-      execute: async ({ inputData, state, setState, resumeData, suspend }) => {
+      execute: async ({ inputData, getState, setState, resumeData, suspend }) => {
+        const state = await getState();
         if (resumeData === undefined) return suspend({});
         await setState({ ...state, a: kb(inputData.n + 1) });
         return { n: inputData.n + 1 };
@@ -1082,7 +1512,8 @@ describe('storage v2 write volume', () => {
             inputSchema: num,
             outputSchema: num,
             stateSchema: quarters,
-            execute: async ({ inputData, state, setState }) => {
+            execute: async ({ inputData, getState, setState }) => {
+              const state = await getState();
               if (inputData.n === hang?.at) {
                 hang.reached();
                 await new Promise(() => {});
@@ -1357,7 +1788,8 @@ const scenarios: Record<string, Scenario> = {
           inputSchema: z.any(),
           outputSchema: z.any(),
           stateSchema: items,
-          execute: async ({ state, resumeData, suspend }) => {
+          execute: async ({ getState, resumeData, suspend }) => {
+            const state = await getState();
             edit(state, resumeData !== undefined);
             if (suspends && resumeData === undefined) return suspend({});
             return {};
@@ -1442,7 +1874,7 @@ function recordStateSends(storage: InstanceType<typeof MockStore>) {
     args: {
       workflowName: string;
       runId: string;
-      header: { status: string };
+      header?: { status: string };
       state?: unknown;
       statePatch?: unknown;
     },
@@ -1451,7 +1883,7 @@ function recordStateSends(storage: InstanceType<typeof MockStore>) {
     sends.push({
       workflowName: args.workflowName,
       runId: args.runId,
-      status: args.header.status,
+      status: args.header?.status,
       checkpoint,
       state: args.state !== undefined ? 'full' : args.statePatch !== undefined ? 'patch' : 'none',
       bytes: sent === undefined ? 0 : JSON.stringify(sent).length,
@@ -1526,7 +1958,8 @@ describe('storage v2 nested runs', () => {
           inputSchema: num,
           outputSchema: num,
           stateSchema: items,
-          execute: async ({ inputData, state, setState }) => {
+          execute: async ({ inputData, getState, setState }) => {
+            const state = await getState();
             await setState({ items: [...state.items, String(inputData.n % 10).repeat(1024)] });
             return { n: inputData.n + 1 };
           },
@@ -1595,7 +2028,8 @@ describe('storage v2 nested runs', () => {
               inputSchema: num,
               outputSchema: num,
               stateSchema: items,
-              execute: async ({ inputData, state, setState }) => {
+              execute: async ({ inputData, getState, setState }) => {
+                const state = await getState();
                 await setState({ items: [...state.items, String(inputData.n % 10).repeat(1024)] });
                 return inputData;
               },
@@ -1898,7 +2332,8 @@ describe('storage v2 nested runs', () => {
           inputSchema: num,
           outputSchema: num,
           stateSchema: withExtra,
-          execute: async ({ inputData, state, setState }) => {
+          execute: async ({ inputData, getState, setState }) => {
+            const state = await getState();
             await setState({ ...state, extra: 'x' });
             return inputData;
           },

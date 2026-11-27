@@ -1,0 +1,24 @@
+{
+  "attachment": ["glm-5.3-flash-abliterated"],
+  "temperature": ["deepseek-v4.1-flash-abliterated", "glm-5.3-abliterated", "glm-5.3-flash-abliterated"],
+  "reasoning": {
+    "deepseek-v4.1-flash-abliterated": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "glm-5.3-flash-abliterated": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5.3-abliterated": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ]
+  }
+}

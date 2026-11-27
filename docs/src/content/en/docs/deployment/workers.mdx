@@ -70,7 +70,9 @@ Extra scheduler instances add availability, not throughput. Each one polls stora
 
 ### Background task worker
 
-Executes agent tool calls marked with `background: { enabled: true }`. When an agent invokes a background tool, the API dispatches the task to this worker instead of blocking the response stream.
+Executes agent tool calls marked with `background: { enabled: true }` without blocking the response stream.
+
+A background tool call is bound to the agent run that made it, so it runs on the process that executes the agent loop. An API server with `MASTRA_WORKERS=false` doesn't hand its agents' tool calls to a dedicated background task worker: a durable agent runs the tool inline, and a regular agent returns a dispatch error as the tool result unless you pass `disableBackgroundTasks: true`. See [BackgroundTaskWorker](/reference/workers/overview#backgroundtaskworker).
 
 The background task worker manages concurrency limits, task lifecycle, and result delivery through the PubSub bus.
 
@@ -95,7 +97,7 @@ This setup needs no external infrastructure beyond your storage adapter. It does
 
 :::warning
 
-The in-memory PubSub delivers events only inside the process that published them. Running several Mastra instances on one storage with it isn't supported for evented workflows: each instance restarts the others' active runs when it boots. Configure a distributed PubSub backend for a multi-instance deployment.
+The in-memory PubSub delivers events only inside the process that published them. Running several Mastra instances on one storage with it isn't supported for evented workflows or agents. Each instance restarts the others' active evented workflow runs when it boots. A multi-instance deployment needs a PubSub backend that redelivers unacknowledged events and a storage adapter with workflow step guards. See [evented workflows and agents](/docs/server/pubsub#evented-workflows-and-agents).
 
 :::
 

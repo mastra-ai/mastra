@@ -399,7 +399,7 @@ describe('tracing when a tool call suspends', () => {
     ]);
   });
 
-  it('leaves provider cost to the resumed leg when a retry before the suspension left the leg without usage', async () => {
+  it('keeps usage and provider cost on the suspended leg when its request was retried before the suspension', async () => {
     const exporter = new TestExporter();
     let calls = 0;
     const model = new MockLanguageModelV2({
@@ -477,11 +477,14 @@ describe('tracing when a tool call suspends', () => {
       .filter(event => event.exportedSpan.type === SpanType.MODEL_GENERATION)
       .map(event => event.exportedSpan.attributes);
     expect(generations).toHaveLength(2);
-    // The retried attempt reported no usage, so the suspended leg records no tokens and the
-    // resumed leg records the tokens of both model calls. Its cost must cover both calls too.
-    expect(generations[0]?.usage?.inputTokens).toBeUndefined();
-    expect(generations[1]?.usage).toMatchObject({ inputTokens: 107, outputTokens: 23 });
-    expect(generationCosts(exporter)).toEqual([undefined, undefined]);
+    // The rejected request is re-attempted within the suspended leg's step, so that leg reports
+    // the usage and cost of the request that completed it (COR-1554).
+    expect(generations[0]?.usage).toMatchObject({ inputTokens: 100, outputTokens: 20 });
+    expect(generations[1]?.usage).toMatchObject({ inputTokens: 7, outputTokens: 3 });
+    expect(generationCosts(exporter)).toEqual([
+      { estimatedCost: 0.5, reportedStepCount: 1 },
+      { estimatedCost: 2, reportedStepCount: 1 },
+    ]);
   });
 
   it('keeps provider cost on the suspended leg when it records only some token counts', async () => {
@@ -664,5 +667,62 @@ describe('tracing when a tool call suspends', () => {
     expect(started(SpanType.MODEL_STEP)).toHaveLength(1);
     expect(started(SpanType.MODEL_INFERENCE)).toHaveLength(1);
     expect(exporter.getIncompleteSpans().map(entry => entry.span?.name)).toEqual([]);
+  });
+
+  // The first tool to suspend takes the usage of the step. When its own transform delays it, the
+  // other suspension ends the run before the chunk with the usage arrives.
+  it('keeps the response of a call whose tools suspend together and report out of order', async () => {
+    const exporter = new TestExporter();
+    const askAfter = (id: string, delayMs: number) =>
+      createTool({
+        id,
+        description: 'Ask a person',
+        inputSchema: z.object({}),
+        execute: async (_input, { agent }) => agent!.suspend({ question: 'which one?' }),
+        transform: {
+          display: {
+            suspend: async context => {
+              await new Promise(resolve => setTimeout(resolve, delayMs));
+              return context?.suspendPayload;
+            },
+          },
+        },
+      });
+    const agent = new Agent({
+      id: 'usage-agent',
+      name: 'usage-agent',
+      instructions: 'use the tools',
+      model: new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'tool-call', toolCallId: 'call-1', toolName: 'slow', input: '{}', providerExecuted: false },
+            { type: 'tool-call', toolCallId: 'call-2', toolName: 'fast', input: '{}', providerExecuted: false },
+            { type: 'finish', finishReason: 'tool-calls', usage: SUSPENDED_STEP_USAGE },
+          ]),
+        }),
+      }),
+      tools: { slow: askAfter('slow', 60), fast: askAfter('fast', 0) },
+    });
+    observability = new Observability({
+      configs: { default: { serviceName: 'suspended-usage', exporters: [exporter] } },
+    });
+    new Mastra({ logger: false, agents: { agent }, storage: new InMemoryStore(), observability });
+
+    const output = await agent.stream('Hello');
+    await output.consumeStream();
+    expect(output.status).toBe('suspended');
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    const inferences = exporter
+      .getByEventType(TracingEventType.SPAN_ENDED)
+      .filter(event => event.exportedSpan.type === SpanType.MODEL_INFERENCE);
+    expect(inferences).toHaveLength(1);
+    expect(inferences[0]!.exportedSpan.output?.toolCalls?.map((call: { toolName: string }) => call.toolName)).toEqual([
+      'slow',
+      'fast',
+    ]);
   });
 });

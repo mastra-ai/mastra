@@ -20,6 +20,7 @@ import { apiKeyReopenStoredScenario } from './api-key-reopen-stored.js';
 import { approvalOverlayFocusScenario } from './approval-overlay-focus.js';
 import { askUserAdvancedPromptsScenario } from './ask-user-advanced-prompts.js';
 import { askUserAnswerHoldsPromptScenario } from './ask-user-answer-holds-prompt.js';
+import { askUserRecommendedOptionScenario } from './ask-user-recommended-option.js';
 import { autocompleteWrappingNavigationScenario } from './autocomplete-wrapping-navigation.js';
 import { automatedChatUnixPubSubScenario } from './automated-chat-unix-pubsub.js';
 import { automatedChatScenario } from './automated-chat.js';
@@ -51,6 +52,7 @@ import { browserWizardBrowserbaseScenario } from './browser-wizard-browserbase.j
 import { browserWizardExportScenario } from './browser-wizard-export.js';
 import { browserbaseStartupRestoreScenario } from './browserbase-startup-restore.js';
 import { clipboardImagePasteScenario } from './clipboard-image-paste.js';
+import { codexFastModelPickerScenario } from './codex-fast-model-picker.js';
 import { commitAttributionPromptScenario } from './commit-attribution-prompt.js';
 import { connectCommandScenario } from './connect-command.js';
 import { controllerApiConfigScenario } from './controller-api-config.js';
@@ -63,6 +65,7 @@ import { customPackImportRenameScenario } from './custom-pack-import-rename.js';
 import { customPackRenameActiveScenario } from './custom-pack-rename-active.js';
 import { customProviderDeleteScenario } from './custom-provider-delete.js';
 import { customProviderEditShareImportScenario } from './custom-provider-edit-share-import.js';
+import { customProviderEndpointChecksScenario } from './custom-provider-endpoint-checks.js';
 import { customProviderManagementScenario } from './custom-provider-management.js';
 import { customProviderModalValidationScenario } from './custom-provider-modal-validation.js';
 import { customProviderModelSelectorScenario } from './custom-provider-model-selector.js';
@@ -121,6 +124,7 @@ import { mcpReloadConfigScenario } from './mcp-reload-config.js';
 import { mcpSelectorReconnectScenario } from './mcp-selector-reconnect.js';
 import { mcpServerConfigScenario } from './mcp-server-config.js';
 import { mcpSkippedValidationScenario } from './mcp-skipped-validation.js';
+import { missingEmbedderHeadlessScenario, missingEmbedderTuiScenario } from './missing-embedder.js';
 import { modalAndShellScenario } from './modal-and-shell.js';
 import { modeSwitchAppliesPackModelScenario } from './mode-switch-applies-pack-model.js';
 import { modelSearchScenario } from './model-search.js';
@@ -288,6 +292,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'api-key-reopen-stored': apiKeyReopenStoredScenario,
   'ask-user-advanced-prompts': askUserAdvancedPromptsScenario,
   'ask-user-answer-holds-prompt': askUserAnswerHoldsPromptScenario,
+  'ask-user-recommended-option': askUserRecommendedOptionScenario,
   'automated-chat': automatedChatScenario,
   'automated-chat-unix-pubsub': automatedChatUnixPubSubScenario,
   'background-adoption-deferred': backgroundAdoptionDeferredScenario,
@@ -317,12 +322,14 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'clipboard-image-paste': clipboardImagePasteScenario,
   'connect-command': connectCommandScenario,
   'commit-attribution-prompt': commitAttributionPromptScenario,
+  'codex-fast-model-picker': codexFastModelPickerScenario,
   'custom-config-dir': customConfigDirScenario,
   'custom-pack-import-overwrite': customPackImportOverwriteScenario,
   'custom-pack-import-rename': customPackImportRenameScenario,
   'custom-pack-rename-active': customPackRenameActiveScenario,
   'custom-provider-delete': customProviderDeleteScenario,
   'custom-provider-edit-share-import': customProviderEditShareImportScenario,
+  'custom-provider-endpoint-checks': customProviderEndpointChecksScenario,
   'custom-provider-management': customProviderManagementScenario,
   'custom-provider-modal-validation': customProviderModalValidationScenario,
   'custom-provider-model-selector': customProviderModelSelectorScenario,
@@ -397,6 +404,8 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'notify-input-request-hook': notifyInputRequestHookScenario,
   'knowledge-browser': knowledgeBrowserScenario,
   'knowledge-settings': knowledgeSettingsScenario,
+  'missing-embedder-headless': missingEmbedderHeadlessScenario,
+  'missing-embedder-tui': missingEmbedderTuiScenario,
   'om-attachment-observation': omAttachmentObservationScenario,
   'om-auto-selection': omAutoSelectionScenario,
   'om-auto-preview-google-api-key': omAutoPreviewGoogleApiKeyScenario,

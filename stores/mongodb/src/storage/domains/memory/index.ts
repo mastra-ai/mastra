@@ -3,8 +3,10 @@ import {
   assertActiveObservationsApplied,
   isAppendOnlySince,
   isBufferedChunkCoveredByCursor,
+  isBufferedReflectionUnchangedSince,
   maxObservationCursor,
   planReflectionGenerationText,
+  withBufferedReflectionVerified,
 } from '@internal/core/memory';
 import type { UpdateActiveObservationsResult, UpdateBufferedObservationsResult } from '@internal/core/memory';
 
@@ -2731,7 +2733,11 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   async swapBufferedReflectionToActive(input: SwapBufferedReflectionToActiveInput): Promise<ObservationalMemoryRecord> {
     try {
       const { currentRecord } = input;
-      return await this.#rollOver(currentRecord, 'swapBufferedReflectionToActive', doc => {
+      // The id of the successor the latest `decide` planned; the rollover returns it only if that
+      // plan's conditional freeze (which matches the stored buffer) won.
+      const planned: { id?: string } = {};
+      const result = await this.#rollOver(currentRecord, 'swapBufferedReflectionToActive', doc => {
+        planned.id = undefined;
         const stored = this.parseOMDocument(doc);
         const bufferedReflection = stored.bufferedReflection || '';
         if (!bufferedReflection) {
@@ -2746,6 +2752,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         // Only appends may have happened since the caller's snapshot; a rewrite invalidates the
         // reflected line count.
         if (!isAppendOnlySince(stored.activeObservations, currentRecord.activeObservations)) return null;
+        // The swap must consume the buffer and reflected line count the caller read; another
+        // writer may have extended both since, which the activated text alone cannot reveal.
+        if (!isBufferedReflectionUnchangedSince(stored, currentRecord)) return null;
 
         // Lines 0..reflectedLineCount were reflected on → replaced by bufferedReflection.
         // Lines after reflectedLineCount were added after reflection started → kept as-is.
@@ -2762,8 +2771,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         const tokenCount =
           input.tokenCount +
           Math.max(0, (stored.observationTokenCount ?? 0) - (currentRecord.observationTokenCount ?? 0));
+        planned.id = input.newRecordId ?? globalThis.crypto.randomUUID();
         return {
-          newId: input.newRecordId ?? globalThis.crypto.randomUUID(),
+          newId: planned.id,
           mode: 'equal' as const,
           reflection: newObservations,
           tokenCount,
@@ -2773,6 +2783,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           createdAt: new Date(),
         };
       });
+      return result.id === planned.id ? withBufferedReflectionVerified(result, currentRecord) : result;
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;

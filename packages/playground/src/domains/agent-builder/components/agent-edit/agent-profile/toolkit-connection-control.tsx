@@ -1,11 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { IconPlugin1 } from '@mastra/playground-ui/icons/central/IconPlugin1';
-import { IconSettingsGear1 } from '@mastra/playground-ui/icons/central/IconSettingsGear1';
+import { IconSettingsGear5 } from '@mastra/playground-ui/icons/central/IconSettingsGear5';
 import { useAuthorize, useExistingConnections, useToolkits } from '@mastra/react/hooks/tool-providers';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
 
+import { useEffect, useMemo, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { UseFormSetValue } from 'react-hook-form';
 import { ManageConnectionDialog } from '../../../../tool-providers/components/manage-connection-dialog';
@@ -229,10 +229,11 @@ export const ToolkitConnectionControl = ({
         type="button"
         size="sm"
         onClick={handleConnect}
-        disabled={disabled || authorize.isPending}
+        disabled={disabled}
         data-testid={`toolkit-connect-${testIdSuffix}`}
+        loading={authorize.isPending}
       >
-        {authorize.isPending ? 'Connecting…' : 'Connect'}
+        Connect
       </Button>
     );
   }
@@ -249,7 +250,7 @@ export const ToolkitConnectionControl = ({
         disabled={disabled}
         data-testid={`toolkit-manage-${testIdSuffix}`}
       >
-        <IconSettingsGear1 />
+        <IconSettingsGear5 />
       </Button>
 
       {manageOpen && (

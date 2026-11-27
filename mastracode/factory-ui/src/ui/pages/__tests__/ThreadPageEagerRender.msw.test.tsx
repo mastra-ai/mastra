@@ -70,7 +70,7 @@ function stubThreadRoute(): ThreadRouteController {
       HttpResponse.json({ project: { id: FACTORY_ID, name: 'Acme Factory', defaultModelId: 'openai/gpt-4o-mini' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-      HttpResponse.json({ modelId: null, thinkingLevel: null }),
+      HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [workspaceSession] }),
@@ -135,19 +135,19 @@ describe('ThreadPage eager render', () => {
     expect(await screen.findByRole('region', { name: 'Thread composer' })).toBeInTheDocument();
     expect(await findPageHeader()).toBeInTheDocument();
 
-    // The only blocking window is initial message loading — the loader shows
-    // "Loading messages…" and Send stays disabled while it is held.
-    await waitFor(() => expect(screen.getByText('Loading messages…')).toBeInTheDocument());
+    // The only blocking window is initial message loading — the transcript shows
+    // its loading placeholder and Send stays disabled while it is held.
+    expect(await screen.findByRole('status', { name: 'Loading messages' })).toBeInTheDocument();
     const sendButton = screen.getByRole('button', { name: 'Send message' });
     expect(sendButton).toBeDisabled();
 
-    // Messages resolve: the composer comes fully online and the stepper
+    // Messages resolve: the composer comes fully online and the placeholder
     // releases, because message loading was the only thing it was waiting on.
     messages.completeMessages();
     const user = userEvent.setup();
     await user.type(screen.getByRole('textbox', { name: 'Message' }), 'ready to send');
     await waitFor(() => expect(sendButton).toBeEnabled());
-    await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'Loading messages' })).not.toBeInTheDocument());
     await waitForMutationsIdle(client);
   });
 

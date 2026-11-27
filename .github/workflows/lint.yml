@@ -81,13 +81,17 @@ jobs:
             fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Quality assurance routing\n\n- AGENTS validation: \`${hasAgentsInputs}\` — ${formatReasons(agentsReasons)}\n- Peer dependency validation: \`${hasPeerdepsInputs}\` — ${formatReasons(peerdepsReasons)}\n- README validation: \`${hasReadmeInputs}\` — ${formatReasons(readmeReasons)}; packages missing docs: ${formatMissingDocs(missingPackageDocs)}\n`);
           '
 
+  # The changeset, package.json, README, AGENTS.md and examples validators, one step each, so
+  # setup happens once. Each runs under its old job's condition and when an earlier one failed.
+  # scripts/test-tiers/update.mjs reads the changeset steps by name for job:qa/changeset-check.
   changeset-check:
-    name: Validate changeset packages
+    name: Validate repository files
     needs: changes
     runs-on: starsling-ubuntu-26.04-2
-    timeout-minutes: 10
+    timeout-minutes: 30
     permissions:
       contents: read
+      pull-requests: read
       id-token: write
 
     steps:
@@ -101,12 +105,26 @@ jobs:
           persist-credentials: false
 
       - name: Setup pnpm and Node.js
+        id: setup
         uses: ./.github/actions/setup-pnpm-node
+
+      - name: Run package.json validator
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra' }}
+        run: node .github/scripts/validate-pkg-json.mjs
+
+      - name: Run README validator
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && needs.changes.outputs.has_readme_inputs == 'true' && github.repository == 'mastra-ai/mastra' }}
+        run: node .github/scripts/check-package-readmes.mjs
+
+      - name: Run AGENTS.md validator
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && needs.changes.outputs.has_agents_inputs == 'true' && github.repository == 'mastra-ai/mastra' }}
+        run: node .github/scripts/validate-agents-md.mjs
 
       # Test tiers (scripts/test-tiers/select.mjs): the validator's own tests are tiered as
       # job:qa/changeset-check. The checks of this PR's changesets below always run.
       - name: Check test tier
         id: tier
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ github.token }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -125,11 +143,12 @@ jobs:
           echo "skip=$(jq 'length > 0' <<< "$SKIP")" >> "$GITHUB_OUTPUT"
 
       - name: Test changeset package validator
-        if: ${{ steps.tier.outputs.skip != 'true' }}
+        if: ${{ !cancelled() && steps.tier.outcome == 'success' && steps.tier.outputs.skip != 'true' }}
         run: node --test .github/scripts/check-changeset-packages.test.mjs
 
       # Check all pending changesets, including on changeset-only PRs.
       - name: Reject unknown or ignored changeset packages
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node .github/scripts/check-changeset-packages.mjs
 
       # Whether a change needs a release is the author's call, so a PR that adds
@@ -139,6 +158,7 @@ jobs:
       # deletes changesets.
       - name: Check whether this PR adds changesets
         id: pr-changesets
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         env:
           BASE_SHA: ${{ needs.changes.outputs.base_sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -151,8 +171,15 @@ jobs:
 
       # actions/checkout fetches main as origin/main, not a local main branch.
       - name: Validate changeset release plan
-        if: ${{ steps.pr-changesets.outputs.found == 'true' }}
+        if: ${{ !cancelled() && steps.pr-changesets.outputs.found == 'true' }}
         run: pnpm changeset-cli status --since origin/main
+
+      # Last: adding globby rewrites the root package.json and node_modules.
+      - name: Run examples validator
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && needs.changes.outputs.has_examples == 'true' && github.repository == 'mastra-ai/mastra' }}
+        run: |
+          pnpm --config.trust-policy=no-check add -w --no-lockfile globby
+          node .github/scripts/validate-examples.js
 
   new-package-npm-check:
     name: New packages exist on npm
@@ -179,7 +206,7 @@ jobs:
           install-dependencies: 'false'
 
       - name: Test npm package existence check, publish and placeholder scripts
-        run: node --test .github/scripts/check-npm-packages-exist.test.mjs .github/scripts/publish-packages.test.mjs scripts/npm-placeholder-publish.test.mjs
+        run: node --test .github/scripts/check-npm-packages-exist.test.mjs .github/scripts/publish-packages.test.mjs scripts/npm-placeholder-publish.test.mjs .github/scripts/sync-docs.test.mjs
 
       - name: Test the test-tier scripts
         run: node --test scripts/test-tiers/*.test.mjs
@@ -233,8 +260,17 @@ jobs:
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         timeout-minutes: 20
 
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
+
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
+      - name: Test the CI routing scripts
+        run: pnpm vitest run --config .github/scripts/vitest.config.ts
+
       - name: Run lint and format checks
         run: pnpm lint
 
@@ -257,6 +293,12 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         timeout-minutes: 20
+
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -281,84 +323,6 @@ jobs:
       - name: Check bundles
         working-directory: ./e2e-tests/pkg-outputs
         run: pnpm test
-
-  validator:
-    name: Validate examples packages.json
-    needs: changes
-    runs-on: starsling-ubuntu-26.04
-    timeout-minutes: 30
-    if: needs.changes.outputs.has_examples == 'true' && github.repository == 'mastra-ai/mastra'
-    permissions:
-      contents: read
-      pull-requests: read
-      id-token: write
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 20
-
-      - name: Setup pnpm and Node.js
-        uses: ./.github/actions/setup-pnpm-node
-        with:
-          package-manager-cache: false
-          install-dependencies: false
-
-      - name: Install dependencies
-        run: pnpm --config.trust-policy=no-check add -w --no-lockfile globby
-
-      - name: Run examples validator
-        run: node .github/scripts/validate-examples.js
-
-  agents-md-check:
-    name: Validate AGENTS.md files
-    needs: changes
-    runs-on: starsling-ubuntu-26.04
-    timeout-minutes: 10
-    if: needs.changes.outputs.has_agents_inputs == 'true' && github.repository == 'mastra-ai/mastra'
-    permissions:
-      contents: read
-      pull-requests: read
-      id-token: write
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 20
-
-      - name: Setup pnpm and Node.js
-        uses: ./.github/actions/setup-pnpm-node
-        with:
-          package-manager-cache: false
-
-      - name: Run AGENTS.md validator
-        run: node .github/scripts/validate-agents-md.mjs
-
-  readme-check:
-    name: Validate package READMEs
-    needs: changes
-    runs-on: starsling-ubuntu-26.04
-    timeout-minutes: 10
-    if: needs.changes.outputs.has_readme_inputs == 'true' && github.repository == 'mastra-ai/mastra'
-    permissions:
-      contents: read
-      id-token: write
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 20
-        with:
-          persist-credentials: false
-
-      - name: Setup pnpm and Node.js
-        uses: ./.github/actions/setup-pnpm-node
-        with:
-          package-manager-cache: false
-          install-dependencies: false
-
-      - name: Run README validator
-        run: node .github/scripts/check-package-readmes.mjs
 
   peerdeps-check:
     name: Validate peer dependencies
@@ -413,27 +377,3 @@ jobs:
             git diff --name-only -- ':!package.json'
             exit 1
           fi
-
-  validate-pkg-json:
-    name: Validate package.json files
-    needs: changes
-    runs-on: starsling-ubuntu-26.04-2
-    timeout-minutes: 10
-    if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
-    permissions:
-      contents: read
-      pull-requests: read
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 20
-
-      - name: Setup Node.js 22.x
-        uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
-        with:
-          node-version: 24.22.1
-          package-manager-cache: false
-
-      - name: Run package.json validator
-        run: node .github/scripts/validate-pkg-json.mjs

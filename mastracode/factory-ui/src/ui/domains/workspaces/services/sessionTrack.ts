@@ -1,5 +1,6 @@
 import { isHumanActorId } from '@mastra/factory/storage/domains/audit/actors';
-import { differenceInCalendarDays, format } from 'date-fns';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import { differenceInCalendarDays } from 'date-fns';
 
 import type { AuditEvent } from '../../factory/services/audit';
 import { stageMoves, stageStays } from '../../factory/stageStays';
@@ -110,22 +111,20 @@ export function layoutSessionTrack({
   };
 }
 
-const START_FORMATS = { today: 'HH:mm', thisWeek: 'EEE', older: 'MMM d' };
-const MOMENT_FORMATS = { today: 'HH:mm', thisWeek: 'EEE HH:mm', older: 'MMM d, HH:mm' };
-
-function trackTimeLabel(time: number, now: number, formats: typeof START_FORMATS): string {
-  const days = differenceInCalendarDays(now, time);
-  if (days === 0) return format(time, formats.today);
-  if (days < 7) return format(time, formats.thisWeek);
-  return format(time, formats.older);
-}
+const weekday = (time: number) => new Date(time).toLocaleDateString(undefined, { weekday: 'short' });
 
 /** Clock time today, weekday this week, calendar date beyond. */
 export function trackStartLabel(startedAt: number, now: number): string {
-  return trackTimeLabel(startedAt, now, START_FORMATS);
+  const days = differenceInCalendarDays(now, startedAt);
+  if (days === 0) return formatDate(startedAt, 'time') ?? '';
+  if (days < 7) return weekday(startedAt);
+  return new Date(startedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 /** Same buckets as the start, with the clock: a hovered span or pin names its exact moments. */
 export function trackMomentLabel(time: number, now: number): string {
-  return trackTimeLabel(time, now, MOMENT_FORMATS);
+  const days = differenceInCalendarDays(now, time);
+  if (days === 0) return formatDate(time, 'time') ?? '';
+  if (days < 7) return `${weekday(time)} ${formatDate(time, 'time')}`;
+  return formatDate(time, 'day-time') ?? '';
 }

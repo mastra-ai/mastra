@@ -173,55 +173,6 @@ describe('StreamChatProvider', () => {
       expect(body.memory).toMatchObject({ thread: 'thread-xyz' });
       expect(body.clientTools).toMatchObject({ myTool: { id: 'myTool' } });
     });
-
-    it('flattens extraInstructions into modelSettings on the wire', async () => {
-      (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'false';
-      const captured: Captured[] = [];
-      server.use(
-        ...baseHandlers(),
-        http.post(`${BASE_URL}/api/agents/a/stream`, async ({ request }) => {
-          captured.push({ url: request.url, body: await captureBody(request) });
-          return sseResponse(emptyStream());
-        }),
-      );
-
-      await act(async () => {
-        renderWithProviders(
-          <StreamChatProvider agentId="a" threadId="thread-xyz" initialMessages={[]} extraInstructions="snapshot-text">
-            <SendOnMount message="hi" />
-          </StreamChatProvider>,
-        );
-      });
-
-      await waitFor(() => expect(captured.length).toBeGreaterThan(0));
-      const body = captured.at(-1)!.body;
-      // The React layer flattens `modelSettings.instructions` to top-level `instructions`.
-      expect(body.instructions).toBe('snapshot-text');
-      expect(body.providerOptions).toEqual({ openai: { reasoningEffort: 'low' } });
-    });
-
-    it('omits instructions on the wire when extraInstructions is absent', async () => {
-      (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'false';
-      const captured: Captured[] = [];
-      server.use(
-        ...baseHandlers(),
-        http.post(`${BASE_URL}/api/agents/a/stream`, async ({ request }) => {
-          captured.push({ url: request.url, body: await captureBody(request) });
-          return sseResponse(emptyStream());
-        }),
-      );
-
-      await act(async () => {
-        renderWithProviders(
-          <StreamChatProvider agentId="a" threadId="thread-xyz" initialMessages={[]}>
-            <SendOnMount message="hi" />
-          </StreamChatProvider>,
-        );
-      });
-
-      await waitFor(() => expect(captured.length).toBeGreaterThan(0));
-      expect(captured.at(-1)!.body.instructions).toBeUndefined();
-    });
   });
 
   describe('when consumers subscribe to split contexts', () => {

@@ -47,7 +47,7 @@ export class SentenceTransformer extends TextTransformer {
       if (this.sentenceEnders.includes(char)) {
         const remainingText = text.slice(i + 1);
 
-        if (this.isRealSentenceBoundary(currentSentence, remainingText)) {
+        if (this.isRealSentenceBoundary(currentSentence, remainingText, char)) {
           sentences.push(currentSentence.trim());
           currentSentence = '';
         }
@@ -62,47 +62,89 @@ export class SentenceTransformer extends TextTransformer {
     return sentences.filter(s => s.length > 0);
   }
 
-  private isRealSentenceBoundary(currentSentence: string, remainingText: string): boolean {
+  private isRealSentenceBoundary(currentSentence: string, remainingText: string, ender: string): boolean {
     if (!remainingText.trim()) {
       return true;
     }
 
-    if (!/^\s+[A-Z]/.test(remainingText)) {
+    // ASCII enders only end a sentence when the next sentence starts with an uppercase
+    // or caseless letter after whitespace. Configured non-ASCII enders (CJK, Indic, ...)
+    // do not require that whitespace, so the gap is optional for them.
+    const gap = this.isAsciiEnder(ender) ? '\\s+' : '\\s*';
+    if (!new RegExp(`^${gap}[\\p{Lu}\\p{Lt}\\p{Lo}]`, 'u').test(remainingText)) {
       return false;
     }
 
-    const words = currentSentence.trim().split(/\s+/);
+    // Question and exclamation marks (and configured Unicode enders) are unambiguous
+    // boundaries. Only periods are ambiguous with abbreviations, initials and list markers.
+    if (ender !== '.') {
+      return true;
+    }
+
+    const trimmed = currentSentence.trim();
+    const words = trimmed.split(/\s+/);
     const lastWord = words[words.length - 1] || '';
-
     const baseWord = lastWord.slice(0, -1);
+    const previous = words.length >= 2 ? words[words.length - 2] : undefined;
+    // Text before the final word, used to spot an earlier numbered-list marker.
+    const prefix = lastWord ? trimmed.slice(0, trimmed.length - lastWord.length) : trimmed;
 
-    if (this.isCommonAbbreviation(baseWord)) {
-      return false;
-    }
+    // A bare integer ending in a period is a numbered-list marker (not a sentence-final
+    // number) when one of these holds:
+    //  - it opens the sentence (`5. Fifth`);
+    //  - it follows a configured ender;
+    //  - it starts a line (`\n2. Second`);
+    //  - an earlier bare-number marker already appears in the sentence
+    //    (`1. First 2. Second`);
+    //  - it opens a colon-introduced numbered list whose next item follows immediately
+    //    (`Steps: 1. Open 2. Edit`).
+    // The colon lookahead is value-independent and bounded to the token that follows, so it
+    // never depends on the number's value or reaches a later, unrelated list: a colon-labelled
+    // value (`Result: 5. The score was 6. Done.`) and the same prose with `1.`/`2.`
+    // (`Result: 1. The score was 2. Done.`) both keep their sentence boundaries.
+    // `startsLine` inspects the last line of the prefix directly: the equivalent unanchored
+    // `/(?:^|\n)\s*$/` backtracks quadratically over long newline runs.
+    const startsLine = /^\s*$/.test(prefix.slice(prefix.lastIndexOf('\n') + 1));
+    const hasEarlierMarker = /(?:^|\s)\d+\.\s/.test(prefix);
+    const startsColonList = previous !== undefined && previous.endsWith(':') && /^\s*\S+\s+\d+\.\s/.test(remainingText);
+    const isListMarker =
+      /^\d+$/.test(baseWord) &&
+      (!previous ||
+        this.sentenceEnders.includes(previous.slice(-1)) ||
+        startsLine ||
+        hasEarlierMarker ||
+        startsColonList);
 
-    return true;
+    return !this.isCommonAbbreviation(baseWord, isListMarker);
   }
 
-  private isCommonAbbreviation(word: string): boolean {
+  private isAsciiEnder(ender: string): boolean {
+    return ender.length === 1 && ender.charCodeAt(0) < 128;
+  }
+
+  private isCommonAbbreviation(word: string, isListMarker = false): boolean {
     // Common titles
     const titles = ['Dr', 'Mr', 'Mrs', 'Ms', 'Prof', 'Sr', 'Jr'];
     if (titles.includes(word)) {
       return true;
     }
 
-    // Multi-character abbreviations with periods (U.S.A., a.m., p.m., etc.)
-    if (/^[A-Z](\.[A-Z])*$/.test(word) || /^[a-z](\.[a-z])*$/.test(word)) {
+    // Multi-character abbreviations with periods (U.S.A., a.m., p.m., etc.), including
+    // non-ASCII letters so initials like `И.И.` are recognized too.
+    if (/^\p{Lu}(\.\p{Lu})*$/u.test(word) || /^\p{Ll}(\.\p{Ll})*$/u.test(word)) {
       return true;
     }
 
-    // Single capital letters (initials)
-    if (/^[A-Z]$/.test(word)) {
+    // Single uppercase letters (initials), Unicode-aware so `И.` or `É.` are kept with
+    // the following name just like `J.`.
+    if (/^\p{Lu}$/u.test(word)) {
       return true;
     }
 
-    // Numbers (versions, decimals)
+    // Numbers (versions, decimals): a bare integer is only an abbreviation in a numbered
+    // list context, so sentence-final numbers can end a sentence.
     if (/^\d+$/.test(word)) {
-      return true;
+      return isListMarker;
     }
 
     // Time abbreviations

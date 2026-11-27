@@ -1,4 +1,4 @@
-import { differenceInDays, differenceInHours, differenceInMinutes, format, isValid } from 'date-fns';
+import { differenceInDays, differenceInHours, differenceInMinutes, isValid } from 'date-fns';
 
 /**
  * Compact relative timestamp for dense UI (thread lists, activity rows):
@@ -18,5 +18,5 @@ export function relativeTime(iso: string, now: Date = new Date()): string {
   if (hours < 24) return `${hours}h`;
   const days = differenceInDays(now, then);
   if (days < 7) return `${days}d`;
-  return format(then, 'MMM d');
+  return then.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }

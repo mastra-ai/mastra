@@ -35,7 +35,7 @@ import type {
 } from '@mastra/core/memory';
 import { SpanType, EntityType } from '@mastra/core/observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '@mastra/core/observability';
-import { TokenLimiterProcessor } from '@mastra/core/processors';
+import { isProcessorWorkflow, TokenLimiterProcessor } from '@mastra/core/processors';
 import type {
   ErrorProcessor,
   ErrorProcessorOrWorkflow,
@@ -76,11 +76,15 @@ import type {
 import { TokenCounter } from './processors/observational-memory/token-counter';
 import type { WidenedObservationalMemoryModel } from './processors/observational-memory/types';
 import { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
+import { WorkingMemoryInstructionCompat } from './processors/working-memory-instruction-compat';
+import type { WorkingMemoryInstructionArgs } from './processors/working-memory-instruction-compat';
 import { SUBCONSCIOUS_REMOVED_MESSAGE } from './removed-subconscious';
 import { isSystemReminderMessage } from './system-reminders';
 import { recallTool } from './tools/om-tools';
 import { createWorkingMemoryTool, deepMergeWorkingMemory, parseWorkingMemoryJson } from './tools/working-memory';
 
+export { asUserTurn, escapeTurnMarkup, sealTurnMarkup } from '@mastra/core/memory';
+export type { TurnSpeaker } from '@mastra/core/memory';
 export {
   ModelByInputTokens,
   type ModelByInputTokensConfig,
@@ -384,6 +388,28 @@ function isTransientSignalMessage(message: MastraDBMessage): boolean {
   );
 }
 
+const DEFAULT_WORKING_MEMORY_TEMPLATE = `
+# User Information
+- **First Name**: 
+- **Last Name**: 
+- **Location**: 
+- **Occupation**: 
+- **Interests**: 
+- **Goals**: 
+- **Events**: 
+- **Facts**: 
+- **Projects**: 
+`;
+
+/**
+ * True when the installed `@mastra/core` builds its WorkingMemory processor with the memory instance as the
+ * instruction provider. Cores from before `MastraMemory.getWorkingMemoryInstruction` existed (up to and
+ * including 1.86.0-alpha.5) don't, and render their own built-in text. Checked per call, not at import.
+ */
+function coreRendersWorkingMemoryInstructionThroughMemory(): boolean {
+  return 'getWorkingMemoryInstruction' in MastraMemory.prototype;
+}
+
 function normalizeObservationalMemoryConfig(
   config: boolean | MemoryObservationalMemoryOptions | undefined,
 ): NormalizedObservationalMemoryConfig | undefined {
@@ -470,6 +496,51 @@ const invalidMerge = (text: string) =>
     category: ErrorCategory.USER,
     text,
   });
+
+type ProcessorGraphEntry = { type: string; step?: unknown; steps?: ProcessorGraphEntry[] };
+
+/**
+ * Whether a processor with `id` is configured, either at the top level or as a step
+ * anywhere inside a processor workflow (sequential, branch, parallel, loop, foreach, nested workflow).
+ * Workflow steps built with `createStep(processor)` carry `processorId`, which survives step id
+ * rewrites (the Editor renames graph steps to `processor:<graph step id>`); older core versions
+ * only carry the id `processor:<id>`.
+ * A step inside a branch counts even though it only runs when that branch is taken.
+ */
+function hasConfiguredProcessorId(processors: readonly unknown[], id: string): boolean {
+  const seen = new Set<unknown>();
+
+  const matchesStep = (step: unknown): boolean => {
+    if (!step || typeof step !== 'object' || seen.has(step)) return false;
+    seen.add(step);
+    const {
+      processorId,
+      id: stepId,
+      stepGraph,
+    } = step as {
+      processorId?: unknown;
+      id?: unknown;
+      stepGraph?: ProcessorGraphEntry[];
+    };
+    // A workflow counts only through its steps; its own id names the workflow, not a processor.
+    if (Array.isArray(stepGraph)) return stepGraph.some(matchesEntry);
+    // `processorId` is authoritative; older core versions only carry the step id `processor:<id>`.
+    return processorId !== undefined ? processorId === id : stepId === `processor:${id}`;
+  };
+
+  // `loop` and `foreach` wrap a nested graph entry in `step` rather than a step.
+  const isEntry = (value: unknown): value is ProcessorGraphEntry =>
+    !!value && typeof value === 'object' && 'type' in value && 'step' in value;
+
+  const matchesEntry = (entry: ProcessorGraphEntry): boolean =>
+    (isEntry(entry.step) ? matchesEntry(entry.step) : matchesStep(entry.step)) ||
+    (entry.steps ?? []).some(matchesEntry);
+
+  return processors.some(processor =>
+    // A workflow's own id names the workflow, not a processor; only its steps count.
+    isProcessorWorkflow(processor) ? matchesStep(processor) : (processor as { id?: unknown }).id === id,
+  );
+}
 
 export class Memory extends MastraMemory {
   protected override createMemoryTokenCounter() {
@@ -1774,8 +1845,16 @@ ${workingMemory}`;
       newMessage.content = { ...message.content };
     }
 
+    // Trim only what removing the tags left behind. Text without working-memory tags is
+    // saved as the model saw it, so the next run replays the same prompt (and keeps the
+    // provider's prompt cache), matching core's filterMessagesForPersistence.
+    const hideTags = (text: string) => {
+      const cleaned = removeWorkingMemoryTags(text);
+      return cleaned === text ? text : cleaned.trim();
+    };
+
     if (typeof newMessage.content?.content === 'string' && newMessage.content.content.length > 0) {
-      newMessage.content.content = removeWorkingMemoryTags(newMessage.content.content).trim();
+      newMessage.content.content = hideTags(newMessage.content.content);
     }
 
     if (Array.isArray(newMessage.content?.parts)) {
@@ -1789,7 +1868,7 @@ ${workingMemory}`;
           const text = typeof part.text === 'string' ? part.text : '';
           return {
             ...part,
-            text: removeWorkingMemoryTags(text).trim(),
+            text: hideTags(text),
           };
         }
         return part;
@@ -1866,14 +1945,15 @@ ${workingMemory}`;
       const loadWorkingMemory = async () => {
         const memoryStore = await this.getMemoryStore();
         const resource = await memoryStore.getResourceById({ resourceId });
-        return resource?.workingMemory || null;
+        return typeof resource?.workingMemory === 'string' && resource.workingMemory ? resource.workingMemory : null;
       };
       workingMemoryData = runState
         ? await runState.load(`working-memory:resource:${resourceId}`, loadWorkingMemory)
         : await loadWorkingMemory();
     } else {
       const thread = runState?.threadLoaded ? runState.thread : await this.getThreadById({ threadId });
-      workingMemoryData = thread?.metadata?.workingMemory as string;
+      const stored = thread?.metadata?.workingMemory;
+      workingMemoryData = typeof stored === 'string' && stored ? stored : null;
     }
 
     if (!workingMemoryData) {
@@ -1971,23 +2051,25 @@ ${workingMemory}`;
 
     // In readOnly or non-agent-managed mode, provide context without tool instructions.
     // With agentManaged: false the app still updates the memory, so the agent must not claim it can't.
-    if (config?.readOnly || workingMemoryConfig.agentManaged === false) {
-      return this.getReadOnlyWorkingMemoryInstruction({
-        template: workingMemoryTemplate,
-        data: workingMemoryData,
-        autoUpdated: !config?.readOnly,
-      });
-    }
-
-    return this.isVNextWorkingMemoryConfig(memoryConfig)
-      ? this.__experimental_getWorkingMemoryToolInstructionVNext({
-          template: workingMemoryTemplate,
-          data: workingMemoryData,
-        })
-      : this.getWorkingMemoryToolInstruction({
-          template: workingMemoryTemplate,
-          data: workingMemoryData,
-        });
+    // Render through getWorkingMemoryInstruction, the same method agents use, so both paths agree.
+    // `undefined` keeps the built-in text (the agent's processor falls back the same way), and an
+    // override that returns an empty string sends no instruction, so report that as null.
+    const args: WorkingMemoryInstructionArgs =
+      config?.readOnly || workingMemoryConfig.agentManaged === false
+        ? {
+            kind: 'read-only',
+            template: workingMemoryTemplate,
+            data: workingMemoryData,
+            autoUpdated: !config?.readOnly,
+          }
+        : {
+            // Same check the agent's WorkingMemory processor uses (see MastraMemory.getInputProcessors).
+            kind: 'version' in workingMemoryConfig && workingMemoryConfig.version === 'vnext' ? 'vnext' : 'tool',
+            template: workingMemoryTemplate,
+            data: workingMemoryData,
+          };
+    const instruction = this.getWorkingMemoryInstruction(args) ?? this.renderBuiltInWorkingMemoryInstruction(args);
+    return instruction || null;
   }
 
   /** Fetch current stored copies of messages in a resumed turn, bypassing run-state history caches. */
@@ -2339,20 +2421,9 @@ ${workingMemory}`;
     });
   }
 
-  public defaultWorkingMemoryTemplate = `
-# User Information
-- **First Name**: 
-- **Last Name**: 
-- **Location**: 
-- **Occupation**: 
-- **Interests**: 
-- **Goals**: 
-- **Events**: 
-- **Facts**: 
-- **Projects**: 
-`;
+  public defaultWorkingMemoryTemplate = DEFAULT_WORKING_MEMORY_TEMPLATE;
 
-  protected getWorkingMemoryToolInstruction({
+  private builtInWorkingMemoryToolInstruction({
     template,
     data,
   }: {
@@ -2406,13 +2477,14 @@ Notes:
 - IMPORTANT: Preserve the ${template.format === 'json' ? 'JSON' : 'Markdown'} formatting structure above while updating the content.`;
   }
 
-  protected __experimental_getWorkingMemoryToolInstructionVNext({
+  private builtInWorkingMemoryToolInstructionVNext({
     template,
     data,
   }: {
     template: WorkingMemoryTemplate;
     data: string | null;
   }) {
+    const templateContent = typeof template.content === 'string' ? template.content : JSON.stringify(template.content);
     return `WORKING_MEMORY_SYSTEM_INSTRUCTION:
 Store and update any conversation-relevant information by calling the updateWorkingMemory tool.
 
@@ -2425,7 +2497,7 @@ Guidelines:
 6. Information not being relevant to the current conversation is not a valid reason to replace or remove working memory information. Your working memory spans across multiple conversations and may be needed again later, even if it's not currently relevant.
 
 <working_memory_template>
-${template.content}
+${templateContent}
 </working_memory_template>
 
 <working_memory_data>
@@ -2435,7 +2507,7 @@ ${data || 'No working memory data available.'}
 Notes:
 - Update memory whenever referenced information changes
 ${
-  template.content !== this.defaultWorkingMemoryTemplate
+  templateContent !== DEFAULT_WORKING_MEMORY_TEMPLATE
     ? `- Only store information if it's in the working memory template, do not store other information unless the user asks you to remember it, as that non-template information may be irrelevant`
     : `- If you're unsure whether to store something, store it (eg if the user tells you information about themselves, call updateWorkingMemory immediately to update it)
 `
@@ -2447,12 +2519,7 @@ ${
 `;
   }
 
-  /**
-   * Generate read-only working memory instructions.
-   * This provides the working memory context without any tool update instructions.
-   * Used when memory is in readOnly mode, or with `autoUpdated` when the app updates it (agentManaged: false).
-   */
-  protected getReadOnlyWorkingMemoryInstruction({
+  private builtInReadOnlyWorkingMemoryInstruction({
     data,
     autoUpdated = false,
   }: {
@@ -2479,6 +2546,64 @@ Guidelines:
 Notes:
 - This system is here so that you can maintain the conversation when your context window is very short
 - The user will not see the working memory data directly`;
+  }
+
+  /** Instruction for agents that update working memory with the updateWorkingMemory tool. Override to customize it. */
+  protected getWorkingMemoryToolInstruction(args: { template: WorkingMemoryTemplate; data: string | null }): string {
+    return this.builtInWorkingMemoryToolInstruction(args);
+  }
+
+  /** Instruction for `version: 'vnext'` template working memory. Override to customize it. */
+  protected __experimental_getWorkingMemoryToolInstructionVNext(args: {
+    template: WorkingMemoryTemplate;
+    data: string | null;
+  }): string {
+    return this.builtInWorkingMemoryToolInstructionVNext(args);
+  }
+
+  /**
+   * Generate read-only working memory instructions.
+   * This provides the working memory context without any tool update instructions.
+   * Used when memory is in readOnly mode, or with `autoUpdated` when the app updates it (agentManaged: false).
+   * Override to customize it.
+   */
+  protected getReadOnlyWorkingMemoryInstruction(args: {
+    template: WorkingMemoryTemplate;
+    data: string | null;
+    autoUpdated?: boolean;
+  }): string {
+    return this.builtInReadOnlyWorkingMemoryInstruction(args);
+  }
+
+  /**
+   * Renders the working memory instruction an agent receives, using the instruction methods above,
+   * so a subclass that overrides them changes what the model sees. Return `undefined` to use the
+   * built-in instruction, or an empty string to send none.
+   */
+  override getWorkingMemoryInstruction(args: WorkingMemoryInstructionArgs): string | undefined {
+    switch (args.kind) {
+      case 'read-only':
+        return this.getReadOnlyWorkingMemoryInstruction(args);
+      case 'vnext':
+        return this.__experimental_getWorkingMemoryToolInstructionVNext(args);
+      case 'tool':
+        return this.getWorkingMemoryToolInstruction(args);
+    }
+  }
+
+  /**
+   * The built-in text, ignoring subclass overrides of the instruction methods. Used when
+   * getWorkingMemoryInstruction returns `undefined`, matching the agent processor's own fallback.
+   */
+  private renderBuiltInWorkingMemoryInstruction(args: WorkingMemoryInstructionArgs): string {
+    switch (args.kind) {
+      case 'read-only':
+        return this.builtInReadOnlyWorkingMemoryInstruction(args);
+      case 'vnext':
+        return this.builtInWorkingMemoryToolInstructionVNext(args);
+      case 'tool':
+        return this.builtInWorkingMemoryToolInstruction(args);
+    }
   }
 
   private isVNextWorkingMemoryConfig(config?: MemoryConfig): boolean {
@@ -3518,7 +3643,12 @@ Notes:
         };
       }
       const moved = new Set<string>();
-      for (;;) {
+      // Eventually consistent stores may keep returning an updated page for minutes.
+      // Bound the whole index migration, including retries across multiple pages.
+      const deadline = Date.now() + 120_000;
+      let retryDelayMs = 1_000;
+      let complete = false;
+      migration: while (Date.now() < deadline) {
         // `queryText` is accepted only by self-embedding stores, so it is not on the shared
         // QueryVectorParams.
         const stale = await vector.query({
@@ -3528,9 +3658,22 @@ Notes:
           topK: 20,
           filter: { thread_id: threadId, resource_id: { $ne: resourceId } },
         } as never);
+        if (stale.length === 0) {
+          complete = true;
+          break;
+        }
         const pending = stale.filter(result => !moved.has(result.id));
-        if (pending.length === 0) break;
+        if (pending.length === 0) {
+          const delayMs = Math.min(retryDelayMs, Math.max(0, deadline - Date.now()));
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          retryDelayMs = Math.min(retryDelayMs * 2, 30_000);
+          continue;
+        }
+        retryDelayMs = 1_000;
         for (const result of pending) {
+          // A slow query or earlier updates can use up the budget mid-page. Start no new write after
+          // the deadline; completed updates stay in place so a same-resource retry finishes the rest.
+          if (Date.now() >= deadline) break migration;
           moved.add(result.id);
           // Stores that replace metadata would drop thread_id/group_id if we wrote resource_id alone.
           if (!result.metadata) {
@@ -3550,6 +3693,12 @@ Notes:
             },
           });
         }
+      }
+      if (!complete) {
+        throw new Error(
+          `Observation vector migration in index "${indexName}" did not complete within 120 seconds ` +
+            `(${moved.size} vector IDs processed). The store may still be returning stale results; retry the transfer.`,
+        );
       }
     }
   }
@@ -3850,6 +3999,15 @@ Notes:
     // Get base processors from parent class
     const processors = await super.getInputProcessors(configuredProcessors, context);
 
+    // Older cores build the WorkingMemory processor with their own instruction text, so swap in one that
+    // renders through this instance. A WorkingMemory processor the user configured is left alone.
+    if (!coreRendersWorkingMemoryInstructionThroughMemory()) {
+      const index = processors.findIndex(p => p.id === 'working-memory' && !configuredProcessors.includes(p));
+      if (index !== -1) {
+        processors[index] = await this.createWorkingMemoryInstructionCompatProcessor(context);
+      }
+    }
+
     const om = await this.createOMProcessor(configuredProcessors, context);
     if (om) {
       processors.push(om);
@@ -3893,7 +4051,12 @@ Notes:
   ): Promise<ErrorProcessor[]> {
     const processors = await super.getErrorProcessors(configuredProcessors, context);
 
-    const om = await this.createOMProcessor(configuredProcessors, context);
+    // The error phase only calls `processAPIError`, which the runner skips for workflows,
+    // so an OM step inside an error workflow cannot stand in for Memory's OM here.
+    const om = await this.createOMProcessor(
+      configuredProcessors.filter(p => !isProcessorWorkflow(p)),
+      context,
+    );
     if (om) {
       processors.push(om as unknown as ErrorProcessor);
     }
@@ -3910,10 +4073,8 @@ Notes:
     configuredProcessors: (InputProcessorOrWorkflow | OutputProcessorOrWorkflow | ErrorProcessorOrWorkflow)[] = [],
     context?: RequestContext,
   ): Promise<InputProcessor | null> {
-    const hasObservationalMemory = configuredProcessors.some(
-      p => !('workflow' in p) && p.id === 'observational-memory',
-    );
-    if (hasObservationalMemory) return null;
+    // The user's OM processor wins wherever they placed it, including inside a processor workflow.
+    if (hasConfiguredProcessorId(configuredProcessors, 'observational-memory')) return null;
 
     // Note: attachment is intentionally permissive — `MastraMemory` may not be
     // populated in the request context at discovery time (or at all, for direct
@@ -3942,6 +4103,33 @@ Notes:
     const { ObservationalMemoryProcessor } = await import('./processors/observational-memory');
     return new ObservationalMemoryProcessor(engine, this, {
       temporalMarkers: effectiveConfig.temporalMarkers,
+    });
+  }
+
+  /**
+   * Builds the WorkingMemory input processor for cores without an instruction provider, from the same
+   * config core's `MastraMemory.getInputProcessors()` uses for the processor it replaces.
+   */
+  private async createWorkingMemoryInstructionCompatProcessor(
+    context?: RequestContext,
+  ): Promise<WorkingMemoryInstructionCompat> {
+    const runtimeMemory = context?.get('MastraMemory') as { memoryConfig?: MemoryConfigInternal } | undefined;
+    const effectiveConfig = runtimeMemory?.memoryConfig
+      ? this.getMergedThreadConfig(runtimeMemory.memoryConfig)
+      : this.threadConfig;
+    const workingMemory = typeof effectiveConfig.workingMemory === 'object' ? effectiveConfig.workingMemory : undefined;
+
+    return new WorkingMemoryInstructionCompat({
+      storage: await this.getMemoryStore(),
+      template: workingMemory?.template ? { format: 'markdown', content: workingMemory.template } : undefined,
+      scope: workingMemory?.scope,
+      useVNext: workingMemory !== undefined && 'version' in workingMemory && workingMemory.version === 'vnext',
+      readOnly: effectiveConfig.readOnly,
+      agentManaged: workingMemory?.agentManaged,
+      defaultTemplate: DEFAULT_WORKING_MEMORY_TEMPLATE,
+      getWorkingMemoryTemplate: args => this.getWorkingMemoryTemplate(args),
+      renderInstruction: args =>
+        this.getWorkingMemoryInstruction(args) ?? this.renderBuiltInWorkingMemoryInstruction(args),
     });
   }
 

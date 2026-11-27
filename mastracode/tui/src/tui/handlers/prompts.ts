@@ -37,7 +37,7 @@ export async function handleAskQuestion(
   ctx: EventHandlerContext,
   toolCallId: string,
   question: string,
-  options?: Array<{ label: string; description?: string }>,
+  options?: Array<{ label: string; description?: string; recommended?: boolean }>,
   selectionMode?: AskUserSelectionMode,
 ): Promise<void> {
   const { state } = ctx;
@@ -311,12 +311,14 @@ async function prepareApprovedPlan(
   });
 
   // Archive the approved plan to the global plans dir so it's findable later. The
-  // local plan file is left in place so the user can review every plan made.
+  // local plan file is left in place so the user can review every plan made. Pass the
+  // reviewed text so the archive holds what was approved even if the file changes.
   if (planPath) {
     await approvePlanFile({
       planPath,
       title,
       resourceId: state.session.identity.getResourceId(),
+      plan,
     }).catch(() => {});
   }
 

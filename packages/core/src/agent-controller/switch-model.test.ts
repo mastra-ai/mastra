@@ -671,19 +671,14 @@ describe('session.model.displayName', () => {
     expect(session.model.displayName()).toBe('unknown');
   });
 
-  it('returns the last segment of a provider-prefixed model id', async () => {
+  it.each([
+    ['returns the last segment of a provider-prefixed model id', 'anthropic/claude-sonnet-4', 'claude-sonnet-4'],
+    ['returns the whole id when there is no provider prefix', 'gpt-4o', 'gpt-4o'],
+  ] as const)('%s', async (_title, input, expected) => {
     const { session } = await createSession();
 
-    await session.model.switch('anthropic/claude-sonnet-4');
+    await session.model.switch(input);
 
-    expect(session.model.displayName()).toBe('claude-sonnet-4');
-  });
-
-  it('returns the whole id when there is no provider prefix', async () => {
-    const { session } = await createSession();
-
-    await session.model.switch('gpt-4o');
-
-    expect(session.model.displayName()).toBe('gpt-4o');
+    expect(session.model.displayName()).toBe(expected);
   });
 });

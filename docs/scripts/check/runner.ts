@@ -1,6 +1,8 @@
 import path from 'path'
+import { externalDocsCheck } from './checks/external-docs'
 import { formatCheck } from './checks/format'
 import { frontmatterCheck } from './checks/frontmatter'
+import { headingVocabularyCheck } from './checks/heading-vocabulary'
 import { mdxCheck } from './checks/mdx'
 import { redirectsCheck } from './checks/redirects'
 import { sidebarCheck } from './checks/sidebar'
@@ -21,7 +23,16 @@ import {
   type SkippedCheck,
 } from './types'
 
-export const CHECKS: Check[] = [frontmatterCheck, sidebarCheck, mdxCheck, valeCheck, formatCheck, redirectsCheck]
+export const CHECKS: Check[] = [
+  frontmatterCheck,
+  sidebarCheck,
+  mdxCheck,
+  externalDocsCheck,
+  headingVocabularyCheck,
+  valeCheck,
+  formatCheck,
+  redirectsCheck,
+]
 
 export interface RunOptions {
   rootDir: string

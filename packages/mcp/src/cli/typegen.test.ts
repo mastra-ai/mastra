@@ -2,15 +2,15 @@ import fs, { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { compile } from 'json-schema-to-typescript';
+import { compile } from 'json-schema-to-typescript-lite';
 import { describe, expect, it, vi } from 'vitest';
 import { compileConsumer, compileStrict } from '../client/__fixtures__/typed-client/compile';
 import type { SerializableMCPToolCatalog } from '../client/types';
 import { MAX_CATALOG_VALUES, MAX_JSON_SCHEMA_NODES, MAX_SCHEMA_VALUES } from '../shared/json-schema-dialect';
 import { generateToolTypes, TypegenError } from './typegen';
 
-vi.mock('json-schema-to-typescript', async importOriginal => {
-  const original = await importOriginal<typeof import('json-schema-to-typescript')>();
+vi.mock('json-schema-to-typescript-lite', async importOriginal => {
+  const original = await importOriginal<typeof import('json-schema-to-typescript-lite')>();
   return { ...original, compile: vi.fn(original.compile) };
 });
 
@@ -171,6 +171,26 @@ describe('concrete MCP schema generation', () => {
       );
     },
   );
+
+  it('widens the index signature of an object with named and additional properties so it compiles', async () => {
+    const result = await generateToolTypes(
+      catalog({
+        type: 'object',
+        properties: { name: { type: 'string' } },
+        required: ['name'],
+        additionalProperties: { type: 'number' },
+      }),
+    );
+    expect(result.warnings).toEqual([
+      'Additional properties alongside named properties at server "test" tool "tool" input/schema[0]; index signature widened to unknown',
+    ]);
+    check(
+      result.source,
+      assertions +
+        `const ok: Input = {name: 'x', extra: 1};\nconst name: string = ({} as Input).name;\n` +
+        `// @ts-expect-error name stays a string\nconst bad: Input = {name: 1};`,
+    );
+  });
 
   it('isolates root and repeated nested titles, raw tool names and hostile comments', async () => {
     const schema = {
@@ -455,6 +475,26 @@ describe('concrete MCP schema generation', () => {
       mutual.source,
       assertions +
         `const nested: Input = {b:{a:{}}};\n// @ts-expect-error wrong recursive shape\nconst bad: Input = {b:{a:1}};`,
+    );
+    const viaRoot = await generateToolTypes(
+      catalog({
+        $ref: '#/$defs/Node',
+        $defs: {
+          Node: {
+            type: 'object',
+            properties: { label: { type: 'string' }, children: { type: 'array', items: { $ref: '#/$defs/Node' } } },
+            required: ['label'],
+            additionalProperties: false,
+          },
+        },
+      }),
+    );
+    expect(viaRoot.warnings).toEqual([]);
+    check(
+      viaRoot.source,
+      assertions +
+        `const tree: Input = {label: 'a', children: [{label: 'b', children: []}]};\n` +
+        `// @ts-expect-error children need labels\nconst bad: Input = {label: 'a', children: [{}]};`,
     );
   });
 

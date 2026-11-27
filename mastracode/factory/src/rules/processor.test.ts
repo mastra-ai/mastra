@@ -1,13 +1,19 @@
 import { MessageList } from '@mastra/core/agent/message-list';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/request-context';
 import { createSignal } from '@mastra/core/signals';
-import { describe, expect, it, vi } from 'vitest';
+import { InMemoryStore } from '@mastra/core/storage';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { DispatcherBoardEngine } from '../board-engine/engine.js';
+import type { FactoryBoardEngine } from '../board-engine/engine.js';
 import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/index.js';
 import { reviewBoard } from '../boards/review.js';
 import { createToolRuleTestRegistry, selfReviewWorkBoard, createTriageWorkRegistry } from '../boards/test-utils.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { createFactoryStorageForTests, finishQueuedRunsForTests } from '../storage/test-utils.js';
+import { setFactoryToolsRole } from './binding-context.js';
+import { FactoryDecisionDispatcher } from './dispatcher.js';
 import { FactoryPhaseStateProcessor } from './processor.js';
 import { FactoryTransitionService } from './transition-service.js';
 
@@ -16,6 +22,7 @@ const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 function requestContext(
   overrides: Partial<{
     threadId: string;
+    sessionId: string;
     authenticated: boolean;
     modelId: string;
     thinkingLevel: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
@@ -28,7 +35,7 @@ function requestContext(
   context.set('controller', {
     resourceId: 'resource-1',
     threadId: overrides.threadId ?? 'thread-1',
-    sessionId: 'resource-1',
+    sessionId: overrides.sessionId ?? 'resource-1',
     state: { factoryProjectId: PROJECT_ID, thinkingLevel: overrides.thinkingLevel ?? 'high' },
     getState: () => ({ factoryProjectId: PROJECT_ID, thinkingLevel: overrides.thinkingLevel ?? 'high' }),
     session: { modelId: overrides.modelId ?? 'openai/gpt-5.6-sol', modeId: 'review' },
@@ -512,7 +519,7 @@ describe('FactoryPhaseStateProcessor', () => {
           configVersion: 'rules-v1',
           boards,
           storage,
-          transitionService,
+          boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
         });
         await processor.processInputStep(inputArgs(requestContext(), [c.message]));
         // The tool's result never moves the card by itself.
@@ -584,11 +591,12 @@ describe('FactoryPhaseStateProcessor', () => {
         configVersion: 'rules-v1',
         boards,
         storage,
-        transitionService,
+        boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
       });
       await processor.processInputStep(inputArgs(requestContext(), [approved()]));
       // A person sends the card to Building and back; the old result is read again from the thread.
       for (const stage of ['execute', 'planning']) {
+        await finishQueuedRunsForTests(storage);
         const current = (await storage.get({ orgId: 'org-1', id: prepared.item.id }))!;
         await expect(
           transitionService.transition({
@@ -630,7 +638,7 @@ describe('FactoryPhaseStateProcessor', () => {
         configVersion: 'rules-v1',
         boards,
         storage,
-        transitionService,
+        boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
       });
       await processor.processInputStep(inputArgs(requestContext(), [approved()]));
       const card = await storage.get({ orgId: 'org-1', id: prepared.item.id });
@@ -662,7 +670,7 @@ describe('FactoryPhaseStateProcessor', () => {
           configVersion: 'rules-v1',
           boards,
           storage,
-          transitionService,
+          boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
         });
         await processor.processInputStep(inputArgs(requestContext(), [approved()]));
         expect(await stageOf(storage, prepared.item.id)).toEqual([board.stage]);
@@ -703,7 +711,7 @@ describe('FactoryPhaseStateProcessor', () => {
           configVersion: 'rules-v1',
           boards,
           storage,
-          transitionService,
+          boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
         });
         await processor.processInputStep(inputArgs(requestContext(), [c.message]));
         const card = await storage.get({ orgId: 'org-1', id: prepared.item.id });
@@ -790,7 +798,7 @@ describe('FactoryPhaseStateProcessor', () => {
           configVersion: 'rules-v1',
           boards,
           storage,
-          transitionService,
+          boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
         });
         return { storage, prepared, transitionService, processor };
       };
@@ -830,7 +838,7 @@ describe('FactoryPhaseStateProcessor', () => {
         configVersion: 'rules-v1',
         boards,
         storage,
-        transitionService,
+        boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
       });
       await processor.processInputStep(inputArgs(requestContext(), [approved()]));
       expect(await stageOf(storage, prepared.item.id)).toEqual(['planning']);
@@ -843,7 +851,12 @@ describe('FactoryPhaseStateProcessor', () => {
     const prepared = await prepare(storage, 'plan');
     const boards = createTriageWorkRegistry();
     const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
-    const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage, transitionService });
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards,
+      storage,
+      boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
+    });
 
     await processor.processInputStep(
       inputArgs(requestContext(), [
@@ -851,7 +864,7 @@ describe('FactoryPhaseStateProcessor', () => {
       ]),
     );
 
-    // The approval stamp bumps the revision; the planner moves the card itself.
+    // The approval stamp bumps the revision; it is the phase's outcome, which Factory applies once the run ends.
     await expect(storage.get({ orgId: 'org-1', id: prepared.item.id })).resolves.toMatchObject({
       revision: 2,
       stages: ['planning'],
@@ -862,7 +875,7 @@ describe('FactoryPhaseStateProcessor', () => {
       attributes: { board: 'work', stage: 'planning', role: 'plan', revision: 2 },
     });
     expect(signal?.contents).toContain('Factory work phase: Planning (planning)');
-    expect(signal?.contents).toContain('Then move the card with factory_transition_work_item to one of:');
+    expect(signal?.contents).toContain('Reported outcome: advance (Plan approved) → Building.');
   });
 
   it('still records an approved plan when an unrelated write to the card lands first', async () => {
@@ -870,7 +883,12 @@ describe('FactoryPhaseStateProcessor', () => {
     const prepared = await prepare(storage, 'plan');
     const boards = createTriageWorkRegistry();
     const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
-    const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage, transitionService });
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards,
+      storage,
+      boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
+    });
     const update = storage.update.bind(storage);
     let raced = false;
     vi.spyOn(storage, 'update').mockImplementation(async args => {
@@ -978,7 +996,7 @@ describe('FactoryPhaseStateProcessor', () => {
       configVersion: 'rules-v1',
       storage,
       boards,
-      transitionService,
+      boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
       messageReader: reader as never,
     });
 
@@ -1015,6 +1033,76 @@ describe('FactoryPhaseStateProcessor', () => {
         }),
       }),
     ]);
+  });
+
+  it("keeps a tool-result move the host's board engine refused undone when the dispatcher replays it", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const board = defineBoard({
+      id: 'custom',
+      title: 'Custom',
+      initialPhase: 'backlog',
+      phases: {
+        backlog: { title: 'Backlog', kind: 'resting', next: 'building' },
+        building: { title: 'Building', kind: 'working', next: 'done' },
+        done: { title: 'Done', kind: 'terminal' },
+      },
+      tools: {
+        finish: {
+          onResult: () => ({ type: 'transition' as const, idempotencyKey: 'finish', board: 'custom', stage: 'done' }),
+        },
+      },
+    });
+    const boards = boardRegistryOf([board]);
+    const prepared = await prepare(storage, 'builder', 'issue', { id: 'custom', stage: 'building' });
+    const reader = {
+      listMessages: vi.fn(async () => ({ messages: [toolMessage({ toolName: 'finish' })], hasMore: false })),
+    };
+    const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
+    const defaultEngine = new DispatcherBoardEngine({ transitionService, workItems: storage, boards });
+    const asked: string[] = [];
+    // A host engine that refuses a move an agent's tool result asks for, but would take the same move from a rule.
+    const boardEngine: FactoryBoardEngine = {
+      requestMove: async request => {
+        asked.push(request.cause ?? 'none');
+        if (request.cause !== 'tool_result_rule') return defaultEngine.requestMove(request);
+        return {
+          status: 'rejected',
+          transitionId: 'host-refusal',
+          itemId: request.workItemId,
+          code: 'forbidden',
+          reason: 'Agents cannot close cards on this host.',
+        };
+      },
+      requestPlacement: placement => defaultEngine.requestPlacement(placement),
+      runEnded: (binding, engine) => defaultEngine.runEnded(binding, engine),
+    };
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      storage,
+      boards,
+      boardEngine,
+      messageReader: reader as never,
+    });
+
+    await processor.reconcileBinding(prepared.binding);
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: { listActiveThreadRuns: () => [] } as never,
+      storage,
+      boards,
+      transitionService,
+      boardEngine,
+      ownerId: 'replay-worker',
+    });
+    await dispatcher.runOnce(new Date(Date.now() + 60_000));
+
+    expect(asked).toEqual(['tool_result_rule']);
+    expect((await storage.get({ orgId: 'org-1', id: prepared.item.id }))?.stages).toEqual(['building']);
+    expect(
+      (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(entry => entry.idempotencyKey === 'finish'),
+    ).toMatchObject({
+      status: 'failed',
+      lastError: expect.stringContaining('Agents cannot close cards on this host.'),
+    });
   });
 
   it('ingests custom-phase persisted results once and retains their cursor and provenance', async () => {
@@ -1265,7 +1353,12 @@ describe('FactoryPhaseStateProcessor', () => {
       },
     });
     const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
-    const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage, transitionService });
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards,
+      storage,
+      boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
+    });
     const context = requestContext();
 
     await processor.processInputStep(
@@ -1304,7 +1397,8 @@ describe('FactoryPhaseStateProcessor', () => {
     const resting = await processor.computeStateSignal(stateArgs(requestContext()));
     expect(resting?.contents).toContain('Factory work phase: Intake (intake)');
     expect(resting?.contents).toContain('rests in Intake');
-    expect(resting?.contents).toContain('request the transition into the working stage first');
+    expect(resting?.contents).toContain('a person moves it on from the Factory board when the work should resume');
+    expect(resting?.contents).not.toContain('Outcomes:');
   });
 
   it("names each phase by its part in the loop, from the card's own board, so skills never assume Work's keys", async () => {
@@ -1452,7 +1546,7 @@ describe('FactoryPhaseStateProcessor', () => {
     );
   });
 
-  it('tells the planner Planning holds the card until the plan is approved, and then to move it', async () => {
+  it('tells the planner Planning holds the card until the plan is approved, and that approval is its outcome', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepare(storage, 'plan', 'issue', { id: 'work', stage: 'planning' });
     const boards = createTriageWorkRegistry();
@@ -1462,8 +1556,12 @@ describe('FactoryPhaseStateProcessor', () => {
       storage,
     }).computeStateSignal(stateArgs(requestContext()));
     expect(signal?.contents).toContain(
-      'This phase ends when submit_plan succeeds with an approved plan; until then the card stays here. Then move the card with factory_transition_work_item to one of: execute, triage, intake, done, canceled.',
+      'This phase ends when submit_plan succeeds with an approved plan; until then the card stays here. Its success reports advance (Plan approved); Factory moves the card to Building once your run ends.',
     );
+    expect(signal?.contents).toContain(
+      'Outcomes: advance: Plan approved → Building; rest: Needs a person before planning can go on → Intake; done: Already done; nothing to build → Done; cancel: Not worth doing → Canceled',
+    );
+    expect(signal?.contents).not.toContain('factory_transition_work_item');
     expect(signal?.contents).not.toContain('Its result moves the card on.');
   });
 
@@ -1475,7 +1573,7 @@ describe('FactoryPhaseStateProcessor', () => {
     const context = requestContext();
     const first = await processor.computeStateSignal(stateArgs(context));
     expect(first).toMatchObject({ id: 'factory-phase', mode: 'snapshot', attributes: { status: 'active' } });
-    expect(first?.contents).toContain('expectedRevision 1');
+    expect(first?.contents).toContain('Revision: 1');
 
     const lastSnapshot = { metadata: { value: first?.metadata?.value } };
     await expect(
@@ -1547,6 +1645,46 @@ describe('FactoryPhaseStateProcessor', () => {
     expect(moved?.contents).toContain(
       'This card is now in Review, which runs in the review context in another session. Your part is done',
     );
+  });
+
+  it('tells a request whose binding rotated mid-run that its part is done, keeping the role its tools have', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const building = await prepare(storage, 'work', 'issue', { id: 'work', stage: 'execute' });
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: new Map([['work', selfReviewWorkBoard]]),
+      storage,
+    });
+    // The builder's request built its tools under the work binding.
+    const builderRequest = requestContext();
+    setFactoryToolsRole(builderRequest, 'work');
+
+    // The builder moves the card to Self-review: the thread's binding rotates to review mid-request.
+    await storage.update({ orgId: 'org-1', id: building.item.id, userId: 'user-1', patch: { stages: ['review'] } });
+    const reviewing = await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: { id: building.item.id },
+      role: 'review',
+      session: { sessionId: 'resource-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: 'resource-1',
+      kickoffKey: 'kickoff-review',
+      kickoffMessage: null,
+    });
+    expect(reviewing.binding.id).not.toBe(building.binding.id);
+    expect(reviewing.binding.threadId).toBe(building.binding.threadId);
+
+    const stillBuilding = await processor.computeStateSignal(stateArgs(builderRequest));
+    expect(stillBuilding?.contents).toContain('Role: work');
+    expect(stillBuilding?.contents).toContain('runs in the review context in another session. Your part is done');
+
+    // The self-review kickoff starts a fresh request with review tools.
+    const reviewRequest = requestContext();
+    setFactoryToolsRole(reviewRequest, 'review');
+    const selfReview = await processor.computeStateSignal(stateArgs(reviewRequest));
+    expect(selfReview?.contents).toContain('Role: review');
+    expect(selfReview?.contents).not.toContain('Your part is done');
   });
 
   it('keeps a plan session that still works a Planning card planned before Planning ran in work', async () => {
@@ -1773,7 +1911,11 @@ describe('FactoryPhaseStateProcessor', () => {
       patch: { parentWorkItemId: epic.item.id },
     });
     await card('Unrelated work', 'github-issue:11');
+    // Children created in the same millisecond tie on creation time; space them so "newest first" is decided.
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() });
+    onTestFinished(() => void vi.useRealTimers());
     await card('Older child', 'github-issue:12', prepared.item.id);
+    vi.setSystemTime(Date.now() + 1_000);
     await card('Newer child', 'github-issue:13', prepared.item.id);
     const listShared = vi.spyOn(storage, 'listShared');
 
@@ -1960,5 +2102,221 @@ describe('FactoryPhaseStateProcessor', () => {
     await storage.delete({ orgId: 'org-1', id: prepared.item.id });
     await processor.reconcileAllBoundThreads();
     expect(reader.listMessages).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('FactoryPhaseStateProcessor bound-thread reconcile', () => {
+  function prepareBound(storage: WorkItemsStorage, index: number) {
+    return storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: 'issue',
+            externalId: `github-issue:${100 + index}`,
+            url: `https://example.test/issues/${100 + index}`,
+          },
+          title: `Card ${index}`,
+          stages: ['planning'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: `session-${index}`, branch: `factory/issue-${index}`, threadId: `thread-${index}` },
+      resourceId: 'resource-1',
+      kickoffKey: `kickoff-${index}`,
+      kickoffMessage: null,
+    });
+  }
+
+  /** Threads in the in-memory Mastra store, read through the same `listMessages` Factory uses. */
+  async function threadStore() {
+    const memory = (await new InMemoryStore().getStore('memory'))!;
+    const reads = { inFlight: 0, maxInFlight: 0 };
+    const listMessages = vi.fn(async (input: Parameters<typeof memory.listMessages>[0]) => {
+      reads.maxInFlight = Math.max(reads.maxInFlight, ++reads.inFlight);
+      try {
+        // A database read takes time; this is what lets overlapping reads show.
+        await new Promise(resolve => setTimeout(resolve, 1));
+        return await memory.listMessages(input);
+      } finally {
+        reads.inFlight -= 1;
+      }
+    });
+    return {
+      reads,
+      reader: { listMessages },
+      save: (threadId: string, ...messages: Array<ReturnType<typeof toolMessage>>) =>
+        memory.saveMessages({ messages: messages.map(message => ({ ...message, threadId }) as MastraDBMessage) }),
+      readThreads: () => listMessages.mock.calls.map(([input]) => (input as { threadId: string }).threadId).sort(),
+    };
+  }
+
+  function step(processor: FactoryPhaseStateProcessor, index: number) {
+    return processor.processInputStep(
+      inputArgs(requestContext({ threadId: `thread-${index}`, sessionId: `session-${index}` }), []),
+    );
+  }
+
+  // Production walked all 232 active bindings every 30s while busy, most of them idle for hours.
+  it('reads only the threads a run stepped on, plus a slow full walk', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const threads = await threadStore();
+    for (let index = 0; index < 12; index++) {
+      await prepareBound(storage, index);
+      await threads.save(
+        `thread-${index}`,
+        toolMessage({ id: `assistant-${index}`, toolCallId: `call-${index}`, toolName: 'old_tool' }),
+      );
+    }
+    const onResult = vi.fn(() => undefined);
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createToolRuleTestRegistry({ submit_plan: { onResult } }),
+      storage,
+      messageReader: threads.reader as never,
+      isThreadRunning: () => false,
+    });
+    const start = Date.now();
+
+    // The first pass catches up on everything written while no process watched.
+    await processor.reconcileBoundThreads(start);
+    expect(threads.readThreads()).toHaveLength(12);
+    // A few at a time, so a walk never floods the event loop or the database.
+    expect(threads.reads.maxInFlight).toBeGreaterThan(1);
+    expect(threads.reads.maxInFlight).toBeLessThanOrEqual(4);
+
+    threads.reader.listMessages.mockClear();
+    await threads.save(
+      'thread-3',
+      toolMessage({ id: 'assistant-3b', toolCallId: 'plan-3', createdAt: new Date('2026-07-18T11:00:00Z') }),
+    );
+    await threads.save(
+      'thread-7',
+      toolMessage({ id: 'assistant-7b', toolCallId: 'plan-7', createdAt: new Date('2026-07-18T11:00:00Z') }),
+    );
+    await step(processor, 3);
+    await step(processor, 7);
+    await processor.reconcileBoundThreads(start + 30_000);
+
+    expect(threads.readThreads()).toEqual(['thread-3', 'thread-7']);
+    expect(onResult).toHaveBeenCalledTimes(2);
+
+    // One trailing read for results persisted after the run ended, then they drop out.
+    threads.reader.listMessages.mockClear();
+    await processor.reconcileBoundThreads(start + 60_000);
+    expect(threads.readThreads()).toEqual(['thread-3', 'thread-7']);
+    threads.reader.listMessages.mockClear();
+    await processor.reconcileBoundThreads(start + 90_000);
+    expect(threads.readThreads()).toEqual([]);
+
+    // The safety net still walks every active binding, just far less often.
+    await processor.reconcileBoundThreads(start + 10 * 60_000);
+    expect(threads.readThreads()).toHaveLength(12);
+    expect(onResult).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps reading a running thread and catches the result its run leaves after its last step', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const threads = await threadStore();
+    await prepareBound(storage, 1);
+    await prepareBound(storage, 2);
+    const onResult = vi.fn(() => undefined);
+    let running = true;
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createToolRuleTestRegistry({ submit_plan: { onResult } }),
+      storage,
+      messageReader: threads.reader as never,
+      isThreadRunning: threadId => running && threadId === 'thread-1',
+    });
+    const start = Date.now();
+    await processor.reconcileBoundThreads(start);
+    await step(processor, 1);
+    for (let pass = 1; pass <= 3; pass++) await processor.reconcileBoundThreads(start + pass * 30_000);
+
+    // The run is aborted mid-tool-call: its error result lands with no step after it.
+    await threads.save(
+      'thread-1',
+      toolMessage({ id: 'assistant-aborted', toolCallId: 'aborted-call', state: 'error', result: 'aborted' }),
+    );
+    running = false;
+    threads.reader.listMessages.mockClear();
+    await processor.reconcileBoundThreads(start + 4 * 30_000);
+
+    expect(threads.readThreads()).toEqual(['thread-1']);
+    expect(onResult).toHaveBeenCalledWith(
+      expect.objectContaining({ toolCallId: 'aborted-call', result: expect.objectContaining({ status: 'error' }) }),
+    );
+  });
+
+  it('does not ingest the message at its cursor again until it changes', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const threads = await threadStore();
+    const prepared = await prepareBound(storage, 1);
+    await threads.save('thread-1', toolMessage({ id: 'assistant-1', toolCallId: 'pending-call', state: 'call' }));
+    await threads.save(
+      'thread-1',
+      toolMessage({ id: 'assistant-2', toolCallId: 'done-call', createdAt: new Date('2026-07-18T10:00:00Z') }),
+    );
+    const recordPullRequestProvenance = vi.fn(async () => undefined);
+    const onResult = vi.fn(() => undefined);
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createToolRuleTestRegistry({ submit_plan: { onResult } }),
+      storage,
+      messageReader: threads.reader as never,
+      recordPullRequestProvenance,
+    });
+    const advance = vi.spyOn(storage, 'advanceToolResultCursor');
+
+    await processor.reconcileAllBoundThreads();
+    expect(recordPullRequestProvenance).toHaveBeenCalledTimes(1);
+    expect(advance).toHaveBeenCalledTimes(1);
+
+    await processor.reconcileAllBoundThreads();
+    expect(recordPullRequestProvenance).toHaveBeenCalledTimes(1);
+    expect(advance).toHaveBeenCalledTimes(1);
+
+    // The suspended call at the cursor time resumes in place with its result.
+    await threads.save('thread-1', toolMessage({ id: 'assistant-1', toolCallId: 'pending-call', state: 'result' }));
+    await processor.reconcileAllBoundThreads();
+
+    expect(recordPullRequestProvenance).toHaveBeenCalledTimes(2);
+    expect(recordPullRequestProvenance).toHaveBeenLastCalledWith(
+      expect.objectContaining({ toolCallId: 'pending-call' }),
+    );
+    expect(onResult).toHaveBeenCalledTimes(2);
+    await expect(storage.getToolResultCursor('org-1', PROJECT_ID, prepared.binding.id)).resolves.toMatchObject({
+      lastMessageCreatedAt: new Date('2026-07-18T10:00:00Z'),
+    });
+  });
+
+  it('skips a binding revoked after its last step', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const threads = await threadStore();
+    const prepared = await prepareBound(storage, 1);
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createToolRuleTestRegistry({}),
+      storage,
+      messageReader: threads.reader as never,
+    });
+    const start = Date.now();
+    await processor.reconcileBoundThreads(start);
+    await step(processor, 1);
+    await storage.revokeRunBinding({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      bindingId: prepared.binding.id,
+      revokedAt: new Date(),
+    });
+    threads.reader.listMessages.mockClear();
+    await processor.reconcileBoundThreads(start + 30_000);
+    expect(threads.readThreads()).toEqual([]);
   });
 });

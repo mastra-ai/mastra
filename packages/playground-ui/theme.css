@@ -35,30 +35,46 @@
   --sidebar: var(--background-1);
   --card: var(--background-3);
   --popover: var(--background-3);
-  --field: var(--card);
+  /* A box inside a card or dialog: a code block, a group of rows, a tool result. */
+  --nested: oklch(var(--fill-tint) 0 0 / 6%);
+  /* Rows of a table or list, on the card that frames them. */
+  --row: color-mix(in oklab, var(--background-2) 75%, var(--background-3));
+  --field: var(--field-on-page);
+  --field-hover: var(--field-hover-on-page);
+  --field-open: var(--field-open-on-page);
   --field-disabled: var(--fill-subtle);
-  --field-rim: var(--surface-rim);
   --field-rim-focus: var(--border-focus);
   --muted: var(--gray-1);
   --foreground: var(--gray-10);
-  /* Supporting text, measured against Linear's sidebar label: `lch(37.78)` light,
-     `oklch(0.647)` dark. `--gray-8` is 0.4459 / 0.65 — the rung the ramp already
-     had. `--gray-9` sat one rung from the ink (0.309 vs 0.129), so supporting
-     text read as a second ink instead of stepping back. */
+  /* Supporting text: labels, descriptions, quiet controls. 74% of the ink, so it stays readable at 12px. */
   --muted-foreground: var(--gray-8);
+  /* Text that only backs up something else: counts, timestamps, hints, an empty cell's dash. Labels are supporting
+     text and use `--muted-foreground`. */
+  --subtle-foreground: var(--gray-7);
+  /* Input placeholders and disabled labels, nothing else. */
   --placeholder: var(--gray-7);
-  /* The icons inside an interactive control (see `controlIconState`). A labelled control's
-     icons stay muted on hover: the label and surface answer it. Icon-only controls and lists
-     retune the pair, never the rule. */
-  --control-icon-rest: var(--muted-foreground);
-  --control-icon-hover: var(--muted-foreground);
+  /* An icon is one step quieter than the label beside it: 80% of the ink next to foreground text, 66% next to
+     muted text. */
+  --icon: color-mix(in srgb, var(--foreground) 80%, transparent);
+  --muted-icon: color-mix(in srgb, var(--foreground) 66%, transparent);
+  /* The icons inside an interactive control (see `controlIconState`). Icon-only controls and lists retune the pair,
+     never the rule. */
+  --control-icon-rest: var(--muted-icon);
+  --control-icon-hover: var(--icon);
   /* The clock a time field draws in place of the browser's picker icon (see `Input`). An image
      can't read CSS variables, so the stroke repeats `--muted-foreground` (`--gray-8`) per theme. */
-  --time-field-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='oklch(0.65 0 0)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 6v6l4 2'/%3E%3C/svg%3E");
+  --time-field-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='oklch(0.7984 0 0)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 6v6l4 2'/%3E%3C/svg%3E");
+  /* The links between nodes on the Factory board canvas. Light lines on a dark page read brighter than dark ones on
+     a light page, so the dark theme blends its hint color halfway into the page. Solid, so crossing lines don't
+     darken. */
+  --canvas-link: color-mix(in oklab, var(--subtle-foreground) 50%, var(--background));
 }
 
 html.light {
-  --time-field-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='oklch(0.4459 0 0)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 6v6l4 2'/%3E%3C/svg%3E");
+  --nested: oklch(var(--fill-tint) 0 0 / 2.5%);
+  --row: var(--background-2);
+  --time-field-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='oklch(0.4568 0 0)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 6v6l4 2'/%3E%3C/svg%3E");
+  --canvas-link: var(--subtle-foreground);
 }
 
 /* Semantic aliases stay inline so utilities resolve var(--token) on the styled
@@ -67,6 +83,9 @@ html.light {
   --color-background: var(--background);
   --color-sidebar: var(--sidebar);
   --color-card: var(--card);
+  --color-canvas-link: var(--canvas-link);
+  --color-nested: var(--nested);
+  --color-row: var(--row);
   --color-field: var(--field);
   --color-field-disabled: var(--field-disabled);
   --color-dialog: var(--dialog);
@@ -74,5 +93,8 @@ html.light {
   --color-muted: var(--muted);
   --color-foreground: var(--foreground);
   --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
   --color-placeholder: var(--placeholder);
+  --color-icon: var(--icon);
+  --color-muted-icon: var(--muted-icon);
 }

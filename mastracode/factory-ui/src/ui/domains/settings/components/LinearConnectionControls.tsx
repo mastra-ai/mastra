@@ -1,9 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 
-import { useApiConfig } from '../../../../api/config';
-import { connectLinear } from '../../factory/services/linear';
-import { IntegrationItem } from './IntegrationItem';
+import { useLinearConnect } from '../../../../hooks/useLinearConnect';
 import { IconChainLink3 } from '@mastra/playground-ui/icons/central/IconChainLink3';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 export function LinearConnectButton({
   action = 'Connect',
@@ -12,18 +11,32 @@ export function LinearConnectButton({
   action?: 'Connect' | 'Reconnect';
   label?: string;
 }) {
-  const { baseUrl } = useApiConfig();
+  const linear = useLinearConnect();
   return (
-    <Button size="sm" icon={<IconChainLink3 />} aria-label={label} onClick={() => connectLinear(baseUrl)}>
-      {action}
+    <Button
+      size="sm"
+      icon={<IconChainLink3 />}
+      aria-label={linear.pending ? undefined : label}
+      disabled={linear.pending}
+      onClick={() => void linear.connect()}
+    >
+      {linear.pending ? 'Connecting…' : action}
     </Button>
   );
 }
 
-export function AddLinearWorkspaceRow() {
+export function AddLinearWorkspaceButton() {
+  const linear = useLinearConnect();
   return (
-    <IntegrationItem provider="linear" name="Linear" description="Another workspace">
-      <LinearConnectButton label="Connect another Linear workspace" />
-    </IntegrationItem>
+    <Button
+      size="sm"
+      variant="ghost"
+      icon={<IconPlusMedium />}
+      aria-label={linear.pending ? undefined : 'Add workspace to Linear'}
+      disabled={linear.pending}
+      onClick={() => void linear.connect()}
+    >
+      {linear.pending ? 'Connecting…' : 'Add workspace'}
+    </Button>
   );
 }

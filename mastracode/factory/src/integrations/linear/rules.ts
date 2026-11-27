@@ -13,7 +13,7 @@ import type { BoardRegistry } from '../../boards/index.js';
 import { toBoardSource } from '../../boards/project-boards.js';
 import type { ProjectBoardSource } from '../../boards/project-boards.js';
 import { recordIntakeEvent } from '../../metrics/intake.js';
-import { deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
+import { commitObservedChange, deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type { FactoryLinearRuleContext, FactoryRuleDecision } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
@@ -86,7 +86,7 @@ export function boardEventFor(context: Pick<FactoryLinearRuleContext, 'event' | 
   if (context.event === 'issueClosed') {
     return { type: 'work_item.closed', reason: closeReason(context.issue.stateType === 'canceled') };
   }
-  return context.item ? undefined : { type: 'work_item.created' };
+  return context.item ? undefined : { type: 'work_item.opened' };
 }
 
 export class LinearRules {
@@ -128,9 +128,14 @@ export class LinearRules {
       // The identifier finds the card filed under it; after Linear renamed the
       // identifier, the stable issue id finds it, preferring a live card over
       // finished ones, as the issue detail route does.
+      // A card under the identifier that knows another issue id is another workspace's issue.
       const byIssueId = items.filter(item => item.workItem.metadata?.linearIssueId === issue.id);
+      const byIdentifier = itemsBySourceKey.get(`linear:${issue.identifier}`);
+      const knownIssueId = byIdentifier?.workItem.metadata?.linearIssueId;
       const relatedItem =
-        itemsBySourceKey.get(`linear:${issue.identifier}`) ??
+        (typeof knownIssueId === 'string' && knownIssueId.length > 0 && knownIssueId !== issue.id
+          ? undefined
+          : byIdentifier) ??
         byIssueId.find(item => !isTerminalWorkItem(this.#boards(input), item)) ??
         byIssueId[0];
       statuses.push(await this.#ingestIssue(input, issue, relatedItem && structuredClone(relatedItem)));
@@ -258,6 +263,19 @@ export class LinearRules {
       const fresh = relatedItem ? await this.options.storage.get({ orgId: input.orgId, id: relatedItem.id }) : null;
       if (relatedItem && !fresh) return 'missing';
       return this.#ingestIssue(input, issue, fresh ?? undefined, attempt + 1);
+    }
+    if (relatedItem && event === 'issueObserved' && outcome.status === 'accepted' && !ownedByDeployment) {
+      await commitObservedChange(this.options.storage, {
+        orgId: input.orgId,
+        factoryProjectId: input.factoryProjectId,
+        item: relatedItem,
+        ingressId,
+        actor,
+        labels: issue.labels,
+        assignee: issue.assignee,
+        observedAt: issue.updatedAt,
+        metadata: { linearAssignee: issue.assignee },
+      });
     }
     return committed.status;
   }

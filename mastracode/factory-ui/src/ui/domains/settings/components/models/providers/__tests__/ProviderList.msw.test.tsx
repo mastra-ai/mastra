@@ -4,20 +4,35 @@ import { delay, http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../../e2e/ui/render';
-import type { OAuthStartResponse, ProviderInfo } from '../../../../../../../api/types';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../../../e2e/ui/render';
+import type {
+  CustomProviderCheckFailedResponse,
+  CustomProviderCheckFailure,
+  CustomProviderCheckResponse,
+  CustomProviderInfo,
+  OAuthStartResponse,
+  ProviderInfo,
+} from '../../../../../../../api/types';
 import { useAvailableModelsQuery } from '../../../../../../../hooks/useAvailableModels';
 import type { AvailableModelOption } from '../../../../../../../hooks/useAvailableModels';
 import { ProviderList } from '../ProviderList';
 import {
+  CHECK_URL,
+  CUSTOM_PROVIDERS_URL,
   PROVIDERS_URL,
+  customProviderUrl,
+  fillCustomEndpoint,
+  findCustomRow,
   keyUrl,
   oauthUrl,
   openAddProvider,
+  openCustomEndpointForm,
   pasteCodeSession,
+  pickCustomRowAction,
   pickRowAction,
   rowFor,
   saveKey,
+  stubCustomProviders,
   stubProviders,
 } from './provider-list-test-utils';
 
@@ -348,5 +363,348 @@ describe('ProviderList', () => {
 
     await waitFor(() => expect(signedOut).toBe(true));
     await waitFor(() => expect(screen.queryByText('Anthropic')).not.toBeInTheDocument());
+  });
+});
+
+describe('ProviderList custom endpoints', () => {
+  const myLlm: CustomProviderInfo = {
+    id: 'my-llm',
+    name: 'my-llm',
+    url: 'https://api.example.com/v1',
+    hasApiKey: true,
+    authScheme: 'bearer',
+    headers: [],
+    models: ['model-a', 'model-b'],
+    scope: 'user',
+    lastCheck: { at: '2026-11-26T10:00:00.000Z', ok: true },
+  };
+
+  it('lists an endpoint with its URL and model count, with its own actions instead of key actions', async () => {
+    // The provider catalog reports the endpoint too; it must not also be drawn
+    // as a built-in provider whose key can be updated.
+    stubProviders([
+      { provider: 'openai', source: 'stored' },
+      { provider: 'my-llm', source: 'stored', custom: true },
+    ]);
+    stubCustomProviders([myLlm]);
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    const row = await findCustomRow('my-llm');
+    expect(within(row).getByText('https://api.example.com/v1')).toBeInTheDocument();
+    expect(within(row).getByText('2 models')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /actions$/ })).toHaveLength(2);
+
+    await user.click(within(row).getByRole('button', { name: 'my-llm actions' }));
+    expect(await screen.findByRole('menuitem', { name: 'Edit' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Update key' })).not.toBeInTheDocument();
+  });
+
+  it('marks an endpoint this server refuses to call and keeps it editable', async () => {
+    stubProviders([]);
+    stubCustomProviders([
+      {
+        ...myLlm,
+        url: 'http://10.0.0.5/v1',
+        urlProblem: 'Use an HTTPS address: a hosted Factory only calls custom endpoints over HTTPS.',
+      },
+    ]);
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    const row = await findCustomRow('my-llm');
+    expect(within(row).getByText('URL not allowed')).toBeInTheDocument();
+    expect(within(row).queryByText('2 models')).not.toBeInTheDocument();
+
+    await user.click(within(row).getByRole('button', { name: 'my-llm actions' }));
+    expect(await screen.findByRole('menuitem', { name: 'Edit' })).toBeInTheDocument();
+  });
+
+  it('adds an endpoint from the Add provider dialog, even when no provider matches the search', async () => {
+    const saved: CustomProviderInfo[] = [];
+    let postBody: unknown;
+    stubProviders([{ provider: 'openai', source: 'none' }]);
+    server.use(
+      http.get(CUSTOM_PROVIDERS_URL, () => HttpResponse.json({ providers: saved })),
+      http.post(CUSTOM_PROVIDERS_URL, async ({ request }) => {
+        postBody = await request.json();
+        saved.push(myLlm);
+        return HttpResponse.json({ ok: true, provider: myLlm });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    const dialog = await openAddProvider(user);
+    await user.type(within(dialog).getByLabelText('Search providers'), 'no-such-provider');
+    expect(within(dialog).getByText(/No providers match/)).toBeInTheDocument();
+
+    const form = await openCustomEndpointForm(user, dialog);
+    await fillCustomEndpoint(user, form, {
+      name: 'my-llm',
+      url: 'https://api.example.com/v1',
+      models: ['model-a', 'model-b'],
+    });
+    await user.click(within(form).getByRole('button', { name: 'Test & save' }));
+
+    await waitFor(() =>
+      expect(postBody).toEqual({
+        name: 'my-llm',
+        url: 'https://api.example.com/v1',
+        authScheme: 'bearer',
+        headers: [],
+        models: ['model-a', 'model-b'],
+        scope: 'user',
+        check: true,
+      }),
+    );
+    expect(await findCustomRow('my-llm')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('keeps the form open with the server message when saving fails', async () => {
+    stubProviders([{ provider: 'openai', source: 'none' }]);
+    server.use(
+      http.post(CUSTOM_PROVIDERS_URL, () =>
+        HttpResponse.json(
+          { error: 'provider_name_taken', message: '"OpenAI" is already a built-in provider. Choose another name.' },
+          { status: 409 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    const form = await openCustomEndpointForm(user, await openAddProvider(user));
+    await fillCustomEndpoint(user, form, { name: 'OpenAI', url: 'https://proxy.example.com/v1', models: ['gpt'] });
+    await user.click(within(form).getByRole('button', { name: 'Test & save' }));
+
+    expect(await within(form).findByText(/already a built-in provider/)).toBeInTheDocument();
+  });
+
+  it('edits an endpoint without sending its key again', async () => {
+    let postBody: unknown;
+    stubProviders([]);
+    stubCustomProviders([myLlm]);
+    server.use(
+      http.post(CUSTOM_PROVIDERS_URL, async ({ request }) => {
+        postBody = await request.json();
+        return HttpResponse.json({ ok: true, provider: { ...myLlm, url: 'https://api.example.com/v2' } });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    await pickCustomRowAction(user, 'my-llm', 'Edit');
+    const form = await screen.findByRole('dialog', { name: 'Edit my-llm' });
+    const url = within(form).getByPlaceholderText('https://api.example.com/v1');
+    await user.clear(url);
+    await user.type(url, 'https://api.example.com/v2');
+    await user.click(within(form).getByRole('button', { name: 'Test & save' }));
+
+    await waitFor(() =>
+      expect(postBody).toEqual({
+        name: 'my-llm',
+        url: 'https://api.example.com/v2',
+        authScheme: 'bearer',
+        headers: [],
+        models: ['model-a', 'model-b'],
+        previousId: 'my-llm',
+        scope: 'user',
+        check: true,
+      }),
+    );
+  });
+
+  it('keeps the form open and asks for the key when the server needs it again', async () => {
+    stubProviders([]);
+    stubCustomProviders([myLlm]);
+    server.use(
+      http.post(CUSTOM_PROVIDERS_URL, () =>
+        HttpResponse.json(
+          {
+            error: 'api_key_required',
+            message: 'Enter the API key again: the saved key is only kept while the URL stays on the same host.',
+          },
+          { status: 400 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    await pickCustomRowAction(user, 'my-llm', 'Edit');
+    const form = await screen.findByRole('dialog', { name: 'Edit my-llm' });
+    const url = within(form).getByPlaceholderText('https://api.example.com/v1');
+    await user.clear(url);
+    await user.type(url, 'https://elsewhere.example.com/v1');
+    await user.click(within(form).getByRole('button', { name: 'Test & save' }));
+
+    expect(await within(form).findByText(/Enter the API key again/)).toBeInTheDocument();
+  });
+
+  it('removes an endpoint from its row menu', async () => {
+    const saved: CustomProviderInfo[] = [myLlm];
+    let removedWith: string | undefined;
+    stubProviders([]);
+    server.use(
+      http.get(CUSTOM_PROVIDERS_URL, () => HttpResponse.json({ providers: saved })),
+      http.delete(customProviderUrl('my-llm'), ({ request }) => {
+        removedWith = new URL(request.url).search;
+        saved.length = 0;
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    await pickCustomRowAction(user, 'my-llm', 'Remove');
+
+    await waitFor(() => expect(removedWith).toBe('?scope=user'));
+    await waitFor(() => expect(screen.queryByText('my-llm')).not.toBeInTheDocument());
+  });
+
+  // Only a passing check may show the endpoint as connected; a row with models but no check used to.
+  it.each([
+    { lastCheck: { at: '2026-11-26T10:00:00.000Z', ok: true }, status: '2 models' },
+    { lastCheck: undefined, status: 'Not verified' },
+    { lastCheck: { at: '2026-11-26T10:00:00.000Z', ok: false, message: 'HTTP 401' }, status: 'Check failed' },
+  ])('shows $status for the last check of the endpoint', async ({ lastCheck, status }) => {
+    stubProviders([]);
+    stubCustomProviders([{ ...myLlm, lastCheck }]);
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    expect(within(await findCustomRow('my-llm')).getByText(status)).toBeInTheDocument();
+  });
+
+  it('records a row test on the saved endpoint and shows its result', async () => {
+    let saved: CustomProviderInfo = { ...myLlm, lastCheck: undefined };
+    let checkBody: unknown;
+    const failure: CustomProviderCheckFailure = { kind: 'http', status: 403, message: 'HTTP 403 Forbidden' };
+    stubProviders([]);
+    server.use(
+      http.get(CUSTOM_PROVIDERS_URL, () => HttpResponse.json({ providers: [saved] })),
+      http.post(CHECK_URL, async ({ request }) => {
+        checkBody = await request.json();
+        saved = { ...saved, lastCheck: { at: '2026-11-26T10:00:00.000Z', ok: false, message: failure.message } };
+        const response: CustomProviderCheckResponse = {
+          ok: true,
+          check: { models: { ok: false, failure, latencyMs: 30 } },
+          provider: saved,
+        };
+        return HttpResponse.json(response);
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    await pickCustomRowAction(user, 'my-llm', 'Test connection');
+
+    expect(await within(await findCustomRow('my-llm')).findByText('Check failed')).toBeVisible();
+    expect(checkBody).toEqual({ previousId: 'my-llm', scope: 'user' });
+  });
+
+  const URL_UNDER_TEST = 'https://api.example.com/v1';
+
+  /** Lists `models` for every draft check. */
+  function serveListing(models: string[]) {
+    const response: CustomProviderCheckResponse = { ok: true, check: { models: { ok: true, models, latencyMs: 20 } } };
+    server.use(http.post(CHECK_URL, () => HttpResponse.json(response)));
+  }
+
+  it('refuses a failing Test & save with the endpoint detail, then saves untested with Save anyway', async () => {
+    const bodies: unknown[] = [];
+    const refused: CustomProviderCheckFailedResponse = {
+      error: 'custom_endpoint_check_failed',
+      message: 'The connection test failed, so the provider was not saved.',
+      failure: { kind: 'http', status: 403, message: 'HTTP 403 Forbidden', detail: 'Your IP is not allowed.' },
+    };
+    serveListing(['gpt-a', 'gpt-b']);
+    stubProviders([{ provider: 'openai', source: 'none' }]);
+    server.use(
+      http.post(CUSTOM_PROVIDERS_URL, async ({ request }) => {
+        const body = await request.json();
+        bodies.push(body);
+        if (bodies.length === 1) return HttpResponse.json(refused, { status: 422 });
+        return HttpResponse.json({ ok: true, provider: myLlm });
+      }),
+    );
+    const user = userEvent.setup();
+    const { client } = renderWithProviders(<ProviderList credentialScope="user" />);
+    const form = await openCustomEndpointForm(user, await openAddProvider(user));
+
+    // A typed ID the endpoint does not list is kept next to a listed one.
+    await fillCustomEndpoint(user, form, { name: 'my-llm', url: URL_UNDER_TEST, models: ['my-finetune'] });
+    await user.click(within(form).getByRole('button', { name: 'Test' }));
+    await user.click(within(form).getByRole('combobox', { name: 'Models' }));
+    await user.click(await screen.findByRole('option', { name: 'gpt-a' }));
+    await user.keyboard('{Escape}');
+    await user.click(within(form).getByRole('button', { name: 'Test & save' }));
+
+    expect(await within(form).findByRole('alert')).toHaveTextContent('Your IP is not allowed.');
+    await user.click(within(form).getByRole('button', { name: 'Save anyway' }));
+
+    await waitFor(() => expect(bodies).toHaveLength(2));
+    await waitForMutationsIdle(client);
+    const saved = {
+      name: 'my-llm',
+      url: URL_UNDER_TEST,
+      authScheme: 'bearer',
+      headers: [],
+      models: ['my-finetune', 'gpt-a'],
+      scope: 'user',
+    };
+    expect(bodies).toEqual([{ ...saved, check: true }, saved]);
+  });
+
+  it('keeps a saved secret header by sending its name only, and sends a typed secret value', async () => {
+    let postBody: unknown;
+    stubProviders([]);
+    stubCustomProviders([{ ...myLlm, headers: [{ name: 'X-Org', secret: true }] }]);
+    server.use(
+      http.post(CUSTOM_PROVIDERS_URL, async ({ request }) => {
+        postBody = await request.json();
+        return HttpResponse.json({ ok: true, provider: myLlm });
+      }),
+    );
+    const user = userEvent.setup();
+    const { client } = renderWithProviders(<ProviderList credentialScope="user" />);
+
+    await pickCustomRowAction(user, 'my-llm', 'Edit');
+    const form = await screen.findByRole('dialog', { name: 'Edit my-llm' });
+    await user.click(within(form).getByRole('button', { name: 'Add header' }));
+    await user.type(within(form).getByRole('textbox', { name: 'Header 2 name' }), 'X-Team');
+    await user.type(within(form).getByLabelText('Header 2 value', { exact: true }), 'research');
+    await user.click(within(form).getByRole('button', { name: 'Test & save' }));
+
+    await waitFor(() =>
+      expect(postBody).toEqual(
+        expect.objectContaining({
+          headers: [
+            { name: 'X-Org', secret: true },
+            { name: 'X-Team', value: 'research', secret: true },
+          ],
+        }),
+      ),
+    );
+    await waitForMutationsIdle(client);
+  });
+
+  it('does not add the models listed for one URL in bulk after the URL changes', async () => {
+    serveListing(['a-1', 'a-2', 'a-3']);
+    stubProviders([{ provider: 'openai', source: 'none' }]);
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+    const form = await openCustomEndpointForm(user, await openAddProvider(user));
+    const url = within(form).getByPlaceholderText('https://api.example.com/v1');
+
+    await user.type(url, 'https://a.example/v1');
+    await user.click(within(form).getByRole('button', { name: 'Test' }));
+    expect(await within(form).findByRole('button', { name: 'Add all 3 listed models' })).toBeInTheDocument();
+    await user.clear(url);
+    await user.type(url, 'https://b.example/v1');
+
+    expect(within(form).queryByRole('button', { name: /listed model/ })).not.toBeInTheDocument();
   });
 });

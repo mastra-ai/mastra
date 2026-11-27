@@ -20,20 +20,25 @@ new BraintrustExporter(config: BraintrustExporterConfig)
 ## `BraintrustExporterConfig`
 
 ```typescript
-interface BraintrustExporterConfig extends BaseExporterConfig {
+interface BraintrustExporterConfig extends TrackingExporterConfig {
   apiKey?: string
   endpoint?: string
   projectName?: string
-  braintrustLogger?: Logger<true>
-  currentSpan?: () => Span | undefined
+  braintrustLogger?: BraintrustLogger
+  currentSpan?: () => BraintrustSpan | undefined
   tuningParameters?: Record<string, any>
 }
 ```
 
-Extends `BaseExporterConfig`, which includes:
+Extends `TrackingExporterConfig`, which builds on `BaseExporterConfig` and includes:
 
 - `logger?: IMastraLogger` - Logger instance
 - `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
+- `earlyQueueMaxAttempts?: number` - Attempts to process a queued event before dropping it (default: 5)
+- `earlyQueueTTLMs?: number` - Maximum age in milliseconds of a queued event (default: 30000). The age is checked when the queue is replayed. An older event is dropped at the next replay or trace cleanup.
+- `traceCleanupDelayMs?: number` - Milliseconds to keep trace data after all its spans end, so late data can still be processed (default: 30000)
+- `maxPendingCleanupTraces?: number` - Soft cap on finished traces awaiting cleanup; the oldest are cleaned first when exceeded (default: 100)
+- `maxTotalTraces?: number` - Hard cap on tracked traces, including active ones; the oldest are aborted when exceeded (default: 500)
 
 <PropertiesTable
   props={[
@@ -57,13 +62,13 @@ Extends `BaseExporterConfig`, which includes:
   },
   {
     name: 'braintrustLogger',
-    type: 'Logger<true>',
+    type: 'BraintrustLogger',
     description: 'Braintrust logger instance for eval and traced span context integration.',
     required: false,
   },
   {
     name: 'currentSpan',
-    type: '() => Span | undefined',
+    type: '() => BraintrustSpan | undefined',
     description:
       'Resolver from the app Braintrust package instance. Use this with braintrustLogger when Eval() or logger.traced() spans are created by a different installed Braintrust SDK copy.',
     required: false,
@@ -71,7 +76,7 @@ Extends `BaseExporterConfig`, which includes:
   {
     name: 'logLevel',
     type: "'debug' | 'info' | 'warn' | 'error'",
-    description: "Logger level (default: 'warn')",
+    description: "Logger level (default: 'info')",
     required: false,
   },
   {
@@ -119,7 +124,7 @@ Flushes pending data and shuts down the client.
 
 ## Usage
 
-### Zero-Config (using environment variables)
+### Zero-config (using environment variables)
 
 ```typescript
 import { BraintrustExporter } from '@mastra/braintrust'
@@ -128,7 +133,7 @@ import { BraintrustExporter } from '@mastra/braintrust'
 const exporter = new BraintrustExporter()
 ```
 
-### Explicit Configuration
+### Explicit configuration
 
 ```typescript
 import { BraintrustExporter } from '@mastra/braintrust'

@@ -37,6 +37,8 @@ export const coreFeatures = new Set<string>([
   'knowledge-v2',
   // Knowledge schema 4 (pages, notes, stamps, mentions, pins) and its shared bound helpers.
   'knowledge-pages',
+  // KnowledgeStorage.importers: importer bookkeeping beside the pages, and its error classes.
+  'knowledge-importers',
   // Experiments can be deleted, including experiments orphaned by dataset
   // deletion, and the deletion cascades to the experiment's observability traces.
   'experiment-deletion',
@@ -54,4 +56,12 @@ export const coreFeatures = new Set<string>([
   // `@mastra/core/features` is itself a recent subpath, so importing it raises
   // the oldest core the dependent can load against.
   'processor-span-types',
+  // A suspending workflow run saves its sampling decision and trace state
+  // (`getWorkflowResumeTracingContext`), and its resume repeats that decision
+  // instead of sampling again.
+  'workflow-resume-sampling',
+  // A resumed or recovered durable run carries the span pair it reports under
+  // on the request context (`carrySegmentSpans`), and every durable step ends
+  // that pair instead of the run's first one (`segmentSpanData`).
+  'durable-segment-spans',
 ]);

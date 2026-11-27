@@ -5,12 +5,12 @@ import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
 import { DurableAgentDefaults, DurableStepIds } from '../../constants';
-import { getRunRegistryEntry, globalRunRegistry } from '../../run-registry';
+import { getLiveRunRequestContext, getRunRegistryEntry, globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent } from '../../stream-adapter';
 import type { SerializableDurableOptions } from '../../types';
 import { restoreCustomContext, restoreRequestContext } from '../../utils/resolve-runtime';
 import { restoreCompletionPolicy } from '../../utils/restore-completion';
-import { readAccumulatedSteps } from '../shared/accumulated-steps';
+import { loadAccumulatedSteps } from '../shared/accumulated-steps';
 import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
 
 /**
@@ -76,7 +76,11 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
         const restored = await restoreCompletionPolicy({
           agent,
           persisted: initData.options.isTaskComplete,
-          requestContext: restoreRequestContext(initData.requestContextEntries, registryEntry?.requestContext),
+          requestContext: restoreRequestContext(
+            initData.requestContextEntries,
+            params.requestContext,
+            getLiveRunRequestContext(registryEntry, state.runId, params.requestContext),
+          ),
           runId: state.runId,
           logger: mastra?.getLogger?.(),
         });
@@ -98,7 +102,7 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
         return messageList;
       };
 
-      const lastStep = readAccumulatedSteps(params.state, state).at(-1);
+      const lastStep = (await loadAccumulatedSteps(params, state)).at(-1);
       const outcome = await evaluateTaskCompletion({
         policy,
         // Durable steps replay under at-least-once redelivery: a
@@ -126,7 +130,7 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
         resourceId: initData.state?.resourceId,
         customContext: restoreCustomContext(
           initData.requestContextEntries,
-          registryEntry?.requestContext ?? params.requestContext,
+          getLiveRunRequestContext(registryEntry, state.runId, params.requestContext) ?? params.requestContext,
         ),
         generateId: () => mastra?.generateId?.(),
         emitChunk: chunk => {

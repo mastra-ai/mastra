@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { createSessionApprovalNotifier, createSessionRunEndReporter } from './reports.js';
-import { observeSessionRunReports } from './run-watch.js';
+import { observeSessionRunReports, reportsTellingOfWaits } from './run-watch.js';
 
 function fakeSession() {
   const listeners = new Set<(event: AgentControllerEvent) => void>();
@@ -52,6 +52,26 @@ describe('observeSessionRunReports', () => {
       { status: 'blocked', toolName: 'factory_transition_work_item', toolCallId: 'call-1', approval: true },
       expect.any(Date),
     );
+  });
+
+  it('reports a run a memory-model failure stopped as failed, quoting the failure', () => {
+    const session = fakeSession();
+    const report = vi.fn(async () => {});
+    observeSessionRunReports(session, report);
+
+    session.emit({
+      type: 'error',
+      error: new Error('Observational memory observation run failed: insufficient_quota'),
+    } as AgentControllerEvent);
+    session.emit({ type: 'agent_end', reason: 'aborted', abortReason: 'memory-failure' } as AgentControllerEvent);
+    session.emit({ type: 'agent_end', reason: 'aborted', abortReason: 'thread-lease-lost' } as AgentControllerEvent);
+
+    expect(report.mock.calls.map(([outcome]) => outcome)).toEqual([
+      {
+        status: 'failed',
+        reason: 'the run ended in error: Observational memory observation run failed: insufficient_quota',
+      },
+    ]);
   });
 
   it('says nothing for an aborted run, and the next run’s window starts where the aborted one did', () => {
@@ -483,5 +503,69 @@ describe('createSessionApprovalNotifier', () => {
     const { notify, deliver } = notifier(false);
     await notify(request);
     expect(deliver).not.toHaveBeenCalled();
+  });
+});
+
+describe('reportsTellingOfWaits', () => {
+  function held() {
+    let release = () => {};
+    const told: string[] = [];
+    const hold = new Promise<void>(resolve => (release = resolve));
+    const session = fakeSession();
+    const waits = reportsTellingOfWaits({
+      reportRunEnd: async outcome => void told.push(`ended:${outcome.status}`),
+      notifyApproval: async request => void told.push(`notice:${request.toolCallId}`),
+      runPaused: async () => {
+        told.push('engine asked');
+        await hold;
+        told.push('engine answered');
+      },
+      answersItself: toolCallId => toolCallId === 'answered-by-factory',
+    });
+    observeSessionRunReports(session, waits.report, { onApprovalRequested: waits.onApprovalRequested });
+    return { session, told, release };
+  }
+  const approval = (toolCallId: string) =>
+    ({ type: 'tool_approval_required', toolCallId, toolName: 'execute_command', args: {} }) as AgentControllerEvent;
+
+  it("sends the approval notice while the board engine still hasn't taken the wait", async () => {
+    const { session, told, release } = held();
+
+    session.emit(approval('call-1'));
+    await vi.waitFor(() => expect(told).toContain('engine asked'));
+
+    expect(told).toEqual(['notice:call-1', 'engine asked']);
+    release();
+    await vi.waitFor(() => expect(told).toEqual(['notice:call-1', 'engine asked', 'engine answered']));
+  });
+
+  it("reports a run that ended waiting on a person while the board engine still hasn't taken the wait", async () => {
+    const { session, told, release } = held();
+
+    session.emit({
+      type: 'tool_suspended',
+      toolCallId: 'call-2',
+      toolName: 'submit_plan',
+      resumeSchema: JSON.stringify({
+        properties: { action: { enum: ['approved', 'rejected'] } },
+        required: ['action'],
+      }),
+    } as AgentControllerEvent);
+    session.emit(end('suspended'));
+    await vi.waitFor(() => expect(told).toContain('engine asked'));
+
+    expect(told).toEqual(['ended:blocked', 'engine asked']);
+    release();
+  });
+
+  it('tells the board engine of no wait for a call Factory answers itself, or a run that just ended', async () => {
+    const { session, told } = held();
+
+    session.emit(approval('answered-by-factory'));
+    session.emit(end('complete'));
+
+    await vi.waitFor(() => expect(told).toEqual(['notice:answered-by-factory', 'ended:done']));
+    await new Promise(resolve => setImmediate(resolve));
+    expect(told).not.toContain('engine asked');
   });
 });

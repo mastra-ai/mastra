@@ -176,6 +176,8 @@ function getHttpStatusForMastraError(errorId: string): number {
     case 'EXPERIMENT_HAS_TARGET':
     case 'EXPERIMENT_HAS_NO_TARGET':
     case 'EXPERIMENT_INVALID_TARGET':
+    case 'EXPERIMENT_NOT_DURABLE':
+    case 'EXPERIMENT_SCORER_NOT_FOUND':
       return 400;
     case 'EXPERIMENT_TARGET_NOT_FOUND':
       return 404;
@@ -896,7 +898,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
   responseSchema: experimentSummaryResponseSchema,
   summary: 'Trigger or create an experiment',
   description:
-    'By default triggers a new experiment on the dataset against the specified target: returns immediately with pending status and execution happens in background. With start: false, creates the experiment without running it so the caller can drive the loop (run-item for targeted experiments, result submission for target-less ones). Create-only requests are idempotent on a caller-supplied id.',
+    'By default triggers a new experiment on the dataset against the specified target: returns immediately with pending status and execution happens in background. With durable: true it starts as a durable evented workflow instead, which runs wherever the Mastra pubsub events are handled. With start: false, creates the experiment without running it so the caller can drive the loop (run-item for targeted experiments, result submission for target-less ones). Create-only requests are idempotent on a caller-supplied id.',
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
@@ -915,6 +917,9 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         agentVersion,
         agentModel,
         maxConcurrency,
+        itemTimeout,
+        maxRetries,
+        durable,
         provenance,
         grouping,
         requestContext: rawRequestContext,
@@ -932,6 +937,9 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         agentVersion?: string;
         agentModel?: { provider: string; modelId: string };
         maxConcurrency?: number;
+        itemTimeout?: number;
+        maxRetries?: number;
+        durable?: boolean;
         provenance?: {
           source?: string;
           sourceId?: string;
@@ -979,6 +987,12 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
       if (!targetType || !targetId) {
         throw new HTTPException(400, { message: 'targetType and targetId are required to start an experiment' });
       }
+      // Older cores ignore `durable` and would run the experiment in this process instead.
+      if (durable && typeof mastra.__ensureExperimentWorkflow !== 'function') {
+        throw new HTTPException(400, {
+          message: 'durable experiments need a newer @mastra/core; upgrade it together with @mastra/server',
+        });
+      }
       const result = await ds.startExperimentAsync({
         targetType,
         targetId,
@@ -990,10 +1004,13 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         agentVersion,
         agentModel: agentModel ? `${agentModel.provider}/${agentModel.modelId}` : undefined,
         maxConcurrency,
+        itemTimeout,
+        maxRetries,
         provenance,
         grouping,
         requestContext,
         versions,
+        durable,
       });
       // Return shape matching experimentSummaryResponseSchema
       return {
@@ -1002,7 +1019,8 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         totalItems: result.totalItems ?? 0,
         succeededCount: 0,
         failedCount: 0,
-        startedAt: new Date(),
+        // A durable run starts when something handles its first event.
+        startedAt: durable ? null : new Date(),
         completedAt: null,
         results: [],
       };

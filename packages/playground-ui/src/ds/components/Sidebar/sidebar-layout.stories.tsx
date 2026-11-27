@@ -11,6 +11,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/ds/components/Dialog';
+import { Kbd } from '@/ds/components/Kbd';
 import { LogoWithoutText } from '@/ds/components/Logo';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import {
@@ -41,7 +42,7 @@ import { IconMaintenance } from '@/ds/icons/central/IconMaintenance';
 import { IconRescueRing } from '@/ds/icons/central/IconRescueRing';
 import { IconRobot } from '@/ds/icons/central/IconRobot';
 import { IconServer1 } from '@/ds/icons/central/IconServer1';
-import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconSettingsGear5 } from '@/ds/icons/central/IconSettingsGear5';
 import { IconSignalTower } from '@/ds/icons/central/IconSignalTower';
 import { IconSparklesTwo } from '@/ds/icons/central/IconSparklesTwo';
 import { IconUserDuo } from '@/ds/icons/central/IconUserDuo';
@@ -251,12 +252,9 @@ const StudioSidebarBody = () => {
               <IconMagnifyingGlass />
               <Sidebar.NavLabel state={state}>Search</Sidebar.NavLabel>
               {state !== 'collapsed' && (
-                <kbd
-                  aria-hidden="true"
-                  className="ml-auto rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-meta leading-none text-muted-foreground"
-                >
-                  ⌘K
-                </kbd>
+                <span aria-hidden="true" className="ml-auto">
+                  <Kbd size="xs">⌘K</Kbd>
+                </span>
               )}
             </button>
           </Sidebar.NavLink>
@@ -406,7 +404,7 @@ export const WithNestedItems: Story = {
                 key: 'settings',
                 title: 'Admin',
                 separator: true,
-                links: [{ name: 'Settings', url: '/settings', icon: <IconSettingsGear1 /> }],
+                links: [{ name: 'Settings', url: '/settings', icon: <IconSettingsGear5 /> }],
               },
             ]}
             isActive={(link, siblings) => getIsLinkActive(link, '/agents/templates', siblings)}
@@ -438,7 +436,7 @@ export const WithFooter: Story = {
           <Sidebar.NavList>
             <Sidebar.NavLink link={{ name: 'Team', url: '/team', icon: <IconUserDuo /> }} />
             <Sidebar.NavLink link={{ name: 'Notifications', url: '/notifications', icon: <IconBell2 /> }} />
-            <Sidebar.NavLink link={{ name: 'Settings', url: '/settings', icon: <IconSettingsGear1 /> }} />
+            <Sidebar.NavLink link={{ name: 'Settings', url: '/settings', icon: <IconSettingsGear5 /> }} />
           </Sidebar.NavList>
           <Sidebar.Trigger />
         </Sidebar.Footer>
@@ -591,7 +589,7 @@ const ParityBody = () => (
     </Sidebar.Nav>
     <Sidebar.Footer>
       <Sidebar.NavList>
-        <Sidebar.NavLink link={{ name: 'Settings', url: '/settings', icon: <IconSettingsGear1 /> }} />
+        <Sidebar.NavLink link={{ name: 'Settings', url: '/settings', icon: <IconSettingsGear5 /> }} />
       </Sidebar.NavList>
       <Sidebar.Trigger />
     </Sidebar.Footer>

@@ -87,6 +87,14 @@ export interface CreateEventedAgentOptions<
    * multi-worker coordination build on.
    */
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
+
+  /**
+   * How the agent's new runs are stored (`1` or `2`). Defaults to `1`. See
+   * {@link DurableAgentConfig.storageVersion}.
+   *
+   * @experimental
+   */
+  storageVersion?: 1 | 2;
 }
 
 /**
@@ -96,6 +104,12 @@ export interface CreateEventedAgentOptions<
  * execution via the built-in evented workflow engine. Runs survive process
  * death: over the same storage, a fresh process can resume in-flight runs via
  * `recover(runId)` / `recoverActiveRuns()`.
+ *
+ * In one process it runs on any pubsub, including the default one. Running its
+ * steps on several processes needs a pubsub that redelivers unacknowledged
+ * events and a workflows store with step guards.
+ *
+ * @see https://mastra.ai/docs/server/pubsub#evented-workflows-and-agents
  *
  * @param options - Configuration options
  * @returns An EventedAgent instance (register it on a `Mastra` host before use)
@@ -120,7 +134,7 @@ export function createEventedAgent<
   TTools extends Record<string, any> = Record<string, any>,
   TOutput = undefined,
 >(options: CreateEventedAgentOptions<TAgentId, TTools, TOutput>): EventedAgent<TAgentId, TTools, TOutput> {
-  const { agent, pubsub, cache, maxSteps, shouldCache, shouldPersistSnapshot } = options;
+  const { agent, pubsub, cache, maxSteps, shouldCache, shouldPersistSnapshot, storageVersion } = options;
 
   return new EventedAgent({
     agent,
@@ -129,6 +143,7 @@ export function createEventedAgent<
     maxSteps,
     shouldCache,
     shouldPersistSnapshot,
+    storageVersion,
   } as EventedAgentConfig<TAgentId, TTools, TOutput>);
 }
 

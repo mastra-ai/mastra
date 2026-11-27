@@ -95,6 +95,25 @@ describe('usePendingConnect', () => {
       expect(open).not.toHaveBeenCalled();
     });
 
+    it('points the SDK at the session apiBaseUrl when the server returns one (self-hosted Nango)', async () => {
+      server.use(
+        http.post(`${BASE_URL}/connect/linear/sessions`, () =>
+          HttpResponse.json({ ...connectPromptSession, apiBaseUrl: 'https://nango.internal.example' }),
+        ),
+        launchTokenHandler,
+        http.get(statusPath, () => HttpResponse.json(connectPromptStatusActive)),
+      );
+
+      const { result } = renderPendingConnect();
+      act(() => result.current.connect(oauthProvider));
+
+      await waitFor(() => expect(result.current.settled).toEqual({ provider: 'linear', status: 'active' }));
+      expect(nangoMocks.constructorOptions).toContainEqual({
+        connectSessionToken: 'nango_connect_session_t1',
+        host: 'https://nango.internal.example',
+      });
+    });
+
     it('falls back to the hosted popup when the gate releases no token', async () => {
       const popup = stubPopup();
       server.use(
@@ -169,6 +188,22 @@ describe('usePendingConnect', () => {
       expect(result.current.pending).toBeNull();
       expect(result.current.settled).toBeNull();
       resolveAuth?.();
+    });
+
+    it('cancel closes the hosted connect window too', async () => {
+      const popup = stubPopup();
+      server.use(
+        sessionHandler,
+        http.get(statusPath, () => HttpResponse.json({ ...connectPromptStatusActive, status: 'pending' })),
+      );
+
+      const { result } = renderPendingConnect();
+      act(() => result.current.connect(hostedProvider));
+      await waitFor(() => expect(result.current.pending).not.toBeNull());
+
+      act(() => result.current.cancel());
+      expect(popup.close).toHaveBeenCalled();
+      expect(result.current.pending).toBeNull();
     });
   });
 

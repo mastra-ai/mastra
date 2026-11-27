@@ -433,33 +433,18 @@ describe('buildTraceQueryRequest', () => {
       ).toBeUndefined();
     });
 
-    it('keeps the word Any, which is only a neutral sentinel for pick lists', () => {
+    it.each([
+      ['keeps the word Any, which is only a neutral sentinel for pick lists', 'Any'],
+      ['emits matches with the field on the left and the words on the right', 'incorrect dosage'],
+    ] as const)('%s', (_title, value) => {
       expect(
         buildTraceQueryRequest({
-          tokens: [{ fieldId: 'feedback.comment', value: 'Any', operatorId: 'matches' }],
+          tokens: [{ fieldId: 'feedback.comment', value, operatorId: 'matches' }],
           now,
         }).where,
       ).toEqual({
         op: 'and',
-        args: [{ feedback: { some: { op: 'matches', left: { path: 'comment' }, right: { literal: 'Any' } } } }],
-      });
-    });
-
-    it('emits matches with the field on the left and the words on the right', () => {
-      expect(
-        buildTraceQueryRequest({
-          tokens: [{ fieldId: 'feedback.comment', value: 'incorrect dosage', operatorId: 'matches' }],
-          now,
-        }).where,
-      ).toEqual({
-        op: 'and',
-        args: [
-          {
-            feedback: {
-              some: { op: 'matches', left: { path: 'comment' }, right: { literal: 'incorrect dosage' } },
-            },
-          },
-        ],
+        args: [{ feedback: { some: { op: 'matches', left: { path: 'comment' }, right: { literal: value } } } }],
       });
     });
   });

@@ -1,0 +1,192 @@
+---
+title: Boards and rules | Configuration
+description: Shape your team's process with boards, phases, and rules that decide what Factory does with each work item.
+---
+
+# Boards and rules
+
+A board turns your team's process into something Factory can follow. It defines the phases a work item moves through, such as Queued, Checking, and Done, and the rules for handling arriving work and card moves.
+
+Factory gives every project a Work board. An issue passes through Intake, Planning, and Building, its pull request is reviewed in Review, and the work finishes in Done. The board is a starting point. Edit phases, add boards, and adjust the rules so the board matches how your team works.
+
+Boards belong to a Factory project and are stored with its data, so you edit them in the UI. For everyday tasks and approvals on the Work board, see [Work items](/using/work-and-approvals).
+
+## Where to change each setting
+
+| What you want to change | Where to change it |
+| - | - |
+| Add a board, or copy an existing one | **Boards**, then **New board** |
+| A board's phases, their order, and their moves | The board's **Configure** page |
+| How many of the board's rules admit new items | **New items** on the board's **Configure** page |
+| What happens when a card moves between phases | The board's **Rules** page |
+| Which board receives an arriving issue or pull request | The board's **Routing** page and **Settings → Work Intake** |
+| Skills a phase can run | **Skills** in the board's settings |
+
+## Create a board
+
+1. Open **Boards** and select **New board**.
+1. Enter a **Name** and a **Key**. The key identifies the board in URLs and API calls, and uses lowercase letters, digits, and hyphens.
+1. Choose the phases to start from: the starter board with Backlog, Doing, and Done, or the phases of an existing board.
+1. Save the board, then open its **Configure** page to add phases and moves.
+
+The first phase is where new cards start. You can reorder phases and rename them at any time. A board with cards in a phase keeps that phase.
+
+## Phase kinds
+
+Every phase has a kind that tells Factory what the phase is for.
+
+| Kind | What it means |
+| - | - |
+| Resting | Nobody works here. A person or an event moves the card on. |
+| Working | An agent works the card in a session, once the phase starts a run. |
+| Terminal | The work is finished. Factory stops the card's sessions and releases what they held. |
+
+A working phase starts an agent only when the phase has a skill to run.
+
+## Configure a working phase
+
+On a phase's page, these settings control its runs:
+
+- **Skill**: the skill the run starts with. Without one, entering the phase starts nothing and the card waits for a person.
+- **Session**: the session the phase runs in. Phases that name the same session share one session per card, and a different name gets its own session. The default is `work`.
+- **Instructions**: text appended to every run the phase starts.
+- **Goal**: an objective the run pursues instead of stopping after one turn. The agent's goal judge keeps working until the objective is met, so the goal has to say what done looks like. An optional run limit makes the goal pause for a person.
+- **Start on its own**: the run starts without anyone approving it. The setting belongs to the phase, so a board can mix phases that run on their own with phases that wait. **Start only when** limits self-starting runs to cards the condition matches.
+- **Exit tool**: the tool whose successful call ends the phase. The agent then moves the card itself, to one of the phase's allowed next phases. **Approve on its own** supplies the approval `submit_plan` waits for, and **Approve only when** limits automatic approval to cards the condition matches.
+
+Working phases also decide where cards can go next. A phase with no next phases keeps every card in place, apart from moves the exit tool and the board's rules make.
+
+## Rules
+
+Rules tell Factory what to do when work arrives and when a card moves. A board's **Rules** page groups them into lanes, one per event, and Factory applies the first rule in a lane that matches. The lanes come in a **Work items** section and a **Pull requests** section.
+
+| Lane | What it sees |
+| - | - |
+| Work item opened | A new issue arrives and creates a work item. |
+| Work item reopened | A closed work item is opened again. |
+| Work item labels or assignees change | Someone adds or removes a label or an assignee. |
+| Work item closed | The card's work item is closed. |
+| Pull request opened | A pull request arrives. It links to its issue's card when one exists, and otherwise creates a card. |
+| Pull request reopened, updated with commits, or sent a review request | Changes on the pull request that belongs to a card. |
+| Pull request merged or closed unmerged | The card's pull request closes, with or without a merge. |
+| Pull request labels or assignees change | Someone adds or removes a label or an assignee on the card's pull request. |
+
+Only the two opening lanes create cards. Every other lane sees cards that already exist, so a rule there can match every card.
+
+A rule combines a condition with a move to a phase. For example, **Work item labels or assignees change** with a condition for a `status: ready` label can move the card to the phase where agents plan. **Test an item** on the **Rules** page runs an item through the board's lanes and shows where it would go.
+
+Rules decide where a card moves. They don't start runs: a card that moves into a working phase starts that phase's skill according to the phase's own settings.
+
+## Rule decisions
+
+Factory records every effect a rule queues. Open **Rules** from the Factory search to see those effects grouped by day, each with its status: queued, awaiting approval, running, retrying, done, failed, dismissed, or superseded. The filters are **All effects**, **Active**, **Awaiting approval**, **Failed**, and **Succeeded**. **Active** covers effects that are queued, running, or retrying.
+
+A rule that matches can still fail to act, for example when the session it needs is gone. The row shows the effect's type, its attempt count, and the last error. Fix the cause, then select **Retry**. An effect that waits for a person offers **Run** and **Dismiss**: **Run** carries it out, and **Dismiss** leaves the card as it is.
+
+Open the page when a card didn't move as expected or a rule seems silent. For decisions on a card, see [Work items](/using/work-and-approvals).
+
+## Change which board receives work
+
+A board's **Routing** page sets the order boards are offered new issues and pull requests. Factory offers the work to the first board whose rules accept it. Items that no rule accepts are listed as not routed.
+
+Sources themselves are selected in **Settings → Work Intake**. See [Work intake](/using/intake) for how sources, routing, and cards relate, and [GitHub configuration](/configure/github) or [Linear configuration](/configure/linear) for connecting a source.
+
+## Manage boards from code
+
+Boards created in the UI are the supported path. Write boards from code with `upsertBoard()` after `prepare()` when every project needs the same definition, or when you keep board definitions in version control:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraFactory } from '@mastra/factory'
+import { LibSQLFactoryStorage } from '@mastra/libsql'
+
+const factory = new MastraFactory({
+  storage: new LibSQLFactoryStorage({ id: 'factory-storage', url: 'file:./factory.db' }),
+})
+
+const prepared = await factory.prepare()
+
+await factory.upsertBoard(
+  {
+    key: 'quality',
+    name: 'Quality',
+    phases: [
+      {
+        key: 'queued',
+        name: 'Queued',
+        kind: 'resting',
+        nextPhases: ['checking'],
+      },
+      {
+        key: 'checking',
+        name: 'Checking',
+        kind: 'working',
+        runner: {
+          skill: 'factory-review',
+          context: 'quality-checker',
+          instructions: 'Review the card against the repository, then record a verdict.',
+        },
+        tools: ['factory_record_review_verdict'],
+        exitTool: 'factory_record_review_verdict',
+        nextPhases: ['done', 'queued'],
+      },
+      { key: 'done', name: 'Done', kind: 'terminal' },
+    ],
+  },
+  { projects: 'all' },
+)
+
+export const mastra = new Mastra(prepared)
+await factory.finalize()
+```
+
+`upsertBoard()` writes the board into the projects you list, or into every project and every project created later with `projects: 'all'`. It returns which projects were inserted, updated, or left unchanged, and audits each write. A project that refuses the write stops the call, and the projects before it keep the board. See [the API reference](/reference/mastra-factory-api#upsertboard) for the input fields and refusal codes.
+
+A board stored in the UI keeps the code behavior of the board that has its key, such as tool-result rules and event overrides. A new key gets none, so a board created only in code declares them on the definition.
+
+The deprecated ways to install boards still load, so older projects keep working, but new projects should use `upsertBoard()`:
+
+- `defineBoard()` and the constructor's `boards` array seed a project only when it stores no boards yet.
+- `includeDefaultBoards` is ignored. A project with no boards gets the Work board.
+- Phase `onEnter` and `onExit` handlers are ignored. A phase starts its run from `runner.skill`.
+- `role` is replaced by `runner.context`, `title` by `name`, and `next` by `nextPhases`. `outcomes` is replaced by `nextPhases`. `transitionPolicy` still runs when a board sets one, but phase `nextPhases` and `exitTool` express the same rules.
+
+## React to tool results
+
+A board definition can react to the tools an agent runs. Add a `tools` property with an `onResult` handler for each tool you care about. The handler returns a decision such as `notify`, or `transition` to move the card.
+
+```typescript oxfmt:false
+tools: {
+  execute_command: {
+    onResult: context => {
+      if (context.item.stages[0] !== 'checking' || context.result.status !== 'error') return
+
+      return {
+        type: 'notify',
+        idempotencyKey: `${context.ingress.id}:quality-command-error`,
+        title: 'Quality check command failed',
+        body: 'Inspect the tool error before continuing the quality check.',
+        level: 'warning',
+      }
+    }
+  }
+}
+```
+
+The rule leaves the card in its current phase. A command that returns a nonzero exit code isn't necessarily a tool error, so inspect the returned value when that distinction matters.
+
+Tool rules belong to the board that declares them. A custom board doesn't inherit or override the Work board's `submit_plan` handler. See [tool-result handlers](/reference/mastra-factory-api#tool-results) for the result format.
+
+## Override integration events in code
+
+Rules configured in the UI cover most event handling. A board definition can also answer an integration event for its own cards, which overrides the integration's default for those cards only.
+
+```typescript oxfmt:false
+events: {
+  github: {
+    'pull_request.synchronized': null,
+  }
+},
+```
+
+This example switches off the default reaction to new commits for cards on that board. `null` turns an event off, a handler replaces the default, and events the deployment set explicitly on the integration keep precedence. See [GitHub configuration](/configure/github) or [Linear configuration](/configure/linear) for the integration side.

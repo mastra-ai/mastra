@@ -34,7 +34,7 @@ import type { Schedule, ScheduleTrigger } from './schedules/base';
 import type { ScorerDefinitionVersion } from './scorer-definitions';
 import type { SkillVersion } from './skills';
 import type { WorkflowDefinition } from './workflow-definitions';
-import type { WorkflowRunEntry, WorkflowRunHeader } from './workflows/journal';
+import type { StoredStateColumns, WorkflowRunEntry, WorkflowRunHeader } from './workflows/journal';
 import type { WorkspaceVersion } from './workspaces';
 
 /**
@@ -65,12 +65,15 @@ export class InMemoryDB {
       stateShared?: boolean;
       createdAt: Date;
       updatedAt: Date;
-    }
+    } & StoredStateColumns
   >();
   /** Storage v2 run entries in `seq` order, keyed like `workflowRunHeaders`. */
   readonly workflowRunEntries = new Map<string, WorkflowRunEntry[]>();
   /** Workflows-domain run ownership, keyed by runId. */
-  readonly runOwners = new Map<string, { generation: number; ownerId: string; leaseExpiresAt: Date | null }>();
+  readonly runOwners = new Map<
+    string,
+    { generation: number; ownerId: string; leaseExpiresAt: Date | null; updatedAt: Date }
+  >();
   /** Memory-domain run fences, keyed by runId. */
   readonly runFences = new Map<string, { generation: number; ownerId: string }>();
   readonly workflowDefinitions = new Map<string, WorkflowDefinition>();

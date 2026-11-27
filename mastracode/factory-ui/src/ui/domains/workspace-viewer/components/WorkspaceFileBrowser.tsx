@@ -1,32 +1,27 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { Tree } from '@mastra/playground-ui/components/Tree';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { cn } from '@mastra/playground-ui/utils/cn';
+import { VirtualTree } from '@mastra/playground-ui/components/VirtualTree';
 import { hashKey, useIsFetching, useQueryClient } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
 import { queryKeys } from '../../../../api/keys';
 import { WakeSandbox } from './WakeSandbox';
-import type { WorkspaceTreeEntry } from '../../../../api/types';
-import { useWorkspaceChanges, useWorkspaceTree } from '../../../../hooks/use-fs';
-import { treeRowContainmentClass } from '../layout';
-import { CHANGE_STATUSES } from './changes/change-statuses';
-import { ChangeStatusLetter } from './changes/ChangeStatusLetter';
+import { useWorkspaceChanges, useWorkspaceTree, useWorkspaceTrees } from '../../../../hooks/use-fs';
 import { changeMarks, NO_CHANGE_MARKS } from './files/change-marks';
 import type { ChangeMarks } from './files/change-marks';
-import { getFileIcon, getFolderIcon } from './files/file-icons';
+import { BrowserEntryContent } from './files/BrowserEntryContent';
+import { buildBrowserRows, isHidden, isOpenAndShown } from './files/browser-rows';
+import type { BrowserFolderListing, BrowserRow } from './files/browser-rows';
 import { FileFinderResults } from './files/FileFinderResults';
 import { foldersAbove } from './files/folders-above';
 import { useFileFinder } from './files/useFileFinder';
 import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 import { IconEyeOpen } from '@mastra/playground-ui/icons/central/IconEyeOpen';
 import { IconEyeSlash } from '@mastra/playground-ui/icons/central/IconEyeSlash';
-import { IconFolderLink } from '@mastra/playground-ui/icons/central/IconFolderLink';
 
 function TreeMessage({ children, tone = 'muted' }: { children: ReactNode; tone?: 'muted' | 'error' }) {
   return (
@@ -41,23 +36,7 @@ function TreeMessage({ children, tone = 'muted' }: { children: ReactNode; tone?:
   );
 }
 
-/** Tree ids for symlinked folders, which jump to their target instead of expanding. */
-const FOLDER_LINK_ID = 'folder-link:';
-
-/** `→ target` after a symlink's name. */
-function LinkTarget({ target }: { target?: string }) {
-  if (!target) return null;
-  return (
-    <Txt as="span" variant="caption" tone="muted" className="ml-1.5 truncate">
-      → {target}
-    </Txt>
-  );
-}
-
-/** Dotfiles and dot-folders, hidden unless the viewer asks for them. */
-function isHidden(entry: WorkspaceTreeEntry): boolean {
-  return entry.name.startsWith('.');
-}
+const PENDING_LISTING: BrowserFolderListing = { isLoading: true };
 
 function changeMarksNotice(changes: UseQueryResult<ChangeMarks>, sandboxRunning: boolean): string | undefined {
   if (changes.isError) return 'Change marks unavailable';
@@ -65,97 +44,6 @@ function changeMarksNotice(changes: UseQueryResult<ChangeMarks>, sandboxRunning:
   if (changes.data.unreadable.length > 0) return `Change marks unavailable for ${changes.data.unreadable.join(', ')}`;
   if (!changes.data.read && sandboxRunning) return 'Change marks unavailable';
   return undefined;
-}
-
-interface TreeLevelProps {
-  workspacePath: string;
-  showHidden: boolean;
-  openFolders: Record<string, boolean>;
-  onFolderOpenChange: (path: string, open: boolean) => void;
-  marks: ChangeMarks;
-}
-
-/** The contents of one open folder: fetched only once it is open. */
-function FolderChildren({ path, ...props }: TreeLevelProps & { path: string }) {
-  const listing = useWorkspaceTree(props.workspacePath, path);
-  if (listing.isLoading) {
-    return (
-      <li className="px-2 py-1">
-        <Spinner size="sm" />
-      </li>
-    );
-  }
-  if (listing.error) {
-    return (
-      <li className="px-2 py-1">
-        <TreeMessage tone="error">{listing.error.message}</TreeMessage>
-      </li>
-    );
-  }
-  const entries = (listing.data?.entries ?? []).filter(entry => props.showHidden || !isHidden(entry));
-  if (entries.length === 0) {
-    return (
-      <li className="px-2 py-1">
-        <TreeMessage>Empty</TreeMessage>
-      </li>
-    );
-  }
-  return entries.map(entry => <WorkspaceTreeItem key={entry.path} entry={entry} {...props} />);
-}
-
-function WorkspaceTreeItem({ entry, ...props }: TreeLevelProps & { entry: WorkspaceTreeEntry }) {
-  if (entry.type === 'directory' && entry.linkedPath !== undefined) {
-    return (
-      <Tree.File id={`${FOLDER_LINK_ID}${entry.linkedPath}`} className={treeRowContainmentClass}>
-        <Tree.Icon>
-          <IconFolderLink className="text-badge-amber-indicator" />
-        </Tree.Icon>
-        <Tree.Label>
-          {entry.name}
-          <LinkTarget target={entry.symlinkTarget} />
-        </Tree.Label>
-      </Tree.File>
-    );
-  }
-  if (entry.type === 'directory') {
-    const isOpen = props.openFolders[entry.path] ?? false;
-    return (
-      <Tree.Folder
-        className={treeRowContainmentClass}
-        open={isOpen}
-        onOpenChange={(open: boolean) => props.onFolderOpenChange(entry.path, open)}
-      >
-        <Tree.FolderTrigger>
-          <Tree.Icon>{getFolderIcon(isOpen)}</Tree.Icon>
-          <Tree.Label>{entry.name}</Tree.Label>
-          {props.marks.folders.has(entry.path) ? (
-            <span
-              role="img"
-              aria-label="Holds branch changes"
-              title="Holds branch changes"
-              className={cn(
-                'mr-1.5 ml-auto size-1.5 shrink-0 rounded-full bg-current',
-                CHANGE_STATUSES.modified.className,
-              )}
-            />
-          ) : null}
-        </Tree.FolderTrigger>
-        <Tree.FolderContent>{isOpen ? <FolderChildren path={entry.path} {...props} /> : null}</Tree.FolderContent>
-      </Tree.Folder>
-    );
-  }
-
-  const status = props.marks.files.get(entry.path);
-  return (
-    <Tree.File id={entry.path} className={treeRowContainmentClass}>
-      <Tree.Icon>{getFileIcon(entry.name)}</Tree.Icon>
-      <Tree.Label>
-        {entry.name}
-        <LinkTarget target={entry.symlinkTarget} />
-      </Tree.Label>
-      {status ? <ChangeStatusLetter status={status} /> : null}
-    </Tree.File>
-  );
 }
 
 interface WorkspaceFileBrowserProps {
@@ -210,10 +98,25 @@ export function WorkspaceFileBrowser({
     void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceTreeScope(workspacePath) });
     void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceChanges(workspacePath), exact: true });
   };
+  const openPaths = Object.keys(openFolders).filter(path => isOpenAndShown(path, { open: openFolders, showHidden }));
+  const results = useWorkspaceTrees(workspacePath, visible ? openPaths : []);
+  const listings = new Map(
+    openPaths.map((path, index): [string, BrowserFolderListing] => {
+      const result = results[index];
+      return [
+        path,
+        result ? { data: result.data, error: result.error ?? undefined, isLoading: result.isLoading } : PENDING_LISTING,
+      ];
+    }),
+  );
+  const rows = buildBrowserRows(entries, { open: openFolders, listings, showHidden });
   // A symlinked folder opens its target and every folder above it.
-  const select = (id: string) => {
-    if (!id.startsWith(FOLDER_LINK_ID)) return onFileSelect(id);
-    const segments = id.slice(FOLDER_LINK_ID.length).split('/');
+  const activate = (row: BrowserRow) => {
+    if (row.kind !== 'entry') return;
+    const { entry } = row;
+    if (entry.type !== 'directory') return onFileSelect(entry.path);
+    if (entry.linkedPath === undefined) return onFolderOpenChange(entry.path, !row.expanded);
+    const segments = entry.linkedPath.split('/');
     segments.forEach((_, i) => onFolderOpenChange(segments.slice(0, i + 1).join('/'), true));
   };
 
@@ -269,10 +172,10 @@ export function WorkspaceFileBrowser({
           size="icon-sm"
           variant="ghost"
           onClick={refresh}
-          disabled={isRefreshing}
-          aria-label={isRefreshing ? 'Refreshing workspace files' : 'Refresh workspace files'}
+          aria-label="Refresh workspace files"
+          loading={isRefreshing}
         >
-          {isRefreshing ? <Spinner size="sm" /> : <IconArrowRotateClockwise />}
+          <IconArrowRotateClockwise />
         </Button>
       </div>
       {marksNotice ? (
@@ -285,21 +188,22 @@ export function WorkspaceFileBrowser({
       ) : content ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">{content}</div>
       ) : (
-        <ScrollArea className="min-h-0 flex-1">
-          <Tree className="p-1.5" selectedId={selectedFilePath} onSelect={select}>
-            {entries.map(entry => (
-              <WorkspaceTreeItem
-                key={entry.path}
-                entry={entry}
-                workspacePath={workspacePath}
-                showHidden={showHidden}
-                openFolders={openFolders}
-                onFolderOpenChange={onFolderOpenChange}
-                marks={marks}
-              />
-            ))}
-          </Tree>
-        </ScrollArea>
+        <VirtualTree
+          aria-label="Files"
+          rows={rows}
+          selectedId={selectedFilePath}
+          onActivate={activate}
+          onExpandedChange={(row, expanded) => {
+            if (row.kind === 'entry') onFolderOpenChange(row.entry.path, expanded);
+          }}
+          renderRow={row => {
+            if (row.kind === 'entry')
+              return <BrowserEntryContent entry={row.entry} expanded={row.expanded} marks={marks} />;
+            if (row.kind === 'loading') return <Spinner size="sm" />;
+            if (row.kind === 'error') return <TreeMessage tone="error">{row.message}</TreeMessage>;
+            return <TreeMessage>Empty</TreeMessage>;
+          }}
+        />
       )}
     </aside>
   );

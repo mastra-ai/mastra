@@ -14,6 +14,7 @@ import {
   pairOrphanedToolCalls,
   sanitizeOrphanedToolPairs,
 } from '../utils/provider-compat';
+import { hasReplayableReasoningMetadata } from '../utils/reasoning-metadata';
 import {
   getResponseProviderItemId,
   getResponseProviderItemKey,
@@ -272,10 +273,7 @@ export function sanitizeV5UIMessages(
 
   const getSafeParts = (m: AIV5Type.UIMessage, assistantTurnStillOpen: boolean) =>
     m.parts.filter(p => {
-      // Filter out data-* parts (custom streaming data from writer.custom())
-      // These are Mastra extensions not supported by LLM providers.
-      // If not filtered, convertToModelMessages produces empty content arrays
-      // which causes some models to fail with "must include at least one parts field"
+      // Filter out data-* parts (custom streaming data from writer.custom()).
       if (typeof p.type === 'string' && p.type.startsWith('data-')) {
         return false;
       }
@@ -695,31 +693,85 @@ function restoreAssistantFileProviderMetadata(
  */
 export type ToolCallConversionMode = 'response' | 'prompt' | 'prompt-with-suspended';
 
-/**
- * A step that dies after the model starts thinking but before the reasoning
- * signature arrives leaves a step block holding only unsigned reasoning.
- * Providers that require signed thinking (Anthropic, Bedrock) drop such parts,
- * sending `content: []` and failing every later turn with a 400 (#24558).
- */
-const REPLAYABLE_REASONING_KEYS = [
-  'signature',
-  'redactedData',
-  'itemId',
-  'reasoningEncryptedContent',
-  'thoughtSignature',
-];
-
-function hasReplayableReasoningMetadata(providerOptions: AIV5Type.ProviderMetadata | undefined): boolean {
-  return Object.values(providerOptions ?? {}).some(
-    value => !!value && typeof value === 'object' && REPLAYABLE_REASONING_KEYS.some(key => key in value),
-  );
-}
-
 function isUnforwardableReasoningOnlyMessage(message: AIV5Type.ModelMessage): boolean {
   if (message.role !== 'assistant' || !Array.isArray(message.content) || message.content.length === 0) return false;
   return message.content.every(
     part => part.type === 'reasoning' && !hasReplayableReasoningMetadata(part.providerOptions),
   );
+}
+
+type ProviderCustomModelPart = {
+  type: 'custom';
+  kind: string;
+  providerOptions?: AIV5Type.ProviderMetadata;
+};
+
+type ProviderCustomModelMessage = {
+  role: 'assistant';
+  content: ProviderCustomModelPart[];
+};
+
+function getProviderCustomUIPart(part: unknown):
+  | {
+      type: 'custom';
+      kind: string;
+      providerMetadata?: AIV5Type.ProviderMetadata;
+    }
+  | undefined {
+  if (!part || typeof part !== 'object') return undefined;
+  if (
+    !('type' in part) ||
+    part.type !== 'custom' ||
+    !('kind' in part) ||
+    typeof part.kind !== 'string' ||
+    part.kind.length === 0
+  ) {
+    return undefined;
+  }
+  return part as {
+    type: 'custom';
+    kind: string;
+    providerMetadata?: AIV5Type.ProviderMetadata;
+  };
+}
+
+function convertUIMessageWithProviderCustomParts(uiMsg: AIV5Type.UIMessage): AIV5Type.ModelMessage[] {
+  const produced: AIV5Type.ModelMessage[] = [];
+  let regularParts: AIV5Type.UIMessage['parts'] = [];
+
+  const flushRegularParts = () => {
+    if (regularParts.length === 0) return;
+    produced.push(...AIV5.convertToModelMessages([{ ...uiMsg, parts: regularParts }]));
+    regularParts = [];
+  };
+
+  for (const part of uiMsg.parts) {
+    const customPart = getProviderCustomUIPart(part);
+    if (!customPart) {
+      regularParts.push(part);
+      continue;
+    }
+
+    flushRegularParts();
+    if (uiMsg.role === 'assistant') {
+      const message: ProviderCustomModelMessage = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'custom',
+            kind: customPart.kind,
+            ...(customPart.providerMetadata ? { providerOptions: customPart.providerMetadata } : {}),
+          },
+        ],
+      };
+      // AI SDK v5's ModelMessage type predates provider custom parts, even though
+      // newer provider specs accept and emit them at runtime.
+      produced.push(message as unknown as AIV5Type.ModelMessage);
+    }
+  }
+
+  flushRegularParts();
+  return produced;
 }
 
 /**
@@ -744,7 +796,10 @@ export function aiV5UIMessagesToAIV5ModelMessages(
   const converted: AIV5Type.ModelMessage[] = [];
   const dbMessagesById = new Map(dbMessages.map(message => [message.id, message]));
   for (const uiMsg of preprocessed) {
-    const produced = applyProviderToolErrorOutputs(AIV5.convertToModelMessages([uiMsg]), dbMessagesById.get(uiMsg.id));
+    const produced = applyProviderToolErrorOutputs(
+      convertUIMessageWithProviderCustomParts(uiMsg),
+      dbMessagesById.get(uiMsg.id),
+    );
     if (produced.length === 0) continue;
 
     const providerMetadata =

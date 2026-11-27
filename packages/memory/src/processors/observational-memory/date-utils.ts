@@ -30,12 +30,34 @@ export function resolveTimeZone(timeZone: string | undefined): string | undefine
   return known ? timeZone : undefined;
 }
 
+const MAX_CACHED_FORMATTERS = 256;
+const formatters = new Map<string, Intl.DateTimeFormat>();
+
+/**
+ * A shared `en-US` formatter for `options` in `timeZone`, or in the process time zone when unset. Building a formatter
+ * costs far more than formatting with one, and OM formats a date for every message line. `name` identifies `options`.
+ */
+export function getDateTimeFormat(
+  name: string,
+  timeZone: string | undefined,
+  options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  // A formatter built without a zone keeps the process zone it was built in, so key it by TZ, which Node lets change.
+  const key = `${name}|${timeZone ?? `process:${globalThis.process?.env?.TZ ?? ''}`}`;
+  let formatter = formatters.get(key);
+  if (!formatter) {
+    if (formatters.size >= MAX_CACHED_FORMATTERS) formatters.clear();
+    formatter = new Intl.DateTimeFormat('en-US', { ...options, timeZone });
+    formatters.set(key, formatter);
+  }
+  return formatter;
+}
+
 /** Day number of the calendar date `instant` falls on in `timeZone` (the process time zone when unset). */
 function calendarDayIn(instant: Date, timeZone: string | undefined): number {
   const zone = resolveTimeZone(timeZone);
   if (!zone) return calendarDay(instant);
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: zone,
+  const parts = getDateTimeFormat('calendar-day', zone, {
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
@@ -122,7 +144,8 @@ const YEAR = String.raw`(?:19|20|21)\d{2}(?!\d)`;
 const MERIDIEM = String.raw`(?:[AaPp]\.[Mm]\.|[AaPp][Mm]\b)`;
 const TIME = String.raw`(?:,?\s+(?:at\s+)?\d{1,2}:\d{2}(?:\s*${MERIDIEM})?|\s+at\s+\d{1,2}\s*${MERIDIEM})`;
 const QUALIFIER = String.raw`(?:(?:early|mid|late)[- ](?:to[- ](?:early|mid|late)[- ])?)`;
-const RANGE_SEP = String.raw`(?:\s*[–—]\s*|\s*-\s*|\s+(?:to|through|until)\s+)`;
+// En and em dash, escaped because rolldown's `charset: 'ascii'` can't rewrite `String.raw` text.
+const RANGE_SEP = String.raw`(?:\s*[\u2013\u2014]\s*|\s*-\s*|\s+(?:to|through|until)\s+)`;
 
 /**
  * Dates written into observation text that carry their own year, longest forms first:
@@ -487,7 +510,9 @@ export function formatTemporalGap(diffMs: number): string | null {
 }
 
 export function formatTemporalTimestamp(date: Date): string {
-  return date.toLocaleString('en-US', {
+  // `toLocaleString` gave 'Invalid Date' here; `format` would throw.
+  if (Number.isNaN(date.getTime())) return 'Invalid Date';
+  return getDateTimeFormat('temporal-timestamp', undefined, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -495,7 +520,7 @@ export function formatTemporalTimestamp(date: Date): string {
     minute: '2-digit',
     hour12: true,
     timeZoneName: 'short',
-  });
+  }).format(date);
 }
 
 export function getMessagePartTimestamp(msg: MastraDBMessage, position: 'first' | 'last'): number {

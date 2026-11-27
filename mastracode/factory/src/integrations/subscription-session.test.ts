@@ -79,6 +79,7 @@ describe('resolveSubscriptionSession', () => {
     const session = await resolveSubscriptionSession(controller, row(), {
       label: 'Test',
       sourceControl: { sessions: { getBySessionId } },
+      runContext: () => subscriptionRunContext(row(), undefined),
     });
     expect(queryThread).toHaveBeenCalledWith({ threadId: 'thread-1' });
     expect(getBySessionId).toHaveBeenCalledWith('session-1');
@@ -89,6 +90,50 @@ describe('resolveSubscriptionSession', () => {
     expect(session?.thread.getId()).toBe('thread-1');
     expect(session?.state.get()).toMatchObject({ factoryOrgId: 'org-1' });
     if (!cold) expect(session).toBe(original);
+  });
+
+  // A session filed under one repository can subscribe to a pull request in another
+  // repository of the environment. Waking it must keep the repository it is filed
+  // under: the source-control tools refuse every call when the session's state names
+  // a different repository than its row.
+  it.each([
+    ['the repository it is filed under', 'repo-own', { projectRepositoryId: 'repo-own' }],
+    ['no repository when its row names none', undefined, {}],
+  ])('wakes a session with %s, not the pull request repository', async (_case, expected, filed) => {
+    const controller = new AgentController<MastraCodeState>({
+      id: 'code',
+      stateSchema,
+      storage: new InMemoryStore({ id: 'subscription-repository-host' }),
+      workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
+      modes: [
+        {
+          id: 'build',
+          name: 'Build',
+          default: true,
+          agent: new Agent({
+            id: 'test-agent',
+            name: 'Test agent',
+            instructions: 'Test subscription addressing.',
+            model: { id: 'openai/gpt-5.5' },
+          }),
+        },
+      ],
+    });
+    await controller.init();
+    await controller.createSession({ id: 'session-1', ownerId: 'user-1', resourceId: 'session-1', threadId: 'thread-1' });
+    await controller.deleteSession({ sessionId: 'session-1' });
+    onTestFinished(async () => {
+      await controller.deleteSession({ sessionId: 'session-1' });
+    });
+
+    const session = await resolveSubscriptionSession(controller, row({ projectRepositoryId: 'repo-pr' }), {
+      label: 'Test',
+      sourceControl: { sessions: { getBySessionId: async () => ({ userId: 'user-1', orgId: 'org-1', ...filed }) } },
+      runContext: () => subscriptionRunContext(row(), undefined),
+    });
+
+    expect(session?.state.get().projectRepositoryId).toBe(expected);
+    expect(session?.state.get().factoryProjectId).toBe('factory-1');
   });
 });
 

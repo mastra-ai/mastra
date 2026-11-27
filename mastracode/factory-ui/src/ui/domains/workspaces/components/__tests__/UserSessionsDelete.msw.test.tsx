@@ -44,7 +44,7 @@ function renderSection() {
 }
 
 describe('User sessions deletion', () => {
-  it.each(['dropdown', 'context'])('deletes the selected session from the %s menu', async entry => {
+  it('deletes the selected session from the context menu', async () => {
     let sessions = [session];
     const deletedSessions: string[] = [];
     const threadRequests: string[] = [];
@@ -91,11 +91,7 @@ describe('User sessions deletion', () => {
     const user = userEvent.setup();
     const { client } = renderSection();
 
-    if (entry === 'context') {
-      await user.pointer({ target: await screen.findByRole('link', { name: 'my-feature' }), keys: '[MouseRight]' });
-    } else {
-      await user.click(await screen.findByRole('button', { name: 'Session actions for my-feature' }));
-    }
+    await user.pointer({ target: await screen.findByRole('link', { name: 'my-feature' }), keys: '[MouseRight]' });
     await user.click(await screen.findByRole('menuitem', { name: 'Delete' }));
     await user.click(screen.getByRole('button', { name: 'Delete' }));
 

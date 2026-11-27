@@ -10,7 +10,6 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { TripWire } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -22,10 +21,9 @@ vi.hoisted(() => {
 
 import { setCredentialStoreProvider } from '../agents/credential-resolver.js';
 import { createRequestScopedCredentialStore } from '../agents/model.js';
+import { MODEL_FALLBACK_PART_TYPE, MODEL_FALLBACK_STATE_KEY } from '../model-fallback.js';
 import {
   ACCOUNT_SWITCH_PART_TYPE,
-  MODEL_FALLBACK_PART_TYPE,
-  MODEL_FALLBACK_STATE_KEY,
   AccountRotationProcessor,
   AccountStartNoticeProcessor,
   accountSwitchNoticeText,
@@ -247,6 +245,13 @@ describe('classifyRotationError (locked Q7 taxonomy)', () => {
   it('rotates immediately on 429 and 402', () => {
     expect(classifyRotationError(apiError(429))).toEqual({ kind: 'rotate', reason: 'rate-limit' });
     expect(classifyRotationError(apiError(402))).toEqual({ kind: 'rotate', reason: 'quota-exhausted' });
+  });
+
+  it('never rotates accounts on a 404, whether or not the model is gone', () => {
+    expect(
+      classifyRotationError(apiError(404, { message: 'model_not_found: The model `claude-retired` does not exist' })),
+    ).toEqual({ kind: 'never' });
+    expect(classifyRotationError(apiError(404, { message: 'Not Found' }))).toEqual({ kind: 'never' });
   });
 
   it('rotates on provider usage-limit wording co-occurring with 400 or no status', () => {
@@ -1117,7 +1122,33 @@ describe('model-route fallback parts', () => {
     expect(args.writer.custom).not.toHaveBeenCalledWith(expect.objectContaining({ type: ACCOUNT_SWITCH_PART_TYPE }));
   });
 
-  it('throws TripWire for a never-rotate error while a route fallback remains', async () => {
+  it('records a hop caused by a missing credential as an auth failure', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const route = makeRouteContext({
+      modelId: 'openai/gpt-5.6-sol',
+      entries: [
+        { id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-5.6-sol' },
+        { id: 'anthropic', label: 'Anthropic', modelId: 'anthropic/claude-fable-5' },
+      ],
+    });
+    const args = makeArgs({
+      error: new ProviderAuthRequiredError('No usable OpenAI credential for this organization.'),
+      requestContext: route.requestContext,
+    });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+
+    expect(await processor.processAPIError(args as never)).toEqual({ retry: false });
+    expect(args.writer.custom).toHaveBeenCalledWith({
+      type: MODEL_FALLBACK_PART_TYPE,
+      data: expect.objectContaining({ to: { entryId: 'anthropic', label: 'Anthropic' }, failure: { kind: 'auth' } }),
+    });
+    expect(route.emitEvent).toHaveBeenCalledWith({
+      type: 'info',
+      message: 'OpenAI has missing or invalid credentials, switched to Anthropic',
+    });
+  });
+
+  it('moves to the next model, announced, when the provider rejects the request', async () => {
     const seeded = await makeTwoAccountStorage();
     const route = makeRouteContext({
       modelId: 'anthropic/claude-fable-5',
@@ -1129,8 +1160,36 @@ describe('model-route fallback parts', () => {
     const args = makeArgs({ error: apiError(400), requestContext: route.requestContext });
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
 
-    await expect(processor.processAPIError(args as never)).rejects.toBeInstanceOf(TripWire);
-    expect(args.writer.custom).not.toHaveBeenCalledWith(expect.objectContaining({ type: MODEL_FALLBACK_PART_TYPE }));
+    expect(await processor.processAPIError(args as never)).toEqual({ retry: false });
+    expect(args.writer.custom).toHaveBeenCalledWith({
+      type: MODEL_FALLBACK_PART_TYPE,
+      data: expect.objectContaining({
+        from: { entryId: 'anthropic', label: 'Anthropic' },
+        to: { entryId: 'openai', label: 'OpenAI' },
+      }),
+    });
+  });
+
+  it('finds the route entry of a Codex Fast model by its canonical ID', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const route = makeRouteContext({
+      modelId: 'openai/gpt-6.2-sol:fast',
+      entries: [
+        { id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-6.2-sol' },
+        { id: 'anthropic', label: 'Anthropic', modelId: 'anthropic/claude-fable-5' },
+      ],
+    });
+    const args = makeArgs({ error: apiError(400), requestContext: route.requestContext });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+
+    expect(await processor.processAPIError(args as never)).toEqual({ retry: false });
+    expect(args.writer.custom).toHaveBeenCalledWith({
+      type: MODEL_FALLBACK_PART_TYPE,
+      data: expect.objectContaining({
+        from: { entryId: 'openai', label: 'OpenAI' },
+        to: { entryId: 'anthropic', label: 'Anthropic' },
+      }),
+    });
   });
 
   it('returns retry false when no route fallback remains', async () => {

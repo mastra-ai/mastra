@@ -5,28 +5,18 @@ import {
   useChatAnnotations,
 } from '@mastra/playground-ui/components/ai/annotations';
 import type { ChatAnnotation } from '@mastra/playground-ui/components/ai/annotations';
-import {
-  Composer as ComposerRoot,
-  ComposerActions,
-  ComposerActionsEnd,
-  ComposerActionsStart,
-  ComposerAttachMenu,
-  ComposerBox,
-  ComposerHeader,
-  ComposerInput,
-  ComposerRing,
-  ComposerSuggestions,
-  useComposerCommands,
-} from '@mastra/playground-ui/components/Composer';
+import { useComposerCommands } from '@mastra/playground-ui/components/Composer';
 import type { ComposerInputProps } from '@mastra/playground-ui/components/Composer';
+import { SessionComposer } from '@mastra/playground-ui/domains/chat/transcript';
 import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useEffectEvent, useState } from 'react';
+import { useContext, useEffect, useEffectEvent, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { useMatch, useNavigate, useParams } from 'react-router';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
 import {
+  isEndedPrompt,
   useAbortAgentControllerMutation,
   useSendAgentControllerMessageMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
@@ -34,6 +24,7 @@ import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAge
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import type { PendingImage } from '../context/ComposerImagesContext';
 import { useChatConnection } from '../context/useChatConnection';
+import { DraftSessionStartContext } from '../context/DraftSessionStartContext';
 import { useChatModels } from '../context/useChatModels';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
@@ -45,9 +36,6 @@ import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
 import { commandRequiresReadySession, isSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { mergeDictation } from '../services/dictation';
-import { ComposerConnectionNotice } from './ComposerConnectionNotice';
-import { ComposerImageAttachments } from './ComposerImageAttachments';
-import { ComposerPrimaryAction } from './ComposerPrimaryAction';
 import { ComposerVoiceButton } from './ComposerVoiceButton';
 import { StatusLine } from './StatusLine';
 import { ModelPicker } from './StatusLine/ModelPicker';
@@ -56,7 +44,7 @@ import { useInitializingPlaceholder } from './useInitializingPlaceholder';
 import { useVoiceDictation } from './useVoiceDictation';
 
 type ComposerProps = Pick<ComposerInputProps, 'variant'> & {
-  /** Leads the status row above the composer, e.g. who is steering this session. */
+  /** Leads the status row below the composer, e.g. who is steering this session. */
   statusLead?: ReactNode;
 };
 
@@ -78,6 +66,8 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
   const { factoryId } = useParams<{ factoryId: string }>();
   const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
   const onUserDraft = useMatch('/factories/:factoryId/user/new/:draftSessionId') !== null;
+  const draftStart = useContext(DraftSessionStartContext);
+  const onDraft = onUserDraft || draftStart !== undefined;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
@@ -110,10 +100,15 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
 
   const preparingThreadId = usePreparingThreadId();
   const liveRun = phase === 'working' && !preparingThreadId && sessionEnabled;
-  const createSessionFromDraft = useCreateUserSessionFromDraft();
-  const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
+  const createUserSessionFromDraft = useCreateUserSessionFromDraft();
+  const createSessionFromDraft = draftStart?.start ?? createUserSessionFromDraft;
+  const blocked = draftStart
+    ? !draftStart.ready
+    : onUserDraft
+      ? !factorySessionState
+      : status !== 'ready' && !preparingThreadId;
   // A draft send waits for a model still loading, so only a model that failed to load holds it back.
-  const draftModelFailed = onUserDraft && modelError !== undefined;
+  const draftModelFailed = onDraft && modelError !== undefined;
   const [heldDraftText, setHeldDraftText] = useState<string>();
   const startingDraft = heldDraftText !== undefined;
   const attachDisabled = blocked || chatPreparing || planFeedback.pending || startingDraft;
@@ -137,7 +132,7 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
   const shownText = preview?.text ?? draft;
   const hasSubmittableDraft =
     shownText.trim().length > 0 || annotations.length > 0 || (images.length > 0 && draftImagesCanBeSent);
-  // Typing never waits on the connection: a reconnect only holds back sending.
+  // Typing never waits on the connection or a card's repository choice: those only hold back sending.
   const textareaDisabled = (startingDraft || planFeedback.isSubmitting || (onUserDraft && blocked)) && !chatPreparing;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
   const normalPlaceholder = planFeedback.pending
@@ -147,7 +142,7 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
       : 'Ask Mastra Code';
   const placeholder = initializingPlaceholder ?? normalPlaceholder;
   const sendTitle = sendTitleFor({
-    waitsOnConnection: connectionLost && !onUserDraft && blocked,
+    waitsOnConnection: connectionLost && !onDraft && blocked,
     chatPreparing,
     startingDraft,
     dictating,
@@ -221,7 +216,7 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
   };
 
   const submitInput = (text: string) => {
-    if (onUserDraft && modelLoading && !isSlashCommand(text)) {
+    if (onDraft && modelLoading && !isSlashCommand(text)) {
       setHeldDraftText(text);
       return;
     }
@@ -274,11 +269,20 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
   async function handleInput(text: string, sentAnnotations: readonly ChatAnnotation[]) {
     const message = formatAnnotatedMessage(text, sentAnnotations);
     if (planFeedback.pending) {
-      await planFeedback.submitFeedback(message);
-      setImages([]);
-      return;
+      const answered = await planFeedback.submitFeedback(message).then(
+        () => true,
+        error => {
+          // The plan's run has ended, so nothing reads this as feedback; send it as a message.
+          if (isEndedPrompt(error)) return false;
+          throw error;
+        },
+      );
+      if (answered) {
+        setImages([]);
+        return;
+      }
     }
-    if (onUserDraft && isSlashCommand(text)) {
+    if (onDraft && isSlashCommand(text)) {
       if (commandRequiresReadySession(commands, text)) {
         updateDraft(text);
         pushNotice('This command needs a session. Send a prompt to create one first.');
@@ -287,7 +291,7 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
       }
       return;
     }
-    if (onUserDraft) {
+    if (onDraft) {
       try {
         await withPendingImages(async files => createSessionFromDraft({ prompt: message, files }));
       } catch (error) {
@@ -310,58 +314,45 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
   }
 
   return (
-    <>
-      <StatusLine>{statusLead}</StatusLine>
-      <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
-        <ComposerHeader placement="overlay" open={connectionNotice !== undefined}>
-          {connectionNotice && <ComposerConnectionNotice notice={connectionNotice} />}
-        </ComposerHeader>
-        <ComposerRing busy={(busy || chatPreparing || startingDraft) && !connectionLost}>
-          <ComposerBox>
-            <ComposerSuggestions {...commandMenu.suggestionsProps} />
-            <ComposerAnnotations />
-            <ComposerImageAttachments images={images} onRemove={removeImage} />
-            <ComposerInput
-              {...commandMenu.inputProps}
-              ref={inputRef}
-              onKeyDown={onComposerKeyDown}
-              onPaste={onPaste}
-              placeholder={placeholder}
-              disabled={textareaDisabled}
-              readOnly={preview !== undefined}
-              style={preview ? { height: preview.height } : undefined}
-              variant={variant}
-              aria-label="Message"
+    <SessionComposer
+      onSubmit={onSubmit}
+      onDrop={onDrop}
+      connectionNotice={connectionNotice}
+      busy={busy || chatPreparing || startingDraft}
+      suggestions={commandMenu.suggestionsProps}
+      annotations={<ComposerAnnotations />}
+      images={images}
+      onRemoveImage={removeImage}
+      onAddFiles={addFiles}
+      attachDisabled={attachDisabled}
+      input={{
+        ...commandMenu.inputProps,
+        ref: inputRef,
+        onKeyDown: onComposerKeyDown,
+        onPaste,
+        placeholder,
+        disabled: textareaDisabled,
+        readOnly: preview !== undefined,
+        style: preview ? { height: preview.height } : undefined,
+        variant,
+      }}
+      actions={
+        <>
+          <ModelPicker />
+          {factoryId && (
+            <ComposerVoiceButton
+              factoryId={factoryId}
+              disabled={textareaDisabled || preview !== undefined}
+              dictation={dictation}
             />
-            <ComposerActions>
-              <ComposerActionsStart>
-                <ComposerAttachMenu
-                  onFiles={addFiles}
-                  accept="image/*"
-                  disabled={attachDisabled}
-                  label="Attach images"
-                />
-              </ComposerActionsStart>
-              <ComposerActionsEnd role="group" aria-label="Composer actions">
-                <ModelPicker />
-                {factoryId && (
-                  <ComposerVoiceButton
-                    factoryId={factoryId}
-                    disabled={textareaDisabled || preview !== undefined}
-                    dictation={dictation}
-                  />
-                )}
-                <ComposerPrimaryAction
-                  showAbort={liveRun && !hasSubmittableDraft}
-                  sendDisabled={sendDisabled || !hasSubmittableDraft}
-                  sendTitle={sendTitle}
-                  onAbort={() => void abortMutation.mutateAsync()}
-                />
-              </ComposerActionsEnd>
-            </ComposerActions>
-          </ComposerBox>
-        </ComposerRing>
-      </ComposerRoot>
-    </>
+          )}
+        </>
+      }
+      showAbort={liveRun && !hasSubmittableDraft}
+      sendDisabled={sendDisabled || !hasSubmittableDraft}
+      sendTitle={sendTitle}
+      onAbort={() => void abortMutation.mutateAsync()}
+      status={<StatusLine>{statusLead}</StatusLine>}
+    />
   );
 }

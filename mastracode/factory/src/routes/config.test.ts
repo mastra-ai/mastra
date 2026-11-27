@@ -1,4 +1,7 @@
 import { promises as fs } from 'node:fs';
+import { createServer } from 'node:http';
+import type { IncomingHttpHeaders, ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -21,6 +24,7 @@ import { factoryProjectSettingsUserId } from '../storage/domains/projects/base.j
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { buildProviderAccess, ConfigRoutes, listProviders, resolveDeploymentModelProviders } from './config.js';
+import type { ModelCatalogEntry } from './config.js';
 import type { RouteAuth } from './route.js';
 import {
   registerTenantCredentialResolver,
@@ -799,8 +803,17 @@ describe('Mastra Gateway routes with a tenant', () => {
       body: JSON.stringify({ scope }),
     });
 
+  // Whether the server has its own gateway key decides these routes. Pin it, so a key in the
+  // developer's own credential store or environment cannot change the outcome.
+  let serverGatewayKey: ReturnType<typeof vi.spyOn<typeof MastraCodeGateway, 'getMastraGatewayApiKey'>>;
+
   beforeEach(async () => {
     seed = await createFactoryStorageForTests();
+    serverGatewayKey = vi.spyOn(MastraCodeGateway, 'getMastraGatewayApiKey').mockReturnValue(undefined);
+  });
+
+  afterEach(() => {
+    serverGatewayKey.mockRestore();
   });
 
   it("creates a gateway key on the user's Mastra organization and lists the gateway models", async () => {
@@ -838,6 +851,70 @@ describe('Mastra Gateway routes with a tenant', () => {
     expect(platform.requests).toEqual([]);
     expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'mastra-gateway')).toMatchObject({
       key: 'msk_existing',
+    });
+  });
+
+  describe('with a gateway key on the server', () => {
+    // The Mastra platform hands a deploy its gateway key, which the server reads from its environment.
+    beforeEach(() => {
+      serverGatewayKey.mockReturnValue('msk-gateway-deploy');
+    });
+
+    const gatewayRow = async (app: Hono) => {
+      const { providers } = (await (await app.request('/web/config/providers')).json()) as {
+        providers: Array<{ provider: string; source: string; connectWithMastraAccount?: true }>;
+      };
+      return providers.find(p => p.provider === 'mastra');
+    };
+
+    it('lists the gateway as already connected and offers no one-click connect', async () => {
+      const row = await gatewayRow(buildApp(fakePlatform()));
+
+      expect(row).toMatchObject({ provider: 'mastra', source: 'deployment', serverKey: true });
+      expect(row).not.toHaveProperty('connectWithMastraAccount');
+    });
+
+    it('keeps a key someone connected earlier, still without the one-click connect', async () => {
+      await seed.credentials.setCredential({ orgId: 'org1' }, 'mastra-gateway', { type: 'api_key', key: 'msk_old' });
+
+      const row = await gatewayRow(buildApp(fakePlatform()));
+
+      // The stored key wins for the company account, and the server key still serves personal sessions.
+      expect(row).toMatchObject({
+        provider: 'mastra',
+        source: 'stored-org',
+        orgCredential: 'api_key',
+        serverKey: true,
+      });
+      expect(row).not.toHaveProperty('connectWithMastraAccount');
+    });
+
+    it("leaves a person's own gateway key in charge of their sessions", async () => {
+      await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'mastra-gateway', {
+        type: 'api_key',
+        key: 'msk_personal',
+      });
+
+      const row = await gatewayRow(buildApp(fakePlatform()));
+
+      expect(row).toMatchObject({
+        provider: 'mastra',
+        source: 'stored-user',
+        userCredential: 'api_key',
+        serverKey: true,
+      });
+    });
+
+    it.each(['org', 'user'] as const)('creates no key when a client still calls connect for %s', async scope => {
+      const platform = fakePlatform({
+        [`POST ${KEYS}`]: () => Response.json({ apiKey: 'msk_factory' }, { status: 201 }),
+      });
+
+      const res = await connect(buildApp(platform), scope);
+
+      expect(res.status).toBe(200);
+      expect(platform.requests).toEqual([]);
+      expect(await seed.credentials.listCredentials('org1', 'user-a')).toEqual([]);
     });
   });
 
@@ -923,6 +1000,14 @@ describe('Mastra Gateway routes with a tenant', () => {
     const res = await buildApp(platform).request('/web/config/providers/mastra/credits');
 
     expect(await res.json()).not.toHaveProperty('remaining');
+  });
+
+  it('reports no server key when the server has none', async () => {
+    const { providers } = (await (await buildApp(fakePlatform()).request('/web/config/providers')).json()) as {
+      providers: Array<{ provider: string }>;
+    };
+
+    expect(providers.find(p => p.provider === 'mastra')).not.toHaveProperty('serverKey');
   });
 
   it('offers the one-click gateway only when auth can act on the Mastra platform', async () => {
@@ -1064,6 +1149,59 @@ describe('GET /web/config/models', () => {
     expect((await app.request('/web/config/models?factoryId=missing')).status).toBe(404);
   });
 
+  it('offers Fast entries for supported OpenAI models only to a Codex sign-in', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'openai-codex', {
+      type: 'oauth',
+      refresh: 'refresh',
+      access: 'access',
+      expires: Date.now() + 60_000,
+    });
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'openai-codex', { type: 'api_key', key: 'sk-org' });
+    const orgProject = await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Org' } });
+    const controller = {
+      listAvailableModels: async () => [
+        { id: 'openai/gpt-6.2-sol', modelName: 'gpt-6.2-sol', provider: 'openai', hasApiKey: false },
+        { id: 'openai/gpt-5.3', modelName: 'gpt-5.3', provider: 'openai', hasApiKey: false },
+      ],
+    };
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: 'org1' } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({
+        auth: fakeRouteAuth(),
+        controller,
+        modelCredentials: seed.credentials,
+        factoryProjects: seed.projects,
+      }).routes(),
+    );
+    const models = async (query: string) => {
+      const res = await app.request(`/web/config/models${query}`);
+      expect(res.status).toBe(200);
+      return ((await res.json()) as { models: ModelCatalogEntry[] }).models;
+    };
+
+    const personal = await models('');
+    expect(personal.map(model => model.id)).toEqual([
+      'openai/gpt-5.3',
+      'openai/gpt-6.2-sol',
+      'openai/gpt-6.2-sol:fast',
+    ]);
+    expect(personal.find(model => model.id === 'openai/gpt-6.2-sol:fast')).toMatchObject({
+      provider: 'openai',
+      modelName: 'gpt-6.2-sol:fast',
+      credentialHolder: 'personal',
+    });
+    expect((await models(`?factoryId=${orgProject.id}`)).map(model => model.id)).toEqual([
+      'openai/gpt-5.3',
+      'openai/gpt-6.2-sol',
+    ]);
+  });
+
   it('names the credential and its holder from the scope a reply will use, not a personal login that shadows it', async () => {
     const seed = await createFactoryStorageForTests();
     await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic', {
@@ -1157,14 +1295,14 @@ describe('GET /web/config/models', () => {
 
   it('appends the caller org custom provider models from the DB', async () => {
     const seed = await createFactoryStorageForTests();
-    await seed.customProviders.upsert({
-      orgId: 'org1',
-      userId: 'user-a',
+    await seed.customProviders.create({
+      owner: { orgId: 'org1' },
+      createdBy: 'user-a',
       input: { providerId: 'acme', name: 'Acme', url: 'https://llm.acme.dev/v1', apiKey: 'sk', models: ['fast-1'] },
     });
-    await seed.customProviders.upsert({
-      orgId: 'org2',
-      userId: 'user-b',
+    await seed.customProviders.create({
+      owner: { orgId: 'org2' },
+      createdBy: 'user-b',
       input: { providerId: 'other', name: 'Other', url: 'https://other.dev/v1', models: ['m-1'] },
     });
     const controller = { listAvailableModels: async () => [] };
@@ -1190,6 +1328,48 @@ describe('GET /web/config/models', () => {
         { id: 'acme/fast-1', provider: 'acme', modelName: 'fast-1', hasApiKey: true, credentialHolder: 'organization' },
       ],
     });
+  });
+
+  it('lists custom provider models only at the scope their endpoint is saved at', async () => {
+    const seed = await createFactoryStorageForTests();
+    const endpoint = (name: string) => ({
+      providerId: name.toLowerCase(),
+      name,
+      url: `https://${name.toLowerCase()}.dev/v1`,
+      models: ['m'],
+    });
+    await seed.customProviders.create({ owner: { orgId: 'org1' }, createdBy: 'admin', input: endpoint('Shared') });
+    await seed.customProviders.create({
+      owner: { orgId: 'org1', userId: 'user-a' },
+      createdBy: 'user-a',
+      input: endpoint('Mine'),
+    });
+    await seed.customProviders.create({
+      owner: { orgId: 'org1', userId: 'user-b' },
+      createdBy: 'user-b',
+      input: endpoint('Theirs'),
+    });
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: 'org1' } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({
+        auth: fakeRouteAuth(),
+        controller: { listAvailableModels: async () => [] },
+        modelCredentials: seed.credentials,
+        customProviders: seed.customProviders,
+      }).routes(),
+    );
+    const modelsAt = async (scope: string) =>
+      ((await (await app.request(`/web/config/models?scope=${scope}`)).json()).models as ModelCatalogEntry[]).map(
+        model => [model.id, model.credentialHolder],
+      );
+
+    expect(await modelsAt('user')).toEqual([['mine/m', 'personal']]);
+    expect(await modelsAt('org')).toEqual([['shared/m', 'organization']]);
   });
 
   it('separates personal and company catalogs by credential scope', async () => {
@@ -1312,6 +1492,13 @@ describe('default model routes with a tenant', () => {
   const controller = makeAgentController([]);
   const userA = { workosId: 'user-a', organizationId: 'org1' };
   const userB = { workosId: 'user-b', organizationId: 'org1' };
+  const unset = { modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null };
+  const singleModelDefaults = (modelId: string, thinkingLevel: string) => ({
+    modelId,
+    thinkingLevel,
+    modelPacks: [{ id: 'default', name: 'Default', models: [{ modelId, thinkingLevel }] }],
+    defaultModelPackId: 'default',
+  });
 
   function buildApp(user: { workosId: string; organizationId?: string } | null, includeStorage = true) {
     const app = new Hono();
@@ -1359,7 +1546,7 @@ describe('default model routes with a tenant', () => {
   it('returns null when the user has no default model', async () => {
     const res = await buildApp(userA).request('/web/config/default-model');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ modelId: null, thinkingLevel: null });
+    expect(await res.json()).toEqual(unset);
   });
 
   it('validates and persists a default model per user', async () => {
@@ -1368,11 +1555,14 @@ describe('default model routes with a tenant', () => {
 
     const nullBody = await putDefault(buildApp(userA), null);
     expect(nullBody.status).toBe(400);
-    expect(await nullBody.json()).toEqual({ error: 'Missing required field: modelId' });
+    expect(await nullBody.json()).toEqual({ error: 'Invalid modelId' });
 
-    const oversized = await putDefault(buildApp(userA), { modelId: 'm'.repeat(257) });
+    const oversized = await putDefault(buildApp(userA), { modelId: `openai/${'m'.repeat(250)}` });
     expect(oversized.status).toBe(400);
-    expect(await oversized.json()).toEqual({ error: 'Missing required field: modelId' });
+    expect(await oversized.json()).toEqual({ error: 'Invalid modelId' });
+
+    const searchText = await putDefault(buildApp(userA), { modelId: 'sonnet 5.5' });
+    expect(searchText.status).toBe(400);
 
     const saved = await putDefault(buildApp(userA), { modelId: ' openai/gpt-5.6 ' });
     expect(saved.status).toBe(200);
@@ -1383,97 +1573,64 @@ describe('default model routes with a tenant', () => {
 
     const userAResponse = await buildApp(userA).request('/web/config/default-model');
     const userBResponse = await buildApp(userB).request('/web/config/default-model');
-    expect(await userAResponse.json()).toEqual({ modelId: 'openai/gpt-5.6', thinkingLevel: null });
-    expect(await userBResponse.json()).toEqual({ modelId: null, thinkingLevel: null });
+    expect(await userAResponse.json()).toEqual(singleModelDefaults('openai/gpt-5.6', 'medium'));
+    expect(await userBResponse.json()).toEqual(unset);
   });
 
-  it('saves a personal thinking level only next to a personal default model', async () => {
-    const putThinking = (body: unknown) =>
-      buildApp(userA).request('/web/config/default-model/thinking', {
+  it('replaces the caller’s model packs and keeps the default model on the default pack', async () => {
+    const putPacks = (body: unknown) =>
+      buildApp(userA).request('/web/config/model-packs', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
       });
     const getDefaults = async (user: typeof userA) =>
       (await buildApp(user).request('/web/config/default-model')).json();
+    const build = {
+      id: 'build',
+      name: 'Build',
+      models: [
+        { modelId: 'anthropic/claude-opus-5.5', thinkingLevel: 'high' },
+        { modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'medium' },
+      ],
+    };
+    const quick = { id: 'quick', name: 'Quick', models: [{ modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'low' }] };
 
-    const withoutModel = await putThinking({ thinkingLevel: 'high' });
-    expect(withoutModel.status).toBe(400);
-    expect(await withoutModel.json()).toEqual({ error: 'default_model_not_set' });
+    for (const invalid of [
+      { modelPacks: [build] },
+      { modelPacks: [build], defaultModelPackId: 'missing' },
+      { modelPacks: [build, { ...quick, name: 'build' }], defaultModelPackId: 'build' },
+      { modelPacks: [{ ...build, models: [...build.models, build.models[0]] }], defaultModelPackId: 'build' },
+    ]) {
+      const rejected = await putPacks(invalid);
+      expect(rejected.status).toBe(400);
+      expect(await rejected.json()).toMatchObject({ error: 'invalid_model_packs' });
+    }
+    expect(await getDefaults(userA)).toEqual(unset);
 
-    await putDefault(buildApp(userA), { modelId: 'openai/gpt-5.6' });
-    const saved = await putThinking({ thinkingLevel: 'high' });
+    const saved = await putPacks({ modelPacks: [build, quick], defaultModelPackId: 'quick' });
     expect(saved.status).toBe(200);
-    expect(await saved.json()).toEqual({ ok: true, thinkingLevel: 'high' });
-    expect(await getDefaults(userA)).toEqual({ modelId: 'openai/gpt-5.6', thinkingLevel: 'high' });
-    expect(await getDefaults(userB)).toEqual({ modelId: null, thinkingLevel: null });
+    const quickDefaults = {
+      modelId: 'openai/gpt-5.6-sol',
+      thinkingLevel: 'low',
+      modelPacks: [build, quick],
+      defaultModelPackId: 'quick',
+    };
+    expect(await saved.json()).toEqual(quickDefaults);
+    expect(await getDefaults(userA)).toEqual(quickDefaults);
+    expect(await getDefaults(userB)).toEqual(unset);
 
-    const invalid = await putThinking({ thinkingLevel: 'enormous' });
-    expect(invalid.status).toBe(400);
-    expect(await invalid.json()).toEqual({ error: 'Invalid thinkingLevel' });
-    expect(await getDefaults(userA)).toEqual({ modelId: 'openai/gpt-5.6', thinkingLevel: 'high' });
-
-    const reset = await putThinking({ thinkingLevel: null });
-    expect(reset.status).toBe(200);
-    expect(await reset.json()).toEqual({ ok: true, thinkingLevel: null });
-    expect(await getDefaults(userA)).toEqual({ modelId: 'openai/gpt-5.6', thinkingLevel: null });
-  });
-
-  it('clears a personal default model', async () => {
-    await putDefault(buildApp(userA), { modelId: 'openai/gpt-5.6' });
-    const cleared = await buildApp(userA).request('/web/config/default-model', { method: 'DELETE' });
-    expect(cleared.status).toBe(200);
-    expect(await cleared.json()).toEqual({ ok: true, modelId: null });
-    expect(await seed.modelDefaults.get({ orgId: 'org1', userId: 'user-a' })).toBeNull();
-  });
-
-  it('switches only the caller’s live user sessions without starting dormant sessions', async () => {
-    await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Team' } });
-    await putDefault(buildApp(userA), { modelId: 'openai/gpt-5.6' });
-    const settings = new Map<string, string>();
-    const rows = [
-      { sessionId: 'live', userId: 'user-a', originSessionId: null },
-      { sessionId: 'dormant', userId: 'user-a', originSessionId: null },
-      { sessionId: 'other-user', userId: 'user-b', originSessionId: null },
-      { sessionId: 'side-session', userId: 'user-a', originSessionId: 'live' },
-    ];
-    const app = new Hono();
-    app.use('*', async (c, next) => {
-      c.set('factoryAuthUser' as never, userA as never);
-      await next();
+    await putDefault(buildApp(userA), { modelId: 'google/gemini-3.8-flash' });
+    expect(await getDefaults(userA)).toEqual({
+      ...quickDefaults,
+      modelId: 'google/gemini-3.8-flash',
+      modelPacks: [build, { ...quick, models: [{ modelId: 'google/gemini-3.8-flash', thinkingLevel: 'low' }] }],
     });
-    mountApiRoutes(
-      app as never,
-      new ConfigRoutes({
-        auth: fakeRouteAuth(),
-        modelDefaults: seed.modelDefaults,
-        factoryProjects: seed.projects,
-        workItems: seed.workItems,
-        sourceControls: [{ sessions: { listByProject: async () => rows } }] as never,
-        controller: {
-          ...controller,
-          getSession: async (id: string) =>
-            id === 'live'
-              ? {
-                  model: {
-                    get: () => settings.get('currentModelId') ?? '',
-                    switch: async (modelId: string) => void settings.set('currentModelId', modelId),
-                  },
-                  thread: { getId: () => 'thread-live' },
-                }
-              : undefined,
-        },
-      }).routes(),
-    );
 
-    const response = await app.request('/web/config/default-model/apply', { method: 'POST' });
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      modelId: 'openai/gpt-5.6',
-      applied: ['live'],
-      skipped: [{ sessionId: 'dormant', reason: 'not-running' }],
-    });
-    expect(settings.get('currentModelId')).toBe('openai/gpt-5.6');
+    const emptied = await putPacks({ modelPacks: [], defaultModelPackId: null });
+    expect(emptied.status).toBe(200);
+    expect(await emptied.json()).toEqual(unset);
+    expect(await getDefaults(userA)).toEqual(unset);
   });
 
   it('uses the local sentinel org and user when auth is disabled', async () => {
@@ -1908,28 +2065,28 @@ describe('OM routes with a tenant', () => {
     });
   });
 
-  it('reports caller-visible custom providers as available', async () => {
-    await seed.customProviders.upsert({
-      orgId: 'org1',
-      userId: 'user-a',
-      input: {
-        providerId: 'acme',
-        name: 'Acme',
-        url: 'https://llm.acme.dev/v1',
-        apiKey: 'sk-acme',
-        models: ['fast-1'],
-      },
-    });
+  it("reports the caller's own custom providers as available for personal memory settings", async () => {
+    const acme = {
+      providerId: 'acme',
+      name: 'Acme',
+      url: 'https://llm.acme.dev/v1',
+      apiKey: 'sk-acme',
+      models: ['fast-1'],
+    };
     await seed.memorySettings.patch({
       orgId: 'org1',
       userId: 'user-a',
       patch: { observerModelId: 'acme/fast-1' },
     });
+    const observer = async () =>
+      (await (await buildApp(null, { withCustomProviders: true }).request('/web/config/om')).json()).config.observer;
 
-    const res = await buildApp(null, { withCustomProviders: true }).request('/web/config/om');
+    // Personal work never runs on the organization's endpoints.
+    await seed.customProviders.create({ owner: { orgId: 'org1' }, createdBy: 'admin', input: acme });
+    expect(await observer()).toMatchObject({ model: 'acme/fast-1', providerStatus: 'unavailable' });
 
-    expect(res.status).toBe(200);
-    expect((await res.json()).config.observer).toMatchObject({
+    await seed.customProviders.create({ owner: { orgId: 'org1', userId: 'user-a' }, createdBy: 'user-a', input: acme });
+    expect(await observer()).toMatchObject({
       model: 'acme/fast-1',
       effectiveModelId: 'acme/fast-1',
       providerStatus: 'available',
@@ -2178,7 +2335,10 @@ describe('custom provider routes', () => {
     mountApiRoutes(
       app as any,
       new ConfigRoutes({
-        auth: fakeRouteAuth({ enabled: opts.authEnabled !== false }),
+        auth: fakeRouteAuth({
+          enabled: opts.authEnabled !== false,
+          isOrganizationAdmin: async (_organizationId, userId) => userId === admin.workosId,
+        }),
         controller,
         ...(opts.withStorage === false ? {} : { customProviders: seed.customProviders }),
         onCustomProvidersChanged,
@@ -2187,9 +2347,13 @@ describe('custom provider routes', () => {
     return app;
   }
 
+  const admin = { workosId: 'admin', organizationId: 'org1' };
   const userA = { workosId: 'user-a', organizationId: 'org1' };
+  const userB = { workosId: 'user-b', organizationId: 'org1' };
   const userOtherOrg = { workosId: 'user-c', organizationId: 'org2' };
+  const soloUser = { workosId: 'solo' };
   const providerBody = { name: 'My LLM', url: 'https://llm.example.com/v1', apiKey: 'sk-x', models: ['m1', 'm2'] };
+  const sharedBody = { ...providerBody, name: 'Team LLM', apiKey: 'sk-team', scope: 'org' };
 
   const postProvider = (app: Hono, body: unknown) =>
     app.request('/web/config/custom-providers', {
@@ -2198,31 +2362,187 @@ describe('custom provider routes', () => {
       body: JSON.stringify(body),
     });
 
+  const listCustomProviders = async (user: Parameters<typeof buildApp>[0]) =>
+    (await (await buildApp(user).request('/web/config/custom-providers')).json()).providers as Array<{
+      id: string;
+      name: string;
+      scope: string;
+    }>;
+
+  const ownList = (user: { workosId: string; organizationId?: string }) =>
+    seed.customProviders.list({ orgId: user.organizationId ?? `user:${user.workosId}`, userId: user.workosId });
+
   beforeEach(async () => {
+    // A deployment id in the developer's shell would refuse the local test endpoints.
+    vi.stubEnv('MASTRA_DEPLOYMENT_ID', '');
     seed = await createFactoryStorageForTests();
     onCustomProvidersChanged.mockClear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('rejects unauthenticated access when web auth is enabled', async () => {
     expect((await buildApp(null).request('/web/config/custom-providers')).status).toBe(401);
   });
 
-  it('persists providers in the org-scoped domain with keys redacted', async () => {
+  it("saves an endpoint to the caller's own list by default, with the key redacted", async () => {
     const created = await postProvider(buildApp(userA), providerBody);
     expect(created.status).toBe(200);
     const { provider } = await created.json();
-    expect(provider).toMatchObject({ name: 'My LLM', hasApiKey: true, models: ['m1', 'm2'] });
+    expect(provider).toMatchObject({ name: 'My LLM', hasApiKey: true, models: ['m1', 'm2'], scope: 'user' });
     expect(JSON.stringify(provider)).not.toContain('sk-x');
 
-    const stored = await seed.customProviders.list({ orgId: 'org1' });
+    const stored = await ownList(userA);
     expect(stored).toHaveLength(1);
     expect(stored[0]).toMatchObject({ createdBy: 'user-a', apiKey: 'sk-x' });
+    expect(await seed.customProviders.list({ orgId: 'org1' })).toEqual([]);
     expect(onCustomProvidersChanged).toHaveBeenCalledWith({ orgId: 'org1' });
 
-    const listed = await buildApp(userA).request('/web/config/custom-providers');
-    const { providers } = await listed.json();
-    expect(providers).toHaveLength(1);
-    expect(providers[0]).toMatchObject({ id: provider.id, hasApiKey: true });
+    expect(await listCustomProviders(userA)).toMatchObject([{ id: provider.id, scope: 'user' }]);
+  });
+
+  it("keeps a member's own endpoints invisible to the rest of the organization", async () => {
+    await postProvider(buildApp(userA), providerBody);
+
+    expect(await listCustomProviders(userB)).toEqual([]);
+    expect(await listCustomProviders(admin)).toEqual([]);
+  });
+
+  it('lets an admin share an endpoint with the organization', async () => {
+    const created = await postProvider(buildApp(admin), sharedBody);
+    expect(created.status).toBe(200);
+    expect((await created.json()).provider).toMatchObject({ name: 'Team LLM', scope: 'org' });
+
+    expect(await seed.customProviders.list({ orgId: 'org1' })).toMatchObject([{ createdBy: 'admin' }]);
+    // Every member sees it, next to their own.
+    await postProvider(buildApp(userA), providerBody);
+    expect(await listCustomProviders(userA)).toMatchObject([
+      { name: 'My LLM', scope: 'user' },
+      { name: 'Team LLM', scope: 'org' },
+    ]);
+    expect(await listCustomProviders(userB)).toMatchObject([{ name: 'Team LLM', scope: 'org' }]);
+  });
+
+  // Any member could previously repoint an endpoint the whole organization
+  // sends its prompts to.
+  it("refuses a member's changes to the organization's endpoints", async () => {
+    await postProvider(buildApp(admin), sharedBody);
+
+    const added = await postProvider(buildApp(userA), { ...sharedBody, name: 'Sneaky' });
+    expect(added.status).toBe(403);
+    expect((await added.json()).error).toBe('organization_admin_required');
+
+    const repointed = await postProvider(buildApp(userA), { ...sharedBody, url: 'https://evil.example.com/v1' });
+    expect(repointed.status).toBe(403);
+
+    const removed = await buildApp(userA).request('/web/config/custom-providers/team-llm?scope=org', {
+      method: 'DELETE',
+    });
+    expect(removed.status).toBe(403);
+
+    expect(await seed.customProviders.list({ orgId: 'org1' })).toMatchObject([
+      { name: 'Team LLM', url: 'https://llm.example.com/v1' },
+    ]);
+  });
+
+  // Scoped exactly like keys: an account without an organization has its own
+  // list, and an organization list only an admin can change.
+  it('scopes an account without an organization like its keys', async () => {
+    expect((await postProvider(buildApp(soloUser), providerBody)).status).toBe(200);
+    expect((await postProvider(buildApp(soloUser), sharedBody)).status).toBe(403);
+
+    expect(await listCustomProviders(soloUser)).toMatchObject([{ name: 'My LLM', scope: 'user' }]);
+    expect(await ownList(soloUser)).toHaveLength(1);
+  });
+
+  it('refuses a name that belongs to a built-in provider', async () => {
+    const res = await postProvider(buildApp(userA), { ...providerBody, name: 'Anthropic' });
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe('provider_name_taken');
+    expect(await ownList(userA)).toEqual([]);
+  });
+
+  // Each of these ids already means something to model resolution or the
+  // pickers. This server's catalog lists only Anthropic, as when models.dev
+  // has not loaded, so "OpenAI" is caught by the static registry.
+  it.each([
+    ['OpenAI', 'a built-in provider missing from a catalog that failed to load'],
+    ['Mastra', 'the Mastra Gateway catalog, listed per tenant'],
+    ['Mastra Gateway', 'the id the gateway key is saved under'],
+    ['MastraCode', "the MastraCode gateway's namespace"],
+    ['OpenAI Codex', 'the id OpenAI sign-ins are saved under'],
+    ['Kimi for Coding', 'an older id rewritten to another provider before lookup'],
+    ['Amazon Bedrock', 'a deployment provider this server does not enable'],
+    ['Google Vertex', 'a deployment provider this server does not enable'],
+    ['GitHub Copilot', 'a browser sign-in provider outside the catalog'],
+  ])('refuses the name "%s": %s', async name => {
+    const res = await postProvider(buildApp(userA), { ...providerBody, name });
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe('provider_name_taken');
+    expect(await ownList(userA)).toEqual([]);
+  });
+
+  // Adding under a name already in use used to replace that endpoint and
+  // inherit its saved key.
+  it('refuses to add an endpoint under a name already in use', async () => {
+    await postProvider(buildApp(admin), sharedBody);
+
+    const { apiKey: _apiKey, ...withoutKey } = sharedBody;
+    const res = await postProvider(buildApp(admin), { ...withoutKey, url: 'https://evil.example.com/v1' });
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe('provider_name_taken');
+    expect(await seed.customProviders.list({ orgId: 'org1' })).toMatchObject([
+      { url: 'https://llm.example.com/v1', apiKey: 'sk-team' },
+    ]);
+  });
+
+  it('keeps the saved key when an edit sends none and the host stays the same', async () => {
+    const { provider } = await (await postProvider(buildApp(userA), providerBody)).json();
+    const { apiKey: _apiKey, ...withoutKey } = providerBody;
+
+    const edited = await postProvider(buildApp(userA), {
+      ...withoutKey,
+      url: 'https://llm.example.com/v2',
+      previousId: provider.id,
+    });
+
+    expect((await edited.json()).provider).toMatchObject({ url: 'https://llm.example.com/v2', hasApiKey: true });
+    expect(await ownList(userA)).toMatchObject([{ url: 'https://llm.example.com/v2', apiKey: 'sk-x' }]);
+  });
+
+  // The saved key is never shown, so keeping it across a host change would
+  // let whoever edits the endpoint send it to their own server.
+  it('asks for the key again when an edit moves an endpoint to another host', async () => {
+    const { provider } = await (await postProvider(buildApp(admin), sharedBody)).json();
+    const { apiKey: _apiKey, ...withoutKey } = sharedBody;
+
+    const res = await postProvider(buildApp(admin), {
+      ...withoutKey,
+      url: 'https://evil.example.com/v1',
+      previousId: provider.id,
+    });
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('api_key_required');
+    expect(await seed.customProviders.list({ orgId: 'org1' })).toMatchObject([
+      { url: 'https://llm.example.com/v1', apiKey: 'sk-team' },
+    ]);
+  });
+
+  it('reports an edit or a removal of an endpoint that is not there', async () => {
+    const edited = await postProvider(buildApp(userA), { ...providerBody, previousId: 'missing' });
+    expect(edited.status).toBe(404);
+
+    // The organization's endpoint is not in the caller's own list, the default.
+    await postProvider(buildApp(admin), sharedBody);
+    const removed = await buildApp(admin).request('/web/config/custom-providers/team-llm', { method: 'DELETE' });
+    expect(removed.status).toBe(404);
+    expect(await seed.customProviders.list({ orgId: 'org1' })).toHaveLength(1);
   });
 
   it('renames via previousId without leaving the old row behind', async () => {
@@ -2232,20 +2552,21 @@ describe('custom provider routes', () => {
     const renamed = await postProvider(buildApp(userA), { ...providerBody, name: 'New Name', previousId: provider.id });
     expect(renamed.status).toBe(200);
 
-    const stored = await seed.customProviders.list({ orgId: 'org1' });
+    const stored = await ownList(userA);
     expect(stored).toHaveLength(1);
     expect(stored[0]?.name).toBe('New Name');
   });
 
   it('keeps providers invisible across organizations', async () => {
     await postProvider(buildApp(userA), providerBody);
+    await postProvider(buildApp(admin), sharedBody);
 
-    const { providers } = await (await buildApp(userOtherOrg).request('/web/config/custom-providers')).json();
-    expect(providers).toEqual([]);
+    expect(await listCustomProviders(userOtherOrg)).toEqual([]);
   });
 
-  it('includes only the caller org custom providers in the provider catalog without exposing keys', async () => {
+  it('reports each custom provider in the provider catalog at the scope it is saved at, without exposing keys', async () => {
     await postProvider(buildApp(userA), providerBody);
+    await postProvider(buildApp(admin), sharedBody);
     await postProvider(buildApp(userOtherOrg), {
       name: 'Other LLM',
       url: 'https://other.example.com/v1',
@@ -2257,22 +2578,114 @@ describe('custom provider routes', () => {
     expect(response.status).toBe(200);
     const body = await response.json();
 
-    expect(body.providers).toContainEqual({ provider: 'my-llm', source: 'stored-org', custom: true });
+    expect(body.providers).toContainEqual({
+      provider: 'my-llm',
+      source: 'stored-user',
+      userCredential: 'api_key',
+      custom: true,
+    });
+    expect(body.providers).toContainEqual({
+      provider: 'team-llm',
+      source: 'stored-org',
+      orgCredential: 'api_key',
+      orgKey: true,
+      custom: true,
+    });
     expect(body.providers).not.toContainEqual(expect.objectContaining({ provider: 'other-llm' }));
-    expect(JSON.stringify(body)).not.toContain('sk-x');
-    expect(JSON.stringify(body)).not.toContain('sk-other');
+    expect(JSON.stringify(body)).not.toContain('sk-');
+
+    // Another member is not shown the first member's own endpoint.
+    const forOtherMember = await (await buildApp(userB).request('/web/config/providers')).json();
+    expect(forOtherMember.providers).not.toContainEqual(expect.objectContaining({ provider: 'my-llm' }));
   });
 
-  it('deletes within the caller org only', async () => {
+  describe('on a hosted Factory', () => {
+    const modelIds = async (user: Parameters<typeof buildApp>[0]) =>
+      (
+        (await (await buildApp(user).request('/web/config/models')).json()) as { models: Array<{ id: string }> }
+      ).models.map(model => model.id);
+
+    beforeEach(() => {
+      vi.stubEnv('MASTRA_DEPLOYMENT_ID', 'deploy-1');
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it.each(['http://llm.example.com/v1', 'https://169.254.169.254/v1', 'https://localhost:11434/v1'])(
+      'refuses to save %s',
+      async url => {
+        const res = await postProvider(buildApp(userA), { ...providerBody, url });
+
+        expect(res.status).toBe(400);
+        expect(await res.json()).toMatchObject({ error: 'custom_endpoint_url_refused', message: expect.any(String) });
+        expect(await ownList(userA)).toEqual([]);
+      },
+    );
+
+    it('refuses an edit that moves an endpoint onto a local address', async () => {
+      const { provider } = await (await postProvider(buildApp(userA), providerBody)).json();
+
+      const res = await postProvider(buildApp(userA), {
+        ...providerBody,
+        url: 'https://10.0.0.5/v1',
+        previousId: provider.id,
+      });
+
+      expect(res.status).toBe(400);
+      expect(await ownList(userA)).toMatchObject([{ url: 'https://llm.example.com/v1' }]);
+    });
+
+    it('flags an endpoint saved before the rule and keeps it out of the catalogs', async () => {
+      await seed.customProviders.create({
+        owner: { orgId: 'org1', userId: 'user-a' },
+        createdBy: 'user-a',
+        input: { providerId: 'old-llm', name: 'Old LLM', url: 'http://10.0.0.5/v1', apiKey: 'sk-old', models: ['old'] },
+      });
+      await postProvider(buildApp(userA), providerBody);
+
+      const listed = await listCustomProviders(userA);
+      expect(listed.map(provider => provider.name)).toEqual(['My LLM', 'Old LLM']);
+      expect(listed[0]).not.toHaveProperty('urlProblem');
+      expect(listed[1]).toHaveProperty('urlProblem', expect.any(String));
+      const { providers } = await (await buildApp(userA).request('/web/config/providers')).json();
+      expect(providers).toContainEqual(expect.objectContaining({ provider: 'my-llm' }));
+      expect(providers).not.toContainEqual(expect.objectContaining({ provider: 'old-llm' }));
+      const models = await modelIds(userA);
+      expect(models).toContain('my-llm/m1');
+      expect(models).not.toContain('old-llm/old');
+    });
+  });
+
+  it('lists a custom provider once when the gateway catalog also namespaces it', async () => {
+    const app = new Hono();
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({
+        auth: fakeRouteAuth({ enabled: false }),
+        controller: makeAgentController([{ provider: 'mastracode/my-llm', hasApiKey: true }]),
+        customProviders: seed.customProviders,
+      }).routes(),
+    );
+    expect((await postProvider(app, providerBody)).status).toBe(200);
+
+    const { providers } = await (await app.request('/web/config/providers')).json();
+
+    expect(providers).toEqual([{ provider: 'my-llm', source: 'stored', custom: true }]);
+  });
+
+  it("deletes from the caller's own list only", async () => {
     const created = await postProvider(buildApp(userA), providerBody);
     const { provider } = await created.json();
 
     await buildApp(userOtherOrg).request(`/web/config/custom-providers/${provider.id}`, { method: 'DELETE' });
-    expect(await seed.customProviders.list({ orgId: 'org1' })).toHaveLength(1);
+    await buildApp(userB).request(`/web/config/custom-providers/${provider.id}`, { method: 'DELETE' });
+    expect(await ownList(userA)).toHaveLength(1);
 
     const res = await buildApp(userA).request(`/web/config/custom-providers/${provider.id}`, { method: 'DELETE' });
     expect(res.status).toBe(200);
-    expect(await seed.customProviders.list({ orgId: 'org1' })).toEqual([]);
+    expect(await ownList(userA)).toEqual([]);
   });
 
   it('uses a sentinel local org when auth is disabled — never settings.json', async () => {
@@ -2283,6 +2696,11 @@ describe('custom provider routes', () => {
     const stored = await seed.customProviders.list({ orgId: 'local' });
     expect(stored).toHaveLength(1);
     expect(stored[0]).toMatchObject({ createdBy: 'local', name: 'My LLM' });
+
+    // Single-user: no admin to ask, and a name is the user's own business.
+    expect((await postProvider(app, sharedBody)).status).toBe(200);
+    expect((await postProvider(app, { ...providerBody, name: 'Anthropic' })).status).toBe(200);
+    expect(await seed.customProviders.list({ orgId: 'local' })).toHaveLength(3);
   });
 
   it('returns 503 when storage is unavailable', async () => {
@@ -2294,5 +2712,212 @@ describe('custom provider routes', () => {
   it('validates the payload', async () => {
     expect((await postProvider(buildApp(userA), { url: 'https://x.example' })).status).toBe(400);
     expect((await postProvider(buildApp(userA), { name: 'x', url: 'ftp://bad' })).status).toBe(400);
+    // `/models` is appended as text, so it would land inside the query string.
+    const withQuery = await postProvider(buildApp(userA), { ...providerBody, url: 'https://llm.example.com/v1?a=1' });
+    expect(withQuery.status).toBe(400);
+  });
+
+  // Without a scheme the edit keeps x-api-key, under which Authorization is an ordinary header.
+  it('accepts an Authorization header on an edit that keeps a saved x-api-key scheme', async () => {
+    const app = buildApp(userA);
+    const headers = [{ name: 'Authorization', value: 'Basic gateway-user' }];
+    const { provider } = await (await postProvider(app, { ...providerBody, authScheme: 'x-api-key', headers })).json();
+
+    const edited = await postProvider(app, { ...providerBody, headers, previousId: provider.id });
+
+    expect(edited.status).toBe(200);
+  });
+
+  describe('checks against a real endpoint', () => {
+    type Respond = (path: string, res: ServerResponse) => void;
+    const closers: Array<() => Promise<void>> = [];
+
+    afterEach(async () => {
+      vi.unstubAllEnvs();
+      await Promise.all(closers.splice(0).map(close => close()));
+    });
+
+    /** A local endpoint that records the headers of every request it answers. */
+    async function startEndpoint(respond: Respond) {
+      const requests: Array<{ path: string; headers: IncomingHttpHeaders }> = [];
+      const server = createServer((req, res) => {
+        req.resume();
+        req.on('end', () => {
+          requests.push({ path: req.url ?? '', headers: req.headers });
+          respond(req.url ?? '', res);
+        });
+      });
+      await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+      closers.push(() => {
+        server.closeAllConnections();
+        return new Promise(resolve => server.close(() => resolve()));
+      });
+      return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`, requests };
+    }
+
+    /** Lists `m1` and answers "yes" to a streamed chat completion. */
+    const openAiCompatible: Respond = (path, res) => {
+      if (path.endsWith('/models')) {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ data: [{ id: 'm1' }] }));
+        return;
+      }
+      const chunk = (delta: unknown, finish: string | null) => {
+        const choices = [{ index: 0, delta, finish_reason: finish }];
+        return `data: ${JSON.stringify({ id: 'c', object: 'chat.completion.chunk', created: 0, model: 'm1', choices })}\n\n`;
+      };
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.end(`${chunk({ role: 'assistant', content: 'yes' }, null)}${chunk({}, 'stop')}data: [DONE]\n\n`);
+    };
+
+    /** Refuses every call with an error that echoes the request headers, as some gateways do. */
+    const echoingRefusal: Respond = (_path, res) => {
+      res.writeHead(401, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: `Invalid credentials: ${JSON.stringify(res.req.headers)}` } }));
+    };
+
+    const postCheck = (app: Hono, body: unknown) =>
+      app.request('/web/config/custom-providers/check', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    const connection = (url: string) => ({
+      name: 'My LLM',
+      url,
+      apiKey: 'sk-saved-key',
+      authScheme: 'x-api-key',
+      headers: [
+        { name: 'X-Tenant', value: 'tenant-secret-value' },
+        { name: 'X-Region', value: 'eu-west', secret: false },
+      ],
+      models: ['m1'],
+    });
+
+    it('lists the models of a draft and sends it the test message, storing nothing', async () => {
+      const endpoint = await startEndpoint(openAiCompatible);
+
+      const res = await postCheck(buildApp(userA), { ...connection(endpoint.url), model: 'm1' });
+
+      expect((await res.json()).check).toEqual({
+        models: { ok: true, models: ['m1'], latencyMs: expect.any(Number) },
+        reply: { ok: true, reply: 'yes', finishReason: 'stop', latencyMs: expect.any(Number) },
+      });
+      expect(endpoint.requests.map(request => request.path).sort()).toEqual(['/v1/chat/completions', '/v1/models']);
+      expect(await ownList(userA)).toEqual([]);
+    });
+
+    it('records the result of checking a saved provider', async () => {
+      const endpoint = await startEndpoint(openAiCompatible);
+      const app = buildApp(userA);
+      const { provider } = await (await postProvider(app, connection(endpoint.url))).json();
+
+      const body = await (await postCheck(app, { previousId: provider.id })).json();
+
+      expect(body.provider.lastCheck).toEqual({ at: expect.any(String), ok: true });
+      expect((await ownList(userA))[0]!.lastCheck).toEqual(body.provider.lastCheck);
+
+      // A row saved before query strings were refused is never called.
+      const calls = endpoint.requests.length;
+      await seed.storage.ops.updateMany(
+        'user_custom_providers',
+        { provider_id: provider.id },
+        { url: `${endpoint.url}?a=1` },
+      );
+      expect((await postCheck(app, { previousId: provider.id })).status).toBe(400);
+      expect(endpoint.requests).toHaveLength(calls);
+    });
+
+    it('reuses the saved key and secret headers for a draft on the same origin', async () => {
+      const endpoint = await startEndpoint(openAiCompatible);
+      const app = buildApp(userA);
+      const { provider } = await (await postProvider(app, connection(endpoint.url))).json();
+
+      await postCheck(app, { previousId: provider.id, url: `${endpoint.url}/`, headers: [{ name: 'X-Tenant' }] });
+
+      expect(endpoint.requests[0]!.headers).toMatchObject({
+        'x-api-key': 'sk-saved-key',
+        'x-tenant': 'tenant-secret-value',
+      });
+    });
+
+    // Reusing a saved secret elsewhere would let whoever edits the provider send it to their own server.
+    it('refuses a draft on another origin that would reuse the saved key, before calling it', async () => {
+      const saved = await startEndpoint(openAiCompatible);
+      const other = await startEndpoint(openAiCompatible);
+      const app = buildApp(userA);
+      const { provider } = await (await postProvider(app, connection(saved.url))).json();
+
+      const res = await postCheck(app, { previousId: provider.id, url: other.url });
+
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe('api_key_required');
+      expect(other.requests).toEqual([]);
+    });
+
+    it("refuses a member's check of an organization provider", async () => {
+      const endpoint = await startEndpoint(openAiCompatible);
+      const { provider } = await (
+        await postProvider(buildApp(admin), { ...connection(endpoint.url), scope: 'org' })
+      ).json();
+
+      const res = await postCheck(buildApp(userA), { previousId: provider.id, scope: 'org' });
+
+      expect(res.status).toBe(403);
+      expect(endpoint.requests).toEqual([]);
+    });
+
+    it('refuses a private address on a hosted Factory before calling it', async () => {
+      const endpoint = await startEndpoint(openAiCompatible);
+      vi.stubEnv('MASTRA_DEPLOYMENT_ID', 'deploy-1');
+
+      const res = await postCheck(buildApp(userA), { url: endpoint.url });
+
+      expect((await res.json()).error).toBe('custom_endpoint_url_refused');
+      expect(endpoint.requests).toEqual([]);
+    });
+
+    it('saves with check: true only when the connection test passes', async () => {
+      const passing = await startEndpoint(openAiCompatible);
+      const failing = await startEndpoint(echoingRefusal);
+      const app = buildApp(userA);
+
+      const refused = await postProvider(app, { ...connection(failing.url), check: true });
+      expect(refused.status).toBe(422);
+      expect((await refused.json()).failure).toMatchObject({ kind: 'http', status: 401 });
+      expect(await ownList(userA)).toEqual([]);
+
+      const saved = await postProvider(app, { ...connection(passing.url), check: true });
+      expect((await saved.json()).provider.lastCheck).toEqual({ at: expect.any(String), ok: true });
+      expect(await ownList(userA)).toHaveLength(1);
+    });
+
+    it('never returns a secret header value or the key, and returns plain header values', async () => {
+      const endpoint = await startEndpoint(echoingRefusal);
+      const app = buildApp(userA);
+      const created = await postProvider(app, connection(endpoint.url));
+      const { provider } = await created.clone().json();
+
+      const texts = await Promise.all(
+        [
+          created,
+          await app.request('/web/config/custom-providers'),
+          await postCheck(app, { previousId: provider.id, model: 'm1' }),
+          await postProvider(app, { ...connection(endpoint.url), previousId: provider.id, check: true }),
+        ].map(res => res.text()),
+      );
+
+      // The endpoint echoed both secrets back in every error body.
+      expect(texts.join('\n')).toContain('[redacted]');
+      for (const text of texts) {
+        expect(text).not.toContain('tenant-secret-value');
+        expect(text).not.toContain('sk-saved-key');
+      }
+      expect(JSON.parse(texts[1]!).providers[0].headers).toEqual([
+        { name: 'X-Tenant', secret: true },
+        { name: 'X-Region', secret: false, value: 'eu-west' },
+      ]);
+    });
   });
 });

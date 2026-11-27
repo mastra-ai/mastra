@@ -1,23 +1,15 @@
-import { Button } from '@mastra/playground-ui/components/Button';
+import { VantaIntakeCard, vantaSourcesEnabled } from '@mastra/playground-ui/domains/factory';
+import type { VantaIntakeStatus } from '@mastra/playground-ui/domains/factory';
 import { useQuery } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 import { useApiConfig } from '../../../../api/config';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import type { PlatformProviderConnection } from '../../factory/services/platformConnect';
 import { useIntakeSelection } from '../hooks/useIntakeSelection';
-import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { RoutedSourcePicker } from './IntakeSourceRouting';
-import { connectionName, PlatformConnectButton, PlatformConnectionActions } from './PlatformProviderConnections';
-import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
-import { IntakeSyncControl } from './common/IntakeSyncControl';
 
-export interface VantaStatus {
-  enabled: boolean;
-  configured: boolean;
-  reason: 'ready' | 'missing_config' | 'organization_required' | 'auth_required';
-}
+export type VantaStatus = VantaIntakeStatus;
 
 interface VantaSource {
   id: string;
@@ -70,86 +62,16 @@ export function VantaIntakeSection({
 }) {
   const selection = useIntakeSelection('vanta');
   const factories = useFactoriesQuery().data ?? [];
-  const vanta = config.vanta ?? { enabled: false, sourceIds: null };
-  const ready = statusQuery.data?.reason === 'ready';
-  const connections = connectionsQuery.data ?? [];
-  const connected = connections.some(connection => connection.status === 'active');
-  const sourcesQuery = useVantaSourcesQuery(ready && connected);
-  const sources = sourcesQuery.data ?? [];
-  const unavailable = connectionsQuery.isError || statusQuery.isError;
-  const description = connectionsQuery.isError
-    ? "Couldn't load Vanta connections."
-    : statusQuery.isError
-      ? "Couldn't load Vanta status."
-      : connections.some(connection => connection.status === 'needs_reauth')
-        ? 'A Vanta account needs to be reconnected to keep syncing vulnerabilities.'
-        : !connected
-          ? 'Connect Vanta to sync vulnerabilities.'
-          : undefined;
-
+  const sourcesQuery = useVantaSourcesQuery(vantaSourcesEnabled(statusQuery.data, connectionsQuery.data));
   return (
-    <IntakeProviderCard
-      name="Vanta"
-      icon={<SettingsIntegrationIcon provider="vanta" />}
-      account={connections.map(connectionName).join(', ')}
+    <VantaIntakeCard
+      config={config}
       listed={listed}
-      description={description}
-      connection={
-        !unavailable &&
-        (listed ? (
-          <PlatformConnectionActions provider="vanta" connections={connections} />
-        ) : (
-          <PlatformConnectButton provider="vanta" />
-        ))
-      }
-      syncControl={
-        <IntakeSyncControl
-          label="Sync vulnerabilities"
-          accessibleLabel="Sync Vanta vulnerabilities"
-          description="Active Vanta vulnerabilities become security-labeled cards."
-          checked={vanta.enabled}
-          disabled={!connected}
-          onCheckedChange={enabled => selection.update(current => ({ ...current, enabled }))}
-        />
-      }
-      action={
-        (unavailable || sourcesQuery.isError) && (
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={<IconArrowRotateCounterClockwise />}
-            onClick={() => {
-              void connectionsQuery.refetch();
-              void statusQuery.refetch();
-              void sourcesQuery.refetch();
-            }}
-          >
-            Retry
-          </Button>
-        )
-      }
-    >
-      {vanta.enabled && (connected || Boolean(vanta.sourceIds?.length)) && (
-        <RoutedSourcePicker
-          integrationId="vanta"
-          routingLabel="Vanta"
-          factories={factories}
-          label="Vulnerability sources"
-          addLabel="Add vulnerability source"
-          itemIcon={<SettingsIntegrationIcon provider="vanta" />}
-          groups={[
-            { id: 'vanta-vulnerabilities', items: sources.map(source => ({ id: source.id, label: source.name })) },
-          ]}
-          selectedIds={vanta.sourceIds}
-          saving={selection.saving}
-          loading={ready && sourcesQuery.isPending}
-          error={sourcesQuery.isError ? "Couldn't load Vanta sources." : undefined}
-          onRetry={() => void sourcesQuery.refetch()}
-          onToggleItem={id =>
-            selection.update(current => ({ ...current, sourceIds: toggleSourceId(current.sourceIds, id) }))
-          }
-        />
-      )}
-    </IntakeProviderCard>
+      selection={selection}
+      statusQuery={statusQuery}
+      connectionsQuery={connectionsQuery}
+      sourcesQuery={sourcesQuery}
+      renderPicker={picker => <RoutedSourcePicker {...picker} factories={factories} />}
+    />
   );
 }

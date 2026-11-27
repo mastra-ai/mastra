@@ -69,6 +69,20 @@ describe('ModelPicker', () => {
     vi.unstubAllGlobals();
   });
 
+  it('given trigger children, names the trigger by them rather than by the model', () => {
+    render(
+      <ModelPicker
+        providers={[anthropic]}
+        value={{ provider: 'anthropic', model: 'claude-sonnet-4-6' }}
+        onValueChange={() => {}}
+      >
+        Change model
+      </ModelPicker>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Change model' })).toBeTruthy();
+  });
+
   it('given one provider, lists its models with no provider filter or heading, and keeps connect beside search', () => {
     const list = openPicker([anthropic]);
 
@@ -242,6 +256,119 @@ describe('ModelPicker', () => {
       fireEvent.change(screen.getByPlaceholderText('Search models'), { target: { value: 'groq' } });
 
       expect(optionNames(list)).toEqual(['Llama 4 Scout']);
+    });
+  });
+
+  describe('when more than 200 models sit across connected providers', () => {
+    const anthropicCatalog: ModelPickerProvider = {
+      id: 'anthropic',
+      name: 'Anthropic',
+      models: [
+        { id: 'claude-3-opus', releaseDate: '2024-02-29' },
+        { id: 'claude-haiku-4-5', releaseDate: '2025-10-15' },
+        { id: 'claude-sonnet-4-6', releaseDate: '2026-02-17' },
+        { id: 'claude-opus-4-7', releaseDate: '2026-04-16' },
+        { id: 'claude-opus-5', releaseDate: '2026-05-01' },
+        { id: 'claude-opus-5-1', releaseDate: '2026-06-01' },
+        { id: 'claude-opus-5-2', releaseDate: '2026-07-01' },
+        { id: 'claude-opus-5-3', releaseDate: '2026-08-01' },
+      ],
+    };
+    const pad = (n: number) => String(n).padStart(2, '0');
+    // Gateway 11 holds the newest models, Gateway 0 the oldest.
+    const gateways = Array.from(
+      { length: 12 },
+      (_, i): ModelPickerProvider => ({
+        id: `gw-${i}`,
+        name: `Gateway ${i}`,
+        models: Array.from({ length: 20 }, (_, j) => ({
+          id: `gw-${i}-model-${j}`,
+          releaseDate: `2025-${pad(i + 1)}-${pad(j + 1)}`,
+        })),
+      }),
+    );
+    const undated: ModelPickerProvider = {
+      id: 'undated',
+      name: 'Undated',
+      models: [{ id: 'undated-model', releaseDate: 'unknown' }],
+    };
+    const catalog = [anthropicCatalog, undated, ...gateways];
+    const providerGroup = (list: HTMLElement, name: string) => within(list).getByRole('group', { name });
+
+    it("lists each provider's newest five, keeps the picked and default models, and says how to reach the rest", () => {
+      const list = openPicker(catalog, { defaultModel: { provider: 'anthropic', model: 'claude-haiku-4-5' } });
+
+      expect(optionNames(providerGroup(list, 'Anthropic'))).toEqual([
+        'Claude Opus 5.3',
+        'Claude Opus 5.2',
+        'Claude Opus 5.1',
+        'Claude Opus 5',
+        'Claude Opus 4.7',
+        'Claude Sonnet 4.6',
+        'Claude Haiku 4.5Default',
+      ]);
+      expect(optionNames(providerGroup(list, 'Gateway 11'))).toHaveLength(5);
+      expect(within(list).getByText('Search or pick a provider to see all models.')).toBeTruthy();
+    });
+
+    it('given a provider filter, lists every model of that provider', () => {
+      const list = openPicker(catalog);
+
+      fireEvent.click(
+        within(screen.getByRole('group', { name: 'Filter by provider' })).getByRole('button', { name: 'Anthropic' }),
+      );
+
+      expect(optionNames(list)).toHaveLength(8);
+      expect(within(list).queryByText('Search or pick a provider to see all models.')).toBeNull();
+    });
+
+    it('keeps the twelve providers with the newest models in the row, ranking unknown release dates last', () => {
+      const list = openPicker(catalog);
+
+      expect(
+        within(screen.getByRole('group', { name: 'Filter by provider' }))
+          .getAllByRole('button')
+          .map(button => button.getAttribute('aria-label') ?? button.textContent),
+      ).toEqual(['All', 'Anthropic', ...gateways.slice(1).map(gateway => gateway.name), '2 more providers']);
+
+      fireEvent.click(screen.getByRole('button', { name: '2 more providers' }));
+
+      expect(within(list).getByText('More providers')).toBeTruthy();
+      expect(optionNames(list)).toEqual([expect.stringMatching(/^Undated/), expect.stringMatching(/^Gateway 0/)]);
+    });
+
+    it("given a default model from a provider with older models, keeps that provider's pill and its default model", () => {
+      const list = openPicker(catalog, { defaultModel: { provider: 'gw-0', model: 'gw-0-model-3' } });
+
+      expect(
+        within(screen.getByRole('group', { name: 'Filter by provider' })).getByRole('button', { name: 'Gateway 0' }),
+      ).toBeTruthy();
+      expect(optionNames(providerGroup(list, 'Gateway 0'))).toContainEqual(expect.stringMatching(/Default$/));
+    });
+
+    it('given a single provider holding them all, lists its newest 200 and finds the rest by search', () => {
+      const legacy = Array.from({ length: 250 }, (_, j) => ({ id: `claude-legacy-${j}`, releaseDate: '2023-01-01' }));
+      const list = openPicker([{ ...anthropicCatalog, models: [...anthropicCatalog.models, ...legacy] }]);
+
+      expect(optionNames(list)).toHaveLength(200);
+      expect(optionNames(list)[0]).toBe('Claude Opus 5.3');
+      expect(within(list).getByText('Search to see the rest.')).toBeTruthy();
+
+      fireEvent.change(screen.getByPlaceholderText('Search models'), { target: { value: 'legacy 249' } });
+
+      expect(optionNames(list)).toEqual([expect.stringMatching(/legacy 249/i)]);
+    });
+
+    it('given an older model whose id every newer one contains, finds it first by its exact id', () => {
+      const previews = Array.from({ length: 250 }, (_, j) => ({ id: `claude-3-opus-${j}`, releaseDate: '2026-09-01' }));
+      const list = openPicker([{ ...anthropicCatalog, models: [...anthropicCatalog.models, ...previews] }]);
+      const search = screen.getByPlaceholderText('Search models');
+
+      fireEvent.change(search, { target: { value: 'claude-3-opus' } });
+      expect(optionNames(list)[0]).toBe('Claude 3 Opus');
+
+      fireEvent.change(search, { target: { value: 'anthropic/claude-3-opus' } });
+      expect(optionNames(list)[0]).toBe('Claude 3 Opus');
     });
   });
 });

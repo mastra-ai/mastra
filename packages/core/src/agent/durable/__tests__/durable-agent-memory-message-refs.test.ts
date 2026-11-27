@@ -12,7 +12,6 @@ import { z } from 'zod';
 import type { WorkflowRunState } from '../../../workflows/types';
 import type { MastraDBMessage } from '../../message-list';
 import { DurableStepIds } from '../constants';
-import { storeRunsInV2 } from './storage-version';
 
 const threadId = 'refs-thread';
 const resourceId = 'refs-resource';
@@ -142,10 +141,9 @@ async function startProcess(
   const pubsub = engine === 'evented' ? new EventEmitterPubSub() : undefined;
   // The tests read the transcript from the loop run's snapshot and capture checkpoints through v1's
   // snapshot writes. v2 stores the transcript changes a nested run makes in the nested run.
-  const durableAgent = storeRunsInV2(
-    pubsub ? createEventedAgent({ agent, pubsub }) : createDurableAgent({ agent }),
-    false,
-  );
+  const durableAgent = pubsub
+    ? createEventedAgent({ agent, pubsub, storageVersion: 1 })
+    : createDurableAgent({ agent, storageVersion: 1 });
   const mastra = new Mastra({
     agents: { durableAgent },
     storage,
@@ -182,7 +180,7 @@ async function startColdCacheRun(engine: Engine, failures: number | 'always') {
   const process = await startProcess(history(), {
     engine,
     onLookup: async () => {
-      process.transcripts.releaseMessageListState({ state: undefined, getInitData: () => ({ runId }) });
+      process.transcripts.releaseMessageListState({ getInitData: () => ({ runId }) });
       const memoryStore = (await process.storage.getStore('memory'))!;
       listMessagesById = vi.spyOn(memoryStore, 'listMessagesById');
       const outage = new Error('memory storage down');
@@ -278,7 +276,7 @@ async function collectText(stream: { fullStream: AsyncIterable<any> }) {
 
 describe('memory-recalled messages in durable runs', () => {
   it('persists recalled messages as refs in workflow state and restores them for every model call', async () => {
-    const { durableAgent, workflows, prompts } = await startProcess(history());
+    const { durableAgent, workflows, prompts, storage } = await startProcess(history());
     const persisted: SnapshotRow[] = [];
     const persist = workflows.persistWorkflowSnapshot.bind(workflows);
     workflows.persistWorkflowSnapshot = async args => {
@@ -289,10 +287,29 @@ describe('memory-recalled messages in durable runs', () => {
     const result = await durableAgent.stream('Look it up', { memory: memoryOption });
     expect(await collectText(result)).toBe('done');
 
+    const memoryStore = (await storage.getStore('memory'))!;
+    await vi.waitFor(async () => {
+      const { messages } = await memoryStore.listMessages({ threadId, perPage: false });
+      expect(messages.filter(message => !allHistoryIds.includes(message.id)).map(message => message.role)).toEqual([
+        'user',
+        'assistant',
+      ]);
+    });
+    const { messages } = await memoryStore.listMessages({ threadId, perPage: false });
+    const saved = messages.filter(message => !allHistoryIds.includes(message.id));
+    expect(JSON.stringify(saved[0]!.content)).toContain('Look it up');
+    expect(JSON.stringify(saved[1]!.content)).toContain('done');
+    const expectedIds = [...allHistoryIds, ...saved.map(message => message.id)].sort();
+    await vi.waitFor(() => {
+      expect(refIds(persisted.at(-1)?.snapshot).sort()).toEqual(expectedIds);
+    });
+
     const withTranscript = persisted.filter(row => (row.snapshot.value as any)?.messageListState);
     expect(withTranscript.length).toBeGreaterThan(0);
     for (const row of withTranscript) {
-      expect(refIds(row.snapshot)).toEqual(allHistoryIds);
+      const refs = refIds(row.snapshot);
+      expect(refs.filter((id: string) => allHistoryIds.includes(id))).toEqual(allHistoryIds);
+      for (const id of refs) expect(expectedIds).toContain(id);
       expect(JSON.stringify(row.snapshot.value)).not.toContain(historyText(0));
     }
 
@@ -332,6 +349,55 @@ describe('memory-recalled messages in durable runs', () => {
       expect(prompts).toHaveLength(4);
       expect(prompts[3]).toContain('Look it up');
     },
+  );
+
+  // The run saves its input before it starts (#31237); without savePerStep nothing else is saved
+  // until the run finishes, so only refs to that save keep the input out of the checkpoints.
+  it.each(engines)(
+    'persists the input message the run saved before starting as a ref in every later checkpoint (%s engine)',
+    async engine => {
+      const { durableAgent, workflows, storage } = await startProcess(history(), { engine, toolRounds: 2 });
+      const marker = 'pre-run-input-marker';
+      const persisted: SnapshotRow[] = [];
+      const persist = workflows.persistWorkflowSnapshot.bind(workflows);
+      workflows.persistWorkflowSnapshot = async args => {
+        persisted.push(structuredClone(args));
+        return persist(args);
+      };
+
+      const fileData = `UFJFUlVO${'A'.repeat(20_000)}`;
+      const result = await durableAgent.stream(
+        [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: marker },
+              { type: 'file', data: fileData, mediaType: 'application/pdf' },
+            ],
+          },
+        ],
+        { memory: memoryOption },
+      );
+      expect(await collectText(result)).toBe('done');
+
+      const memoryStore = (await storage.getStore('memory'))!;
+      const { messages: stored } = await memoryStore.listMessages({ threadId, perPage: false });
+      const inputId = stored.find(m => m.role === 'user' && JSON.stringify(m.content).includes(marker))?.id;
+      expect(inputId).toBeDefined();
+
+      // The first row makes the run recoverable before the input is saved, so it must carry the
+      // input inline; every checkpoint after it can reference the saved row.
+      const running = persisted.slice(1).filter(row => row.snapshot.status === 'running');
+      expect(copyPaths(persisted[0]!.snapshot, fileData).length).toBeGreaterThan(0);
+      expect(running.length).toBeGreaterThan(0);
+      // Checkpoints written before the transcript exists hold no messages at all (checked below).
+      const withTranscript = running.filter(row => workflowState(row.snapshot, engine)?.messageListState);
+      expect(withTranscript.length).toBeGreaterThan(0);
+      expect(withTranscript.filter(row => !refIds(row.snapshot, engine).includes(inputId!))).toEqual([]);
+      expect(running.flatMap(row => copyPaths(row.snapshot, marker))).toEqual([]);
+      expect(running.flatMap(row => copyPaths(row.snapshot, fileData))).toEqual([]);
+    },
+    30_000,
   );
 
   // Default engine only: the evented engine writes workflow state with refs at each step, and its

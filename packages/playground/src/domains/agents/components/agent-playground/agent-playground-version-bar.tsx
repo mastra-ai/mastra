@@ -17,13 +17,12 @@ import {
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
-import { IconBubbleWide } from '@mastra/playground-ui/icons/central/IconBubbleWide';
+import { IconChatBubble7 } from '@mastra/playground-ui/icons/central/IconChatBubble7';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
-import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
 import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -181,51 +180,35 @@ export function AgentPlaygroundVersionBar({
                 size="md"
                 onClick={() => void (isDirty ? onSaveDraft() : onPublish())}
                 disabled={codeSaveDisabled}
+                icon={<IconFloppyDisk1 />}
+                loading={isSavingDraft}
               >
-                {isSavingDraft ? (
-                  <>
-                    <Spinner className="size-3.5" />
-                    Saving&hellip;
-                  </>
-                ) : (
-                  <>
-                    <Icon size="xs">
-                      <IconFloppyDisk1 />
-                    </Icon>
-                    Save to filesystem
-                  </>
-                )}
+                Save to filesystem
               </Button>
             )}
           </div>
         ) : readOnly && !isViewingPreviousVersion ? null : (
           <div className="flex flex-wrap items-center justify-end gap-2">
             <ButtonsGroup>
-              <Button variant="default" onClick={() => onSaveDraft()} disabled={saveDisabled}>
-                {isSavingDraft ? (
-                  <>
-                    <Spinner className="size-3.5" />
-                    Saving&hellip;
-                  </>
-                ) : (
-                  <>
-                    <Icon size="xs">
-                      <IconFloppyDisk1 />
-                    </Icon>
-                    Save new version
-                  </>
-                )}
+              <Button
+                variant="default"
+                onClick={() => onSaveDraft()}
+                disabled={saveDisabled}
+                icon={<IconFloppyDisk1 />}
+                loading={isSavingDraft}
+              >
+                Save new version
               </Button>
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
                   <Button size="icon-md" variant="default" disabled={saveDisabled} aria-label="More save options">
-                    <IconChevronBottom />
+                    <IconChevronDownMedium />
                   </Button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
                   <DropdownMenu.Item onSelect={() => setShowMessageDialog(true)}>
                     <Icon size="xs">
-                      <IconBubbleWide />
+                      <IconChatBubble7 />
                     </Icon>
                     Save with message
                   </DropdownMenu.Item>
@@ -242,20 +225,10 @@ export function AgentPlaygroundVersionBar({
                   ? selectedVersionId === activeVersionId || isPublishing || isSavingDraft
                   : readOnly || !hasDraft || isPublishing || isSavingDraft
               }
+              icon={<IconCheckmark2Medium />}
+              loading={isPublishing}
             >
-              {isPublishing ? (
-                <>
-                  <Spinner className="size-3.5" />
-                  Publishing&hellip;
-                </>
-              ) : (
-                <>
-                  <Icon size="xs">
-                    <IconCheckmark2Medium />
-                  </Icon>
-                  {isViewingPreviousVersion ? 'Publish this version' : 'Publish'}
-                </>
-              )}
+              {isViewingPreviousVersion ? 'Publish this version' : 'Publish'}
             </Button>
           </div>
         )}

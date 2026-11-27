@@ -8,7 +8,7 @@ import { DIALOG_DRAWER_BREAKPOINT_PX } from '@/ds/components/Dialog/dialog-shell
 import { Drawer, DrawerContent, DrawerTitle, DrawerTrigger } from '@/ds/components/Drawer';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 import { focusRing } from '@/ds/primitives/transitions';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { cn } from '@/utils/cn';
@@ -19,6 +19,7 @@ export interface ModelPickerProps {
   providers: ModelPickerProvider[];
   value?: ModelPickerValue;
   onValueChange: (value: ModelPickerValue) => void;
+  customModel?: (query: string) => ModelPickerValue | undefined;
   /** Marked "Default" in the list. */
   defaultModel?: ModelPickerValue;
   /** Trigger content. Defaults to the selected provider's icon and the model's readable name. */
@@ -42,6 +43,7 @@ export interface ModelPickerProps {
   unavailableReason?: string;
   side?: 'top' | 'bottom';
   align?: 'start' | 'end';
+  chevron?: boolean;
   triggerClassName?: string;
   'aria-label'?: string;
 }
@@ -57,6 +59,7 @@ export function ModelPicker({
   providers,
   value,
   onValueChange,
+  customModel,
   defaultModel,
   children,
   renderProviderIcon = defaultProviderIcon,
@@ -69,6 +72,7 @@ export function ModelPicker({
   unavailableReason,
   side = 'top',
   align = 'end',
+  chevron = true,
   triggerClassName,
   'aria-label': ariaLabel,
 }: ModelPickerProps) {
@@ -84,7 +88,7 @@ export function ModelPicker({
   const triggerProps = {
     type: 'button' as const,
     disabled: busy,
-    'aria-label': ariaLabel,
+    'aria-label': ariaLabel ?? (!children && value?.model ? `Model: ${formatModelName(value.model)}` : undefined),
     'aria-busy': busy,
     title: value ? `${value.provider}/${value.model}` : undefined,
   };
@@ -95,12 +99,18 @@ export function ModelPicker({
         <>
           <span className="sr-only">Model: </span>
           {value?.provider ? <span className="flex shrink-0">{renderProviderIcon(value.provider)}</span> : null}
-          <span className="truncate max-sm:max-w-28">
+          <span className="truncate max-sm:max-w-28" data-composer-line-hidden={value?.provider ? true : undefined}>
             {value?.model ? formatModelName(value.model) : 'Select model'}
           </span>
         </>
       )}
-      <IconChevronBottom aria-hidden className="shrink-0" size={12} />
+      {chevron && (
+        <IconChevronDownMedium
+          aria-hidden
+          className="size-icon-xs shrink-0"
+          data-composer-line-hidden={children || value?.provider ? true : undefined}
+        />
+      )}
     </>
   );
 
@@ -144,6 +154,7 @@ export function ModelPicker({
       value={value}
       defaultModel={defaultModel}
       onSelect={select}
+      customModel={customModel}
       initialProviderFilter={openOnSelectedProvider ? selectedProvider?.id : undefined}
       renderProviderIcon={renderProviderIcon}
       header={header}
@@ -178,9 +189,7 @@ export function ModelPicker({
         <DrawerContent
           showCloseButton={false}
           initialFocus={false}
-          // The muted frame matches the popover, so the inset card reads the same in both themes. The
-          // handle is muted too, so it takes the side handle's stronger fill to stay visible on the frame.
-          className="bg-muted pb-[max(0.75rem,env(safe-area-inset-bottom))] **:data-[slot=drawer-handle]:bg-border-strong"
+          className="pb-[max(0.75rem,env(safe-area-inset-bottom))]"
         >
           <DrawerTitle className="sr-only">Choose a model</DrawerTitle>
           {panel}
@@ -199,8 +208,7 @@ export function ModelPicker({
       <PopoverContent
         side={side}
         align={align}
-        // An inset card holds search and the list; the header and settings sit on the frame around it.
-        className="w-80 rounded-[calc(var(--radius-xl)+--spacing(1))] bg-muted p-1"
+        className="w-80 rounded-[calc(var(--radius-xl)+--spacing(1))] p-1"
         // A touch open (e.g. a tablet) would raise the keyboard over the list; search stays one tap away.
         initialFocus={openType => openType !== 'touch'}
       >

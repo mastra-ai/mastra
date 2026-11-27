@@ -30,9 +30,8 @@ import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 import { IconAgents } from '@/ds/icons/central/IconAgents';
 import { IconBox } from '@/ds/icons/central/IconBox';
 import { IconBranch } from '@/ds/icons/central/IconBranch';
-import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
-import { IconBubbleWide } from '@/ds/icons/central/IconBubbleWide';
 import { IconBuildings } from '@/ds/icons/central/IconBuildings';
+import { IconChatBubble7 } from '@/ds/icons/central/IconChatBubble7';
 import { IconChip } from '@/ds/icons/central/IconChip';
 import { IconCloud } from '@/ds/icons/central/IconCloud';
 import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
@@ -54,7 +53,7 @@ import { IconSignalTower } from '@/ds/icons/central/IconSignalTower';
 import { IconStar } from '@/ds/icons/central/IconStar';
 import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
 import { IconTag } from '@/ds/icons/central/IconTag';
-import { IconThumbsUp } from '@/ds/icons/central/IconThumbsUp';
+import { IconThumbUpSimple } from '@/ds/icons/central/IconThumbUpSimple';
 import { IconUser } from '@/ds/icons/central/IconUser';
 
 export type {
@@ -79,6 +78,7 @@ export const ROOT_ENTITY_TYPE_OPTIONS = [
   { label: 'Scorer', entityType: ROOT_ENTITY_TYPES.SCORER },
   { label: 'Ingest', entityType: ROOT_ENTITY_TYPES.INGEST },
   { label: 'Classifier', entityType: ROOT_ENTITY_TYPES.CLASSIFIER },
+  { label: 'MCP Server', entityType: ROOT_ENTITY_TYPES.MCP_SERVER },
 ] as const satisfies readonly EntityOptions[];
 
 export type TraceStatusFilter = 'running' | 'success' | 'error';
@@ -173,6 +173,12 @@ export const TRACE_PROPERTY_FILTER_PARAM_BY_FIELD = {
   'spans.timeToFirstChunkMs': 'filterSpanTimeToFirstChunkMs',
   'spans.timeToFirstTokenMs': 'filterSpanTimeToFirstTokenMs',
   'spans.error': 'filterSpanError',
+  'spans.input': 'filterSpanInput',
+  'spans.output': 'filterSpanOutput',
+  'spans.inputPreview': 'filterSpanInputPreview',
+  'spans.outputPreview': 'filterSpanOutputPreview',
+  'spans.errorPreview': 'filterSpanErrorPreview',
+  'spans.all': 'filterSpanAll',
   'scores.scorerId': 'filterScorerId',
   'scores.score': 'filterScore',
   'feedback.feedbackType': 'filterFeedbackType',
@@ -201,7 +207,7 @@ export const traceFilterTokenOperator = (token: TraceFilterToken): TraceFilterOp
 
 /** The legacy pick-multi neutral value. A text-match literal `Any` is a real word, not the sentinel. */
 export const isLegacyAnyValue = (value: unknown, operatorId: TraceFilterOperatorId): boolean =>
-  value === 'Any' && operatorId !== 'matches' && operatorId !== 'notMatches';
+  value === 'Any' && operatorId !== 'matches' && operatorId !== 'notMatches' && operatorId !== 'hasAllTokens';
 
 const readTraceFilterOperator = (searchParams: URLSearchParams, valueParam: string) => {
   const raw = searchParams.get(traceFilterOperatorParam(valueParam));
@@ -299,6 +305,7 @@ export const TRACE_FILTER_BAR_OPERATORS: (FilterBarOperator & { id: TraceFilterO
   { id: 'lte', label: 'at most' },
   { id: 'matches', label: 'matches', freeText: true },
   { id: 'notMatches', label: 'does not match', freeText: true },
+  { id: 'hasAllTokens', label: 'contains words', freeText: true },
 ];
 
 export const TRACE_STRING_OPERATORS: TraceFilterOperatorId[] = ['is', 'isNot', 'in', 'notIn', 'exists', 'notExists'];
@@ -387,7 +394,7 @@ const TRACE_FILTER_BAR_FIELD_ICONS: Record<string, LucideIcon> = {
   environment: IconGlobe,
   traceId: IconAgents,
   runId: IconPlay,
-  threadId: IconBubbleWide,
+  threadId: IconChatBubble7,
   sessionId: IconLayersTwo,
   requestId: IconSignalTower,
   resourceId: IconHashtag,
@@ -407,13 +414,14 @@ const TRACE_FILTER_BAR_FIELD_ICONS: Record<string, LucideIcon> = {
   'spans.error': IconExclamationTriangle,
   'scores.scorerId': IconGauge,
   'scores.score': IconPercent,
-  'feedback.feedbackType': IconThumbsUp,
+  'feedback.feedbackType': IconThumbUpSimple,
   'feedback.value': IconStar,
-  'feedback.comment': IconBubbleText,
+  'feedback.comment': IconChatBubble7,
 };
 
 /** Which optional trace query fields the server declares support for. */
 export type TraceQueryFieldSupport = {
+  withTokenSearch?: boolean;
   /** Root `durationMs`, declared by `traceQueryRootDuration`. */
   withRootDuration?: boolean;
   /** Root and span `timeToFirstChunkMs`, declared by `traceQueryTimeToFirstChunk`. */
@@ -564,8 +572,10 @@ export function createTraceFilterBarFields({
 }: TraceQueryFieldSupport & {
   /** Trace-scope field descriptors from the query discovery endpoint. Empty when discovery is unavailable. */
   canonicalTraceFields?: readonly TraceQueryCanonicalFieldDescriptor[];
-  availableRootEntityNames: string[];
-  availableEnvironments: string[];
+  /** The root entity names to pick from. Omitted, `entityName` takes free text. */
+  availableRootEntityNames?: string[];
+  /** The environments to pick from. Omitted, `environment` takes free text. */
+  availableEnvironments?: string[];
   hiddenFieldIds?: readonly string[];
   /** Discovered `metadata.<key>` paths with a lazy value-suggestions resolver each. */
   metadataFields?: readonly TraceMetadataFilterField[];
@@ -587,6 +597,13 @@ export function createTraceFilterBarFields({
     strict: true,
     suggestions,
   });
+  const toOptions = (values: string[]) => values.map(value => ({ value }));
+  // A known list of values is a strict pick; without one, the host has nothing to offer and the value is typed.
+  const pickOrText = (
+    id: string,
+    values: string[] | undefined,
+    operators: TraceFilterOperatorId[] = TRACE_STRING_OPERATORS,
+  ): FilterBarField => (values ? pick(id, toOptions(values), operators) : { ...traceFieldBase(id), operators });
   const text = (id: string): FilterBarField => ({
     ...traceFieldBase(id),
     operators: id === 'traceId' ? TRACE_REQUIRED_STRING_OPERATORS : TRACE_STRING_OPERATORS,
@@ -613,20 +630,13 @@ export function createTraceFilterBarFields({
       ROOT_ENTITY_TYPE_OPTIONS.map(o => ({ value: o.entityType, label: o.label })),
       TRACE_SYNTHETIC_OPERATORS,
     ),
-    pick(
-      'entityName',
-      availableRootEntityNames.map(name => ({ value: name })),
-      TRACE_REQUIRED_STRING_OPERATORS,
-    ),
+    pickOrText('entityName', availableRootEntityNames, TRACE_REQUIRED_STRING_OPERATORS),
     pick(
       'status',
       TRACE_STATUS_OPTIONS.filter(o => o.value !== 'running').map(o => ({ value: o.value, label: o.label })),
       TRACE_SYNTHETIC_OPERATORS,
     ),
-    pick(
-      'environment',
-      availableEnvironments.map(env => ({ value: env })),
-    ),
+    pickOrText('environment', availableEnvironments),
   ];
   const textFields = TRACE_FILTER_BAR_TEXT_FIELD_IDS.map(text);
   const relatedFields = (['spans', 'scores', 'feedback'] as const).flatMap(scope =>
@@ -781,10 +791,9 @@ export function getTracePropertyFilterTokens(searchParams: URLSearchParams): Tra
     const operatorId = readTraceFilterOperator(searchParams, paramName);
     const raw = searchParams.getAll(paramName);
 
-    // Presence-only fields can't match a value; a hand-edited URL that gives
-    // them one would show a chip for a filter that is never applied. A pending
-    // chip (empty value, no operator yet) must still survive the round-trip.
-    if (TRACE_FILTER_BAR_PRESENCE_FIELD_IDS.has(fieldId)) {
+    // Error supports presence and gated word search. Other value operators are
+    // invalid; retain pending chips so users can finish selecting an operator.
+    if (TRACE_FILTER_BAR_PRESENCE_FIELD_IDS.has(fieldId) && operatorId !== 'hasAllTokens') {
       if (operatorId ? !isPresenceOperator(operatorId) : Boolean(raw[0])) continue;
     }
 

@@ -75,17 +75,25 @@ async function main() {
     model: openai('gpt-4o-mini'),
     tools: { wait_gate: waitGate, lookup_status: lookup },
   });
-  const redisPubsub = new RedisStreamsPubSub({ url: REDIS_URL, keyPrefix: KEY_PREFIX, blockMs: 200 });
+  const writer = createClient<{}, {}, {}, 2, {}>({ url: REDIS_URL });
+  const redisPubsub = new RedisStreamsPubSub({ client: writer, keyPrefix: KEY_PREFIX, blockMs: 200 });
   const cache = new RedisServerCache(
     { client: cacheClient as any },
     { ...nodeRedisPreset, keyPrefix: `${KEY_PREFIX}:cache` },
   );
   const pubsub = process.env.PREWRAPPED_PUBSUB === '1' ? new CachingPubSub(redisPubsub, cache) : redisPubsub;
-  const agent = ENGINE === 'evented' ? createEventedAgent({ agent: base }) : createDurableAgent({ agent: base });
+  const executionEngine = ENGINE === 'native-default' ? 'default' : ENGINE === 'native-evented' ? 'evented' : undefined;
+  const storage = new LibSQLStore({ id: 'observe-storage', url: STORAGE_URL! });
+  const agent = executionEngine
+    ? base
+    : ENGINE === 'evented'
+      ? createEventedAgent({ agent: base })
+      : createDurableAgent({ agent: base });
 
   const mastra = new Mastra({
     logger: false,
-    storage: new LibSQLStore({ id: 'observe-storage', url: STORAGE_URL! }),
+    storage,
+    ...(executionEngine && { durable: { executionEngine } }),
     pubsub,
     cache,
     agents: { observerAgent: agent },
@@ -163,6 +171,104 @@ async function main() {
     stream,
     approve,
     observe,
+    async followUpAtFinish(cmd) {
+      const releaseLease = redisPubsub.releaseLease.bind(redisPubsub);
+      const acquireLease = redisPubsub.acquireLease.bind(redisPubsub);
+      const firstRunId = `${cmd.threadId}-first`;
+      const secondRunId = `${cmd.threadId}-second`;
+      const memory = { thread: cmd.threadId, resource: 'follow-up-test' };
+      let allowRelease!: () => void;
+      const releaseGate = new Promise<void>(resolve => (allowRelease = resolve));
+      redisPubsub.releaseLease = async (key, owner) => {
+        if (key.endsWith(cmd.threadId) && owner.includes(firstRunId)) await releaseGate;
+        return releaseLease(key, owner);
+      };
+      const set = writer.set.bind(writer);
+      let releasedBetweenCommands = false;
+      let failedSets = 0;
+      if (cmd.releaseOnFailedSet) {
+        const setWithRelease: typeof writer.set = async (key, owner, options) => {
+          const result = await set(key, owner, options);
+          if (
+            typeof key === 'string' &&
+            key.endsWith(cmd.threadId) &&
+            typeof owner === 'string' &&
+            owner.includes(secondRunId) &&
+            result === null &&
+            ++failedSets === cmd.releaseOnFailedSet
+          ) {
+            const previousOwner = await writer.get(key);
+            if (!previousOwner?.includes(firstRunId))
+              throw new Error('Expected the first run to hold the thread lease');
+            await releaseLease(key.slice(`${KEY_PREFIX}:lease:`.length), previousOwner);
+            releasedBetweenCommands = true;
+          }
+          return result;
+        };
+        Object.defineProperty(writer, 'set', { configurable: true, value: setWithRelease });
+      }
+      let releaseTimer: ReturnType<typeof setTimeout> | undefined;
+      redisPubsub.acquireLease = async (key, owner, ttl) => {
+        const result = await acquireLease(key, owner, ttl);
+        if (
+          releasedBetweenCommands &&
+          key.endsWith(cmd.threadId) &&
+          owner.includes(secondRunId) &&
+          !result.acquired &&
+          result.owner === undefined
+        ) {
+          emit({ type: 'follow-up-ownerless' });
+        }
+        if (
+          !cmd.releaseOnFailedSet &&
+          !releaseTimer &&
+          key.endsWith(cmd.threadId) &&
+          owner.includes(secondRunId) &&
+          result.owner?.includes(firstRunId)
+        ) {
+          emit({ type: 'follow-up-contended' });
+          releaseTimer = setTimeout(allowRelease, 2_000);
+        }
+        return result;
+      };
+      try {
+        const first = await durable.stream('First turn', { runId: firstRunId, memory });
+        for await (const chunk of first.fullStream) {
+          if (chunk.type !== 'finish') continue;
+          const second = await durable.stream('Follow-up turn', { runId: secondRunId, memory });
+          let text = '';
+          for await (const part of second.fullStream) {
+            if (part.type === 'error') throw part.payload.error;
+            if (part.type === 'text-delta') text += part.payload.text;
+          }
+          emit({ type: 'follow-up-done', text });
+          return;
+        }
+        throw new Error('First turn ended without a finish frame');
+      } finally {
+        clearTimeout(releaseTimer);
+        if (cmd.releaseOnFailedSet) Reflect.deleteProperty(writer, 'set');
+        allowRelease();
+        redisPubsub.releaseLease = releaseLease;
+        redisPubsub.acquireLease = acquireLease;
+      }
+    },
+    async waitForSuspension(cmd) {
+      const workflows = await storage.getStore('workflows');
+      const deadline = Date.now() + 10_000;
+      while (Date.now() < deadline) {
+        const snapshot = await workflows?.loadWorkflowSnapshot({
+          workflowName: 'durable-agentic-loop',
+          runId: cmd.runId,
+        });
+        if (snapshot?.status === 'suspended') {
+          emit({ type: 'suspension-persisted', runId: cmd.runId });
+          return;
+        }
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      throw new Error(`No suspended checkpoint for ${cmd.runId}`);
+    },
     release: () => releaseGate(),
     detach: cmd => observations.get(cmd.id)?.detach(),
   };

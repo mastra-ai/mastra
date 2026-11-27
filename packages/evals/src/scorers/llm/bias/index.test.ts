@@ -116,68 +116,21 @@ describe('BiasMetric', () => {
   beforeAll(() => mock.start());
   afterAll(() => mock.saveAndStop());
 
-  it('should detect multiple severe biases (political, geographical, age)', async () => {
-    const inputMessages = [createTestMessage({ role: 'user', content: testCases[0].input, id: 'test-input' })];
-    const output = [createTestMessage({ role: 'assistant', content: testCases[0].output, id: 'test-output' })];
+  it.each([
+    ['should detect multiple severe biases (political, geographical, age)', 0],
+    ['should recognize unbiased workplace descriptions', 1],
+    ['should recognize balanced academic success discussion', 2],
+    ['should detect multiple biases in STEM discussion', 3],
+    ['should detect intersectional bias in leadership roles', 4],
+    ['should detect gender and age bias in tech', 5],
+    ['should detect geographical and socioeconomic bias in education', 6],
+    ['should identify subtle political bias in economic policy', 7],
+  ] as const)('%s', async (_title, value) => {
+    const inputMessages = [createTestMessage({ role: 'user', content: testCases[value].input, id: 'test-input' })];
+    const output = [createTestMessage({ role: 'assistant', content: testCases[value].output, id: 'test-output' })];
 
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
-    expect(result.score).toBeCloseTo(testCases[0].expectedResult.score, 1);
-  });
-
-  it('should recognize unbiased workplace descriptions', async () => {
-    const inputMessages = [createTestMessage({ role: 'user', content: testCases[1].input, id: 'test-input' })];
-    const output = [createTestMessage({ role: 'assistant', content: testCases[1].output, id: 'test-output' })];
-
-    const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
-    expect(result.score).toBeCloseTo(testCases[1].expectedResult.score, 1);
-  });
-
-  it('should recognize balanced academic success discussion', async () => {
-    const inputMessages = [createTestMessage({ role: 'user', content: testCases[2].input, id: 'test-input' })];
-    const output = [createTestMessage({ role: 'assistant', content: testCases[2].output, id: 'test-output' })];
-
-    const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
-    expect(result.score).toBeCloseTo(testCases[2].expectedResult.score, 1);
-  });
-
-  it('should detect multiple biases in STEM discussion', async () => {
-    const inputMessages = [createTestMessage({ role: 'user', content: testCases[3].input, id: 'test-input' })];
-    const output = [createTestMessage({ role: 'assistant', content: testCases[3].output, id: 'test-output' })];
-
-    const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
-    expect(result.score).toBeCloseTo(testCases[3].expectedResult.score, 1);
-  });
-
-  it('should detect intersectional bias in leadership roles', async () => {
-    const inputMessages = [createTestMessage({ role: 'user', content: testCases[4].input, id: 'test-input' })];
-    const output = [createTestMessage({ role: 'assistant', content: testCases[4].output, id: 'test-output' })];
-
-    const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
-    expect(result.score).toBeCloseTo(testCases[4].expectedResult.score, 1);
-  });
-
-  it('should detect gender and age bias in tech', async () => {
-    const inputMessages = [createTestMessage({ role: 'user', content: testCases[5].input, id: 'test-input' })];
-    const output = [createTestMessage({ role: 'assistant', content: testCases[5].output, id: 'test-output' })];
-
-    const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
-    expect(result.score).toBeCloseTo(testCases[5].expectedResult.score, 1);
-  });
-
-  it('should detect geographical and socioeconomic bias in education', async () => {
-    const inputMessages = [createTestMessage({ role: 'user', content: testCases[6].input, id: 'test-input' })];
-    const output = [createTestMessage({ role: 'assistant', content: testCases[6].output, id: 'test-output' })];
-
-    const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
-    expect(result.score).toBeCloseTo(testCases[6].expectedResult.score, 1);
-  });
-
-  it('should identify subtle political bias in economic policy', async () => {
-    const inputMessages = [createTestMessage({ role: 'user', content: testCases[7].input, id: 'test-input' })];
-    const output = [createTestMessage({ role: 'assistant', content: testCases[7].output, id: 'test-output' })];
-
-    const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
-    expect(result.score).toBeCloseTo(testCases[7].expectedResult.score, 1);
+    expect(result.score).toBeCloseTo(testCases[value].expectedResult.score, 1);
   });
 
   it('should work with model router magic string format', async () => {

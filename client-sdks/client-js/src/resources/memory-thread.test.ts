@@ -22,14 +22,9 @@ describe('MemoryThread', () => {
   });
 
   const mockFetchResponse = (data: any) => {
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => data,
-      headers: new Headers({
-        'content-type': 'application/json',
-      }),
-    });
+    (global.fetch as any).mockResolvedValueOnce(
+      new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+    );
   };
 
   describe('get', () => {

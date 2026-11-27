@@ -31,6 +31,7 @@ import type { LanguageModelUsage, ProviderMetadata } from '../stream/types';
 import { residentStepResults } from '../workflows/run-journal';
 import type { OutputWriter } from '../workflows/types';
 import type { AnyWorkspace } from '../workspace/workspace';
+import { PROCESSOR_ABORT_SIGNAL } from './abort-signal-scope';
 import { isProcessorWorkflow } from './is-processor-workflow';
 import { createProcessorSendSignal, PROCESSOR_LATE_SIGNAL_SINK } from './send-signal';
 import type { ProcessorLateSignalSink } from './send-signal';
@@ -716,10 +717,14 @@ export class ProcessorRunner {
           }
         : undefined,
     );
-    // Workflow schemas strip unknown fields. Keep the live callback off
-    // step payloads so chained processors can recover it from their run.
-    const scope = this.lateSignalSink ? workflow.mastra?.__createRunScope(run.runId) : undefined;
+    // Workflow schemas strip unknown fields and serializing pubsubs drop live objects, so
+    // evented steps read these from the run scope, not step data. The default engine still
+    // reads `abortSignal` from step data. Evented steps abort on this signal or a cancel of the
+    // processor run. The scope only exists in the caller's process; an evented step on another
+    // worker falls back to that worker's run-cancel signal.
+    const scope = this.lateSignalSink || abortSignal ? workflow.mastra?.__createRunScope(run.runId) : undefined;
     if (this.lateSignalSink) scope?.set(PROCESSOR_LATE_SIGNAL_SINK, this.lateSignalSink);
+    if (abortSignal) scope?.set(PROCESSOR_ABORT_SIGNAL, abortSignal);
     const result = await (async () => {
       try {
         return await run.start({ inputData, ...observabilityContext, requestContext, outputWriter });
@@ -1164,15 +1169,20 @@ export class ProcessorRunner {
        * `step-finish` chunk.
        */
       keepStepScopedSpans?: boolean;
+      /** End only the spans `keepStepScopedSpans` leaves open. */
+      stepScopedOnly?: boolean;
     },
   ): void {
     for (const state of processorStates.values()) {
-      state.span?.end({ output: state.getFinalOutput(), attributes: state.getFinalAttributes() });
+      if (!options?.stepScopedOnly) {
+        state.span?.end({ output: state.getFinalOutput(), attributes: state.getFinalAttributes() });
+      }
 
       for (const [key, value] of Object.entries(state.customState)) {
         if (key.startsWith('__outputStreamSpan_')) {
           const span = value as Span<SpanType.PROCESSOR_RUN> | undefined;
-          if (options?.keepStepScopedSpans && span?.parent?.type === SpanType.MODEL_STEP) {
+          const stepScoped = span?.parent?.type === SpanType.MODEL_STEP;
+          if (stepScoped ? options?.keepStepScopedSpans : options?.stepScopedOnly) {
             continue;
           }
           const durationKey = OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX + key.slice('__outputStreamSpan_'.length);

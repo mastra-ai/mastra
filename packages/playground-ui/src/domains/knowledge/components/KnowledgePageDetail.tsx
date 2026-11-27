@@ -2,8 +2,21 @@ import { createContext, useContext, useEffect, useMemo, useRef } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import type { Components, ExtraProps } from 'react-markdown';
 
+import { bodyHeadings } from '../lib/bodyHeadings';
 import { scopeTitle } from '../lib/pageAddress';
-import { knowledgePageRefIndex, noteMentionTarget } from '../lib/pageRefs';
+import {
+  KNOWLEDGE_NOTE,
+  KNOWLEDGE_PAGE_ARTICLE,
+  KNOWLEDGE_PAGE_ASIDE,
+  KNOWLEDGE_PAGE_BADGES,
+  KNOWLEDGE_PAGE_BODY,
+  KNOWLEDGE_PAGE_HEADER,
+  KNOWLEDGE_PAGE_MAIN,
+  KNOWLEDGE_PEEK_BODY,
+  KNOWLEDGE_PEEK_COUNTS,
+  KNOWLEDGE_PEEK_PREVIEW,
+} from '../lib/pageLayout';
+import { bodyLinkRefs, knowledgePageRefIndex, noteMentionTarget } from '../lib/pageRefs';
 import type { KnowledgePageRefIndex } from '../lib/pageRefs';
 import { KnowledgePagesByRef } from '../lib/pagesByRefContext';
 import { parseRecordSegments } from '../lib/recordText';
@@ -20,10 +33,15 @@ import { KnowledgeTooltip } from './KnowledgeTooltip';
 
 import { Badge } from '@/ds/components/Badge';
 import { Breadcrumb, Crumb } from '@/ds/components/Breadcrumb';
+import { Button } from '@/ds/components/Button';
+import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Metadata } from '@/ds/components/Metadata';
 import { RelativeTimestamp } from '@/ds/components/RelativeTimestamp';
+import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
+import { IconArrowLeft } from '@/ds/icons/central/IconArrowLeft';
+import { IconArrowRight } from '@/ds/icons/central/IconArrowRight';
 import { IconPin } from '@/ds/icons/central/IconPin';
 
 const ACTIVITY_LABELS: Record<KnowledgeActivityAction, string> = {
@@ -118,19 +136,51 @@ function BodySpan({ node, ...props }: ComponentProps<'span'> & ExtraProps) {
 }
 
 const BODY_REMARK_PLUGINS = [remarkKnowledgeLinks];
+
+type LinkedPage = { page: KnowledgePagePayload; count: number };
+export type PageLinkLists = { in: LinkedPage[]; out: LinkedPage[] };
+
+function linkedPages(page: KnowledgePagePayload, index: KnowledgePageRefIndex) {
+  const counts = new Map<string, { page: KnowledgePagePayload; count: number }>();
+  for (const ref of page.body ? bodyLinkRefs(page.body) : []) {
+    const target = index.resolve(ref);
+    if (!target || target.id === page.id) continue;
+    counts.set(target.id, { page: target, count: (counts.get(target.id)?.count ?? 0) + 1 });
+  }
+  return [...counts.values()];
+}
+
+export function PeekCount({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5 px-3 py-2">
+      <dt>
+        <Txt as="span" variant="caption" tone="muted">
+          {label}
+        </Txt>
+      </dt>
+      <dd>
+        <Txt as="span" variant="label" tone="ink">
+          {value}
+        </Txt>
+      </dd>
+    </div>
+  );
+}
 const BODY_COMPONENTS: Components = { span: BodySpan };
 
 export function KnowledgeDetailSection({
   label,
   count,
+  className,
   children,
 }: {
   label: string;
   count?: number;
+  className?: string;
   children: ReactNode;
 }) {
   return (
-    <section aria-label={label} className="flex flex-col gap-2">
+    <section aria-label={label} className={className ? `flex flex-col gap-2 ${className}` : 'flex flex-col gap-2'}>
       <Txt as="h3" variant="label" tone="ink" className="flex items-center gap-1.5">
         {label}
         {count ? (
@@ -206,7 +256,7 @@ export function KnowledgeNoteItem({
     <li
       ref={itemRef}
       data-highlighted={highlighted || undefined}
-      className={`flex gap-3 rounded-lg border border-border bg-card ${compact ? 'p-2' : 'p-3'}`}
+      className={KNOWLEDGE_NOTE[compact ? 'compact' : 'full']}
       style={highlighted ? { borderColor: 'var(--chart-blue)', boxShadow: '0 0 0 1px var(--chart-blue)' } : undefined}
     >
       {compact ? null : <AuthorMark author={note.provenance.author} />}
@@ -224,7 +274,7 @@ export function KnowledgeNoteItem({
             </Txt>
           ) : null}
         </div>
-        <p className="text-ui-md wrap-anywhere text-foreground">
+        <p className="text-body wrap-anywhere text-foreground">
           {parseRecordSegments(note.text).map((segment, index) => {
             if (segment.type === 'text') return <span key={index}>{segment.value}</span>;
             const target = mentionTarget(segment.value);
@@ -281,9 +331,13 @@ export function KnowledgePageDetail({
   notesMore,
   childPages,
   activity,
+  links,
+  onOpenPage,
   compact = false,
 }: {
   compact?: boolean;
+  onOpenPage?: () => void;
+  links?: PageLinkLists;
   page: KnowledgePagePayload;
   notes: KnowledgeNotePayload[];
   pin?: KnowledgePinPayload;
@@ -324,20 +378,142 @@ export function KnowledgePageDetail({
     [pagesById, ancestors, page, pagesByRef],
   );
   const bodyLinks = useMemo(() => ({ index: refIndex, onPageClick }), [refIndex, onPageClick]);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const headings = useMemo(() => (page.body ? bodyHeadings(page.body) : []), [page.body]);
+  const bodyLinkTargets = useMemo(() => linkedPages(page, refIndex), [page, refIndex]);
+  const linksTo = links?.out ?? bodyLinkTargets;
+  const linkedFrom = links?.in ?? [];
+  const linksIn = links ? links.in.length : mentionedBy.length;
+
+  const body = (
+    <BodyLinks.Provider value={bodyLinks}>
+      <MarkdownRenderer remarkPlugins={BODY_REMARK_PLUGINS} components={BODY_COMPONENTS}>
+        {page.body ?? ''}
+      </MarkdownRenderer>
+    </BodyLinks.Provider>
+  );
+  const noBody = (
+    <Txt variant="body" tone="muted">
+      This {page.isScope ? 'scope' : 'page'} has no body yet.
+    </Txt>
+  );
+  const noteList = (items: KnowledgeNotePayload[]) => (
+    <ul className="flex flex-col gap-2">
+      {items.map(note => {
+        const highlighted = !!highlightMentionOf && note.mentions.includes(highlightMentionOf);
+        const takeRef = highlighted && !highlightRefSet;
+        if (takeRef) highlightRefSet = true;
+        return (
+          <KnowledgeNoteItem
+            key={note.id}
+            note={note}
+            pagesById={notePages}
+            onPageClick={onPageClick}
+            highlighted={highlighted}
+            compact={compact}
+            itemRef={
+              takeRef
+                ? element => {
+                    firstHighlighted.current = element;
+                  }
+                : undefined
+            }
+          />
+        );
+      })}
+    </ul>
+  );
+  const mentioning = highlightMentionOf ? notes.filter(note => note.mentions.includes(highlightMentionOf)) : [];
+  const latest = notes.reduce<KnowledgeNotePayload | undefined>(
+    (newest, note) => (!newest || note.updatedAt > newest.updatedAt ? note : newest),
+    undefined,
+  );
+  const peekNotes = mentioning.length > 0 ? mentioning : latest ? [latest] : [];
+  const connections =
+    linksTo.length > 0 || linkedFrom.length > 0 || mentionedBy.length > 0 ? (
+      <KnowledgeDetailSection
+        label="Connections"
+        count={linksTo.length + Math.max(linkedFrom.length, mentionedBy.length)}
+      >
+        <div className="flex flex-col gap-4">
+          {linksTo.length > 0 ? (
+            <section aria-label="Links to" className="flex flex-col gap-1.5">
+              <Txt as="h4" variant="caption" tone="muted">
+                Links to
+              </Txt>
+              <ul className="flex flex-col gap-1">
+                {linksTo.map(({ page: target, count }) => (
+                  <li key={target.id} className="flex min-w-0 items-center gap-2">
+                    <IconArrowRight aria-hidden className="size-icon-xs shrink-0 text-muted-foreground" />
+                    <button
+                      type="button"
+                      className="min-w-0 truncate text-left text-body-sm text-foreground hover:underline"
+                      onClick={() => onPageClick(target)}
+                    >
+                      {scopeTitle(target)}
+                    </button>
+                    {count > 1 ? (
+                      <Txt as="span" variant="caption" tone="muted" className="tabular-nums">
+                        ×{count}
+                      </Txt>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+          {linkedFrom.length > 0 ? (
+            <section aria-label="Linked from" className="flex flex-col gap-1.5">
+              <Txt as="h4" variant="caption" tone="muted">
+                Linked from
+              </Txt>
+              <ul className="flex flex-col gap-1">
+                {linkedFrom.map(({ page: source, count }) => (
+                  <li key={source.id} className="flex min-w-0 items-center gap-2">
+                    <IconArrowLeft aria-hidden className="size-icon-xs shrink-0 text-muted-foreground" />
+                    <button
+                      type="button"
+                      className="min-w-0 truncate text-left text-body-sm text-foreground hover:underline"
+                      onClick={() => onPageClick(source)}
+                    >
+                      {scopeTitle(source)}
+                    </button>
+                    {count > 1 ? (
+                      <Txt as="span" variant="caption" tone="muted" className="tabular-nums">
+                        ×{count}
+                      </Txt>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+          {mentionedBy.length > 0 ? (
+            <section aria-label="Mentioned in" className="flex flex-col gap-1.5">
+              <Txt as="h4" variant="caption" tone="muted">
+                Mentioned in
+              </Txt>
+              <ul className="flex flex-col gap-2">
+                {mentionedBy.map(note => (
+                  <KnowledgeNoteItem
+                    key={note.id}
+                    note={note}
+                    pagesById={notePages}
+                    onPageClick={onPageClick}
+                    showPage
+                    compact
+                  />
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </div>
+      </KnowledgeDetailSection>
+    ) : null;
 
   return (
-    <article
-      key={page.id}
-      aria-label={page.name}
-      className="@container flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain"
-    >
-      <header
-        className={
-          compact
-            ? 'flex flex-col gap-3 border-b border-surface-rim px-4 pt-3 pb-4'
-            : 'flex flex-col gap-3 border-b border-border bg-fill-subtle px-6 pt-5 pb-4'
-        }
-      >
+    <article key={page.id} aria-label={page.name} className={KNOWLEDGE_PAGE_ARTICLE}>
+      <header className={KNOWLEDGE_PAGE_HEADER[compact ? 'compact' : 'full']}>
         <Breadcrumb label="Breadcrumb" className="ml-[-.9em] min-w-0" listClassName="overflow-hidden">
           {ancestors.map(ancestor => (
             <Crumb key={ancestor.id} as="button" onClick={() => onPageClick(ancestor)}>
@@ -363,130 +539,167 @@ export function KnowledgePageDetail({
             </div>
           )}
           {page.description ? (
-            <Txt variant="body" tone="muted">
+            <Txt variant="body" tone="muted" className={`wrap-anywhere ${compact ? 'line-clamp-3' : 'line-clamp-6'}`}>
               {page.description}
             </Txt>
           ) : null}
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <div className={KNOWLEDGE_PAGE_BADGES}>
             <Badge variant={page.isScope ? 'info' : 'neutral'} size="sm">
               {kind}
             </Badge>
             {pin ? (
-              <Badge variant="warning" size="sm" icon={<IconPin size={10} aria-hidden />}>
+              <Badge variant="warning" size="sm" icon={<IconPin aria-hidden />}>
                 {pin.audience.length > 0 ? `Pinned for ${pin.audience.join(', ')}` : 'Pinned'}
               </Badge>
             ) : null}
-            <Txt as="span" variant="caption" tone="muted" data-testid="knowledge-page-version">
-              <Metadata>
-                {page.isScope ? null : <Metadata.Item>In {scope ? scopeTitle(scope) : page.scopeId}</Metadata.Item>}
-                {compact ? <Metadata.Item>v{page.version}</Metadata.Item> : null}
-                <Metadata.Item>
-                  Updated{' '}
-                  <RelativeTimestamp value={page.updatedAt} label={`Updated by ${authorName(page.updatedBy.author)}`} />
-                </Metadata.Item>
-              </Metadata>
-            </Txt>
+            {compact ? (
+              <Txt as="span" variant="caption" tone="muted" data-testid="knowledge-page-version">
+                <Metadata>
+                  {page.isScope || !scope ? null : <Metadata.Item>In {scopeTitle(scope)}</Metadata.Item>}
+                  <Metadata.Item>v{page.version}</Metadata.Item>
+                  <Metadata.Item>
+                    Updated{' '}
+                    <RelativeTimestamp
+                      value={page.updatedAt}
+                      label={`Updated by ${authorName(page.updatedBy.author)}`}
+                    />
+                  </Metadata.Item>
+                </Metadata>
+              </Txt>
+            ) : null}
           </div>
         </div>
       </header>
 
-      <div className={`flex flex-col gap-8 ${compact ? 'p-4' : 'p-6'} @4xl:flex-row`}>
-        <div className="flex min-w-0 flex-col gap-8 @4xl:flex-1">
-          {page.body ? (
-            <div data-testid="knowledge-page-body" className="max-w-3xl">
-              <BodyLinks.Provider value={bodyLinks}>
-                <MarkdownRenderer remarkPlugins={BODY_REMARK_PLUGINS} components={BODY_COMPONENTS}>
-                  {page.body}
-                </MarkdownRenderer>
-              </BodyLinks.Provider>
-            </div>
-          ) : (
-            <Txt variant="body" tone="muted">
-              This {page.isScope ? 'scope' : 'page'} has no body yet.
-            </Txt>
-          )}
-
-          {notes.length > 0 || notesMore ? (
-            <KnowledgeDetailSection label="Notes" count={notesMore ? undefined : notes.length}>
-              <ul className="flex flex-col gap-2">
-                {notes.map(note => {
-                  const highlighted = !!highlightMentionOf && note.mentions.includes(highlightMentionOf);
-                  const takeRef = highlighted && !highlightRefSet;
-                  if (takeRef) highlightRefSet = true;
-                  return (
-                    <KnowledgeNoteItem
-                      key={note.id}
-                      note={note}
-                      pagesById={notePages}
-                      onPageClick={onPageClick}
-                      highlighted={highlighted}
-                      itemRef={
-                        takeRef
-                          ? element => {
-                              firstHighlighted.current = element;
-                            }
-                          : undefined
-                      }
-                    />
-                  );
-                })}
-              </ul>
-              {notesMore}
+      {compact ? (
+        <div className={KNOWLEDGE_PEEK_BODY}>
+          <dl aria-label="Links and notes" className={KNOWLEDGE_PEEK_COUNTS}>
+            <PeekCount label="Links in" value={linksIn} />
+            <PeekCount label="Links out" value={linksTo.length} />
+            <PeekCount label="Notes" value={notesMore ? `${notes.length}+` : notes.length} />
+          </dl>
+          {/* The preview takes the panel's free height: a long body scrolls inside it, down to 12rem. */}
+          <KnowledgeDetailSection label="Preview" className={KNOWLEDGE_PEEK_PREVIEW}>
+            {page.body ? (
+              <ScrollArea className="min-h-0">
+                <div data-testid="knowledge-page-body">{body}</div>
+              </ScrollArea>
+            ) : (
+              noBody
+            )}
+          </KnowledgeDetailSection>
+          {connections}
+          {peekNotes.length > 0 ? (
+            <KnowledgeDetailSection label={highlightMentionOf ? 'Notes that mention it' : 'Latest note'}>
+              {noteList(peekNotes)}
+              {onOpenPage && notes.length > peekNotes.length ? (
+                <Button variant="ghost" size="sm" className="self-start" onClick={onOpenPage}>
+                  All {notesMore ? '' : `${notes.length} `}notes
+                </Button>
+              ) : null}
             </KnowledgeDetailSection>
           ) : null}
         </div>
+      ) : (
+        <div className={KNOWLEDGE_PAGE_BODY}>
+          <div className={KNOWLEDGE_PAGE_MAIN}>
+            {page.body ? (
+              <div ref={bodyRef} data-testid="knowledge-page-body" className="max-w-3xl">
+                {body}
+              </div>
+            ) : (
+              noBody
+            )}
 
-        <aside className="flex min-w-0 flex-col divide-y divide-border border-t border-border *:py-6 *:last:pb-0 @4xl:w-72 @4xl:shrink-0 @4xl:border-t-0 @4xl:border-l @4xl:pl-8 @4xl:*:first:pt-0">
-          {childPages}
+            {notes.length > 0 || notesMore ? (
+              <KnowledgeDetailSection label="Notes" count={notesMore ? undefined : notes.length}>
+                {noteList(notes)}
+                {notesMore}
+              </KnowledgeDetailSection>
+            ) : null}
+          </div>
 
-          {mentionedBy.length > 0 ? (
-            <KnowledgeDetailSection label="Mentioned in" count={mentionedBy.length}>
-              <ul className="flex flex-col gap-2">
-                {mentionedBy.map(note => (
-                  <KnowledgeNoteItem
-                    key={note.id}
-                    note={note}
-                    pagesById={notePages}
-                    onPageClick={onPageClick}
-                    showPage
-                    compact
-                  />
-                ))}
-              </ul>
+          <aside className={KNOWLEDGE_PAGE_ASIDE}>
+            {headings.length > 1 ? (
+              <KnowledgeDetailSection label="On this page">
+                <ol className="flex flex-col gap-1.5 border-l border-border">
+                  {headings.map((heading, index) => (
+                    <li key={index} className={heading.depth > 2 ? 'pl-6' : 'pl-3'}>
+                      <button
+                        type="button"
+                        className="text-left text-body-sm text-muted-foreground hover:text-foreground"
+                        onClick={() => {
+                          const shown = bodyRef.current?.querySelectorAll('h1, h2, h3');
+                          shown?.[index]?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+                        }}
+                      >
+                        <span className="line-clamp-2 wrap-anywhere">{heading.text}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+              </KnowledgeDetailSection>
+            ) : null}
+
+            <KnowledgeDetailSection label="Details">
+              <DataKeysAndValues>
+                {page.isScope ? null : (
+                  <>
+                    <DataKeysAndValues.Key>Scope</DataKeysAndValues.Key>
+                    <DataKeysAndValues.Value>{scope ? scopeTitle(scope) : page.scopeId}</DataKeysAndValues.Value>
+                  </>
+                )}
+                <DataKeysAndValues.Key>Updated</DataKeysAndValues.Key>
+                <DataKeysAndValues.Value>
+                  <RelativeTimestamp value={page.updatedAt} />
+                </DataKeysAndValues.Value>
+                <DataKeysAndValues.Key>By</DataKeysAndValues.Key>
+                <DataKeysAndValues.Value>{authorName(page.updatedBy.author)}</DataKeysAndValues.Value>
+                <DataKeysAndValues.Key>Created</DataKeysAndValues.Key>
+                <DataKeysAndValues.Value>
+                  <RelativeTimestamp value={page.createdAt} />
+                </DataKeysAndValues.Value>
+                <DataKeysAndValues.Key>Version</DataKeysAndValues.Key>
+                <DataKeysAndValues.Value>v{page.version}</DataKeysAndValues.Value>
+              </DataKeysAndValues>
             </KnowledgeDetailSection>
-          ) : null}
 
-          {activity && activity.length > 0 ? (
-            <KnowledgeDetailSection label="Activity">
-              <ol className="relative flex flex-col gap-3 border-l border-border pl-4">
-                {activity.map(event => (
-                  <li key={event.id} className="relative flex flex-col">
-                    <span
-                      aria-hidden
-                      className="absolute top-1.5 -left-5 size-2 rounded-full border border-border bg-card"
-                    />
-                    <Txt as="span" variant="body-sm" tone="ink">
-                      {ACTIVITY_LABELS[event.action] ?? event.action}
-                    </Txt>
-                    <Txt as="span" variant="caption" tone="muted" className="min-w-0">
-                      <Metadata singleLine>
-                        <Metadata.Item className="min-w-0">
-                          <KnowledgeTooltip label={event.provenance.author}>
-                            <span className="truncate">{authorName(event.provenance.author)}</span>
-                          </KnowledgeTooltip>
-                        </Metadata.Item>
-                        <Metadata.Item className="shrink-0">
-                          <RelativeTimestamp value={event.createdAt} />
-                        </Metadata.Item>
-                      </Metadata>
-                    </Txt>
-                  </li>
-                ))}
-              </ol>
-            </KnowledgeDetailSection>
-          ) : null}
-        </aside>
-      </div>
+            {connections}
+
+            {childPages}
+
+            {activity && activity.length > 0 ? (
+              <KnowledgeDetailSection label="Activity">
+                <ol className="relative flex flex-col gap-3 border-l border-border pl-4">
+                  {activity.map(event => (
+                    <li key={event.id} className="relative flex flex-col">
+                      <span
+                        aria-hidden
+                        className="absolute top-1.5 -left-5 size-2 rounded-full border border-border bg-card"
+                      />
+                      <Txt as="span" variant="body-sm" tone="ink">
+                        {ACTIVITY_LABELS[event.action] ?? event.action}
+                      </Txt>
+                      <Txt as="span" variant="caption" tone="muted" className="min-w-0">
+                        <Metadata singleLine>
+                          <Metadata.Item className="min-w-0">
+                            <KnowledgeTooltip label={event.provenance.author}>
+                              <span className="truncate">{authorName(event.provenance.author)}</span>
+                            </KnowledgeTooltip>
+                          </Metadata.Item>
+                          <Metadata.Item className="shrink-0">
+                            <RelativeTimestamp value={event.createdAt} />
+                          </Metadata.Item>
+                        </Metadata>
+                      </Txt>
+                    </li>
+                  ))}
+                </ol>
+              </KnowledgeDetailSection>
+            ) : null}
+          </aside>
+        </div>
+      )}
     </article>
   );
 }

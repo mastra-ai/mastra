@@ -4,18 +4,22 @@
  * Used by the ask_user tool to collect structured answers from the user.
  */
 
-import { Box, getKeybindings, Input, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
-import type { Focusable, SelectItem, Component, TUI } from '@earendil-works/pi-tui';
+import { Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
+import type { Focusable, SelectItem, Component, TUI, Input } from '@earendil-works/pi-tui';
 import { theme, getSelectListTheme, getEditorTheme } from '../theme.js';
 import type { AskQuestionSelectionMode } from './ask-question-inline.js';
+import { MaskedInput } from './masked-input.js';
+import type { MenuChrome, MenuHint } from './menu-chrome.js';
+import { MenuList } from './menu-list.js';
 import { MultilineInput } from './multiline-input.js';
+import { TextInput } from './text-input.js';
 import { WrappingSelectList } from './wrapping-select-list.js';
 
 export interface AskQuestionDialogOptions {
   question: string;
   /** Dialog heading. Defaults to "Question". */
   title?: string;
-  options?: Array<{ label: string; description?: string }>;
+  options?: Array<{ label: string; description?: string; recommended?: boolean }>;
   /** Controls whether options are single- or multi-select. Defaults to single_select. */
   selectionMode?: AskQuestionSelectionMode;
   /**
@@ -23,6 +27,8 @@ export interface AskQuestionDialogOptions {
    * Defaults to false. Enable for prompts that legitimately want paragraph-length replies.
    */
   multiline?: boolean;
+  /** Show typed text as asterisks, for secrets. Applies to single-line input only. */
+  masked?: boolean;
   allowEmptyInput?: boolean;
   defaultValue?: string;
   allowCustomResponse?: boolean;
@@ -37,13 +43,15 @@ export interface AskQuestionDialogOptions {
   onCancel: () => void;
 }
 
-export class AskQuestionDialogComponent extends Box implements Focusable {
+export class AskQuestionDialogComponent extends Container implements Focusable, MenuChrome {
   private static readonly CUSTOM_RESPONSE_VALUE = '__custom_response__';
 
-  private selectList?: SelectList | WrappingSelectList;
-  private input?: Input | MultilineInput;
+  private selectList?: MenuList | WrappingSelectList;
+  private readonly title: string;
+  private input?: Input | MaskedInput | MultilineInput;
   private tui?: TUI;
   private multiline = false;
+  private masked = false;
   private multiSelect = false;
   private allowEmptyInput = false;
   private defaultValue?: string;
@@ -66,28 +74,30 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
   }
 
   constructor(options: AskQuestionDialogOptions) {
-    super(2, 1, text => theme.bg('overlayBg', text));
+    super();
 
     this.onSubmit = options.onSubmit;
     this.onSubmitMulti = options.onSubmitMulti;
     this.onCancel = options.onCancel;
     this.tui = options.tui;
     this.multiline = Boolean(options.multiline);
+    this.masked = Boolean(options.masked);
     this.multiSelect = options.selectionMode === 'multi_select';
     this.allowEmptyInput = Boolean(options.allowEmptyInput);
     this.defaultValue = options.defaultValue;
     this.allowCustomResponse = options.allowCustomResponse ?? true;
     this.selectedOptionLabel = options.selectedOptionLabel;
 
-    // Title
-    this.addChild(new Text(theme.bold(theme.fg('accent', options.title ?? 'Question')), 0, 0));
-    this.addChild(new Spacer(1));
-
-    // Question text (may be multi-line)
-    for (const line of options.question.split('\n')) {
-      this.addChild(new Text(theme.fg('text', line), 0, 0));
+    // A short one-line question is the menu's title (its search placeholder); otherwise the title is
+    // shown there and the question above the options.
+    const shortQuestion = !options.title && !options.question.includes('\n') && options.question.length <= 70;
+    this.title = shortQuestion ? options.question.replace(/[:?]$/, '') : (options.title ?? 'Question');
+    if (!shortQuestion) {
+      for (const line of options.question.split('\n')) {
+        this.addChild(new Text(theme.fg('text', line), 0, 0));
+      }
+      this.addChild(new Spacer(1));
     }
-    this.addChild(new Spacer(1));
 
     if (options.options && options.options.length > 0) {
       this.buildSelectMode(options.options);
@@ -96,30 +106,36 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
     }
   }
 
-  private buildSelectMode(opts: Array<{ label: string; description?: string }>): void {
+  private buildSelectMode(opts: Array<{ label: string; description?: string; recommended?: boolean }>): void {
     // Each option renders as one row; a newline in a label or description (e.g. a
-    // multi-line schedule prompt) would spill the row out of the overlay.
+    // multi-line schedule prompt) would spill the row out of the menu.
     const singleLine = (text: string) => text.replace(/\s*[\r\n]+\s*/g, ' ').trim();
     const items: SelectItem[] = opts.map(opt => {
-      const label = singleLine(opt.label);
-      const description = opt.description ? singleLine(opt.description) : '';
-      return {
-        value: opt.label,
-        label: description ? `  ${label}  ${theme.fg('dim', description)}` : `  ${label}`,
-      };
+      // The tag leads the description: a long label is cut to its column, which would hide it there.
+      const description = [
+        opt.recommended ? theme.fg('accent', '(recommended)') : '',
+        opt.description ? singleLine(opt.description) : '',
+      ]
+        .filter(Boolean)
+        .join('  ');
+      return { value: opt.label, label: singleLine(opt.label), description: description || undefined };
     });
 
     // "Custom response..." only applies to single-select: it switches to free-text.
     if (this.allowCustomResponse && !this.multiSelect) {
       items.push({
         value: AskQuestionDialogComponent.CUSTOM_RESPONSE_VALUE,
-        label: `  ${theme.fg('dim', '✎ Custom response...')}`,
+        label: theme.fg('dim', '✎ Custom response...'),
       });
     }
 
-    let hintText: string;
     if (this.multiSelect) {
-      const list = new WrappingSelectList(items, Math.min(items.length, 8), getSelectListTheme(), true);
+      // The multi-select list has no description column, so descriptions follow the label.
+      const multiItems = items.map(item => ({
+        ...item,
+        label: item.description ? `${item.label}  ${theme.fg('dim', item.description)}` : item.label,
+      }));
+      const list = new WrappingSelectList(multiItems, Math.min(items.length, 8), getSelectListTheme(), true);
       list.onConfirmMulti = (selected: SelectItem[]) => {
         const values = selected.map(item => item.value);
         if (this.onSubmitMulti) {
@@ -130,9 +146,8 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
       };
       list.onCancel = this.onCancel;
       this.selectList = list;
-      hintText = '  Space to toggle · Enter to confirm · Esc to skip';
     } else {
-      const list = new SelectList(items, Math.min(items.length, 8), getSelectListTheme());
+      const list = new MenuList(items, Math.min(items.length, 8));
       const selectedIndex = items.findIndex(item => item.value === this.selectedOptionLabel);
       if (selectedIndex >= 0) list.setSelectedIndex(selectedIndex);
       list.onSelect = (item: SelectItem) => {
@@ -144,19 +159,24 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
       };
       list.onCancel = this.onCancel;
       this.selectList = list;
-      hintText = '  ↑↓ to navigate · Enter to select · Esc to skip';
     }
 
-    this.modeChildren = [];
     const selectChild = this.selectList as Component;
     this.addChild(selectChild);
-    this.modeChildren.push(selectChild);
-    const spacer = new Spacer(1);
-    this.addChild(spacer);
-    this.modeChildren.push(spacer);
-    const hint = new Text(theme.fg('dim', hintText), 0, 0);
-    this.addChild(hint);
-    this.modeChildren.push(hint);
+    this.modeChildren = [selectChild];
+  }
+
+  /** Backspace never skips the question (Esc does). */
+  readonly menuKeepsBackspace = true;
+
+  menuTitle(): string {
+    return this.title;
+  }
+
+  menuHints(): readonly MenuHint[] {
+    if (this.selectList instanceof WrappingSelectList) return [{ key: 'space', label: 'toggle' }];
+    if (this.input && this.useMultiline()) return [{ key: 'shift+enter', label: 'new line' }];
+    return [];
   }
 
   /** Whether this prompt should render a multiline editor (vs a single-line input). */
@@ -164,6 +184,7 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
     return this.multiline && Boolean(this.tui);
   }
 
+  /** Add the text input, its hint and the default value. A masked prompt uses `MaskedInput`. */
   private buildInputMode(): void {
     if (this.useMultiline()) {
       const multilineInput = new MultilineInput(this.tui!, getEditorTheme());
@@ -180,7 +201,7 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
       };
       this.input = multilineInput;
     } else {
-      this.input = new Input();
+      this.input = this.masked ? new MaskedInput() : new TextInput();
       this.input.onSubmit = (value: string) => {
         const trimmed = value.trim();
         if (trimmed || this.allowEmptyInput) {
@@ -189,19 +210,8 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
       };
     }
 
-    this.modeChildren = [];
-    const inputChild = this.input;
-    this.addChild(inputChild);
-    this.modeChildren.push(inputChild);
-    const spacer = new Spacer(1);
-    this.addChild(spacer);
-    this.modeChildren.push(spacer);
-    const hintText = this.useMultiline()
-      ? '  Enter to submit · Shift+Enter for new line · \\+Enter for new line · Esc to skip'
-      : '  Enter to submit · Esc to skip';
-    const hint = new Text(theme.fg('dim', hintText), 0, 0);
-    this.addChild(hint);
-    this.modeChildren.push(hint);
+    this.addChild(this.input);
+    this.modeChildren = [this.input];
 
     if (this.defaultValue) {
       (this.input as Input).setValue?.(this.defaultValue);

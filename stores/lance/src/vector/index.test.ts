@@ -549,6 +549,253 @@ describe('Lance vector store tests', () => {
         // Cleanup
         await vectorDB.deleteTable(nonExistentTable);
       });
+
+      describe('metadata column preparation (issue #31592)', () => {
+        const indexColumn = 'vector';
+
+        it('should accept a literal dotted metadata key after createIndex pre-creates an empty table', async () => {
+          const tableName = 'lance-dotted-key-preindex-' + Date.now();
+          const rowId = 'dotted-preindex-1';
+
+          await vectorDB.createIndex({
+            indexConfig: {
+              type: 'ivfflat',
+              numPartitions: 1,
+              numSubVectors: 1,
+            },
+            indexName: indexColumn,
+            dimension: 3,
+            tableName,
+          });
+
+          const ids = await vectorDB.upsert({
+            indexName: indexColumn,
+            tableName,
+            vectors: [[0.1, 0.2, 0.3]],
+            metadata: [{ 'group.sub': 'A', stage: 'ready' }],
+            ids: [rowId],
+          });
+          expect(ids).toEqual([rowId]);
+
+          const results = await vectorDB.query({
+            indexName: indexColumn,
+            tableName,
+            queryVector: [0.1, 0.2, 0.3],
+            topK: 10,
+          });
+          expect(results).toHaveLength(1);
+          expect(results[0].id).toBe(rowId);
+          expect(results[0].metadata).toEqual({ 'group.sub': 'A', stage: 'ready' });
+
+          const filtered = await vectorDB.query({
+            indexName: indexColumn,
+            tableName,
+            queryVector: [0.1, 0.2, 0.3],
+            topK: 10,
+            filter: { 'group.sub': 'A' },
+          });
+          expect(filtered.map(r => r.id)).toEqual([rowId]);
+
+          await vectorDB.deleteTable(tableName);
+        });
+
+        it('should accept a literal dotted metadata key on the first direct upsert', async () => {
+          const tableName = 'lance-dotted-key-direct-' + Date.now();
+          const rowId = 'dotted-direct-1';
+
+          const ids = await vectorDB.upsert({
+            indexName: indexColumn,
+            tableName,
+            vectors: [[0.1, 0.2, 0.3]],
+            metadata: [{ 'group.sub': 'A', stage: 'ready' }],
+            ids: [rowId],
+          });
+          expect(ids).toEqual([rowId]);
+
+          const results = await vectorDB.query({
+            indexName: indexColumn,
+            tableName,
+            queryVector: [0.1, 0.2, 0.3],
+            topK: 10,
+          });
+          expect(results).toHaveLength(1);
+          expect(results[0].id).toBe(rowId);
+          expect(results[0].metadata).toEqual({ 'group.sub': 'A', stage: 'ready' });
+
+          const filtered = await vectorDB.query({
+            indexName: indexColumn,
+            tableName,
+            queryVector: [0.1, 0.2, 0.3],
+            topK: 10,
+            filter: { 'group.sub': 'A' },
+          });
+          expect(filtered.map(r => r.id)).toEqual([rowId]);
+
+          await vectorDB.deleteTable(tableName);
+        });
+
+        it('should accept an explicit null metadata value after createIndex pre-creates an empty table', async () => {
+          const tableName = 'lance-null-preindex-' + Date.now();
+          const rowId = 'null-preindex-1';
+
+          await vectorDB.createIndex({
+            indexConfig: {
+              type: 'ivfflat',
+              numPartitions: 1,
+              numSubVectors: 1,
+            },
+            indexName: indexColumn,
+            dimension: 3,
+            tableName,
+          });
+
+          const ids = await vectorDB.upsert({
+            indexName: indexColumn,
+            tableName,
+            vectors: [[0.1, 0.2, 0.3]],
+            metadata: [{ stage: null, group: 'alpha' }],
+            ids: [rowId],
+          });
+          expect(ids).toEqual([rowId]);
+
+          const results = await vectorDB.query({
+            indexName: indexColumn,
+            tableName,
+            queryVector: [0.1, 0.2, 0.3],
+            topK: 10,
+          });
+          expect(results).toHaveLength(1);
+          expect(results[0].id).toBe(rowId);
+          expect(results[0].metadata).toEqual({ stage: null, group: 'alpha' });
+
+          const filtered = await vectorDB.query({
+            indexName: indexColumn,
+            tableName,
+            queryVector: [0.1, 0.2, 0.3],
+            topK: 10,
+            filter: { group: 'alpha' },
+          });
+          expect(filtered.map(r => r.id)).toEqual([rowId]);
+
+          await vectorDB.deleteTable(tableName);
+        });
+
+        it('should accept all-null metadata on the first direct upsert', async () => {
+          const tableName = 'lance-null-direct-' + Date.now();
+          const rowId = 'null-direct-1';
+
+          const ids = await vectorDB.upsert({
+            indexName: indexColumn,
+            tableName,
+            vectors: [[0.1, 0.2, 0.3]],
+            metadata: [{ stage: null }],
+            ids: [rowId],
+          });
+          expect(ids).toEqual([rowId]);
+
+          const results = await vectorDB.query({
+            indexName: indexColumn,
+            tableName,
+            queryVector: [0.1, 0.2, 0.3],
+            topK: 10,
+          });
+          expect(results).toHaveLength(1);
+          expect(results[0].id).toBe(rowId);
+          expect(results[0].metadata).toEqual({ stage: null });
+
+          await vectorDB.deleteTable(tableName);
+        });
+
+        it('should preserve null nested leaves, typed later rows, and empty metadata across a mixed first batch', async () => {
+          const tableName = 'lance-mixed-batch-' + Date.now();
+
+          await vectorDB.upsert({
+            indexName: indexColumn,
+            tableName,
+            vectors: [
+              [0.1, 0.2, 0.3],
+              [0.4, 0.5, 0.6],
+              [0.7, 0.8, 0.9],
+            ],
+            metadata: [{ stage: null, profile: { note: null } }, { stage: 'ready', profile: { note: 'present' } }, {}],
+            ids: ['mixed-1', 'mixed-2', 'mixed-3'],
+          });
+
+          const results = await vectorDB.query({
+            indexName: indexColumn,
+            tableName,
+            queryVector: [0.1, 0.2, 0.3],
+            topK: 10,
+          });
+          const byId = new Map(results.map(r => [r.id, r.metadata]));
+          expect(byId.get('mixed-1')).toEqual({ stage: null, profile: { note: null } });
+          expect(byId.get('mixed-2')).toEqual({ stage: 'ready', profile: { note: 'present' } });
+          expect(byId.get('mixed-3')).toEqual({});
+
+          const filtered = await vectorDB.query({
+            indexName: indexColumn,
+            tableName,
+            queryVector: [0.1, 0.2, 0.3],
+            topK: 10,
+            filter: { stage: 'ready' },
+          });
+          expect(filtered.map(r => r.id)).toEqual(['mixed-2']);
+
+          await vectorDB.deleteTable(tableName);
+        });
+
+        it('should preserve mixed metadata after createIndex pre-creates an empty table', async () => {
+          const tableName = 'lance-mixed-preindex-' + Date.now();
+
+          // createIndex leaves an empty table with only id, vector, and _metadata_json.
+          // A following batch whose first row has only null metadata and whose later row
+          // has typed values must still upsert without a "field not in schema" error.
+          await vectorDB.createIndex({
+            indexConfig: {
+              type: 'ivfflat',
+              numPartitions: 1,
+              numSubVectors: 1,
+            },
+            indexName: indexColumn,
+            dimension: 3,
+            tableName,
+          });
+
+          await vectorDB.upsert({
+            indexName: indexColumn,
+            tableName,
+            vectors: [
+              [0.1, 0.2, 0.3],
+              [0.4, 0.5, 0.6],
+              [0.7, 0.8, 0.9],
+            ],
+            metadata: [{ stage: null, profile: { note: null } }, { stage: 'ready', profile: { note: 'present' } }, {}],
+            ids: ['mixed-preindex-1', 'mixed-preindex-2', 'mixed-preindex-3'],
+          });
+
+          const results = await vectorDB.query({
+            indexName: indexColumn,
+            tableName,
+            queryVector: [0.1, 0.2, 0.3],
+            topK: 10,
+          });
+          const byId = new Map(results.map(r => [r.id, r.metadata]));
+          expect(byId.get('mixed-preindex-1')).toEqual({ stage: null, profile: { note: null } });
+          expect(byId.get('mixed-preindex-2')).toEqual({ stage: 'ready', profile: { note: 'present' } });
+          expect(byId.get('mixed-preindex-3')).toEqual({});
+
+          const filtered = await vectorDB.query({
+            indexName: indexColumn,
+            tableName,
+            queryVector: [0.1, 0.2, 0.3],
+            topK: 10,
+            filter: { stage: 'ready' },
+          });
+          expect(filtered.map(r => r.id)).toEqual(['mixed-preindex-2']);
+
+          await vectorDB.deleteTable(tableName);
+        });
+      });
     });
 
     describe('query operations', () => {

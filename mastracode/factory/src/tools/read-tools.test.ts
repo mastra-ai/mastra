@@ -1,6 +1,10 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
+import { boardRegistryOf } from '../boards/registry.js';
+import { compileStoredBoard } from '../boards/stored-board.js';
 import { createTriageWorkRegistry } from '../boards/test-utils.js';
+import { workSeedWithTriage } from '../boards/work-seeds.js';
+import { workBoard } from '../boards/work.js';
 
 import { LiveSessions } from '../session/live-sessions.js';
 import type { LiveSession } from '../session/live-sessions.js';
@@ -120,6 +124,7 @@ function setup({
   audit = [],
   subscriptions = [],
   sessions,
+  boards = createTriageWorkRegistry(),
 }: {
   items?: Card[];
   bindings?: FactoryRunBindingRecord[];
@@ -127,6 +132,7 @@ function setup({
   audit?: AuditEventRow[];
   subscriptions?: WorkItemSubscription[];
   sessions?: FactoryReadToolDependencies['sessions'];
+  boards?: FactoryReadToolDependencies['boards'];
 }) {
   const deps: FactoryReadToolDependencies = {
     workItems: {
@@ -155,7 +161,7 @@ function setup({
       ),
     },
     audit: { list: vi.fn(async () => ({ events: audit })) },
-    boards: createTriageWorkRegistry(),
+    boards,
     ...(sessions ? { sessions } : {}),
   };
   const tools = createFactoryReadTools(scope, deps) as Record<
@@ -170,6 +176,7 @@ type ListResult = {
   counts: { total: number; byStage: Record<string, number> };
   items: Array<{ id: string; number: number | null; activeWorker: { role: string; sessionId: string } | null }>;
   truncated: boolean;
+  boards: Array<{ id: string; name: string }>;
 };
 
 function follow(workItemId: string, sessionId: string, reason: WorkItemSubscription['reason']): WorkItemSubscription {
@@ -222,6 +229,26 @@ describe('factory_list_work_items', () => {
     expect(await ids({ requestedBy: 'me' })).toEqual(['b']);
   });
 
+  it('finds a renamed board by its displayed name and lists each board with its name', async () => {
+    const openSource = compileStoredBoard({ ...workSeedWithTriage(), name: 'Open source' }, workBoard);
+    const { run } = setup({ items: rows, boards: boardRegistryOf([openSource]) });
+    const result = await run<ListResult>('factory_list_work_items', { board: 'open SOURCE' });
+    expect(result.items.map(row => row.id)).toEqual(['b', 'a']);
+    expect(result.boards).toEqual([{ id: 'work', name: 'Open source' }]);
+  });
+
+  it('refuses a displayed name that more than one board shares', async () => {
+    const seed = workSeedWithTriage();
+    const boards = boardRegistryOf([
+      compileStoredBoard({ ...seed, name: 'Open source' }, workBoard),
+      compileStoredBoard({ ...seed, key: 'oss', name: 'Open source' }, workBoard),
+    ]);
+    const { run } = setup({ items: rows, boards });
+    await expect(run('factory_list_work_items', { board: 'Open source' })).rejects.toThrow(
+      'Board "Open source" matches more than one board; use its id instead: work (Open source), oss (Open source).',
+    );
+  });
+
   it('numbers a card filed by hand and finds it by that #number', async () => {
     const manual = item({ id: 'm', title: 'Filed by hand', externalSource: null, metadata: { cardNumber: 3 } });
     const { run } = setup({ items: [...rows, manual] });
@@ -246,16 +273,16 @@ describe('factory_list_work_items', () => {
     expect(result.items.find(row => row.id === 'a')?.number).toBe(12);
   });
 
-  it('links each card on its board when a public URL is configured', async () => {
+  it('links each card to the page that opens its session when a public URL is configured', async () => {
     vi.stubEnv('MASTRACODE_PUBLIC_URL', 'https://factory.example.com');
     try {
       const { run } = setup({ items: rows });
       const result = await run<{ items: Array<{ id: string; url: string | null }> }>('factory_list_work_items', {});
       expect(result.items.find(row => row.id === 'a')?.url).toBe(
-        'https://factory.example.com/factories/project-1/work?item=a',
+        'https://factory.example.com/factories/project-1/cards/a',
       );
       expect(result.items.find(row => row.id === 'c')?.url).toBe(
-        'https://factory.example.com/factories/project-1/boards/release?item=c',
+        'https://factory.example.com/factories/project-1/cards/c',
       );
     } finally {
       vi.unstubAllEnvs();
@@ -456,39 +483,6 @@ describe('factory_list_attention', () => {
     expect(result.truncated).toBe(false);
   });
 
-  it('flags open cards filed by hand that name no repository while several are linked', async () => {
-    const linked = [
-      { id: 'link-1', repositoryId: 'repo-1', externalId: '2', slug: 'mastra-ai/mastra' },
-      { id: 'link-2', repositoryId: 'repo-2', externalId: '3', slug: 'mastra-ai/platform' },
-    ];
-    const sourceControl = {
-      integrationId: 'github',
-      connections: { list: async () => [{ id: 'connection-1', integrationId: 'github' }] },
-      projectRepositories: {
-        list: async () => linked.map(({ id, repositoryId }) => ({ id, repositoryId, inEnvironment: true })),
-      },
-      repositories: {
-        get: async ({ id }: { id: string }) => {
-          const link = linked.find(candidate => candidate.repositoryId === id);
-          return link ? { id, externalId: link.externalId, slug: link.slug } : null;
-        },
-      },
-    } as unknown as SourceControlStorageHandle;
-    const items = [
-      item({ id: 'unnamed', externalSource: null, metadata: { cardNumber: 1 } }),
-      item({ id: 'named', externalSource: null, metadata: { cardNumber: 2, repository: 'mastra-ai/mastra' } }),
-      item({ id: 'done', externalSource: null, stages: ['done'], metadata: { cardNumber: 3 } }),
-      item({ id: 'synced' }),
-    ];
-    const { run } = setup({ items, sessions: { getSourceControlBySessionId: async () => sourceControl } });
-    const result = await run<{
-      needsRepository: Array<{ workItemId: string; number: number | null }>;
-      linkedRepositories?: string[];
-    }>('factory_list_attention', {});
-    expect(result.needsRepository).toMatchObject([{ workItemId: 'unnamed', number: 1 }]);
-    expect(result.linkedRepositories).toEqual(['mastra-ai/mastra', 'mastra-ai/platform']);
-  });
-
   it('lists a run parked on a tool prompt while it is still in flight', async () => {
     let created: (session: LiveSession) => void = () => {};
     const liveSessions = new LiveSessions({
@@ -502,6 +496,7 @@ describe('factory_list_attention', () => {
     const pendingSuspensions = new Map<string, { toolName: string }>();
     created({
       identity: { getId: () => 'session-builder' },
+      thread: { getId: () => 'session-builder' },
       run: { isRunning: () => true },
       state: { get: () => ({ factoryOrgId: 'org-1', factoryProjectId: 'project-1' }) },
       displayState: { get: () => ({ pendingSuspensions }) },

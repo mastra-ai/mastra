@@ -21,7 +21,7 @@ export interface TraceDetailsViewProps {
 /**
  * Compact trace panel using `DataDetailsPanel` (popover-style). Renders the timeline only —
  * no trace header KV, no evaluate/save actions. Use this for inline trace inspection from a
- * list page (e.g. the Logs page). For the full-width trace view, use `TraceDataPanelView`.
+ * list page (e.g. the Logs page). For the full-width trace view, compose `TracePanel`.
  */
 export function TraceDetailsView({
   traceId,

@@ -5,6 +5,7 @@ import type { ActivityCounts, ActivityKind, ActivitySlot } from '../../periodAct
 import { IconInboxEmpty } from '@mastra/playground-ui/icons/central/IconInboxEmpty';
 import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
 import { IconPackageCkeck } from '@mastra/playground-ui/icons/central/IconPackageCkeck';
+import { formatClock } from '@mastra/playground-ui/utils/date-format';
 
 interface ActivityKindLook {
   label: string;
@@ -28,12 +29,11 @@ export const ACTIVITY_KINDS = ACTIVITY_KIND_ORDER.map(kind => ({ kind, ...LOOKS[
 
 const plural = new Intl.PluralRules('en');
 const dayFormat = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
-const hourFormat = new Intl.DateTimeFormat(undefined, { hour: 'numeric' });
 
 export function slotWhen(slot: ActivitySlot, hoursPerSlot: number) {
   const day = dayFormat.format(slot.start);
   if (hoursPerSlot >= 24) return { day };
-  return { day, hours: `${hourFormat.format(slot.start)} – ${hourFormat.format(slot.end)}` };
+  return { day, hours: `${formatClock(slot.start)} – ${formatClock(slot.end)}` };
 }
 
 export function totalOf(kind: ActivityKind, counts: ActivityCounts, runs: RunsState) {

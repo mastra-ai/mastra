@@ -142,7 +142,13 @@ async function drive(engine: ParityEngine, variant: Variant): Promise<EngineCont
       : engine === 'evented'
         ? createEventedAgent({ agent, pubsub })
         : undefined;
-  const host = new Mastra({ agents: { [agent.id]: wrapper ?? agent }, storage: new InMemoryStore(), logger: false });
+  const executionEngine = engine === 'native-default' ? 'default' : engine === 'native-evented' ? 'evented' : undefined;
+  const host = new Mastra({
+    agents: { [agent.id]: wrapper ?? agent },
+    storage: new InMemoryStore(),
+    logger: false,
+    durable: { executionEngine },
+  });
 
   const registered = host.getAgent('t66-agent') as unknown as {
     stream: (messages: string, options: Record<string, unknown>) => Promise<unknown>;
@@ -164,7 +170,7 @@ async function drive(engine: ParityEngine, variant: Variant): Promise<EngineCont
     output?: unknown;
     cleanup?: () => void | Promise<void>;
   };
-  const openingOutput = engine === 'plain' ? opening : opening.output;
+  const openingOutput = opening.output ?? opening;
 
   try {
     let segment = await readSegment(engine, openingOutput);

@@ -17,6 +17,7 @@ import type {
   TimeTravelContext,
   WorkflowEngineType,
   WorkflowResult,
+  WorkflowRunStatus,
   WorkflowStreamEvent,
 } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
@@ -30,6 +31,18 @@ import {
   mergeResumeRequestContext,
 } from './durable-event-payload';
 import type { InngestEngineType } from './types';
+
+// Statuses a cancel can still apply to. A finished run keeps its final status
+// (success, failed, canceled, tripwire, bailed), but cancel must still cover a
+// live run that is starting or blocked waiting for a resume.
+const CANCELABLE_RUN_STATUSES: WorkflowRunStatus[] = [
+  'running',
+  'pending',
+  'waiting',
+  'suspended',
+  'paused',
+  'skipped',
+];
 
 export class InngestRun<
   TEngineType = InngestEngineType,
@@ -250,6 +263,10 @@ export class InngestRun<
   async cancel() {
     const storage = this.#mastra?.getStorage();
 
+    // A cancel can arrive after the run already finished (a retried or late
+    // cancel event). Leave a finished run's final status and results untouched.
+    if (await this.hasReachedTerminalStatus()) return;
+
     await this.inngest.send({
       name: `cancel.workflow.${this.workflowId}`,
       data: {
@@ -272,6 +289,10 @@ export class InngestRun<
           status: 'canceled' as any,
           value: snapshot.value,
         },
+        // Only mark the run canceled while it is still live. The run can finish
+        // between the check above and this write, and the guard keeps that
+        // finishing snapshot from being rewritten back to 'canceled'.
+        expectedStatus: CANCELABLE_RUN_STATUSES,
       });
     }
   }

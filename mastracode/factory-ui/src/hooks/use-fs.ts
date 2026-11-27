@@ -1,4 +1,4 @@
-import { queryOptions, skipToken, useQuery } from '@tanstack/react-query';
+import { queryOptions, skipToken, useQueries, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import type { ApiClient } from '../api/client';
@@ -67,8 +67,12 @@ export function normalizePlanPath(
   // Only absolute posix paths are normalization candidates.
   if (!rootPath) return undefined;
   const base = rootPath.endsWith('/') ? rootPath.slice(0, -1) : rootPath;
-  if (path !== base && !path.startsWith(`${base}/`)) return undefined;
-  const remainder = path.slice(base.length).replace(/^\/+/, '');
+  // Sandbox file tools resolve absolute paths against the workspace root, so
+  // agents may submit `/mastra/.artifacts/...` for `/workspace/mastra/.artifacts/...`.
+  const workspaceBase = `/${root}`;
+  const matchedBase = [base, workspaceBase].find(candidate => path === candidate || path.startsWith(`${candidate}/`));
+  if (!matchedBase) return undefined;
+  const remainder = path.slice(matchedBase.length).replace(/^\/+/, '');
   const relative = remainder ? `${root}/${remainder}` : root;
   return isPlanReadablePath(relative) ? relative : undefined;
 }
@@ -146,6 +150,17 @@ export function useWorkspaceTree(
     queryKey: queryKeys.workspaceTree(workspacePath, path),
     enabled,
     queryFn: url ? () => client.get<WorkspaceTreeListing>(url) : skipToken,
+  });
+}
+
+export function useWorkspaceTrees(workspacePath: string, paths: readonly string[]) {
+  const { client } = useApiConfig();
+  return useQueries({
+    queries: paths.map(path => ({
+      queryKey: queryKeys.workspaceTree(workspacePath, path),
+      queryFn: () =>
+        client.get<WorkspaceTreeListing>(`/web/workspace/tree?${new URLSearchParams({ workspacePath, path })}`),
+    })),
   });
 }
 

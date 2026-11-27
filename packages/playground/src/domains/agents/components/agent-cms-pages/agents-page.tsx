@@ -118,7 +118,7 @@ export function AgentsPage() {
                 const isDisabled = readOnly || !isSelected;
 
                 return (
-                  <Entity key={agent.value} className="bg-background">
+                  <Entity key={agent.value} className="bg-nested">
                     <EntityContent>
                       <EntityName>{agent.label}</EntityName>
                       <EntityDescription>

@@ -1,4 +1,4 @@
-import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
+import { Box, Container, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 
 import { providerFromModelId } from '@mastra/code-sdk/auth/account-rotation-processor';
@@ -22,14 +22,16 @@ import {
 } from '@mastra/code-sdk/onboarding/settings';
 import type { GlobalSettings } from '@mastra/code-sdk/onboarding/settings';
 import chalk from 'chalk';
+import { withFastEntries } from '../codex-fast-entries.js';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
+import { MenuList } from '../components/menu-list.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
 import { applyPackToSession, listResolvableModePacks } from '../model-packs/apply.js';
 import { showModalOverlay } from '../overlay.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import { updateStatusLine } from '../status-line.js';
-import { getSelectListTheme, mastra, theme } from '../theme.js';
+import { mastra, theme } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
 
 // Re-exported for existing importers/tests; the implementation lives in
@@ -90,13 +92,16 @@ export function deserializePack(input: string): ModePack | null {
   }
 }
 
-async function selectModel(
+export async function selectModel(
   ctx: SlashCommandContext,
   title: string,
   modeColor?: string,
   currentModelId?: string,
 ): Promise<string | undefined> {
-  const availableModels = await ctx.state.controller.listAvailableModels();
+  const availableModels = withFastEntries(await ctx.state.controller.listAvailableModels(), {
+    authStorage: ctx.authStorage,
+    factory: ctx.state.factory,
+  });
   if (availableModels.length === 0) return undefined;
 
   return new Promise<string | undefined>(resolve => {
@@ -105,7 +110,6 @@ async function selectModel(
       models: availableModels,
       currentModelId,
       title,
-      titleColor: modeColor,
       onSelect: async (model: ModelItem) => {
         ctx.state.ui.hideOverlay();
         const apiKeyResult = await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
@@ -238,16 +242,15 @@ async function askCustomPackAction(
   ] as const;
 
   return new Promise(resolve => {
-    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
-    container.addChild(new Text(theme.bold(theme.fg('accent', `Custom pack: ${pack.name}`)), 0, 0));
-    container.addChild(new Spacer(1));
+    const container = new Container();
 
     const items: SelectItem[] = actions.map(action => ({
       value: action.id,
-      label: `  ${action.label}  ${theme.fg('dim', action.description)}`,
+      label: action.label,
+      description: theme.fg('dim', action.description),
     }));
 
-    const selectList = new SelectList(items, items.length, getSelectListTheme());
+    const selectList = new MenuList(items, items.length);
     const detailText = new Text('', 0, 0);
     const detailById: Record<string, string> = {
       activate: activateActionDetail(getPackDetail(pack), loadSettings(), packs, pack.id),
@@ -282,12 +285,10 @@ async function askCustomPackAction(
     container.addChild(selectList);
     container.addChild(new Spacer(1));
     container.addChild(detailText);
-    container.addChild(new Spacer(1));
-    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
-    (container as Box & { handleInput: (data: string) => void }).handleInput = (data: string) =>
+    (container as Container & { handleInput: (data: string) => void }).handleInput = (data: string) =>
       selectList.handleInput(data);
 
-    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
+    showModalOverlay(ctx.state.ui, container, { title: `Custom pack: ${pack.name}` });
   });
 }
 
@@ -307,15 +308,14 @@ async function askBuiltinPackAction(
   ] as const;
 
   return new Promise(resolve => {
-    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
-    container.addChild(new Text(theme.bold(theme.fg('accent', `Pack: ${pack.name}`)), 0, 0));
-    container.addChild(new Spacer(1));
+    const container = new Container();
 
     const items: SelectItem[] = actions.map(action => ({
       value: action.id,
-      label: `  ${action.label}  ${theme.fg('dim', action.description)}`,
+      label: action.label,
+      description: theme.fg('dim', action.description),
     }));
-    const selectList = new SelectList(items, items.length, getSelectListTheme());
+    const selectList = new MenuList(items, items.length);
     const detailText = new Text('', 0, 0);
     const detailById: Record<string, string> = {
       activate: activateActionDetail(getPackDetail(pack), loadSettings(), packs, pack.id),
@@ -345,12 +345,10 @@ async function askBuiltinPackAction(
     container.addChild(selectList);
     container.addChild(new Spacer(1));
     container.addChild(detailText);
-    container.addChild(new Spacer(1));
-    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
-    (container as Box & { handleInput: (data: string) => void }).handleInput = (data: string) =>
+    (container as Container & { handleInput: (data: string) => void }).handleInput = (data: string) =>
       selectList.handleInput(data);
 
-    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
+    showModalOverlay(ctx.state.ui, container, { title: `Pack: ${pack.name}` });
   });
 }
 
@@ -368,15 +366,14 @@ async function askModifiedBuiltinPackAction(
   ] as const;
 
   return new Promise(resolve => {
-    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
-    container.addChild(new Text(theme.bold(theme.fg('warning', `Modified built-in pack: ${pack.name}`)), 0, 0));
-    container.addChild(new Spacer(1));
+    const container = new Container();
 
     const items: SelectItem[] = actions.map(action => ({
       value: action.id,
-      label: `  ${action.label}  ${theme.fg('dim', action.description)}`,
+      label: action.label,
+      description: theme.fg('dim', action.description),
     }));
-    const selectList = new SelectList(items, items.length, getSelectListTheme());
+    const selectList = new MenuList(items, items.length);
     const detailText = new Text('', 0, 0);
     const detailById: Record<string, string> = {
       activate: activateActionDetail(
@@ -412,12 +409,10 @@ async function askModifiedBuiltinPackAction(
     container.addChild(selectList);
     container.addChild(new Spacer(1));
     container.addChild(detailText);
-    container.addChild(new Spacer(1));
-    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
-    (container as Box & { handleInput: (data: string) => void }).handleInput = (data: string) =>
+    (container as Container & { handleInput: (data: string) => void }).handleInput = (data: string) =>
       selectList.handleInput(data);
 
-    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
+    showModalOverlay(ctx.state.ui, container, { title: `Modified built-in pack: ${pack.name}` });
   });
 }
 
@@ -426,18 +421,16 @@ async function askCustomPackEditTarget(
   pack: ModePack,
 ): Promise<'rename' | 'plan' | 'build' | 'fast' | 'memory' | 'memory-auto' | 'memory-clear' | 'save' | null> {
   return new Promise(resolve => {
-    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
-    container.addChild(new Text(theme.bold(theme.fg('accent', `Edit custom pack: ${pack.name}`)), 0, 0));
-    container.addChild(new Spacer(1));
+    const container = new Container();
 
     const items: SelectItem[] = [
-      { value: 'rename', label: `  Rename → ${theme.fg('text', pack.name)}` },
-      { value: 'plan', label: `  ${chalk.hex(mastra.purple)('plan')} → ${theme.fg('text', pack.models.plan)}` },
-      { value: 'build', label: `  ${chalk.hex(mastra.green)('build')} → ${theme.fg('text', pack.models.build)}` },
-      { value: 'fast', label: `  ${chalk.hex(mastra.orange)('fast')} → ${theme.fg('text', pack.models.fast)}` },
+      { value: 'rename', label: `Rename → ${theme.fg('text', pack.name)}` },
+      { value: 'plan', label: `${chalk.hex(mastra.purple)('plan')} → ${theme.fg('text', pack.models.plan)}` },
+      { value: 'build', label: `${chalk.hex(mastra.green)('build')} → ${theme.fg('text', pack.models.build)}` },
+      { value: 'fast', label: `${chalk.hex(mastra.orange)('fast')} → ${theme.fg('text', pack.models.fast)}` },
       {
         value: 'memory',
-        label: `  ${chalk.hex(mastra.pink)('memory')} → ${
+        label: `${chalk.hex(mastra.pink)('memory')} → ${
           pack.models.memory === 'auto'
             ? theme.fg('text', 'Auto')
             : pack.models.memory
@@ -447,14 +440,14 @@ async function askCustomPackEditTarget(
       },
     ];
     if (pack.models.memory !== 'auto') {
-      items.push({ value: 'memory-auto', label: `  ${chalk.hex(mastra.pink)('Use Auto memory model')}` });
+      items.push({ value: 'memory-auto', label: chalk.hex(mastra.pink)('Use Auto memory model') });
     }
     if (pack.models.memory) {
-      items.push({ value: 'memory-clear', label: `  ${theme.fg('warning', 'Clear memory model (use /om settings)')}` });
+      items.push({ value: 'memory-clear', label: theme.fg('warning', 'Clear memory model (use /om settings)') });
     }
-    items.push({ value: 'save', label: `  ${theme.fg('success', 'Save')}` });
+    items.push({ value: 'save', label: theme.fg('success', 'Save') });
 
-    const selectList = new SelectList(items, items.length, getSelectListTheme());
+    const selectList = new MenuList(items, items.length);
 
     const closeOverlay = () => {
       ctx.state.ui.hideOverlay();
@@ -472,39 +465,35 @@ async function askCustomPackEditTarget(
     };
 
     container.addChild(selectList);
-    container.addChild(new Spacer(1));
-    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
-    (container as Box & { handleInput: (data: string) => void }).handleInput = (data: string) =>
+    (container as Container & { handleInput: (data: string) => void }).handleInput = (data: string) =>
       selectList.handleInput(data);
 
-    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
+    showModalOverlay(ctx.state.ui, container, { title: `Edit custom pack: ${pack.name}` });
   });
 }
 
 async function askOptionalOmChoice(ctx: SlashCommandContext): Promise<'choose' | 'auto' | 'skip' | null> {
   return new Promise(resolve => {
-    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
-    container.addChild(new Text(theme.bold(theme.fg('accent', 'Observational memory model (optional)')), 0, 0));
+    const container = new Container();
     container.addChild(
       new Text(
         theme.fg(
           'dim',
           'Drives the OM observer/reflector while this pack is active. Skipped packs use your /om settings.',
         ),
-        0,
+        2,
         0,
       ),
     );
     container.addChild(new Spacer(1));
 
-    const selectList = new SelectList(
+    const selectList = new MenuList(
       [
-        { value: 'choose', label: `  ${chalk.hex(mastra.pink)('Choose model…')}` },
-        { value: 'auto', label: `  ${chalk.hex(mastra.pink)('Auto — follow the main model')}` },
-        { value: 'skip', label: `  ${theme.fg('dim', 'Skip — use /om settings')}` },
+        { value: 'choose', label: chalk.hex(mastra.pink)('Choose model…') },
+        { value: 'auto', label: chalk.hex(mastra.pink)('Auto — follow the main model') },
+        { value: 'skip', label: theme.fg('dim', 'Skip — use /om settings') },
       ],
       3,
-      getSelectListTheme(),
     );
 
     const closeOverlay = () => {
@@ -523,12 +512,10 @@ async function askOptionalOmChoice(ctx: SlashCommandContext): Promise<'choose' |
     };
 
     container.addChild(selectList);
-    container.addChild(new Spacer(1));
-    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
-    (container as Box & { handleInput: (data: string) => void }).handleInput = (data: string) =>
+    (container as Container & { handleInput: (data: string) => void }).handleInput = (data: string) =>
       selectList.handleInput(data);
 
-    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
+    showModalOverlay(ctx.state.ui, container, { title: 'Observational memory model (optional)' });
   });
 }
 
@@ -948,16 +935,15 @@ async function askImportCollision(
   ] as const;
 
   return new Promise(resolve => {
-    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
-    container.addChild(new Text(theme.bold(theme.fg('accent', `A pack named "${existingName}" already exists`)), 0, 0));
-    container.addChild(new Spacer(1));
+    const container = new Container();
 
     const items: SelectItem[] = actions.map(a => ({
       value: a.id,
-      label: `  ${a.label}  ${theme.fg('dim', a.description)}`,
+      label: a.label,
+      description: theme.fg('dim', a.description),
     }));
 
-    const selectList = new SelectList(items, items.length, getSelectListTheme());
+    const selectList = new MenuList(items, items.length);
 
     const closeOverlay = () => {
       ctx.state.ui.hideOverlay();
@@ -975,10 +961,10 @@ async function askImportCollision(
     };
 
     container.addChild(selectList);
-    (container as Box & { handleInput: (data: string) => void }).handleInput = (data: string) =>
+    (container as Container & { handleInput: (data: string) => void }).handleInput = (data: string) =>
       selectList.handleInput(data);
 
-    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
+    showModalOverlay(ctx.state.ui, container, { title: `A pack named "${existingName}" already exists` });
   });
 }
 
@@ -1054,21 +1040,21 @@ async function askFallbackTarget(
 
   const items: SelectItem[] = candidates.map(p => ({
     value: p.id,
-    label: `  ${p.name}  ${theme.fg('dim', p.description)}${p.id === current ? theme.fg('accent', ' (current)') : ''}`,
+    label: p.name,
+    description: `${theme.fg('dim', p.description)}${p.id === current ? theme.fg('accent', ' (current)') : ''}`,
   }));
   if (current) {
     items.unshift({
       value: '__clear__',
-      label: `  Clear fallback  ${theme.fg('dim', 'Stop hopping away from this pack')}`,
+      label: 'Clear fallback',
+      description: theme.fg('dim', 'Stop hopping away from this pack'),
     });
   }
 
   return new Promise(resolve => {
-    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
-    container.addChild(new Text(theme.bold(theme.fg('accent', `Fallback for ${pack.name}`)), 0, 0));
-    container.addChild(new Spacer(1));
+    const container = new Container();
 
-    const selectList = new SelectList(items, items.length, getSelectListTheme());
+    const selectList = new MenuList(items, items.length);
     const detailText = new Text('', 0, 0);
 
     const closeOverlay = () => {
@@ -1096,12 +1082,10 @@ async function askFallbackTarget(
     container.addChild(selectList);
     container.addChild(new Spacer(1));
     container.addChild(detailText);
-    container.addChild(new Spacer(1));
-    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
-    (container as Box & { handleInput: (data: string) => void }).handleInput = (data: string) =>
+    (container as Container & { handleInput: (data: string) => void }).handleInput = (data: string) =>
       selectList.handleInput(data);
 
-    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
+    showModalOverlay(ctx.state.ui, container, { title: `Fallback for ${pack.name}` });
   });
 }
 
@@ -1127,15 +1111,14 @@ async function askRoutingModel(ctx: SlashCommandContext, pack: ModePack): Promis
       : undefined;
     return {
       value: modelId,
-      label: `  ${modes.join('/')}  ${theme.fg('dim', modelId)}  ${theme.fg(preferredId ? 'textHighlight' : 'dim', preferredId ? `${account?.label ?? preferredId} (only)` : 'Automatic')}`,
+      label: modes.join('/'),
+      description: `${theme.fg('dim', modelId)}  ${theme.fg(preferredId ? 'textHighlight' : 'dim', preferredId ? `${account?.label ?? preferredId} (only)` : 'Automatic')}`,
     };
   });
 
   return new Promise(resolve => {
-    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
-    container.addChild(new Text(theme.bold(theme.fg('accent', `Subscription routing: ${pack.name}`)), 0, 0));
-    container.addChild(new Spacer(1));
-    const selectList = new SelectList(items, items.length, getSelectListTheme());
+    const container = new Container();
+    const selectList = new MenuList(items, items.length);
     selectList.onSelect = item => {
       ctx.state.ui.hideOverlay();
       ctx.state.ui.requestRender();
@@ -1147,10 +1130,9 @@ async function askRoutingModel(ctx: SlashCommandContext, pack: ModePack): Promis
       resolve(undefined);
     };
     container.addChild(selectList);
-    container.addChild(new Spacer(1));
-    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc back'), 0, 0));
-    (container as Box & { handleInput: (data: string) => void }).handleInput = data => selectList.handleInput(data);
-    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
+    (container as Container & { handleInput: (data: string) => void }).handleInput = data =>
+      selectList.handleInput(data);
+    showModalOverlay(ctx.state.ui, container, { title: `Subscription routing: ${pack.name}` });
   });
 }
 
@@ -1165,19 +1147,18 @@ async function askPreferredAccount(
   const items: SelectItem[] = [
     {
       value: '__automatic__',
-      label: `  Automatic  ${theme.fg('dim', 'Rotate through accounts on failure')}${!current ? theme.fg('accent', ' (current)') : ''}`,
+      label: 'Automatic',
+      description: `${theme.fg('dim', 'Rotate through accounts on failure')}${!current ? theme.fg('accent', ' (current)') : ''}`,
     },
     ...accounts.map(account => ({
       value: account.id,
-      label: `  ${account.label}${account.active ? theme.fg('success', ' (active)') : ''}${account.id === current ? theme.fg('accent', ' (selected)') : ''}`,
+      label: `${account.label}${account.active ? theme.fg('success', ' (active)') : ''}${account.id === current ? theme.fg('accent', ' (selected)') : ''}`,
     })),
   ];
 
   return new Promise(resolve => {
-    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
-    container.addChild(new Text(theme.bold(theme.fg('accent', `Subscription for ${modelId}`)), 0, 0));
-    container.addChild(new Spacer(1));
-    const selectList = new SelectList(items, items.length, getSelectListTheme());
+    const container = new Container();
+    const selectList = new MenuList(items, items.length);
     const preview = new Text('', 0, 0);
     const updatePreview = (selectedId: string) => {
       const preferred = selectedId === '__automatic__' ? null : selectedId;
@@ -1214,10 +1195,9 @@ async function askPreferredAccount(
     container.addChild(selectList);
     container.addChild(new Spacer(1));
     container.addChild(preview);
-    container.addChild(new Spacer(1));
-    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc back'), 0, 0));
-    (container as Box & { handleInput: (data: string) => void }).handleInput = data => selectList.handleInput(data);
-    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
+    (container as Container & { handleInput: (data: string) => void }).handleInput = data =>
+      selectList.handleInput(data);
+    showModalOverlay(ctx.state.ui, container, { title: `Subscription for ${modelId}` });
   });
 }
 
@@ -1320,19 +1300,19 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
 
   const items: SelectItem[] = packs.map(p => ({
     value: p.id,
-    label: `  ${p.name}${modifiedPackIds.has(p.id) ? theme.fg('warning', ' (modified)') : ''}  ${theme.fg('dim', p.description)}${p.id === currentPackId ? theme.fg('dim', ' (current)') : ''}`,
+    label: `${p.name}${modifiedPackIds.has(p.id) ? theme.fg('warning', ' (modified)') : ''}`,
+    description: `${theme.fg('dim', p.description)}${p.id === currentPackId ? theme.fg('dim', ' (current)') : ''}`,
   }));
   items.push({
     value: '__import__',
-    label: `  Import Pack  ${theme.fg('dim', 'Paste a shared pack config')}`,
+    label: 'Import Pack',
+    description: theme.fg('dim', 'Paste a shared pack config'),
   });
 
   return new Promise<void>(resolve => {
-    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
-    container.addChild(new Text(theme.bold(theme.fg('accent', 'Switch model pack')), 0, 0));
-    container.addChild(new Spacer(1));
+    const container = new Container();
 
-    const selectList = new SelectList(items, items.length, getSelectListTheme());
+    const selectList = new MenuList(items, items.length);
     const detailText = new Text('', 0, 0);
 
     const closeOverlay = () => {
@@ -1538,16 +1518,14 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
     container.addChild(selectList);
     container.addChild(new Spacer(1));
     container.addChild(detailText);
-    container.addChild(new Spacer(1));
-    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
 
     const currentIdx = packs.findIndex(p => p.id === currentPackId);
     const initialIdx = currentIdx >= 0 ? currentIdx : 0;
     if (initialIdx > 0) selectList.setSelectedIndex(initialIdx);
     updateDetail(packs[initialIdx]!.id);
-    (container as Box & { handleInput: (data: string) => void }).handleInput = (data: string) =>
+    (container as Container & { handleInput: (data: string) => void }).handleInput = (data: string) =>
       selectList.handleInput(data);
 
-    showModalOverlay(ctx.state.ui, container, { maxHeight: '80%' });
+    showModalOverlay(ctx.state.ui, container, { title: 'Switch model pack' });
   });
 }

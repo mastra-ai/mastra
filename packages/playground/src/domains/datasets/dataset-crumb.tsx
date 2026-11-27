@@ -1,9 +1,7 @@
 import { CrumbSkeleton, crumbSwitcherTriggerProps } from '@mastra/playground-ui/components/Breadcrumb';
+import { DatasetCombobox, DatasetVersions, useDatasetItemsUrlState } from '@mastra/playground-ui/domains/datasets';
 import { useDataset } from '@mastra/react/hooks/datasets';
 import { useParams, useSearchParams } from 'react-router';
-import { DatasetCombobox } from './components/dataset-combobox';
-import { DatasetVersions } from './components/dataset-versions';
-import { useDatasetItemsUrlState } from './hooks/use-dataset-items-url-state';
 
 export function DatasetCrumb() {
   const { datasetId } = useParams<{ datasetId: string }>();

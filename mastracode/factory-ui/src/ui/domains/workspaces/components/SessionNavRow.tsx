@@ -1,3 +1,5 @@
+import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
+import type { CardChangeRequest, PullRequestStatus } from '@mastra/factory/work-items/change-requests';
 import { ContextMenu } from '@mastra/playground-ui/components/ContextMenu';
 import { HoverCard, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
 import { Sidebar, useMaybeSidebar } from '@mastra/playground-ui/components/Sidebar';
@@ -12,17 +14,15 @@ import { SourceIcon } from '../../factory/components/BoardIcons';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import type { SessionSource } from '../services/sessionPresentation';
 import type { SessionExternalLink } from '../services/sessionRows';
-import type { SessionRowStatus } from '../services/sessionStatus';
 import { ActivityBelt } from '@mastra/playground-ui/components/Activity';
+import { sessionBeltLabel } from '@mastra/playground-ui/domains/factory';
 import { SessionActionsMenu } from './SessionActionsMenu';
 import { SessionMenuItems } from './SessionMenuItems';
 import { SessionPreviewCard } from './SessionPreviewCard';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 import { SessionSharingPopover } from './SessionSharingPopover';
 import { relativeTime } from '../../../../lib/date/relativeTime';
-import type { PullRequestStatus } from '../../factory/boardItems';
 import { changeRequestStatusLabel } from '../../factory/changeRequestState';
-import type { CardChangeRequest } from '../../factory/changeRequestState';
 import { changeRequestNumberLabel, changeRequestReference } from '../../factory/sessionChangeRequests';
 import type { ChangeRequestProvider } from '../../factory/services/githubSubscriptions';
 import { isPullRequestSource } from '../../factory/services/workItems';
@@ -57,6 +57,7 @@ export function SessionNavRow({
   from,
   onPinChange,
   onDelete,
+  onRename,
   onRegenerateTitle,
   onAnswerApproval,
   answeringApproval,
@@ -97,6 +98,7 @@ export function SessionNavRow({
   /** Omit on sessions the viewer does not own: the server only lets owners delete. */
   onDelete?: () => void;
   /** Omitted for sessions the viewer does not own: the server only lets owners rename. */
+  onRename?: () => void;
   onRegenerateTitle?: () => void;
   /** Set while a followed card's phase session waits on an approval this viewer may give. */
   onAnswerApproval?: (decision: 'approve' | 'decline') => void;
@@ -183,7 +185,7 @@ export function SessionNavRow({
         {runByFactory ? <span className="text-muted-foreground ml-1.5">run by Factory</span> : null}
       </Sidebar.NavLabel>
       {pinned && !loading ? (
-        <IconPin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />
+        <IconPin aria-label={`${name} pinned`} className="text-subtle-foreground size-icon-xs shrink-0 rotate-45" />
       ) : null}
       {statusLabel ? (
         <span id={statusId} hidden>
@@ -198,6 +200,7 @@ export function SessionNavRow({
     pinned,
     onPinChange,
     onDelete,
+    onRename,
     onRegenerateTitle,
     regeneratingTitle,
     onAnswerApproval,
@@ -212,7 +215,7 @@ export function SessionNavRow({
   const action = (
     <>
       <span ref={anchor} aria-hidden className="pointer-events-none absolute inset-0" />
-      {belt ? <ActivityBelt status={belt} label={beltLabel(belt, name)} /> : null}
+      {belt ? <ActivityBelt status={belt} label={sessionBeltLabel(belt, name)} /> : null}
       {visibility === 'private' ? (
         <SessionSharingPopover
           name={name}
@@ -353,7 +356,7 @@ function SessionSourceIcon({
   pullRequestStatus?: PullRequestStatus;
 }) {
   if (source === 'user') {
-    return <IconUser data-source="user" aria-hidden className="text-muted-foreground size-3.5 shrink-0" />;
+    return <IconUser data-source="user" aria-hidden className="text-muted-foreground size-icon-sm shrink-0" />;
   }
   if (pullRequestStatus) {
     return <PullRequestStatusIcon status={pullRequestStatus} provider={provider} decorative className="size-3.5" />;
@@ -367,12 +370,6 @@ const trailingSlot = 'size-6 shrink-0 grid-rows-1 place-items-center *:col-start
 // An empty slot claims no width, so the label runs the full row until there is something to show.
 const revealedSlot =
   'grid pointer-fine:hidden group-focus-within/nav-row:grid group-hover/nav-row:grid group-has-[[data-popup-open]]/nav-row:grid';
-
-function beltLabel(status: SessionRowStatus, name: string) {
-  if (status === 'initializing') return `Initializing ${name}`;
-  if (status === 'working') return `Agent working in ${name}`;
-  return `${name} waiting on you`;
-}
 
 // The actions menu owns the slot as soon as the row is hovered, focused, or its menu is open.
 const yieldsToActions =

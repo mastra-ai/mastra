@@ -10,11 +10,10 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
-import { queryKeys } from '../../../../../api/keys';
+import { invalidateSessionQueries } from '../../../../../hooks/useWorkspaces';
 import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import { SessionsSection } from '../SessionsSection';
@@ -100,9 +99,9 @@ describe('User sessions sidebar activity', () => {
     await screen.findByRole('status', { name: 'Agent working in feature-a' });
   });
 
-  it('shows the initializing belt for a session that has not materialized yet', async () => {
+  it('shows the initializing belt while a run waits on the session setting up', async () => {
     stubProjectAndSessions([makeSession({ sessionId: 'sess-2', branch: 'user/feature-b', materializedAt: null })]);
-    stubActiveSessions(new Set());
+    stubActiveSessions(new Set(['sess-2']));
 
     const { client } = renderSection();
     await waitForMutationsIdle(client);
@@ -110,40 +109,17 @@ describe('User sessions sidebar activity', () => {
     await screen.findByRole('status', { name: 'Initializing feature-b' });
   });
 
-  it('clears the initializing belt once the run that materialized the session finishes', async () => {
-    let settled = false;
+  it('clears the initializing belt once the run ends, though setup never finished', async () => {
     const active = new Set(['sess-4']);
-    stubProjectAndSessions([]);
-    // Serve a mutable session row so the next sessions refetch observes the
-    // stamped `materializedAt` (registered after the base stub — the most
-    // recent handler wins).
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () =>
-        HttpResponse.json({
-          sessions: [
-            makeSession({
-              sessionId: 'sess-4',
-              branch: 'user/feature-d',
-              materializedAt: settled ? '2026-07-20T00:00:00.000Z' : null,
-            }),
-          ],
-        }),
-      ),
-    );
+    stubProjectAndSessions([makeSession({ sessionId: 'sess-4', branch: 'user/feature-d', materializedAt: null })]);
     stubActiveSessions(active);
 
     const { client } = renderSection();
     await waitForMutationsIdle(client);
     await screen.findByRole('status', { name: 'Initializing feature-d' });
 
-    // The run finishes and the server stamps materializedAt; the sessions
-    // list refetches on its own cadence.
-    settled = true;
     active.delete('sess-4');
-    await client.invalidateQueries({
-      queryKey: queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, TEST_BASE_URL),
-    });
-    await client.invalidateQueries({ queryKey: queryKeys.sessions(factoryId) });
+    await invalidateSessionQueries(client, factoryId);
     await waitForMutationsIdle(client);
 
     // The belt goes dark on an idle session, not back on (or stuck at) initializing.

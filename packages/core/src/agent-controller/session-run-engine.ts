@@ -11,6 +11,7 @@ import { AgentThreadLeaseLostError, agentThreadStreamRuntime } from '../agent/th
 import type { AgentThreadSubscription } from '../agent/types';
 import { getErrorFromUnknown, MastraError } from '../error';
 import { isLeaseProvider } from '../events/pubsub';
+import { describeNonSuccessFinishReason } from '../loop/shared/non-success-finish-reason';
 import type { RequestContext } from '../request-context';
 import type { GoalEvaluationPayload, IsTaskCompletePayload } from '../stream/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
@@ -21,12 +22,7 @@ import {
   SUSPENDED_RUN_AGENT_KEY,
   SUSPENDED_RUN_MEMORY_KEY,
 } from './session';
-import {
-  describeNonSuccessFinishReason,
-  describeServerSideFallback,
-  getDisplayTransform,
-  toStepTokenUsage,
-} from './stream-content';
+import { describeServerSideFallback, getDisplayTransform, toStepTokenUsage } from './stream-content';
 import { isToolResultError } from './tool-result';
 import { createEmptyTokenUsage } from './types';
 import type { ActiveSubagentState, AgentControllerEvent, TokenUsage } from './types';
@@ -104,6 +100,7 @@ type StreamChunk =
   | StreamDataChunk<'data-om-activation'>
   | StreamDataChunk<'data-om-thread-update'>
   | StreamDataChunk<'data-mastracode-tool-progress'>
+  | StreamDataChunk<'data-mastracode-model-fallback'>
   | StreamDataChunk<'data-sandbox-stdout'>
   | StreamDataChunk<'data-sandbox-stderr'>
   | StreamDataChunk<'data-sandbox-exit'>;
@@ -199,6 +196,9 @@ function formatToolProgressOutput(progress: unknown): string {
 }
 
 const ABORT_STREAM_GRACE_MS = 5_000;
+
+/** `agent_end.abortReason` when an observational-memory failure stopped the run. */
+const MEMORY_FAILURE_ABORT_REASON = 'memory-failure';
 const abortBailed = Symbol('abort-bailed');
 
 /**
@@ -248,6 +248,8 @@ type StreamState = {
   /** Response ids offered by `step-start` — an id binds to at most one display message. */
   offeredResponseIds: Set<string>;
   completedToolPrelude: boolean;
+  /** Model-fallback parts saved under the next response's id, held until its `step-start` binds that id. */
+  pendingModelFallbackParts: MastraMessagePart[];
   /**
    * Set when a stream ends on a non-success finish reason (e.g. `content-filter`,
    * `error`, `length`). Carries the user-facing message so the run finalizes
@@ -399,6 +401,13 @@ export class SessionRunEngine {
     state.completedToolPrelude = false;
   }
 
+  private emitPendingModelFallbacks(state: StreamState): void {
+    for (const part of state.pendingModelFallbackParts.splice(0)) {
+      const index = state.currentMessage.content.parts.push(part) - 1;
+      this.emitMessagePart(state, index);
+    }
+  }
+
   createStreamState(
     threadId = this.#session.thread.getId() ?? undefined,
     resourceId = this.#session.identity.getResourceId(),
@@ -416,6 +425,7 @@ export class SessionRunEngine {
       toolPartById: new Map<string, number>(),
       offeredResponseIds: new Set<string>(),
       completedToolPrelude: false,
+      pendingModelFallbackParts: [],
     };
   }
 
@@ -514,11 +524,19 @@ export class SessionRunEngine {
     });
   }
 
+  /** Set when the observer or reflector stopped the run, so its end says why. */
+  #memoryFailureAbort = false;
+
+  #takeAbortReason(reason?: string): string | undefined {
+    return this.#memoryFailureAbort ? MEMORY_FAILURE_ABORT_REASON : reason;
+  }
+
   private abortForOmFailure({ operationType, stage, error }: { operationType: string; stage: string; error: string }) {
     this.#session.emit({
       type: 'error',
       error: new Error(`Observational memory ${operationType} ${stage} failed: ${error}`),
     });
+    this.#memoryFailureAbort = true;
     this.#session.abortRun();
   }
 
@@ -590,15 +608,18 @@ export class SessionRunEngine {
       });
     }
 
+    const reason = error
+      ? 'error'
+      : result.suspended
+        ? 'suspended'
+        : aborted || this.#session.run.isAbortRequested()
+          ? 'aborted'
+          : 'complete';
     await this.#session.finishAgentRun(
-      error
-        ? 'error'
-        : result.suspended
-          ? 'suspended'
-          : aborted || this.#session.run.isAbortRequested()
-            ? 'aborted'
-            : 'complete',
+      reason,
+      reason === 'aborted' ? { abortReason: this.#takeAbortReason() } : undefined,
     );
+    this.#memoryFailureAbort = false;
 
     this.#session.run.reset();
 
@@ -683,7 +704,10 @@ export class SessionRunEngine {
         const messageId = getString(payload.messageId);
         if (!messageId) break;
         if (state.offeredResponseIds.has(messageId)) {
-          if (messageId === state.currentMessage.id) this.stampResponseModel(state.currentMessage, payload);
+          if (messageId === state.currentMessage.id) {
+            this.stampResponseModel(state.currentMessage, payload);
+            this.emitPendingModelFallbacks(state);
+          }
           break;
         }
         // A resumed tool can finish before the first model step starts. Seal
@@ -703,6 +727,7 @@ export class SessionRunEngine {
           state.currentMessage.id = messageId;
         }
         this.stampResponseModel(state.currentMessage, payload);
+        if (state.currentMessage.id === messageId) this.emitPendingModelFallbacks(state);
         break;
       }
 
@@ -1151,13 +1176,17 @@ export class SessionRunEngine {
               threadId: suspThreadId,
               resourceId: suspResourceId,
             });
-            this.#session.suspensions.register({
-              toolCallId: suspToolCallId,
-              runId: suspRunId,
-              toolName: suspToolName,
-              threadId: suspThreadId,
-              resourceId: suspResourceId,
-            });
+            this.#session.__registerStreamSuspension(
+              {
+                toolCallId: suspToolCallId,
+                runId: suspRunId,
+                toolName: suspToolName,
+                threadId: suspThreadId,
+                resourceId: suspResourceId,
+              },
+              // The thread subscription can replay a suspension from another mode's agent.
+              runScope?.get(SUSPENDED_RUN_AGENT_KEY),
+            );
           }
         }
         state.isSuspended = true;
@@ -1249,7 +1278,7 @@ export class SessionRunEngine {
             break;
           if (savedUsage) this.#session.setTokenUsage({ ...createEmptyTokenUsage(), ...savedUsage });
           else this.#session.addUsage(stepUsage);
-          this.#session.emit({ type: 'usage_update', usage: stepUsage });
+          this.#session.emit({ type: 'usage_update', usage: stepUsage, total: this.#session.getTokenUsage() });
         }
         break;
       }
@@ -1581,6 +1610,10 @@ export class SessionRunEngine {
         break;
       }
 
+      case 'data-mastracode-model-fallback':
+        state.pendingModelFallbackParts.push({ type: chunk.type, data: chunk.data });
+        break;
+
       // Sandbox streaming data chunks (from workspace execute_command tool)
       case 'data-sandbox-stdout': {
         const d = getDataRecord(chunk);
@@ -1831,7 +1864,11 @@ export class SessionRunEngine {
     } else if (reason === 'error' && terminalError) {
       this.retractFailedRunSuspensions({ resourceId, threadId, runId, reason: terminalError });
     }
-    await this.#session.finishAgentRun(reason, reason === 'aborted' ? { abortReason } : undefined);
+    await this.#session.finishAgentRun(
+      reason,
+      reason === 'aborted' ? { abortReason: this.#takeAbortReason(abortReason) } : undefined,
+    );
+    this.#memoryFailureAbort = false;
     this.#session.run.reset();
   }
 
@@ -1882,7 +1919,8 @@ export class SessionRunEngine {
 
   private async handleSubscribedStreamError(error: unknown, resourceId: string, threadId: string): Promise<void> {
     if (error instanceof Error && error.name === 'AbortError') {
-      await this.#session.finishAgentRun('aborted');
+      const abortReason = this.#takeAbortReason();
+      await this.#session.finishAgentRun('aborted', abortReason ? { abortReason } : undefined);
     } else {
       const streamError = getErrorFromUnknown(error);
       this.#session.emit({ type: 'error', error: streamError });
@@ -1896,6 +1934,7 @@ export class SessionRunEngine {
       }
       await this.#session.finishAgentRun('error');
     }
+    this.#memoryFailureAbort = false;
     this.#session.stream.detach();
     this.#session.run.reset();
   }

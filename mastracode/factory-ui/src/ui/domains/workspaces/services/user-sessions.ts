@@ -7,9 +7,6 @@
 import type { FailedDraft } from '../../chat/services/handoffFiles';
 import { postSourceControlRepositoryOp, readJsonOrThrow } from './http';
 
-export const USER_SESSION_BRANCH_PREFIX = 'user/';
-export const SLACK_SESSION_BRANCH_PREFIX = 'slack/';
-
 export interface FactoryUserSessionOwner {
   id: string;
   name: string;
@@ -38,10 +35,18 @@ export interface FactoryUserSession {
   createdAt: string;
   updatedAt: string;
   /** What the viewer may do with this session, computed by the server. */
-  capabilities?: { recreateSandbox: boolean; takeOwnership: boolean; switchModel?: boolean };
+  capabilities?: {
+    recreateSandbox: boolean;
+    takeOwnership: boolean;
+    switchModel?: boolean;
+    ownershipLock?: SessionOwnershipLock;
+  };
   /** The cards this session follows: the ones it asked for or subscribed to. Only the list read reports it. */
   followedWorkItemIds?: readonly string[];
 }
+
+/** Why a session the viewer doesn't own keeps its owner. */
+export type SessionOwnershipLock = 'card' | 'slack-thread' | 'side-session';
 
 type FactoryUserSessionPayload = Omit<FactoryUserSession, 'title'> & { title?: string | null };
 
@@ -65,7 +70,7 @@ export async function listUserSessions(
 }
 
 export type CreateUserSessionOptions = (
-  | { branch: string; baseBranch?: string; sessionId?: never; title?: never }
+  | { branch: string; baseBranch?: string; sessionId?: string; title?: never }
   | { sessionId: string; title: string; branch?: never; baseBranch?: never }
 ) & {
   /** Defaults to `org`. A session someone opens for themselves with New session is created `private`. */
@@ -154,6 +159,19 @@ export async function regenerateSessionTitle(baseUrl: string, sessionId: string)
   const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}/title`, {
     method: 'POST',
     credentials: 'include',
+  });
+  const body: { title?: string; error?: string } = await res.json().catch(() => ({}));
+  if (!res.ok || !body.title) throw new Error(body.error ?? `Failed to rename session (${res.status})`);
+  return body.title;
+}
+
+/** Store the title a person typed for a session. Resolves to the title as saved. */
+export async function renameSession(baseUrl: string, sessionId: string, title: string): Promise<string> {
+  const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}/title`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ title }),
   });
   const body: { title?: string; error?: string } = await res.json().catch(() => ({}));
   if (!res.ok || !body.title) throw new Error(body.error ?? `Failed to rename session (${res.status})`);

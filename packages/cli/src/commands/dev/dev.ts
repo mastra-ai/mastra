@@ -204,6 +204,7 @@ const startServer = async (
       currentServerProcess.stdout.on('data', (data: Buffer) => {
         const output = data.toString();
         if (!output.includes('Studio available') && !output.includes('👨‍💻') && !output.includes('Mastra API running')) {
+          devLogger.stopStarting();
           process.stdout.write(output);
         }
       });
@@ -213,6 +214,7 @@ const startServer = async (
       currentServerProcess.stderr.on('data', (data: Buffer) => {
         const output = data.toString();
         if (!output.includes('Studio available') && !output.includes('👨‍💻') && !output.includes('Mastra API running')) {
+          devLogger.stopStarting();
           process.stderr.write(output);
         }
       });
@@ -227,6 +229,7 @@ const startServer = async (
 
     // Show hint about updating packages when server exits with error
     currentServerProcess.on('exit', (code: number | null) => {
+      if (!serverIsReady) devLogger.stopStarting();
       if (code !== null && code !== 0) {
         const updateCommand = getUpdateCommand(startOptions.peerDepMismatches ?? []);
         if (updateCommand) {
@@ -280,6 +283,7 @@ const startServer = async (
       }
     });
   } catch (err) {
+    devLogger.stopStarting();
     const execaError = err as { stderr?: string; stdout?: string };
     if (execaError.stderr) {
       devLogger.serverError(execaError.stderr);
@@ -561,7 +565,7 @@ export async function dev({
   const mastraPackages = await getMastraPackages(rootDir);
 
   // Check for peer dependency version mismatches
-  const peerDepMismatches = await checkMastraPeerDeps(mastraPackages);
+  const peerDepMismatches = await checkMastraPeerDeps(mastraPackages, rootDir);
   logPeerDepWarnings(peerDepMismatches);
 
   // Write the generated fs-routed agents wrapper entry. Runs after `prepare()`

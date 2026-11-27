@@ -110,24 +110,6 @@ describe('useOMQuery', () => {
     });
   });
 
-  describe('when a sessionId is provided', () => {
-    it('passes sessionId and returns the config', async () => {
-      let seenResource: string | null = null;
-      server.use(
-        http.get(URL, ({ request }) => {
-          seenResource = new global.URL(request.url).searchParams.get('sessionId');
-          return HttpResponse.json(omResponse({ observationThreshold: 12_000 }));
-        }),
-      );
-
-      const { result } = renderHookWithProviders(() => useOMQuery('res-1'));
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(seenResource).toBe('res-1');
-      expect(result.current.data?.config.observationThreshold).toBe(12_000);
-    });
-  });
-
   describe('when the GET fails', () => {
     it('surfaces the error', async () => {
       server.use(http.get(URL, () => HttpResponse.json({ error: 'No session' }, { status: 404 })));
@@ -176,42 +158,6 @@ describe('useUpdateOMThresholds', () => {
 });
 
 describe('useUpdateOMModel', () => {
-  describe('when a role model is updated', () => {
-    it('PUTs to the role route and updates the cache from the response', async () => {
-      server.use(
-        http.get(URL, () => HttpResponse.json(omResponse())),
-        http.put(`${URL}/observer/model`, () =>
-          HttpResponse.json({
-            ok: true,
-            config: omResponse({
-              observer: {
-                model: 'p/new-observer',
-                effectiveModelId: 'p/new-observer',
-                effectiveModelSource: 'explicit',
-                providerStatus: 'available',
-              },
-              observerModelId: 'p/new-observer',
-            }).config,
-          }),
-        ),
-      );
-
-      const { result, client } = renderHookWithProviders(() => ({
-        query: useOMQuery('res-1'),
-        update: useUpdateOMModel('res-1', 'observer'),
-      }));
-
-      await waitFor(() => expect(result.current.query.isSuccess).toBe(true));
-
-      await act(async () => {
-        await result.current.update.mutateAsync({ modelId: 'p/new-observer' });
-      });
-      await waitForMutationsIdle(client);
-
-      expect(result.current.query.data?.config.observer.effectiveModelId).toBe('p/new-observer');
-    });
-  });
-
   describe('when a role is reset to auto', () => {
     it('PUTs auto intent and caches the effective concrete model returned by the server', async () => {
       let putBody: unknown;

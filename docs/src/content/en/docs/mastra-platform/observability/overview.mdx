@@ -1,0 +1,179 @@
+---
+title: "Observability | Mastra platform"
+description: "Collect, import, and query hosted traces, logs, metrics, scores, and feedback from Mastra applications with Mastra Platform Observability and local fallback storage."
+packages:
+  - "@mastra/core"
+  - "@mastra/observability"
+  - "mastra"
+---
+
+# Observability on Mastra platform
+
+Mastra Platform Observability collects traces, logs, metrics, scores, and feedback from Mastra applications. Use it for hosted observability without deploying Studio or Server or configuring local observability storage.
+
+## Quickstart
+
+Choose the setup path that matches your project.
+
+### New project
+
+Create a managed Mastra project and enable Mastra Platform Observability when prompted:
+
+```bash npm2yarn
+npm create mastra@latest
+```
+
+The create command authenticates with Mastra Platform and creates an observability project. It then creates an access token and writes `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` to `.env`.
+
+### Existing project
+
+If you're adding Mastra to an existing application, run `mastra init` and enable Mastra Observability when prompted:
+
+```bash npm2yarn
+npx mastra init
+```
+
+The init command lets you select an existing platform project or create one. It then creates an access token and writes the credentials to `.env`.
+
+## Configure manually
+
+Use manual configuration if you skipped platform setup or automatic provisioning failed.
+
+1. In [Mastra Platform](https://projects.mastra.ai), create or open a project.
+1. Create an access token for the project's organization.
+1. Copy the project ID from the project page.
+1. Add both values to `.env`:
+
+```bash title=".env"
+MASTRA_PLATFORM_ACCESS_TOKEN=<your-platform-access-token>
+MASTRA_PROJECT_ID=<your-project-id>
+```
+
+Register [`MastraPlatformExporter`](/reference/observability/tracing/exporters/mastra-platform-exporter) in your observability configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { MastraPlatformExporter, Observability } from '@mastra/observability'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'my-service',
+        exporters: [new MastraPlatformExporter()],
+      },
+    },
+  }),
+})
+```
+
+The exporter reads the access token and project ID from the environment. Keep `serviceName` stable so you can distinguish applications and deployments when filtering observability data.
+
+`MastraPlatformExporter` sends ended spans, logs, metrics, scores, and feedback. It buffers events and sends a batch when it reaches 1,000 events or has waited five seconds. Model chunk spans aren't exported.
+
+:::note
+
+`MastraPlatformExporter` replaced `CloudExporter`. `CloudExporter` remains available for backward compatibility but is deprecated. Use `MastraPlatformExporter` for new code.
+
+:::
+
+### Store data locally
+
+Add `MastraStorageExporter` if you also want to persist observability data to your configured Mastra storage and inspect it in local Studio:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { MastraPlatformExporter, MastraStorageExporter, Observability } from '@mastra/observability'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'my-service',
+        exporters: [new MastraPlatformExporter(), new MastraStorageExporter()],
+      },
+    },
+  }),
+})
+```
+
+See [Mastra storage exporter](/docs/observability/integrations/exporters/mastra-storage) for storage requirements and configuration.
+
+## View observability data
+
+Open your project in [Mastra Platform](https://projects.mastra.ai) to inspect exported traces, logs, metrics, and scores. A Studio or Server deployment isn't required. Query exported feedback through the hosted feedback API described below.
+
+Use a consistent `serviceName` to filter data from a specific application or deployment.
+
+To get notified when a value such as an error rate or cost crosses a threshold, [create alerts](/docs/mastra-platform/observability/alerts).
+
+## Query observability data
+
+Browse hosted traces from the terminal with the Mastra CLI:
+
+```bash npm2yarn
+npx mastra api trace list
+```
+
+The CLI reads `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` from your project environment and targets the US observability endpoint by default. See [CLI target resolution](/reference/cli/mastra#target-resolution) for other authentication options and regional endpoints.
+
+Use `mastra api trace query` to find completed traces by their fields or related spans. For example, find traces whose root span took more than five seconds:
+
+```bash
+npx mastra api trace query '{
+  "timeRange": {
+    "from": "2026-08-01T00:00:00.000Z",
+    "to": "2026-08-08T00:00:00.000Z"
+  },
+  "where": {
+    "op": "gt",
+    "left": { "path": "durationMs" },
+    "right": { "literal": 5000 }
+  },
+  "page": { "limit": 25 }
+}'
+```
+
+Choose a time range containing your exported traces within your plan's data retention period, with `from` earlier than `to`. Results appear in `data.traces`.
+
+Mastra Platform follows the same query and aggregate request structure as Mastra Server. Use the [Query traces and spans reference](/reference/observability/tracing/advanced-queries) for HTTP endpoints, filters, response shapes, pagination, and discovery:
+
+| Task | CLI command | Reference |
+| - | - | - |
+| Find matching traces | `mastra api trace query` | [Query traces](/reference/observability/tracing/advanced-queries#query-traces) |
+| Find individual spans, including nested runs | `mastra api span query` | [Query spans](/reference/observability/tracing/advanced-queries#query-spans) |
+| Measure matching traces | `mastra api trace aggregate` | [Aggregate traces](/reference/observability/tracing/advanced-queries#aggregate-traces) |
+| Measure individual spans | `mastra api span aggregate` | [Aggregate spans](/reference/observability/tracing/advanced-queries#aggregate-spans) |
+
+Pass the request as one JSON argument to each command. Responses are nested under `data`.
+
+### Platform scope and differences
+
+Use the `X-Mastra-Project-Id` HTTP header to select one project. The CLI sets it from `MASTRA_PROJECT_ID`, an explicit header, or your project configuration. Without a project scope, credentials authorized for organization-wide access can query across projects. Project-bound credentials remain restricted to their project. Project scoping is separate from predicates: don't put `projectId` in `where`.
+
+Platform adds these fields and grouping options:
+
+| Operation | Platform addition |
+| - | - |
+| `queryTraces()` and `querySpans()` | Each result includes `projectId`. |
+| `aggregateTraces()` | Supports `groupBy: ['projectId']` and `countDistinct.projectId`. |
+| `aggregateSpans()` | Supports `groupBy: ['projectId']`, but not `countDistinct.projectId`. |
+
+All traces are retained for six months. This retention period is subject to change for all month-to-month plans. See [pricing](https://mastra.ai/pricing) for current plan limits.
+
+### Other observability data
+
+You can query exported feedback over HTTP. See the [Feedback API](/docs/mastra-platform/api#feedback-api) for its current status, regional endpoints, authentication, project scoping, and supported query parameters such as `traceId` and `environment`.
+
+You can query exported metrics over HTTP, with `MastraClient`, or with `mastra api metric`. See the [Metrics API](/docs/mastra-platform/api#metrics-api) for regional endpoints, authentication, project scoping, and supported endpoints.
+
+## Import existing traces
+
+To move trace history from another provider, such as Langfuse, into a Mastra Platform project, see [Import existing traces](/docs/mastra-platform/observability/import-traces).
+
+## Next steps
+
+- 📹 [Mastra observability and Studio workshop](https://www.youtube.com/watch?v=dKO_a3RPra0)
+- [Configure Mastra Platform](/docs/mastra-platform/configuration)
+- [Learn about observability](/docs/observability/overview)
+- [Configure `MastraPlatformExporter`](/reference/observability/tracing/exporters/mastra-platform-exporter)

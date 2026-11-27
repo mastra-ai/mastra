@@ -74,7 +74,7 @@ export const SinglePoint: Story = {
 
 // 30 daily buckets, as the latency card renders for the 30d preset.
 const latencyData: Record<string, unknown>[] = Array.from({ length: 30 }, (_, i) => ({
-  time: new Date(2026, 7, 26 + i).toLocaleDateString('en-US', { month: 'short', day: '2-digit' }),
+  time: new Date(2026, 7, 26 + i).toLocaleDateString(undefined, { month: 'short', day: '2-digit' }),
   p50: Math.round(130 + 25 * Math.sin(i / 2.5)),
   p95: Math.round(550 + 160 * Math.sin(i / 3.5 + 1)),
 }));
@@ -286,7 +286,13 @@ export const ThinLines: Story = {
 
 /** `markers`: dashed vertical lines at buckets, e.g. where a billing period starts, with an optional label. */
 export const Markers: Story = {
-  args: { lineStyle: 'thin', markers: [{ x: '12:00', label: 'Period starts' }] },
+  args: {
+    lineStyle: 'thin',
+    markers: [
+      { x: '10:00', label: 'Period starts' },
+      { x: '15:00', label: 'Period ends' },
+    ],
+  },
   render: args => (
     <div className="w-[min(48rem,calc(100vw-3rem))]">
       <MetricsLineChart {...args} />

@@ -16,6 +16,7 @@ const FACTORY_ID = 'fp-1';
 const REPO_ID = 'ghp-1';
 const SESSION_ID = 'sess-1';
 const AC = `${TEST_BASE_URL}/api/agent-controller/code`;
+const OTHER_THREAD_ID = 'thread-other';
 const THREAD_PATH = `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${SESSION_ID}`;
 const CREATED_AT = new Date('2026-11-16T03:16:20.000Z');
 
@@ -63,20 +64,16 @@ function toolPart(tool: Tool, state: 'call' | 'result'): MastraMessagePart {
 }
 
 // Storage keeps step-start and workspace data parts the stream never sends; the stream indexes live parts only.
+// Like the server with displayState=false, a new stream opens on the row in flight as a message_start.
 function runOnServer() {
   const encoder = new TextEncoder();
   const stored: MastraDBMessage[] = [];
   let live: MastraDBMessage | null = null;
   let stream: ReadableStreamDefaultController<Uint8Array> | undefined;
+  let opens = 0;
 
-  const write = (event: { type: string; [key: string]: unknown }) =>
+  const send = (event: { type: string; [key: string]: unknown }) =>
     stream?.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-  const snapshot = () =>
-    write({ type: 'display_state_changed', displayState: { isRunning: true, currentMessage: live } });
-  const send = (event: { type: string; [key: string]: unknown }) => {
-    write(event);
-    snapshot();
-  };
 
   const rowInFlight = () => {
     const storedRow = stored.find(message => message.id === live?.id);
@@ -97,14 +94,20 @@ function runOnServer() {
 
   server.use(
     http.get(`${AC}/sessions/:resourceId/stream`, ({ request }) => {
+      if (new URL(request.url).searchParams.get('displayState') !== 'false') {
+        return new HttpResponse('expected displayState=false', { status: 400 });
+      }
+      let opened: ReadableStreamDefaultController<Uint8Array> | undefined;
       request.signal.addEventListener('abort', () => {
-        stream = undefined;
+        if (stream === opened) stream = undefined;
       });
       return new Response(
         new ReadableStream<Uint8Array>({
           start(controller) {
+            opened = controller;
             stream = controller;
-            snapshot();
+            opens += 1;
+            if (live) send({ type: 'message_start', message: structuredClone(live) });
           },
         }),
         { headers: { 'content-type': 'text/event-stream' } },
@@ -118,6 +121,9 @@ function runOnServer() {
   return {
     get streaming() {
       return stream !== undefined;
+    },
+    get opens() {
+      return opens;
     },
     startRow(id: string, text: string, threadId = SESSION_ID) {
       live = {
@@ -182,7 +188,7 @@ function stubThreadRoute() {
       () => new Response(new ReadableStream<Uint8Array>(), { headers: { 'content-type': 'text/event-stream' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-      HttpResponse.json({ modelId: null, thinkingLevel: null }),
+      HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [userSession] }),
@@ -206,7 +212,9 @@ function stubThreadRoute() {
     http.post(`${AC}/sessions/:resourceId/thread`, () => HttpResponse.json({ ok: true })),
     http.put(`${AC}/sessions/:resourceId/state`, () => HttpResponse.json({ ok: true })),
     http.get(`${AC}/sessions/:resourceId/permissions`, () => HttpResponse.json({})),
-    http.get(`${AC}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [{ id: SESSION_ID }] })),
+    http.get(`${AC}/sessions/:resourceId/threads`, () =>
+      HttpResponse.json({ threads: [{ id: SESSION_ID }, { id: OTHER_THREAD_ID }] }),
+    ),
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>
       HttpResponse.json({ workspacePath: `/ws/${SESSION_ID}`, root: '.artifacts', rootPath: '', entries: [] }),
     ),
@@ -221,9 +229,11 @@ function setTabVisibility(state: 'visible' | 'hidden') {
 async function openThread(run: Run) {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [THREAD_PATH] });
   const { client } = renderWithProviders(<RouterProvider router={router} />);
+  // The thread page loads lazily; the first test in the file waits for its first import.
+  await screen.findByRole('textbox', { name: 'Message' }, { timeout: 10_000 });
   await waitForMutationsIdle(client);
   await waitFor(() => expect(run.streaming).toBe(true));
-  return client;
+  return { client, router };
 }
 
 async function leaveTab(run: Run) {
@@ -261,7 +271,7 @@ describe('ThreadPage joining a run in flight', () => {
   it('draws each call once when the tab comes back to a reply that began while it was away', async () => {
     stubThreadRoute();
     const run = runOnServer();
-    const client = await openThread(run);
+    const { client } = await openThread(run);
     run.startRow('row-before', 'Meanwhile, existing review signal.');
     run.runTool(viewPullRequest);
     await screen.findByText('Meanwhile, existing review signal.');
@@ -280,7 +290,7 @@ describe('ThreadPage joining a run in flight', () => {
   it('shows the calls a streaming reply made while the tab was away', async () => {
     stubThreadRoute();
     const run = runOnServer();
-    const client = await openThread(run);
+    const { client } = await openThread(run);
     run.startRow('row-now', 'Now cross-check provenance.');
     run.runTool(reviewSource);
     await screen.findByText('Now cross-check provenance.');
@@ -311,7 +321,7 @@ describe('ThreadPage joining a run in flight', () => {
   it('keeps the words a reply wrote while the tab was away', async () => {
     stubThreadRoute();
     const run = runOnServer();
-    const client = await openThread(run);
+    const { client } = await openThread(run);
     run.startRow('row-now', 'Checking');
     await screen.findByText('Checking');
 
@@ -323,10 +333,28 @@ describe('ThreadPage joining a run in flight', () => {
     expect(await screen.findByText('Checking the authors now.')).toBeInTheDocument();
   });
 
+  it('keeps the words a reply wrote while another thread was open', async () => {
+    stubThreadRoute();
+    const run = runOnServer();
+    const { client, router } = await openThread(run);
+    run.startRow('row-now', 'Checking');
+    await screen.findByText('Checking');
+
+    await act(() => router.navigate(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${OTHER_THREAD_ID}`));
+    await screen.findByText('What can I help you build?');
+    await waitForMutationsIdle(client);
+    run.say(' the authors');
+    await act(() => router.navigate(THREAD_PATH));
+    await waitFor(() => expect(run.streaming).toBe(true));
+    run.say(' now.');
+
+    expect(await screen.findByText('Checking the authors now.')).toBeInTheDocument();
+  });
+
   it('leaves out a reply in flight on another thread of the session', async () => {
     stubThreadRoute();
     const run = runOnServer();
-    run.startRow('row-elsewhere', 'Working on the other thread.', 'thread-other');
+    run.startRow('row-elsewhere', 'Working on the other thread.', OTHER_THREAD_ID);
 
     await openThread(run);
     run.startRow('row-here', 'Working on this thread.');

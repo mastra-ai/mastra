@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import '@/test/english-locale';
 import type { GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
 import { planTraceAggregate, traceAggregateRequestSchema } from '@mastra/core/storage';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -6,9 +7,9 @@ import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TracesExplorer } from '../index';
+import type { TracesExplorerFeatures } from '../index';
 import { DEFAULT_TRACES_FILTERS, DEFAULT_TRACES_SORT, EMPTY_TRACES_SELECTION } from '../traces-explorer-actions';
 import type { TracesFilters, TracesSort } from '../traces-explorer-actions';
-import type { TracesExplorerFeatures } from '../traces-explorer-context';
 import {
   emptyDatasets,
   emptyEntityNames,
@@ -18,13 +19,14 @@ import {
   emptyTracesPage,
   idleDeltaBatch,
   traceAggregateCapabilities,
-  traceTextSearchCapabilities,
+  traceTokenSearchCapabilities,
   traceAggregateError,
   traceCountsAggregate,
   traceQueryCapabilities,
   twoTracesPage,
   weatherTraceUsage,
 } from './fixtures/traces-explorer';
+import { StudioFilterBar, StudioHistogram, StudioList, StudioTracesExplorer } from './studio-traces-explorer';
 import { useFixedChartSize } from '@/test/chart-size';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
@@ -72,7 +74,7 @@ const setHandlers = ({
       const parsed = traceAggregateRequestSchema.safeParse(body);
       if (!parsed.success) return HttpResponse.json({ error: parsed.error.message }, { status: 400 });
       try {
-        planTraceAggregate(parsed.data);
+        planTraceAggregate(parsed.data, { allowTokenSearch: capabilities.capabilities.traceAggregateTokenSearch });
       } catch (error) {
         return HttpResponse.json({ error: String(error) }, { status: 400 });
       }
@@ -108,7 +110,7 @@ function Harness({
       <button type="button" onClick={() => setFilters(current => ({ ...current, tokens: FAILED_ONLY }))}>
         Only failed traces
       </button>
-      <TracesExplorer
+      <StudioTracesExplorer
         selection={selection}
         filters={filters}
         onChange={next => {
@@ -121,11 +123,11 @@ function Harness({
         features={features}
         rootSource={rootSource}
       >
-        <TracesExplorer.FilterBar />
-        <TracesExplorer.Body chart={<TracesExplorer.Histogram />}>
-          <TracesExplorer.List />
+        <StudioFilterBar />
+        <TracesExplorer.Body chart={<StudioHistogram />}>
+          <StudioList />
         </TracesExplorer.Body>
-      </TracesExplorer>
+      </StudioTracesExplorer>
     </>
   );
 }
@@ -499,191 +501,142 @@ describe('TracesExplorer.Histogram', () => {
       expect(chart()).toBeNull();
     });
   });
-  describe('when text search is supported', () => {
-    it('marks an invalid restored search with a validation warning', async () => {
-      setHandlers({ capabilities: traceTextSearchCapabilities });
-      await renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, textSearch: 'ab' } });
-      expect(screen.getByRole('group', { name: 'Contains text ab' }).getAttribute('aria-invalid')).toBe('true');
-      expect(screen.getByTitle('Enter between 3 and 256 characters to search')).toBeTruthy();
-      expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
-      expect(chart()).not.toBeNull();
-    });
-
-    it('rejects an oversized edit without changing the applied search', async () => {
-      setHandlers({ capabilities: traceTextSearchCapabilities });
-      await renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, textSearch: 'needle' } });
-      fireEvent.click(screen.getByRole('combobox', { name: 'Value: needle' }));
-      const editor = screen.getByPlaceholderText('Type a value…');
-      fireEvent.change(editor, { target: { value: 'x'.repeat(257) } });
-      fireEvent.keyDown(editor, { key: 'Enter' });
-      expect(await screen.findByText('Enter between 3 and 256 characters to search')).toBeTruthy();
-      expect(onTraceQuery.mock.calls.at(-1)?.[0]).toHaveProperty('textSearch', 'needle');
-    });
-
-    it('applies an edited search without losing other filters', async () => {
-      setHandlers({ capabilities: traceTextSearchCapabilities });
+  describe('indexed content filters', () => {
+    it.each(['traceQueryTokenSearch', 'traceAggregateTokenSearch'] as const)(
+      'disables search for the whole page without %s',
+      async capability => {
+        setHandlers({
+          capabilities: {
+            ...traceTokenSearchCapabilities,
+            capabilities: { ...traceTokenSearchCapabilities.capabilities, [capability]: false },
+          },
+        });
+        await renderExplorer({
+          initialFilters: {
+            ...DEFAULT_TRACES_FILTERS,
+            tokens: [{ fieldId: 'spans.all', operatorId: 'hasAllTokens', value: 'needle' }],
+          },
+        });
+        expect(tokenTerms(onTraceQuery.mock.calls.at(-1)?.[0])).toEqual([]);
+        expect(tokenTerms(onAggregate.mock.calls.at(-1)?.[0])).toEqual([]);
+        expect(chart()).not.toBeNull();
+        const input = screen.getByRole('combobox', { name: 'Add filter' });
+        fireEvent.focus(input);
+        fireEvent.change(input, { target: { value: 'Any span content' } });
+        expect(screen.queryByRole('option', { name: 'Any span content' })).toBeNull();
+      },
+    );
+    it.each([
+      ['all', 'Any span content'],
+      ['input', 'Span input'],
+      ['output', 'Span output'],
+      ['error', 'Span error'],
+      ['inputPreview', 'Span input preview'],
+      ['outputPreview', 'Span output preview'],
+      ['errorPreview', 'Span error preview'],
+    ] as const)('uses the same %s search for lists and histograms', async (field, label) => {
+      setHandlers({ capabilities: traceTokenSearchCapabilities });
       await renderExplorer({
-        initialFilters: { ...DEFAULT_TRACES_FILTERS, tokens: FAILED_ONLY, textSearch: 'needle' },
+        initialFilters: {
+          ...DEFAULT_TRACES_FILTERS,
+          tokens: [{ fieldId: `spans.${field}`, operatorId: 'hasAllTokens', value: 'id' }],
+        },
       });
-      const originalWhere = onTraceQuery.mock.calls.at(-1)?.[0].where;
-      fireEvent.click(screen.getByRole('combobox', { name: 'Value: needle' }));
-      const editor = screen.getByPlaceholderText('Type a value…');
-      fireEvent.change(editor, { target: { value: 'updated' } });
-      fireEvent.keyDown(editor, { key: 'Enter' });
-      await waitFor(() => expect(onTraceQuery.mock.calls.at(-1)?.[0]).toHaveProperty('textSearch', 'updated'));
-      expect(onTraceQuery.mock.calls.at(-1)?.[0].where).toEqual(originalWhere);
+      expect(onTraceQuery.mock.calls.at(-1)?.[0].where).toEqual({
+        op: 'and',
+        args: [{ spans: { some: { op: 'hasAllTokens', left: { path: field }, right: { literal: 'id' } } } }],
+      });
+      expect(screen.getByRole('button', { name: `Remove ${label} filter` })).toBeTruthy();
+      expect(screen.getByText('contains words')).toBeTruthy();
+      expect(onAggregate.mock.calls.at(-1)?.[0].where).toEqual(onTraceQuery.mock.calls.at(-1)?.[0].where);
     });
-
-    it('does not offer an existing search field when editing another chip', async () => {
-      setHandlers({ capabilities: traceTextSearchCapabilities });
+    it('requires input and output conditions on the same span', async () => {
+      setHandlers({ capabilities: traceTokenSearchCapabilities });
       await renderExplorer({
-        initialFilters: { ...DEFAULT_TRACES_FILTERS, tokens: FAILED_ONLY, textSearch: 'needle' },
+        initialFilters: {
+          ...DEFAULT_TRACES_FILTERS,
+          tokens: [
+            { fieldId: 'spans.input', operatorId: 'hasAllTokens', value: 'payment' },
+            { fieldId: 'spans.output', operatorId: 'hasAllTokens', value: 'declined' },
+          ],
+        },
       });
-      fireEvent.click(screen.getByRole('combobox', { name: 'Field: Status' }));
-      await screen.findByRole('option', { name: 'Trace ID' });
-      expect(screen.queryByRole('option', { name: 'Contains text' })).toBeNull();
+      expect(onTraceQuery.mock.calls.at(-1)?.[0].where).toEqual({
+        op: 'and',
+        args: [
+          {
+            spans: {
+              some: {
+                op: 'and',
+                args: [
+                  { op: 'hasAllTokens', left: { path: 'input' }, right: { literal: 'payment' } },
+                  { op: 'hasAllTokens', left: { path: 'output' }, right: { literal: 'declined' } },
+                ],
+              },
+            },
+          },
+        ],
+      });
     });
-
-    it('preserves an editable empty search after changing the field', async () => {
-      setHandlers({
-        capabilities: traceTextSearchCapabilities,
-      });
-      await renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, tokens: FAILED_ONLY } });
-      fireEvent.click(screen.getByRole('combobox', { name: 'Field: Status' }));
-      fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
-      expect(await screen.findByRole('button', { name: 'Remove Contains text filter' })).toBeTruthy();
-      expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
-    });
-
-    it('applies text entered into an empty search chip', async () => {
-      setHandlers({
-        capabilities: traceTextSearchCapabilities,
-      });
-      await renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, tokens: FAILED_ONLY } });
-      fireEvent.click(screen.getByRole('combobox', { name: 'Field: Status' }));
-      fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
-      expect(await screen.findByRole('button', { name: 'Remove Contains text filter' })).toBeTruthy();
-      expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
-      fireEvent.click(screen.getByRole('combobox', { name: 'Value: …' }));
-      const editor = screen.getByPlaceholderText('Type a value…');
-      fireEvent.change(editor, { target: { value: 'needle' } });
-      fireEvent.keyDown(editor, { key: 'Enter' });
-      await waitFor(() =>
-        expect(onTraceQuery).toHaveBeenLastCalledWith(expect.objectContaining({ textSearch: 'needle' })),
-      );
-    });
-
-    it('removes an empty search chip', async () => {
-      setHandlers({
-        capabilities: traceTextSearchCapabilities,
-      });
-      await renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, tokens: FAILED_ONLY } });
-      fireEvent.click(screen.getByRole('combobox', { name: 'Field: Status' }));
-      fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
-      expect(await screen.findByRole('button', { name: 'Remove Contains text filter' })).toBeTruthy();
-      expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
-      fireEvent.click(screen.getByRole('button', { name: 'Remove Contains text filter' }));
-      await waitFor(() => expect(screen.queryByRole('button', { name: 'Remove Contains text filter' })).toBeNull());
-    });
-
-    it('applies the search to the list on commit', async () => {
-      setHandlers({
-        capabilities: traceTextSearchCapabilities,
-      });
-      await renderExplorer();
-      const search = screen.getByRole('combobox', { name: 'Add filter' });
-      fireEvent.focus(search);
-      fireEvent.change(search, { target: { value: 'Contains text' } });
-      fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
-      onAggregate.mockClear();
-      fireEvent.change(search, { target: { value: 'needle' } });
-      expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
-      fireEvent.keyDown(search, { key: 'Enter' });
-      await waitFor(() =>
-        expect(onTraceQuery).toHaveBeenLastCalledWith(expect.objectContaining({ textSearch: 'needle' })),
-      );
-    });
-
-    it('suppresses the histogram after search is applied', async () => {
-      setHandlers({
-        capabilities: traceTextSearchCapabilities,
-      });
+    it('keeps Any Content search and histogram filters in sync through removal', async () => {
+      setHandlers({ capabilities: traceTokenSearchCapabilities });
       const result = await renderExplorer();
-      const search = screen.getByRole('combobox', { name: 'Add filter' });
-      fireEvent.focus(search);
-      fireEvent.change(search, { target: { value: 'Contains text' } });
-      fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
-      onAggregate.mockClear();
-      fireEvent.change(search, { target: { value: 'needle' } });
-      expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
-      fireEvent.keyDown(search, { key: 'Enter' });
-      await waitFor(() =>
-        expect(onTraceQuery).toHaveBeenLastCalledWith(expect.objectContaining({ textSearch: 'needle' })),
-      );
-      await settle(result.queryClient);
-      expect(chart()).toBeNull();
-      expect(onAggregate).not.toHaveBeenCalled();
-      expect(onTraceQuery.mock.calls.at(-1)?.[0].where).toBeUndefined();
-    });
-
-    it('restores the histogram when search is removed', async () => {
-      setHandlers({ capabilities: traceTextSearchCapabilities });
-      const result = await renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, textSearch: 'needle' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Remove Contains text filter' }));
-      await waitFor(() => expect(chart()).not.toBeNull());
-      await settle(result.queryClient);
-      expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
-    });
-  });
-
-  describe('when text search is not supported', () => {
-    it('does not expose a search control', async () => {
-      setHandlers();
-      await renderExplorer();
       const input = screen.getByRole('combobox', { name: 'Add filter' });
       fireEvent.focus(input);
-      fireEvent.change(input, { target: { value: 'Contains text' } });
-      expect(screen.queryByRole('option', { name: 'Contains text' })).toBeNull();
-    });
-  });
-
-  describe('when search is restored on an unsupported backend', () => {
-    it('keeps the ordinary list and histogram available', async () => {
-      setHandlers();
-      await renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, textSearch: 'needle' } });
-      expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
-      expect(chart()).not.toBeNull();
-    });
-  });
-
-  describe('when search is too short after normalization', () => {
-    it('explains the minimum without sending an invalid query', async () => {
-      setHandlers({
-        capabilities: traceTextSearchCapabilities,
-      });
-      const result = await renderExplorer();
-      const search = screen.getByRole('combobox', { name: 'Add filter' });
-      fireEvent.focus(search);
-      fireEvent.change(search, { target: { value: 'Contains text' } });
-      fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
-      fireEvent.change(search, { target: { value: '  ab  ' } });
-      fireEvent.keyDown(search, { key: 'Enter' });
-      expect(await screen.findByText('Enter between 3 and 256 characters to search')).toBeTruthy();
-      fireEvent.keyDown(search, { key: 'Escape' });
+      fireEvent.change(input, { target: { value: 'Any span content' } });
+      fireEvent.click(await screen.findByRole('option', { name: 'Any span content' }));
+      onAggregate.mockClear();
+      fireEvent.change(input, { target: { value: 'ok' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      await waitFor(() => expect(tokenTerms(onTraceQuery.mock.calls.at(-1)?.[0])).toEqual(['ok']));
+      fireEvent.keyDown(input, { key: 'Escape' });
       await settle(result.queryClient);
-      expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
-      expect(screen.getByRole('region', { name: 'Traces over time', hidden: true })).toBeTruthy();
+      await waitFor(() => expect(chart()).not.toBeNull());
+      expect(onAggregate.mock.calls.at(-1)?.[0].where).toEqual(onTraceQuery.mock.calls.at(-1)?.[0].where);
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Any span content filter' }));
+      await waitFor(() => expect(chart()).not.toBeNull());
     });
-  });
-
-  describe('when an indexed search is restored', () => {
-    it('normalizes the term and suppresses the initial histogram request', async () => {
+    it.each([
+      ['all', 'Any span content'],
+      ['input', 'Span input'],
+      ['output', 'Span output'],
+      ['error', 'Span error'],
+      ['inputPreview', 'Span input preview'],
+      ['outputPreview', 'Span output preview'],
+      ['errorPreview', 'Span error preview'],
+    ] as const)('does not send %s token predicates without the trace capability', async field => {
       setHandlers({
-        capabilities: traceTextSearchCapabilities,
+        capabilities: {
+          ...traceAggregateCapabilities,
+          capabilities: { ...traceAggregateCapabilities.capabilities, spanQueryTokenSearch: true },
+        },
       });
-      await renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, textSearch: '  NEEDLE  ' } });
-      expect(onTraceQuery).toHaveBeenLastCalledWith(expect.objectContaining({ textSearch: 'needle' }));
-      expect(onAggregate).not.toHaveBeenCalled();
+      await renderExplorer({
+        initialFilters: {
+          ...DEFAULT_TRACES_FILTERS,
+          tokens: [{ fieldId: `spans.${field}`, operatorId: 'hasAllTokens', value: 'needle' }],
+        },
+      });
+      expect(tokenTerms(onTraceQuery.mock.calls.at(-1)?.[0])).toEqual([]);
+      expect(chart()).not.toBeNull();
+      const input = screen.getByRole('combobox', { name: 'Add filter' });
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: 'Any span content' } });
+      expect(screen.queryByRole('option', { name: 'Any span content' })).toBeNull();
     });
   });
 });
+
+function tokenTerms(value: unknown): unknown[] {
+  if (!value || typeof value !== 'object') return [];
+  if (
+    'op' in value &&
+    value.op === 'hasAllTokens' &&
+    'right' in value &&
+    value.right &&
+    typeof value.right === 'object' &&
+    'literal' in value.right
+  )
+    return [value.right.literal];
+  return Object.values(value).flatMap(child => (Array.isArray(child) ? child.flatMap(tokenTerms) : tokenTerms(child)));
+}

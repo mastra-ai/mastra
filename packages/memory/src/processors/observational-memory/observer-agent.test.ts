@@ -99,20 +99,21 @@ describe('optimizeObservationsForContext', () => {
     expect(optimized).toContain('🔴');
   });
 
-  it('should simplify arrows', () => {
-    const observations = '- Task -> completed successfully';
+  it.each([
+    ['should simplify arrows', '- Task -> completed successfully', '->'],
+    [
+      'should collapse multiple newlines',
+      `Line 1
+
+
+
+Line 2`,
+      '\n\n\n',
+    ],
+  ] as const)('%s', (_title, observationsValue, expected) => {
+    const observations = observationsValue;
     const optimized = optimizeObservationsForContext(observations);
-    expect(optimized).not.toContain('->');
-  });
-
-  it('should collapse multiple newlines', () => {
-    const observations = `Line 1
-
-
-
-Line 2`;
-    const optimized = optimizeObservationsForContext(observations);
-    expect(optimized).not.toContain('\n\n\n');
+    expect(optimized).not.toContain(expected);
   });
 
   it('should preserve markdown link text', () => {
@@ -134,17 +135,17 @@ Line 2`;
     expect(optimized).toContain('[Item name](#preview=item&id=abc123)');
   });
 
-  it('should still strip semantic tags that are not markdown links', () => {
+  it('should preserve bracketed labels that are not markdown links', () => {
     const observations = '- 🔴 [tag one, tag two] User prefers direct answers';
     const optimized = optimizeObservationsForContext(observations);
-    expect(optimized).not.toContain('[tag one, tag two]');
+    expect(optimized).toContain('[tag one, tag two]');
     expect(optimized).toContain('User prefers direct answers');
   });
 
-  it('should strip semantic tags while preserving an adjacent markdown link', () => {
+  it('should preserve bracketed labels alongside an adjacent markdown link', () => {
     const observations = '- 🔴 [internal] Agent shared [the guide](https://example.com/guide)';
     const optimized = optimizeObservationsForContext(observations);
-    expect(optimized).not.toContain('[internal]');
+    expect(optimized).toContain('[internal]');
     expect(optimized).toContain('[the guide](https://example.com/guide)');
   });
 

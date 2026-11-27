@@ -6,9 +6,10 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import type { Component } from '@earendil-works/pi-tui';
 import type { BackgroundCompletionEvent } from '@mastra/code-sdk/agents/background-completion-events';
-import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
-import type { PendingModelFallback } from '@mastra/code-sdk/auth/account-rotation-processor';
+import { onEmbedderPackageMissing } from '@mastra/code-sdk/agents/fastembed-subprocess';
 import { getOAuthProviders } from '@mastra/code-sdk/auth/storage';
+import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/model-fallback';
+import type { PendingModelFallback } from '@mastra/code-sdk/model-fallback';
 import {
   getAvailableModePacks,
   ONBOARDING_VERSION,
@@ -43,7 +44,8 @@ import {
 } from './background-activity.js';
 import type { BackgroundActivity } from './background-activity.js';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
-import { dispatchSlashCommand } from './command-dispatch.js';
+import { withFastEntries } from './codex-fast-entries.js';
+import { dispatchSlashCommand, menuCommandName } from './command-dispatch.js';
 import { sendGoalReminder, setGoalWithDefaults } from './commands/goal.js';
 import { showThreadLockPrompt } from './commands/threads.js';
 import type { SlashCommandContext } from './commands/types.js';
@@ -54,7 +56,7 @@ import { promptAuthMode } from './components/login-mode-selector.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
 import type { ModelItem } from './components/model-selector.js';
 import { GradientAnimator } from './components/obi-loader.js';
-import { showError, showInfo, showFormattedError, notify } from './display.js';
+import { showError, showInfo, showFormattedError, showLines, notify } from './display.js';
 import { dispatchEvent, getThreadLifecycleGeneration } from './event-dispatch.js';
 import { renderStatusAnimationFrame } from './footer-animation-renderer.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
@@ -91,6 +93,7 @@ import { handleShellPassthrough } from './shell.js';
 import type { MastraTUIOptions, TUIState } from './state.js';
 import { createTUIState, getGithubPrSubscriptionsFromMetadata } from './state.js';
 import { updateStatusLine } from './status-line.js';
+import { theme } from './theme.js';
 import { resumeThreadOnStartup } from './thread-startup.js';
 import { setCurrentThreadTitle } from './thread-title.js';
 import { offerUpdate } from './update-flow.js';
@@ -212,6 +215,7 @@ export class MastraTUI {
   private cleanupPluginReloadListener?: () => void;
   private cleanupPluginUpdateListener?: () => void;
   private cleanupPluginErrorListener?: () => void;
+  private cleanupEmbedderNoticeListener?: () => void;
   private cleanupBackgroundCompletionListener?: () => void;
   private backgroundNoticeQueue = Promise.resolve();
   private lastStreamError: string | null = null;
@@ -750,6 +754,11 @@ export class MastraTUI {
       this.cleanupPluginErrorListener = undefined;
     }
 
+    if (this.cleanupEmbedderNoticeListener) {
+      this.cleanupEmbedderNoticeListener();
+      this.cleanupEmbedderNoticeListener = undefined;
+    }
+
     if (this.cleanupBackgroundCompletionListener) {
       this.cleanupBackgroundCompletionListener();
       this.cleanupBackgroundCompletionListener = undefined;
@@ -931,6 +940,13 @@ export class MastraTUI {
     if (this.state.pluginManager && !this.cleanupPluginErrorListener) {
       this.cleanupPluginErrorListener = this.state.pluginManager.onPluginError(event => {
         showError(this.state, event.message);
+      });
+    }
+    // Memory contains embedder failures (and console.warn is silenced), so a missing
+    // embedder package is only visible through this notice. Reported once per process.
+    if (!this.cleanupEmbedderNoticeListener) {
+      this.cleanupEmbedderNoticeListener = onEmbedderPackageMissing(error => {
+        showLines(this.state, [theme.fg('warning', `Warning: ${error.message}`)]);
       });
     }
 
@@ -1555,7 +1571,9 @@ export class MastraTUI {
   }
 
   private async handleSlashCommand(input: string): Promise<boolean> {
-    return dispatchSlashCommand(input, this.state, () => this.buildCommandContext());
+    const dispatch = () => dispatchSlashCommand(input, this.state, () => this.buildCommandContext());
+    const menu = menuCommandName(input);
+    return menu ? this.state.promptSlot.runMenuCommand(menu, dispatch) : dispatch();
   }
 
   // ===========================================================================
@@ -1704,7 +1722,10 @@ export class MastraTUI {
           });
         },
         onSelectModel: async (title: string, modeColor?: string): Promise<string | undefined> => {
-          const availableModels = await this.state.controller.listAvailableModels();
+          const availableModels = withFastEntries(await this.state.controller.listAvailableModels(), {
+            authStorage: this.state.authStorage,
+            factory: this.state.factory,
+          });
           if (this.stopped || availableModels.length === 0) return undefined;
 
           return new Promise<string | undefined>(resolveModel => {
@@ -1713,7 +1734,6 @@ export class MastraTUI {
               models: availableModels,
               currentModelId: undefined,
               title,
-              titleColor: modeColor,
               onSelect: async (model: ModelItem) => {
                 this.state.ui.hideOverlay();
                 await promptForApiKeyIfNeeded(this.state.ui, model, this.state.authStorage);
@@ -1734,6 +1754,7 @@ export class MastraTUI {
       this.state.activeOnboarding = component;
       // Setup takes over the whole terminal (the component centers itself and fills every row).
       showModalOverlay(this.state.ui, component, {
+        fullscreen: true,
         widthPercent: 1,
         maxWidth: 10_000,
         maxHeight: '100%',

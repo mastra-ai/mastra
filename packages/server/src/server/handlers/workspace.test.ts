@@ -603,6 +603,20 @@ describe('Workspace Handlers', () => {
       }
     });
 
+    it('returns 404 for an unknown workspace without logging an error', async () => {
+      const mastra = createMastra();
+      const trackException = vi.spyOn(mastra.getLogger(), 'trackException');
+
+      await expect(
+        WORKSPACE_FS_READ_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'nonexistent-workspace',
+          path: '/test.txt',
+        }),
+      ).rejects.toMatchObject({ status: 404 });
+      expect(trackException).not.toHaveBeenCalled();
+    });
+
     it('should throw 400 when path parameter missing', async () => {
       const workspace = createWorkspace('test-workspace');
       const mastra = createMastra(workspace);
@@ -2230,7 +2244,10 @@ describe('Workspace Handlers', () => {
       }
     });
 
-    it('should throw 404 when skill not found on filesystem', async () => {
+    it.each([
+      ['should throw 404 when skill not found on filesystem', 'nonexistent', 404],
+      ['should reject invalid skill names (path traversal)', '../../../etc', 400],
+    ] as const)('%s', async (_title, skillName, expected) => {
       const workspace = createWorkspace('test-workspace');
       const mastra = createMastra(workspace);
 
@@ -2238,7 +2255,7 @@ describe('Workspace Handlers', () => {
         WORKSPACE_SKILLS_SH_REMOVE_ROUTE.handler({
           ...createTestServerContext({ mastra }),
           workspaceId: 'test-workspace',
-          skillName: 'nonexistent',
+          skillName,
         }),
       ).rejects.toThrow(HTTPException);
 
@@ -2246,33 +2263,10 @@ describe('Workspace Handlers', () => {
         await WORKSPACE_SKILLS_SH_REMOVE_ROUTE.handler({
           ...createTestServerContext({ mastra }),
           workspaceId: 'test-workspace',
-          skillName: 'nonexistent',
+          skillName,
         });
       } catch (e) {
-        expect((e as HTTPException).status).toBe(404);
-      }
-    });
-
-    it('should reject invalid skill names (path traversal)', async () => {
-      const workspace = createWorkspace('test-workspace');
-      const mastra = createMastra(workspace);
-
-      await expect(
-        WORKSPACE_SKILLS_SH_REMOVE_ROUTE.handler({
-          ...createTestServerContext({ mastra }),
-          workspaceId: 'test-workspace',
-          skillName: '../../../etc',
-        }),
-      ).rejects.toThrow(HTTPException);
-
-      try {
-        await WORKSPACE_SKILLS_SH_REMOVE_ROUTE.handler({
-          ...createTestServerContext({ mastra }),
-          workspaceId: 'test-workspace',
-          skillName: '../../../etc',
-        });
-      } catch (e) {
-        expect((e as HTTPException).status).toBe(400);
+        expect((e as HTTPException).status).toBe(expected);
       }
     });
   });

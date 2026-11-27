@@ -12,11 +12,6 @@ describe('VARIABLE_PATTERN', () => {
     return matches;
   };
 
-  it('should match simple variable names', () => {
-    const text = '{{userName}}';
-    expect(matchAll(text)).toEqual(['{{userName}}']);
-  });
-
   it('should match variables starting with underscore', () => {
     const text = '{{_privateVar}}';
     expect(matchAll(text)).toEqual(['{{_privateVar}}']);
@@ -32,28 +27,14 @@ describe('VARIABLE_PATTERN', () => {
     expect(matchAll(text)).toEqual(['{{userName}}', '{{companyName}}']);
   });
 
-  it('should not match variables starting with numbers', () => {
-    const text = '{{1invalid}}';
-    expect(matchAll(text)).toEqual([]);
-  });
-
-  it('should not match empty braces', () => {
-    const text = '{{}}';
-    expect(matchAll(text)).toEqual([]);
-  });
-
-  it('should not match single braces', () => {
-    const text = '{singleBrace}';
-    expect(matchAll(text)).toEqual([]);
-  });
-
-  it('should not match variables with spaces', () => {
-    const text = '{{user name}}';
-    expect(matchAll(text)).toEqual([]);
-  });
-
-  it('should not match variables with special characters', () => {
-    const text = '{{user-name}}';
+  it.each([
+    ['should not match variables starting with numbers', '{{1invalid}}'],
+    ['should not match empty braces', '{{}}'],
+    ['should not match single braces', '{singleBrace}'],
+    ['should not match variables with spaces', '{{user name}}'],
+    ['should not match variables with special characters', '{{user-name}}'],
+  ] as const)('%s', (_title, textValue) => {
+    const text = textValue;
     expect(matchAll(text)).toEqual([]);
   });
 
@@ -76,17 +57,5 @@ describe('VARIABLE_PATTERN', () => {
 
   it('should not match a trailing dot', () => {
     expect(matchAll('{{user.}}')).toEqual([]);
-  });
-
-  it('should match in markdown context', () => {
-    const text = `# Instructions
-
-You are helping {{userName}} at {{companyName}}.
-
-## Context
-- Role: {{userRole}}
-- Language: {{preferredLanguage}}`;
-
-    expect(matchAll(text)).toEqual(['{{userName}}', '{{companyName}}', '{{userRole}}', '{{preferredLanguage}}']);
   });
 });

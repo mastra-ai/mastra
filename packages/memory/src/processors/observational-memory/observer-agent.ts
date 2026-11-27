@@ -4,7 +4,7 @@ import type { CoreMessage } from '@mastra/core/llm';
 
 import { isSystemReminderMessage } from '../../system-reminders';
 import { stripEphemeralAnchorIds } from './anchor-ids';
-import { isTemporalGapMarker, resolveTimeZone } from './date-utils';
+import { getDateTimeFormat, isTemporalGapMarker, resolveTimeZone } from './date-utils';
 import type { Extractor } from './extractor';
 import {
   buildExtractorOutputSections,
@@ -666,8 +666,7 @@ const OBSERVER_IMAGE_FILE_EXTENSIONS = new Set([
 
 function formatObserverDate(createdAt: Date | undefined, timeZone: string | undefined): string {
   if (!createdAt) return '';
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
+  const parts = getDateTimeFormat('observer-date', timeZone, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -678,12 +677,11 @@ function formatObserverDate(createdAt: Date | undefined, timeZone: string | unde
 
 function formatObserverTime(createdAt: Date | undefined, timeZone: string | undefined): string {
   return createdAt
-    ? createdAt.toLocaleTimeString('en-US', {
-        timeZone,
+    ? getDateTimeFormat('observer-time', timeZone, {
         hour: 'numeric',
         minute: '2-digit',
         hour12: true,
-      })
+      }).format(createdAt)
     : '';
 }
 
@@ -2270,7 +2268,7 @@ export function extractCurrentTask(observations: string): string | null {
  *
  * This removes:
  * - Non-critical emojis (🟡 and 🟢, keeping only 🔴)
- * - Semantic tags [label, label]
+ * - Ephemeral observation anchor IDs ([O1], [O1-N1])
  * - Arrow indicators (->)
  * - Extra whitespace
  *
@@ -2282,11 +2280,6 @@ export function optimizeObservationsForContext(observations: string): string {
   // Remove 🟡 and 🟢 emojis (keep 🔴 for critical items)
   optimized = optimized.replace(/🟡\s*/g, '');
   optimized = optimized.replace(/🟢\s*/g, '');
-
-  // Remove semantic tags like [label, label] but keep collapsed markers like [72 items collapsed - ID: b1fa]
-  // and markdown link text like [label](url) — the trailing `(?!\()` lookahead keeps the label so the
-  // link survives intact instead of collapsing to a bare, unlabelled URL.
-  optimized = optimized.replace(/\[(?![\d\s]*items collapsed)[^\]]+\](?!\()/g, '');
 
   // Remove arrow indicators
   optimized = optimized.replace(/\s*->\s*/g, ' ');

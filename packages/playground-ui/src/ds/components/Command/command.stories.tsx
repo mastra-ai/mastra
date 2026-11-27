@@ -19,10 +19,10 @@ import {
 } from './command';
 import { IconBox } from '@/ds/icons/central/IconBox';
 import { IconBranch } from '@/ds/icons/central/IconBranch';
-import { IconBubbleWide } from '@/ds/icons/central/IconBubbleWide';
 import { IconCalculator } from '@/ds/icons/central/IconCalculator';
 import { IconCalendar1 } from '@/ds/icons/central/IconCalendar1';
 import { IconChart6 } from '@/ds/icons/central/IconChart6';
+import { IconChatBubble7 } from '@/ds/icons/central/IconChatBubble7';
 import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
 import { IconCreditCard1 } from '@/ds/icons/central/IconCreditCard1';
 import { IconEmojiSmile } from '@/ds/icons/central/IconEmojiSmile';
@@ -31,7 +31,7 @@ import { IconMaintenance } from '@/ds/icons/central/IconMaintenance';
 import { IconRescueRing } from '@/ds/icons/central/IconRescueRing';
 import { IconRobot } from '@/ds/icons/central/IconRobot';
 import { IconRocket } from '@/ds/icons/central/IconRocket';
-import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconSettingsGear5 } from '@/ds/icons/central/IconSettingsGear5';
 import { IconShield } from '@/ds/icons/central/IconShield';
 import { IconUser } from '@/ds/icons/central/IconUser';
 
@@ -103,7 +103,7 @@ export const Default: Story = {
             <CommandShortcut>⌘B</CommandShortcut>
           </CommandItem>
           <CommandItem>
-            <IconSettingsGear1 className={iconClassName} />
+            <IconSettingsGear5 className={iconClassName} />
             <span>Settings</span>
             <CommandShortcut>⌘S</CommandShortcut>
           </CommandItem>
@@ -130,7 +130,7 @@ export const InlineVercelStyle: Story = {
           <CommandEmpty>No results found.</CommandEmpty>
           <CommandGroup heading="Projects">
             <InlineResult
-              icon={<IconSettingsGear1 className="size-3.5" />}
+              icon={<IconSettingsGear5 className="size-3.5" />}
               title="Settings"
               subtitle="Mastra"
               value="settings mastra account billing"
@@ -157,7 +157,7 @@ export const InlineVercelStyle: Story = {
               value="deployments mastra docs"
             />
             <InlineResult
-              icon={<IconSettingsGear1 className="size-3.5" />}
+              icon={<IconSettingsGear5 className="size-3.5" />}
               title="On-Demand Concurrent Builds"
               subtitle="Mastra / Build and Deployment / Settings"
               value="on demand concurrent builds mastra build deployment settings"
@@ -193,11 +193,7 @@ export const WithDialog: Story = {
     return (
       <>
         <p className="mb-4 text-body text-muted-foreground">
-          Press{' '}
-          <kbd className="pointer-events-none inline-flex h-5 items-center gap-1 rounded border border-border bg-muted px-1.5 font-mono text-meta text-foreground select-none">
-            <span className="text-caption">⌘</span>K
-          </kbd>{' '}
-          or click the button below
+          Press <Kbd size="sm">⌘K</Kbd> or click the button below
         </p>
         <Button onClick={() => setOpen(true)}>Open command palette</Button>
         <CommandDialog open={open} onOpenChange={setOpen}>
@@ -231,7 +227,7 @@ export const WithDialog: Story = {
                 <CommandShortcut>⌘B</CommandShortcut>
               </CommandItem>
               <CommandItem onSelect={() => setOpen(false)}>
-                <IconSettingsGear1 className={iconClassName} />
+                <IconSettingsGear5 className={iconClassName} />
                 <span>Settings</span>
                 <CommandShortcut>⌘S</CommandShortcut>
               </CommandItem>
@@ -359,7 +355,7 @@ export const InDialogWithDisabledRows: Story = {
               <CommandGroup heading="Coming soon">
                 {['HubSpot', 'Discord'].map(name => (
                   <CommandItem key={name} disabled onSelect={() => setPicked(name)}>
-                    <IconBubbleWide className={iconClassName} />
+                    <IconChatBubble7 className={iconClassName} />
                     <span className="flex-1">{name}</span>
                   </CommandItem>
                 ))}
@@ -377,7 +373,7 @@ export const InDialogWithDisabledRows: Story = {
 
 const InsetFooter = () => (
   <>
-    <Button variant="ghost" size="sm" icon={<IconBubbleWide />}>
+    <Button variant="ghost" size="sm" icon={<IconChatBubble7 />}>
       Send feedback
     </Button>
     <span className="flex items-center gap-1.5">
@@ -408,7 +404,7 @@ const InsetResults = ({ search }: { search: string }) => (
         Deploys
       </CommandItem>
       <CommandItem>
-        <IconSettingsGear1 />
+        <IconSettingsGear5 />
         Settings
       </CommandItem>
     </CommandGroup>

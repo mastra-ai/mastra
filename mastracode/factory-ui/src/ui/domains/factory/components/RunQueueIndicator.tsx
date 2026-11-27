@@ -1,103 +1,62 @@
-import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Link } from 'react-router';
+import { RunQueueMenu } from '@mastra/playground-ui/domains/factory';
+import type { RunQueueMenuRun } from '@mastra/playground-ui/domains/factory';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
+import { HrefLink } from '../../../ui/HrefLink';
 import type { RunQueueResponse } from '../services/decisions';
 import { factoryAttentionTargetPath } from '../services/attention';
-import { IconHourglass } from '@mastra/playground-ui/icons/central/IconHourglass';
 
 type QueuedRun = RunQueueResponse['queued'][number];
 
 function runLabel(run: QueuedRun): string {
+  if (run.lane === 'interactive') return 'Reply from a person';
   if (run.skillName) return run.skillName;
   if (run.type === 'sendMessage') return 'Message to the session';
   if (run.type === 'signalActivity') return 'Pull request activity';
   return 'Prompt run';
 }
 
-function slotsLabel(slots: RunQueueResponse['slots']): string | undefined {
-  return slots ? `${slots.inUse} of ${slots.cap} run slots in use on this server` : undefined;
+function slotLines(slots: RunQueueResponse['slots']): string[] {
+  if (!slots) return [];
+  return [
+    `${slots.inUse} of ${slots.cap} run slots in use on this server`,
+    `${slots.interactive.inUse} of ${slots.interactive.cap} reply slots in use on this server`,
+  ];
 }
 
-/** How many automated runs wait for a run slot, opening the list oldest first. */
 export function RunQueueIndicator({ factoryId, queue }: { factoryId: string; queue: RunQueueResponse | undefined }) {
   const catalog = useBoardCatalog(factoryId);
-  if (!queue || queue.queuedCount === 0) return null;
+  if (!queue) return null;
 
   const phaseName = (board: string | null, phase: string | null) => {
     const found = catalog.data?.find(definition => definition.id === board)?.phases.find(entry => entry.id === phase);
     return found?.name ?? found?.title ?? phase;
   };
-  const running = queue.slots ? `, ${queue.slots.inUse} running on this server` : '';
-  const unlisted = queue.queuedCount - queue.queued.length;
+  const toRun = (run: QueuedRun): RunQueueMenuRun => {
+    const card = run.workItem;
+    return {
+      id: run.decisionId,
+      position: run.position,
+      title: card?.title ?? 'Card no longer on the board',
+      details: [card?.key, runLabel(run), phaseName(card?.board ?? null, card?.phase ?? null)].filter(
+        (detail): detail is string => Boolean(detail),
+      ),
+      queuedSince: { dateTime: run.queuedSince, label: relativeTime(run.queuedSince) },
+      href: card?.board
+        ? factoryAttentionTargetPath(factoryId, { kind: 'work-item', workItemId: card.id, board: card.board })
+        : undefined,
+    };
+  };
 
   return (
-    <DropdownMenu>
-      <DropdownMenu.Trigger
-        variant="ghost"
-        size="sm"
-        aria-label={`${queue.queuedCount} queued${running}`}
-        tooltip={slotsLabel(queue.slots) ?? 'Automated runs waiting for a run slot'}
-      >
-        <IconHourglass aria-hidden />
-        <span className="tabular-nums">{queue.queuedCount} queued</span>
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="end" className="w-[min(24rem,calc(100vw-1.5rem))]">
-        <DropdownMenu.Label>Waiting for a run slot, oldest first</DropdownMenu.Label>
-        {queue.queued.map(run => {
-          const card = run.workItem;
-          const details = [card?.key, runLabel(run), phaseName(card?.board ?? null, card?.phase ?? null)].filter(
-            (detail): detail is string => Boolean(detail),
-          );
-          const row = (
-            <>
-              <span className="w-7 shrink-0 tabular-nums">#{run.position}</span>
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate">{card?.title ?? 'Card no longer on the board'}</span>
-                <span className="flex min-w-0 gap-2">
-                  {details.map(detail => (
-                    <Txt key={detail} as="span" variant="caption" tone="muted" className="truncate">
-                      {detail}
-                    </Txt>
-                  ))}
-                  <Txt as="time" variant="caption" tone="muted" className="shrink-0" dateTime={run.queuedSince}>
-                    {relativeTime(run.queuedSince)}
-                  </Txt>
-                </span>
-              </span>
-            </>
-          );
-          return card?.board ? (
-            <DropdownMenu.Item
-              key={run.decisionId}
-              render={
-                <Link
-                  to={factoryAttentionTargetPath(factoryId, {
-                    kind: 'work-item',
-                    workItemId: card.id,
-                    board: card.board,
-                  })}
-                />
-              }
-            >
-              {row}
-            </DropdownMenu.Item>
-          ) : (
-            <DropdownMenu.Item key={run.decisionId} disabled>
-              {row}
-            </DropdownMenu.Item>
-          );
-        })}
-        {unlisted > 0 && <DropdownMenu.Label>And {unlisted} more</DropdownMenu.Label>}
-        {queue.slots && (
-          <>
-            <DropdownMenu.Separator />
-            <DropdownMenu.Label>{slotsLabel(queue.slots)}</DropdownMenu.Label>
-          </>
-        )}
-      </DropdownMenu.Content>
-    </DropdownMenu>
+    <RunQueueMenu
+      queuedCount={queue.queuedCount}
+      replies={queue.queued.filter(run => run.lane === 'interactive').map(toRun)}
+      automated={queue.queued.filter(run => run.lane !== 'interactive').map(toRun)}
+      running={queue.slots ? `, ${queue.slots.inUse + queue.slots.interactive.inUse} running on this server` : ''}
+      slotLines={slotLines(queue.slots)}
+      LinkComponent={HrefLink}
+    />
   );
 }

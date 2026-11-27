@@ -85,10 +85,7 @@ export function WorkflowTimelineRow({
       >
         <span
           aria-label={status.label}
-          className={cn(
-            'grid size-6 flex-none place-items-center rounded-md border border-border bg-background',
-            workflowStatusToneText[tone],
-          )}
+          className={cn('grid size-6 flex-none place-items-center rounded-md bg-nested', workflowStatusToneText[tone])}
         >
           <StatusIcon aria-hidden className={cn('size-3.5', row.status === 'running' && 'motion-safe:animate-spin')} />
         </span>
@@ -98,7 +95,7 @@ export function WorkflowTimelineRow({
           </Txt>
           {row.isNestedEntry && (
             <Txt as="span" variant="meta" tone="muted" className="flex min-w-0 items-center gap-1">
-              <IconArrowCornerDownRight aria-hidden className="size-3 shrink-0" />
+              <IconArrowCornerDownRight aria-hidden className="size-icon-xs shrink-0" />
               <span className="truncate">{parentPath}</span>
             </Txt>
           )}

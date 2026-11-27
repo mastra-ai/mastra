@@ -332,7 +332,7 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
    */
   tools?: ModelToolDefinition[];
   /** Type of result/output this LLM call produced */
-  resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning';
+  resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning' | 'title_generation';
   /** Token usage statistics */
   usage?: UsageStats;
   /** Whether one or more model steps omitted a primary token count */
@@ -1769,7 +1769,7 @@ export interface IModelSpanTracker {
   getTimeToFirstTokenMs?(): number | undefined;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
   /** @internal Record a chunk after the runtime has applied output processors. */
-  recordChunk?(chunk: ChunkType): void;
+  recordChunk?<OUTPUT>(chunk: ChunkType<OUTPUT>): void;
   startStep(payload?: StepStartPayload): void;
   updateStep?(payload?: StepStartPayload): void;
 
@@ -2112,6 +2112,17 @@ export interface ResumeTracingContext {
   resumedFromSpanId?: string;
   /** External parent of the suspended invocation, kept by a resume that gives none of its own */
   externalParentSpanId?: string;
+  /**
+   * Whether the suspended invocation was sampled. Workflow runs save it (see
+   * `getWorkflowResumeTracingContext`) and their resumes repeat the decision instead of sampling
+   * again. Agent runs and snapshots from older versions lack it, so those resumes decide as before.
+   */
+  sampled?: boolean;
+  /**
+   * Trace-level state of the suspended invocation. A resume keeps its hidden input/output and keys
+   * where the resume call sets none of its own.
+   */
+  traceState?: TraceState;
 }
 
 /** Options for retrieving an existing span or creating a new one from a tracing context. */

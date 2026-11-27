@@ -10,24 +10,47 @@ import { pushableFeedStream } from '../../../../../../e2e/ui/feed-stream';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { queryKeys } from '../../../../../api/keys';
-import { useActiveRunResourceIds } from '../../../../../hooks/useActiveRunResources';
+import type { SessionActivity, SessionRowsRequest, SessionRowsResponse } from '../../../../../api/types';
 import { useFactoryDecisionStatus } from '../../../../../hooks/useFactoryDecisions';
+import { useSessionActivityQuery, useSessionRowsQuery } from '../../../../../hooks/useSessionRows';
 import {
   useBoardPhasesQuery,
+  useSessionCardsQuery,
   useSessionWorkItemsQuery,
-  useSidebarWorkItemsQuery,
   useTransitionWorkItemMutation,
   workItemActivityQueryOptions,
   workItemStartersQueryOptions,
 } from '../../../../../hooks/useWorkItems';
 import { createQueryClient } from '../../../../../query-client';
-import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
 import { FeedEventsProvider } from '../FeedEventsProvider';
 
 const PROJECT_ID = 'project-1';
 const BOARD_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`;
 const DECISIONS_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/decisions`;
-const RUNS_URL = '*/api/agent-controller/:controllerId/active-runs';
+const SESSION_ROWS_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/session-rows`;
+const SESSION_ACTIVITY_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/session-activity`;
+const SIDEBAR_VIEW: SessionRowsRequest = {
+  sort: 'activity',
+  groupBy: 'none',
+  owner: 'all',
+  children: false,
+  pin: [],
+  windows: {},
+};
+const NO_SESSION_ROWS: SessionRowsResponse = {
+  total: 0,
+  matching: 0,
+  groups: [],
+  boards: [],
+  owners: [],
+};
+const NO_SESSION_ACTIVITY: SessionActivity = {
+  runningSessionIds: [],
+  parkedSessionIds: [],
+  cardStatuses: {},
+  sessionHeldCardIds: [],
+  cards: { working: 0, waiting: 0 },
+};
 const PHASES_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/boards/:boardKey/phases`;
 const FEED_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/feed-events`;
 const WITHIN_A_SECOND_MS = 900;
@@ -56,7 +79,7 @@ function card(title: string, stage = 'intake') {
 }
 
 function boardSnapshot(title: string, stage?: string) {
-  return { workItems: [card(title, stage)], runningSessionIds: [], parkedSessionIds: [] };
+  return { workItems: [card(title, stage)] };
 }
 
 function inner({ children }: { children: React.ReactNode }) {
@@ -64,11 +87,12 @@ function inner({ children }: { children: React.ReactNode }) {
 }
 
 function watchBoard() {
-  const cards = useSidebarWorkItemsQuery(PROJECT_ID);
+  const cards = useSessionCardsQuery(PROJECT_ID);
   return {
     cards: { isSuccess: cards.isSuccess, data: cards.data?.workItems },
     decisions: useFactoryDecisionStatus(PROJECT_ID, ['pending', 'leased']),
-    running: useActiveRunResourceIds(AGENT_CONTROLLER_ID),
+    sessionRows: useSessionRowsQuery(PROJECT_ID, SIDEBAR_VIEW).shown,
+    sessionActivity: useSessionActivityQuery(PROJECT_ID).data,
     move: useTransitionWorkItemMutation(PROJECT_ID),
   };
 }
@@ -76,11 +100,17 @@ function watchBoard() {
 interface BoardRequests {
   cards: number;
   decisions: number;
-  runs: number;
+  sessionRows: number;
+  sessionActivity: number;
 }
 
 function moreRefreshes(requests: BoardRequests, count: number) {
-  return { cards: requests.cards + count, decisions: requests.decisions + count, runs: requests.runs + count };
+  return {
+    cards: requests.cards + count,
+    decisions: requests.decisions + count,
+    sessionRows: requests.sessionRows + count,
+    sessionActivity: requests.sessionActivity + count,
+  };
 }
 
 function oneMoreRefresh(requests: BoardRequests) {
@@ -113,7 +143,7 @@ function heldCardMove(board: { stage: string }) {
 }
 
 function boardEndpoints() {
-  const requests: BoardRequests = { cards: 0, decisions: 0, runs: 0 };
+  const requests: BoardRequests = { cards: 0, decisions: 0, sessionRows: 0, sessionActivity: 0 };
   const board = { title: 'Fix login', stage: 'intake', readMs: 0 };
   server.use(
     http.get(BOARD_URL, async () => {
@@ -126,9 +156,13 @@ function boardEndpoints() {
       requests.decisions += 1;
       return HttpResponse.json({ decisions: [] });
     }),
-    http.get(RUNS_URL, () => {
-      requests.runs += 1;
-      return HttpResponse.json({ runs: [] });
+    http.get(SESSION_ROWS_URL, () => {
+      requests.sessionRows += 1;
+      return HttpResponse.json(NO_SESSION_ROWS);
+    }),
+    http.get(SESSION_ACTIVITY_URL, () => {
+      requests.sessionActivity += 1;
+      return HttpResponse.json(NO_SESSION_ACTIVITY);
     }),
   );
   return { requests, board };
@@ -164,7 +198,7 @@ describe('FeedEventsProvider, on the board', () => {
     vi.useRealTimers();
   });
 
-  it('refreshes cards, decisions and runs within a second of a lone frame', async () => {
+  it('refreshes cards, decisions, session rows and session activity within a second of a lone frame', async () => {
     const stream = pushableFeedStream(PROJECT_ID);
     server.use(stream.handler);
     const { requests } = boardEndpoints();
@@ -286,8 +320,7 @@ describe('FeedEventsProvider, on the board', () => {
       stream.ping();
       await advance(rendered.client, SERVER_PING_EVERY_MS);
     }
-    // Runs have no timer of their own: they are read with the board, at most once a minute.
-    const safetyRereads = requests.runs - connected.runs;
+    const safetyRereads = requests.sessionActivity - connected.sessionActivity;
     expect(safetyRereads).toBeLessThanOrEqual(5);
     expect(requests).toEqual(moreRefreshes(connected, safetyRereads));
 
@@ -300,7 +333,8 @@ describe('FeedEventsProvider, on the board', () => {
     await waitFor(() => {
       expect(requests.cards).toBeGreaterThan(dropped.cards);
       expect(requests.decisions).toBeGreaterThan(dropped.decisions);
-      expect(requests.runs).toBeGreaterThan(dropped.runs);
+      expect(requests.sessionRows).toBeGreaterThan(dropped.sessionRows);
+      expect(requests.sessionActivity).toBeGreaterThan(dropped.sessionActivity);
     });
   });
 
@@ -357,9 +391,166 @@ describe('FeedEventsProvider, on the board', () => {
     settleMove();
     await waitFor(() => expect(rendered.result.current.move.isSuccess).toBe(true));
     await advance(rendered.client, WITHIN_A_SECOND_MS);
-    await waitFor(() => expect(requests.runs).toBeGreaterThan(moving.runs));
+    await waitFor(() => expect(requests.sessionActivity).toBeGreaterThan(moving.sessionActivity));
     expect(shownStages()).toEqual(['review']);
     await waitForMutationsIdle(rendered.client);
+  });
+
+  describe('a move the server takes on and answers later', () => {
+    const PAST_THE_WAIT_FOR_AN_ANSWER_MS = 151_000;
+
+    /** The server answers the move `202`; the card reads `review` once `board.stage` says so. */
+    async function submitMove(stream: FeedStream) {
+      server.use(stream.handler);
+      const { requests, board } = boardEndpoints();
+      server.use(
+        http.post(`${BOARD_URL}/item-1/transition`, () => HttpResponse.json({ inputId: 'input-1' }, { status: 202 })),
+      );
+      const rendered = await renderQuietBoard(stream);
+      const [item] = rendered.result.current.cards.data ?? [];
+      if (!item) throw new Error('the board never loaded its card');
+      act(() => rendered.result.current.move.mutate({ item, board: 'review', stage: 'review' }));
+      const shownStages = () => rendered.result.current.cards.data?.[0]?.stages;
+      await waitFor(() => expect(shownStages()).toEqual(['review']));
+      // The 202 is answered and frames keep coming: the move is still pending, the card where it was dragged.
+      stream.push();
+      await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
+      expect(rendered.result.current.move.isPending).toBe(true);
+      expect(shownStages()).toEqual(['review']);
+      return { rendered, requests, board, shownStages };
+    }
+
+    it('stays pending until the feed says it landed, then reads the card the server holds', async () => {
+      const stream = pushableFeedStream(PROJECT_ID);
+      const { rendered, requests, board, shownStages } = await submitMove(stream);
+      const moving = { ...requests };
+
+      board.stage = 'review';
+      stream.move({ inputId: 'input-1', status: 'accepted' });
+      await waitFor(() => expect(rendered.result.current.move.data).toEqual({ status: 'landed', inputId: 'input-1' }));
+      await waitForMutationsIdle(rendered.client);
+      expect(requests.cards).toBeGreaterThan(moving.cards);
+      expect(shownStages()).toEqual(['review']);
+    });
+
+    it('settles from an answer the feed carried before the 202 arrived', async () => {
+      const stream = pushableFeedStream(PROJECT_ID);
+      server.use(stream.handler);
+      const { requests, board } = boardEndpoints();
+      let answer = () => {};
+      const answered = new Promise<void>(resolve => {
+        answer = resolve;
+      });
+      server.use(
+        http.post(`${BOARD_URL}/item-1/transition`, async () => {
+          // The move settled before the route's answer got back: its frame comes first.
+          board.stage = 'review';
+          stream.move({ inputId: 'input-1', status: 'accepted' });
+          stream.push();
+          await answered;
+          return HttpResponse.json({ inputId: 'input-1' }, { status: 202 });
+        }),
+      );
+      const rendered = await renderQuietBoard(stream);
+      const [item] = rendered.result.current.cards.data ?? [];
+      if (!item) throw new Error('the board never loaded its card');
+      const before = { ...requests };
+      act(() => rendered.result.current.move.mutate({ item, board: 'review', stage: 'review' }));
+      // The frame after the answer was read, so the answer was too, with nobody waiting for it yet.
+      await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
+      await waitFor(() => expect(requests.decisions).toBeGreaterThan(before.decisions));
+      expect(rendered.result.current.move.isPending).toBe(true);
+
+      answer();
+      await waitFor(() => expect(rendered.result.current.move.data).toEqual({ status: 'landed', inputId: 'input-1' }));
+      await waitForMutationsIdle(rendered.client);
+      expect(rendered.result.current.cards.data?.[0]?.stages).toEqual(['review']);
+    });
+
+    it('stops waiting at once when the stream dropped and came back before the 202 arrived', async () => {
+      const stream = pushableFeedStream(PROJECT_ID);
+      server.use(stream.handler);
+      const { board } = boardEndpoints();
+      let answer = () => {};
+      const answered = new Promise<void>(resolve => {
+        answer = resolve;
+      });
+      server.use(
+        http.post(`${BOARD_URL}/item-1/transition`, async () => {
+          await answered;
+          return HttpResponse.json({ inputId: 'input-1' }, { status: 202 });
+        }),
+      );
+      const rendered = await renderQuietBoard(stream);
+      const [item] = rendered.result.current.cards.data ?? [];
+      if (!item) throw new Error('the board never loaded its card');
+      act(() => rendered.result.current.move.mutate({ item, board: 'review', stage: 'review' }));
+      await waitFor(() => expect(rendered.result.current.cards.data?.[0]?.stages).toEqual(['review']));
+
+      // The move landed while the stream was down: its frame went by with nobody to read it.
+      board.stage = 'review';
+      const opened = stream.opens;
+      stream.close();
+      await act(() => vi.advanceTimersByTimeAsync(PAST_ONE_STREAM_RETRY_MS));
+      await waitFor(() => expect(stream.opens).toBeGreaterThan(opened));
+      expect(rendered.result.current.move.isPending).toBe(true);
+
+      answer();
+      await waitFor(() =>
+        expect(rendered.result.current.move.data).toEqual({ status: 'unanswered', inputId: 'input-1' }),
+      );
+      await waitForMutationsIdle(rendered.client);
+      expect(rendered.result.current.cards.data?.[0]?.stages).toEqual(['review']);
+    });
+
+    it('puts the card back when the feed says it was refused', async () => {
+      const stream = pushableFeedStream(PROJECT_ID);
+      const { rendered, shownStages } = await submitMove(stream);
+
+      stream.move({ inputId: 'input-1', status: 'rejected', code: 'card_busy', reason: 'The card is busy.' });
+      await waitFor(() => expect(rendered.result.current.move.data).toMatchObject({ status: 'rejected' }));
+      await waitForMutationsIdle(rendered.client);
+      expect(rendered.result.current.move.data).toEqual({
+        inputId: 'input-1',
+        status: 'rejected',
+        code: 'card_busy',
+        reason: 'The card is busy.',
+      });
+      expect(shownStages()).toEqual(['intake']);
+    });
+
+    it('stops waiting when no answer comes, and shows where the server holds the card', async () => {
+      const stream = pushableFeedStream(PROJECT_ID);
+      const { rendered, requests, shownStages } = await submitMove(stream);
+      const moving = { ...requests };
+
+      // Whoever took the move on never answers. The stream stays alive, as a live server keeps it.
+      for (let waited = 0; waited < PAST_THE_WAIT_FOR_AN_ANSWER_MS; waited += SERVER_PING_EVERY_MS) {
+        stream.ping();
+        await act(() => vi.advanceTimersByTimeAsync(SERVER_PING_EVERY_MS));
+      }
+      await waitFor(() =>
+        expect(rendered.result.current.move.data).toEqual({ status: 'unanswered', inputId: 'input-1' }),
+      );
+      await waitForMutationsIdle(rendered.client);
+      expect(requests.cards).toBeGreaterThan(moving.cards);
+      expect(shownStages()).toEqual(['intake']);
+    });
+
+    it('stops waiting when the stream dropped and came back, since the answer may have gone by', async () => {
+      const stream = pushableFeedStream(PROJECT_ID);
+      const { rendered, board, shownStages } = await submitMove(stream);
+
+      board.stage = 'review';
+      stream.close();
+      await act(() => vi.advanceTimersByTimeAsync(PAST_ONE_STREAM_RETRY_MS));
+      await waitFor(() => expect(stream.open).toBe(true));
+      await waitFor(() =>
+        expect(rendered.result.current.move.data).toEqual({ status: 'unanswered', inputId: 'input-1' }),
+      );
+      await waitForMutationsIdle(rendered.client);
+      expect(shownStages()).toEqual(['review']);
+    });
   });
 
   it('keeps a card in the column it is moving to when a poll comes round before the move settles', async () => {
@@ -497,7 +688,7 @@ describe('FeedEventsProvider, on a session page', () => {
     // The sidebar reads every card holding a session; the header reads the session's cards.
     const rendered = renderHookWithProviders(
       () => ({
-        board: useSidebarWorkItemsQuery(PROJECT_ID),
+        board: useSessionCardsQuery(PROJECT_ID),
         session: useSessionWorkItemsQuery(PROJECT_ID, 'session-1'),
       }),
       { inner },

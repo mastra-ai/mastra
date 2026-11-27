@@ -3,13 +3,13 @@ import { useState } from 'react';
 import { ContextMenu } from './context-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/ds/components/Dialog';
 import { IconArrowBoxLeft } from '@/ds/icons/central/IconArrowBoxLeft';
-import { IconBubbleWide } from '@/ds/icons/central/IconBubbleWide';
+import { IconChatBubble7 } from '@/ds/icons/central/IconChatBubble7';
 import { IconCloud } from '@/ds/icons/central/IconCloud';
 import { IconCreditCard1 } from '@/ds/icons/central/IconCreditCard1';
 import { IconEmail2 } from '@/ds/icons/central/IconEmail2';
 import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { IconRescueRing } from '@/ds/icons/central/IconRescueRing';
-import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconSettingsGear5 } from '@/ds/icons/central/IconSettingsGear5';
 import { IconUser } from '@/ds/icons/central/IconUser';
 import { IconUserAdd } from '@/ds/icons/central/IconUserAdd';
 import { IconUserDuo } from '@/ds/icons/central/IconUserDuo';
@@ -84,7 +84,7 @@ export const WithIconsAndShortcuts: Story = {
             <ContextMenu.Shortcut>Ctrl+B</ContextMenu.Shortcut>
           </ContextMenu.Item>
           <ContextMenu.Item>
-            <IconSettingsGear1 />
+            <IconSettingsGear5 />
             <span>Settings</span>
             <ContextMenu.Shortcut>Ctrl+S</ContextMenu.Shortcut>
           </ContextMenu.Item>
@@ -170,7 +170,7 @@ export const WithSubMenu: Story = {
           <span>Email</span>
         </ContextMenu.Item>
         <ContextMenu.Item>
-          <IconBubbleWide />
+          <IconChatBubble7 />
           <span>Message</span>
         </ContextMenu.Item>
         <ContextMenu.Separator />
@@ -185,7 +185,7 @@ export const WithSubMenu: Story = {
               <span>Email</span>
             </ContextMenu.Item>
             <ContextMenu.Item>
-              <IconBubbleWide />
+              <IconChatBubble7 />
               <span>Message</span>
             </ContextMenu.Item>
             <ContextMenu.Separator />
@@ -268,7 +268,7 @@ export const KitchenSink: Story = {
                 <span>Email</span>
               </ContextMenu.Item>
               <ContextMenu.Item>
-                <IconBubbleWide />
+                <IconChatBubble7 />
                 <span>Message</span>
               </ContextMenu.Item>
             </ContextMenu.SubContent>

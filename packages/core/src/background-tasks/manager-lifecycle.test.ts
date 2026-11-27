@@ -289,6 +289,139 @@ describe('BackgroundTaskManager lifecycle', () => {
     await expect(shutdownPromise).resolves.toBeUndefined();
   });
 
+  it('fails a running task without retries on shutdown, the way a crash would, instead of cancelling it (#31306)', async () => {
+    const onTaskFailed = vi.fn();
+    const onTaskCancelled = vi.fn();
+    const store = new MockStore();
+    const mastra = new Mastra({
+      logger: false,
+      storage: store,
+      backgroundTasks: { enabled: true, onTaskFailed, onTaskCancelled },
+    });
+    const manager = mastra.backgroundTaskManager!;
+    const started = Promise.withResolvers<void>();
+    manager.registerStaticExecutor('wait', {
+      execute: (args: unknown, options: { abortSignal?: AbortSignal }) => {
+        started.resolve();
+        return waitUntilAborted(args, options);
+      },
+    });
+    const chunks: any[] = [];
+    const stop = new AbortController();
+    const consumer = (async () => {
+      for await (const chunk of manager.stream({ abortSignal: stop.signal }) as any) chunks.push(chunk);
+    })();
+
+    try {
+      const { task } = await manager.enqueue({
+        runId: 'run-1',
+        toolName: 'wait',
+        toolCallId: 'call-1',
+        args: {},
+        agentId: 'agent-1',
+        maxRetries: 0,
+      });
+      await started.promise;
+
+      await manager.shutdown();
+
+      expect(await (await store.getStore('backgroundTasks'))!.getTask(task.id)).toMatchObject({
+        status: 'failed',
+        error: { message: 'Worker process terminated before task completed' },
+        ownerId: undefined,
+      });
+      await vi.waitFor(() => expect(onTaskFailed).toHaveBeenCalledTimes(1));
+      expect(onTaskCancelled).not.toHaveBeenCalled();
+      expect(chunks.map(c => c.type)).toContain('background-task-failed');
+      expect(chunks.map(c => c.type)).not.toContain('background-task-cancelled');
+    } finally {
+      stop.abort();
+      await consumer;
+      mastra.__unregisterHooks();
+    }
+  });
+
+  it('still fires onTaskFailed on shutdown when a per-task hook of the failed task throws', async () => {
+    const onTaskFailed = vi.fn();
+    const mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      backgroundTasks: { enabled: true, onTaskFailed },
+    });
+    const manager = mastra.backgroundTaskManager!;
+    const started = Promise.withResolvers<void>();
+    const unhandled = recordUnhandledRejections();
+
+    try {
+      const { task } = await manager.enqueue(
+        { runId: 'run-1', toolName: 'wait', toolCallId: 'call-1', args: {}, agentId: 'agent-1', maxRetries: 0 },
+        {
+          executor: {
+            execute: (args: unknown, options: { abortSignal?: AbortSignal }) => {
+              started.resolve();
+              return waitUntilAborted(args, options);
+            },
+          },
+          onResult: async () => {
+            throw new Error('memory unavailable');
+          },
+        },
+      );
+      await started.promise;
+
+      await manager.shutdown();
+
+      await vi.waitFor(() => expect(onTaskFailed).toHaveBeenCalledTimes(1));
+      expect(onTaskFailed.mock.calls[0]![0]).toMatchObject({ id: task.id, status: 'failed' });
+      expect(unhandled.rejections).toEqual([]);
+    } finally {
+      unhandled.stop();
+      mastra.__unregisterHooks();
+    }
+  });
+
+  it('waits for onTaskFailed of a task it fails before shutdown returns and storage closes', async () => {
+    let reported = false;
+    const store = new ClosableStore();
+    const mastra = new Mastra({
+      logger: false,
+      storage: store,
+      backgroundTasks: {
+        enabled: true,
+        onTaskFailed: async () => {
+          await new Promise(resolve => setTimeout(resolve, 300));
+          reported = true;
+        },
+      },
+    });
+    const manager = mastra.backgroundTaskManager!;
+    const started = Promise.withResolvers<void>();
+    manager.registerStaticExecutor('wait', {
+      execute: (args: unknown, options: { abortSignal?: AbortSignal }) => {
+        started.resolve();
+        return waitUntilAborted(args, options);
+      },
+    });
+
+    try {
+      await manager.enqueue({
+        runId: 'run-1',
+        toolName: 'wait',
+        toolCallId: 'call-1',
+        args: {},
+        agentId: 'agent-1',
+        maxRetries: 0,
+      });
+      await started.promise;
+
+      await manager.shutdown();
+
+      expect(reported).toBe(true);
+    } finally {
+      mastra.__unregisterHooks();
+    }
+  });
+
   it('logs task cancellation failures during shutdown', async () => {
     const mastra = new Mastra({ logger: false, storage: new MockStore(), workers: false });
     const warn = vi.spyOn(mastra.getLogger(), 'warn');
@@ -298,7 +431,7 @@ describe('BackgroundTaskManager lifecycle', () => {
     await storage.createTask(makeRunningTask({ maxRetries: 0 }));
     manager.activeAbortControllers.set('task-1', new AbortController());
     const error = new Error('storage unavailable');
-    vi.spyOn(manager, 'cancel').mockRejectedValue(error);
+    vi.spyOn(storage, 'updateTask').mockRejectedValue(error);
 
     try {
       await manager.shutdown();
@@ -1165,6 +1298,51 @@ describe('BackgroundTaskManager lifecycle', () => {
       expectedLeaseExpiresAt: null,
     });
     expect(ack).toHaveBeenCalled();
+    await manager.shutdown();
+    await pubsub.close();
+  });
+
+  it('keeps the stored retry count when a redelivered dispatch finds the task running', async () => {
+    const pubsub = new CapturingPubSub();
+    const manager = new BackgroundTaskManager({ enabled: true });
+    await manager.init(pubsub);
+
+    // Startup recovery already spent two retries on crashes, so the stored
+    // count is ahead of this message's delivery count. Taking the delivery
+    // count would hand back retries and allow more crashes than `maxRetries`.
+    const crashedTask = makeRunningTask({ retryCount: 2, maxRetries: 3 });
+    const updateTask = vi.fn(async () => true);
+    const workflowRun = { start: vi.fn(async () => ({ status: 'success' })) };
+    manager.__registerMastra({
+      getStorage: () => ({
+        getStore: async () => ({
+          getTask: async () => crashedTask,
+          updateTask,
+          listTasks: async () => ({ tasks: [] }),
+        }),
+      }),
+      __getInternalWorkflow: () => ({
+        createRun: async () => workflowRun,
+        deleteWorkflowRunById: async () => {},
+      }),
+    } as unknown as Mastra);
+    const ack = vi.fn(async () => {});
+    const event: Event = {
+      type: 'task.dispatch',
+      id: 'event-1',
+      data: { taskId: 'task-1' },
+      runId: 'task-1',
+      createdAt: new Date(),
+      deliveryAttempt: 2,
+    };
+
+    await pubsub.dispatchCallback!(event, ack);
+
+    expect(updateTask).toHaveBeenCalledWith(
+      'task-1',
+      expect.objectContaining({ status: 'running', retryCount: 2 }),
+      expect.objectContaining({ expectedStatus: 'running' }),
+    );
     await manager.shutdown();
     await pubsub.close();
   });

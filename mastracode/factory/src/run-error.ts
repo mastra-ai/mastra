@@ -7,7 +7,7 @@ import {
   providerModelId,
 } from '@mastra/core/error';
 
-export type RunErrorRecovery = 'continue' | 'credentials' | 'credits' | 'model' | 'new_session';
+export type RunErrorRecovery = 'continue' | 'credentials' | 'credits' | 'model' | 'memory_model' | 'new_session';
 
 export interface RunErrorDescription {
   title: string;
@@ -25,21 +25,31 @@ const UNEXPECTED_ERROR = 'An unexpected error stopped the run. Copy the error de
 const NO_REASON_AVAILABLE =
   'The provider rejected the request. A specific reason isn’t available here. Copy the error details and check the server logs.';
 
+/** How `SessionRunEngine.abortForOmFailure` wraps an observer or reflector failure. */
+const MEMORY_MODEL_FAILURE = /^Observational memory \w+ \w+ failed: /;
+
 export function describeRunError(error: RunErrorIdentity): RunErrorDescription {
-  return { ...explainRunError(error), model: providerModelId(error) };
+  const memoryFailure = MEMORY_MODEL_FAILURE.test(error.message);
+  const description = { ...explainRunError(error, memoryFailure), model: providerModelId(error) };
+  if (!memoryFailure) return description;
+  // The memory model failed, not the session's: changing the session model can't fix it.
+  return {
+    ...description,
+    recoveries: description.recoveries.map(recovery => (recovery === 'model' ? 'memory_model' : recovery)),
+  };
 }
 
-function explainRunError(error: RunErrorIdentity): Omit<RunErrorDescription, 'model'> {
+function explainRunError(error: RunErrorIdentity, memoryFailure: boolean): Omit<RunErrorDescription, 'model'> {
   if (error.name === PROVIDER_AUTH_REQUIRED_ERROR) {
     return { title: 'Provider sign-in required', message: error.message, recoveries: ['credentials', 'model'] };
   }
+  const otherModel = memoryFailure ? 'another memory model in Memory settings' : 'another model';
   switch (classifyProviderError(error)) {
     case 'quota':
       if (isMastraGatewayError(error)) {
         return {
           title: 'Out of Mastra Gateway credits',
-          message:
-            'Your organization has no gateway credits left. Add credits, then continue the run, or choose another model.',
+          message: `Your organization has no gateway credits left. Add credits, then continue the run, or choose ${otherModel}.`,
           recoveries: ['credits', 'continue', 'model'],
         };
       }
@@ -47,28 +57,39 @@ function explainRunError(error: RunErrorIdentity): Omit<RunErrorDescription, 'mo
         title: 'Provider quota exhausted',
         message: afterProviderReason(
           error,
-          'Check the provider account’s billing or usage allowance, or use another credential or model.',
+          memoryFailure
+            ? 'Check the provider account’s billing or usage allowance, or use another credential or memory model in Memory settings.'
+            : 'Check the provider account’s billing or usage allowance, or use another credential or model.',
         ),
         recoveries: ['credentials', 'model'],
       };
     case 'auth':
       return {
         title: 'Provider access failed',
-        message: afterProviderReason(error, 'Review the credentials and model access configured for this session.'),
+        message: afterProviderReason(
+          error,
+          memoryFailure
+            ? 'Review the credentials and the memory model chosen in Memory settings.'
+            : 'Review the credentials and model access configured for this session.',
+        ),
         recoveries: ['credentials', 'model'],
       };
     case 'context_overflow':
       return {
-        title: 'Conversation exceeds the model’s limit',
-        message: 'Choose a model with a larger context window or start a new session with a shorter prompt.',
+        title: memoryFailure
+          ? 'Conversation exceeds the memory model’s limit'
+          : 'Conversation exceeds the model’s limit',
+        message: memoryFailure
+          ? 'Choose a memory model with a larger context window in Memory settings, or start a new session.'
+          : 'Choose a model with a larger context window or start a new session with a shorter prompt.',
         recoveries: ['model', 'new_session'],
       };
     case 'model_rejected':
       return {
-        title: 'Model not available',
+        title: memoryFailure ? 'Memory model not available' : 'Model not available',
         message: afterProviderReason(
           error,
-          'Choose another model for this session.',
+          memoryFailure ? 'Choose another memory model in Memory settings.' : 'Choose another model for this session.',
           'The provider rejected this model.',
         ),
         recoveries: ['model'],
@@ -89,21 +110,21 @@ function explainRunError(error: RunErrorIdentity): Omit<RunErrorDescription, 'mo
     case 'timeout':
       return {
         title: 'Request timed out',
-        message: 'The request took too long to complete. Send a message to continue the run.',
+        message: 'The request took too long to complete. Click Continue or send a message to try again.',
         recoveries: ['continue'],
       };
     case 'rate_limited':
       return {
         title: 'Provider rate limit reached',
-        message:
-          'The provider account behind this session’s credential hit a rate or usage limit. Continue once it resets, or use another credential or model.',
+        message: memoryFailure
+          ? 'The provider account behind the memory model’s credential hit a rate or usage limit. Continue once it resets, or use another credential or memory model in Memory settings.'
+          : 'The provider account behind this session’s credential hit a rate or usage limit. Continue once it resets, or use another credential or model.',
         recoveries: ['continue', 'credentials', 'model'],
       };
     case 'unavailable':
       return {
         title: 'Model provider temporarily unavailable',
-        message:
-          'The provider could not complete the request. Send a message to continue the run, or choose another model.',
+        message: `The provider could not complete the request. Click Continue or send a message to try again, or choose ${otherModel}.`,
         recoveries: ['continue', 'model'],
       };
     case 'unknown':

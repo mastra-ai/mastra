@@ -3,6 +3,7 @@ import type { IMastraLogger } from '../logger';
 import { isLeaseProvider, PubSub } from './pubsub';
 import type { LeaseProvider } from './pubsub';
 import { cachedLogTtlMs, toCachedLogFrame } from './topics';
+import type { CachedLogTtls } from './topics';
 import type { Event, EventCallback, SubscribeOptions } from './types';
 
 /**
@@ -62,6 +63,19 @@ export interface CachingPubSubOptions {
    * ignored for compatibility.
    */
   source?: PubSub;
+  /**
+   * Retention stamped on `agent.stream.<runId>` logs with every append.
+   * Defaults to {@link DEFAULT_RUN_LOG_TTL_MS}. Size it to the longest quiet
+   * gap of a run that is still executing plus a reconnect window — storage is
+   * the system of record, and an expired log resyncs observers instead of
+   * breaking them.
+   */
+  runLogTtlMs?: number;
+  /**
+   * Retention stamped on `agent.thread-stream.<key>` logs with every append.
+   * Defaults to {@link DEFAULT_THREAD_STREAM_LOG_TTL_MS}.
+   */
+  threadStreamLogTtlMs?: number;
 }
 
 const EMPTY_INDICES: ReadonlySet<number> = new Set();
@@ -131,6 +145,7 @@ export class CachingPubSub extends PubSub {
   private readonly shouldCache?: (topic: string) => boolean;
   private readonly extendExistingLogsOnly: boolean;
   private readonly onUnlogged?: (topic: string) => void;
+  private readonly logTtls: CachedLogTtls;
   /** Maps original callbacks to their wrapped versions for proper unsubscribe */
   private callbackMap = new Map<EventCallback, EventCallback>();
 
@@ -154,6 +169,7 @@ export class CachingPubSub extends PubSub {
     this.shouldCache = options.shouldCache;
     this.extendExistingLogsOnly = options.extendExistingLogsOnly ?? false;
     this.onUnlogged = options.onUnlogged;
+    this.logTtls = { runLogTtlMs: options.runLogTtlMs, threadStreamLogTtlMs: options.threadStreamLogTtlMs };
   }
 
   /**
@@ -173,6 +189,10 @@ export class CachingPubSub extends PubSub {
 
   get supportsOffsets(): boolean {
     return true;
+  }
+
+  get deliversAcrossProcesses(): boolean {
+    return this.inner.deliversAcrossProcesses;
   }
 
   get redeliversUnacked(): boolean {
@@ -237,6 +257,20 @@ export class CachingPubSub extends PubSub {
    *
    * Numbered entries are returned in index order, followed by unnumbered
    * ones, because a non-atomic append can store frames out of order.
+   *
+   * Sizing the slice from the last entry's index instead would be one read
+   * cheaper, but only if list order matched index order. It does not on the
+   * non-atomic composed fallback: for a list appended `[0, 1, 4, 2, 3]`, a
+   * tail sized from the last index (3) spans two entries and silently loses
+   * index 4, where walking back by the hole count reaches it.
+   *
+   * The hole count is not a complete defence either — it assumes an entry
+   * numbered `from` or later sits at position `from` or later, which an
+   * out-of-order append can also break for a high enough `from`. Reading from
+   * position 0 whenever the cache cannot promise index-ordered appends would
+   * close that, at the cost of a whole-log read per resume and per live gap;
+   * it needs a capability on `MastraServerCache` to avoid paying that on the
+   * atomic caches, which is tracked separately.
    */
   private async readLogFrom(topic: string, from: number): Promise<Event[]> {
     const cacheKey = this.getCacheKey(topic);
@@ -244,6 +278,9 @@ export class CachingPubSub extends PubSub {
     if (from > 0) {
       // Length before counter: an append landing between the two reads can
       // only overstate the holes, which starts the slice early, never late.
+      // A counter seeded past the indices in the log (an expired log that was
+      // recreated) overstates them to the point of reading everything, which
+      // is still correct.
       const length = await this.cache.listLength(cacheKey).catch(() => undefined);
       const counter =
         length === undefined ? undefined : await this.cache.get(this.getCounterKey(topic)).catch(() => undefined);
@@ -293,7 +330,7 @@ export class CachingPubSub extends PubSub {
         this.getCacheKey(topic),
         this.getCounterKey(topic),
         toCachedLogFrame(topic, fullEvent),
-        cachedLogTtlMs(topic),
+        cachedLogTtlMs(topic, this.logTtls),
       );
     } catch (error) {
       this.logError(`[CachingPubSub] Failed to cache event for ${topic}`, error);
@@ -461,12 +498,31 @@ export class CachingPubSub extends PubSub {
       // Already delivered (a retained transport copy of a frame the log
       // provided). Acknowledge it so it does not stay pending on the backend.
       if (seq < next) {
+        // Only index 0 is worth checking. A continuous log cannot re-deliver
+        // frame 0 from below the cursor, so seeing it means the log this
+        // subscriber was reading is gone: it expired (or was cleared) and the
+        // run resumed on a new one, restarting numbering at 0. Dropping it
+        // would swallow every frame of the new segment, since all of their
+        // indices sit below the stale cursor.
+        //
+        // Any other below-cursor index is ambiguous and is dropped. A log
+        // reseeded *below* this cursor — possible when the cache's clock moves
+        // backwards — therefore goes unnoticed, and the subscriber misses the
+        // new segment until it reattaches. Widening the check to every index
+        // is not a gate change: the counter comparison below only holds while
+        // the cursor is log-derived, and a cursor that adopted a transport
+        // index above the log's counter would read every legitimate duplicate
+        // as a restart. Detecting it needs frame 0's id captured for every
+        // subscriber, or cursor provenance tracked, both out of scope here.
         if (seq !== 0) return ack?.();
 
-        // Index 0 below the cursor can mean the log this subscriber was reading
-        // is gone: it expired (or was cleared) and the run resumed, restarting
-        // numbering at 0. Dropping it would swallow every frame of the new
-        // segment, since all of their indices sit below the stale cursor.
+        // A clock-seeded cache usually renumbers *above* the cursor — a
+        // recreated counter is seeded past the indices it issued before (see
+        // MastraServerCache.listPushIndexed) — so its restarts normally land
+        // on the `seq > next` gap path instead. This path covers logs written
+        // by older cores and caches that number densely (Convex), plus a log
+        // recreated inside the clock's resolution.
+        //
         // Confirm by frame 0's id when one was captured on attach; otherwise by
         // the counter, which restarts with the log and so cannot sit below the
         // cursor in a continuous log.

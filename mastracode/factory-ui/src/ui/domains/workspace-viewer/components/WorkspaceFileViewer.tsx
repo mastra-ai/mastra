@@ -1,12 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Code } from '@mastra/playground-ui/components/Code';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import type { CSSProperties } from 'react';
 
+import { WorkspaceFileCode } from './WorkspaceFileCode';
 import type { WorkspaceFilePreview } from './workspace-file-preview';
 import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 
@@ -14,19 +13,6 @@ function formatBytes(size: number) {
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-/** CSS counters, so copying the code never copies the numbers. */
-const numberedLineClass =
-  '[counter-increment:line] before:mr-4 before:inline-block before:w-[calc(var(--line-digits)*1ch)] before:text-right before:text-placeholder before:content-[counter(line)]';
-const numberedLine = () => numberedLineClass;
-
-type GutterStyle = CSSProperties & { '--line-digits': number };
-
-function lineCount(text: string): number {
-  let count = 1;
-  for (let at = text.indexOf('\n'); at !== -1; at = text.indexOf('\n', at + 1)) count++;
-  return count;
 }
 
 interface WorkspaceFileViewerProps {
@@ -48,7 +34,6 @@ export function WorkspaceFileViewer({
 }: WorkspaceFileViewerProps) {
   const content = file?.content ?? '';
   const isMarkdown = file?.language === 'markdown';
-  const gutter: GutterStyle = { '--line-digits': String(lineCount(content)).length };
 
   return (
     <section className="flex min-h-0 min-w-0 grow flex-col" aria-label="Workspace file viewer">
@@ -60,14 +45,8 @@ export function WorkspaceFileViewer({
           {file?.contentType === 'text' ? (
             <CopyButton content={content} size="icon-sm" variant="ghost" tooltip="Copy file contents" />
           ) : null}
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            onClick={onRefresh}
-            disabled={isRefreshing}
-            aria-label={isRefreshing ? 'Refreshing file' : 'Refresh file'}
-          >
-            {isRefreshing ? <Spinner size="sm" /> : <IconArrowRotateClockwise />}
+          <Button size="icon-sm" variant="ghost" onClick={onRefresh} aria-label="Refresh file" loading={isRefreshing}>
+            <IconArrowRotateClockwise />
           </Button>
         </div>
       </div>
@@ -112,13 +91,7 @@ export function WorkspaceFileViewer({
             ) : null}
             {file?.contentType === 'text' && isMarkdown ? <MarkdownRenderer>{content}</MarkdownRenderer> : null}
             {file?.contentType === 'text' && !isMarkdown ? (
-              <Code
-                code={content}
-                lang={file.language}
-                lineClassName={numberedLine}
-                style={gutter}
-                className="border-border bg-background text-caption text-foreground m-0 rounded-md border p-3 font-mono [counter-reset:line]"
-              />
+              <WorkspaceFileCode path={file.path} content={content} language={file.language} />
             ) : null}
           </div>
         </ScrollArea>

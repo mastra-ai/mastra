@@ -103,27 +103,13 @@ describe('useAgentBuilderInternalRedirect', () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
   });
 
-  it('stays isLoading=true while only the published query is pending', async () => {
+  it.each([
+    ['stays isLoading=true while only the published query is pending', 'draft'],
+    ['stays isLoading=true while only the draft query is pending', 'published'],
+  ] as const)('%s', async (_title, value) => {
     const gate = deferred();
     stubStoredAgents(async status => {
-      if (status === 'draft') return HttpResponse.json(emptyStoredAgents);
-      await gate.promise;
-      return HttpResponse.json(emptyStoredAgents);
-    });
-
-    const { result } = renderHook(() => useAgentBuilderInternalRedirect(), { wrapper: createWrapper() });
-
-    await waitFor(() => expect(result.current.isLoading).toBe(true));
-
-    gate.resolve();
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(result.current.hasAgents).toBe(false);
-  });
-
-  it('stays isLoading=true while only the draft query is pending', async () => {
-    const gate = deferred();
-    stubStoredAgents(async status => {
-      if (status === 'published') return HttpResponse.json(emptyStoredAgents);
+      if (status === value) return HttpResponse.json(emptyStoredAgents);
       await gate.promise;
       return HttpResponse.json(emptyStoredAgents);
     });

@@ -6,7 +6,7 @@ import { DropdownMenu } from '../DropdownMenu/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../Tooltip/tooltip';
 import { TabListContext, TabsContext } from './tabs-context';
 import type { TabMeasurement } from './tabs-context';
-import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { controlHeight } from '@/ds/primitives/control-size';
 import { transitions } from '@/ds/primitives/transitions';
@@ -38,6 +38,11 @@ export type TabListProps = Omit<TabListVariantsProps, 'variant'> & {
   size?: TabListSize;
   variant?: TabListVariant | null;
   style?: React.CSSProperties;
+  /**
+   * What happens to tabs that don't fit: `scroll` (default) scrolls the list; `menu` folds them into a
+   * "+N" menu after the last tab that fits, keeping the open one in the row. Contained tabs always fold.
+   */
+  overflow?: 'scroll' | 'menu';
 };
 
 /** The active pill sits inside the track's inset: 2px on the rung-sized track, 4px when contained. */
@@ -46,7 +51,15 @@ function indicatorHeightClass(variant: TabListVariant, contained: boolean) {
   return contained ? 'h-[calc(100%-0.5rem)]' : 'h-[calc(100%-0.25rem)]';
 }
 
-export const TabList = ({ children, className, variant, size = 'md', sticky, style }: TabListProps) => {
+export const TabList = ({
+  children,
+  className,
+  variant,
+  size = 'md',
+  sticky,
+  style,
+  overflow = 'scroll',
+}: TabListProps) => {
   const resolvedVariant = variant ?? 'pill';
   const tabs = useContext(TabsContext);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -80,26 +93,32 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
     [],
   );
   const contained = tabs?.appearance === 'contained';
+  const folds = contained || overflow === 'menu';
   const pillTrack = resolvedVariant === 'pill' && !contained;
   const indicatorHeight = indicatorHeightClass(resolvedVariant, contained);
   useLayoutEffect(() => {
     const viewport = scrollRef.current;
-    if (!viewport || !contained) return;
+    if (!viewport || !folds) return;
     const measure = () => setAvailable(viewport.clientWidth);
     measure();
     if (!('ResizeObserver' in globalThis)) return;
     const observer = new ResizeObserver(measure);
     observer.observe(viewport);
     return () => observer.disconnect();
-  }, [contained]);
-  const gap = contained ? 4 : 0;
-  const frameReserve = contained ? 30 : 0;
+  }, [folds]);
+  // Space between tabs, and around them, that folding has to count: the inset frame's, a pill
+  // track's `gap-1` and 2px inset on each side, or ghost pills' `gap-0.5`. Once some fold, the "+N"
+  // menu needs room: 48px pinned in contained tabs; elsewhere the `sm` trigger, 58px for "+1" and up to
+  // 68px for a two-digit count, plus the `gap-1` before it.
+  const gap = contained || pillTrack ? 4 : resolvedVariant === 'pill-ghost' ? 2 : 0;
+  const frameReserve = contained ? 30 : pillTrack ? 4 : 0;
+  const menuReserve = contained ? 48 : 72;
   const hiddenValues = useMemo(() => {
     const hidden = new Set<string>();
-    if (!contained || available === null) return hidden;
+    if (!folds || available === null) return hidden;
     const tabTotal = measurements.reduce((sum, tab) => sum + tab.width, 0) + gap * Math.max(measurements.length - 1, 0);
     if (tabTotal + frameReserve <= available) return hidden;
-    let remaining = available - frameReserve - 48;
+    let remaining = available - frameReserve - menuReserve;
     const active = measurements.find(tab => tab.value === tabs?.value);
     if (active) remaining -= active.width + gap;
     let full = false;
@@ -111,7 +130,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
       } else remaining -= tab.width + gap;
     }
     return hidden;
-  }, [contained, available, measurements, gap, frameReserve, tabs?.value]);
+  }, [folds, available, measurements, gap, frameReserve, menuReserve, tabs?.value]);
   const hiddenTabs = measurements.filter(tab => hiddenValues.has(tab.value));
   const overflowX = measurements
     .filter(tab => !hiddenValues.has(tab.value))
@@ -175,7 +194,12 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
         <div
           ref={scrollRef}
           data-slot="tabs-list-scroll"
-          className={cn('relative w-full overflow-x-auto', sticky && 'sticky top-0 z-10 bg-background')}
+          className={cn(
+            'relative w-full',
+            // Outside contained tabs, the "+N" menu follows the list in the row.
+            folds && !contained ? 'flex items-center gap-1' : 'overflow-x-auto',
+            sticky && 'sticky top-0 z-10 bg-background',
+          )}
         >
           <BaseTabs.List
             data-slot="tabs-list"
@@ -231,7 +255,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                     }
                   >
                     <span className="sr-only">Close {tab.label}</span>
-                    <IconCrossMedium aria-hidden="true" className="size-3" />
+                    <IconCrossMedium aria-hidden="true" className="size-icon-xs" />
                   </TooltipTrigger>
                   <TooltipContent>Close {tab.label}</TooltipContent>
                 </Tooltip>
@@ -241,8 +265,8 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
           {hiddenTabs.length > 0 && (
             <div
               data-slot="tabs-overflow"
-              style={{ transform: `translateX(${overflowX}px)` }}
-              className="tabs-overflow"
+              style={contained ? { transform: `translateX(${overflowX}px)` } : undefined}
+              className={contained ? 'tabs-overflow' : undefined}
             >
               <DropdownMenu>
                 <DropdownMenu.Trigger
@@ -252,7 +276,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                   className="tabular-nums"
                 >
                   +{hiddenTabs.length}
-                  <IconChevronBottom aria-hidden="true" className="size-3" />
+                  <IconChevronDownMedium aria-hidden="true" className="size-icon-xs" />
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content>
                   {hiddenTabs.map((tab, index) => (
@@ -282,7 +306,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                             }
                           >
                             <span className="sr-only">Close {tab.label}</span>
-                            <IconCrossMedium aria-hidden="true" className="size-3" />
+                            <IconCrossMedium aria-hidden="true" className="size-icon-xs" />
                           </TooltipTrigger>
                           <TooltipContent side="right">Close {tab.label}</TooltipContent>
                         </Tooltip>

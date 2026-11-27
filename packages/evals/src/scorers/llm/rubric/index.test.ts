@@ -132,6 +132,56 @@ describe('Rubric Scorer (LLM)', () => {
     });
   });
 
+  describe('string rubric', () => {
+    // A rubric pasted as a list must reach the judge as plain criteria, whatever list marker the
+    // author used, while text that only looks like a marker stays part of the criterion.
+    it('strips common list markers from a string rubric before the judge sees it', async () => {
+      const prompts: string[] = [];
+      const judge = mockJudge({
+        criteria: [{ criterion: 'x', satisfied: true, required: true, reasoning: 'ok' }],
+        overallAssessment: 'ok',
+      });
+      const { doGenerate, doStream } = judge;
+      judge.doGenerate = async options => {
+        prompts.push(JSON.stringify(options.prompt));
+        return doGenerate(options);
+      };
+      judge.doStream = async options => {
+        prompts.push(JSON.stringify(options.prompt));
+        return doStream(options);
+      };
+
+      const scorer = createRubricScorer({
+        model: judge,
+        criteria: [
+          '\u2022 Bullet criterion',
+          '- Dash criterion',
+          '* Star criterion',
+          '1. Dotted number criterion',
+          '2) Parenthesised number criterion',
+          '\u2023 Triangle bullet criterion',
+          '\u25E6 White bullet criterion',
+        ].join('\n'),
+      });
+
+      await scorer.run(run('anything'));
+
+      expect(prompts.length).toBeGreaterThan(0);
+      const promptText = prompts.join('\n').replace(/\\n/g, '\n');
+      expect(promptText).toContain(
+        [
+          '1. [required] Bullet criterion',
+          '2. [required] Dash criterion',
+          '3. [required] Star criterion',
+          '4. [required] Dotted number criterion',
+          '5. [required] Parenthesised number criterion',
+          '6. [required] \u2023 Triangle bullet criterion',
+          '7. [required] \u25E6 White bullet criterion',
+        ].join('\n'),
+      );
+    });
+  });
+
   describe('dynamic rubric from context', () => {
     it('reads a newline-delimited rubric string from requestContext', async () => {
       const scorer = createRubricScorer({

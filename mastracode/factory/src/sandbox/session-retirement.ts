@@ -22,6 +22,12 @@ type WarningLogger = (message: string, details: Record<string, unknown>) => void
 export interface SessionRetirementCoordinatorOptions {
   invalidateSession?: (sessionId: string) => Promise<void> | void;
   /**
+   * Unload the session from the controller once its sandbox is stopped or released, so its
+   * in-memory state is freed. Must keep the thread, the row and the VM. Not called by
+   * recreate or reset, which keep the session working.
+   */
+  unloadSession?: (sessionId: string) => Promise<unknown> | unknown;
+  /**
    * The deploy's sandbox configuration. Used to destroy a deleted session's
    * VM by identity when this process never attached to it (after a restart,
    * or on another replica). Recreate uses it the same way.
@@ -81,6 +87,7 @@ function boundedError(error: unknown): string {
  */
 export class SessionRetirementCoordinator {
   readonly #invalidateSession: NonNullable<SessionRetirementCoordinatorOptions['invalidateSession']>;
+  readonly #unloadSession: NonNullable<SessionRetirementCoordinatorOptions['unloadSession']>;
   readonly #sandbox: FactorySandbox | undefined;
   readonly #warn: WarningLogger;
   readonly #destroyTimeoutMs: number;
@@ -88,6 +95,7 @@ export class SessionRetirementCoordinator {
 
   constructor(options: SessionRetirementCoordinatorOptions = {}) {
     this.#invalidateSession = options.invalidateSession ?? (() => {});
+    this.#unloadSession = options.unloadSession ?? (() => {});
     this.#sandbox = options.sandbox;
     this.#warn = options.warn ?? ((message, details) => console.warn(`[Mastra Factory] ${message}`, details));
     this.#destroyTimeoutMs = options.destroyTimeoutMs ?? DEFAULT_DESTROY_TIMEOUT_MS;
@@ -145,6 +153,7 @@ export class SessionRetirementCoordinator {
         else await this.#releaseDetachedSandbox({ ...input, deleteSession: false }, session);
       } finally {
         await this.#invalidate(session);
+        await this.#unload(session);
       }
     });
   }
@@ -213,6 +222,7 @@ export class SessionRetirementCoordinator {
       released = await this.#teardownSessionSandbox(input, session);
     } finally {
       await this.#invalidate(session);
+      await this.#unload(session);
 
       if (input.deleteSession) {
         // Refs first: clearing again is a no-op, but refs on a deleted row would dangle forever.
@@ -321,6 +331,20 @@ export class SessionRetirementCoordinator {
     }
   }
 
+  /** Unload the session from this process's controller; a failure is logged, never fatal. */
+  async #unload(session: SourceControlSession): Promise<void> {
+    try {
+      await this.#unloadSession(session.sessionId);
+    } catch (error) {
+      this.#warn('Factory session unload failed', {
+        orgId: session.orgId,
+        sessionId: session.sessionId,
+        projectRepositoryId: session.projectRepositoryId,
+        error: boundedError(error),
+      });
+    }
+  }
+
   async #recreateSessionSandbox(input: RecreateSessionSandboxInput): Promise<'recreated' | 'not-found'> {
     const session = await input.sourceControl.sessions.getBySessionId(input.sessionId);
     if (!session || session.orgId !== input.orgId) return 'not-found';
@@ -347,31 +371,9 @@ export class SessionRetirementCoordinator {
     const sandbox = peekSessionSandbox(session.id)?.sandbox;
     if (!sandbox) return 'not-here';
 
-    // The provider's own destroy, not the lifecycle wrapper: the wrapper marks
-    // the instance destroyed for good. Bounded, so a VM that won't answer
-    // can't hold the session lock.
-    const destroy = async () => {
-      if (!(await this.#settledWithin(this.#destroyDirectly(sandbox)))) {
-        throw new Error('Timed out destroying the sandbox. Try again.');
-      }
-    };
-    // Destroyed before waiting on a start in flight, so a start hung on the
-    // dead VM can't block recovery; its commands fail fast once the VM is gone.
-    await destroy();
-    const starting = (sandbox as { _startPromise?: Promise<unknown> })._startPromise;
-    if (starting) {
-      const settled = await this.#settledWithin(
-        starting.then(
-          () => {},
-          () => {},
-        ),
-      );
-      if (!settled) throw new Error('The old sandbox is still starting. Try again.');
-      // That start may have found the old VM gone and provisioned another.
-      await destroy();
-    }
-
-    sandbox.status = 'stopped';
+    const resettable = sandbox as { _reset?: (options?: { timeoutMs?: number }) => Promise<void> };
+    if (!resettable._reset) return 'not-here';
+    await resettable._reset({ timeoutMs: this.#destroyTimeoutMs });
     // The new VM runs setup from scratch, including commands that failed on the old one.
     clearFailedSetupCommands(session.id);
     // Re-read: a start that settled while this reset waited may have stored a newer workdir.

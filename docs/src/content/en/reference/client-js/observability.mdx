@@ -19,7 +19,7 @@ const trace = await mastraClient.getTrace('trace-id-123')
 
 ## Getting traces with filtering
 
-Retrieve a paginated list of trace root spans with optional filtering:
+Retrieve a paginated list of trace root spans with optional filtering. `getTraces()` is deprecated: use `listTraces()` for new code, which also supports ordering and more filters.
 
 ```typescript
 const traces = await mastraClient.getTraces({
@@ -363,7 +363,7 @@ Both methods use case-insensitive literal substring search and accept an empty s
 
 Suggestions are bounded and advisory. Manual values remain valid when suggestions are unavailable, empty, or truncated. Discovery doesn't accept a draft query predicate. The client doesn't retry either request, and a per-call `AbortSignal` takes precedence over the signal configured on `MastraClient`.
 
-A discovery timeout rejects with `504 TRACE_QUERY_EXECUTION_TIMEOUT`. Backend memory or resource exhaustion rejects with `503 TRACE_QUERY_RESOURCE_LIMIT`. Neither error contains partial suggestions; truncation flags are only present on successful, completely ranked responses.
+A discovery timeout rejects with `504 TRACE_QUERY_EXECUTION_TIMEOUT`. Backend memory or resource exhaustion rejects with `503 TRACE_QUERY_RESOURCE_LIMIT`. Neither error contains partial suggestions; truncation flags are only present on successful, fully ranked responses.
 
 ## Deleting traces
 
@@ -520,7 +520,7 @@ await mastraClient.replaceFeedback({
 })
 ```
 
-Use the normalized timestamp from the create response's `data` when available. OSS rejects changes to the original trace or timestamp with `409`. Platform uses the timestamp as part of record identity, so preserve it there too. The client preserves the replacement body across retries, but each accepted PUT retry is a new replacement and can supersede another edit. Pass `{ retries: 0, anchorRetryTimeoutMs: 0 }` as the second argument to disable automatic retries.
+Use the normalized timestamp from the create response's `data` when available. OSS rejects changes to the original trace or timestamp with `409`. Platform uses the timestamp as part of record identity, so preserve it there too. The client preserves the replacement body across retries, but each accepted PUT retry is a new replacement and can supersede another edit. PUT requests get no transport retries by default, but a client configured with `retries` applies that count here too, and anchor retries stay on unless you turn them off. Pass `{ retries: 0, anchorRetryTimeoutMs: 0 }` as the second argument to disable both transport and anchor retries. `retries: 0` is only redundant when the client has no `retries` configured.
 
 ### Deleting feedback and scores
 

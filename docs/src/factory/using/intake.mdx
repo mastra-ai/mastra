@@ -1,0 +1,56 @@
+---
+title: Intake | Core concepts
+description: Understand how issues and pull requests arrive in Factory and what to check before starting an agent.
+---
+
+# Intake
+
+Intake is incoming work available for an agent to investigate or review. Issues become [Work items](/using/work-and-approvals), while pull requests become [Review items](/using/reviews).
+
+## Choose your sources
+
+Connect the source, then select which issues you want to follow in **Settings → Work Intake**. Selections are organization-wide: every member reads the same sources. Each selected source routes to one Factory, and the Factory's board rules determine which board receives each card.
+
+| Source | Destination | Required setup |
+| - | - | - |
+| GitHub issues | Work board unless a board rule places it elsewhere | GitHub App access, a linked repository, and issue synchronization and repository selection. |
+| GitLab issues | Work board unless a board rule places it elsewhere | A GitLab connection, issue synchronization and project selection, and a destination Factory. |
+| Linear issues | Work board unless a board rule places it elsewhere | Workspace authorization, issue synchronization with project or team selection, and a destination Factory. |
+| Jira issues | Work board unless a board rule places it elsewhere | A Jira site connection, issue synchronization and project selection, and a destination Factory. |
+| incident.io follow-ups | Work board unless a board rule places it elsewhere | An incident.io connection, follow-up synchronization and source selection, and a destination Factory. |
+| GitHub pull requests | Review on the Work board | GitHub access and the linked repository. Pull request intake uses the Factory's linked repository. |
+| GitLab merge requests | Review on the Work board | GitLab access and the linked repository. |
+
+For Linear, a selected project is more specific than its team. Issues in that project follow the project. The team source covers the rest, including projectless issues.
+
+Use [GitHub](/configure/github), [GitLab](/configure/gitlab), [Linear](/configure/linear), [Jira](/configure/jira), or [incident.io](/configure/incidentio) for connection and selection instructions. [Slack](/configure/slack) starts conversational sessions and doesn't file Work cards.
+
+## Verify incoming work
+
+After connecting a source, create one active issue in a selected repository or routed project or team. Find its card in the destination Factory and match the source identifier, title, and link.
+
+Synchronization is asynchronous. Once an issue arrives, complete an investigation to verify model access and execution.
+
+## How work starts
+
+Selecting a source syncs new issues into cards, but it doesn't start a run. Work begins in one of three ways:
+
+- **You start it.** Select **Investigate** on an issue card, or open a pull request's card in **Review** and start its run. You can start runs manually in any phase.
+- **Factory starts it automatically.** A working phase starts its run on its own when the phase is set to start without approval and the source is trusted and allowed by the task's policy. The default GitHub rules mark an issue as eligible for that start only when it was created after the Factory by an author with write or admin access to the repository. The Work board that Factory installs has no phase set to start on its own, so nothing there starts without you.
+- **A source event starts it.** Events such as a new commit on a reviewed pull request start follow-up work, but only in a phase that runs on its own.
+
+Everything else waits on its card or in **Needs attention** until a person acts. Read the result and respond to any requested decision before continuing. See [Work items](/using/work-and-approvals#choose-how-much-factory-runs-on-its-own) for how much Factory runs on its own.
+
+You start every run on that board yourself, so it's a safe place to learn the workflow.
+
+## Order and priority
+
+Factory doesn't rank, sequence, or filter incoming work. Each issue in a selected repository becomes its own independent card, and each is available to start as soon as it syncs. Order comes entirely from what you start and when.
+
+Parent issues and sub-issues aren't modeled. A sub-issue arrives as an ordinary issue card with no link to its parent, and its parent arrives the same way. Use your roadmap, epic, or milestone in GitHub to decide the order, then start the cards you want in that order. Treat the epic as your own tracking tool rather than something Factory acts on.
+
+## Resolve missing items
+
+To find a missing issue, check source access, the **Work Intake** selections, and the destination Factory. For Linear, confirm the project or team is selected and routed. For a missing PR, check GitHub access and the linked repository instead of intake selections.
+
+Read source errors and reconnect expired authorization before waiting for another sync. Use [Troubleshooting](/troubleshooting#intake-is-empty) if the item still doesn't arrive.

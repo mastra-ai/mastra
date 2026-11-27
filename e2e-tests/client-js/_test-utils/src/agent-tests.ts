@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, inject } from 'vitest';
 import { MastraClient } from '@mastra/client-js';
+import { MID_STREAM_FAILURE_MESSAGE, MID_STREAM_FAILURE_PARTIAL_TEXT } from './server-setup';
 
 export interface AgentTestConfig {
   testNameSuffix?: string;
@@ -57,6 +58,61 @@ export function createAgentTests(config: AgentTestConfig = {}) {
       it('should throw for non-existent agent', async () => {
         const agent = client.getAgent('nonexistent-agent');
         await expect(agent.details()).rejects.toThrow();
+      });
+    });
+
+    // A model that fails partway through a reply used to look like a finished run:
+    // processDataStream resolved with the cut-off text and the error only went to
+    // console.error, so callers (and useChat) showed half an answer as complete.
+    describe('stream that fails mid-response', () => {
+      it('rejects processDataStream with the model error after delivering the partial text', async () => {
+        const response = await client.getAgent('midStreamFailureAgent').stream('hi');
+
+        const chunks: any[] = [];
+        await expect(
+          response.processDataStream({
+            onChunk: async chunk => {
+              chunks.push(chunk);
+            },
+          }),
+        ).rejects.toThrow(MID_STREAM_FAILURE_MESSAGE);
+
+        const text = chunks
+          .filter(chunk => chunk.type === 'text-delta')
+          .map(chunk => chunk.payload.text)
+          .join('');
+        expect(text).toBe(MID_STREAM_FAILURE_PARTIAL_TEXT);
+        expect(chunks.some(chunk => chunk.type === 'error')).toBe(true);
+      });
+
+      it('errors the response body for callers that read the stream directly', async () => {
+        const response = await client.getAgent('midStreamFailureAgent').stream('hi');
+        const reader = response.body!.getReader();
+        const decoder = new TextDecoder();
+        let received = '';
+
+        const readAll = async () => {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) return;
+            received += decoder.decode(value, { stream: true });
+          }
+        };
+
+        await expect(readAll()).rejects.toThrow(MID_STREAM_FAILURE_MESSAGE);
+        expect(received).toContain(MID_STREAM_FAILURE_PARTIAL_TEXT);
+      });
+
+      it('still resolves processDataStream for a reply that finishes normally', async () => {
+        const response = await client.getAgent(agentName).stream('hi');
+        const types: string[] = [];
+        await response.processDataStream({
+          onChunk: async chunk => {
+            types.push(chunk.type);
+          },
+        });
+        expect(types).toContain('finish');
+        expect(types).not.toContain('error');
       });
     });
   });

@@ -44,6 +44,7 @@ export const isolatedTestFiles = [
   'src/agent/__tests__/thread-stream-initial-history.test.ts', // timers
   'src/agent/__tests__/thread-stream-late-generation.test.ts', // env
   'src/agent/__tests__/thread-stream-save-listener.test.ts', // vi.mock
+  'src/agent/__tests__/workflow-tool-background-marker.test.ts', // vi.mock
   'src/agent/durable/__tests__/agreement-memory.test.ts', // reset-modules
   'src/agent/durable/__tests__/durable-agent-background-tasks.test.ts', // lease
   'src/agent/durable/__tests__/durable-agent-background-transform.test.ts', // vi.mock
@@ -102,6 +103,7 @@ export const isolatedTestFiles = [
   'src/events/unix-socket-pubsub-lease-recovery.test.ts', // vi.mock
   'src/events/unix-socket-pubsub.test.ts', // heap
   'src/hooks/index.test.ts', // global
+  'src/knowledge/importers/__tests__/runner.test.ts', // vi.mock
   'src/llm/model/cloudflare-workers-ai-url.test.ts', // vi.mock,env
   'src/llm/model/gateways/azure.test.ts', // vi.mock,global
   'src/llm/model/gateways/custom-gateway.test.ts', // env
@@ -143,6 +145,7 @@ export const isolatedTestFiles = [
   'src/telemetry/model-usage-telemetry.test.ts', // vi.mock,env
   'src/telemetry/posthog.test.ts', // vi.mock,env
   'src/telemetry/usage-telemetry.test.ts', // vi.mock,env
+  'src/tools/builtin/web-fetch.server.test.ts', // global (node:dns, node:http spies)
   'src/tools/builtin/web-fetch.test.ts', // vi.mock
   'src/utils.test.ts', // vi.mock,env,global
   'src/utils/fetchWithRetry.test.ts', // vi.mock,global

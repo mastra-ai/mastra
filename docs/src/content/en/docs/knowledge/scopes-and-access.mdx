@@ -11,7 +11,7 @@ Scopes control what an agent can see and change in Knowledge. You decide what ea
 
 :::alpha
 
-Knowledge is in alpha. Its API may change between releases. Access is checked on every tool call, but the alpha doesn't guarantee isolation between scopes yet. Don't store anything in Knowledge that must never reach another customer or user.
+Knowledge is in alpha. Its API may change between releases. To keep one customer's data away from another's, read [Keep scopes apart](#keep-scopes-apart).
 
 :::
 
@@ -216,6 +216,16 @@ describe('team access', () => {
 Use `explainAccess()` only in server code. It shows whether a page is missing or hidden, and a run must never learn that. Don't expose it through an agent tool, or through a server route without admin-level auth.
 
 :::
+
+## Keep scopes apart
+
+Give each agent only the scopes its task needs, and understand what it means to give one agent more than one.
+
+Knowledge keeps each scope's data separate. Every time an agent calls a Knowledge tool, Knowledge checks which scopes the agent has access to. An agent never sees pages or notes in scopes it can't reach. Agents working for different customers can't see each other's data, as long as two things hold. First, your server gives each run only its own customer's scopes and Memory IDs. Knowledge trusts the scopes and `memory` IDs your code passes, so authenticate the customer before you [set them](#set-a-runs-scopes). Second, every [access rule](#access-rules-and-roles) gives a customer's principal roles only on that customer's own scopes. Check each rule's principal and the scopes it applies to, and test the rules for each customer.
+
+Knowledge has no guardrails yet against an agent leaking content between scopes it can access. Suppose an agent has access to `team:acme:support` and `resource:dana`. It can read a page in Dana's private scope and quote it in a team page. Each step is allowed on its own, and Knowledge can't tell that together they leak Dana's page.
+
+Give one agent more than one scope only when it's acceptable for content to move between them. When scopes must stay apart, such as two tenants or two customers, use a separate agent for each.
 
 ## Next steps
 

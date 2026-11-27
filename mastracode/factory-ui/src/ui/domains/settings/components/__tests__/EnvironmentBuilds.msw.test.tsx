@@ -1,3 +1,4 @@
+import type { EnvironmentBuild } from '@mastra/playground-ui/components/EnvironmentBuild';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -7,11 +8,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
-import type {
-  FactoryEnvironmentBuild,
-  FactoryEnvironmentPatch,
-  FactoryEnvironmentPayload,
-} from '../../../workspaces/services/environment';
+import type { FactoryEnvironmentPatch, FactoryEnvironmentPayload } from '../../../workspaces/services/environment';
 import { FactoryManagementSection } from '../FactoryManagementSection';
 import {
   buildHistory,
@@ -99,7 +96,7 @@ describe('Environment builds', () => {
     const reads = useEnvironment(holder);
     let posts = 0;
     let historyReads = 0;
-    const statuses: FactoryEnvironmentBuild['status'][] = ['building', 'ready'];
+    const statuses: EnvironmentBuild['status'][] = ['building', 'ready'];
     server.use(
       http.post(`${ENVIRONMENT_URL}/build`, () => {
         posts += 1;
@@ -158,7 +155,7 @@ describe('Environment builds', () => {
     await user.click(pushSwitch);
     await waitFor(() => expect(patches).toEqual([{ buildTriggers: { push: { enabled: false } } }]));
 
-    const debounce = screen.getByRole('spinbutton', { name: 'Push debounce in minutes' });
+    const debounce = screen.getByRole('spinbutton', { name: 'Build debounce in minutes' });
     await user.clear(debounce);
     await user.type(debounce, '30{Enter}');
     await waitFor(() => expect(patches.at(-1)).toEqual({ buildTriggers: { push: { debounceMinutes: 30 } } }));
@@ -173,6 +170,26 @@ describe('Environment builds', () => {
     await waitFor(() =>
       expect(patches.at(-1)).toEqual({ buildTriggers: { schedule: { enabled: true, cron: '0 3 * * *' } } }),
     );
+  });
+
+  it('offers the build debounce with push rebuilds off, since session starts use it too', async () => {
+    const holder = {
+      environment: environmentPayload({
+        buildTriggers: buildTriggers({ push: { enabled: false, debounceMinutes: 30 } }),
+      }),
+    };
+    useFactory();
+    useEnvironment(holder);
+    const patches = recordPatches(holder);
+
+    renderEnvironmentSettings();
+    const user = userEvent.setup();
+
+    const debounce = await screen.findByRole('spinbutton', { name: 'Build debounce in minutes' });
+    expect(debounce).toHaveValue(30);
+    await user.clear(debounce);
+    await user.type(debounce, '45{Enter}');
+    await waitFor(() => expect(patches).toEqual([{ buildTriggers: { push: { debounceMinutes: 45 } } }]));
   });
 
   it('explains and locks the schedule when the host has no schedules', async () => {

@@ -25,6 +25,8 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      # Mounts the StarSling Disks pnpm store (setup-pnpm-node).
+      id-token: write
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -65,6 +67,12 @@ jobs:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
 
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
+
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
@@ -79,7 +87,7 @@ jobs:
 
       # Fixture child processes import the built packages, so `dist` must exist.
       - name: Build dependencies
-        run: pnpm turbo build --filter @mastra/core --filter @mastra/pg --filter @mastra/redis-streams
+        run: pnpm turbo build --filter @mastra/core --filter @mastra/pg --filter @mastra/redis-streams --filter '@mastra/factory^...'
         env:
           NODE_OPTIONS: '--max_old_space_size=8192'
 
@@ -99,3 +107,14 @@ jobs:
         env:
           NODE_OPTIONS: '--max_old_space_size=8192'
           MASTRA_AGENT_THREAD_LEASE_TTL_MS: '3000'
+
+      - name: Verify native evented request context
+        run: pnpm exec vitest run src/agentic-loop-pubsub.test.ts src/cross-host-resume-context.test.ts -t 'retains live request context|uses resumed request context|resuming caller context' --reporter=verbose
+        working-directory: pubsub/redis-streams
+
+      - name: Verify evented Factory title persistence
+        run: pnpm exec vitest run src/rules/board-phase-runtime.test.ts -t 'persists a generated title for an evented Factory session over Redis Streams' --reporter=verbose
+        working-directory: mastracode/factory
+        env:
+          FACTORY_TEST_POSTGRES_URL: ${{ env.POSTGRES_CONNECTION_STRING }}
+          FACTORY_TEST_REDIS_URL: ${{ env.REDIS_URL }}

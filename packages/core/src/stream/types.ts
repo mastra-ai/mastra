@@ -24,6 +24,7 @@ import type { ModelConfigModelSettings } from '../llm/model/model-settings';
 import type { MastraLanguageModel, SharedProviderOptions } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import type { ScorerResult } from '../loop';
+import type { ContinuationStopCause } from '../loop/shared/continuation-core';
 import type { ClientObservabilityCarrier, ObservabilityContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
@@ -205,12 +206,25 @@ export interface MastraMetadata {
   selectionReason?: string;
 }
 
+/**
+ * Data of a tool call chunk: what the model asked to run. Found at `chunk.payload` for
+ * `tool-call` chunks, e.g. `result.toolCalls[i].payload` from `agent.generate()`.
+ *
+ * - `toolName` / `args`: the tool the model picked and the input it passed.
+ * - `toolCallId`: matches the `toolCallId` of the corresponding {@link ToolResultPayload}.
+ * - The tool's return value is not here; read it from the matching tool result's
+ *   `payload.result` (`result.toolResults`).
+ */
 export interface ToolCallPayload<TArgs = unknown, TOutput = unknown> {
+  /** Unique ID for this call; the matching tool result has the same `toolCallId`. */
   toolCallId: string;
+  /** Name (key) of the tool the model called. */
   toolName: string;
+  /** Input the model passed to the tool. */
   args?: TArgs & {
     __mastraMetadata?: MastraMetadata;
   };
+  /** True when the provider ran the tool itself (e.g. a provider-hosted search tool). */
   providerExecuted?: boolean;
   providerMetadata?: ProviderMetadata;
   output?: TOutput;
@@ -230,9 +244,15 @@ export interface ToolCallPayload<TArgs = unknown, TOutput = unknown> {
   observability?: ClientObservabilityCarrier;
 }
 
+/**
+ * Data of a tool result chunk: what a tool returned. Found at `chunk.payload` for
+ * `tool-result` chunks, e.g. `result.toolResults[i].payload` from `agent.generate()`.
+ * `result` is the tool's return value; `toolCallId` links it to its {@link ToolCallPayload}.
+ */
 export interface ToolResultPayload<TResult = unknown, TArgs = unknown> {
   toolCallId: string;
   toolName: string;
+  /** The value the tool returned. */
   result: TResult;
   isError?: boolean;
   providerExecuted?: boolean;
@@ -284,6 +304,15 @@ interface FinishPayload<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
     /** Steps array - uses MastraStepResult which extends AI SDK StepResult with tripwire data */
     steps?: MastraStepResult<Tools>[];
   };
+  /**
+   * Why the agent loop stopped calling the model, as opposed to `stepResult.reason`,
+   * which is why the model's last response ended. A run that ends on a tool call has
+   * reason `'tool-calls'` whether it ran out of `maxSteps` (`'max_steps'`), stopped on a
+   * client tool (`'model_finished'`), matched `stopWhen` (`'stop_condition'`) or was ended
+   * by `onIterationComplete` (`'iteration_hook'`). Absent when the loop ended before
+   * deciding whether to continue, such as on abort.
+   */
+  stopCause?: ContinuationStopCause;
   metadata: {
     providerMetadata?: ProviderMetadata;
     request?: LanguageModelRequestMetadata;
@@ -958,10 +987,13 @@ export type NetworkChunkType<OUTPUT = undefined> =
 /** Emitted only by `subscribeToThread({ withInitialHistory })`, before any other chunk. */
 export type ThreadHistoryChunk = BaseChunkType & { type: 'thread-history'; payload: ThreadHistoryPayload };
 
-/** A thread run's outcome, independent of stored-message replay. Suspension is resumable. */
+/**
+ * A thread run's outcome, independent of stored-message replay. Suspension is resumable. `interrupted` means the
+ * process running it shut down mid-run: recovery can continue it under the same runId, so it isn't final either.
+ */
 export type ThreadRunStatusChunk = BaseChunkType & {
   type: 'thread-run-status';
-  payload: { status: 'success' | 'failed' | 'aborted' | 'suspended' };
+  payload: { status: 'success' | 'failed' | 'aborted' | 'suspended' | 'interrupted' };
 };
 
 export type AgentChunkType<OUTPUT = undefined> =

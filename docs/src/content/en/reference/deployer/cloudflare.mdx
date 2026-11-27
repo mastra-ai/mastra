@@ -76,6 +76,49 @@ Use `vars` in the `CloudflareDeployer` constructor only for non-sensitive config
 
 After running `mastra build`, the deployer generates a `wrangler.jsonc` file conforming to Cloudflare's [wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/). It points to files inside `.mastra/output` so you need to run `mastra build` before deploying with Wrangler.
 
+## Minification and source maps
+
+The generated `wrangler.jsonc` sets `minify: true`. Wrangler minifies the Worker when it bundles it for deployment, which cuts the upload size about in half. A Worker keeps its own source code in memory, so a smaller bundle also leaves more of the Worker memory limit for your agents.
+
+Wrangler keeps function and class names when it minifies (`keep_names` defaults to `true`), so code that reads `constructor.name` or an error's `name` keeps working. Leave `keep_names` on.
+
+Stack traces from a minified Worker point at positions in the minified file. Wrangler 4.150 and later upload source maps by default, skipping any they can't resolve, and Cloudflare uses them to map the stack traces of uncaught exceptions in [Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/) and real-time logs back to the files that `mastra build` wrote to `.mastra/output`. Errors that Mastra catches and logs, such as a failing route handler, appear as log messages and aren't mapped. The `stack` property your code reads at runtime isn't mapped either. Source maps don't count toward the Worker size limit and don't affect startup time.
+
+Older Wrangler versions only upload source maps when you set `upload_source_maps: true` in the deployer options. With that setting, Wrangler fails the deployment if it can't resolve a source map.
+
+To map stack traces all the way back to your own files in `src/`, also turn on source maps for the Mastra build:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { CloudflareDeployer } from '@mastra/deployer-cloudflare'
+
+export const mastra = new Mastra({
+  bundler: {
+    sourcemap: true,
+  },
+  deployer: new CloudflareDeployer({
+    name: 'your-project-name',
+  }),
+})
+```
+
+To turn off minification or source map uploads, pass the setting to the constructor:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { CloudflareDeployer } from '@mastra/deployer-cloudflare'
+
+export const mastra = new Mastra({
+  deployer: new CloudflareDeployer({
+    name: 'your-project-name',
+    minify: false,
+    upload_source_maps: false,
+  }),
+})
+```
+
+To skip minification for a single deployment, run `npx wrangler deploy --no-minify`.
+
 ## Cloudflare bindings
 
 When you use the Cloudflare deployer, you can import runtime bindings from `cloudflare:workers` in your Mastra config file. Mastra automatically preserves protocol-based runtime imports like `cloudflare:workers` during `mastra build` without trying to install them as npm dependencies.

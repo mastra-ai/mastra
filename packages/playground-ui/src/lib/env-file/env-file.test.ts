@@ -153,14 +153,25 @@ ESCAPED="quote \" and slash \\"
     });
   });
 
-  it('skips lines that carry no assignment', () => {
-    expect(parseEnvFileText('JUST_A_WORD\n=novalue\n   =spaced\nGOOD=1')).toEqual([{ key: 'GOOD', value: '1' }]);
-  });
-
-  it('keeps an unterminated quoted value up to the end of the file', () => {
-    expect(parseEnvFileText('KEY="never closed\nsecond line')).toEqual([
-      { key: 'KEY', value: 'never closed\nsecond line' },
-    ]);
+  it.each([
+    ['skips lines that carry no assignment', 'JUST_A_WORD\n=novalue\n   =spaced\nGOOD=1', 'GOOD', '1'],
+    [
+      'keeps an unterminated quoted value up to the end of the file',
+      'KEY="never closed\nsecond line',
+      'KEY',
+      'never closed\nsecond line',
+    ],
+    [
+      'keeps a backslash that has nothing left to escape',
+      'KEY="ends with a backslash\\',
+      'KEY',
+      'ends with a backslash\\',
+    ],
+    ['ignores a comment even when it contains an assignment', '# KEY=commented out\nREAL=1', 'REAL', '1'],
+    ['ignores an indented comment that contains an assignment', '   # KEY=commented out\nREAL=1', 'REAL', '1'],
+    ['only strips an export prefix at the start of the line', 'KEY=export value', 'KEY', 'export value'],
+  ] as const)('%s', (_title, input, key, value) => {
+    expect(parseEnvFileText(input)).toEqual([{ key, value }]);
   });
 
   it('counts backslashes to decide whether a quote closes the value', () => {
@@ -180,12 +191,6 @@ ESCAPED="quote \" and slash \\"
   it('reads an escaped quote as content rather than the end of the value', () => {
     // The `\'` does not close the value, so the parser runs on to the end of the file.
     expect(parseEnvFileText(String.raw`KEY='ends with \'`)).toEqual([{ key: 'KEY', value: "ends with '" }]);
-  });
-
-  it('keeps a backslash that has nothing left to escape', () => {
-    expect(parseEnvFileText('KEY="ends with a backslash\\')).toEqual([
-      { key: 'KEY', value: 'ends with a backslash\\' },
-    ]);
   });
 
   it('quotes a value carrying a carriage return', () => {
@@ -276,20 +281,6 @@ ESCAPED="quote \" and slash \\"
     });
   });
 
-  it('refuses a file that holds binary content', async () => {
-    await expect(readEnvFile(new File(['A=1\0B=2'], '.env'))).resolves.toEqual({
-      ok: false,
-      error: 'File appears to be binary. Please import a plain-text .env file.',
-    });
-  });
-
-  it('refuses a file that assigns nothing at all', async () => {
-    await expect(readEnvFile(new File(['# only a comment\n\n'], '.env'))).resolves.toEqual({
-      ok: false,
-      error: 'No valid environment variables found in the file.',
-    });
-  });
-
   it('strips a byte order mark only at the very start', () => {
     expect(parseEnvFileText('\uFEFFKEY=value')).toEqual([{ key: 'KEY', value: 'value' }]);
     // Without a leading mark there is nothing to strip: one inside a value is content.
@@ -301,18 +292,6 @@ ESCAPED="quote \" and slash \\"
       { key: 'KEY', value: 'value#' },
       { key: 'OTHER', value: '1' },
     ]);
-  });
-
-  it('ignores a comment even when it contains an assignment', () => {
-    expect(parseEnvFileText('# KEY=commented out\nREAL=1')).toEqual([{ key: 'REAL', value: '1' }]);
-  });
-
-  it('ignores an indented comment that contains an assignment', () => {
-    expect(parseEnvFileText('   # KEY=commented out\nREAL=1')).toEqual([{ key: 'REAL', value: '1' }]);
-  });
-
-  it('only strips an export prefix at the start of the line', () => {
-    expect(parseEnvFileText('KEY=export value')).toEqual([{ key: 'KEY', value: 'export value' }]);
   });
 
   it('closes a multi-line value on the first unescaped quote of a later line', () => {

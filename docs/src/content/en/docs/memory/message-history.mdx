@@ -154,6 +154,31 @@ System messages, context, the current turn's input, and the agent's responses ar
 
 Trimmed messages stay in storage. During agent runs, Mastra persists a per-thread boundary so they're excluded from later turns. Setting `messageHistory` without `lastMessages` disables the default 10-message cap. Set both to combine a count cap with a token budget. Set `maxTokens` to `0` to disable message history.
 
+### OpenAI Responses compaction
+
+OpenAI Responses models can compact provider context during long-running conversations. Enable compaction for a call with `providerOptions.openai.contextManagement`:
+
+```typescript
+await agent.stream('Continue the conversation', {
+  memory: {
+    thread: 'thread-123',
+    resource: 'user-456',
+  },
+  providerOptions: {
+    openai: {
+      store: false,
+      contextManagement: [{ type: 'compaction', compactThreshold: 10_000 }],
+    },
+  },
+})
+```
+
+When OpenAI returns a compaction item, Mastra stores it with the thread and replays it across tool loops and later agent calls. With `store: false`, Mastra retains the encrypted compaction content. With stored Responses, an item with an OpenAI item ID can replay as an `item_reference`.
+
+Compaction state is provider-specific. Mastra removes OpenAI compaction items when a thread switches to an incompatible provider. Other stored messages remain unchanged.
+
+When the selected history contains a compaction checkpoint, Mastra keeps the full conversation in Memory but sends OpenAI only the latest checkpoint, system instructions, and messages after that checkpoint. Memory's `lastMessages` and `messageHistory` controls still determine which stored messages are selected before compaction is applied.
+
 :::tip
 
 When memory is enabled, [Studio](/docs/studio/overview) uses message history to display past conversations in the chat sidebar.
@@ -411,7 +436,7 @@ Message queries return `MastraDBMessage[]` format. To display messages in a fron
 
 ## Thread cloning
 
-Thread cloning creates a copy of an existing thread with its messages. This is useful for branching conversations or creating checkpoints before a potentially destructive operation, or alternatively testing variations of a conversation.
+Thread cloning creates a copy of an existing thread with its messages. This is useful for branching conversations or creating checkpoints before a destructive operation, or alternatively testing variations of a conversation.
 
 ```typescript
 const { thread, clonedMessages } = await memory.cloneThread({

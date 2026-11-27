@@ -423,6 +423,15 @@ export interface WorkflowRunState {
   waitingPaths: Record<string, number[]>;
   timestamp: number;
   /**
+   * The run's `lastSeq` when the evented engine applied `pruneSnapshot` to this finished storage v2
+   * run, written in the same write as the pruned results. A redelivered `workflow.end` sees it and
+   * doesn't prune again: the hook would read its own output, since the first prune replaced the
+   * results it was applied to. Cleared by the engine-built headers of a drive that re-runs the run
+   * (a restart or time travel), whose finish prunes again.
+   * @internal
+   */
+  prunedAtSeq?: number;
+  /**
    * Epoch ms when an agent resume claimed this suspended run (status `pending`). Lets a later
    * resume recognize a claim abandoned by a process that died before starting the run.
    * @internal
@@ -448,7 +457,10 @@ export interface WorkflowRunState {
     /** The approval decision or `resumeSchema` data the resume passes to the suspended tool call. */
     resumeData?: unknown;
   };
-  /** @internal Snapshot created only to guard evented step deliveries. */
+  /**
+   * @internal Snapshot stored only because evented step guards or storage v2 need it while the run
+   * runs; the workflow's `shouldPersistSnapshot` declined it.
+   */
   guardedOnlySnapshot?: boolean;
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;
@@ -592,8 +604,24 @@ export interface WorkflowOptions<TStorageVersion extends 1 | 2 = 1> {
    * whose side effects must not be re-driven by a blanket restart — durable
    * agent workflows set this to false because their recovery is owned by the
    * dedicated opt-in path (`recovery.durableAgents: 'auto'`).
+   *
+   * It also decides whether a default-engine run holds a storage run lease while
+   * it executes. On storage with run fencing, a leased run's saves carry that
+   * lease, so once another process takes the run over, storage refuses this
+   * process's saves and its call rejects with `STORAGE_RUN_FENCE_CONFLICT`.
    */
   autoRestartActiveRuns?: boolean;
+  /**
+   * How long, in milliseconds, the storage run lease of this workflow's runs lasts
+   * without a renewal. Only runs that take a lease use it (see
+   * `autoRestartActiveRuns`). The lease is renewed every third of it, so a step
+   * that blocks the event loop for longer than this lets another process take
+   * the run over. A restart over a lease that lapsed doubles it, up to 8 times
+   * this value. Defaults to `MASTRA_AGENT_THREAD_LEASE_TTL_MS` (15000).
+   * Values under 1000 are raised to 1000.
+   * `createRun({ leaseTtlMs })` overrides it for one run.
+   */
+  leaseTtlMs?: number;
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
   /**
    * Evaluates `shouldPersistSnapshot` before entering the durable operation so a
@@ -621,6 +649,15 @@ export interface WorkflowOptions<TStorageVersion extends 1 | 2 = 1> {
    * @internal Set by durable agent loops, whose suspended-run listing reads the stored status.
    */
   persistResumeClaim?: boolean;
+
+  /**
+   * Only this process cancels runs of this workflow (`run.cancel()` or an aborted signal), so
+   * the default engine does not read a stored `canceled` status before or between steps.
+   *
+   * @internal Set by workflows the framework creates for each agent call (stream preparation
+   * and combined processors). Their runs are never stored, so a status read can only miss.
+   */
+  localCancellationOnly?: boolean;
 
   /**
    * Identifies step errors raised because this execution lost, or could not
@@ -660,6 +697,18 @@ export interface WorkflowOptions<TStorageVersion extends 1 | 2 = 1> {
    * function returning JSON-safe data — the snapshot may cross a pubsub
    * codec boundary. Defaults to identity (no change).
    *
+   * On storage version 2 it's called once, when the run finishes, with every
+   * step result, and only for a workflow that sets `storageVersion: 2` itself.
+   * A redelivered finish event doesn't prune the stored run again: the run
+   * remembers it was pruned until a restart or time travel re-runs it.
+   * Concurrent duplicate deliveries can still each invoke the hook, always
+   * with the same unpruned results, so keep the hook side-effect-free.
+   * Suspended runs aren't pruned: their later steps read earlier results from
+   * storage. Step results the hook returns as the same object aren't written
+   * again, and the run's result keeps the unpruned step results. Replace step
+   * results rather than removing them: on the default engine, a step result
+   * the hook leaves out stays stored.
+   *
    * Used internally by agent-loop workflows to strip data that is never
    * read on resume (stale suspend payloads, duplicated message arrays).
    */
@@ -670,13 +719,13 @@ export interface WorkflowOptions<TStorageVersion extends 1 | 2 = 1> {
    * per run on every write. `2` stores a run header plus per-step entries, and
    * each write sends only what changed.
    *
-   * Version 2 requires the default execution engine and a storage adapter that
-   * supports it (in-memory, `@mastra/pg`, `@mastra/libsql`), and can't be
-   * combined with `pruneSnapshot`. Steps read earlier results with
-   * `getStepResultAsync`; sync `getStepResult` throws. Runs keep the version
-   * they were created with: a run resumed after this option changes continues
-   * in its stored version. A nested workflow's run uses its parent run's
-   * version, so this option applies only when the workflow runs on its own.
+   * Version 2 requires the default or evented execution engine and a storage
+   * adapter that supports it (in-memory, `@mastra/pg`, `@mastra/libsql`).
+   * Steps read earlier results with `getStepResultAsync`; sync `getStepResult`
+   * throws. Runs keep the version they were created with: a run resumed after
+   * this option changes continues in its stored version. A nested workflow's
+   * run uses its parent run's version, so this option applies only when the
+   * workflow runs on its own.
    *
    * On version 2 a run's result holds its step results as an async loader,
    * `await result.steps()`, so returning a result doesn't read them all back.
@@ -687,7 +736,8 @@ export interface WorkflowOptions<TStorageVersion extends 1 | 2 = 1> {
 
   /**
    * When `storageVersion` isn't set, a new top-level run takes version 2 if
-   * it runs on the default engine and the store supports it, otherwise 1.
+   * it runs on the default or evented engine and the store supports it,
+   * otherwise 1.
    * Unlike an explicit `storageVersion: 2`, this never throws, and runs it
    * stores as version 2 skip `pruneSnapshot`.
    *
@@ -1423,6 +1473,8 @@ export type ExecutionContext = {
   tracingIds?: {
     traceId: string;
     workflowSpanId: string;
+    /** The run's sampling decision. Spans started from these ids repeat it instead of sampling again. */
+    sampled?: boolean;
   };
 };
 
@@ -1438,6 +1490,11 @@ export type MutableContext = {
    * to. Applying it applies those changes to the state then, not `state` itself.
    */
   stateBase?: Record<string, unknown>;
+  /**
+   * @internal A storage v2 step's `setState` changes, applied on top of the state then. A key set
+   * to `undefined` is deleted.
+   */
+  stateDelta?: Record<string, unknown>;
   suspendedPaths: Record<string, number[]>;
   resumeLabels: Record<
     string,

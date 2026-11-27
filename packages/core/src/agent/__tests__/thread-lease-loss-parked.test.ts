@@ -19,7 +19,7 @@ vi.hoisted(() => {
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { PubSub } from '../../events/pubsub';
 import { describeForAllEngines } from '../../loop/test-utils/aimock/aimock-scenario';
-import { isDurableEngineVariant } from '../../loop/test-utils/aimock/types';
+import { isDurableEngineVariant, nativeExecutionEngine } from '../../loop/test-utils/aimock/types';
 import type { EngineVariant } from '../../loop/test-utils/aimock/types';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
@@ -28,7 +28,8 @@ import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { createDurableAgent, createEventedAgent } from '../durable';
 import { assembleAgentFromFsEntry } from '../fs-routing';
-import { agentThreadStreamRuntime } from '../thread-stream-runtime';
+import { verifyRunLease } from '../run-lease-fence';
+import { AgentThreadLeaseLostError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 
 const RESOURCE = 'parked-lease-user';
 
@@ -139,7 +140,9 @@ function buildAgent(
       : engine === 'evented'
         ? createEventedAgent({ agent: base, pubsub })
         : base;
+  const executionEngine = nativeExecutionEngine(engine);
   const mastra = new Mastra({
+    ...(executionEngine && { durable: { executionEngine } }),
     agents: engine === 'fs' ? {} : { agent: wrapped as any },
     pubsub,
     storage,
@@ -191,7 +194,7 @@ describeForAllEngines('parked run across a lease backend outage', (engine: Engin
       const agent = buildAgent(engine, llm.url, archive, pubsub, storage);
 
       const result = await agent.stream(`archive ${tag}`, { memory: { thread, resource: RESOURCE } });
-      const output = isDurableEngineVariant(engine) ? result.output : result;
+      const output = 'output' in result ? result.output : result;
       const chunkTypes: string[] = [];
       for await (const chunk of result.fullStream) {
         chunkTypes.push(chunk.type);
@@ -255,7 +258,7 @@ describeForAllEngines('parked run across a lease backend outage', (engine: Engin
     });
     const agent = buildAgent(engine, llm.url, archive, pubsub, new InMemoryStore());
     const result = await agent.stream(`archive ${tag}`, { memory: { thread, resource: RESOURCE } });
-    const output = isDurableEngineVariant(engine) ? result.output : result;
+    const output = 'output' in result ? result.output : result;
     for await (const chunk of result.fullStream) {
       if (chunk.type === 'tool-call-approval') break;
     }
@@ -412,6 +415,54 @@ describeForAllEngines('parked run across a lease backend outage', (engine: Engin
     expect(ctx.pubsub.leases.get(ctx.leaseKey)?.owner).toBe('successor-run');
   }, 20_000);
 
+  // A resume on another server takes the thread under this run id with a newer generation, and its tool-call step
+  // can run here, where the parked run's lease check is still registered (#31066). Any other run holding the
+  // thread is a takeover, so the tool must not run beside it.
+  it.each([
+    ['lets a resumed tool call through when the run itself holds the lease under a newer generation', 'same run', true],
+    ['still stops a tool call when a different run holds the lease', 'another run', false],
+  ] as const)(
+    '%s',
+    async (_name, holder, allowed) => {
+      const tag = `${engine}-parked-fence-${holder === 'same run' ? 'same' : 'other'}`;
+      const thread = `parked-lease-thread-${tag}`;
+      llm.on(
+        { userMessage: `archive ${tag}`, hasToolResult: false },
+        { toolCalls: [{ id: `call_archive_${tag}`, name: 'archive', arguments: { item: 'a' } }] },
+      );
+      const archive = createTool({
+        id: 'archive',
+        description: 'Archive an item',
+        inputSchema: z.object({ item: z.string() }),
+        requireApproval: true,
+        execute: async () => ({ archived: true }),
+      });
+      const pubsub = new SharedLeasePubSub();
+      const agent = buildAgent(engine, llm.url, archive, pubsub, new InMemoryStore());
+      const result = await agent.stream(`archive ${tag}`, { memory: { thread, resource: RESOURCE } });
+      const output = 'output' in result ? result.output : result;
+      for await (const chunk of result.fullStream) {
+        if (chunk.type === 'tool-call-approval') break;
+      }
+      const runId: string = output.runId ?? result.runId;
+      await pubsub.parked(runId);
+      const leaseKey = [...pubsub.leases.keys()].find(key => key.endsWith(thread))!;
+      expect(leaseKey).toBeDefined();
+
+      const owner =
+        holder === 'same run'
+          ? `mastra:thread-lease:${JSON.stringify([runId, 'generation', Date.now() + 1])}`
+          : `mastra:thread-lease:${JSON.stringify(['successor-run', 'generation', Date.now() + 1])}`;
+      pubsub.leases.set(leaseKey, { owner, expiresAt: Date.now() + 60_000 });
+
+      if (allowed) await expect(verifyRunLease(runId)).resolves.toBeUndefined();
+      else await expect(verifyRunLease(runId)).rejects.toBeInstanceOf(AgentThreadLeaseLostError);
+      // The parked run never takes the thread back from whoever holds it.
+      expect(pubsub.leases.get(leaseKey)?.owner).toBe(owner);
+    },
+    20_000,
+  );
+
   it('still stops a partly resumed run that loses its lease while a sibling suspension is pending', async () => {
     const tag = `${engine}-partial`;
     const thread = `parked-lease-thread-${tag}`;
@@ -450,7 +501,7 @@ describeForAllEngines('parked run across a lease backend outage', (engine: Engin
     const agent = buildAgent(engine, llm.url, ask, pubsub, new InMemoryStore());
 
     const result = await agent.stream(`ask two ${tag}`, { memory: { thread, resource: RESOURCE } });
-    const output = isDurableEngineVariant(engine) ? result.output : result;
+    const output = 'output' in result ? result.output : result;
     const suspended: string[] = [];
     for await (const chunk of result.fullStream) {
       if (chunk.type === 'tool-call-suspended') suspended.push(chunk.payload.toolCallId);

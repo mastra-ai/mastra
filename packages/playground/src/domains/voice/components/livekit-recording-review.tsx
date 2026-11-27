@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
-import { IconVoiceHigh } from '@mastra/playground-ui/icons/central/IconVoiceHigh';
+import { IconVoiceSimple } from '@mastra/playground-ui/icons/central/IconVoiceSimple';
 import { useMastraPackages } from '@mastra/react/hooks/configuration';
 import { useState } from 'react';
 import { LiveKitRecordingContent } from './livekit-recording-content';
@@ -27,8 +27,7 @@ export function LiveKitRecordingReview({ traceId, spans }: { traceId: string; sp
 
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)}>
-        <IconVoiceHigh />
+      <Button icon={<IconVoiceSimple />} size="sm" onClick={() => setOpen(true)}>
         Review audio
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>

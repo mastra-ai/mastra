@@ -241,14 +241,21 @@ export interface TrustedSpanAggregatePlan {
  */
 export function planSpanAggregate(
   input: unknown,
-  options: Pick<TraceQueryPlanOptions, 'scope'> = {},
+  options: Pick<TraceQueryPlanOptions, 'scope' | 'allowTokenSearch'> = {},
 ): TrustedSpanAggregatePlan {
   const request = parseSpanAggregateRequest(input);
   const issues: TraceQueryIssue[] = [];
-  const where = request.where ? planSpanQuerySelectionPredicate(request.where, issues) : undefined;
+  const where = request.where
+    ? planSpanQuerySelectionPredicate(request.where, issues, options.allowTokenSearch)
+    : undefined;
   const plan = planAggregateGroups(request, issues, {
     isDimension: isSpanAggregateDimension,
     parseMeasure: parseSpanAggregateMeasure,
   });
-  return { result: 'spanAggregate', ...plan, where, scope: normalizeTraceQueryTenantScope(options.scope) };
+  return {
+    result: 'spanAggregate',
+    ...plan,
+    where,
+    scope: normalizeTraceQueryTenantScope(options.scope),
+  };
 }

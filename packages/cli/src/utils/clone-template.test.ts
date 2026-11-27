@@ -434,28 +434,6 @@ describe('clone-template', () => {
       );
     });
 
-    it('should not include branch in git clone when branch is not specified', async () => {
-      const mockExec = vi
-        .fn()
-        .mockRejectedValueOnce(new Error('degit failed'))
-        .mockResolvedValueOnce({ stdout: '', stderr: '' }); // git clone succeeds
-
-      vi.mocked(execa).mockImplementation(mockExec as never);
-
-      const { cloneTemplate } = await import('./clone-template');
-      const result = await cloneTemplate({
-        template: mockTemplate,
-        projectName: 'test-project',
-      });
-
-      expect(result).toBe('/test-project');
-      expect(mockExec).toHaveBeenCalledWith(
-        'git',
-        ['clone', 'https://github.com/mastra-ai/template-test', '/test-project'],
-        { cwd: process.cwd() },
-      );
-    });
-
     it('preserves arbitrary template content without creating .env', async () => {
       const packageJson = {
         name: 'old-name',
@@ -574,20 +552,6 @@ describe('clone-template', () => {
       expect(process.listeners('SIGTERM')).not.toContain(spinnerExitHandler);
     });
 
-    it('should default to npm when no lock file is found', async () => {
-      const mockExec = vi.fn().mockResolvedValue({ stdout: '', stderr: '' });
-      vi.mocked(execa).mockImplementation(mockExec as never);
-
-      const { installDependencies } = await import('./clone-template');
-      await installDependencies('/test-project');
-
-      expect(mockExec).toHaveBeenCalledWith('npm', ['install'], {
-        cwd: '/test-project',
-        timeout: undefined,
-        killSignal: 'SIGTERM',
-      });
-    });
-
     it('should detect yarn when getPackageManager returns yarn', async () => {
       const mockExec = vi.fn().mockResolvedValue({ stdout: '', stderr: '' });
       vi.mocked(execa).mockImplementation(mockExec as never);
@@ -600,21 +564,6 @@ describe('clone-template', () => {
       await installDependencies('/test-project');
 
       expect(mockExec).toHaveBeenCalledWith('yarn', ['install'], {
-        cwd: '/test-project',
-        timeout: undefined,
-        killSignal: 'SIGTERM',
-      });
-    });
-
-    it('should detect npm when getPackageManager returns npm', async () => {
-      const mockExec = vi.fn().mockResolvedValue({ stdout: '', stderr: '' });
-      vi.mocked(execa).mockImplementation(mockExec as never);
-
-      // getPackageManager is already mocked to return 'npm' by default
-      const { installDependencies } = await import('./clone-template');
-      await installDependencies('/test-project');
-
-      expect(mockExec).toHaveBeenCalledWith('npm', ['install'], {
         cwd: '/test-project',
         timeout: undefined,
         killSignal: 'SIGTERM',

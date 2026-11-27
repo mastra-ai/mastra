@@ -3,7 +3,7 @@ import { Agent } from '@mastra/core/agent';
 export const intentClarifierAgent = new Agent({
   id: 'intent-clarifier-agent',
   name: 'Intent Clarifier Agent',
-  model: 'openai/gpt-5-mini',
+  model: 'openai/gpt-6.1-terra',
   instructions: `Today's date is ${new Date().toDateString()}.
 
 You are an expert at understanding user intent and generating clarifying questions.
