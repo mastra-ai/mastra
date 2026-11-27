@@ -375,6 +375,55 @@ export function describeResumeOccurrenceCases({
       20_000,
     );
 
+    // A resume event delivered again before its first step event was handled finds the resumed step
+    // as it left it, so it publishes that step event again, and the step's guard lets one of the
+    // two run it.
+    it('runs a resumed step once when the resume event is delivered again before the step starts', async () => {
+      const wf = linearWorkflow();
+      await withHost({ [wf.workflow.id]: wf.workflow }, async ({ driver }) => {
+        const publish = driver.pubsub.publish.bind(driver.pubsub);
+        const firstStepEvent = deferred();
+        let releaseFirst: (() => Promise<void>) | undefined;
+        let runId = '';
+        const interceptor = vi.spyOn(driver.pubsub, 'publish').mockImplementation(async (topic, event, options) => {
+          if (
+            !releaseFirst &&
+            event.type === 'workflow.step.run' &&
+            event.runId === runId &&
+            event.data.resumeSteps?.length &&
+            event.data.executionPath?.[0] === 0
+          ) {
+            releaseFirst = () => publish(topic, event, options);
+            firstStepEvent.resolve();
+            return;
+          }
+          return publish(topic, event, options);
+        });
+        try {
+          const run = await wf.workflow.createRun();
+          expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'suspended' });
+          runId = run.runId;
+          const from = driver.events.length;
+          const result = run.resume({ step: 'gate', resumeData: { ok: true } });
+          await firstStepEvent.promise;
+          const trigger = driver.events
+            .slice(from)
+            .find(event => event.type === 'workflow.resume' && event.runId === run.runId)!;
+          await driver.redeliverEvent(trigger);
+          // The repeated resume published the step event again.
+          expect(stepRunsSince(driver, from, run.runId, '0')).toHaveLength(1);
+          await releaseFirst!();
+          expect(await result).toMatchObject({ status: 'success', result: { n: 2 } });
+          await drainHandlers();
+          expect(stepRunsSince(driver, from, run.runId, '0')).toHaveLength(2);
+          expect(wf.calls).toEqual({ gate: 1, after: 1, next: 1 });
+        } finally {
+          interceptor.mockRestore();
+          await releaseFirst?.();
+        }
+      });
+    }, 20_000);
+
     // T4 (T1 after a time travel). Time travel carries its flag on every later step, so without the
     // guards nothing told the two copies of a duplicated step apart and the step after it ran twice.
     it('runs the step after a time-travelled step once when that step is delivered twice', async () => {
