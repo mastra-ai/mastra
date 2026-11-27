@@ -7,5 +7,3 @@ Added `@mastra/factory/contract`, a browser-safe entry with Factory's wire types
 ```ts
 import { phaseMayStartRun, cardChangeRequests } from '@mastra/factory/contract';
 ```
-
-`ExternalWorkItemSource` now lives in `@mastra/factory/work-items/external-source` and is no longer re-exported from `storage/domains/work-items/base`.
