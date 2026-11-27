@@ -11,7 +11,11 @@ Knowledge storage adapters get a new `getPageParents({ parentId, read })` method
 ```ts
 const knowledge = await storage.getStore('knowledge');
 // Nearest first: [parent, grandparent, ..., scope page]
-const parents = await knowledge!.getPageParents({ parentId: page.parentId!, read: 'all' });
-// The page's key path below its scope, e.g. ['guides', 'setup', 'install']
-const path = [...parents.filter(parent => !parent.isScope).reverse(), page].map(p => p.key!);
+const parents = page.parentId ? await knowledge!.getPageParents({ parentId: page.parentId, read: 'all' }) : [];
+// The chain stops early at a missing or unreadable page, and keys are optional,
+// so a key path exists only when the chain reaches the scope and every page below it has a key.
+const below = [...parents.filter(parent => !parent.isScope).reverse(), page];
+const keys = below.flatMap(p => (p.key ? [p.key] : []));
+// The page's key path below its scope, e.g. ['guides', 'setup', 'install'], or undefined.
+const path = parents.at(-1)?.isScope && keys.length === below.length ? keys : undefined;
 ```
