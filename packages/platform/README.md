@@ -111,6 +111,46 @@ const files = await project.filesystems.create({ environmentId: production.id, n
 
 Creating Memory instances, Knowledge instances, and databases requires the `admin` role.
 
+### Datasets and experiments
+
+`project.datasets` has the same methods as `mastra.datasets`, and the datasets it returns have the same methods as `Dataset` from `@mastra/core/datasets`. Reads and writes go to the project's datasets, which Studio shows. Code written against `mastra.datasets` works when given `{ datasets: project.datasets }`.
+
+`startExperiment` runs the experiment in your process and uploads each result, with its scores, as the item finishes. Pass `mastra` to run an agent or workflow registered on it; with `task`, no Mastra is needed. Nothing is written to that Mastra's own storage.
+
+```ts
+const project = new MastraProject({ accessToken: process.env.MASTRA_PLATFORM_ACCESS_TOKEN });
+
+const dataset = await project.datasets.create({ name: 'Billing questions' });
+await dataset.addItems({ items: [{ input: 'Where is my invoice?', groundTruth: 'Billing > Invoices' }] });
+
+const summary = await dataset.startExperiment({
+  mastra,
+  targetType: 'agent',
+  targetId: 'support',
+  scorers: [answerMatches],
+});
+```
+
+To run items yourself, create an experiment, submit each result, and finalize it:
+
+```ts
+const { experimentId } = await dataset.createExperiment({ name: 'baseline', provenance: { source: 'ci' } });
+await dataset.submitExperimentResult({
+  experimentId,
+  itemId,
+  output,
+  scores: [{ scorerId: 'accuracy', score: 1 }],
+  completedAt: new Date(),
+});
+await dataset.finalizeExperiment({ experimentId });
+```
+
+The project needs managed agents set up (`project.setupAgents()`), since its datasets live in their database, and observability on to store scores. The token needs `datasets:write` and `experiments:write`. Some core options aren't available and throw a `MastraError` instead of being ignored:
+
+- The Platform assigns dataset IDs, so `create` takes no `id`.
+- Experiments created from code have no target. `startExperiment` records the target you ran in the experiment's `metadata.target`.
+- `startExperimentAsync`, `runExperimentItem`, and `compareExperiments` aren't supported, and neither are the tenancy options (`organizationId`, `projectId`).
+
 ### Hosted browser
 
 Create a hosted browser from your Mastra Platform project's browser page, then pass its CDP URL to `PlatformBrowser`. Treat the CDP URL as a secret: anyone holding it can connect to that browser. Keep it server-side, do not commit it, and use a secure environment variable such as `MASTRA_BROWSER_CDP_URL`.

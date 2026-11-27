@@ -5,6 +5,7 @@ import { PlatformFilesystem, PlatformSandbox } from '@mastra/platform-workspace'
 import type { PlatformFilesystemOptions, PlatformSandboxOptions } from '@mastra/platform-workspace';
 import { PlatformAgent, toAgentBody } from './agents/platform-agent';
 import type { CreatePlatformAgentInput, PlatformAgentRecord } from './agents/platform-agent';
+import { PlatformDatasets } from './datasets/platform-datasets';
 import { PlatformKnowledge } from './knowledge/index';
 import type { PlatformKnowledgeOptions } from './knowledge/index';
 import { PlatformMemory } from './memory/platform-memory';
@@ -114,6 +115,7 @@ export class MastraProject {
   readonly #api: PlatformApi;
   readonly #projectId: string | undefined;
   #project: ProjectServices | undefined;
+  #datasets: PlatformDatasets | undefined;
 
   constructor(options: MastraPlatformOptions = {}) {
     const { accessToken, apiUrl, organizationId, api } = resolveOptions(options);
@@ -201,6 +203,15 @@ export class MastraProject {
   /** The Platform's records of the project's sandboxes. Use `createSandbox` or `getSandbox` to run commands. */
   get sandboxes(): PlatformSandboxes {
     return this.#services.sandboxes;
+  }
+
+  /**
+   * The project's datasets and experiments, with the same methods as core's `mastra.datasets`.
+   * Experiments run in this process and upload their results. Needs managed agents set up.
+   */
+  get datasets(): PlatformDatasets {
+    this.#datasets ??= new PlatformDatasets(this.#services.client);
+    return this.#datasets;
   }
 
   /** Whether the project is set up to run managed agents. */
