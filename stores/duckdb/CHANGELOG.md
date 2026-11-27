@@ -1,5 +1,18 @@
 # @mastra/duckdb
 
+## 1.19.3-alpha.0
+
+### Patch Changes
+
+- Fixed DuckDB vector metadata filters so values are compared using their stored JSON type. ([#31600](https://github.com/mastra-ai/mastra/pull/31600))
+
+  Previously a filter value was extracted as text and cast to a number, so `false` matched a stored `0`, `'0'` matched the number `0`, and range filters (`$gt`, `$gte`, `$lt`, `$lte`) errored on rows that held a boolean, string, null or array. The same clause builder also backs filtered updates and deletes, so those operations matched the wrong rows.
+
+  Now scalar equality (`$eq`, `$in`, `$nin`, `$contains`) checks the field's JSON type before comparing, and range filters only admit stored numbers. Booleans no longer match `0`/`1`, numeric strings no longer satisfy numeric filters, and a single query, update or delete clause is corrected for all of them.
+
+- Updated dependencies [[`6af07e7`](https://github.com/mastra-ai/mastra/commit/6af07e76acda2c15c9b85675a428baab774d8606), [`116f675`](https://github.com/mastra-ai/mastra/commit/116f6755907feea0c97d78c0b9d22fe0df436823), [`5af764a`](https://github.com/mastra-ai/mastra/commit/5af764a61c49ccb7587ab45afc82e8c65830f419), [`a414673`](https://github.com/mastra-ai/mastra/commit/a414673fc9f725e40ec24cfc83eb84554ed514a2), [`237add3`](https://github.com/mastra-ai/mastra/commit/237add377a4006b02336800155140ccfb9cd86d3), [`cfa1aea`](https://github.com/mastra-ai/mastra/commit/cfa1aea7e917c810c21705fa197af7c832d0b951), [`afdf069`](https://github.com/mastra-ai/mastra/commit/afdf069f29d34a2d51b7e458b071c42d23e6b2c4), [`d890f2d`](https://github.com/mastra-ai/mastra/commit/d890f2dacbb5f62fe809ed165e42278810eb66bd), [`5793d03`](https://github.com/mastra-ai/mastra/commit/5793d03b44a6e59a8a63873ed2a0ddc1b9a20a4d), [`b5755a5`](https://github.com/mastra-ai/mastra/commit/b5755a5e10386f424c3ec76663ea6a57543c648a)]:
+  - @mastra/core@1.87.0-alpha.4
+
 ## 1.19.2
 
 ### Patch Changes
