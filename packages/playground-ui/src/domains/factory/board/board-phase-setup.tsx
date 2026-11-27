@@ -1,12 +1,12 @@
-import { PhaseSetup as SharedPhaseSetup, useBoardNavigation } from '@mastra/playground-ui/domains/factory';
-import type { PhaseSetupHandle } from '@mastra/playground-ui/domains/factory';
+import type { InstalledPhaseInfo } from '@mastra/client-js';
+import { approvalText, startsText } from '../rules/phase-summary';
+import { ruleCount } from '../rules/rule-lanes';
+import { useBoardNavigation } from './board-navigation';
+import { PhaseSetup } from './phase-setup';
+import type { PhaseSetupHandle } from './phase-setup';
+import { usePhaseArrivals } from './use-phase-arrivals';
 
-import type { InstalledPhaseInfo } from '../../../../api/types';
-import { approvalText, startsText } from '../../boardConfig/phaseSummary';
-import { ruleCount } from '../../boardRules/ruleLanes';
-import { usePhaseArrivals } from '../hooks/usePhaseArrivals';
-
-export function PhaseSetup({
+export function BoardPhaseSetup({
   handle,
   factoryId,
   boardId,
@@ -32,7 +32,7 @@ export function PhaseSetup({
     .filter(Boolean)
     .join(' ');
   return (
-    <SharedPhaseSetup
+    <PhaseSetup
       handle={handle}
       phaseId={phase.id}
       href={boardConfigHref(boardId, phase.id)}

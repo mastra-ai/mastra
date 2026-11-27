@@ -1,6 +1,6 @@
-import type { InstalledPhaseInfo } from '../../../api/types';
-import { describeRule } from '../settings/components/conditionFields';
-import { PHASE_TOOLS } from './boardDraft';
+import type { InstalledPhaseInfo } from '@mastra/client-js';
+import { PHASE_TOOLS } from './board-draft';
+import { describeRule } from './condition-fields';
 
 type CardRule = InstalledPhaseInfo['autoStartWhen'] | null;
 type ExitTool = { autoApprove?: boolean; autoApproveWhen?: CardRule };

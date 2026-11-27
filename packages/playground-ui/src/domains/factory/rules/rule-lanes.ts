@@ -1,4 +1,5 @@
 import { kindsTakenWhole, SETTLING_PULL_REQUEST_EVENTS, STATUS_EVENTS, testsField } from '@internal/factory-contract';
+import type { IntakeRouteInfo } from '@mastra/client-js';
 import {
   CircleCheck,
   CircleDot,
@@ -13,9 +14,8 @@ import {
   RotateCcw,
   Zap,
 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
 
-import type { IntakeRouteInfo } from '../../../api/types';
+import type { LucideIcon } from 'lucide-react';
 
 /** An event a rule can trigger on. */
 export type RuleEvent = IntakeRouteInfo['on'][number];

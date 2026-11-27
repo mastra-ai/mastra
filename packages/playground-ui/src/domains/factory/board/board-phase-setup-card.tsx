@@ -1,16 +1,17 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
-import { focusRing } from '@mastra/playground-ui/primitives/transitions';
-import { cn } from '@mastra/playground-ui/utils/cn';
+import type { InstalledBoardInfo, InstalledPhaseInfo, IntakeRouteInfo } from '@mastra/client-js';
+import { approvalText, toolLabel } from '../rules/phase-summary';
+import { AutoStartSwitch } from './auto-start-switch';
+import { useBoardNavigation } from './board-navigation';
+import { Muted, PhaseSetupCard } from './phase-walkthrough';
 
-import type { InstalledBoardInfo, InstalledPhaseInfo, IntakeRouteInfo } from '../../../../api/types';
-import { useBoardNavigation, PhaseSetupCard as SharedPhaseSetupCard } from '@mastra/playground-ui/domains/factory';
-import { Muted } from '../../boardConfig/components/PhaseTimeline';
-import { outlineOfInstalled, sharedOutline } from '../../boardConfig/components/PhaseWalkthrough';
-import { RuleRow } from '../../boardConfig/components/RuleRow';
-import { AutoStartSwitch } from './AutoStartSwitch';
+import type { PhaseOutline } from './phase-walkthrough';
+import { RuleRow } from './rule-row';
+import { Button } from '@/ds/components/Button';
+import { SkeletonText } from '@/ds/components/Skeleton';
+import { Txt } from '@/ds/components/Txt';
+import { IconSettingsSliderHor } from '@/ds/icons/central/IconSettingsSliderHor';
+import { focusRing } from '@/ds/primitives/transitions';
+import { cn } from '@/utils/cn';
 
 /** Rules listed in the card before the rest are left to the board's settings. */
 const SHOWN_RULES = 3;
@@ -19,7 +20,20 @@ const SHOWN_RULES = 3;
  * A phase read top to bottom, as the Overview does: the rules that bring cards in, how and who works them, how the work ends,
  * where cards go next. Starting on its own can be switched on its step.
  */
-export function PhaseSetupCard({
+/** A phase as the walkthrough reads it, with Factory's tool labels and approval wording. */
+function installedPhaseOutline(phase: InstalledPhaseInfo): PhaseOutline {
+  return {
+    key: phase.id,
+    name: phase.name ?? phase.title,
+    kind: phase.kind,
+    runs: Boolean(phase.skill),
+    tools: phase.tools?.map(toolLabel),
+    exitTool: phase.exitTool ? { id: phase.exitTool.id, approval: approvalText(phase.exitTool) } : null,
+    nextPhases: phase.nextPhases,
+  };
+}
+
+export function BoardPhaseSetupCard({
   factoryId,
   boardId,
   phase,
@@ -42,11 +56,11 @@ export function PhaseSetupCard({
 }) {
   const { LinkComponent: Link, boardConfigHref } = useBoardNavigation();
   return (
-    <SharedPhaseSetupCard
+    <PhaseSetupCard
       boardId={boardId}
       label={label}
-      phase={sharedOutline(outlineOfInstalled(phase))}
-      phases={phases.map(phase => sharedOutline(outlineOfInstalled(phase)))}
+      phase={installedPhaseOutline(phase)}
+      phases={phases.map(installedPhaseOutline)}
       actions={
         <Button
           variant="ghost"
@@ -75,7 +89,7 @@ export function PhaseSetupCard({
               {arriving.length > SHOWN_RULES && (
                 <Link
                   href={boardConfigHref(boardId, phase.id)}
-                  className={cn(focusRing, 'text-muted-foreground hover:text-foreground w-fit rounded-sm text-xs')}
+                  className={cn(focusRing, 'w-fit rounded-sm text-caption text-muted-foreground hover:text-foreground')}
                 >
                   {arriving.length - SHOWN_RULES} more
                 </Link>

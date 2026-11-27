@@ -1,10 +1,5 @@
-import { PhaseSettingsPanel } from '@mastra/playground-ui/domains/factory';
-
-import type { FactorySkillInfo, StoredPhaseInfo } from '../../../../../api/types';
-import { useSourceSuggestions } from '../../../../../hooks/useSourceSuggestions';
-import { SettingsHrefLink } from '../../../settings/components/SettingsHrefLink';
-import { newSkillPath, settingsSectionPath, skillPath } from '../../../settings/settingsSections';
 import {
+  PhaseSettingsPanel,
   DEFAULT_SESSION,
   MAX_OUTCOMES,
   PHASE_TOOLS,
@@ -17,10 +12,15 @@ import {
   withAutoStart,
   withKind,
   withNextPhases,
-} from '../../../boardConfig/boardDraft';
-import type { RuleField } from '../../../boardConfig/boardDraft';
+  CARD_FACTS,
+} from '@mastra/playground-ui/domains/factory';
+
+import type { FactorySkillInfo, StoredPhaseInfo } from '../../../../../api/types';
+import { useSourceSuggestions } from '../../../../../hooks/useSourceSuggestions';
+import { SettingsHrefLink } from '../../../settings/components/SettingsHrefLink';
+import { newSkillPath, settingsSectionPath, skillPath } from '../../../settings/settingsSections';
+import type { RuleField } from '@mastra/playground-ui/domains/factory';
 import { skillBadges } from '../../../boardConfig/components/skills/SkillBadges';
-import { CARD_FACTS } from '../../../settings/components/conditionFields';
 import { ConditionCells } from '../conditions/ConditionCells';
 
 type Runner = NonNullable<StoredPhaseInfo['runner']>;

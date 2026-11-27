@@ -1,11 +1,10 @@
-import { PhaseNotFoundPanel } from '@mastra/playground-ui/domains/factory';
+import { PhaseNotFoundPanel, canRemovePhase, kindLocked } from '@mastra/playground-ui/domains/factory';
 
 import type { FactorySkillsResponse, StoredBoardInfo, StoredPhaseInfo } from '../../../../api/types';
 import { HrefLink } from '../../../ui/HrefLink';
 import { boardConfigPath } from '../../boardConfig/boardConfigPaths';
 import type { CanvasFocus } from '../../boardConfig/boardConfigPaths';
-import { canRemovePhase, kindLocked } from '../../boardConfig/boardDraft';
-import type { RuleField } from '../../boardConfig/boardDraft';
+import type { RuleField } from '@mastra/playground-ui/domains/factory';
 import { PhasePanel } from './phasePanel/PhasePanel';
 import { RulePanel } from './rulePanel/RulePanel';
 import { TestPanel } from './testPanel/TestPanel';

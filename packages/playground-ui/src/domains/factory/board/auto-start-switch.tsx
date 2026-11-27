@@ -1,7 +1,8 @@
+import type { InstalledPhaseInfo } from '@mastra/client-js';
 import { useBoardQuery, useSaveBoardMutation } from '@mastra/react/hooks/factory';
-import type { InstalledPhaseInfo } from '../../../../api/types';
-import { withAutoStart } from '../../boardConfig/boardDraft';
-import { StartsToggle } from '../../boardConfig/components/StartsToggle';
+import { withAutoStart } from '../rules/board-draft';
+import { startsText } from '../rules/phase-summary';
+import { StartsToggle } from './starts-toggle';
 
 /**
  * How a phase starts, switched from the board itself: the change saves the board at once. When someone saved the board
@@ -24,12 +25,13 @@ export function AutoStartSwitch({
   const editable = board && stored.data?.canEdit && board.editable;
   const asked = save.isPending ? save.variables.phases.find(candidate => candidate.key === phase.id) : undefined;
   const saved = board?.phases.find(candidate => candidate.key === phase.id);
+  const autoStart = (asked ?? saved ?? phase).autoStart ?? false;
 
   return (
     <StartsToggle
       label={label}
-      autoStart={(asked ?? saved ?? phase).autoStart ?? false}
-      autoStartWhen={(saved ?? phase).autoStartWhen}
+      autoStart={autoStart}
+      starts={startsText({ autoStart, autoStartWhen: (saved ?? phase).autoStartWhen })}
       pending={save.isPending}
       failed={save.isError}
       onChange={

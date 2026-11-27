@@ -1,7 +1,6 @@
-import { RuleRank, OrderRuleRow as SharedOrderRuleRow } from '@mastra/playground-ui/domains/factory';
+import { RuleRank, OrderRuleRow as SharedOrderRuleRow, phaseName } from '@mastra/playground-ui/domains/factory';
 
 import type { InstalledBoardInfo } from '../../../../../api/types';
-import { phaseName } from '../../../boardRules/ruleTargets';
 import { boardPhaseIconKind } from '../../../factory/components/BoardIcons';
 import { ruleNotes } from '../../canvasModel';
 import type { RuleLine } from '../../canvasModel';

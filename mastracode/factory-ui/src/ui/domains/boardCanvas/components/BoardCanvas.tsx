@@ -6,6 +6,12 @@ import {
   LeaveDialog,
   TestInput,
   usePhoneLayout,
+  draftChanged,
+  movePhase,
+  phaseHasProblem,
+  removePhase,
+  withNextPhases,
+  boardName,
 } from '@mastra/playground-ui/domains/factory';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -18,10 +24,7 @@ import { useIntakeTestQuery } from '../../../../hooks/useIntakeDryRun';
 import { useBoardDraft } from '../../boardConfig/BoardDraftProvider';
 import { boardConfigPath, parseBoardConfigPath, readCanvasFocus } from '../../boardConfig/boardConfigPaths';
 import type { CanvasFocus } from '../../boardConfig/boardConfigPaths';
-import { draftChanged, movePhase, phaseHasProblem, removePhase, withNextPhases } from '../../boardConfig/boardDraft';
-import type { BoardDraft } from '../../boardConfig/boardDraft';
-import type { RuleEvent } from '../../boardRules/ruleLanes';
-import { boardName } from '../../boardRules/ruleTargets';
+import type { BoardDraft, RuleEvent } from '@mastra/playground-ui/domains/factory';
 import { canvasModel, emphasisOf, orderNote } from '../canvasModel';
 import type { RuleLine } from '../canvasModel';
 import { useCanvasData } from '../useCanvasData';

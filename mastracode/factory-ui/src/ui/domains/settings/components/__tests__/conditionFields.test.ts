@@ -3,8 +3,15 @@ import { cardRuleGroupSchema } from '@internal/factory-contract';
 import type { RuleGroup } from '@internal/factory-contract';
 import { describe, expect, it } from 'vitest';
 
-import { conditionFields, describeRule, intakeRouteFacts } from '../conditionFields';
-import { canNest, emptyRow, fromRule, toRule } from '../conditionTree';
+import {
+  conditionFields,
+  describeRule,
+  intakeRouteFacts,
+  canNest,
+  emptyRow,
+  fromRule,
+  toRule,
+} from '@mastra/playground-ui/domains/factory';
 
 // A Self-review start rule in use today: groups three levels deep, the most the server accepts.
 const selfReviewRule: RuleGroup = {

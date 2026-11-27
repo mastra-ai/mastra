@@ -7,9 +7,8 @@ import type { IntakeRouteInfo, IntakeRouteListResponse } from '../../../api/type
 import { FactoryRequestError } from '@mastra/client-js';
 import { useIntakeRouteWrites } from '../../../hooks/useIntakeRoutes';
 import type { RouteWrite } from '../../../hooks/useIntakeRoutes';
-import { laneRules } from '../boardRules/ruleLanes';
-import type { RuleEvent } from '../boardRules/ruleLanes';
-import { reorderWithin } from '../boardRules/ruleTargets';
+import { laneRules, reorderWithin } from '@mastra/playground-ui/domains/factory';
+import type { RuleEvent } from '@mastra/playground-ui/domains/factory';
 import { boardRulesOf } from './canvasModel';
 import { slotAboveCatchAll } from './ruleDraft';
 import type { RuleDraft } from './ruleDraft';

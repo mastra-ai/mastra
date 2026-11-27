@@ -1,10 +1,9 @@
 import { useBoardCatalog } from '@mastra/react/hooks/factory';
-import { IntakeTestResult } from '@mastra/playground-ui/domains/factory';
+import { IntakeTestResult, phaseName } from '@mastra/playground-ui/domains/factory';
 import type { ReactNode } from 'react';
 
 import type { IntakeTestResponse } from '../../../../../api/types';
 import { HrefLink } from '../../../../ui/HrefLink';
-import { phaseName } from '../../../boardRules/ruleTargets';
 import { boardPath } from '../../../factory/boardCatalog';
 import { eventLabel, moveRuleVerdictLabel, moveVerdictLabel, ruleVerdictLabel } from '../../../intake/intakeCheckCopy';
 

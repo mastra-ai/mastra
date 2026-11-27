@@ -9,3 +9,4 @@ export * from './preferences';
 export * from './intake';
 export * from './session';
 export * from './activity';
+export * from './rules';

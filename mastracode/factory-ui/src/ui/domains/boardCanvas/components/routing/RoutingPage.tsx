@@ -14,6 +14,7 @@ import {
   StackLink,
   TestInput,
   UnsavedPill,
+  phaseName,
 } from '@mastra/playground-ui/domains/factory';
 import type { BoardStats } from '@mastra/playground-ui/domains/factory';
 import { Notice } from '@mastra/playground-ui/components/Notice';
@@ -30,7 +31,6 @@ import {
   readCanvasFocus,
 } from '../../../boardConfig/boardConfigPaths';
 import type { CanvasFocus } from '../../../boardConfig/boardConfigPaths';
-import { phaseName } from '../../../boardRules/ruleTargets';
 import type { LinkedRepositoryPayload } from '../../../workspaces/services/github';
 import { BoardSettingsTabs } from '../BoardSettingsTabs';
 import { NotRoutedCard } from './NotRoutedCard';

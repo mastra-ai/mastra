@@ -1,5 +1,5 @@
 import type { IntakeDryRunResponse, IntakeTestResponse } from '../../../api/types';
-import { fieldLabel } from '../settings/components/conditionFields';
+import { fieldLabel } from '@mastra/playground-ui/domains/factory';
 
 type DryRunBoard = IntakeDryRunResponse['boards'][number];
 type DryRunRule = DryRunBoard['rules'][number];

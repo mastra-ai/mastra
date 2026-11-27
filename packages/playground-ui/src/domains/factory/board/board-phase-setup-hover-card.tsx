@@ -1,13 +1,10 @@
-import { PhaseSetupHoverCard as SharedPhaseSetupHoverCard } from '@mastra/playground-ui/domains/factory';
-import type { PhaseSetupHandle } from '@mastra/playground-ui/domains/factory';
+import type { InstalledPhaseInfo } from '@mastra/client-js';
+import { BoardPhaseSetupCard } from './board-phase-setup-card';
+import { PhaseSetupHoverCard } from './phase-setup';
+import type { PhaseSetupHandle } from './phase-setup';
+import { usePhaseArrivals } from './use-phase-arrivals';
 
-import type { InstalledPhaseInfo } from '../../../../api/types';
-import { usePhaseArrivals } from '../hooks/usePhaseArrivals';
-import { PhaseSetupCard } from './PhaseSetupCard';
-
-export type { PhaseSetupHandle };
-
-export function PhaseSetupHoverCard({
+export function BoardPhaseSetupHoverCard({
   handle,
   factoryId,
   boardId,
@@ -20,12 +17,12 @@ export function PhaseSetupHoverCard({
 }) {
   const arrivals = usePhaseArrivals(factoryId, boardId, phases[0]?.id);
   return (
-    <SharedPhaseSetupHoverCard handle={handle}>
+    <PhaseSetupHoverCard handle={handle}>
       {payload => {
         const phase = phases.find(candidate => candidate.id === payload);
         if (!phase) return null;
         return (
-          <PhaseSetupCard
+          <BoardPhaseSetupCard
             factoryId={factoryId}
             boardId={boardId}
             phase={phase}
@@ -38,6 +35,6 @@ export function PhaseSetupHoverCard({
           />
         );
       }}
-    </SharedPhaseSetupHoverCard>
+    </PhaseSetupHoverCard>
   );
 }

@@ -85,9 +85,9 @@ const asLimit = (condition: Condition): Limit[] =>
 
 /** The format a bare repository name breaks, when every provider the limits allow has an owner in its paths. */
 function formatFor(limits: readonly Limit[]): string | undefined {
-  const providers = [...(limitedProviders(limits) ?? [])];
-  if (providers.length === 0 || !providers.every(provider => REPOSITORY_FORMATS.has(provider))) return undefined;
-  return REPOSITORY_FORMATS.get(providers[0]);
+  const [first, ...rest] = limitedProviders(limits) ?? [];
+  if (first === undefined || ![first, ...rest].every(provider => REPOSITORY_FORMATS.has(provider))) return undefined;
+  return REPOSITORY_FORMATS.get(first);
 }
 
 function hintIn(group: Group, limits: readonly Condition[]): string | undefined {

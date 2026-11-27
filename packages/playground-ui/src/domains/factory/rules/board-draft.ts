@@ -1,8 +1,11 @@
 import { BOARD_IDENTIFIER_RE, cardRuleGroupSchema, MAX_BOARD_IDENTIFIER_LENGTH } from '@internal/factory-contract';
-import { phaseRunFieldsValid } from '@mastra/playground-ui/domains/factory';
+import type { StoredBoardResponse } from '@mastra/client-js';
+import { phaseRunFieldsValid } from '../board/phase-run-fields';
 
-import type { StoredBoardInfo, StoredPhaseInfo } from '../../../api/types';
-import { ruleProblem } from '../settings/services/rules';
+import { ruleProblem } from './rule-limits';
+
+export type StoredBoardInfo = StoredBoardResponse['board'];
+export type StoredPhaseInfo = StoredBoardInfo['phases'][number];
 
 export type CardRule = NonNullable<StoredPhaseInfo['autoStartWhen']>;
 export type PhaseKind = StoredPhaseInfo['kind'];

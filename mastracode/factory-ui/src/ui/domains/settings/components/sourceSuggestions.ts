@@ -4,8 +4,8 @@ import type { IntakeSourceBinding } from '../../factory/services/intake';
 import type { JiraProject } from '../../factory/services/jira';
 import type { LinearProject, LinearTeam } from '../../factory/services/linear';
 import { linearTeamSourceId } from '../../factory/services/linear';
-import type { Limit } from '../services/rules';
-import { limitedProviders } from '../services/rules';
+import type { Limit } from '@mastra/playground-ui/domains/factory';
+import { limitedProviders } from '@mastra/playground-ui/domains/factory';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 
 /** A value `source.repository` can take, and the provider whose items carry it. */

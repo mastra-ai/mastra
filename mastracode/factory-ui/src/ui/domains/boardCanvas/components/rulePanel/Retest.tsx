@@ -2,7 +2,7 @@ import type { RuleRetestInfo } from '@mastra/playground-ui/domains/factory';
 
 import type { InstalledBoardInfo, IntakeDryRunBody, IntakeTestResponse } from '../../../../../api/types';
 import { testBody, useIntakeTest, useIntakeTestQuery } from '../../../../../hooks/useIntakeDryRun';
-import { boardName, phaseName } from '../../../boardRules/ruleTargets';
+import { boardName, phaseName } from '@mastra/playground-ui/domains/factory';
 
 type DraftBoards = NonNullable<IntakeDryRunBody['boards']>;
 

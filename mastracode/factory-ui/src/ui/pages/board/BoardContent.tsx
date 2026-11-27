@@ -1,7 +1,12 @@
 import { DEFAULT_BOARD_ID } from '@internal/factory-contract';
 import type { ProviderPerson, WorkItem } from '@internal/factory-contract';
-import { PhaseSetup } from '../../domains/factory/components/PhaseSetup';
-import { PhaseSetupHoverCard } from '../../domains/factory/components/PhaseSetupHoverCard';
+import {
+  BoardPhaseSetup,
+  BoardPhaseSetupHoverCard,
+  ConfigureBoardButton,
+  BoardEmptyStateActions,
+  RunQueueIndicator,
+} from '@mastra/playground-ui/domains/factory';
 import { createHoverCardHandle } from '@mastra/playground-ui/components/HoverCard';
 import { boardLoop } from '../../domains/factory/boardFlow';
 import { Notice } from '@mastra/playground-ui/components/Notice';
@@ -24,7 +29,6 @@ import type { ShownPhase } from '../../domains/factory/boardPhases';
 import { boardPhasesRequest, deeperPhaseWindow } from '../../domains/factory/boardPhasesRequest';
 import { boardLoadingStages } from '../../domains/factory/boardStages';
 import type { BoardKind } from '../../domains/factory/boardStages';
-import { ConfigureBoardButton, BoardEmptyStateActions, RunQueueIndicator } from '@mastra/playground-ui/domains/factory';
 import { BoardItemsSkeleton } from '../../domains/factory/components/BoardItemsSkeleton';
 import { BoardStageCards } from '../../domains/factory/components/BoardStageCards';
 import { BoardViewControls } from '../../domains/factory/components/BoardViewControls';
@@ -218,7 +222,7 @@ export function BoardContent({
       stage,
       phaseKind: definition.id === DEFAULT_BOARD_ID ? undefined : stage.kind,
       setup: (
-        <PhaseSetup
+        <BoardPhaseSetup
           handle={phaseCard}
           factoryId={factoryProjectId}
           boardId={definition.id}
@@ -361,7 +365,7 @@ export function BoardContent({
           />
         }
       />
-      <PhaseSetupHoverCard
+      <BoardPhaseSetupHoverCard
         handle={phaseCard}
         factoryId={factoryProjectId}
         boardId={definition.id}

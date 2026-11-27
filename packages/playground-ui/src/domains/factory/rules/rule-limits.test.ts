@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { repositoryHint } from './rules';
+import { repositoryHint } from './rule-limits';
 
 const repository = (value: string) => ({ field: 'source.repository', operator: 'equals', value });
 const integration = (value: string) => ({ field: 'source.integration', operator: 'equals', value });

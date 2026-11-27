@@ -3,8 +3,8 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { CARD_FACTS } from '../../settings/components/conditionFields';
-import type { Facts } from '../../settings/components/conditionFields';
+import { CARD_FACTS } from '@mastra/playground-ui/domains/factory';
+import type { Facts } from '@mastra/playground-ui/domains/factory';
 import { ConditionCells } from '../components/conditions/ConditionCells';
 
 const POINTS: Facts = {

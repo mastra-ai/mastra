@@ -23,8 +23,7 @@ import type { FACTORY_ROUTE_CONTRACTS } from '@mastra/factory/routes/contracts';
 
 import type { StoredBoardResponse } from '@internal/factory-contract';
 
-export type StoredBoardInfo = StoredBoardResponse['board'];
-export type StoredPhaseInfo = StoredBoardInfo['phases'][number];
+export type { StoredBoardInfo, StoredPhaseInfo } from '@mastra/playground-ui/domains/factory';
 export type IntakeOrderResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeOrderGet.responseSchema>;
 export type IntakeNotRoutedResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeNotRoutedList.responseSchema>;
 export type IntakeDecisionInfo = IntakeNotRoutedResponse['notRouted'][number];

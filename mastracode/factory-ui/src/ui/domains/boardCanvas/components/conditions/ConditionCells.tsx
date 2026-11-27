@@ -3,22 +3,24 @@ import {
   ConditionRowButton,
   ConditionRowEditor,
   ConditionRowSummary,
-} from '@mastra/playground-ui/domains/factory';
-import type { ConditionCellNode } from '@mastra/playground-ui/domains/factory';
-import type { RuleGroup } from '@internal/factory-contract';
-import type { FilterBarField, FilterBarOption } from '@mastra/playground-ui/components/FilterBar';
-import { useState } from 'react';
-
-import {
   CONDITION_OPERATORS,
   VALUE_PLACEHOLDERS,
   conditionFields,
   isPresenceField,
-} from '../../../settings/components/conditionFields';
-import type { Facts } from '../../../settings/components/conditionFields';
-import { MANY, VALUELESS, fromRule, isGroup, toRule, valueFor } from '../../../settings/components/conditionTree';
-import type { Group, Item, Row } from '../../../settings/components/conditionTree';
-import { andLimits, repositoryHint } from '../../../settings/services/rules';
+  MANY,
+  VALUELESS,
+  fromRule,
+  isGroup,
+  toRule,
+  valueFor,
+  andLimits,
+  repositoryHint,
+} from '@mastra/playground-ui/domains/factory';
+import type { ConditionCellNode, Facts, Group, Item, Row } from '@mastra/playground-ui/domains/factory';
+import type { RuleGroup } from '@internal/factory-contract';
+import type { FilterBarField, FilterBarOption } from '@mastra/playground-ui/components/FilterBar';
+import { useState } from 'react';
+
 import {
   addCondition,
   canJoin,

@@ -16,8 +16,8 @@ import { Link, useNavigate } from 'react-router';
 
 import { useCreateBoardMutation } from '../../hooks/useBoardEditor';
 import { boardConfigPath } from '../domains/boardConfig/boardConfigPaths';
-import { draftOf, keyFromName, keyProblem, starterBoard } from '../domains/boardConfig/boardDraft';
-import type { BoardDraft } from '../domains/boardConfig/boardDraft';
+import { draftOf, keyFromName, keyProblem, starterBoard } from '@mastra/playground-ui/domains/factory';
+import type { BoardDraft } from '@mastra/playground-ui/domains/factory';
 import { IntakeNote } from '../domains/boardConfig/components/IntakeNote';
 import { orderedBoards } from '../domains/factory/boardCatalog';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';

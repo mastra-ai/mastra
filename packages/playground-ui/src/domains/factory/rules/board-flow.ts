@@ -1,5 +1,5 @@
-import type { IntakeRouteInfo } from '../../../api/types';
-import { LANE_EVENTS, laneRules, shadowedBy } from './ruleLanes';
+import type { IntakeRouteInfo } from '@mastra/client-js';
+import { LANE_EVENTS, laneRules, shadowedBy } from './rule-lanes';
 
 export interface BoardFlow {
   /** Rules that can move cards into each phase, this board's and other boards', by phase key. */

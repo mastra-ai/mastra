@@ -1,6 +1,6 @@
-import type { FilterBarOption } from '@mastra/playground-ui/components/FilterBar';
+import type { InstalledBoardInfo, IntakeRouteInfo } from '@mastra/client-js';
 
-import type { InstalledBoardInfo, IntakeRouteInfo } from '../../../api/types';
+import type { FilterBarOption } from '@/ds/components/FilterBar';
 
 export function phaseName(board: InstalledBoardInfo | undefined, phaseKey: string | null): string | undefined {
   if (!board) return undefined;

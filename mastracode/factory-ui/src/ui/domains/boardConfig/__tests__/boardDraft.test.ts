@@ -1,7 +1,7 @@
 import { storedBoardInputSchema } from '@mastra/factory/boards/stored-board';
 import { describe, expect, it } from 'vitest';
 
-import type { StoredPhaseInfo } from '../../../../api/types';
+import type { StoredPhaseInfo, CardRule } from '@mastra/playground-ui/domains/factory';
 import {
   exitToolOutcome,
   canRemovePhase,
@@ -16,8 +16,7 @@ import {
   starterBoard,
   withKind,
   withNextPhases,
-} from '../boardDraft';
-import type { CardRule } from '../boardDraft';
+} from '@mastra/playground-ui/domains/factory';
 
 const phases: StoredPhaseInfo[] = ['intake', 'triage', 'planning', 'done'].map(key => ({
   key,

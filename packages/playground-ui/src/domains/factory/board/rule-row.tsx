@@ -1,9 +1,9 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { InstalledBoardInfo, IntakeRouteInfo } from '@mastra/client-js';
 
-import type { InstalledBoardInfo, IntakeRouteInfo } from '../../../../api/types';
-import { laneText } from '../../boardRules/ruleLanes';
-import { boardName, phaseName, phaseOptions } from '../../boardRules/ruleTargets';
-import { describeRule } from '../../settings/components/conditionFields';
+import { describeRule } from '../rules/condition-fields';
+import { laneText } from '../rules/rule-lanes';
+import { boardName, phaseName, phaseOptions } from '../rules/rule-targets';
+import { Txt } from '@/ds/components/Txt';
 
 /**
  * One rule, read from a board: what fires it, the board it lives on or sends cards to when that is another, and the
@@ -23,7 +23,7 @@ export function RuleRow({
   const destination = rule.target.moveToBoardKey ?? rule.target.boardKey;
   const away = destination !== boardId ? boards?.find(board => board.id === destination) : undefined;
   return (
-    <li className="bg-fill-subtle flex min-w-0 flex-col gap-0.5 rounded-md px-2.5 py-2">
+    <li className="flex min-w-0 flex-col gap-0.5 rounded-md bg-fill-subtle px-2.5 py-2">
       <Txt as="span" variant="caption" tone="muted" className="truncate">
         {elsewhere && `${home ? boardName(home) : rule.target.boardKey}: `}
         {rule.on.map(event => laneText(event).label).join(' or ')}

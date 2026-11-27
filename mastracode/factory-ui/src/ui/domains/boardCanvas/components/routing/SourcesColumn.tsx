@@ -1,11 +1,10 @@
-import { SourcesColumn as SharedSourcesColumn } from '@mastra/playground-ui/domains/factory';
+import { SourcesColumn as SharedSourcesColumn, laneText } from '@mastra/playground-ui/domains/factory';
 
 import { useIntakeBindingsQuery } from '../../../../../hooks/useIntakeConfig';
 import { HrefLink } from '../../../../ui/HrefLink';
 import { INTAKE_PROVIDERS, isIntakeProvider } from '../../../factory/boardSourceFilters';
 import type { IntakeProvider } from '../../../factory/boardSourceFilters';
-import { laneText } from '../../../boardRules/ruleLanes';
-import type { RuleEvent } from '../../../boardRules/ruleLanes';
+import type { RuleEvent } from '@mastra/playground-ui/domains/factory';
 import { SettingsIntegrationIcon } from '../../../settings/components/brand-icons/SettingsIntegrationIcon';
 import { settingsSectionPath } from '../../../settings/settingsSections';
 import type { LinkedRepositoryPayload } from '../../../workspaces/services/github';

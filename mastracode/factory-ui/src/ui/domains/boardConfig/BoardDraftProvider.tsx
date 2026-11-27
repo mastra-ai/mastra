@@ -3,8 +3,8 @@ import { createContext, useContext, useState } from 'react';
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 
 import type { StoredBoardInfo } from '../../../api/types';
-import { draftOf } from './boardDraft';
-import type { BoardDraft } from './boardDraft';
+import { draftOf } from '@mastra/playground-ui/domains/factory';
+import type { BoardDraft } from '@mastra/playground-ui/domains/factory';
 
 interface StoredDraft {
   key: string;
