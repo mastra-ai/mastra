@@ -515,6 +515,10 @@ function searchTool(host: KnowledgePageToolHost) {
         hits.map(hit => hit.page),
       );
       const mentionCache: MentionCache = new Map();
+      const childRefs = await childPageRefs(
+        run,
+        hits.flatMap(hit => (hit.type === 'item' ? [hit.item] : [])),
+      );
       const results = await Promise.all(
         hits.map(async hit =>
           hit.type === 'page'
@@ -523,7 +527,7 @@ function searchTool(host: KnowledgePageToolHost) {
               ? {
                   type: 'item' as const,
                   page: pageSummary(hit.page, addresses),
-                  item: itemSummary(hit.item, addresses.refs.get(hit.page.id) ?? hit.page.id),
+                  item: itemSummary(hit.item, addresses.refs.get(hit.page.id) ?? hit.page.id, childRefs),
                 }
               : {
                   type: 'note' as const,

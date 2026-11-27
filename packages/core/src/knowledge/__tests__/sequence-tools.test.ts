@@ -157,6 +157,11 @@ describe('Knowledge sequence reads through the agent tools', () => {
     expect(whole.sequence.items.map((item: Result) => item.title)).toEqual(['Drain', 'Restart the workers', 'Verify']);
     expect(whole.more.join('\n')).toContain('by position');
 
+    const found = await acme()('knowledge_search', { query: 'restart workers', in: 'Runbook' });
+    expect(found.results.map((hit: Result) => [hit.item.title, hit.item.page])).toEqual([
+      ['Restart the workers', child.page.ref],
+    ]);
+
     await expect(
       acme()('knowledge_read', { page: 'Runbook', sequence: { since: at(1).toISOString() } }),
     ).rejects.toThrow(/position/);
