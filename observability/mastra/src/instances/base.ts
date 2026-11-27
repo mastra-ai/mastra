@@ -1147,8 +1147,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // the usage spans go under the closest exported span that is still open.
     // An output stream processor span, for example, ends with the first model
     // step, before the hidden call it runs at the end of the stream.
+    // A parent that `spanFilter` drops is never exported either, and a child
+    // under it would reference a span missing from the trace.
     let parent: AnySpan | undefined = ancestor;
-    while (parent && (parent.endTime || this.isFilteredFromExport(parent))) parent = parent.parent;
+    while (parent && (parent.endTime || !this.getSpanForExport(parent))) parent = parent.parent;
     if (!parent) return;
 
     try {

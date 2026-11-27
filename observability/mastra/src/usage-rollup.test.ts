@@ -302,6 +302,36 @@ describe('internal MODEL_GENERATION usage rollup', () => {
     expect(usageSpans.every(s => s.parentSpanId === agentSpan.id)).toBe(true);
   });
 
+  it('exports the usage spans under an exported span when spanFilter drops the processor span', async () => {
+    const filtered = new DefaultObservabilityInstance({
+      serviceName: 'usage-rollup-test',
+      name: 'filtered-instance',
+      sampling: { type: SamplingStrategyType.ALWAYS },
+      exporters: [exporter],
+      spanFilter: span => span.type !== SpanType.PROCESSOR_RUN,
+    });
+    onTestFinished(() => filtered.shutdown());
+    const agentSpan = filtered.startSpan({ type: SpanType.AGENT_RUN, name: "agent run: 'weather'" });
+    const processorSpan = agentSpan.createChildSpan({
+      type: SpanType.PROCESSOR_RUN,
+      name: 'output stream processor: Structured Output',
+    });
+    const hiddenModel = processorSpan.createChildSpan({
+      type: SpanType.MODEL_GENERATION,
+      name: "llm: 'mock'",
+      tracingPolicy: { internal: InternalSpans.ALL },
+    });
+    hiddenModel.end({ attributes: { provider: 'p', model: 'm', usage: { inputTokens: 100, outputTokens: 25 } } });
+    processorSpan.end();
+    agentSpan.end();
+    await filtered.flush();
+
+    const exportedIds = new Set(exporter.endedSpans().map(s => s.id));
+    const usageSpans = exporter.endedSpans().filter(s => (s.attributes as { usageOnly?: boolean }).usageOnly);
+    expect(usageSpans).toHaveLength(2);
+    expect(usageSpans.every(s => s.parentSpanId === agentSpan.id && exportedIds.has(s.parentSpanId))).toBe(true);
+  });
+
   it('prices a hidden model call whose provider and model are set only when it starts', async () => {
     const pricing = PricingRegistry.fromModelsDev({
       openai: { models: { 'gpt-4': { cost: { input: 30, output: 60 } } } },
