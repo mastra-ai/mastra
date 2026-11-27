@@ -466,6 +466,7 @@ export function createWorkflowStepGuardTests({
         continued: {
           status: 'success',
           payload: {},
+          output: undefined,
           startedAt: 1,
           endedAt: 2,
           metadata: { startedBy: 'old', __continuationStarted: true },
