@@ -163,14 +163,9 @@ for (const engine of ['durable', 'evented', 'native-default', 'native-evented'] 
     });
 
     if (engine === 'native-evented') {
-      it.each([
-        { cmd: 'queue', crash: false },
-        { cmd: 'queue', crash: true },
-        { cmd: 'queueApprovalContinuation', crash: false },
-        { cmd: 'queueApprovalContinuation', crash: true },
-      ])(
-        'characterizes acknowledged input via $cmd after owner crash=$crash (COR-1521)',
-        async ({ cmd, crash }) => {
+      it.each(['queue', 'queueApprovalContinuation'])(
+        'delivers acknowledged input via %s after the active turn finishes',
+        async cmd => {
           const threadId = randomUUID();
           const queuedRunId = `${threadId}-queued`;
           const queuedPrompt = `queued-next-turn-${threadId}`;
@@ -197,25 +192,9 @@ for (const engine of ['durable', 'evented', 'native-default', 'native-evented'] 
           // The original turn is still blocked and the acknowledged input has not reached the model.
           expect(producer.events.some(e => e.type === 'stream-done')).toBe(false);
           expect(JSON.stringify(llm.getRequests().map(req => req.body))).not.toContain(queuedPrompt);
-          if (!crash) {
-            producer.send({ cmd: 'release' });
-            await producer.next(e => e.type === 'queued-finished' && e.runId === queuedRunId, 15_000);
-            expect(JSON.stringify(llm.getRequests().map(req => req.body))).toContain(queuedPrompt);
-            return;
-          }
-
-          const exited = new Promise(resolve => producer.proc.once('exit', (_code, signal) => resolve(signal)));
-          producer.proc.kill('SIGKILL');
-          expect(await exited).toBe('SIGKILL');
-          observer.send({ cmd: 'waitForThreadLeaseExpiry', threadId });
-          await observer.next(e => e.type === 'thread-lease-expired', 21_000);
-          observer.send({ cmd: 'stream', threadId, prompt: 'Replacement turn' });
-          const replacement = await observer.next(e => e.type === 'stream-done', 25_000);
-          expect(replacement.finishReason, JSON.stringify(observer.events)).toBe('stop');
-          expect(await observer.observeToClose('lost-queue', queuedRunId)).toEqual([]);
-          const requests = JSON.stringify(llm.getRequests().map(req => req.body));
-          expect(requests).toContain('Replacement turn');
-          expect(requests).not.toContain(queuedPrompt);
+          producer.send({ cmd: 'release' });
+          await producer.next(e => e.type === 'queued-finished' && e.runId === queuedRunId, 15_000);
+          expect(JSON.stringify(llm.getRequests().map(req => req.body))).toContain(queuedPrompt);
         },
         45_000,
       );

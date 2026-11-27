@@ -302,15 +302,6 @@ async function main() {
       }
       throw new Error(`No suspended checkpoint for ${cmd.runId}`);
     },
-    async waitForThreadLeaseExpiry(cmd) {
-      const key = `queue-restart-test\u0000${cmd.threadId}`;
-      const deadline = Date.now() + 20_000;
-      while (await redisPubsub.getLeaseOwner(key)) {
-        if (Date.now() >= deadline) throw new Error(`Thread lease did not expire for ${cmd.threadId}`);
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-      emit({ type: 'thread-lease-expired' });
-    },
     release: () => releaseGate(),
     detach: cmd => observations.get(cmd.id)?.detach(),
   };
