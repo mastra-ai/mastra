@@ -48,7 +48,17 @@ type PageLookup = (
 ) => { page: KnowledgePage; hasChildren: boolean; readable: boolean } | undefined;
 
 const keyOf = (sequenceId: string, externalId: string) => JSON.stringify([sequenceId, externalId]);
-const copy = (item: KnowledgeSequenceItemRecord) => structuredClone(item);
+/**
+ * A deep copy. Properties go through JSON, not `structuredClone`, which runs out of call stack
+ * about 2,000 levels down; they are validated as plain JSON as deep as JSON.stringify handles.
+ */
+function copy<T extends Pick<KnowledgeSequenceItemRecord, 'properties'>>(item: T): T {
+  const { properties, ...rest } = item;
+  return {
+    ...structuredClone(rest),
+    properties: properties === null ? null : JSON.parse(JSON.stringify(properties)),
+  } as T;
+}
 
 type OrderKey = Pick<KnowledgeSequenceItemRecord, 'occurredAt' | 'position' | 'id'>;
 
@@ -87,7 +97,10 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
   }
 
   snapshot(): State {
-    return structuredClone(this.#s);
+    return {
+      sequences: structuredClone(this.#s.sequences),
+      items: new Map([...this.#s.items].map(([key, item]) => [key, copy(item)])),
+    };
   }
   restore(state: State): void {
     this.#s = state;
@@ -183,7 +196,7 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
       position,
       editedAt: input.editedAt ? new Date(input.editedAt) : null,
       author: input.author ? { ...input.author } : null,
-      ...structuredClone(knowledgeSequenceItemContent(input)),
+      ...copy(knowledgeSequenceItemContent(input)),
       writtenBy: input.writtenBy,
     };
     if (!stored) {

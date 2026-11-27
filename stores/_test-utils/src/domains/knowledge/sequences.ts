@@ -993,7 +993,7 @@ export function createKnowledgeSequenceTests(createStore: () => Promise<Knowledg
         expect(await sequences.getSequence({ pageId: page.id })).toBeNull();
       });
 
-      it('takes free-form properties nested to the depth limit, and refuses deeper ones with a typed error', async () => {
+      it('takes free-form properties nested as deep as their byte limit allows, and replays them unchanged', async () => {
         const { store, scope, sequences } = await setup();
         const page = await store.createPage({ parentId: scope.id, name: 'Free', provenance: host });
         await sequences.markSequence({ pageId: page.id });
@@ -1002,25 +1002,33 @@ export function createKnowledgeSequenceTests(createStore: () => Promise<Knowledg
           for (let i = 1; i < depth; i++) value = { a: value };
           return value;
         };
-        const write = (externalId: string, depth: number) =>
+        const write = (externalId: string, properties: Record<string, unknown>) =>
           sequences.upsertItem({
             sequenceId: page.id,
             externalId,
             occurredAt: at(1),
             title: externalId,
-            properties: nested(depth),
+            properties,
             writtenBy: importer,
           });
-        expect((await write('deepest', MAX_KNOWLEDGE_SEQUENCE_JSON_DEPTH)).status).toBe('created');
-        expect((await write('deepest', MAX_KNOWLEDGE_SEQUENCE_JSON_DEPTH)).status).toBe('unchanged');
+        // 2,500 levels is about 15 KB of JSON, under the 16 KB limit; key order mustn't matter at depth.
         for (const depth of [MAX_KNOWLEDGE_SEQUENCE_JSON_DEPTH + 1, 2500]) {
-          await expect(write(`too-deep-${depth}`, depth)).rejects.toMatchObject({
-            name: 'KnowledgeSequenceItemInvalidError',
-            field: 'properties',
-          });
+          const id = `deep-${depth}`;
+          const created = await write(id, nested(depth));
+          expect(created.status).toBe('created');
+          expect((await write(id, nested(depth))).status).toBe('unchanged');
+          const stored = await sequences.getItem({ sequenceId: page.id, id: created.item.id, read: 'all' });
+          expect(JSON.stringify(stored!.properties)).toBe(JSON.stringify(nested(depth)));
         }
+        // Arrays nest a level per byte: too deep for JSON.stringify, so refused with a typed error.
+        let deepArray: unknown = [];
+        for (let i = 1; i < 8000; i++) deepArray = [deepArray];
+        await expect(write('too-deep', { list: deepArray })).rejects.toMatchObject({
+          name: 'KnowledgeSequenceItemInvalidError',
+          field: 'properties',
+        });
         const { items } = await sequences.listItems({ sequenceId: page.id, read: 'all', limit: 10 });
-        expect(items.map(i => i.externalId)).toEqual(['deepest']);
+        expect(items.map(i => i.externalId).sort()).toEqual(['deep-2500', 'deep-65']);
       });
 
       it('re-declares: same schemas in another key order write nothing, changed ones replace in place', async () => {

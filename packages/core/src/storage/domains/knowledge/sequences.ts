@@ -49,7 +49,7 @@ export const MAX_KNOWLEDGE_SEQUENCE_SCHEMA_ARRAY_ITEMS = 1000;
 export const MAX_KNOWLEDGE_SEQUENCE_ITEM_TYPES = 50;
 /** At most this many bytes for a sequence's `itemTypes`, and for its `propertiesSchema`, as JSON. */
 export const MAX_KNOWLEDGE_SEQUENCE_DECLARATION_BYTES = 64 * 1024;
-/** At most this many levels of objects and arrays in item properties or a declaration, the outer object counting as one. */
+/** At most this many levels of objects and arrays in a declaration, the outer object counting as one. */
 export const MAX_KNOWLEDGE_SEQUENCE_JSON_DEPTH = 64;
 export const MAX_KNOWLEDGE_SEQUENCE_ITEM_TYPE_LABEL = 80;
 export const MAX_KNOWLEDGE_SEQUENCE_ITEM_TYPE_DESCRIPTION = 500;
@@ -447,13 +447,43 @@ export function isStaleKnowledgeSequenceEdit(
   return !input.editedAt || input.editedAt.getTime() < stored.editedAt.getTime();
 }
 
-/** JSON with object keys sorted, so two values compare equal whatever their key order. */
-function canonicalJson(value: unknown): string {
-  return JSON.stringify(value, (_key, inner) =>
-    inner && typeof inner === 'object' && !Array.isArray(inner)
-      ? Object.fromEntries(Object.entries(inner).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
-      : inner,
-  );
+/**
+ * JSON with object keys sorted, so two values compare equal whatever their key order. Built with
+ * an explicit stack, so item properties nested as deep as their byte limit allows compare without
+ * exhausting the call stack.
+ */
+function canonicalJson(root: unknown): string {
+  const out: string[] = [];
+  // A string is emitted as is; a value is serialized (objects and arrays push their parts).
+  const work: Array<{ text: string } | { value: unknown }> = [{ value: root }];
+  while (work.length > 0) {
+    const next = work.pop()!;
+    if ('text' in next) {
+      out.push(next.text);
+      continue;
+    }
+    const value = next.value;
+    if (value === undefined) {
+      // Only at the root (validated values hold no undefined): kept apart from null.
+      out.push('undefined');
+    } else if (value === null || typeof value !== 'object') {
+      out.push(JSON.stringify(value));
+    } else {
+      const array = Array.isArray(value);
+      const entries: Array<[string | null, unknown]> = array
+        ? (value as unknown[]).map(inner => [null, inner])
+        : Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+      const parts: Array<{ text: string } | { value: unknown }> = [{ text: array ? '[' : '{' }];
+      entries.forEach(([key, inner], index) => {
+        if (index > 0) parts.push({ text: ',' });
+        if (key !== null) parts.push({ text: `${JSON.stringify(key)}:` });
+        parts.push({ value: inner });
+      });
+      parts.push({ text: array ? ']' : '}' });
+      for (let i = parts.length - 1; i >= 0; i--) work.push(parts[i]!);
+    }
+  }
+  return out.join('');
 }
 
 /** The stored form of an item's optional fields: absent and empty both become null (or no links). */
@@ -703,7 +733,7 @@ function checkItemProperties(
  * the same value: plain objects and arrays of own, enumerable data properties (no getters, symbol
  * keys, hidden `toJSON` hooks or holes), no cycles, finite numbers, strings, booleans and null.
  */
-function isJsonValue(root: unknown): boolean | 'too-deep' {
+function isJsonValue(root: unknown, maxDepth = Infinity): boolean | 'too-deep' {
   // An explicit stack, not recursion: a deeply nested value within the size limits is checked
   // without exhausting the call stack.
   const ancestors = new Set<object>();
@@ -730,8 +760,7 @@ function isJsonValue(root: unknown): boolean | 'too-deep' {
   };
   if (!enter(root)) return false;
   while (stack.length > 0) {
-    // Deeper values can't be measured, compared or stored without risking the call stack.
-    if (stack.length > MAX_KNOWLEDGE_SEQUENCE_JSON_DEPTH) return 'too-deep';
+    if (stack.length > maxDepth) return 'too-deep';
     const top = stack.at(-1)!;
     if (top.next === top.children.length) {
       ancestors.delete(top.value);
@@ -745,7 +774,7 @@ function isJsonValue(root: unknown): boolean | 'too-deep' {
 
 /** Refuses a declaration part that isn't plain JSON or nests too deep. */
 function checkDeclarationJson(value: unknown, path: string, message: string): void {
-  const json = isJsonValue(value);
+  const json = isJsonValue(value, MAX_KNOWLEDGE_SEQUENCE_JSON_DEPTH);
   if (json === 'too-deep') schemaInvalid(path, `nests at most ${MAX_KNOWLEDGE_SEQUENCE_JSON_DEPTH} levels.`);
   if (!json) schemaInvalid(path, message);
 }
@@ -809,15 +838,21 @@ export function checkKnowledgeSequenceItemInput(
   }
   if (properties != null) {
     if (typeof properties !== 'object' || Array.isArray(properties)) invalid('properties', 'must be a JSON object.');
-    const json = isJsonValue(properties);
-    if (json === 'too-deep') invalid('properties', `nest at most ${MAX_KNOWLEDGE_SEQUENCE_JSON_DEPTH} levels.`);
-    if (!json) {
+    if (!isJsonValue(properties)) {
       invalid(
         'properties',
         'must be plain JSON: no undefined, holes, cycles, getters, hidden or symbol keys, functions, non-finite numbers or class instances.',
       );
     }
-    if (new TextEncoder().encode(JSON.stringify(properties)).length > MAX_KNOWLEDGE_SEQUENCE_ITEM_PROPERTIES_BYTES) {
+    let json: string;
+    try {
+      json = JSON.stringify(properties);
+    } catch {
+      // Only nesting so deep that JSON.stringify runs out of call stack gets here: such a value
+      // couldn't be stored either.
+      invalid('properties', 'nest too deeply to store as JSON.');
+    }
+    if (new TextEncoder().encode(json).length > MAX_KNOWLEDGE_SEQUENCE_ITEM_PROPERTIES_BYTES) {
       invalid('properties', `are at most ${MAX_KNOWLEDGE_SEQUENCE_ITEM_PROPERTIES_BYTES} bytes as JSON.`);
     }
   }
