@@ -358,8 +358,8 @@ describe('RedeliveryDriver', () => {
         await consumed;
         await driver.waitForStepEnd(toolStep);
         expect(toolExecutions).toBe(2);
-        // InMemoryStore has no step guards, so both tool results continue the run and the
-        // duplicate costs a model call. Stores with step guards keep one (COR-1610).
+        // On InMemoryStore, which has no step guards, both tool results continue the run and the
+        // duplicate costs a model call (COR-1610).
         expect(calls).toBe(3);
       } finally {
         gate.resolve();
