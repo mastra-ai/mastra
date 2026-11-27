@@ -28,6 +28,8 @@ export type {
   CreatePlatformFilesystemInput,
   PlatformSandboxRecord,
 } from './provisioning/index';
+export { PlatformDatasets } from './datasets/platform-datasets';
+export { PlatformDataset } from './datasets/platform-dataset';
 export { PlatformAgent } from './agents/platform-agent';
 export type {
   CreatePlatformAgentInput,

@@ -17,7 +17,7 @@ export interface PlatformApiOptions {
   fetch?: typeof fetch;
 }
 
-function errorMessage(body: unknown): string | undefined {
+export function errorMessage(body: unknown): string | undefined {
   if (!body || typeof body !== 'object') return undefined;
   // Problem details (RFC 9457), which the Platform API answers most errors with.
   if ('detail' in body && typeof body.detail === 'string' && body.detail) return body.detail;
