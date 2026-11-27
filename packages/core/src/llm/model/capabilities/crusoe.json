@@ -21,23 +21,23 @@
     "zai/GLM-5.2"
   ],
   "reasoning": {
-    "google/gemma-4-31b-it": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai/GLM-5.2": [
-      {
-        "type": "toggle"
-      }
-    ],
     "openai/gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
+    "google/gemma-4-31b-it": [
+      {
+        "type": "toggle"
+      }
+    ],
     "moonshotai/Kimi-K2.6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai/GLM-5.2": [
       {
         "type": "toggle"
       }

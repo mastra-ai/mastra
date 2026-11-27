@@ -24,125 +24,67 @@ describe('startDevServer - inspect flag integration', () => {
   });
 
   describe('boolean inspect values', () => {
-    it('should pass boolean true for inspect to dev function', async () => {
+    it.each([
+      ['should pass boolean true for inspect to dev function', true, false],
+      ['should pass boolean true for inspectBrk to dev function', false, true],
+    ] as const)('%s', async (_title, inspect, inspectBrk) => {
       const { startDevServer } = await import('./start-dev-server');
 
       await startDevServer({
-        inspect: true,
-        inspectBrk: false,
+        inspect,
+        inspectBrk,
         debug: false,
       });
 
       expect(devMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          inspect: true,
-          inspectBrk: false,
-        }),
-      );
-    });
-
-    it('should pass boolean true for inspectBrk to dev function', async () => {
-      const { startDevServer } = await import('./start-dev-server');
-
-      await startDevServer({
-        inspect: false,
-        inspectBrk: true,
-        debug: false,
-      });
-
-      expect(devMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          inspect: false,
-          inspectBrk: true,
+          inspect,
+          inspectBrk,
         }),
       );
     });
   });
 
   describe('string inspect values', () => {
-    it('should pass string inspect value "0.0.0.0:9229" to dev function', async () => {
+    it.each([
+      ['should pass string inspect value "0.0.0.0:9229" to dev function', '0.0.0.0:9229', false],
+      ['should pass string inspect value "9230" to dev function', '9230', false],
+      ['should pass string inspectBrk value "0.0.0.0:9229" to dev function', false, '0.0.0.0:9229'],
+    ] as const)('%s', async (_title, inspect, inspectBrk) => {
       const { startDevServer } = await import('./start-dev-server');
 
       await startDevServer({
-        inspect: '0.0.0.0:9229',
-        inspectBrk: false,
+        inspect,
+        inspectBrk,
         debug: false,
       });
 
       expect(devMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          inspect: '0.0.0.0:9229',
-          inspectBrk: false,
-        }),
-      );
-    });
-
-    it('should pass string inspect value "9230" to dev function', async () => {
-      const { startDevServer } = await import('./start-dev-server');
-
-      await startDevServer({
-        inspect: '9230',
-        inspectBrk: false,
-        debug: false,
-      });
-
-      expect(devMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          inspect: '9230',
-          inspectBrk: false,
-        }),
-      );
-    });
-
-    it('should pass string inspectBrk value "0.0.0.0:9229" to dev function', async () => {
-      const { startDevServer } = await import('./start-dev-server');
-
-      await startDevServer({
-        inspect: false,
-        inspectBrk: '0.0.0.0:9229',
-        debug: false,
-      });
-
-      expect(devMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          inspect: false,
-          inspectBrk: '0.0.0.0:9229',
+          inspect,
+          inspectBrk,
         }),
       );
     });
   });
 
   describe('mutual exclusivity with string values', () => {
-    it('should disable inspect when inspectBrk is provided (string value)', async () => {
+    it.each([
+      ['should disable inspect when inspectBrk is provided (string value)', '0.0.0.0:9230'],
+      ['should disable inspect when inspectBrk is boolean true', true],
+    ] as const)('%s', async (_title, inspectBrk) => {
       const { startDevServer } = await import('./start-dev-server');
 
       await startDevServer({
         inspect: '0.0.0.0:9229',
-        inspectBrk: '0.0.0.0:9230',
+        inspectBrk,
         debug: false,
       });
 
       expect(devMock).toHaveBeenCalledWith(
         expect.objectContaining({
           inspect: false,
-          inspectBrk: '0.0.0.0:9230',
-        }),
-      );
-    });
-
-    it('should disable inspect when inspectBrk is boolean true', async () => {
-      const { startDevServer } = await import('./start-dev-server');
-
-      await startDevServer({
-        inspect: '0.0.0.0:9229',
-        inspectBrk: true,
-        debug: false,
-      });
-
-      expect(devMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          inspect: false,
-          inspectBrk: true,
+          inspectBrk,
         }),
       );
     });

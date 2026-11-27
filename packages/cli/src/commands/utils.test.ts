@@ -20,11 +20,14 @@ describe('getVersionTag', () => {
     vi.resetModules();
   });
 
-  test('returns "beta" when CLI version matches beta dist-tag', async () => {
+  test.each([
+    ['returns "beta" when CLI version matches beta dist-tag', '1.0.0-beta.5', 'beta'],
+    ['returns "latest" when CLI version matches latest dist-tag', '0.18.6', 'latest'],
+  ] as const)('%s', async (_title, version, expected) => {
     const { execa } = await import('execa');
     const fsExtra = (await import('fs-extra')).default;
 
-    vi.mocked(fsExtra.readJSON).mockResolvedValue({ version: '1.0.0-beta.5' });
+    vi.mocked(fsExtra.readJSON).mockResolvedValue({ version });
     vi.mocked(execa).mockResolvedValue({
       stdout: 'beta: 1.0.0-beta.5\nlatest: 0.18.6',
       stderr: '',
@@ -39,29 +42,7 @@ describe('getVersionTag', () => {
     const { getVersionTag } = await import('./utils');
     const tag = await getVersionTag();
 
-    expect(tag).toBe('beta');
-  });
-
-  test('returns "latest" when CLI version matches latest dist-tag', async () => {
-    const { execa } = await import('execa');
-    const fsExtra = (await import('fs-extra')).default;
-
-    vi.mocked(fsExtra.readJSON).mockResolvedValue({ version: '0.18.6' });
-    vi.mocked(execa).mockResolvedValue({
-      stdout: 'beta: 1.0.0-beta.5\nlatest: 0.18.6',
-      stderr: '',
-      command: '',
-      escapedCommand: '',
-      exitCode: 0,
-      failed: false,
-      timedOut: false,
-      killed: false,
-    } as any);
-
-    const { getVersionTag } = await import('./utils');
-    const tag = await getVersionTag();
-
-    expect(tag).toBe('latest');
+    expect(tag).toBe(expected);
   });
 
   test('returns undefined when version does not match any dist-tag', async () => {

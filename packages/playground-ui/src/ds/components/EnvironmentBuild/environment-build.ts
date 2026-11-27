@@ -31,3 +31,19 @@ export function formatEnvironmentBuildTime(iso: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
 }
+
+export interface EnvironmentBuildTriggers {
+  schedule: {
+    enabled: boolean;
+    cron: string | null;
+    timezone: string | null;
+    /** False when the host's storage has no schedules domain; the cron trigger cannot be enabled then. */
+    scheduleAvailable: boolean;
+  };
+  push: { enabled: boolean; debounceMinutes: number };
+}
+
+export interface EnvironmentBuildTriggersPatch {
+  schedule?: { enabled: boolean; cron?: string; timezone?: string };
+  push?: { enabled?: boolean; debounceMinutes?: number };
+}

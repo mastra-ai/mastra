@@ -13,62 +13,21 @@
 import Nango, { AuthError } from '@nangohq/frontend';
 import type { AuthOptions } from '@nangohq/frontend';
 
-export type PlatformConnectProviderId = 'jira' | 'incident-io' | 'gitlab' | 'gitlab-self-hosted' | 'vanta' | 'linear';
+import type { PlatformConnectProviderId, PlatformProviderConnection } from '@mastra/playground-ui/domains/factory';
+import { MASTRA_PLATFORM_URL } from '@mastra/playground-ui/domains/factory';
 
-export const MASTRA_PLATFORM_URL = 'https://projects.mastra.ai';
-
-/** How the provider authorizes: OAuth consent popup or an API-key form. */
-export type PlatformConnectAuthKind = 'oauth' | 'apiKey';
-
-/** A connection setting an API-key provider needs besides the key, such as a self-hosted instance's hostname. */
-export interface PlatformConnectParam {
-  key: string;
-  label: string;
-  placeholder: string;
-}
-
-export interface PlatformConnectProviderMeta {
-  id: PlatformConnectProviderId;
-  displayName: string;
-  authKind: PlatformConnectAuthKind;
-  /** What an API-key provider calls its key. Defaults to "API key". */
-  credentialName?: string;
-  params?: readonly PlatformConnectParam[];
-}
-
-export const PLATFORM_CONNECT_PROVIDERS: Record<PlatformConnectProviderId, PlatformConnectProviderMeta> = {
-  jira: { id: 'jira', displayName: 'Jira', authKind: 'oauth' },
-  'incident-io': { id: 'incident-io', displayName: 'incident.io', authKind: 'apiKey' },
-  gitlab: { id: 'gitlab', displayName: 'GitLab', authKind: 'oauth' },
-  'gitlab-self-hosted': {
-    id: 'gitlab-self-hosted',
-    displayName: 'self-hosted GitLab',
-    authKind: 'apiKey',
-    credentialName: 'access token',
-    params: [{ key: 'hostname', label: 'Instance hostname', placeholder: 'gitlab.example.com' }],
-  },
-  vanta: { id: 'vanta', displayName: 'Vanta', authKind: 'oauth' },
-  linear: { id: 'linear', displayName: 'Linear', authKind: 'oauth' },
-};
-
-/**
- * The provider whose flow reconnects `connection`. A self-hosted GitLab
- * connection is listed under GitLab but reconnects with its token form.
- */
-export function reconnectProvider(
-  provider: PlatformConnectProviderId,
-  connection: { integrationId: string },
-): PlatformConnectProviderId {
-  return connection.integrationId === 'gitlab-self-hosted' ? 'gitlab-self-hosted' : provider;
-}
-
-export interface PlatformProviderConnection {
-  id: string;
-  integrationId: string;
-  status: 'active' | 'needs_reauth';
-  accountLabel: string | null;
-  displayName?: string | null;
-}
+export {
+  MASTRA_PLATFORM_URL,
+  PLATFORM_CONNECT_PROVIDERS,
+  reconnectProvider,
+} from '@mastra/playground-ui/domains/factory';
+export type {
+  PlatformConnectAuthKind,
+  PlatformConnectParam,
+  PlatformConnectProviderId,
+  PlatformConnectProviderMeta,
+  PlatformProviderConnection,
+} from '@mastra/playground-ui/domains/factory';
 
 export interface PlatformConnectSession {
   connectionId: string;

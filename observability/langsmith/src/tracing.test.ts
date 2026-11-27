@@ -616,6 +616,7 @@ describe('TestLangSmithExporter', () => {
           mastra_span_type: 'model_generation',
           mastra_span_id: 'llm-span',
           mastra_trace_id: 'llm-span',
+          ls_message_format: 'completions',
           ls_model_name: 'gpt-4',
           ls_provider: 'openai',
           usage_metadata: {
@@ -659,6 +660,7 @@ describe('TestLangSmithExporter', () => {
           mastra_span_type: 'model_generation',
           mastra_span_id: 'minimal-llm',
           mastra_trace_id: 'minimal-llm',
+          ls_message_format: 'completions',
           ls_model_name: 'gpt-3.5-turbo',
           usage_metadata: {},
         },

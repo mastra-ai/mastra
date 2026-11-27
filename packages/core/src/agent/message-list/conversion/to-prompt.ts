@@ -7,6 +7,11 @@ import type { AIV5Type } from '../types';
 import { sanitizeToolName } from '../utils/tool-name';
 
 type AIV5LanguageModelV2Message = LanguageModelV2Prompt[0];
+type ProviderCustomPromptPart = {
+  type: 'custom';
+  kind: string;
+  providerOptions?: AIV5Type.ProviderMetadata;
+};
 type LanguageModelV1Message = LanguageModelV1Prompt[0];
 
 /**
@@ -244,6 +249,20 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
     if (!part || typeof part !== 'object') continue;
 
     const incompatibleMessage = `Saw incompatible message content part type ${part.type} for message role ${role}`;
+    const providerCustomPart = part as {
+      type: string;
+      kind?: string;
+      providerOptions?: AIV5Type.ProviderMetadata;
+    };
+
+    if (role === 'assistant' && providerCustomPart.type === 'custom' && typeof providerCustomPart.kind === 'string') {
+      (roleContent.assistant as Array<(typeof roleContent.assistant)[number] | ProviderCustomPromptPart>).push({
+        type: 'custom',
+        kind: providerCustomPart.kind,
+        ...(providerCustomPart.providerOptions ? { providerOptions: providerCustomPart.providerOptions } : {}),
+      });
+      continue;
+    }
 
     switch (part.type) {
       case 'text': {

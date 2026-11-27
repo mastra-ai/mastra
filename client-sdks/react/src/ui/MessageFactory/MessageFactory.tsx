@@ -120,6 +120,10 @@ const renderPart = (
       // content. Absent an explicit opt-in renderer it renders nothing and is
       // intentionally NOT routed to `fallback`.
       return renderers.StepStart?.(part) ?? null;
+    case 'custom':
+      // Provider-owned continuation state (for example OpenAI compaction) is
+      // persisted in message history for replay, but is not user-facing.
+      return null;
     case 'error':
       // Terminal errors are stored for history but have no built-in visual
       // treatment. Let consumers opt into rendering them through `fallback`.

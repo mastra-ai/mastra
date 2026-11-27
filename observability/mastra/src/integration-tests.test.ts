@@ -1320,16 +1320,16 @@ describe('Tracing Integration Tests', () => {
           testExporter.getSpansByType(type).filter(span => !firstRunSpanIds.has(span.id));
         const steps = resumedSpans(SpanType.MODEL_STEP);
         const inferences = resumedSpans(SpanType.MODEL_INFERENCE);
-        // One step carries the resumed tool result, the other is the model call
+        // One step carries the resumed tool result, the other is the only model call
         expect(steps).toHaveLength(2);
-        expect(inferences).toHaveLength(2);
-        expect(inferences[1]!.input).toBeTruthy();
+        expect(inferences).toHaveLength(1);
+        expect(inferences[0]!.input).toBeTruthy();
 
         for (const span of [
           ...resumedSpans(SpanType.AGENT_RUN),
           ...resumedSpans(SpanType.MODEL_GENERATION),
           steps[1]!,
-          inferences[1]!,
+          inferences[0]!,
         ]) {
           expect(getTimeToFirstChunkMs(span)).toBeGreaterThanOrEqual(35);
         }

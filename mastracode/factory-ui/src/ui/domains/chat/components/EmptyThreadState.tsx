@@ -67,7 +67,7 @@ export function EmptyThreadState() {
         </Button>
       </div>
 
-      <details className="text-muted-foreground group mt-8 w-full max-w-lg min-w-0">
+      <details className="text-muted-foreground mt-8 w-full max-w-lg min-w-0">
         <summary
           className={`hover:text-foreground flex cursor-pointer list-none items-center justify-center gap-1.5 rounded-full px-3 py-2 transition-colors [&::-webkit-details-marker]:hidden ${focusRing}`}
         >
@@ -77,7 +77,7 @@ export function EmptyThreadState() {
               {activeFactory.name}
             </Txt>
           </Txt>
-          <DisclosureChevron className="size-3.5 group-open:rotate-180" />
+          <DisclosureChevron className="size-3.5" />
         </summary>
         <dl className="mx-auto mt-3 grid w-full min-w-0 gap-1 text-left">
           <FactoryMetadata label="Factory" value={activeFactory.name} font="body" />

@@ -50,13 +50,13 @@
     "qwen3.8-27b"
   ],
   "reasoning": {
-    "gpt-oss-120b": [
+    "qwen3.8-27b": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "qwen3.5-9b": [
+    "qwen3.5-397b-a17b": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
@@ -68,10 +68,10 @@
         "values": ["none", "high"]
       }
     ],
-    "qwen3.6-35b-a3b": [
+    "nemotron3-omni-30b": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "qwen3.6-27b": [
@@ -86,13 +86,25 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "qwen3.8-27b": [
+    "qwen3.6-35b-a3b": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "nemotron3-nano-30b": [
+    "qwen3.5-9b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "laguna-xs-2.1": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -104,22 +116,10 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "nemotron3-omni-30b": [
+    "nemotron3-nano-30b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "laguna-xs-2.1": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "qwen3.5-397b-a17b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
       }
     ]
   }

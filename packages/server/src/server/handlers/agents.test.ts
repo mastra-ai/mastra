@@ -4646,11 +4646,22 @@ describe('Agent Routes Authorization', () => {
       expect(forwarded.streamOptions.context[0].metadata?.mastra?.userTurn).toBeUndefined();
     });
 
-    it('should reject subscription tool approval for a thread owned by another resource', async () => {
+    it.each([
+      [
+        'should reject subscription tool approval for a thread owned by another resource',
+        'approval-thread-owned-by-b',
+        'Approval Thread B',
+      ],
+      [
+        'should reject subscription tool decline for a thread owned by another resource',
+        'decline-thread-owned-by-b',
+        'Decline Thread B',
+      ],
+    ] as const)('%s', async (_title, threadId, title) => {
       await mockMemory.createThread({
-        threadId: 'approval-thread-owned-by-b',
+        threadId,
         resourceId: 'user-b',
-        title: 'Approval Thread B',
+        title,
       });
       (mockAgent as any).sendToolApproval = vi.fn();
 
@@ -4661,30 +4672,7 @@ describe('Agent Routes Authorization', () => {
           requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
           abortSignal: new AbortController().signal,
           resourceId: 'user-a',
-          threadId: 'approval-thread-owned-by-b',
-          toolCallId: 'tool-call-123',
-          approved: true,
-        } as any),
-      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
-      expect((mockAgent as any).sendToolApproval).not.toHaveBeenCalled();
-    });
-
-    it('should reject subscription tool decline for a thread owned by another resource', async () => {
-      await mockMemory.createThread({
-        threadId: 'decline-thread-owned-by-b',
-        resourceId: 'user-b',
-        title: 'Decline Thread B',
-      });
-      (mockAgent as any).sendToolApproval = vi.fn();
-
-      await expect(
-        SEND_TOOL_APPROVAL_ROUTE.handler({
-          mastra,
-          agentId: 'test-agent',
-          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
-          abortSignal: new AbortController().signal,
-          resourceId: 'user-a',
-          threadId: 'decline-thread-owned-by-b',
+          threadId,
           toolCallId: 'tool-call-123',
           approved: true,
         } as any),
