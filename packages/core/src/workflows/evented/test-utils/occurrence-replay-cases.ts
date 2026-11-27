@@ -1038,7 +1038,8 @@ export function describeOccurrenceReplayCases({
           id: `overlap-fail-${randomUUID()}`,
           inputSchema: schema,
           outputSchema: schema,
-          retryConfig: { attempts: 1, delay: 200 },
+          // The delay keeps the retry from claiming the step before the second copy's step end.
+          retryConfig: { attempts: 1, delay: 1_000 },
         })
           .then(
             createStep({
