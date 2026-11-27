@@ -44,7 +44,8 @@ function toToolCall({ toolCallId, toolName, input, args }: Part) {
 function toAssistantMessage(content: unknown, toolCalls: Part[]): AssistantMessage {
   return {
     role: 'assistant',
-    content,
+    // As OpenAI sends it. With '', LangSmith shows the call again when a later turn replays it.
+    content: toolCalls.length && content === '' ? null : content,
     ...(toolCalls.length ? { tool_calls: toolCalls.map(toToolCall) } : {}),
   };
 }
@@ -81,12 +82,17 @@ export function toChatMessages(messages: unknown): unknown[] | undefined {
       ...(message.role === 'assistant' && (rest.length || toolCalls.length)
         ? [toAssistantMessage(toContent(rest), toolCalls)]
         : []),
-      ...toolResults.map(({ toolCallId, toolName, output, result }) => ({
-        role: 'tool',
-        tool_call_id: toolCallId,
-        name: toolName,
-        content: toResultText(output ?? result),
-      })),
+      ...toolResults.map(({ toolCallId, toolName, output, result, providerOptions }) => {
+        // What toModelOutput gave the model, as the call that first got the result showed it.
+        const mastra = isPart(providerOptions) ? providerOptions.mastra : undefined;
+        const modelOutput = isPart(mastra) ? mastra.modelOutput : undefined;
+        return {
+          role: 'tool',
+          tool_call_id: toolCallId,
+          name: toolName,
+          content: toResultText(modelOutput ?? output ?? result),
+        };
+      }),
     ];
   });
 }

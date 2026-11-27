@@ -137,7 +137,7 @@ function setup({
 const toolSteps = [
   {
     role: 'assistant',
-    content: '',
+    content: null,
     tool_calls: [{ id: 'call-1', type: 'function', function: { name: 'getWeather', arguments: '{"city":"Paris"}' } }],
   },
   { role: 'tool', tool_call_id: 'call-1', name: 'getWeather', content: JSON.stringify(FORECAST) },
@@ -145,7 +145,7 @@ const toolSteps = [
 
 describe('LangSmith trajectory of an agent turn', () => {
   it('shows the question, the tool call, its result and the answer', async () => {
-    const { agent, llmRuns } = setup();
+    const { agent, sentRuns, llmRuns } = setup();
     const stream = await agent.stream(QUESTION);
     await stream.consumeStream();
 
@@ -163,6 +163,11 @@ describe('LangSmith trajectory of an agent turn', () => {
       expect(run.extra.metadata).toMatchObject({ ls_message_format: 'completions', ls_model_name: 'gpt-4o-mini' });
       expect(run.extra.metadata).not.toHaveProperty('ls_message_view_exclude');
     }
+    // Its messages are Mastra's own, and LangSmith would show their tool calls again as raw objects.
+    expect((await sentRuns()).find(run => run.name === "llm: 'gpt-4o-mini'")).toMatchObject({
+      run_type: 'chain',
+      extra: { metadata: { ls_message_view_exclude: true } },
+    });
   });
 
   it('shows what toModelOutput gave the model instead of the raw tool result', async () => {

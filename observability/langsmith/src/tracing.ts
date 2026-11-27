@@ -709,7 +709,7 @@ export class LangSmithExporter extends TrackingExporter<
 
       // Not part of the conversation: a generation whose calls already show it, and the call
       // that names the thread, whose input is a transcript.
-      const isShownByCalls = usage && !isInference && conversation?.counted;
+      const isShownByCalls = !isInference && conversation?.counted;
       const isTitle = 'resultType' in modelAttr && modelAttr.resultType === 'title_generation';
       if (isShownByCalls || isTitle) payload.metadata[LS_MESSAGE_VIEW_EXCLUDE] = true;
 
