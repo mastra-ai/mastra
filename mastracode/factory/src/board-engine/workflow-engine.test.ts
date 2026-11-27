@@ -272,6 +272,28 @@ describe('the workflow board engine', () => {
     });
   });
 
+  it('keeps what the card is doing when a move it already applied is asked again', async () => {
+    const { storage, engine, item, binding } = await setup();
+    await engine.requestMove(await personMove(storage, item.id, 'intake', 'drag-1')());
+    const byAgent: FactoryTransitionRequest = {
+      ...(await personMove(storage, item.id, 'planning', 'agent-1')()),
+      actor: { type: 'agent', id: 'agent:binding' },
+      ingress: { type: 'agent', identity: 'agent-1' },
+    };
+    const first = await engine.requestMove(byAgent);
+    expect(first).toMatchObject({ status: 'accepted' });
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'running', probes: 0 });
+    await engine.runEnded({ ...binding, runEnd: 'run-1' }, engine);
+    await engine.runEnded({ ...binding, runEnd: 'run-2' }, engine);
+    const flagged = await engine.describe({ workItemId: item.id });
+    expect(flagged).toMatchObject({ state: 'needs_attention', phase: 'planning', probes: 2 });
+
+    // The transition service answers the repeat with the first move's result, the run it queued included.
+    await expect(engine.requestMove(byAgent)).resolves.toEqual(first);
+
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual(flagged);
+  });
+
   it('counts nothing for a run end told again after a later run ended', async () => {
     const { engine, item, binding } = await setup();
 

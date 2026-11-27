@@ -10,6 +10,7 @@ import type { FactoryTransitionRequest } from '../rules/transition-service.js';
 import type { FactoryTransitionResult } from '../rules/types.js';
 import {
   boardRunId,
+  APPLIED_MOVES,
   COUNTED_RUN_ENDS,
   createFactoryBoardWorkflow,
   FACTORY_BOARD_WORKFLOW_ID,
@@ -59,6 +60,20 @@ type PendingInput =
 
 type CardRef = Pick<FactoryTransitionRequest, 'workItemId'>;
 
+/** Whether the record was made in this phase of this board. */
+function sameVisit(previous: FactoryCardRunRecord, board: string, phase: string): boolean {
+  return previous.phase === phase && previous.board === board;
+}
+
+/** What the record keeps whatever the card does next: the last outcome, and the inputs already heard. */
+function carried(previous: FactoryCardRunRecord): Partial<FactoryCardRunRecord> {
+  return {
+    ...(previous.lastOutcome ? { lastOutcome: previous.lastOutcome } : {}),
+    ...(previous.countedRunEnds ? { countedRunEnds: previous.countedRunEnds } : {}),
+    ...(previous.appliedMoves ? { appliedMoves: previous.appliedMoves } : {}),
+  };
+}
+
 /**
  * A board engine where each card has one `factory-board` workflow run that applies everything
  * asked of the card, one input at a time: a move request, and the end of a run of the card's
@@ -71,11 +86,6 @@ type CardRef = Pick<FactoryTransitionRequest, 'workItemId'>;
  * Its workflow must be registered with the host's Mastra (`MastraFactory` does this), which
  * gives the runs their storage. A card's run starts on the first input asked of it.
  */
-/** Whether the record was made in this phase of this board. A record older than `board` matches by phase. */
-function sameVisit(previous: FactoryCardRunRecord, board: string, phase: string): boolean {
-  return previous.phase === phase && (previous.board === undefined || previous.board === board);
-}
-
 export class WorkflowBoardEngine implements FactoryBoardEngine {
   readonly workflow: FactoryBoardWorkflow;
   /** Inputs for one card in this process wait their turn, so a resume never finds the run busy with our own. */
@@ -186,7 +196,7 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     const run = await this.workflow.getWorkflowRunById(boardRunId(card.workItemId), { withNestedWorkflows: false });
     const recorded = (run?.steps?.phase as { payload?: FactoryCardRunRecord } | undefined)?.payload;
     if (!recorded?.state) return undefined;
-    const { countedRunEnds: _counted, board: _board, ...state } = recorded;
+    const { countedRunEnds: _counted, appliedMoves: _applied, board: _board, ...state } = recorded;
     return state;
   }
 
@@ -207,14 +217,20 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     const board = boardForWorkItem(item);
     const kind = boards.get(board)?.phaseKind(phase);
     if (!kind) return undefined;
+    // A request made again is answered with the first one's result, run and all: nothing new
+    // was committed or queued, so what the card was doing stands.
+    const applied = previous.appliedMoves ?? [];
+    if (result.status === 'accepted' && applied.includes(result.transitionId) && previous.state) return previous;
     const run =
       result.status === 'accepted' ? result.decisions.find(decision => decision.type === 'invokeSkill') : undefined;
     // A refused move, or one that left the card where it was, changes nothing the card was doing there.
     if (sameVisit(previous, board, phase) && previous.state && !run) return previous;
-    // The outcome that ended the last phase, and the run end already heard, outlive the move.
+    // The outcome that ended the last phase, and the inputs already heard, outlive the move.
     const kept = {
-      ...(previous.lastOutcome ? { lastOutcome: previous.lastOutcome } : {}),
-      ...(previous.countedRunEnds ? { countedRunEnds: previous.countedRunEnds } : {}),
+      ...carried(previous),
+      ...(result.status === 'accepted'
+        ? { appliedMoves: [...applied, result.transitionId].slice(-APPLIED_MOVES) }
+        : {}),
     };
     if (kind !== 'working') return { state: kind, phase, board, probes: 0, ...kept };
     // The dispatcher's own rule for a run that starts without a person: never on an outside
@@ -246,7 +262,9 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     const at = { phase, board: board.id };
     const probes = sameVisit(previous, board.id, phase) ? (previous.probes ?? 0) : 0;
     const heard = previous.countedRunEnds ?? [];
+    const moves = previous.appliedMoves ? { appliedMoves: previous.appliedMoves } : {};
     const counted = {
+      ...moves,
       ...(binding.runEnd && !heard.includes(binding.runEnd)
         ? { countedRunEnds: [...heard, binding.runEnd].slice(-COUNTED_RUN_ENDS) }
         : previous.countedRunEnds
@@ -259,17 +277,17 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     // that doesn't work this phase, say nothing about how the phase is going.
     if (binding.runEnd !== undefined && heard.includes(binding.runEnd)) return undefined;
     if (board.roleForPhase(phase) !== binding.role) return undefined;
-    // Only a teller that runs the phase again asks for a second run; an end nobody follows up (a
-    // person's chat turn with the session) says nothing about how the phase is going, and stays
-    // uncounted so the teller that does follow up is still heard.
-    if (binding.runsAgain !== true) return undefined;
     const kept = previous.lastOutcome ? { lastOutcome: previous.lastOutcome } : {};
-    // The dispatcher runs a phase again only when the phase names how it ends (a goal or an exit
-    // tool). Any other phase's run just ended: nothing is probed, and its next run waits for a person.
+    // Nobody runs a phase again that doesn't name how it ends (a goal or an exit tool): its run
+    // just ended, nothing is probed, and its next run waits for a person.
     const definition = board.phases[phase];
     if (definition?.kind !== 'working' || !(definition.runner.goal || definition.exitTool)) {
       return { state: 'awaiting_start', ...at, probes, ...kept, ...counted };
     }
+    // Only a teller that runs the phase again asks for a second run; an end nobody follows up (a
+    // person's chat turn with the session, or an end the dispatcher lets stand) says nothing about
+    // how the phase is going, and stays uncounted so the teller that does follow up is still heard.
+    if (binding.runsAgain !== true) return undefined;
     return {
       ...at,
       probes: probes + 1,
@@ -300,8 +318,7 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
       phase,
       board: board.id,
       probes: sameVisit(previous, board.id, phase) ? (previous.probes ?? 0) : 0,
-      ...(previous.lastOutcome ? { lastOutcome: previous.lastOutcome } : {}),
-      ...(previous.countedRunEnds ? { countedRunEnds: previous.countedRunEnds } : {}),
+      ...carried(previous),
     };
   }
 

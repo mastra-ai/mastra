@@ -435,7 +435,7 @@ const factory = new MastraFactory({
 });
 ```
 
-A card's run takes its card from its run id, and a resume carries only an input id. The move itself and its answer stay in the process that asked for it, so the run stores nothing but its id, and a run started or resumed through Mastra's workflow API, which the engine didn't ask for, moves nothing. The process that asks for a move applies it, so this engine runs workflows on the default engine only. A move must not wait on another move of the same card, since that card's inputs are applied one at a time.
+A card's run takes its card from its run id, and a resume carries only an input id. The move itself and its answer stay in the process that asked for it, so the run stores nothing but its id and the card's state, and a run started or resumed through Mastra's workflow API, which the engine didn't ask for, moves nothing. The process that asks for a move applies it, so this engine runs workflows on the default engine only. A move must not wait on another move of the same card, since that card's inputs are applied one at a time.
 
 The card's run also records what the card is doing, and `describe` reads it back:
 
@@ -454,7 +454,7 @@ const doing = await boardEngine.describe?.({ workItemId });
 | `needs_attention`   | Had two runs end without an outcome. `reason` says so, and a person takes it on.   |
 | `terminal`          | Sits in a terminal phase.                                                          |
 
-`phase` is the phase the state was recorded in, `probes` counts the runs that ended there without an outcome, and `lastOutcome` is the last outcome a run ended a phase with. The record holds nothing else: no actor, organization or card content. `describe` answers nothing for a card no input was asked of yet. A run end told more than once counts once, and the count starts over when the card changes phase. Only an end told by whoever runs the phase again counts, which is the dispatcher; a person's chat turn with the card's session ends a run too, and changes nothing unless it reported an outcome. Only a phase that names how it ends, with a goal or an exit tool, is run once more; a run that ends without an outcome in any other working phase leaves the card `awaiting_start`. A person starting a waiting run isn't an input yet, so the card says `awaiting_start` until that run pauses or ends.
+`phase` is the phase the state was recorded in, `probes` counts the runs that ended there without an outcome, and `lastOutcome` is the last outcome a run ended a phase with. The record holds nothing else: no actor, organization or card content. `describe` answers nothing for a card no input was asked of yet. A run end told more than once counts once, and the count starts over when the card changes phase. Only an end the dispatcher follows with another run counts; a person's chat turn with the card's session ends a run too, and changes nothing unless it reported an outcome. Only a phase that names how it ends, with a goal or an exit tool, is run once more; a run that ends without an outcome in any other working phase leaves the card `awaiting_start`. A person starting a waiting run isn't an input yet, so the card says `awaiting_start` until that run pauses or ends.
 
 An engine that keeps such a record may implement two optional members: `describe(card)`, and `runPaused(binding, 'approval')`, which Factory calls when a session's run stops for a person's answer. The default engine implements neither.
 

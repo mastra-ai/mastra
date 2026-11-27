@@ -23,6 +23,9 @@ export const FACTORY_CARD_STEP_STATES = [
 /** How many run ends a card's run remembers; a telling that comes later than this many others is rare. */
 export const COUNTED_RUN_ENDS = 8;
 
+/** How many moves a card's run remembers applying, so a move answered again isn't read as a new one. */
+export const APPLIED_MOVES = 8;
+
 const runStateSchema = z.object({
   state: z.enum(FACTORY_CARD_STEP_STATES).optional(),
   phase: z.string().optional(),
@@ -33,13 +36,15 @@ const runStateSchema = z.object({
   reason: z.string().optional(),
   /** The latest run ends heard, so telling of one again counts nothing. */
   countedRunEnds: z.array(z.string()).max(COUNTED_RUN_ENDS).optional(),
+  /** Ids of the latest transitions applied: the transition service answers a repeated request with the first one's result. */
+  appliedMoves: z.array(z.string()).max(APPLIED_MOVES).optional(),
 });
 
 /**
  * What a card is doing, as its board run last recorded it: phase keys, counts and short reasons,
  * never a request or who made it. Empty until the run applied its first input.
  */
-export type FactoryCardRunState = Omit<FactoryCardRunRecord, 'countedRunEnds' | 'board'>;
+export type FactoryCardRunState = Omit<FactoryCardRunRecord, 'countedRunEnds' | 'appliedMoves' | 'board'>;
 
 /** Everything the run carries from one input to the next. */
 export type FactoryCardRunRecord = z.infer<typeof runStateSchema>;

@@ -2006,15 +2006,10 @@ export class FactoryDecisionDispatcher {
                   // results before applying the run's outcome or deciding the unchanged card means
                   // the run did no work.
                   await this.#reconcileRunBinding?.(binding);
-                  if (
-                    await this.#boardEngine.runEnded(
-                      // The ledger's row names the run for every worker; without a ledger only this
-                      // process tells of the end.
-                      { ...binding, runEnd: this.#openRuns ? deliveryId : latestRunEnd(session), runsAgain: true },
-                      this.#boardEngine,
-                    )
-                  )
-                    return;
+                  // The ledger's row names the run for every worker; without a ledger only this
+                  // process tells of the end.
+                  const ended = { ...binding, runEnd: this.#openRuns ? deliveryId : latestRunEnd(session) };
+                  if (await this.#boardEngine.runEnded(ended, this.#boardEngine)) return;
                   if (workingRevision === null) return;
                   const after = await this.#storage.get({ orgId: record.orgId, id: record.workItemId! });
                   if (after?.revision === workingRevision && !(await kickoffStale())) {
@@ -2032,6 +2027,9 @@ export class FactoryDecisionDispatcher {
                       return review?.kind === 'working' && review.runner.context === 'review';
                     });
                     if (ownCardHandOff) return;
+                    // Only here is the phase run again (or given up on, after its last attempt):
+                    // the engine hears of this end once more, as one a second run answers.
+                    if (await this.#boardEngine.runEnded({ ...ended, runsAgain: true }, this.#boardEngine)) return;
                     throw new FactoryDispatchError(
                       'run_incomplete',
                       'Factory skill run ended before completing the working phase.',

@@ -2681,15 +2681,17 @@ export class MastraFactory {
           return threadId ? (await openRunsStorage.listRunning(threadId)).at(-1)?.kickoffId : undefined;
         },
       });
-      // A run that waits for a person's yes or no leaves its card waiting on that answer.
-      const runPaused = async () => {
+      // A run that waits for a person's yes or no leaves its card waiting on that answer. The
+      // engine may take the card's other inputs first, so nothing waits on it: the person is told
+      // of the wait, and the run's end is reported, without it.
+      const runPaused = () => {
         if (!boardEngine?.runPaused) return;
-        try {
+        void (async () => {
           const binding = await runBinding();
-          if (binding) await boardEngine.runPaused(binding, 'approval');
-        } catch (error) {
+          if (binding) await boardEngine.runPaused?.(binding, 'approval');
+        })().catch(error => {
           console.warn('[Factory] Unable to tell the board engine a session waits for approval.', error);
-        }
+        });
       };
       // Every run end of a work or side session, and every tool call it holds for
       // approval, reaches whoever follows it, however the run started;
@@ -2697,23 +2699,25 @@ export class MastraFactory {
       observeSessionRunReports(
         session,
         async (outcome, since) => {
-          if (outcome.status === 'blocked' && (outcome.approval || outcome.decision)) await runPaused();
-          await reportSessionRunEnd({
+          const reported = reportSessionRunEnd({
             sessionId: session.identity.getId(),
             threadId: session.thread.getId(),
             outcome,
             since,
           });
+          if (outcome.status === 'blocked' && (outcome.approval || outcome.decision)) runPaused();
+          await reported;
         },
         {
           onApprovalRequested: async request => {
             // A call Factory answers itself waits on nobody.
-            if (!this.#dispatcher?.autoApproves(request.toolCallId)) await runPaused();
-            await notifyApprovalRequested({
+            const notified = notifyApprovalRequested({
               sessionId: session.identity.getId(),
               threadId: session.thread.getId(),
               ...request,
             });
+            if (!this.#dispatcher?.autoApproves(request.toolCallId)) runPaused();
+            await notified;
           },
           answersItself: toolCallId => this.#dispatcher?.autoApproves(toolCallId) ?? false,
         },

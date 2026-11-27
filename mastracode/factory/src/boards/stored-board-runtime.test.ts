@@ -816,6 +816,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         });
         const orgId = `org-${randomUUID()}`;
         let engine!: FactoryBoardEngine;
+        let pauseAsked!: () => void;
+        const asked = new Promise<void>(resolve => (pauseAsked = resolve));
+        let releasePause!: () => void;
+        const pauseHeld = new Promise<void>(resolve => (releasePause = resolve));
         // What the card's run says the card is doing after each move it accepted.
         const afterMoves: string[] = [];
         const replica = await boot(database(), orgId, {
@@ -824,7 +828,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             engine = {
               requestPlacement: placement => inner.requestPlacement(placement),
               runEnded: (binding, held) => inner.runEnded(binding, held),
-              runPaused: (binding, reason) => inner.runPaused(binding, reason),
+              // The card's run may be busy with another input when the wait is told.
+              runPaused: async (binding, reason) => {
+                pauseAsked();
+                await pauseHeld;
+                return inner.runPaused(binding, reason);
+              },
               describe: card => inner.describe(card),
               workflows: inner.workflows,
               requestMove: async request => {
@@ -841,6 +850,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         await configureShipyard(replica, projectId);
         seedPlan(replica, 'acme/shipyard');
         const doing = () => engine.describe!({ workItemId: card.id });
+        const followers = vi.spyOn(replica.workItems, 'listWorkItemSubscribers');
 
         const card = await githubIssue(replica, projectId, 'Large rewrite', { trusted: true, labels: [] });
         const startOf = async (skillName: string) =>
@@ -864,11 +874,19 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         );
 
         // Started, its session submits a plan nothing approves for it: the card awaits approval.
+        followers.mockClear();
         const started = await replica.send(
           'POST',
           `/web/factory/projects/${projectId}/decisions/${(await startOf('factory-plan'))!.id}/approve`,
         );
         expect(started.status, JSON.stringify(started.json)).toBe(200);
+        // People following the card hear of the wait without the card's run having recorded it.
+        await asked;
+        await vi.waitFor(() => expect(followers).toHaveBeenCalledWith({ orgId, workItemId: card.id }), {
+          timeout: 30_000,
+        });
+        expect(await doing()).toMatchObject({ state: 'awaiting_start' });
+        releasePause();
         await vi.waitFor(
           async () => expect(await doing()).toMatchObject({ state: 'awaiting_approval', phase: 'planning', probes: 0 }),
           { timeout: 30_000 },
