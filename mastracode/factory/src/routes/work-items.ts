@@ -110,7 +110,7 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   /** Per-project queue-health threshold config. */
   queueHealth: QueueHealthStorage;
   /** The board engine every stage move goes through. Stage moves 503 when absent. */
-  boardEngine?: Pick<FactoryBoardEngine, 'requestMove' | 'cardDeleted' | 'submitMove'>;
+  boardEngine?: Pick<FactoryBoardEngine, 'requestMove' | 'cardDeleted' | 'submitMove' | 'describe'>;
   /** Tells the project's open boards how a move answered `202` ended. */
   announceMove?: (scope: { orgId: string; factoryProjectId: string }, move: FeedMove) => void;
   /** Coordinator that binds a Factory run before dispatching its kickoff. */
@@ -610,6 +610,28 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
       }),
 
       // ── When cards were created and completed, for the draft page's band ────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemRunState.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemRunState.method,
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await this.#resolveProject(loose(c));
+          if ('response' in resolved) return resolved.response;
+          const parsedPath = FACTORY_ROUTE_CONTRACTS.workItemRunState.pathSchema.safeParse({
+            id: resolved.factoryProjectId,
+            workItemId: loose(c).req.param('workItemId'),
+          });
+          if (!parsedPath.success) return c.json({ error: 'Work item not found' }, 404);
+          await workItems.ensureReady();
+          const item = await workItems.get({ orgId: resolved.orgId, id: parsedPath.data.workItemId });
+          if (!item || item.factoryProjectId !== resolved.factoryProjectId) {
+            return c.json({ error: 'Work item not found' }, 404);
+          }
+          // The card's run names no organization; the card read above is what scopes the answer.
+          const runState = await boardEngine?.describe?.({ workItemId: item.id });
+          return c.json(runState ? { runState } : {});
+        },
+      }),
+
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemActivity.path, {
         method: FACTORY_ROUTE_CONTRACTS.workItemActivity.method,
         requiresAuth: false,

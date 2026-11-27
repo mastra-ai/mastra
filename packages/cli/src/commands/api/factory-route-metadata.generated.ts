@@ -539,6 +539,23 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /web/factory/projects/:id/work-items/:workItemId/run-state": {
+    "contractKey": "workItemRunState",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/work-items/:workItemId/run-state",
+    "description": "Show what a card is doing as its board's engine recorded it: phase, step state, probes, attempts, last outcome and why it needs attention",
+    "pathParams": [
+      "id",
+      "workItemId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /web/factory/projects/:id/work-items/:workItemId/session-repository": {
     "contractKey": "workItemSessionRepository",
     "method": "GET",
@@ -5674,6 +5691,83 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "required": [
         "workItems"
       ]
+    }
+  },
+  "GET /web/factory/projects/:id/work-items/:workItemId/run-state": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "workItemId": {
+          "$ref": "#/$defs/__schema0"
+        }
+      },
+      "required": [
+        "id",
+        "workItemId"
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "runState": {
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "enum": [
+                "resting",
+                "awaiting_start",
+                "running",
+                "probing",
+                "awaiting_approval",
+                "needs_attention",
+                "terminal"
+              ]
+            },
+            "phase": {
+              "type": "string"
+            },
+            "probes": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "lastOutcome": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "attempts": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "failure": {
+              "type": "string"
+            },
+            "deadlineAt": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "state"
+          ]
+        }
+      }
     }
   },
   "GET /web/factory/projects/:id/work-items/:workItemId/session-repository": {
@@ -13693,6 +13787,7 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "sessionActivity": "GET /web/factory/projects/:id/session-activity",
   "sessionRows": "GET /web/factory/projects/:id/session-rows",
   "workItemList": "GET /web/factory/projects/:id/work-items",
+  "workItemRunState": "GET /web/factory/projects/:id/work-items/:workItemId/run-state",
   "workItemSessionRepository": "GET /web/factory/projects/:id/work-items/:workItemId/session-repository",
   "workItemActivity": "GET /web/factory/projects/:id/work-items/activity",
   "workItemFilterOptions": "GET /web/factory/projects/:id/work-items/filter-options",

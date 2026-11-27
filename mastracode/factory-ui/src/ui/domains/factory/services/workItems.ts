@@ -15,6 +15,7 @@ import type { WorkItemBranchSource } from '@mastra/factory/work-item-branch';
 
 import type {
   WorkItemActivity,
+  WorkItemRunState,
   BoardPhasesRequest,
   BoardPhasesResponse,
   WorkItemFilterOptions,
@@ -341,6 +342,19 @@ export function getWorkItemSessionRepository(
 ): Promise<WorkItemSessionRepository> {
   return requestJson(
     `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items/${encodeURIComponent(workItemId)}/session-repository`,
+    { signal },
+  );
+}
+
+/** What the card's board engine recorded it doing; empty on an engine that records nothing. */
+export function fetchWorkItemRunState(
+  baseUrl: string,
+  factoryProjectId: string,
+  workItemId: string,
+  signal?: AbortSignal,
+): Promise<WorkItemRunState> {
+  return requestJson(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items/${encodeURIComponent(workItemId)}/run-state`,
     { signal },
   );
 }

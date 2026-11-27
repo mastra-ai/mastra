@@ -37,6 +37,8 @@ export type WorkItemStarters = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemSt
 export type WorkItemSessionRepository = z.infer<
   typeof FACTORY_ROUTE_CONTRACTS.workItemSessionRepository.responseSchema
 >;
+export type WorkItemRunState = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemRunState.responseSchema>;
+export type CardRunState = NonNullable<WorkItemRunState['runState']>;
 export type WorkItemActivity = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemActivity.responseSchema>;
 export type WorkItemListResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema>;
 export type BoardPhasesResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.boardPhases.responseSchema>;
