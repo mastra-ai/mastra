@@ -964,6 +964,55 @@ describe('LocalFilesystem', () => {
         expect(content).toBe('external content');
       });
 
+      it('should resolve only the roots that lexically hold a path when many allowedPaths are set (#30224)', async () => {
+        const roots = await Promise.all(
+          Array.from({ length: 50 }, async (_, i) => {
+            const root = path.join(outsideDir, `skill-${i}`);
+            await fs.mkdir(root);
+            await fs.writeFile(path.join(root, 'SKILL.md'), `skill ${i}`);
+            return root;
+          }),
+        );
+        const fsWithAllowed = new LocalFilesystem({ basePath: tempDir, contained: true, allowedPaths: roots });
+        const configuredRoots = new Set([tempDir, ...roots]);
+        const spy = vi.spyOn(realpathSync, 'native');
+
+        try {
+          await expect(fsWithAllowed.readFile(path.join(roots[49]!, 'SKILL.md'), { encoding: 'utf-8' })).resolves.toBe(
+            'skill 49',
+          );
+          const rootResolutions = spy.mock.calls.filter(([p]) => configuredRoots.has(String(p)));
+          expect(rootResolutions.length).toBeGreaterThan(0);
+          expect(rootResolutions.length).toBeLessThanOrEqual(3);
+        } finally {
+          spy.mockRestore();
+        }
+      });
+
+      it('should follow an allowed path symlink retargeted after a read', async () => {
+        const releaseA = path.join(outsideDir, 'release-a');
+        const releaseB = path.join(outsideDir, 'release-b');
+        await fs.mkdir(releaseA);
+        await fs.mkdir(releaseB);
+        await fs.writeFile(path.join(releaseA, 'notes.md'), 'A');
+        await fs.writeFile(path.join(releaseB, 'notes.md'), 'B');
+        const current = path.join(tempDir, 'current');
+        await fs.symlink(releaseA, current);
+        const fsWithAllowed = new LocalFilesystem({ basePath: tempDir, contained: true, allowedPaths: [current] });
+
+        await expect(fsWithAllowed.readFile(path.join(current, 'notes.md'), { encoding: 'utf-8' })).resolves.toBe('A');
+        await expect(fsWithAllowed.readFile(path.join(releaseA, 'notes.md'), { encoding: 'utf-8' })).resolves.toBe('A');
+
+        await fs.rm(current);
+        await fs.symlink(releaseB, current);
+
+        await expect(fsWithAllowed.readFile(path.join(current, 'notes.md'), { encoding: 'utf-8' })).resolves.toBe('B');
+        await expect(fsWithAllowed.readFile(path.join(releaseA, 'notes.md'), { encoding: 'utf-8' })).rejects.toThrow(
+          PermissionError,
+        );
+        await expect(fsWithAllowed.stat(path.join(releaseA, 'notes.md'))).rejects.toThrow(PermissionError);
+      });
+
       it('should block path traversal that escapes all roots', async () => {
         const restrictedFs = new LocalFilesystem({
           basePath: tempDir,

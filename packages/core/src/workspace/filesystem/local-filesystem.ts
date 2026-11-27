@@ -290,14 +290,28 @@ export class LocalFilesystem extends MastraFilesystem {
     return currentPath;
   }
 
+  /**
+   * Split basePath and allowedPaths into the roots that lexically hold
+   * `absolutePath` and the rest. Containment still resolves each root it
+   * checks; trying the lexical holders first lets most checks stop there.
+   */
+  private _partitionRoots(absolutePath: string): { lexical: string[]; rest: string[] } {
+    const lexical: string[] = [];
+    const rest: string[] = [];
+    for (const root of [this._basePath, ...this._allowedPaths]) {
+      (this._isWithinRoot(absolutePath, root) ? lexical : rest).push(root);
+    }
+    return { lexical, rest };
+  }
+
   private _isWithinAnyRoot(absolutePath: string): boolean {
-    const roots = [this._basePath, ...this._allowedPaths];
+    const { lexical, rest } = this._partitionRoots(absolutePath);
     const resolvedPath = this._resolvePathForContainment(absolutePath);
     if (!resolvedPath) {
       return false;
     }
 
-    return roots.some(root => {
+    return [...lexical, ...rest].some(root => {
       const resolvedRoot = this._resolvePathForContainment(root);
       return resolvedRoot ? this._isWithinRoot(resolvedPath, resolvedRoot) : false;
     });
@@ -389,16 +403,43 @@ export class LocalFilesystem extends MastraFilesystem {
     }
   }
 
-  private async containedRoots(): Promise<string[]> {
-    const roots: string[] = [];
-    for (const root of [this._basePath, ...this._allowedPaths]) {
-      try {
-        roots.push(await fs.realpath(root));
-      } catch (error) {
-        if (!isEnoentError(error)) throw error;
+  private async realpathRoot(root: string): Promise<string | undefined> {
+    try {
+      return await fs.realpath(root);
+    } catch (error) {
+      if (!isEnoentError(error)) throw error;
+      return undefined;
+    }
+  }
+
+  /**
+   * Resolve the roots to check `absolutePath` against, then its canonical path.
+   * Roots that lexically hold the path are tried first. When none contains it,
+   * every root and the path are resolved again from scratch, and a lexical root
+   * that now resolves differently than it did on the first try fails the operation.
+   */
+  private async containedRoots(absolutePath: string): Promise<{ roots: string[]; canonicalPath: string }> {
+    const lexicalRoots = new Map<string, string | undefined>();
+    for (const root of this._partitionRoots(absolutePath).lexical) {
+      lexicalRoots.set(root, await this.realpathRoot(root));
+    }
+    const resolvedLexicalRoots = [...lexicalRoots.values()].filter(root => root !== undefined);
+    if (resolvedLexicalRoots.length > 0) {
+      const canonicalPath = await fs.realpath(absolutePath);
+      if (resolvedLexicalRoots.some(root => this._isWithinRoot(canonicalPath, root))) {
+        return { roots: resolvedLexicalRoots, canonicalPath };
       }
     }
-    return roots;
+
+    const roots: string[] = [];
+    for (const root of [this._basePath, ...this._allowedPaths]) {
+      const resolvedRoot = await this.realpathRoot(root);
+      if (lexicalRoots.has(root) && lexicalRoots.get(root) !== resolvedRoot) {
+        throw new PermissionError(absolutePath, 'access');
+      }
+      if (resolvedRoot !== undefined) roots.push(resolvedRoot);
+    }
+    return { roots, canonicalPath: await fs.realpath(absolutePath) };
   }
 
   private assertCanonicalPathContained(canonicalPath: string, absolutePath: string, roots: string[]): void {
@@ -411,8 +452,7 @@ export class LocalFilesystem extends MastraFilesystem {
     absolutePath: string,
     metadataOnly = false,
   ): Promise<{ handle: FileHandle; canonicalPath: string }> {
-    const roots = await this.containedRoots();
-    const checkedPath = await fs.realpath(absolutePath);
+    const { roots, canonicalPath: checkedPath } = await this.containedRoots(absolutePath);
     this.assertCanonicalPathContained(checkedPath, absolutePath, roots);
     // O_PATH opens a metadata-only descriptor without requiring file read permission on Linux.
     const flags = metadataOnly
@@ -879,8 +919,7 @@ export class LocalFilesystem extends MastraFilesystem {
       }
     } catch (error) {
       if (!(error instanceof Error) || !('code' in error) || error.code !== 'EACCES') throw error;
-      const roots = await this.containedRoots();
-      const before = await fs.realpath(absolutePath);
+      const { roots, canonicalPath: before } = await this.containedRoots(absolutePath);
       this.assertCanonicalPathContained(before, absolutePath, roots);
       const stats = await fs.stat(absolutePath);
       const after = await fs.realpath(absolutePath);

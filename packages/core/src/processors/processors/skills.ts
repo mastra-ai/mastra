@@ -31,7 +31,7 @@
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import { SpanType } from '../../observability';
-import type { Skill, SkillFormat, WorkspaceSkills } from '../../workspace/skills';
+import type { Skill, SkillFormat, SkillMetadata, WorkspaceSkills } from '../../workspace/skills';
 import type { Workspace } from '../../workspace/workspace';
 import type { ProcessInputStepArgs, Processor } from '../index';
 
@@ -319,8 +319,7 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
    * Format available skills metadata based on configured format.
    * Skills are sorted by name for deterministic output (prompt cache stability).
    */
-  private async formatAvailableSkills(skills: WorkspaceSkills = this._skills!): Promise<string> {
-    const skillsList = await skills.list();
+  private async formatAvailableSkills(skills: WorkspaceSkills, skillsList: SkillMetadata[]): Promise<string> {
     if (skillsList.length === 0) {
       return '';
     }
@@ -405,8 +404,8 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
     }
 
     // Inject available skills metadata (if any skills discovered)
-    if (hasSkills) {
-      const availableSkillsMessage = await this.formatAvailableSkills(skills);
+    if (skills && hasSkills) {
+      const availableSkillsMessage = await this.formatAvailableSkills(skills, skillsList);
       if (availableSkillsMessage) {
         messageList.addSystem({
           role: 'system',

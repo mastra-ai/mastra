@@ -146,6 +146,39 @@ describe('LocalFilesystem contained reads during symlink replacement (#27892)', 
     expect(race.onRootRealpath).toBeUndefined();
   });
 
+  it('does not resolve an unrelated allowed path for a read under another allowed path (#30224)', async () => {
+    const unrelated = path.join(temp, 'unrelated');
+    const allowed = path.join(temp, 'allowed');
+    await fs.mkdir(unrelated);
+    await fs.mkdir(allowed);
+    await fs.writeFile(path.join(allowed, 'notes.md'), 'allowed');
+    const withAllowed = new LocalFilesystem({ basePath: root, contained: true, allowedPaths: [unrelated, allowed] });
+
+    race.root = unrelated;
+    race.onRootRealpath = async () => {};
+    await expect(withAllowed.readFile(path.join(allowed, 'notes.md'), { encoding: 'utf-8' })).resolves.toBe('allowed');
+    expect(race.onRootRealpath).toBeDefined();
+  });
+
+  it('rejects an allowed path retargeted mid-check while another allowed path shares its old target', async () => {
+    const shared = path.join(temp, 'shared');
+    await fs.mkdir(shared);
+    await fs.writeFile(path.join(shared, 'a.txt'), 'safe');
+    const current = path.join(temp, 'current');
+    await fs.symlink(shared, current);
+    const withAliases = new LocalFilesystem({ basePath: root, contained: true, allowedPaths: [shared, current] });
+
+    race.root = current;
+    race.onRootRealpath = async () => {
+      await fs.rm(current);
+      await fs.symlink(outside, current);
+    };
+    await expect(withAliases.readFile(path.join(current, 'a.txt'), { encoding: 'utf-8' })).rejects.toThrow(
+      PermissionError,
+    );
+    expect(race.onRootRealpath).toBeUndefined();
+  });
+
   it('preserves stat and exists on files that cannot be opened for reading', async () => {
     race.denyOpen = true;
     const file = path.join(root, 'a.txt');
