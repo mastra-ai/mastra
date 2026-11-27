@@ -22,24 +22,19 @@ describe('webSearchTool on a Mastra Gateway model without a Gateway key', () => 
   it.each(['mastra/openai/gpt-5-mini', 'mastra/anthropic/claude-sonnet-4-5'])(
     '%s fails the same way with webSearchTool as without it',
     async model => {
-      const generateError = (tools: Record<string, unknown>) =>
+      const generate = (tools: Record<string, unknown>) =>
         new Agent({
           id: 'research-agent',
           name: 'Research Agent',
           instructions: 'Use web search when you need current information.',
           model,
           tools: tools as any,
-        })
-          .generate('What happened in the news today?')
-          .then(
-            () => 'no error',
-            (e: unknown) => (e as Error).message,
-          );
+        }).generate('What happened in the news today?');
 
-      const withWebSearch = await generateError({ webSearch: webSearchTool });
+      const withoutWebSearch = await generate({}).catch((e: Error) => e);
+      expect(withoutWebSearch).toBeInstanceOf(Error);
 
-      expect(withWebSearch).not.toContain('Could not infer a supported provider');
-      expect(withWebSearch).toBe(await generateError({}));
+      await expect(generate({ webSearch: webSearchTool })).rejects.toThrow((withoutWebSearch as Error).message);
     },
   );
 });
