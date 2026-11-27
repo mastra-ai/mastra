@@ -177,6 +177,7 @@ export async function runDurableFinishSideEffects({
         agentId: initData.agentId,
         // initData read back from a snapshot may keep saved messages as refs.
         input: { ...initData, messageListState },
+        requestContext,
         logger: effectiveLogger,
       });
       rebuiltSaveQueueManager = resolved.saveQueueManager;
