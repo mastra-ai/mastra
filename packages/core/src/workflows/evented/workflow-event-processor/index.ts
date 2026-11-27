@@ -1295,11 +1295,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     const shouldPersist = currentStorageVersion() === 2 || persistRequested;
 
     // Guarded execution requires a durable run row even when optional snapshots are disabled.
-    const requiresGuardedSnapshot =
-      this.#guardsSteps(await this.mastra.getStorage()?.getStore('workflows')) &&
-      !restart &&
-      !timeTravel &&
-      !resumeSteps?.length;
+    const guardsSteps = this.#guardsSteps(await this.mastra.getStorage()?.getStore('workflows'));
+    const requiresGuardedSnapshot = guardsSteps && !restart && !timeTravel && !resumeSteps?.length;
     // Time travel rewrites the run's history, so its reset step results are stored even when running
     // snapshots are declined. Otherwise the old results stay stored and replayed steps merge into them.
     if (shouldPersist || requiresGuardedSnapshot || timeTravel) {
@@ -1354,6 +1351,11 @@ export class WorkflowEventProcessor extends EventProcessor {
             status: 'running',
             payload: existing?.payload ?? parentWorkflow.input?.output ?? {},
             ...(existing ?? {}), // preserve anything else (suspendPayload, etc.)
+            // A child resumed directly leaves the parent's step suspended. Its hand-back completes
+            // the step under the stamp kept here, which the guard only accepts on a running record.
+            ...(guardsSteps && !parentIsForeach && resumeSteps?.length && existing?.status === 'suspended'
+              ? { status: 'running' }
+              : {}),
             // A child start does not own queued siblings from this potentially stale snapshot.
             ...(parentIsForeach && Array.isArray(existing?.output)
               ? { output: existing.output.map((value: unknown) => (isQueuedForeachIteration(value) ? null : value)) }
@@ -1808,9 +1810,9 @@ export class WorkflowEventProcessor extends EventProcessor {
         },
         step,
         prevResult,
-        // A restarted or resumed child re-drives the stored occurrence, so it completes under
+        // A restarted, resumed or time-travelled child re-drives the stored occurrence, so it completes under
         // that occurrence too; otherwise the leaf stays 'running' and the next iteration is stale.
-        !parentWorkflow.timeTravel ? loopStepResults[getEntryId(step.step)]?.metadata?.startedBy : undefined,
+        loopStepResults[getEntryId(step.step)]?.metadata?.startedBy,
       );
       return;
     }
@@ -2189,13 +2191,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // Control entries have no guarded leaf start. Their durable step.run event
     // already holds the full input, so retire the predecessor without changing state.
-    if (
-      executionPath.length === 1 &&
-      (!isExecutableStep(rawStep) || rawStep.type === 'foreach') &&
-      !restart &&
-      !timeTravel &&
-      !resumeSteps?.length
-    ) {
+    if (executionPath.length === 1 && (!isExecutableStep(rawStep) || rawStep.type === 'foreach') && !restart) {
       const previousEventId = prevResult.metadata?.startedBy;
       const previous =
         previousEventId &&
@@ -2473,22 +2469,15 @@ export class WorkflowEventProcessor extends EventProcessor {
 
   /**
    * Whether `runLeafStep` guards the start of the step `args` delivers with the
-   * store's workflow step guards: a first delivery, not a restart, a time
-   * travel or a resume, of a step other than a foreach item.
+   * store's workflow step guards: any delivery but a restart, of a step other
+   * than a foreach item.
    */
   #guardsStepStart(
     store: WorkflowsStorage | undefined,
-    args: Pick<ProcessorArgs, 'eventId' | 'restart' | 'timeTravel' | 'resumeSteps'>,
+    args: Pick<ProcessorArgs, 'eventId' | 'restart'>,
     step: StepFlowEntry,
   ): boolean {
-    return (
-      !!store?.supportsWorkflowStepGuards() &&
-      !!args.eventId &&
-      !args.restart &&
-      !args.timeTravel &&
-      !args.resumeSteps?.length &&
-      step.type !== 'foreach'
-    );
+    return !!store?.supportsWorkflowStepGuards() && !!args.eventId && !args.restart && step.type !== 'foreach';
   }
 
   /**
@@ -2879,22 +2868,30 @@ export class WorkflowEventProcessor extends EventProcessor {
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
     const nestedWorkflowStep = getEntryWorkflow(leaf);
     const guardStart = this.#guardsStepStart(workflowsStore, args, step);
+    const isResumeTarget = (resumeSteps?.length ?? 0) > 0 && resumeSteps?.[0] === leafId;
+    const isResumedEntry = isResumeTarget || timeTravel?.stepResults?.[leafId]?.status === 'suspended';
     let nestedRunId = '';
     let authorizedEventId: string | undefined;
     let nestedDispatch: 'resume-single' | 'resume-many' | 'time-travel' | 'restart' | 'start' = 'start';
     if (nestedWorkflowStep) {
       const continueRedelivery = async () => {
-        if (restart || timeTravel || resumeSteps?.length || step.type === 'foreach' || !workflowsStore) return false;
+        if (restart || step.type === 'foreach' || !workflowsStore) return false;
         // Redeliveries that cannot execute a child must not make a new authorization decision.
         const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId });
         if (hasRunEnded(snapshot)) return true;
-        if (snapshot?.status === 'suspended' && snapshot.context[leafId]?.status === 'suspended') return true;
+        // A nested run its parent resumes keeps its own header suspended until a step claims it.
+        if (!isResumedEntry && snapshot?.status === 'suspended' && snapshot.context[leafId]?.status === 'suspended')
+          return true;
         if (guardStart) {
           try {
             assertWorkflowStepGuard({
               snapshot,
               stepId: leafId,
-              startGuard: { eventId: args.eventId!, expectedStartedBy: stepResults[leafId]?.metadata?.startedBy },
+              startGuard: {
+                eventId: args.eventId!,
+                expectedStartedBy: stepResults[leafId]?.metadata?.startedBy,
+                ...(isResumedEntry ? { resumeClaim: true } : {}),
+              },
             });
           } catch (error) {
             if (!isWorkflowStepConflictError(error) || error.reason !== 'completed') throw error;
@@ -2989,6 +2986,22 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowStatus: 'running',
       }) ?? true;
     let completedResult: StepResult<any, any, any, any> | undefined;
+    // A step can commit before its continuation is published. Reclaim the
+    // saved continuation without executing the completed occurrence again.
+    const reclaimCompleted = (error: unknown): StepResult<any, any, any, any> => {
+      if (
+        !isWorkflowStepConflictError(error) ||
+        error.reason !== 'completed' ||
+        (error.storedResult?.status !== 'success' && error.storedResult?.status !== 'failed')
+      ) {
+        throw error;
+      }
+      requestContext = restoreLiveRequestContext(error.storedRequestContext, requestContext);
+      const stored = storedContext(error.storedSnapshot);
+      currentState = stored?.__state ?? currentState;
+      Object.assign(stepResults, stored);
+      return error.storedResult;
+    };
     if (shouldPersistRunning || guardStart) {
       // A resumed step skips this generic write (it is claimed separately
       // below, keeping its record fields intact): its suspendPayload is
@@ -2997,9 +3010,6 @@ export class WorkflowEventProcessor extends EventProcessor {
       // resumes into. Foreach iterations are also skipped — the aggregate
       // foreach record is maintained at step-end, and a per-iteration overwrite
       // here would clobber sibling iterations' results.
-      const isResumedEntry =
-        ((resumeSteps?.length ?? 0) > 0 && resumeSteps?.[0] === leafId) ||
-        timeTravel?.stepResults?.[leafId]?.status === 'suspended';
       // Record first, then routing state: if the process dies between the two
       // writes recovery still routes through the old path, whereas the reverse
       // order would point restart at a step whose input was never recorded.
@@ -3100,26 +3110,12 @@ export class WorkflowEventProcessor extends EventProcessor {
               : {}),
           });
         } catch (error) {
-          // A step can commit before its continuation is published. Reclaim the
-          // saved continuation without executing the completed occurrence again.
-          if (
-            isWorkflowStepConflictError(error) &&
-            error.reason === 'completed' &&
-            (error.storedResult?.status === 'success' || error.storedResult?.status === 'failed')
-          ) {
-            completedResult = error.storedResult;
-            requestContext = restoreLiveRequestContext(error.storedRequestContext, requestContext);
-            const stored = storedContext(error.storedSnapshot);
-            currentState = stored?.__state ?? currentState;
-            Object.assign(stepResults, stored);
-          } else {
-            throw error;
-          }
+          completedResult = reclaimCompleted(error);
         }
         if (guardStart && !completedResult) {
           stepResults[leafId] = { ...stepResults[leafId], ...runningResult };
         }
-      } else if ((resumeSteps?.length ?? 0) > 0 && resumeSteps?.[0] === leafId && step.type !== 'foreach') {
+      } else if (step.type !== 'foreach' && (guardStart || isResumeTarget)) {
         // Foreach is excluded on purpose: its resume fans out one step.run per
         // iteration against the shared aggregate record, each with its own
         // resume data, and the aggregate must stay 'suspended' until step-end
@@ -3128,44 +3124,80 @@ export class WorkflowEventProcessor extends EventProcessor {
         // Mark the resumed step running and keep its resume data next to the
         // suspendPayload, so restart() after a crash mid-resume can re-enter
         // the step with the same resume data instead of re-suspending it
-        // (#25365). Only a still-suspended record is claimed, so a redelivered
-        // resume after the step finished usually leaves it alone. Like the
-        // guard above, read-then-write narrows the race window rather than
-        // closing it — closing it needs an expectedStatus compare-and-set on
-        // `updateWorkflowResults` across all storage adapters.
+        // (#25365). With step guards the claim is guarded and stamps this
+        // delivery, whatever the stored status: a retry finds its own failed
+        // attempt, and a repeated resume finds the step already claimed and is
+        // refused before the step runs. Without them only a still-suspended
+        // record is claimed, and like the guard above, read-then-write narrows
+        // the race window rather than closing it — closing it needs an
+        // expectedStatus compare-and-set on `updateWorkflowResults` across all
+        // storage adapters.
         const snapshot = await runStorage.loadStep(leafId);
         const storedResult = (snapshot?.context as any)?.[leafId];
-        if (storedResult?.status === 'suspended') {
+        const suspended = storedResult?.status === 'suspended';
+        if (guardStart || suspended) {
           // The nested run's start clears its suspendedPaths before the inner
           // step claims the resume, so keep them here for restart.
-          const nestedRunId = getEntryWorkflow(leaf) ? storedResult.metadata?.nestedRunId : undefined;
-          const resumedNestedPaths = nestedRunId
-            ? (await this.#runStorage(leafId, nestedRunId).loadHeader())?.suspendedPaths
-            : undefined;
-          await runStorage.writeStepResult({
-            stepId: leafId,
-            result: {
-              ...storedResult,
-              status: 'running',
-              resumePayload: resumeData,
-              resumedAt: Date.now(),
-              ...(authorizedEventId
+          const nestedRunId = suspended && getEntryWorkflow(leaf) ? storedResult.metadata?.nestedRunId : undefined;
+          const resumedNestedPaths =
+            isResumeTarget && nestedRunId
+              ? (await this.#runStorage(leafId, nestedRunId).loadHeader())?.suspendedPaths
+              : undefined;
+          const base = suspended ? storedResult : omitPriorCompletionFields(storedResult ?? {});
+          const claimed = {
+            ...base,
+            status: 'running' as const,
+            ...(isResumeTarget ? { resumePayload: resumeData, resumedAt: Date.now() } : {}),
+            ...(guardStart || authorizedEventId
+              ? {
+                  metadata: {
+                    ...base.metadata,
+                    ...(guardStart
+                      ? {
+                          startedBy: args.eventId,
+                          __restartPending: undefined,
+                          __continuationStarted: undefined,
+                          loopCondition: undefined,
+                        }
+                      : {}),
+                    ...(authorizedEventId
+                      ? {
+                          authorizedEventIds: [
+                            ...new Set([...(base.metadata?.authorizedEventIds ?? []), authorizedEventId]),
+                          ],
+                        }
+                      : {}),
+                  },
+                }
+              : {}),
+            // For a nested workflow step, the inner steps the caller resumed,
+            // so restart can target them instead of guessing.
+            ...(isResumeTarget && resumeSteps!.length > 1 ? { resumedNestedSteps: resumeSteps!.slice(1) } : {}),
+            ...(resumedNestedPaths ? { resumedNestedPaths } : {}),
+          };
+          try {
+            await runStorage.writeStepResult({
+              stepId: leafId,
+              result: claimed,
+              requestContext: withoutAuthToken(requestContext),
+              ...(guardStart
                 ? {
-                    metadata: {
-                      ...storedResult.metadata,
-                      authorizedEventIds: [
-                        ...new Set([...(storedResult.metadata?.authorizedEventIds ?? []), authorizedEventId]),
-                      ],
+                    startGuard: {
+                      eventId: args.eventId!,
+                      expectedStartedBy: stepResults[leafId]?.metadata?.startedBy,
+                      resumeClaim: true,
                     },
                   }
                 : {}),
-              // For a nested workflow step, the inner steps the caller resumed,
-              // so restart can target them instead of guessing.
-              ...(resumeSteps!.length > 1 ? { resumedNestedSteps: resumeSteps!.slice(1) } : {}),
-              ...(resumedNestedPaths ? { resumedNestedPaths } : {}),
-            },
-            requestContext: withoutAuthToken(requestContext),
-          });
+            });
+          } catch (error) {
+            completedResult = reclaimCompleted(error);
+          }
+          // Only the stamp: the step still reads its suspend data from the suspended record, and
+          // a nested child started below hands back under this delivery.
+          if (guardStart && !completedResult && stepResults[leafId]) {
+            stepResults[leafId] = { ...stepResults[leafId], metadata: claimed.metadata };
+          }
         }
       }
       if (completedResult?.status === 'success') {
@@ -4879,11 +4911,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
       const startedBy = stepResults[stepId]?.metadata?.startedBy ?? prevResult?.metadata?.startedBy;
       const guardCompletion =
-        startedBy &&
-        this.#guardsSteps(await this.mastra.getStorage()?.getStore('workflows')) &&
-        !restart &&
-        !timeTravel &&
-        !resumeSteps?.length;
+        startedBy && this.#guardsSteps(await this.mastra.getStorage()?.getStore('workflows')) && !restart;
       // Top-level continuations retain their full input until a guarded successor
       // starts, a control entry receives its durable event, or workflow.end runs.
       const retainContinuation = guardCompletion && executionPath.length === 1;

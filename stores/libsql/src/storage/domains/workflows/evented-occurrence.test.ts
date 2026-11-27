@@ -5,6 +5,7 @@ import { createClient } from '@libsql/client';
 import { afterAll, beforeAll, describe, expect } from 'vitest';
 import { LibSQLStore } from '../..';
 import { describeOccurrenceReplayCases } from '../../../../../../packages/core/src/workflows/evented/test-utils/occurrence-replay-cases';
+import { describeResumeOccurrenceCases } from '../../../../../../packages/core/src/workflows/evented/test-utils/resume-occurrence-cases';
 
 describe.each([1, 2] as const)('LibSQL evented occurrence replay on storage v%i', storageVersion => {
   let dir: string;
@@ -35,4 +36,5 @@ describe.each([1, 2] as const)('LibSQL evented occurrence replay on storage v%i'
       }
     },
   });
+  describeResumeOccurrenceCases({ getStorage: () => storage, storageVersion });
 });
