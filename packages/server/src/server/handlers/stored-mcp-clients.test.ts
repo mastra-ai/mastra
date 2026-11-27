@@ -898,12 +898,16 @@ describe('listStoredMCPClientsQuerySchema', () => {
     }
   });
 
-  it('should accept orderBy', () => {
+  it.each([
+    ['should accept orderBy', 'createdAt', 'DESC', true],
+    ['should reject invalid orderBy direction', 'createdAt', 'INVALID', false],
+    ['should reject invalid orderBy field', 'name', 'ASC', false],
+  ] as const)('%s', (_title, field, direction, expected) => {
     const result = listStoredMCPClientsQuerySchema.safeParse({
-      orderBy: { field: 'createdAt', direction: 'DESC' },
+      orderBy: { field, direction },
     });
 
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(expected);
   });
 
   it('should accept authorId filter', () => {
@@ -915,21 +919,5 @@ describe('listStoredMCPClientsQuerySchema', () => {
     if (result.success) {
       expect(result.data.authorId).toBe('author-1');
     }
-  });
-
-  it('should reject invalid orderBy direction', () => {
-    const result = listStoredMCPClientsQuerySchema.safeParse({
-      orderBy: { field: 'createdAt', direction: 'INVALID' },
-    });
-
-    expect(result.success).toBe(false);
-  });
-
-  it('should reject invalid orderBy field', () => {
-    const result = listStoredMCPClientsQuerySchema.safeParse({
-      orderBy: { field: 'name', direction: 'ASC' },
-    });
-
-    expect(result.success).toBe(false);
   });
 });

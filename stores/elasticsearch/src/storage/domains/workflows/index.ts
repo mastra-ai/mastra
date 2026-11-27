@@ -65,6 +65,71 @@ export class WorkflowsElasticSearch extends WorkflowsStorage {
     await this.db.deleteData({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
+  /** Canonical document id for a workflow run snapshot: exactly one per run. */
+  private snapshotKey(params: { namespace?: string; workflowName: string; runId: string }): string {
+    return getKey(TABLE_WORKFLOW_SNAPSHOT, {
+      namespace: params.namespace ?? 'workflows',
+      workflow_name: params.workflowName,
+      run_id: params.runId,
+    });
+  }
+
+  /** Prefix covering documents older versions wrote under `:resourceId:<id>`. */
+  private legacySnapshotKeyPrefix(params: { namespace?: string; workflowName: string; runId: string }): string {
+    return `${this.snapshotKey(params)}:resourceId:`;
+  }
+
+  /** Whether `key` is the canonical (non-legacy) document id for `record`. */
+  private isCanonicalSnapshotKey(key: string, record: WorkflowSnapshotRecord): boolean {
+    return (
+      key ===
+      this.snapshotKey({
+        namespace: record.namespace ?? 'workflows',
+        workflowName: record.workflow_name,
+        runId: record.run_id,
+      })
+    );
+  }
+
+  /**
+   * Resolve a run's snapshot document, preferring the canonical key and falling
+   * back to the `:resourceId:<id>` documents written by older versions.
+   */
+  private async getSnapshotRecord(params: {
+    namespace?: string;
+    workflowName: string;
+    runId: string;
+  }): Promise<{ key: string; record: WorkflowSnapshotRecord } | null> {
+    const canonicalKey = this.snapshotKey(params);
+    const canonical = await this.db.getByKey<WorkflowSnapshotRecord>({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      key: canonicalKey,
+    });
+    if (canonical) {
+      return { key: canonicalKey, record: canonical };
+    }
+
+    const legacyEntries = await this.db.listAllEntries<WorkflowSnapshotRecord>({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      keyPrefix: this.legacySnapshotKeyPrefix(params),
+    });
+    if (legacyEntries.length === 0) {
+      return null;
+    }
+
+    // A run may have several legacy documents (one per resourceId it was written
+    // under); pick the most recently updated one, deterministically.
+    legacyEntries.sort((a, b) => {
+      const aTime = ensureDate(a.value.updatedAt)?.getTime() ?? 0;
+      const bTime = ensureDate(b.value.updatedAt)?.getTime() ?? 0;
+      if (aTime !== bTime) {
+        return bTime - aTime;
+      }
+      return a.key.localeCompare(b.key);
+    });
+    return { key: legacyEntries[0]!.key, record: legacyEntries[0]!.value };
+  }
+
   public async updateWorkflowResults({
     workflowName,
     runId,
@@ -81,14 +146,7 @@ export class WorkflowsElasticSearch extends WorkflowsStorage {
     state?: Record<string, unknown>;
   }): Promise<Record<string, StepResult<unknown, unknown, unknown, unknown>>> {
     try {
-      const existingRecord = await this.db.get<WorkflowSnapshotRecord>({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        keys: {
-          namespace: 'workflows',
-          workflow_name: workflowName,
-          run_id: runId,
-        },
-      });
+      const existingRecord = (await this.getSnapshotRecord({ namespace: 'workflows', workflowName, runId }))?.record;
 
       const existingSnapshot = existingRecord?.snapshot;
       let snapshot = existingSnapshot;
@@ -120,6 +178,7 @@ export class WorkflowsElasticSearch extends WorkflowsStorage {
         namespace: 'workflows',
         workflowName,
         runId,
+        resourceId: existingRecord?.resourceId,
         snapshot,
         createdAt: existingRecord?.createdAt ? ensureDate(existingRecord.createdAt) : undefined,
       });
@@ -151,14 +210,7 @@ export class WorkflowsElasticSearch extends WorkflowsStorage {
     opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     try {
-      const existingRecord = await this.db.get<WorkflowSnapshotRecord>({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        keys: {
-          namespace: 'workflows',
-          workflow_name: workflowName,
-          run_id: runId,
-        },
-      });
+      const existingRecord = (await this.getSnapshotRecord({ namespace: 'workflows', workflowName, runId }))?.record;
 
       const existingSnapshot = existingRecord?.snapshot;
 
@@ -179,6 +231,7 @@ export class WorkflowsElasticSearch extends WorkflowsStorage {
         namespace: 'workflows',
         workflowName,
         runId,
+        resourceId: existingRecord?.resourceId,
         snapshot: updatedSnapshot,
         createdAt: existingRecord?.createdAt ? ensureDate(existingRecord.createdAt) : undefined,
       });
@@ -211,18 +264,15 @@ export class WorkflowsElasticSearch extends WorkflowsStorage {
   }): Promise<void> {
     const { namespace = 'workflows', workflowName, runId, resourceId, snapshot, createdAt, updatedAt } = params;
     try {
-      let finalCreatedAt = createdAt;
-      if (!finalCreatedAt) {
-        const existing = await this.db.get<WorkflowSnapshotRecord>({
-          tableName: TABLE_WORKFLOW_SNAPSHOT,
-          keys: {
-            namespace,
-            workflow_name: workflowName,
-            run_id: runId,
-          },
-        });
-        finalCreatedAt = existing?.createdAt ? ensureDate(existing.createdAt) : new Date();
+      // Reuse the existing document's createdAt and resourceId so an update keeps
+      // the run's identity, whether it currently lives under the canonical key or
+      // a legacy `:resourceId:` key.
+      let existing: WorkflowSnapshotRecord | undefined;
+      if (!createdAt || resourceId === undefined) {
+        existing = (await this.getSnapshotRecord({ namespace, workflowName, runId }))?.record;
       }
+
+      const finalCreatedAt = createdAt ?? (existing?.createdAt ? ensureDate(existing.createdAt) : new Date());
 
       await this.db.insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
@@ -230,7 +280,7 @@ export class WorkflowsElasticSearch extends WorkflowsStorage {
           namespace,
           workflow_name: workflowName,
           run_id: runId,
-          resourceId,
+          resourceId: resourceId ?? existing?.resourceId,
           snapshot,
           createdAt: finalCreatedAt,
           updatedAt: updatedAt ?? new Date(),
@@ -260,15 +310,8 @@ export class WorkflowsElasticSearch extends WorkflowsStorage {
   }): Promise<WorkflowRunState | null> {
     const { namespace = 'workflows', workflowName, runId } = params;
     try {
-      const record = await this.db.get<WorkflowSnapshotRecord>({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        keys: {
-          namespace,
-          workflow_name: workflowName,
-          run_id: runId,
-        },
-      });
-      return record?.snapshot ?? null;
+      const existing = await this.getSnapshotRecord({ namespace, workflowName, runId });
+      return existing?.record.snapshot ?? null;
     } catch (error) {
       throw new MastraError(
         {
@@ -294,30 +337,40 @@ export class WorkflowsElasticSearch extends WorkflowsStorage {
     workflowName?: string;
   }): Promise<WorkflowRun | null> {
     try {
-      const records = await this.db.listAll<WorkflowSnapshotRecord>({
+      const entries = await this.db.listAllEntries<Record<string, unknown>>({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keyPrefix: getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows' }),
       });
 
-      const data = records.find(workflow => {
-        if (!workflow) {
-          return false;
+      // A run can have more than one document (a canonical one plus legacy
+      // `:resourceId:` copies). Collapse them per run, preferring the canonical.
+      const matches = new Map<string, { canonical: boolean; record: Record<string, unknown> }>();
+      for (const entry of entries) {
+        const value = entry.value;
+        if (value === null || value === undefined || typeof value !== 'object' || !('workflow_name' in value)) {
+          continue;
         }
-
-        const runIdMatch = workflow.run_id === runId;
-
-        if (workflowName) {
-          return runIdMatch && workflow.workflow_name === workflowName;
+        if (value.run_id !== runId) {
+          continue;
         }
+        if (workflowName && value.workflow_name !== workflowName) {
+          continue;
+        }
+        const record = value as WorkflowSnapshotRecord;
+        const canonical = this.isCanonicalSnapshotKey(entry.key, record);
+        const dedupKey = `${record.workflow_name}:${record.run_id}`;
+        const current = matches.get(dedupKey);
+        if (!current || (!current.canonical && canonical)) {
+          matches.set(dedupKey, { canonical, record: value });
+        }
+      }
 
-        return runIdMatch;
-      });
-
+      const data = matches.values().next().value?.record;
       if (!data) {
         return null;
       }
 
-      return parseWorkflowRun(data as Record<string, unknown>);
+      return parseWorkflowRun(data);
     } catch (error) {
       throw new MastraError(
         {
@@ -336,9 +389,19 @@ export class WorkflowsElasticSearch extends WorkflowsStorage {
   }
 
   public async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
-    const key = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName, run_id: runId });
+    const key = this.snapshotKey({ namespace: 'workflows', workflowName, runId });
     try {
-      await this.db.delete({ tableName: TABLE_WORKFLOW_SNAPSHOT, key });
+      // Remove the canonical document plus any legacy `:resourceId:` copies for
+      // this exact run. The `:resourceId:` suffix keeps neighbouring runs out of
+      // the prefix match.
+      const legacyEntries = await this.db.listAllEntries<unknown>({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        keyPrefix: `${key}:resourceId:`,
+      });
+      await this.db.deleteMany({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        keys: [key, ...legacyEntries.map(entry => entry.key)],
+      });
     } catch (error) {
       throw new MastraError(
         {
@@ -385,19 +448,35 @@ export class WorkflowsElasticSearch extends WorkflowsStorage {
       if (workflowName) {
         keyPrefix = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName }) + ':';
       }
-      const records = await this.db.listAll<Record<string, unknown>>({
+      const entries = await this.db.listAllEntries<Record<string, unknown>>({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keyPrefix,
       });
 
-      let runs = records
-        .filter(
-          (record): record is Record<string, unknown> =>
-            record !== null && record !== undefined && typeof record === 'object' && 'workflow_name' in record,
-        )
-        .filter(record => !workflowName || record.workflow_name === workflowName)
-        .filter(record => !resourceId || record.resourceId === resourceId)
-        .map(w => parseWorkflowRun(w))
+      // Collapse canonical and legacy `:resourceId:` documents for the same run,
+      // keeping the canonical one so a run is listed once.
+      const byRun = new Map<string, { canonical: boolean; record: Record<string, unknown> }>();
+      for (const { key, value } of entries) {
+        if (value === null || value === undefined || typeof value !== 'object' || !('workflow_name' in value)) {
+          continue;
+        }
+        if (workflowName && value.workflow_name !== workflowName) {
+          continue;
+        }
+        if (resourceId && value.resourceId !== resourceId) {
+          continue;
+        }
+        const record = value as WorkflowSnapshotRecord;
+        const dedupKey = `${record.workflow_name}:${record.run_id}`;
+        const canonical = this.isCanonicalSnapshotKey(key, record);
+        const current = byRun.get(dedupKey);
+        if (!current || (!current.canonical && canonical)) {
+          byRun.set(dedupKey, { canonical, record: value });
+        }
+      }
+
+      let runs = [...byRun.values()]
+        .map(({ record }) => parseWorkflowRun(record))
         .filter(w => {
           if (normalizedFrom && w.createdAt < normalizedFrom) {
             return false;

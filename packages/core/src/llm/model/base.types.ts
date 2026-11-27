@@ -20,7 +20,7 @@ import type {
 import type { JSONSchema7 } from 'json-schema';
 import type { MessageList } from '../../agent/types';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
-import type { ObservabilityContext, TracingProperties } from '../../observability';
+import type { ModelGenerationAttributes, ObservabilityContext, TracingProperties } from '../../observability';
 import type { OutputProcessorOrWorkflow } from '../../processors';
 import type { RequestContext } from '../../request-context';
 import type { ZodSchema } from '../../schema';
@@ -110,6 +110,8 @@ export type GenerateTextWithMessagesArgs<
 > = {
   messages: UIMessage[] | CoreMessage[];
   output?: never;
+  /** What this call produces, when it is not part of the conversation. Recorded on the MODEL_GENERATION span. */
+  resultType?: ModelGenerationAttributes['resultType'];
 } & GenerateTextOptions<Tools, Output>;
 
 export type GenerateTextResult<

@@ -26,7 +26,8 @@ export const CustomAutoFormField: React.FC<{
 
   const fieldDefault = useMemo(() => {
     if (!defaultValues) return field.default;
-    const resolved = getPathInObject(defaultValues, path);
+    // A parent object can default to null, so stop the walk there.
+    const resolved = path.reduce<any>((value, key) => value?.[key], defaultValues);
     return resolved === undefined ? field.default : resolved;
   }, [defaultValues, path, field.default]);
 

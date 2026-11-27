@@ -17,37 +17,19 @@ describe('AnthropicSchemaCompatLayer', () => {
   createSuite(layer);
 
   describe('shouldApply', () => {
-    it('should apply for Claude models', () => {
+    it.each([
+      ['should apply for Claude models', 'anthropic', 'claude-3-5-sonnet', true],
+      ['should apply for claude-3.5-haiku model', 'anthropic', 'claude-3.5-haiku', true],
+      ['should not apply for non-Claude models', 'openai', 'gpt-4o', false],
+    ] as const)('%s', (_title, provider, modelId, expected) => {
       const modelInfo: ModelInformation = {
-        provider: 'anthropic',
-        modelId: 'claude-3-5-sonnet',
+        provider,
+        modelId,
         supportsStructuredOutputs: false,
       };
 
       const layer = new AnthropicSchemaCompatLayer(modelInfo);
-      expect(layer.shouldApply()).toBe(true);
-    });
-
-    it('should apply for claude-3.5-haiku model', () => {
-      const modelInfo: ModelInformation = {
-        provider: 'anthropic',
-        modelId: 'claude-3.5-haiku',
-        supportsStructuredOutputs: false,
-      };
-
-      const layer = new AnthropicSchemaCompatLayer(modelInfo);
-      expect(layer.shouldApply()).toBe(true);
-    });
-
-    it('should not apply for non-Claude models', () => {
-      const modelInfo: ModelInformation = {
-        provider: 'openai',
-        modelId: 'gpt-4o',
-        supportsStructuredOutputs: false,
-      };
-
-      const layer = new AnthropicSchemaCompatLayer(modelInfo);
-      expect(layer.shouldApply()).toBe(false);
+      expect(layer.shouldApply()).toBe(expected);
     });
   });
 

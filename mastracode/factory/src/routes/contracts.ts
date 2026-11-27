@@ -1906,7 +1906,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
     method: 'POST',
     path: '/web/factory/projects/:id/work-items/:workItemId/transition',
     description:
-      "Transition a work item with its expected revision; naming a board other than the card's moves it to that board's phase",
+      "Transition a work item with its expected revision; naming a board other than the card's moves it to that board's phase. Answers 202 with an inputId when the board's engine settles the move later; the project's feed-events stream then carries a `move` frame for that inputId",
     pathSchema: transitionPathSchema,
     bodySchema: transitionBodySchema,
     responseSchema: entitySchema,

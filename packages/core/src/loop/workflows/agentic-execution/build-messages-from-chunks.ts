@@ -10,6 +10,7 @@ import type {
   ToolCallPayload,
   ToolErrorPayload,
   ToolResultPayload,
+  CustomPayload,
 } from '../../../stream/types';
 import { withToolPayloadTransformProviderMetadata } from '../../../tools/payload-transform';
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
@@ -125,6 +126,17 @@ export function buildMessagesFromChunks({
           mimeType: p.mimeType,
           ...(p.providerMetadata ? { providerMetadata: p.providerMetadata } : {}),
         } as MastraMessagePart);
+        break;
+      }
+
+      // ── Provider custom content ─────────────────────────────────
+      case 'custom': {
+        const p = chunk.payload as CustomPayload;
+        parts.push({
+          type: 'custom',
+          kind: p.kind,
+          ...(p.providerMetadata ? { providerMetadata: p.providerMetadata } : {}),
+        });
         break;
       }
 

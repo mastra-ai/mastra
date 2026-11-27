@@ -25,16 +25,6 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "apertus-ai/Apertus-v1.5-8B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "google/gemma-4-31B-it": [
-      {
-        "type": "toggle"
-      }
-    ],
     "openai/gpt-oss-120b": [
       {
         "type": "effort",
@@ -70,10 +60,9 @@
         "type": "budget_tokens"
       }
     ],
-    "zai-org/GLM-5.3-Flash": [
+    "google/gemma-4-31B-it": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ],
     "NVIDIA/NVIDIA-Nemotron-3-Super-120B-A12B": [
@@ -83,6 +72,17 @@
       },
       {
         "type": "budget_tokens"
+      }
+    ],
+    "zai-org/GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "apertus-ai/Apertus-v1.5-8B": [
+      {
+        "type": "toggle"
       }
     ]
   }

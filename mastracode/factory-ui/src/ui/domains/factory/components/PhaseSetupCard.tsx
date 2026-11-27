@@ -1,21 +1,20 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
 import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Link } from 'react-router';
 
 import type { InstalledBoardInfo, InstalledPhaseInfo, IntakeRouteInfo } from '../../../../api/types';
-import { boardConfigPath, boardRulesPath } from '../../boardConfig/boardConfigPaths';
+import { boardConfigPath } from '../../boardConfig/boardConfigPaths';
 import { Muted } from '../../boardConfig/components/PhaseTimeline';
 import { outlineOfInstalled, sharedOutline } from '../../boardConfig/components/PhaseWalkthrough';
 import { PhaseSetupCard as SharedPhaseSetupCard } from '@mastra/playground-ui/domains/factory';
 import { RuleRow } from '../../boardConfig/components/RuleRow';
 import { AutoStartSwitch } from './AutoStartSwitch';
 
-/** Rules listed in the card before the rest are left to the Rules page. */
+/** Rules listed in the card before the rest are left to the board's settings. */
 const SHOWN_RULES = 3;
 
 /**
@@ -50,24 +49,14 @@ export function PhaseSetupCard({
       phase={sharedOutline(outlineOfInstalled(phase))}
       phases={phases.map(phase => sharedOutline(outlineOfInstalled(phase)))}
       actions={
-        <>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            tooltip={`Rules into ${label}`}
-            render={<Link to={boardRulesPath(factoryId, boardId, { into: phase.id })} />}
-          >
-            <IconBranch />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            tooltip="Phase settings"
-            render={<Link to={boardConfigPath(factoryId, boardId, phase.id)} />}
-          >
-            <IconSettingsSliderHor />
-          </Button>
-        </>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          tooltip="Phase settings"
+          render={<Link to={boardConfigPath(factoryId, boardId, phase.id)} />}
+        >
+          <IconSettingsSliderHor />
+        </Button>
       }
       arrivals={
         <>
@@ -86,7 +75,7 @@ export function PhaseSetupCard({
               </ul>
               {arriving.length > SHOWN_RULES && (
                 <Link
-                  to={boardRulesPath(factoryId, boardId, { into: phase.id })}
+                  to={boardConfigPath(factoryId, boardId, phase.id)}
                   className={cn(focusRing, 'text-muted-foreground hover:text-foreground w-fit rounded-sm text-xs')}
                 >
                   {arriving.length - SHOWN_RULES} more

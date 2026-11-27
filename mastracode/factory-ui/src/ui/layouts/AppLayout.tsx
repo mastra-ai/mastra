@@ -3,8 +3,6 @@ import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { AppShell, MainCard } from '@mastra/playground-ui/new/layout/app-shell';
 import { Outlet } from 'react-router';
 
-import { BoardDraftProvider } from '../domains/boardConfig/BoardDraftProvider';
-import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
 import { ChatSessionRouteProvider } from '../domains/chat/Chat';
 import { ChatOverlays } from '../domains/chat/components/ChatOverlays';
 import { useServerStatus } from '../../hooks/useServerStatus';
@@ -13,9 +11,6 @@ import { PwaInstallBanner } from '../lib/pwa';
 import { AppSidebar } from '../AppSidebar';
 import { MobileHeader } from './MobileHeader';
 import { ServerProblemBanner } from './ServerProblemBanner';
-
-// The board editor needs more room than the sidebar's default minimum. Dragging still collapses it at that default.
-const BOARD_CONFIG_MIN_WIDTH = 288;
 
 /** `[` toggles the sidebar, as the trigger's tooltip says. Needs the `Sidebar.Provider` context. */
 function SidebarShortcuts() {
@@ -44,27 +39,17 @@ function AppFrame() {
  */
 export function AppLayout() {
   const problem = useServerStatus().data?.problems[0];
-  // Board configuration lists phases by name beside the page that edits them, so the sidebar
-  // widens a little while it is open. The stored width is kept and returns when it closes.
-  const configuringBoard = useBoardConfigRoute() !== undefined;
 
   return (
     <div className="bg-sidebar flex h-dvh flex-col">
       {problem ? <ServerProblemBanner problem={problem} /> : null}
       <PwaInstallBanner />
       <div className="min-h-0 flex-1">
-        <Sidebar.Provider
-          storageKey="mastracode-web"
-          collapsedWidth={0}
-          minWidth={configuringBoard ? BOARD_CONFIG_MIN_WIDTH : undefined}
-          collapseBelow={SIDEBAR_WIDTHS.min}
-        >
+        <Sidebar.Provider storageKey="mastracode-web" collapsedWidth={0} collapseBelow={SIDEBAR_WIDTHS.min}>
           <SidebarShortcuts />
           <OverlaysProvider>
             <ChatSessionRouteProvider>
-              <BoardDraftProvider>
-                <AppFrame />
-              </BoardDraftProvider>
+              <AppFrame />
               <ChatOverlays />
             </ChatSessionRouteProvider>
           </OverlaysProvider>

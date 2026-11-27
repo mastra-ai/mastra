@@ -56,7 +56,7 @@ import {
   normalizeInlineLinks,
 } from './inline-media';
 import type { InlineLinkRule } from './inline-media';
-import { ChatChannelOutputProcessor, CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';
+import { ChatChannelOutputProcessor, CHAT_CHANNEL_RENDER_CONTEXT_KEY, isUsableRenderContext } from './output-processor';
 import type { ChatChannelRenderContext } from './output-processor';
 import { ChatChannelProcessor } from './processor';
 import { ChannelReplyModeProcessor, channelReplyTypingStatus, threadLinkOptions } from './reply-mode';
@@ -930,24 +930,39 @@ export class AgentChannels {
                 runId = stashed.runId;
                 toolName = stashed.toolName;
                 toolArgs = stashed.args;
-              } else {
+              }
+
+              // Recover the requester from the persisted user turn whenever the
+              // stash carries no identity. A render context rebuilt from the
+              // thread (a channel-backed run that started outside the platform,
+              // then posted an approval card) has no inbound author to close
+              // over, so `onApprovalPosted` records no requester; without this
+              // read the check below would see `undefined` and let any channel
+              // member answer. The stash still owns the run target when it has
+              // one: it is keyed by toolCallId and survives parallel same-tool
+              // approvals, where the persisted metadata keeps only the latest.
+              if (!requesterId) {
                 const { result: lookup } = await this.lookupPersistedApproval({ mastra, card, platform });
-                if (lookup.status === 'answered') {
-                  this.log('info', 'Tool approval already answered', actionEventContext);
-                  return;
+                if (!stashed?.runId) {
+                  if (lookup.status === 'answered') {
+                    this.log('info', 'Tool approval already answered', actionEventContext);
+                    return;
+                  }
+                  if (lookup.status === 'pending') {
+                    runId = lookup.runId;
+                    toolName = lookup.toolName;
+                    toolArgs = lookup.args;
+                  }
                 }
                 if (lookup.status === 'pending') {
-                  runId = lookup.runId;
-                  toolName = lookup.toolName;
-                  toolArgs = lookup.args;
                   // If the user turn that led to the approval has messages from
                   // more than one author we can't tell who triggered the tool, so
                   // no one may answer the card.
-                  if (adapterConfig?.toolApprovers !== 'anyone' && !requesterId && lookup.authors.length > 1) {
+                  if (adapterConfig?.toolApprovers !== 'anyone' && lookup.authors.length > 1) {
                     this.log('info', 'Ignoring tool approval action: requester is ambiguous', actionEventContext);
                     return;
                   }
-                  requesterId ??= lookup.authors[0];
+                  requesterId = lookup.authors[0];
                 }
               }
 
@@ -1367,8 +1382,9 @@ export class AgentChannels {
     requestContext: RequestContext | undefined,
     state?: Record<string, unknown>,
   ): Promise<ChatChannelRenderContext | undefined> {
-    const inbound = requestContext?.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
-    if (inbound) return inbound;
+    const inbound = requestContext?.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY);
+    // A replica restores this entry from JSON as a method-less husk; rebuild from the thread instead.
+    if (isUsableRenderContext(inbound)) return inbound;
     if (state && 'render' in state) return (state.render as ChatChannelRenderContext | null) ?? undefined;
     const render = await resolveChannelRenderContext(requestContext, () => this);
     if (state) state.render = render ?? null;
@@ -1405,8 +1421,13 @@ export class AgentChannels {
     if (Object.values(this.adapterConfigs).some(cfg => cfg.threadLink) && !has(THREAD_LINK_PROCESSOR_ID)) {
       processors.push(
         new ChannelThreadLinkProcessor(requestContext => {
-          const render = requestContext.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
-          return render && threadLinkOptions(this.adapterConfigs[render.platform]?.threadLink);
+          // `channel` survives the request-context snapshot a replica restores; the
+          // render context does not, so read the platform from the entry that does
+          // and a restored run still links the thread it answers in (#31310).
+          const platform =
+            (requestContext.get('channel') as ChannelContext | undefined)?.platform ??
+            (requestContext.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined)?.platform;
+          return platform ? threadLinkOptions(this.adapterConfigs[platform]?.threadLink) : undefined;
         }),
       );
     }

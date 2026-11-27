@@ -7,23 +7,23 @@ describe('client-to-ai-sdk-format', () => {
     testTransform(transformer, 'client-to-ai-sdk-format');
   });
 
-  it('does not transform imports from other packages', () => {
-    const input = `
+  it.each([
+    [
+      'does not transform imports from other packages',
+      `
 import { toAISdkFormat } from '@some-other/package';
 const stream = toAISdkFormat(data);
-    `.trim();
-
-    const output = applyTransform(transformer, input);
-
-    // Should remain unchanged
-    expect(output).toBe(input);
-  });
-
-  it('does not transform unrelated identifiers with the same name', () => {
-    const input = `
+    `,
+    ],
+    [
+      'does not transform unrelated identifiers with the same name',
+      `
 const toAISdkFormat = 'test';
 const value = toAISdkFormat;
-    `.trim();
+    `,
+    ],
+  ] as const)('%s', (_title, value) => {
+    const input = value.trim();
 
     const output = applyTransform(transformer, input);
 

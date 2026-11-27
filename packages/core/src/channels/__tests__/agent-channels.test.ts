@@ -23,6 +23,7 @@ import { AgentChannels } from '../agent-channels';
 import { getChatModule } from '../chat-lazy';
 import { ChannelSessionRejectedError } from '../errors';
 import { matchesDomain, extractUrls } from '../inline-media';
+import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '../output-processor';
 import { NEW_CHANNEL_THREAD_KEY } from '../thread-link-processor';
 import type { ChannelAdapterBaseConfig, ChannelContext, ChannelHandler, ResolveResourceId } from '../types';
 
@@ -48,6 +49,15 @@ function createMockAdapter(name: string) {
     userName: 'TestBot',
   } as any;
 }
+
+// A live render context: real ones always carry `wrapStream` (issue #31310 guards on it).
+const liveRender = {
+  platform: 'slack',
+  chatThread: { post: vi.fn() },
+  wrapStream: (stream: unknown) => stream,
+} as never;
+// The method-less object a JSON snapshot round-trip leaves on a replica's request context.
+const huskRender = { platform: 'slack', chatThread: {}, streaming: { enabled: false } } as never;
 
 function createMockAgent(name = 'test-agent') {
   return {
@@ -206,6 +216,55 @@ describe('AgentChannels', () => {
     });
   });
 
+  describe('resolveRunRender (reply stream)', () => {
+    function channelsForReplyMode() {
+      return new AgentChannels({
+        adapters: { slack: { adapter: createMockAdapter('slack'), replyMode: 'tool' } },
+        threadContext: { addSystemMessage: false },
+      });
+    }
+
+    it('uses the live render context a message stashed, without a thread read', async () => {
+      const channels = channelsForReplyMode();
+      const buildRenderContextForThread = vi.spyOn(channels as any, 'buildRenderContextForThread');
+      const requestContext = new RequestContext();
+      requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, liveRender);
+
+      expect(await (channels as any).resolveRunRender(requestContext)).toBe(liveRender);
+      expect(buildRenderContextForThread).not.toHaveBeenCalled();
+    });
+
+    it('rebuilds from the thread when a replica left a method-less husk (#31310)', async () => {
+      const channels = channelsForReplyMode();
+      const buildRenderContextForThread = vi
+        .spyOn(channels as any, 'buildRenderContextForThread')
+        .mockResolvedValue(liveRender);
+      const requestContext = new RequestContext();
+      requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, huskRender);
+      requestContext.set('MastraMemory', { thread: { id: 'thread-1' }, resourceId: 'resource-1' });
+
+      expect(await (channels as any).resolveRunRender(requestContext)).toBe(liveRender);
+      expect(buildRenderContextForThread).toHaveBeenCalledWith('thread-1');
+    });
+
+    it('caches the rebuilt render for later chunks instead of rebuilding per chunk (#31310)', async () => {
+      const channels = channelsForReplyMode();
+      const buildRenderContextForThread = vi
+        .spyOn(channels as any, 'buildRenderContextForThread')
+        .mockResolvedValue(liveRender);
+      const requestContext = new RequestContext();
+      requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, huskRender);
+      requestContext.set('MastraMemory', { thread: { id: 'thread-1' }, resourceId: 'resource-1' });
+      const state: Record<string, unknown> = {};
+
+      await (channels as any).resolveRunRender(requestContext, state);
+      await (channels as any).resolveRunRender(requestContext, state);
+
+      expect(state.render).toBe(liveRender);
+      expect(buildRenderContextForThread).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('replyMode and threadLink', () => {
     it('installs reply mode, its stream and the thread link, and hides reply text and tool calls', () => {
       const channels = new AgentChannels({
@@ -254,6 +313,44 @@ describe('AgentChannels', () => {
     it('adds nothing when no adapter asks for it', () => {
       expect(agentChannels.getInputProcessors().map(p => p.id)).not.toContain('channel-reply-mode');
       expect(agentChannels.getOutputProcessors().map(p => p.id)).toEqual(['chat-channel-render']);
+    });
+
+    it('links a restored run whose render context did not survive the request-context snapshot (#31310)', async () => {
+      const channels = new AgentChannels({
+        adapters: {
+          slack: {
+            adapter: createMockAdapter('slack'),
+            replyMode: 'tool',
+            threadLink: ({ threadId }) => `https://app.test/threads/${threadId}`,
+          },
+        },
+        threadContext: { addSystemMessage: false },
+      });
+      // `channel` is plain data and survives the snapshot; the render context (live chat drivers) does not.
+      const requestContext = new RequestContext();
+      requestContext.set('channel', { platform: 'slack', isDM: false } as ChannelContext);
+      requestContext.set('MastraMemory', { thread: { id: 't1' }, resourceId: 'slack:U1' });
+      requestContext.set(NEW_CHANNEL_THREAD_KEY, true);
+      const state: Record<string, unknown> = {};
+      const part = (type: string, payload: Record<string, unknown> = {}) => ({
+        type,
+        runId: 'r',
+        from: 'AGENT',
+        payload,
+      });
+      const link = channels.getOutputProcessors().find(p => p.id === 'channel-thread-link')!;
+
+      await link.processOutputStream({
+        part: part('text-delta', { id: 'b1', text: 'Hi' }),
+        state,
+        requestContext,
+      } as any);
+      const linked = await link.processOutputStream({ part: part('step-finish'), state, requestContext } as any);
+
+      expect(linked).toMatchObject({
+        type: 'text-delta',
+        payload: { text: '\n\n[Open thread ↗](https://app.test/threads/t1)' },
+      });
     });
   });
 
@@ -456,6 +553,7 @@ describe('AgentChannels', () => {
       mockAgent.getMastraInstance = () => ({
         getStorage: () => ({ getStore: () => memoryStore }),
         getServer: () => null,
+        getLogger: () => noopLogger,
       });
     });
 
@@ -1252,6 +1350,69 @@ describe('AgentChannels', () => {
         await click('tool_approve:tool-call-1', 'bob');
         expect(dispatchApproval).not.toHaveBeenCalled();
         await click('tool_approve:tool-call-1', 'alice');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
+      // Persisted turn metadata for a card this instance stashed without a
+      // requester: the shape a run that rebuilt its render context from the
+      // thread produces, since it has no inbound author to close over.
+      const rebuiltContextMessages = (authors: string[]) => [
+        {
+          role: 'assistant',
+          content: {
+            metadata: {
+              pendingToolApprovals: {
+                lookup: { toolCallId: 'tool-call-1', runId: 'run-1', toolName: 'lookup', args: {} },
+              },
+            },
+          },
+        },
+        ...authors.map(userId => ({
+          role: 'user',
+          content: { providerMetadata: { mastra: { channels: { discord: { author: { userId } } } } } },
+        })),
+      ];
+      const mastraWith = (messages: unknown[]) =>
+        ({
+          getStorage: () => ({ getStore: async () => ({ listMessages: async () => ({ messages }) }) }),
+          getServer: () => null,
+          getLogger: () => noopLogger,
+        }) as any;
+
+      it.each([
+        ['approve', 'tool_approve:tool-call-1', 'dispatchApproval'],
+        ['deny', 'tool_deny:tool-call-1', 'dispatchDecline'],
+      ] as const)(
+        'checks the requester of a card posted through a rebuilt render context (%s)',
+        async (_action, actionId, dispatchKey) => {
+          const ctx = await setup({}, mastraWith(rebuiltContextMessages(['alice'])));
+
+          await ctx.click(actionId, 'mallory');
+          expect(ctx[dispatchKey]).not.toHaveBeenCalled();
+
+          await ctx.click(actionId, 'alice');
+          expect(ctx[dispatchKey]).toHaveBeenCalledTimes(1);
+          // The stash still owns the run target, since it is keyed by the tool call.
+          expect(ctx[dispatchKey]).toHaveBeenCalledWith(expect.objectContaining({ runId: 'run-1' }));
+        },
+      );
+
+      it('keeps a rebuilt-context card closed when the persisted authors are ambiguous', async () => {
+        const { dispatchApproval, click } = await setup({}, mastraWith(rebuiltContextMessages(['bob', 'alice'])));
+
+        await click('tool_approve:tool-call-1', 'bob');
+        await click('tool_approve:tool-call-1', 'alice');
+        expect(dispatchApproval).not.toHaveBeenCalled();
+      });
+
+      it('lets a channel member answer a rebuilt-context card when anyone is enabled', async () => {
+        const { dispatchApproval, click } = await setup(
+          {},
+          mastraWith(rebuiltContextMessages(['bob', 'alice'])),
+          'anyone',
+        );
+
+        await click('tool_approve:tool-call-1', 'charlie');
         expect(dispatchApproval).toHaveBeenCalledTimes(1);
       });
 

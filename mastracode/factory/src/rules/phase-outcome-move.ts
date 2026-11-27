@@ -54,6 +54,18 @@ export async function applyPhaseOutcome(deps: PhaseOutcomeMoveDeps, binding: Fac
   }
 }
 
+const endedRuns = new WeakMap<object, { session: string; count: number }>();
+
+/**
+ * Names the latest run the session ended in this process, once {@link observeSessionPhaseOutcome}
+ * watches it. Only for a run the open-run ledger doesn't hold: the name means nothing to another
+ * process, where the ledger's kickoff id names the run for every worker.
+ */
+export function latestRunEnd(session: object): string | undefined {
+  const ended = endedRuns.get(session);
+  return ended ? `${ended.session}:${ended.count}` : undefined;
+}
+
 type RunEndSession = {
   subscribe(listener: (event: AgentControllerEvent) => void): () => void;
 };
@@ -68,15 +80,26 @@ export function observeSessionPhaseOutcome(
   options: {
     binding: () => Promise<FactoryRunEndedBinding | null>;
     boardEngine: () => Pick<FactoryBoardEngine, 'requestMove' | 'runEnded'> | undefined;
+    /**
+     * The kickoff id the open-run ledger holds for the run that is ending, which the dispatcher
+     * of any worker names the same run end by. Asked as the run ends, before its row is closed.
+     */
+    openRun?: () => Promise<string | undefined>;
   },
 ): () => void {
   return session.subscribe(event => {
-    if (event.type !== 'agent_end' || event.reason !== 'complete') return;
+    if (event.type !== 'agent_end') return;
+    const ended = endedRuns.get(session) ?? { session: crypto.randomUUID(), count: 0 };
+    endedRuns.set(session, { ...ended, count: ended.count + 1 });
+    if (event.reason !== 'complete') return;
+    const local = latestRunEnd(session);
+    const shared = options.openRun?.().catch(() => undefined);
     void (async () => {
+      const runEnd = (await shared) ?? local;
       const boardEngine = options.boardEngine();
       if (!boardEngine) return;
       const binding = await options.binding();
-      if (binding) await boardEngine.runEnded(binding, boardEngine);
+      if (binding) await boardEngine.runEnded({ ...binding, runEnd }, boardEngine);
     })().catch(error => {
       console.warn('[Factory] Unable to apply the outcome a session reported.', error);
     });

@@ -11,14 +11,24 @@ import { cn } from '@/lib/utils';
 
 export type AgentPageTab = 'chat' | 'versions' | 'traces';
 
+/** A host-defined tab shown after the built-in ones. */
+export interface AgentPageExtraTab {
+  id: string;
+  href: string;
+  label: string;
+  icon: ReactNode;
+}
+
 interface AgentPageTabsProps {
-  activeTab: AgentPageTab | 'none';
+  /** A built-in tab, an extra tab's `id`, or `'none'`. */
+  activeTab: AgentPageTab | 'none' | (string & {});
   chatHref: string;
   tracesHref?: string;
   versionsHref?: string;
   showUnavailableFeatures?: boolean;
   showObservability?: boolean;
   showPlayground?: boolean;
+  extraTabs?: AgentPageExtraTab[];
 }
 
 function AgentTab({ href, active, icon, label }: { href: string; active: boolean; icon: ReactNode; label: string }) {
@@ -50,6 +60,7 @@ export function AgentPageTabs({
   showPlayground = false,
   showObservability = false,
   showUnavailableFeatures = true,
+  extraTabs = [],
 }: AgentPageTabsProps) {
   return (
     <nav aria-label="Agent views" className="flex min-w-0 items-center justify-between gap-2 p-1.5">
@@ -61,6 +72,9 @@ export function AgentPageTabs({
         {showPlayground && versionsHref && (
           <AgentTab href={versionsHref} active={activeTab === 'versions'} icon={<IconBranch />} label="Editor" />
         )}
+        {extraTabs.map(tab => (
+          <AgentTab key={tab.id} href={tab.href} active={activeTab === tab.id} icon={tab.icon} label={tab.label} />
+        ))}
       </div>
       {showUnavailableFeatures && (!showObservability || !showPlayground) && (
         <div className="ml-auto flex shrink-0 items-center gap-0.5">

@@ -734,7 +734,12 @@ interface ModelGenerationAttributes {
   tools?: ModelToolDefinition[]
 
   /** Type of result/output this model call produced */
-  resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning'
+  resultType?:
+    | 'tool_selection'
+    | 'response_generation'
+    | 'reasoning'
+    | 'planning'
+    | 'title_generation'
 
   /** Token usage statistics */
   usage?: UsageStats
