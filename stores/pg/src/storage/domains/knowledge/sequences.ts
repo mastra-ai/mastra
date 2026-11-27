@@ -18,7 +18,7 @@ import type {
 import type { DbClient, TxClient } from '../../client';
 import { escapeLike, Params, PG_KNOWLEDGE_PAGES_TABLES, ReadFilter } from './pages';
 
-type Queryable = Pick<TxClient, 'none' | 'oneOrNone' | 'any' | 'query'>;
+type Queryable = Pick<TxClient, 'none' | 'one' | 'oneOrNone' | 'any' | 'query'>;
 
 export const PG_KNOWLEDGE_SEQUENCE_TABLES = {
   sequences: 'mastra_knowledge_sequences',
@@ -73,6 +73,7 @@ export function pgKnowledgeSequencesDDL(schemaName?: string): string[] {
       "searchText" text NOT NULL,
       "version" integer NOT NULL,
       "writtenBy" text NOT NULL,
+      "pageId" text,
       UNIQUE ("sequenceId", "externalId")
     )`,
     `CREATE INDEX IF NOT EXISTS mastra_knowledge_sequence_items_order ON ${t.items} ("sequenceId", "occurredAt", "id")`,
@@ -116,6 +117,7 @@ const toItem = (row: Row): KnowledgeSequenceItemRecord => ({
   properties: row.properties ?? null,
   version: Number(row.version),
   writtenBy: row.writtenBy,
+  pageId: row.pageId ?? null,
 });
 
 /** The `types`/`untyped` filter as a predicate on `type`; `arg` binds a value and returns its placeholder. */
@@ -240,8 +242,10 @@ export class PgKnowledgeSequences implements KnowledgeSequencesStorage {
     const {
       checkKnowledgeSequenceDeclaration,
       KnowledgeNotFoundError,
-      KnowledgeSequenceNotLeafError,
+      knowledgeSequenceMarkPositions,
       KnowledgeSequenceOrderByChangeError,
+      KnowledgeSequenceTooManyChildrenError,
+      MAX_KNOWLEDGE_SEQUENCE_MARK_CHILDREN,
       sameKnowledgeSequenceDeclaration,
     } = await loadCore();
     const declaration = checkKnowledgeSequenceDeclaration(schemas);
@@ -265,19 +269,135 @@ export class PgKnowledgeSequences implements KnowledgeSequencesStorage {
         );
         return { status: 'updated' as const };
       }
-      // Known window: createPage doesn't lock the parent row, so a child created after this check
-      // commits alongside the mark. That leaves a sequence with children; reads are unaffected.
-      const child = await tx.oneOrNone(
-        `SELECT 1 FROM ${this.#t.pages} WHERE "parentId" = $1 AND "deletedAt" IS NULL LIMIT 1`,
-        [pageId],
-      );
-      if (child) throw new KnowledgeSequenceNotLeafError(pageId);
+      // Child writes lock this page (create, move in) or the child itself (move out, delete), so
+      // locking the children re-reads which are still here once a writer on one commits.
+      const children = (
+        await tx.any(
+          `SELECT "id", "position" FROM ${this.#t.pages} WHERE "parentId" = $1 AND NOT "isScope" AND "deletedAt" IS NULL ORDER BY "id" LIMIT $2 FOR UPDATE`,
+          [pageId, MAX_KNOWLEDGE_SEQUENCE_MARK_CHILDREN + 1],
+        )
+      ).map(row => ({ id: String(row.id), position: String(row.position) }));
+      if (children.length > MAX_KNOWLEDGE_SEQUENCE_MARK_CHILDREN) {
+        const count = await tx.one(
+          `SELECT COUNT(*)::int AS "n" FROM ${this.#t.pages} WHERE "parentId" = $1 AND NOT "isScope" AND "deletedAt" IS NULL`,
+          [pageId],
+        );
+        throw new KnowledgeSequenceTooManyChildrenError(pageId, Number(count.n));
+      }
       await tx.none(
         `INSERT INTO ${this.#t.sequences} ("pageId", "orderBy", "propertiesSchema", "itemTypes") VALUES ($1, $2, $3::json, $4::json)`,
         [pageId, orderBy, ...stored],
       );
+      if (orderBy === 'position') {
+        for (const [id, position] of knowledgeSequenceMarkPositions(children)) {
+          if (children.find(child => child.id === id)!.position === position) continue;
+          await tx.none(`UPDATE ${this.#t.pages} SET "position" = $2 WHERE "id" = $1`, [id, position]);
+        }
+      }
+      for (const child of children) await this.#writePageItem(tx, pageId, orderBy, child.id);
       return { status: 'created' as const };
     });
+  }
+
+  /**
+   * Brings page items in line with page `pageId` after the page store wrote it in `tx`: created,
+   * renamed, moved from `from`, merged away or deleted. Tombstones its item in a sequence it left and
+   * writes (or revives) the one in the sequence it is now a live child of. On a `position` sequence
+   * `reposition` (no position was asked for) appends the page after every item, writing the key to the
+   * page too; otherwise its key must be one no other item holds. Throwing rolls the page write back.
+   * The page store holds the page's row (and the new parent's) by now, so each sequence row is
+   * locked after them, the same order `markSequence` takes.
+   */
+  async pagePlaced(tx: Queryable, pageId: string, from: string | null, options: { reposition?: boolean } = {}) {
+    const page = await tx.oneOrNone(
+      `SELECT "parentId", "isScope", "deletedAt", "updatedBy" FROM ${this.#t.pages} WHERE "id" = $1`,
+      [pageId],
+    );
+    if (!page) return;
+    const { knowledgeSequencePageItemId } = await loadCore();
+    const externalId = knowledgeSequencePageItemId(pageId);
+    const parentId: string | null = page.parentId ?? null;
+    const live = page.deletedAt === null && !page.isScope;
+    // Sorted so a merge or move touching two sequences locks them in id order.
+    for (const sequenceId of [...new Set([from, parentId])].sort()) {
+      if (sequenceId === null) continue;
+      const marked = await tx.oneOrNone(`SELECT "orderBy" FROM ${this.#t.sequences} WHERE "pageId" = $1 FOR UPDATE`, [
+        sequenceId,
+      ]);
+      if (!marked) continue;
+      if (live && sequenceId === parentId) {
+        await this.#writePageItem(tx, sequenceId, marked.orderBy, pageId, options);
+        continue;
+      }
+      await tx.none(
+        `UPDATE ${this.#t.items} SET "title" = NULL, "deletedAt" = $1, "writtenBy" = $2, "version" = "version" + 1 WHERE "sequenceId" = $3 AND "externalId" = $4 AND "deletedAt" IS NULL`,
+        [page.deletedAt ?? new Date(), String(page.updatedBy.author), sequenceId, externalId],
+      );
+    }
+  }
+
+  async #writePageItem(
+    tx: Queryable,
+    sequenceId: string,
+    orderBy: KnowledgeSequenceOrderBy,
+    pageId: string,
+    options: { reposition?: boolean } = {},
+  ): Promise<void> {
+    const {
+      createKnowledgeUlid,
+      knowledgePositionBetween,
+      knowledgeSequencePageItemId,
+      refuseKnowledgeSequencePagePosition,
+    } = await loadCore();
+    const externalId = knowledgeSequencePageItemId(pageId);
+    const page = (await tx.oneOrNone(
+      `SELECT "name", "position", "createdAt", "updatedBy" FROM ${this.#t.pages} WHERE "id" = $1`,
+      [pageId],
+    ))!;
+    let position: string | null = null;
+    if (orderBy === 'position') {
+      const others = `"sequenceId" = $1 AND "externalId" <> $2 AND "position" IS NOT NULL`;
+      if (options.reposition) {
+        const last = await tx.oneOrNone(`SELECT MAX("position") AS "position" FROM ${this.#t.items} WHERE ${others}`, [
+          sequenceId,
+          externalId,
+        ]);
+        position = knowledgePositionBetween(last?.position ?? undefined);
+        await tx.none(`UPDATE ${this.#t.pages} SET "position" = $2 WHERE "id" = $1`, [pageId, position]);
+      } else {
+        position = String(page.position);
+        const taken = await tx.oneOrNone(`SELECT 1 FROM ${this.#t.items} WHERE ${others} AND "position" = $3 LIMIT 1`, [
+          sequenceId,
+          externalId,
+          position,
+        ]);
+        if (taken) refuseKnowledgeSequencePagePosition(position);
+      }
+    }
+    const occurredAt = orderBy === 'timeline' ? new Date(page.createdAt).getTime() : null;
+    const title = String(page.name);
+    const writtenBy = String(page.updatedBy.author);
+    const stored = await this.#item(tx, sequenceId, externalId);
+    if (!stored) {
+      await tx.none(
+        `INSERT INTO ${this.#t.items} ("id", "sequenceId", "externalId", "writtenAt", "version", "occurredAt", "position", "title", "searchText", "writtenBy", "pageId")
+          VALUES ($1, $2, $3, now(), 1, $4, $5, $6, '', $7, $8)`,
+        [createKnowledgeUlid(), sequenceId, externalId, occurredAt, position, title, writtenBy, pageId],
+      );
+      return;
+    }
+    if (
+      !stored.deletedAt &&
+      stored.title === title &&
+      stored.position === position &&
+      (stored.occurredAt?.getTime() ?? null) === occurredAt
+    ) {
+      return;
+    }
+    await tx.none(
+      `UPDATE ${this.#t.items} SET "occurredAt" = $1, "position" = $2, "title" = $3, "writtenBy" = $4, "deletedAt" = NULL, "version" = "version" + 1 WHERE "id" = $5`,
+      [occurredAt, position, title, writtenBy, stored.id],
+    );
   }
 
   async getSequence({ pageId }: { pageId: string }): Promise<KnowledgeSequenceRecord | null> {
@@ -297,6 +417,7 @@ export class PgKnowledgeSequences implements KnowledgeSequencesStorage {
   async upsertItem(input: UpsertKnowledgeSequenceItemInput): Promise<KnowledgeSequenceItemUpsertResult> {
     const {
       checkKnowledgeSequenceItemInput,
+      checkKnowledgeSequenceLightItem,
       createKnowledgeUlid,
       isStaleKnowledgeSequenceEdit,
       knowledgeSequenceItemContent,
@@ -305,6 +426,7 @@ export class PgKnowledgeSequences implements KnowledgeSequencesStorage {
     } = await loadCore();
     return this.#client.tx(async tx => {
       const sequence = await this.#lockLive(tx, input.sequenceId);
+      checkKnowledgeSequenceLightItem(input.sequenceId, input.externalId);
       checkKnowledgeSequenceItemInput(input, sequence);
       const { orderBy } = sequence;
       const stored = await this.#item(tx, input.sequenceId, input.externalId);
@@ -358,8 +480,10 @@ export class PgKnowledgeSequences implements KnowledgeSequencesStorage {
     writtenBy: string;
     deletedAt?: Date;
   }): Promise<KnowledgeSequenceItemRemoveResult> {
+    const { checkKnowledgeSequenceLightItem } = await loadCore();
     return this.#client.tx(async tx => {
       await this.#lockLive(tx, input.sequenceId);
+      checkKnowledgeSequenceLightItem(input.sequenceId, input.externalId);
       const stored = await this.#item(tx, input.sequenceId, input.externalId);
       if (!stored) return { status: 'missing' as const };
       if (stored.deletedAt) return { status: 'unchanged' as const, item: stored };

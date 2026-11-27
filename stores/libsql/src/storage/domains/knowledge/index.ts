@@ -117,6 +117,8 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     this.#pages = new LibSQLKnowledgePages({
       read: this.#inTransaction ?? this.#client,
       transaction: operation => this.#transaction(operation),
+      placed: (tx, pageId, from, options) =>
+        this.#sequences?.pagePlaced(tx, pageId, from, options) ?? Promise.resolve(),
     });
     if (coreFeatures.has('knowledge-importers')) {
       this.#importers = new LibSQLKnowledgeImporters({

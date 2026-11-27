@@ -64,6 +64,7 @@ export const KNOWLEDGE_SEQUENCE_DDL = [
     searchText TEXT NOT NULL,
     version INTEGER NOT NULL,
     writtenBy TEXT NOT NULL,
+    pageId TEXT,
     UNIQUE (sequenceId, externalId)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_kseq_items_order ON "${T.items}" (sequenceId, occurredAt, id)`,
@@ -102,6 +103,7 @@ const toItem = (row: Row): KnowledgeSequenceItemRecord => ({
   properties: row.properties === null ? null : JSON.parse(String(row.properties)),
   version: Number(row.version),
   writtenBy: String(row.writtenBy),
+  pageId: row.pageId === null || row.pageId === undefined ? null : String(row.pageId),
 });
 
 const toSequence = (row: Row): KnowledgeSequenceRecord => ({
@@ -246,8 +248,10 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
     const {
       checkKnowledgeSequenceDeclaration,
       KnowledgeNotFoundError,
-      KnowledgeSequenceNotLeafError,
+      knowledgeSequenceMarkPositions,
       KnowledgeSequenceOrderByChangeError,
+      KnowledgeSequenceTooManyChildrenError,
+      MAX_KNOWLEDGE_SEQUENCE_MARK_CHILDREN,
       sameKnowledgeSequenceDeclaration,
     } = await loadCore();
     const declaration = checkKnowledgeSequenceDeclaration(schemas);
@@ -270,16 +274,145 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
         });
         return { status: 'updated' as const };
       }
-      const child = await tx.execute({
-        sql: `SELECT 1 FROM "${PAGES}" WHERE parentId = ? AND deletedAt IS NULL LIMIT 1`,
-        args: [pageId],
-      });
-      if (child.rows.length > 0) throw new KnowledgeSequenceNotLeafError(pageId);
+      const children = (
+        await tx.execute({
+          sql: `SELECT id, position FROM "${PAGES}" WHERE parentId = ? AND isScope = 0 AND deletedAt IS NULL LIMIT ?`,
+          args: [pageId, MAX_KNOWLEDGE_SEQUENCE_MARK_CHILDREN + 1],
+        })
+      ).rows.map(row => ({ id: String(row.id), position: String(row.position) }));
+      if (children.length > MAX_KNOWLEDGE_SEQUENCE_MARK_CHILDREN) {
+        const { rows } = await tx.execute({
+          sql: `SELECT COUNT(*) AS n FROM "${PAGES}" WHERE parentId = ? AND isScope = 0 AND deletedAt IS NULL`,
+          args: [pageId],
+        });
+        throw new KnowledgeSequenceTooManyChildrenError(pageId, Number(rows[0]!.n));
+      }
       await tx.execute({
         sql: `INSERT INTO "${T.sequences}" (pageId, createdAt, "orderBy", propertiesSchema, itemTypes) VALUES (?, ?, ?, ?, ?)`,
         args: [pageId, Date.now(), orderBy, ...stored],
       });
+      if (orderBy === 'position') {
+        for (const [id, position] of knowledgeSequenceMarkPositions(children)) {
+          if (children.find(child => child.id === id)!.position === position) continue;
+          await tx.execute({ sql: `UPDATE "${PAGES}" SET position = ? WHERE id = ?`, args: [position, id] });
+        }
+      }
+      for (const child of children) await this.#writePageItem(tx, pageId, orderBy, child.id);
       return { status: 'created' as const };
+    });
+  }
+
+  /**
+   * Brings page items in line with page `pageId` after the page store wrote it in `tx`: created,
+   * renamed, moved from `from`, merged away or deleted. Tombstones its item in a sequence it left and
+   * writes (or revives) the one in the sequence it is now a live child of. On a `position` sequence
+   * `reposition` (no position was asked for) appends the page after every item, writing the key to the
+   * page too; otherwise its key must be one no other item holds. Throwing rolls the page write back.
+   */
+  async pagePlaced(tx: Executor, pageId: string, from: string | null, options: { reposition?: boolean } = {}) {
+    const page = (
+      await tx.execute({
+        sql: `SELECT parentId, isScope, deletedAt, updatedBy FROM "${PAGES}" WHERE id = ?`,
+        args: [pageId],
+      })
+    ).rows[0];
+    if (!page) return;
+    const { knowledgeSequencePageItemId } = await loadCore();
+    const externalId = knowledgeSequencePageItemId(pageId);
+    const parentId = page.parentId === null ? null : String(page.parentId);
+    const live = page.deletedAt === null && Number(page.isScope) === 0;
+    for (const sequenceId of new Set([from, parentId])) {
+      if (sequenceId === null) continue;
+      const marked = (
+        await tx.execute({ sql: `SELECT "orderBy" FROM "${T.sequences}" WHERE pageId = ?`, args: [sequenceId] })
+      ).rows[0];
+      if (!marked) continue;
+      if (live && sequenceId === parentId) {
+        await this.#writePageItem(tx, sequenceId, String(marked.orderBy) as KnowledgeSequenceOrderBy, pageId, options);
+        continue;
+      }
+      const deletedAt = page.deletedAt === null ? Date.now() : Date.parse(String(page.deletedAt));
+      await tx.execute({
+        sql: `UPDATE "${T.items}" SET title = NULL, deletedAt = ?, writtenBy = ?, version = version + 1 WHERE sequenceId = ? AND externalId = ? AND deletedAt IS NULL`,
+        args: [deletedAt, String(JSON.parse(String(page.updatedBy)).author), sequenceId, externalId],
+      });
+    }
+  }
+
+  async #writePageItem(
+    tx: Executor,
+    sequenceId: string,
+    orderBy: KnowledgeSequenceOrderBy,
+    pageId: string,
+    options: { reposition?: boolean } = {},
+  ): Promise<void> {
+    const {
+      createKnowledgeUlid,
+      knowledgePositionBetween,
+      knowledgeSequencePageItemId,
+      refuseKnowledgeSequencePagePosition,
+    } = await loadCore();
+    const externalId = knowledgeSequencePageItemId(pageId);
+    const page = (
+      await tx.execute({
+        sql: `SELECT name, position, createdAt, updatedBy FROM "${PAGES}" WHERE id = ?`,
+        args: [pageId],
+      })
+    ).rows[0]!;
+    let position: string | null = null;
+    if (orderBy === 'position') {
+      const others = `sequenceId = ? AND externalId != ? AND position IS NOT NULL`;
+      if (options.reposition) {
+        const last = (
+          await tx.execute({
+            sql: `SELECT MAX(position) AS position FROM "${T.items}" WHERE ${others}`,
+            args: [sequenceId, externalId],
+          })
+        ).rows[0];
+        position = knowledgePositionBetween(last?.position == null ? undefined : String(last.position));
+        await tx.execute({ sql: `UPDATE "${PAGES}" SET position = ? WHERE id = ?`, args: [position, pageId] });
+      } else {
+        position = String(page.position);
+        const taken = await tx.execute({
+          sql: `SELECT 1 FROM "${T.items}" WHERE ${others} AND position = ? LIMIT 1`,
+          args: [sequenceId, externalId, position],
+        });
+        if (taken.rows.length > 0) refuseKnowledgeSequencePagePosition(position);
+      }
+    }
+    const occurredAt = orderBy === 'timeline' ? Date.parse(String(page.createdAt)) : null;
+    const title = String(page.name);
+    const writtenBy = String(JSON.parse(String(page.updatedBy)).author);
+    const stored = await this.#item(tx, sequenceId, externalId);
+    if (!stored) {
+      await tx.execute({
+        sql: `INSERT INTO "${T.items}" (id, sequenceId, externalId, writtenAt, version, occurredAt, position, title, searchText, writtenBy, pageId)
+          VALUES (?, ?, ?, ?, 1, ?, ?, ?, '', ?, ?)`,
+        args: [
+          createKnowledgeUlid(),
+          sequenceId,
+          externalId,
+          Date.now(),
+          occurredAt,
+          position,
+          title,
+          writtenBy,
+          pageId,
+        ],
+      });
+      return;
+    }
+    if (
+      !stored.deletedAt &&
+      stored.title === title &&
+      stored.position === position &&
+      (stored.occurredAt?.getTime() ?? null) === occurredAt
+    ) {
+      return;
+    }
+    await tx.execute({
+      sql: `UPDATE "${T.items}" SET occurredAt = ?, position = ?, title = ?, writtenBy = ?, deletedAt = NULL, version = version + 1 WHERE id = ?`,
+      args: [occurredAt, position, title, writtenBy, stored.id],
     });
   }
 
@@ -302,6 +435,7 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
   async upsertItem(input: UpsertKnowledgeSequenceItemInput): Promise<KnowledgeSequenceItemUpsertResult> {
     const {
       checkKnowledgeSequenceItemInput,
+      checkKnowledgeSequenceLightItem,
       createKnowledgeUlid,
       isStaleKnowledgeSequenceEdit,
       knowledgeSequenceItemContent,
@@ -310,6 +444,7 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
     } = await loadCore();
     return this.#transaction(async tx => {
       const sequence = await this.#liveSequence(tx, input.sequenceId);
+      checkKnowledgeSequenceLightItem(input.sequenceId, input.externalId);
       checkKnowledgeSequenceItemInput(input, sequence);
       const { orderBy } = sequence;
       const stored = await this.#item(tx, input.sequenceId, input.externalId);
@@ -362,8 +497,10 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
     writtenBy: string;
     deletedAt?: Date;
   }): Promise<KnowledgeSequenceItemRemoveResult> {
+    const { checkKnowledgeSequenceLightItem } = await loadCore();
     return this.#transaction(async tx => {
       await this.#liveSequence(tx, input.sequenceId);
+      checkKnowledgeSequenceLightItem(input.sequenceId, input.externalId);
       const stored = await this.#item(tx, input.sequenceId, input.externalId);
       if (!stored) return { status: 'missing' as const };
       if (stored.deletedAt) return { status: 'unchanged' as const, item: stored };

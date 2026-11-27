@@ -4,13 +4,15 @@ import {
   KnowledgeSequenceItemInvalidError,
   KnowledgeSequenceItemPropertiesError,
   KnowledgeSequenceNotFoundError,
-  KnowledgeSequenceNotLeafError,
   KnowledgeSequenceOrderByChangeError,
+  KnowledgeSequencePageItemError,
   KnowledgeSequenceParentNestedError,
   KnowledgeSequenceParentNotFoundError,
   KnowledgeSequencePurgeRefusedError,
   KnowledgeSequenceSchemaInvalidError,
+  KnowledgeSequenceTooManyChildrenError,
   MAX_KNOWLEDGE_SEQUENCE_JSON_DEPTH,
+  MAX_KNOWLEDGE_SEQUENCE_MARK_CHILDREN,
 } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
@@ -64,15 +66,10 @@ export function createKnowledgeSequenceTests(createStore: () => Promise<Knowledg
 
     const acme = { addresses: ['org:acme'], prefixes: [], children: [] };
 
-    it('marks a live leaf page a sequence once, and refuses a page with children or a deleted one', async () => {
+    it('marks a live page a sequence once, and refuses a deleted one', async () => {
       const { store, scope, page, sequences } = await setup();
       expect(await sequences.markSequence({ pageId: page.id })).toEqual({ status: 'unchanged' });
       expect(await sequences.listSequenceIds({ pageIds: [page.id, scope.id] })).toEqual([page.id]);
-
-      const parent = await store.createPage({ parentId: scope.id, name: 'Parent', provenance: host });
-      await store.createPage({ parentId: parent.id, name: 'Child', provenance: host });
-      await expect(sequences.markSequence({ pageId: parent.id })).rejects.toBeInstanceOf(KnowledgeSequenceNotLeafError);
-      expect(await sequences.listSequenceIds({ pageIds: [parent.id] })).toEqual([]);
 
       const gone = await store.createPage({ parentId: scope.id, name: 'Gone', provenance: host });
       await store.deletePage({ id: gone.id, expectedVersion: gone.version, deletedBy: 'host' });
@@ -784,6 +781,210 @@ export function createKnowledgeSequenceTests(createStore: () => Promise<Knowledg
         ).rejects.toBeInstanceOf(KnowledgeSequenceItemInvalidError);
         const created = await item('dated', 1);
         expect(created).toMatchObject({ status: 'created', item: { position: null } });
+      });
+    });
+
+    describe('child pages as page items', () => {
+      async function withChildren(orderBy: 'timeline' | 'position') {
+        const base = await setup();
+        const list = await base.store.createPage({ parentId: base.scope.id, name: 'Plan', provenance: host });
+        const make = (name: string, extra: Record<string, unknown> = {}) =>
+          base.store.createPage({ parentId: list.id, name, provenance: host, ...extra });
+        const read = async (extra: Record<string, unknown> = {}) =>
+          (await base.sequences.listItems({ sequenceId: list.id, read: 'all', limit: 100, ...extra })).items;
+        const titles = async (extra: Record<string, unknown> = {}) => (await read(extra)).map(i => i.title);
+        const pageOf = async (id: string) => (await base.store.getPage({ id, read: 'all' }))!;
+        /** Every live page item carries its page's position, and every live child has one. */
+        const consistent = async () => {
+          const items = (await read()).filter(i => i.pageId);
+          const children = (await base.store.listChildPages({ parentId: list.id, read: 'all', limit: 100 })).pages;
+          expect(items.map(i => i.pageId).sort()).toEqual(children.map(c => c.id).sort());
+          if (orderBy === 'position') {
+            for (const child of children) expect(items.find(i => i.pageId === child.id)!.position).toBe(child.position);
+          }
+        };
+        return { ...base, list, make, read, titles, pageOf, consistent, orderBy };
+      }
+
+      it('marks a page that has children, giving each a page item titled with its page name', async () => {
+        for (const orderBy of ['timeline', 'position'] as const) {
+          const { list, make, sequences, read, consistent } = await withChildren(orderBy);
+          const first = await make('First');
+          const second = await make('Second');
+          expect(await sequences.markSequence({ pageId: list.id, orderBy })).toEqual({ status: 'created' });
+          const items = await read();
+          expect(items.map(i => [i.pageId, i.title, i.externalId])).toEqual([
+            ...(orderBy === 'timeline'
+              ? [
+                  [second.id, 'Second', `page:${second.id}`],
+                  [first.id, 'First', `page:${first.id}`],
+                ]
+              : [
+                  [first.id, 'First', `page:${first.id}`],
+                  [second.id, 'Second', `page:${second.id}`],
+                ]),
+          ]);
+          if (orderBy === 'timeline') expect(items[1]!.occurredAt).toEqual(first.createdAt);
+          await consistent();
+        }
+      });
+
+      it('gives a page created under a sequence its item, appended after the light items on a position sequence', async () => {
+        const { list, make, sequences, titles, consistent } = await withChildren('position');
+        await sequences.markSequence({ pageId: list.id, orderBy: 'position' });
+        await sequences.upsertItem({ sequenceId: list.id, externalId: 'a', title: 'a', writtenBy: 'agent:a' });
+        await make('Page');
+        await sequences.upsertItem({ sequenceId: list.id, externalId: 'b', title: 'b', writtenBy: 'agent:a' });
+        expect(await titles()).toEqual(['a', 'Page', 'b']);
+        await consistent();
+      });
+
+      it('takes a page position as the item key, and refuses one another item holds', async () => {
+        const { list, make, sequences, titles, consistent } = await withChildren('position');
+        await sequences.markSequence({ pageId: list.id, orderBy: 'position' });
+        await sequences.upsertItem({ sequenceId: list.id, externalId: 'm', title: 'm', position: 'm', writtenBy: 'x' });
+        await make('Early', { position: 'c' });
+        await expect(make('Clash', { position: 'm' })).rejects.toBeInstanceOf(KnowledgeSequenceItemInvalidError);
+        expect(await titles()).toEqual(['Early', 'm']);
+        await consistent();
+      });
+
+      it('reorders a page within a position sequence in both rows, and keeps them equal under concurrent moves', async () => {
+        const { store, list, make, sequences, titles, pageOf, consistent } = await withChildren('position');
+        await sequences.markSequence({ pageId: list.id, orderBy: 'position' });
+        const a = await make('A', { position: 'b' });
+        const b = await make('B', { position: 'd' });
+        const c = await make('C', { position: 'f' });
+        await store.movePage({
+          id: c.id,
+          parentId: list.id,
+          position: 'a',
+          expectedVersion: c.version,
+          provenance: host,
+        });
+        expect(await titles()).toEqual(['C', 'A', 'B']);
+        await consistent();
+        const [ma, mb] = [await pageOf(a.id), await pageOf(b.id)];
+        await Promise.all([
+          store.movePage({
+            id: ma.id,
+            parentId: list.id,
+            position: 'x',
+            expectedVersion: ma.version,
+            provenance: host,
+          }),
+          store.movePage({
+            id: mb.id,
+            parentId: list.id,
+            position: 'w',
+            expectedVersion: mb.version,
+            provenance: host,
+          }),
+        ]);
+        expect(await titles()).toEqual(['C', 'B', 'A']);
+        await consistent();
+      });
+
+      it('tombstones the page item when the page moves out or is deleted, and revives it when the page comes back', async () => {
+        const { store, scope, list, make, sequences, read, pageOf, consistent } = await withChildren('timeline');
+        await sequences.markSequence({ pageId: list.id });
+        const stays = await make('Stays');
+        const leaves = await make('Leaves');
+        const goes = await make('Goes');
+        const reply = await sequences.upsertItem({
+          sequenceId: list.id,
+          externalId: 'reply',
+          body: 'about Goes',
+          occurredAt: at(5),
+          externalParentId: `page:${goes.id}`,
+          writtenBy: importer,
+        });
+        expect(reply.status).toBe('created');
+        await store.movePage({ id: leaves.id, parentId: scope.id, expectedVersion: leaves.version, provenance: host });
+        await store.deletePage({ id: goes.id, expectedVersion: goes.version, deletedBy: 'host' });
+        await consistent();
+        const all = await read({ includeDeleted: true });
+        expect(
+          all
+            .filter(i => i.pageId && i.deletedAt)
+            .map(i => i.pageId)
+            .sort(),
+        ).toEqual([leaves.id, goes.id].sort());
+        expect((await read()).find(i => i.externalId === 'reply')).toMatchObject({
+          externalParentId: `page:${goes.id}`,
+        });
+        const moved = await pageOf(leaves.id);
+        await store.movePage({ id: moved.id, parentId: list.id, expectedVersion: moved.version, provenance: host });
+        await consistent();
+        expect((await read()).map(i => i.pageId).filter(Boolean)).toEqual(
+          expect.arrayContaining([stays.id, leaves.id]),
+        );
+      });
+
+      it('carries a page item through a merge into or out of a sequence', async () => {
+        const { store, scope, list, make, sequences, consistent } = await withChildren('position');
+        await sequences.markSequence({ pageId: list.id, orderBy: 'position' });
+        await make('Kept');
+        const outside = await store.createPage({ parentId: scope.id, name: 'Outside', provenance: host });
+        await store.createPage({ parentId: outside.id, name: 'Arrives', provenance: host });
+        await store.mergePages({
+          sourceId: outside.id,
+          targetId: list.id,
+          sourceVersion: outside.version,
+          provenance: host,
+        });
+        await consistent();
+        const leaving = await make('Leaving');
+        const target = await store.createPage({ parentId: scope.id, name: 'Target', provenance: host });
+        await store.mergePages({
+          sourceId: leaving.id,
+          targetId: target.id,
+          sourceVersion: leaving.version,
+          provenance: host,
+        });
+        await consistent();
+      });
+
+      it('shows a renamed page by its new name, and refuses item writes to a page item', async () => {
+        const { store, list, make, sequences, titles } = await withChildren('position');
+        await sequences.markSequence({ pageId: list.id, orderBy: 'position' });
+        const page = await make('Old name');
+        await store.updatePage({ id: page.id, name: 'New name', expectedVersion: page.version, provenance: host });
+        expect(await titles()).toEqual(['New name']);
+        await sequences.upsertItem({
+          sequenceId: list.id,
+          externalId: 'after-page',
+          title: 'after',
+          after: `page:${page.id}`,
+          writtenBy: 'agent:a',
+        });
+        expect(await titles()).toEqual(['New name', 'after']);
+        await expect(
+          sequences.upsertItem({
+            sequenceId: list.id,
+            externalId: `page:${page.id}`,
+            title: 'x',
+            writtenBy: 'agent:a',
+          }),
+        ).rejects.toBeInstanceOf(KnowledgeSequencePageItemError);
+        await expect(
+          sequences.removeItem({ sequenceId: list.id, externalId: `page:${page.id}`, writtenBy: 'agent:a' }),
+        ).rejects.toBeInstanceOf(KnowledgeSequencePageItemError);
+        await expect(
+          sequences.upsertItem({ sequenceId: list.id, externalId: 'page:other', title: 'x', writtenBy: 'agent:a' }),
+        ).rejects.toBeInstanceOf(KnowledgeSequencePageItemError);
+        expect(await titles()).toEqual(['New name', 'after']);
+      });
+
+      it('refuses to mark a page with more children than one mark may write', async () => {
+        const { store, list, sequences } = await withChildren('timeline');
+        for (let i = 0; i <= MAX_KNOWLEDGE_SEQUENCE_MARK_CHILDREN; i++) {
+          await store.createPage({ parentId: list.id, name: `p${i}`, provenance: host });
+        }
+        await expect(sequences.markSequence({ pageId: list.id })).rejects.toBeInstanceOf(
+          KnowledgeSequenceTooManyChildrenError,
+        );
+        expect(await sequences.listSequenceIds({ pageIds: [list.id] })).toEqual([]);
       });
     });
 

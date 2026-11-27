@@ -182,6 +182,8 @@ export class KnowledgePG extends KnowledgeStorage {
           assertKnowledgeNoteTextWithinBound: core.assertKnowledgeNoteTextWithinBound,
         };
       },
+      placed: (tx, pageId, from, options) =>
+        this.#sequences?.pagePlaced(tx, pageId, from, options) ?? Promise.resolve(),
     });
     if (coreFeatures.has('knowledge-sequences')) {
       this.#sequences = new PgKnowledgeSequences({

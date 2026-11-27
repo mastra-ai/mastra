@@ -8,7 +8,10 @@ import { InMemoryKnowledgeSequencesStorage } from './sequences-inmemory';
 export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   readonly #pageStore = new InMemoryKnowledgePageStore();
   readonly #importers = new InMemoryKnowledgeImportersStorage();
-  readonly #sequences = new InMemoryKnowledgeSequencesStorage((id, read) => this.#pageStore.sequencePage(id, read));
+  readonly #sequences = new InMemoryKnowledgeSequencesStorage((id, read) => this.#pageStore.sequencePage(id, read), {
+    children: parentId => this.#pageStore.sequenceChildren(parentId),
+    reposition: (pageId, position) => this.#pageStore.repositionForSequence(pageId, position),
+  });
 
   override get importers(): InMemoryKnowledgeImportersStorage {
     return this.#importers;
@@ -194,6 +197,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   constructor(_config: { db: InMemoryDB }) {
     super();
+    this.#pageStore.placement = this.#sequences;
   }
 
   /**

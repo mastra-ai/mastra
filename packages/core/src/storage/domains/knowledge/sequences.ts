@@ -158,6 +158,12 @@ export interface KnowledgeSequenceItemRecord {
   version: number;
   /** The Knowledge writer of the last change, e.g. `importer:slack`. */
   writtenBy: string;
+  /**
+   * Set on a page item: the child page this item places in the sequence. Its `externalId` is
+   * `page:<pageId>`, its `title` follows the page's name, and on a `position` sequence its
+   * `position` is the page's. Null on a light item.
+   */
+  pageId: string | null;
 }
 
 /**
@@ -263,11 +269,88 @@ export interface SearchKnowledgeSequenceItemsInput {
 
 export type KnowledgeSequencePurgeResult = { purgedIds: string[]; done: boolean };
 
-/** The page has child pages, so it can't become a sequence. Nothing was written. */
-export class KnowledgeSequenceNotLeafError extends Error {
-  constructor(readonly pageId: string) {
-    super(`Knowledge page ${pageId} has child pages, so it can't be a sequence.`);
-    this.name = 'KnowledgeSequenceNotLeafError';
+/** The most live child pages a page may have when it is marked a sequence; each gets a page item in one write. */
+export const MAX_KNOWLEDGE_SEQUENCE_MARK_CHILDREN = 1000;
+
+/**
+ * The page has more than {@link MAX_KNOWLEDGE_SEQUENCE_MARK_CHILDREN} live child pages, so marking it
+ * would write too many page items at once. Nothing was written: mark it first and add pages after.
+ */
+export class KnowledgeSequenceTooManyChildrenError extends Error {
+  constructor(
+    readonly pageId: string,
+    readonly children: number,
+  ) {
+    super(
+      `Knowledge page ${pageId} has ${children} child pages, more than the ${MAX_KNOWLEDGE_SEQUENCE_MARK_CHILDREN} a sequence can be marked with.`,
+    );
+    this.name = 'KnowledgeSequenceTooManyChildrenError';
+  }
+}
+
+/** The prefix of a page item's `externalId`; light items can't use it. */
+export const KNOWLEDGE_SEQUENCE_PAGE_ITEM_PREFIX = 'page:';
+
+/** The `externalId` of the page item that places child page `pageId` in its sequence. */
+export function knowledgeSequencePageItemId(pageId: string): string {
+  return `${KNOWLEDGE_SEQUENCE_PAGE_ITEM_PREFIX}${pageId}`;
+}
+
+/**
+ * The item write names a page item (an `externalId` starting `page:`). Page items follow their page:
+ * create, move, reorder or delete the page instead. Nothing was written.
+ */
+export class KnowledgeSequencePageItemError extends Error {
+  constructor(
+    readonly sequenceId: string,
+    readonly externalId: string,
+  ) {
+    super(
+      `Knowledge sequence item ${JSON.stringify(externalId)} on ${sequenceId} is a page item; change its page instead.`,
+    );
+    this.name = 'KnowledgeSequencePageItemError';
+  }
+}
+
+/**
+ * The keys child pages take as page items when a `position` sequence is marked: their own positions in
+ * order, with a key that is missing or repeats an earlier sibling's replaced by one between its
+ * neighbours. Returns `[pageId, position]` in order; the caller writes changed keys back to the pages.
+ */
+export function knowledgeSequenceMarkPositions(
+  children: { id: string; position?: string | null }[],
+): [string, string][] {
+  const sorted = [...children].sort((a, b) =>
+    (a.position ?? '\uffff') < (b.position ?? '\uffff')
+      ? -1
+      : (a.position ?? '\uffff') > (b.position ?? '\uffff')
+        ? 1
+        : a.id < b.id
+          ? -1
+          : 1,
+  );
+  const placed: [string, string][] = [];
+  for (const [index, child] of sorted.entries()) {
+    const previous = placed.at(-1)?.[1];
+    if (child.position && (previous === undefined || child.position > previous)) {
+      placed.push([child.id, child.position]);
+      continue;
+    }
+    const next = sorted.slice(index + 1).find(c => c.position && (previous === undefined || c.position > previous));
+    placed.push([child.id, knowledgePositionBetween(previous, next?.position ?? undefined)]);
+  }
+  return placed;
+}
+
+/** Refuses a child page's position that another item of its `position` sequence holds. */
+export function refuseKnowledgeSequencePagePosition(position: string): never {
+  invalid('position', `${JSON.stringify(position)} is held by another item.`);
+}
+
+/** Refuses an item write to a page item's `externalId`. */
+export function checkKnowledgeSequenceLightItem(sequenceId: string, externalId: string): void {
+  if (externalId.startsWith(KNOWLEDGE_SEQUENCE_PAGE_ITEM_PREFIX)) {
+    throw new KnowledgeSequencePageItemError(sequenceId, externalId);
   }
 }
 
@@ -362,8 +445,11 @@ export class KnowledgeSequencePurgeRefusedError extends Error {
 
 export abstract class KnowledgeSequencesStorage {
   /**
-   * Makes a live page a sequence. Refuses with {@link KnowledgeSequenceNotLeafError} when it has
-   * live child pages, `KnowledgeNotFoundError` when it isn't live, and
+   * Makes a live page a sequence, writing a page item for each live child page: on a `timeline`
+   * sequence at the child's `createdAt`, on a `position` one at the child's position (a child whose
+   * key is missing or held by an earlier sibling gets a new key, written to the page too). Refuses with
+   * {@link KnowledgeSequenceTooManyChildrenError} above {@link MAX_KNOWLEDGE_SEQUENCE_MARK_CHILDREN}
+   * children, `KnowledgeNotFoundError` when it isn't live, and
    * {@link KnowledgeSequenceSchemaInvalidError} for a bad schema. Marking it again is a whole
    * re-declaration: the same `orderBy` and schemas (key order aside) are `unchanged` and write
    * nothing; changed schemas replace the stored ones in place (`updated`), checking no existing item;
@@ -377,10 +463,17 @@ export abstract class KnowledgeSequencesStorage {
   /**
    * Upserts by `(sequenceId, externalId)`. Unchanged fields are `unchanged` and write nothing. The
    * sequence must be live; refuses with {@link KnowledgeSequenceItemInvalidError},
-   * {@link KnowledgeSequenceParentNotFoundError} or {@link KnowledgeSequenceParentNestedError}.
+   * {@link KnowledgeSequenceParentNotFoundError}, {@link KnowledgeSequenceParentNestedError}, or
+   * {@link KnowledgeSequencePageItemError} for a page item's `externalId`.
+   *
+   * Page items aren't written here: the page store writes them as child pages are created, moved in,
+   * out or within the sequence, merged or deleted, in the same transaction as the page.
    */
   abstract upsertItem(input: UpsertKnowledgeSequenceItemInput): Promise<KnowledgeSequenceItemUpsertResult>;
-  /** Marks the item deleted and clears its content, keeping its type. Only on a positive signal from the source. */
+  /**
+   * Marks the item deleted and clears its content, keeping its type. Only on a positive signal from the
+   * source. Refuses a page item with {@link KnowledgeSequencePageItemError}.
+   */
   abstract removeItem(input: {
     sequenceId: string;
     externalId: string;

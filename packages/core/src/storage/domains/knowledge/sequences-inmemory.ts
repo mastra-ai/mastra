@@ -1,7 +1,9 @@
 import { knowledgeSearchWords } from '@internal/core/knowledge-compat';
 import { createKnowledgeUlid, KnowledgeNotFoundError } from './base';
+import { knowledgePositionBetween } from './pages';
 import type { KnowledgePage, KnowledgeReadScope } from './pages';
 import {
+  checkKnowledgeSequenceLightItem,
   checkKnowledgeSequenceDeclaration,
   checkKnowledgeSequenceItemInput,
   checkKnowledgeSequenceReadLimit,
@@ -13,8 +15,12 @@ import {
   knowledgeSequenceItemSearchText,
   knowledgeSequenceTypeFilter,
   knowledgeSequenceTypeMatches,
+  knowledgeSequenceMarkPositions,
   KnowledgeSequenceNotFoundError,
-  KnowledgeSequenceNotLeafError,
+  knowledgeSequencePageItemId,
+  KnowledgeSequenceTooManyChildrenError,
+  MAX_KNOWLEDGE_SEQUENCE_MARK_CHILDREN,
+  refuseKnowledgeSequencePagePosition,
   KnowledgeSequenceOrderByChangeError,
   KnowledgeSequenceParentNestedError,
   KnowledgeSequenceParentNotFoundError,
@@ -42,10 +48,15 @@ interface State {
   items: Map<string, KnowledgeSequenceItemRecord>;
 }
 
-type PageLookup = (
-  id: string,
-  read?: KnowledgeReadScope,
-) => { page: KnowledgePage; hasChildren: boolean; readable: boolean } | undefined;
+type PageLookup = (id: string, read?: KnowledgeReadScope) => { page: KnowledgePage; readable: boolean } | undefined;
+
+/** What the sequences need from the page store beside {@link PageLookup}. */
+export interface InMemoryKnowledgeSequencePages {
+  /** The live child pages of `parentId`, scope pages left out. */
+  children(parentId: string): KnowledgePage[];
+  /** Gives a page a new position, as marking a `position` sequence does for a missing or repeated key. */
+  reposition(pageId: string, position: string): void;
+}
 
 const keyOf = (sequenceId: string, externalId: string) => JSON.stringify([sequenceId, externalId]);
 /**
@@ -92,8 +103,92 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
     return run;
   }
 
-  constructor(private readonly lookup: PageLookup) {
+  constructor(
+    private readonly lookup: PageLookup,
+    private readonly pages: InMemoryKnowledgeSequencePages,
+  ) {
     super();
+  }
+
+  /**
+   * The position a child page takes on arriving at, or moving within, `parentId`, before the page
+   * changes. Undefined when `parentId` isn't a `position` sequence, so the page store picks as usual.
+   * Refuses a key another item holds; writes nothing.
+   */
+  pagePosition(parentId: string, pageId: string, requested: string | undefined): string | undefined {
+    const sequence = this.#s.sequences.get(parentId);
+    if (!sequence || sequence.orderBy !== 'position') return undefined;
+    const items = this.#positioned(parentId, knowledgeSequencePageItemId(pageId));
+    if (requested === undefined) return knowledgePositionBetween(items.at(-1)?.position ?? undefined);
+    if (items.some(item => item.position === requested)) refuseKnowledgeSequencePagePosition(requested);
+    return requested;
+  }
+
+  /**
+   * Brings page items in line with `page` after the page store changed it: created, renamed, moved
+   * from `from`, merged away or deleted. Tombstones the item in a sequence the page left and writes
+   * (or revives) the one in the sequence it is now a live child of.
+   */
+  pagePlaced(page: KnowledgePage, from: string | null): void {
+    const externalId = knowledgeSequencePageItemId(page.id);
+    const live = !page.deletedAt && !page.isScope;
+    for (const sequenceId of new Set([from, page.parentId])) {
+      if (sequenceId === null) continue;
+      const sequence = this.#s.sequences.get(sequenceId);
+      if (!sequence) continue;
+      const key = keyOf(sequenceId, externalId);
+      const stored = this.#s.items.get(key);
+      if (live && sequenceId === page.parentId) {
+        this.#s.items.set(key, this.#pageItem(sequence, page, stored));
+      } else if (stored && !stored.deletedAt) {
+        this.#s.items.set(key, {
+          ...stored,
+          title: null,
+          deletedAt: page.deletedAt ?? new Date(),
+          writtenBy: page.updatedBy.author,
+          version: stored.version + 1,
+        });
+      }
+    }
+  }
+
+  #pageItem(
+    sequence: KnowledgeSequenceRecord,
+    page: KnowledgePage,
+    stored: KnowledgeSequenceItemRecord | undefined,
+  ): KnowledgeSequenceItemRecord {
+    const fields = {
+      occurredAt: sequence.orderBy === 'timeline' ? new Date(page.createdAt) : null,
+      position: sequence.orderBy === 'position' ? page.position! : null,
+      title: page.name,
+    };
+    if (
+      stored &&
+      !stored.deletedAt &&
+      stored.title === fields.title &&
+      stored.position === fields.position &&
+      stored.occurredAt?.getTime() === fields.occurredAt?.getTime()
+    ) {
+      return stored;
+    }
+    return {
+      id: stored?.id ?? createKnowledgeUlid(),
+      sequenceId: sequence.pageId,
+      externalId: knowledgeSequencePageItemId(page.id),
+      writtenAt: stored?.writtenAt ?? new Date(),
+      editedAt: null,
+      author: null,
+      body: null,
+      links: [],
+      properties: null,
+      type: null,
+      externalParentId: null,
+      ...fields,
+      pageId: page.id,
+      deletedAt: null,
+      writtenBy: page.updatedBy.author,
+      version: (stored?.version ?? 0) + 1,
+    };
   }
 
   snapshot(): State {
@@ -131,8 +226,23 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
       this.#s.sequences.set(pageId, { ...marked, ...structuredClone(declaration) });
       return { status: 'updated' };
     }
-    if (found.hasChildren) throw new KnowledgeSequenceNotLeafError(pageId);
-    this.#s.sequences.set(pageId, { pageId, createdAt: new Date(), orderBy, ...structuredClone(declaration) });
+    const children = this.pages.children(pageId);
+    if (children.length > MAX_KNOWLEDGE_SEQUENCE_MARK_CHILDREN) {
+      throw new KnowledgeSequenceTooManyChildrenError(pageId, children.length);
+    }
+    const sequence = { pageId, createdAt: new Date(), orderBy, ...structuredClone(declaration) };
+    this.#s.sequences.set(pageId, sequence);
+    if (orderBy === 'position') {
+      for (const [id, position] of knowledgeSequenceMarkPositions(children)) {
+        if (children.find(child => child.id === id)!.position !== position) this.pages.reposition(id, position);
+      }
+    }
+    for (const child of this.pages.children(pageId)) {
+      this.#s.items.set(
+        keyOf(pageId, knowledgeSequencePageItemId(child.id)),
+        this.#pageItem(sequence, child, undefined),
+      );
+    }
     return { status: 'created' };
   }
 
@@ -186,6 +296,7 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
 
   async #upsertItem(input: UpsertKnowledgeSequenceItemInput): Promise<KnowledgeSequenceItemUpsertResult> {
     const sequence = this.#liveSequence(input.sequenceId);
+    checkKnowledgeSequenceLightItem(input.sequenceId, input.externalId);
     checkKnowledgeSequenceItemInput(input, sequence);
     const { orderBy } = sequence;
     const key = keyOf(input.sequenceId, input.externalId);
@@ -198,6 +309,7 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
       author: input.author ? { ...input.author } : null,
       ...copy(knowledgeSequenceItemContent(input)),
       writtenBy: input.writtenBy,
+      pageId: null,
     };
     if (!stored) {
       this.#checkParent(input.sequenceId, input.externalId, fields.externalParentId);
@@ -241,6 +353,7 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
     deletedAt?: Date;
   }): KnowledgeSequenceItemRemoveResult {
     this.#liveSequence(input.sequenceId);
+    checkKnowledgeSequenceLightItem(input.sequenceId, input.externalId);
     const key = keyOf(input.sequenceId, input.externalId);
     const stored = this.#s.items.get(key);
     if (!stored) return { status: 'missing' };
@@ -335,7 +448,8 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
     const until = input.until?.getTime();
     return [...this.#s.items.values()]
       .filter(item => {
-        if (!visible.has(item.sequenceId) || item.deletedAt) return false;
+        // A page item is found as its page, by page search.
+        if (!visible.has(item.sequenceId) || item.deletedAt || item.pageId) return false;
         if (!knowledgeSequenceTypeMatches(typeFilter, item.type)) return false;
         const time = item.occurredAt?.getTime();
         if (time === undefined) return since === undefined && until === undefined;

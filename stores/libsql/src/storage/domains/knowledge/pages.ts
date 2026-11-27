@@ -49,6 +49,14 @@ export interface PageExecutor {
 /** Runs `operation` in one write transaction. */
 export type PageTransaction = <T>(operation: (tx: PageExecutor) => Promise<T>) => Promise<T>;
 
+/** Called after a page write that can change its sequence item: `from` is the page's parent before it. */
+export type PagePlaced = (
+  tx: PageExecutor,
+  pageId: string,
+  from: string | null,
+  options?: { reposition?: boolean },
+) => Promise<void>;
+
 export const KNOWLEDGE_PAGE_TABLES = {
   pages: 'mastra_knowledge_pages',
   notes: 'mastra_knowledge_notes',
@@ -443,10 +451,13 @@ function jsonList(values: string[]): string {
 export class LibSQLKnowledgePages implements KnowledgePageStore {
   readonly #read: PageExecutor;
   readonly #transaction: PageTransaction;
+  /** Keeps sequence page items in step with a child page, in the page's write transaction. */
+  readonly #placed?: PagePlaced;
 
-  constructor(config: { read: PageExecutor; transaction: PageTransaction }) {
+  constructor(config: { read: PageExecutor; transaction: PageTransaction; placed?: PagePlaced }) {
     this.#read = config.read;
     this.#transaction = config.transaction;
+    this.#placed = config.placed;
   }
 
   /** Deletes every row from the page tables (scopes, pages, notes, pins, activity, links). */
@@ -903,6 +914,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
         now,
       ],
     });
+    await this.#placed?.(tx, id, null, { reposition: input.position === undefined });
     await this.#logActivity(tx, 'page-created', { scopeId, pageId: id, provenance: input.provenance }, now);
     return toPage((await this.#pageRow(tx, id))!);
   }
@@ -934,6 +946,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
           input.id,
         ],
       });
+      if (input.name !== undefined) await this.#placed?.(tx, input.id, String(row.parentId));
       await this.#logActivity(
         tx,
         'page-updated',
@@ -1012,6 +1025,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
         sql: `UPDATE "${T.pages}" SET version = version + 1, updatedBy = ?, updatedAt = ? WHERE id = ?`,
         args: [JSON.stringify(input.provenance), now, input.id],
       });
+      await this.#placed?.(tx, input.id, String(row.parentId), { reposition: input.position === undefined });
       await this.#logActivity(tx, 'page-moved', { scopeId, pageId: input.id, provenance: input.provenance }, now);
       return toPage((await this.#pageRow(tx, input.id))!);
     });
@@ -1063,7 +1077,9 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
           position: String(child.position),
           countLimitId: input.sourceId,
         });
+        await this.#placed?.(tx, String(child.id), input.sourceId, { reposition: true });
       }
+      await this.#placed?.(tx, input.sourceId, source.parentId === null ? null : String(source.parentId));
       await tx.execute({
         sql: `UPDATE "${T.notes}" SET pageId = ? WHERE pageId = ?`,
         args: [input.targetId, input.sourceId],
@@ -1123,6 +1139,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
         sql: `UPDATE "${T.pages}" SET deletedAt = ?, deletedBy = ?, version = version + 1, updatedBy = ?, updatedAt = ? WHERE id = ?`,
         args: [now, input.deletedBy, JSON.stringify({ author: input.deletedBy }), now, input.id],
       });
+      await this.#placed?.(tx, input.id, String(row.parentId));
       await tx.execute({
         sql: `DELETE FROM "${T.pinAudiences}" WHERE pinId IN (SELECT id FROM "${T.pins}" WHERE pageId = ?)`,
         args: [input.id],
