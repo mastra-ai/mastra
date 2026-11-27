@@ -237,16 +237,14 @@ export class MastraPlatform {
       method: 'POST',
       body: toAgentBody(input),
     });
-    return new PlatformAgent(this.#services.client, {
-      id: created.id,
-      name: created.name ?? input.name,
-      description: input.description,
-      instructions: input.instructions,
-      model: input.model,
-    });
+    // The Platform resolves the default model and the tools the connections bring.
+    return this.getAgent(created.id);
   }
 
-  /** An existing managed agent, with its name, description, and instructions read from the Platform. */
+  /**
+   * An existing managed agent, with its name, instructions, model, and tools read from the
+   * Platform.
+   */
   async getAgent(agentId: string): Promise<PlatformAgent> {
     const client = this.#services.client;
     const details = await client.getAgent(agentId).details();
@@ -255,8 +253,32 @@ export class MastraPlatform {
       name: details.name,
       description: details.description,
       instructions: typeof details.instructions === 'string' ? details.instructions : undefined,
-      model: details.modelId,
+      model: gatewayModel(details.provider, details.modelId),
+      tools: details.tools,
+      memory: () => this.#agentMemoryLookup(),
     });
+  }
+
+  #agentMemory?: Promise<PlatformMemory | undefined>;
+
+  /** The Platform Memory the project's managed agents keep their conversations in, once it's ready. */
+  #agentMemoryLookup() {
+    const lookup = (this.#agentMemory ??= this.#api
+      .request<{ memoryInstanceId?: string }>('GET', `${this.#agentsPath}/setup`)
+      .then(({ memoryInstanceId }) =>
+        memoryInstanceId ? this.getMemory({ instanceId: memoryInstanceId }) : undefined,
+      ));
+    // Look again next time until the memory is ready.
+    return lookup.then(
+      memory => {
+        if (!memory) this.#agentMemory = undefined;
+        return memory;
+      },
+      error => {
+        this.#agentMemory = undefined;
+        throw error;
+      },
+    );
   }
 
   /** The project's managed agents, keyed by agent ID. */
@@ -365,4 +387,10 @@ export class MastraPlatform {
     const sandboxProvider = options.sandboxProvider ?? (await this.sandboxes.get(sandboxId)).provider;
     return this.createSandbox({ ...options, sandboxId, sandboxProvider, reattach: 'required' });
   }
+}
+
+/** An agent's model as `provider/model`, however the Platform splits it into provider and ID. */
+function gatewayModel(provider: string | undefined, modelId: string | undefined) {
+  if (!modelId) return undefined;
+  return modelId.includes('/') || !provider || provider === 'mastra' ? modelId : `${provider}/${modelId}`;
 }
