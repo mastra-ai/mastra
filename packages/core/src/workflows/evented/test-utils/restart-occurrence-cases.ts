@@ -1374,6 +1374,54 @@ export function describeRestartOccurrenceCases({
       });
     }, 20_000);
 
+    // A run stored only for the guards stored a suspension, was resumed, and is restarted while a
+    // later step runs; that step then suspends without storing its suspension. The suspend handler
+    // removed the restarted run's row, which still held the earlier, stored progress.
+    it('keeps the row of a restarted run that suspends without storing the suspension', async () => {
+      let storeSuspension = true;
+      const steps = holdableSteps();
+      const gate = (id: string) =>
+        createStep({
+          id,
+          inputSchema: Num,
+          outputSchema: Num,
+          resumeSchema: z.object({ ok: z.boolean() }),
+          execute: async ({ inputData, resumeData, suspend }) =>
+            resumeData ? { n: inputData.n + 1 } : suspend({ reason: id }),
+        });
+      const workflow = createWorkflow({
+        id: `restart-keeps-row-${randomUUID()}`,
+        inputSchema: Num,
+        outputSchema: Num,
+        options: {
+          shouldPersistSnapshot: ({ workflowStatus }) =>
+            workflowStatus === 'suspended' ? storeSuspension : workflowStatus !== 'running',
+        },
+      })
+        .then(gate('first'))
+        .then(steps.step('work'))
+        .then(gate('second'))
+        .commit();
+      await withHost({ [workflow.id]: workflow }, steps.releaseAll, async () => {
+        const run = await workflow.createRun();
+        expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'suspended' });
+        expect((await storedRun(workflow.id, run.runId))?.guardedOnlySnapshot).toBe(true);
+
+        const oldWork = steps.holdAt('work');
+        const resumed = run.resume({ step: 'first', resumeData: { ok: true } });
+        await oldWork.entered;
+        storeSuspension = false;
+        expect(await restartRun(workflow, run.runId)).toMatchObject({ status: 'suspended' });
+        oldWork.release();
+        expect(await resumed).toMatchObject({ status: 'suspended' });
+        // The suspend handler goes on after the callers hear of the suspension.
+        await drainHandlers();
+        expect(await storedRun(workflow.id, run.runId)).toMatchObject({
+          context: { first: { status: 'success' }, work: { status: 'success' } },
+        });
+      });
+    }, 20_000);
+
     // R7 for a run that suspended in that window: it stays suspended, the caller gets the suspension,
     // and the run is resumed as usual.
     it('leaves a run that suspended between the restart read and the restart suspended', async () => {
