@@ -2,7 +2,10 @@ import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../../agent';
 import { MockMemory } from '../../memory/mock';
+import { ProcessorStepSchema } from '../../processors/index';
 import { InMemoryStore } from '../../storage';
+import { createWorkflow } from '../../workflows/create';
+import { createStep } from '../../workflows/workflow';
 import { knowledgeMemoryScopes } from '../declarations';
 import { Knowledge } from '../index';
 import { KNOWLEDGE_READ_INSTRUCTIONS, KNOWLEDGE_WRITE_INSTRUCTIONS } from '../instructions';
@@ -319,6 +322,38 @@ describe('Knowledge attached to an Agent without Memory', () => {
     expect(prompt).toContain('Your session has access to:');
     expect(prompt).toContain('- thread:thread-9 (owner)');
     expect(prompt).toContain('- resource:user-1 (owner)');
+  });
+
+  it('lets a knowledge-scopes processor inside a processor workflow replace the built-in one', async () => {
+    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'held-wf' }), scopes, tools: true });
+    const replacement = {
+      id: 'knowledge-scopes',
+      processInput: ({ messages }: { messages: unknown[] }) => messages,
+    };
+    const workflow = createWorkflow({
+      id: 'scopes-workflow',
+      inputSchema: ProcessorStepSchema,
+      outputSchema: ProcessorStepSchema,
+      type: 'processor',
+      options: { validateInputs: false },
+    })
+      .then(createStep(replacement as never))
+      .commit();
+    const prompts: unknown[][] = [];
+    const agent = new Agent({
+      id: 'held-wf',
+      name: 'held-wf',
+      instructions: 'x',
+      model: scriptedModel([], prompts),
+      knowledge,
+      memory: new MockMemory(),
+      scopes: ['org:acme'],
+      inputProcessors: [workflow],
+    });
+    await agent.generate('hello', { maxSteps: 1, memory: { thread: 'thread-9', resource: 'user-1' } });
+    const prompt = JSON.stringify(prompts[0]);
+    expect(prompt).not.toContain('<knowledge-scopes>');
+    expect(prompt).not.toContain('Your session has access to:');
   });
 
   it('warns and delivers no pins to an agent without Memory', async () => {

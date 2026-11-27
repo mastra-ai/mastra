@@ -2533,7 +2533,11 @@ export class Agent<
     }
     // Held scopes ride a Memory state signal too, and only matter to an agent with Knowledge tools.
     const toolGroups = knowledge.__toolGroups;
-    if (hasMemory && (toolGroups.read || toolGroups.write) && !configuredIds.has(HELD_SCOPES_STATE_ID)) {
+    if (
+      hasMemory &&
+      (toolGroups.read || toolGroups.write) &&
+      !hasConfiguredProcessor(configuredProcessors, processor => processor.id === HELD_SCOPES_STATE_ID)
+    ) {
       processors.push(
         new HeldScopesStateProcessor({
           principalsKey: context => knowledge.__principalsKey(context),
