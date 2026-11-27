@@ -147,6 +147,18 @@ export class GatewayManager {
    */
   async resolveAuth(routerId: string): Promise<GatewayAuthResult> {
     const { gateway, gatewayId, providerId, modelId } = this.resolveModelId(routerId);
+
+    // The Mastra gateway turns itself off without a key, so its `mastra/...` ids fall through to
+    // models.dev, which has no `mastra` provider and would fail without naming the key.
+    if (gatewayId === 'models.dev' && routerId.startsWith('mastra/')) {
+      throw new MastraError({
+        id: 'MASTRA_GATEWAY_NO_API_KEY',
+        domain: 'LLM',
+        category: 'USER',
+        text: `Set MASTRA_GATEWAY_API_KEY to use "${routerId}" through Mastra Gateway.`,
+      });
+    }
+
     const request: GatewayAuthRequest = { gatewayId, providerId, modelId, routerId };
 
     const rawGatewayAuth = await gateway.resolveAuth?.(request);
