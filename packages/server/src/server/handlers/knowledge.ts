@@ -18,8 +18,8 @@ import {
   knowledgePathParams,
   knowledgeSearchQuerySchema,
   knowledgeSearchResponseSchema,
-  knowledgeTimelineQuerySchema,
-  knowledgeTimelineResponseSchema,
+  knowledgeSequenceQuerySchema,
+  knowledgeSequenceResponseSchema,
   knowledgeLinkCountsQuerySchema,
   knowledgeLinkCountsResponseSchema,
   knowledgePageLinksQuerySchema,
@@ -274,11 +274,11 @@ export const GET_KNOWLEDGE_PAGE_ROUTE = createRoute({
       const view = await readers.readKnowledgePage(store, { pageId, read, noteCursor, noteLimit });
       if (!view) throw new HTTPException(404, { message: 'Knowledge page not found' });
       const label = <T extends { isScope: boolean; declaration?: string }>(page: T) => withDisplayLabel(instance, page);
-      // Stores without timelines (and older cores) send no flag, and the explorer shows a plain page.
-      const timeline = (await store.timelines?.listTimelineIds({ pageIds: [view.page.id] }))?.length ? true : undefined;
+      // Stores without sequences (and older cores) send no flag, and the explorer shows a plain page.
+      const sequence = (await store.sequences?.listSequenceIds({ pageIds: [view.page.id] }))?.length ? true : undefined;
       return {
         ...view,
-        ...(timeline ? { timeline } : {}),
+        ...(sequence ? { sequence } : {}),
         page: label(view.page),
         ancestors: view.ancestors.map(label),
         related: view.related.map(label),
@@ -409,51 +409,51 @@ export const SEARCH_KNOWLEDGE_ROUTE = createRoute({
   },
 });
 
-export const GET_KNOWLEDGE_TIMELINE_ROUTE = createRoute({
+export const GET_KNOWLEDGE_SEQUENCE_ROUTE = createRoute({
   method: 'GET',
-  path: '/knowledge/:knowledgeKey/pages/:pageId/timeline',
+  path: '/knowledge/:knowledgeKey/pages/:pageId/sequence',
   responseType: 'json',
   pathParamSchema: knowledgePagePathParams,
-  queryParamSchema: knowledgeTimelineQuerySchema,
-  responseSchema: knowledgeTimelineResponseSchema,
-  summary: "Read a timeline page's entries",
+  queryParamSchema: knowledgeSequenceQuerySchema,
+  responseSchema: knowledgeSequenceResponseSchema,
+  summary: "Read a sequence page's items",
   description:
-    "Returns a timeline page's entries, newest first by default, paged with cursor, within a since/until range or one thread. With q, returns the entries matching those keywords instead, best first and not paged. 404 when the page is not a timeline the caller can read; 501 when the store has no timelines.",
+    "Returns a sequence page's items, newest first by default, paged with cursor, within a since/until range or one thread. With q, returns the items matching those keywords instead, best first and not paged. 404 when the page is not a sequence the caller can read; 501 when the store has no sequences.",
   tags: ['Knowledge'],
   requiresAuth: true,
   handler: async ({ mastra, requestContext, knowledgeKey, pageId, since, until, order, thread, q, cursor, limit }) => {
     try {
       const { store, read } = await resolveStore(mastra, requestContext, knowledgeKey);
-      const timelines = store.timelines;
-      if (!timelines) throw new HTTPException(501, { message: 'This Knowledge store has no timelines.' });
+      const sequences = store.sequences;
+      if (!sequences) throw new HTTPException(501, { message: 'This Knowledge store has no sequences.' });
       const page = await store.getPage({ id: pageId, read });
-      if (!page || !(await timelines.listTimelineIds({ pageIds: [page.id] })).length) {
-        throw new HTTPException(404, { message: 'Knowledge timeline not found' });
+      if (!page || !(await sequences.listSequenceIds({ pageIds: [page.id] })).length) {
+        throw new HTTPException(404, { message: 'Knowledge sequence not found' });
       }
       const range = { since: since ? new Date(since) : undefined, until: until ? new Date(until) : undefined };
       if (q) {
-        const entries = await timelines.searchEntries({
+        const items = await sequences.searchItems({
           query: q,
           read,
-          timelineIds: [page.id],
+          sequenceIds: [page.id],
           ...range,
           limit: limit ?? 20,
         });
-        return { entries: entries.map(entry => ({ ...entry })), nextCursor: null };
+        return { items: items.map(item => ({ ...item })), nextCursor: null };
       }
-      const entries = await timelines.listEntries({
-        timelineId: page.id,
+      const items = await sequences.listItems({
+        sequenceId: page.id,
         read,
         ...range,
         order,
-        threadExternalId: thread,
+        externalParentId: thread,
         cursor: cursor || undefined,
         includeDeleted: true,
         limit: limit ?? 50,
       });
-      return { ...entries, entries: entries.entries.map(entry => ({ ...entry })) };
+      return { ...items, items: items.items.map(item => ({ ...item })) };
     } catch (error) {
-      return handleError(error, 'Error reading Knowledge timeline');
+      return handleError(error, 'Error reading Knowledge sequence');
     }
   },
 });

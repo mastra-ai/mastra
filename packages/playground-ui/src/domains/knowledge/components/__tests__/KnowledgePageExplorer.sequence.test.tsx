@@ -8,9 +8,9 @@ import type { KnowledgePagePayload } from '../../pageTypes';
 import type {
   KnowledgeExplorerQueryState,
   KnowledgeExplorerSource,
-  KnowledgeExplorerTimeline,
-  KnowledgeExplorerTimelineEntry,
-  KnowledgeExplorerTimelineRequest,
+  KnowledgeExplorerSequence,
+  KnowledgeExplorerSequenceItem,
+  KnowledgeExplorerSequenceRequest,
 } from '../KnowledgePageExplorer';
 import { KnowledgePageExplorer } from '../KnowledgePageExplorer';
 
@@ -31,22 +31,22 @@ function page(id: string, parentId: string | null, extra: Partial<KnowledgePageP
   };
 }
 
-function entry(
+function item(
   id: string,
   occurredAt: string,
   body: string,
-  extra: Partial<KnowledgeExplorerTimelineEntry> = {},
-): KnowledgeExplorerTimelineEntry {
+  extra: Partial<KnowledgeExplorerSequenceItem> = {},
+): KnowledgeExplorerSequenceItem {
   return {
     id,
-    timelineId: 'general',
+    sequenceId: 'general',
     externalId: id,
     occurredAt,
     writtenAt: occurredAt,
     editedAt: null,
     deletedAt: null,
     author: { sourceId: 'U1', name: 'Ada' },
-    threadExternalId: null,
+    externalParentId: null,
     body,
     version: 1,
     writtenBy: 'importer:slack',
@@ -58,35 +58,35 @@ const org = page('org', null, { name: 'Acme', address: 'org:acme' });
 const general = page('general', 'org', { name: '#general', key: 'general' });
 const plain = page('plain', 'org', { name: 'Plain', key: 'plain', body: 'Just a page' });
 
-const root = entry('e1', '2026-11-01T09:00:00.000Z', 'Deploy is starting');
-const reply = entry('e2', '2026-11-01T09:05:00.000Z', 'Deploy finished', {
-  threadExternalId: 'e1',
+const root = item('e1', '2026-11-01T09:00:00.000Z', 'Deploy is starting');
+const reply = item('e2', '2026-11-01T09:05:00.000Z', 'Deploy finished', {
+  externalParentId: 'e1',
   author: { sourceId: 'U2', name: 'Grace' },
   editedAt: '2026-11-01T09:06:00.000Z',
 });
-const removed = entry('e3', '2026-11-01T10:00:00.000Z', '', { deletedAt: '2026-11-01T10:01:00.000Z' });
-const older = entry('e0', '2026-10-31T08:00:00.000Z', 'Yesterday standup');
+const removed = item('e3', '2026-11-01T10:00:00.000Z', '', { deletedAt: '2026-11-01T10:01:00.000Z' });
+const older = item('e0', '2026-10-31T08:00:00.000Z', 'Yesterday standup');
 
 const ok = <T,>(data: T): KnowledgeExplorerQueryState<T> => ({ data, isPending: false, isError: false, error: null });
 const idle: KnowledgeExplorerQueryState<never> = { isPending: false, isError: false, error: null };
 
-function respond(request: KnowledgeExplorerTimelineRequest): KnowledgeExplorerTimeline {
-  if (request.q) return { entries: [reply, root].filter(item => /deploy/i.test(item.body)), nextCursor: null };
-  if (request.thread) return { entries: [reply, root], nextCursor: null };
-  if (request.cursor === 'older') return { entries: [older], nextCursor: null };
-  return { entries: [removed, reply, root], nextCursor: 'older' };
+function respond(request: KnowledgeExplorerSequenceRequest): KnowledgeExplorerSequence {
+  if (request.q) return { items: [reply, root].filter(item => /deploy/i.test(item.body)), nextCursor: null };
+  if (request.thread) return { items: [reply, root], nextCursor: null };
+  if (request.cursor === 'older') return { items: [older], nextCursor: null };
+  return { items: [removed, reply, root], nextCursor: 'older' };
 }
 
 function setup() {
-  const calls: Array<{ pageId: string; requests: KnowledgeExplorerTimelineRequest[] }> = [];
+  const calls: Array<{ pageId: string; requests: KnowledgeExplorerSequenceRequest[] }> = [];
   const source: KnowledgeExplorerSource = {
     usePage: pageId => {
       if (!pageId) return idle;
-      if (pageId === 'general') return ok({ page: general, notes: [], ancestors: [org], related: [], timeline: true });
+      if (pageId === 'general') return ok({ page: general, notes: [], ancestors: [org], related: [], sequence: true });
       return ok({ page: plain, notes: [], ancestors: [org], related: [] });
     },
     useSearch: () => ({ data: { results: [] } }),
-    useTimeline: (pageId, requests) => {
+    useSequence: (pageId, requests) => {
       calls.push({ pageId, requests });
       return requests.map(request => ok(respond(request)));
     },
@@ -117,17 +117,17 @@ beforeAll(() => {
   };
 });
 
-const entryTexts = () =>
-  within(screen.getByRole('list', { name: 'Timeline entries' }))
+const itemTexts = () =>
+  within(screen.getByRole('list', { name: 'Sequence items' }))
     .getAllByRole('listitem')
     .map(item => item.textContent ?? '');
 
-describe('KnowledgePageExplorer timeline', () => {
-  it("lists a timeline page's entries newest first, with author, edits and deletions", () => {
+describe('KnowledgePageExplorer sequence', () => {
+  it("lists a sequence page's items newest first, with author, edits and deletions", () => {
     const { source, calls } = setup();
     renderPage(source, 'general');
     expect(calls.at(-1)).toEqual({ pageId: 'general', requests: [{ order: 'desc' }] });
-    const texts = entryTexts();
+    const texts = itemTexts();
     expect(texts).toHaveLength(3);
     expect(texts[0]).toContain('Deleted');
     expect(texts[1]).toContain('Grace');
@@ -137,33 +137,33 @@ describe('KnowledgePageExplorer timeline', () => {
     expect(texts[2]).toContain('Deploy is starting');
   });
 
-  it('loads older entries with the cursor', async () => {
+  it('loads older items with the cursor', async () => {
     const { source, calls } = setup();
     renderPage(source, 'general');
-    await userEvent.click(screen.getByRole('button', { name: 'Load older entries' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Load older items' }));
     expect(calls.at(-1)?.requests).toEqual([{ order: 'desc' }, { order: 'desc', cursor: 'older' }]);
-    expect(entryTexts()).toHaveLength(4);
-    expect(entryTexts()[3]).toContain('Yesterday standup');
-    expect(screen.queryByRole('button', { name: 'Load older entries' })).toBeNull();
+    expect(itemTexts()).toHaveLength(4);
+    expect(itemTexts()[3]).toContain('Yesterday standup');
+    expect(screen.queryByRole('button', { name: 'Load older items' })).toBeNull();
   });
 
   it('reanchors loaded pages when polling shifts the first page', async () => {
     const { source } = setup();
     let polled = false;
-    source.useTimeline = (_pageId, requests) =>
+    source.useSequence = (_pageId, requests) =>
       requests.map(request =>
         ok(
           !polled
             ? respond(request)
             : request.cursor === 'shifted'
-              ? { entries: [root, older], nextCursor: null }
+              ? { items: [root, older], nextCursor: null }
               : request.cursor === 'older'
-                ? { entries: [older], nextCursor: null }
-                : { entries: [removed, reply], nextCursor: 'shifted' },
+                ? { items: [older], nextCursor: null }
+                : { items: [removed, reply], nextCursor: 'shifted' },
         ),
       );
     const view = renderPage(source, 'general');
-    await userEvent.click(screen.getByRole('button', { name: 'Load older entries' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Load older items' }));
     polled = true;
     view.rerender(
       <KnowledgePageExplorer
@@ -176,28 +176,28 @@ describe('KnowledgePageExplorer timeline', () => {
       />,
     );
     expect(screen.getByText('Deploy is starting')).toBeTruthy();
-    expect(entryTexts()).toHaveLength(4);
+    expect(itemTexts()).toHaveLength(4);
   });
 
-  it('leaves thread view when searching the whole timeline', async () => {
+  it('leaves thread view when searching the whole sequence', async () => {
     const { source, calls } = setup();
     renderPage(source, 'general');
     const thread = screen.getAllByRole('button', { name: 'Open thread' })[0];
     expect(thread).toBeDefined();
     if (thread) await userEvent.click(thread);
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Search entries' }), 'deploy{Enter}');
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search items' }), 'deploy{Enter}');
     expect(calls.at(-1)?.requests[0]).not.toHaveProperty('thread');
     expect(screen.queryByText(/^Thread /)).toBeNull();
   });
 
-  it('labels ascending pagination as newer entries', async () => {
+  it('labels ascending pagination as newer items', async () => {
     const { source } = setup();
     renderPage(source, 'general');
     await userEvent.click(screen.getByRole('button', { name: 'Oldest first' }));
-    expect(screen.getByRole('button', { name: 'Load newer entries' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Load newer items' })).toBeTruthy();
   });
 
-  it('opens a thread from a reply and goes back to every entry', async () => {
+  it('opens a thread from a reply and goes back to every item', async () => {
     const { source, calls } = setup();
     renderPage(source, 'general');
     const replyItem = screen.getAllByRole('listitem').find(item => item.textContent?.includes('Deploy finished'));
@@ -205,7 +205,7 @@ describe('KnowledgePageExplorer timeline', () => {
     await userEvent.click(within(replyItem as HTMLElement).getByRole('button', { name: 'Open thread' }));
     expect(calls.at(-1)?.requests).toEqual([{ order: 'asc', thread: 'e1' }]);
     expect(screen.getByText(/Thread/)).toBeTruthy();
-    await userEvent.click(screen.getByRole('button', { name: 'All entries' }));
+    await userEvent.click(screen.getByRole('button', { name: 'All items' }));
     expect(calls.at(-1)?.requests).toEqual([{ order: 'desc' }]);
   });
 
@@ -224,18 +224,18 @@ describe('KnowledgePageExplorer timeline', () => {
     ]);
   });
 
-  it('searches entries by keyword', async () => {
+  it('searches items by keyword', async () => {
     const { source, calls } = setup();
     renderPage(source, 'general');
-    await userEvent.type(screen.getByLabelText('Search entries'), 'deploy{Enter}');
+    await userEvent.type(screen.getByLabelText('Search items'), 'deploy{Enter}');
     expect(calls.at(-1)?.requests).toEqual([{ order: 'desc', q: 'deploy' }]);
-    expect(entryTexts()).toHaveLength(2);
+    expect(itemTexts()).toHaveLength(2);
   });
 
-  it('shows no timeline on an ordinary page', () => {
+  it('shows no sequence on an ordinary page', () => {
     const { source, calls } = setup();
     renderPage(source, 'plain');
-    expect(screen.queryByRole('list', { name: 'Timeline entries' })).toBeNull();
+    expect(screen.queryByRole('list', { name: 'Sequence items' })).toBeNull();
     expect(calls).toHaveLength(0);
   });
 });

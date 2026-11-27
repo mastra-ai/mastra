@@ -3252,9 +3252,9 @@ export const API_ROUTE_METADATA = {
       "kind": "record"
     }
   },
-  "GET /knowledge/:knowledgeKey/pages/:pageId/timeline": {
+  "GET /knowledge/:knowledgeKey/pages/:pageId/sequence": {
     "method": "GET",
-    "path": "/knowledge/:knowledgeKey/pages/:pageId/timeline",
+    "path": "/knowledge/:knowledgeKey/pages/:pageId/sequence",
     "pathParams": [
       "knowledgeKey",
       "pageId"
@@ -3273,7 +3273,7 @@ export const API_ROUTE_METADATA = {
     "hasBody": false,
     "responseShape": {
       "kind": "object-property",
-      "listProperty": "entries"
+      "listProperty": "items"
     }
   },
   "GET /workspaces": {

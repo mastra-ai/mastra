@@ -31,8 +31,8 @@ import type { PageLinkLists } from './KnowledgePageDetail';
 import { KnowledgePageGraph } from './KnowledgePageGraph';
 import { KnowledgeNotesSkeleton, KnowledgePageSkeleton } from './KnowledgePageSkeleton';
 import { KNOWLEDGE_TREE_ROOT, KnowledgePageTree } from './KnowledgePageTree';
+import { KnowledgeSequenceItems } from './KnowledgeSequenceItems';
 import { KnowledgeSourceIcon } from './KnowledgeSourceIcon';
-import { KnowledgeTimelineEntries } from './KnowledgeTimelineEntries';
 import { KnowledgeTooltip } from './KnowledgeTooltip';
 
 import { ActionRow } from '@/ds/components/ActionRow';
@@ -89,33 +89,33 @@ export interface KnowledgeExplorerPageDetail {
   related: KnowledgePagePayload[];
   /** Notes on other pages that mention this one. */
   mentionedBy?: KnowledgeNotePayload[];
-  /** Set when the page is a timeline; the explorer then lists its entries through `useTimeline`. */
-  timeline?: boolean;
+  /** Set when the page is a sequence; the explorer then lists its items through `useSequence`. */
+  sequence?: boolean;
 }
 
-/** One entry of a timeline page, as the server sends it (times are ISO strings). */
-export interface KnowledgeExplorerTimelineEntry {
+/** One item of a sequence page, as the server sends it (times are ISO strings). */
+export interface KnowledgeExplorerSequenceItem {
   id: string;
-  timelineId: string;
+  sequenceId: string;
   externalId: string;
   occurredAt: string;
   writtenAt: string;
   editedAt: string | null;
   deletedAt: string | null;
   author: { sourceId: string; name?: string } | null;
-  threadExternalId: string | null;
+  externalParentId: string | null;
   body: string;
   version: number;
   writtenBy: string;
 }
 
-export interface KnowledgeExplorerTimeline {
-  entries: KnowledgeExplorerTimelineEntry[];
+export interface KnowledgeExplorerSequence {
+  items: KnowledgeExplorerSequenceItem[];
   nextCursor: string | null;
 }
 
-/** One read of a timeline's entries. With `q` the host returns keyword matches, best first, unpaged. */
-export interface KnowledgeExplorerTimelineRequest {
+/** One read of a sequence's items. With `q` the host returns keyword matches, best first, unpaged. */
+export interface KnowledgeExplorerSequenceRequest {
   order: 'desc' | 'asc';
   since?: string;
   until?: string;
@@ -187,11 +187,11 @@ export interface KnowledgeExplorerSource {
   usePageLinks?: (pageId: string | null) => KnowledgeExplorerQueryState<KnowledgeExplorerPageLinks>;
   /** A page's recent activity, newest first. */
   useActivity?: (pageId: string) => KnowledgeExplorerQueryState<KnowledgeExplorerActivity>;
-  /** A timeline page's entries, one result per request in order (e.g. `useQueries`). Without it timelines show as plain pages. */
-  useTimeline?: (
+  /** A sequence page's items, one result per request in order (e.g. `useQueries`). Without it sequences show as plain pages. */
+  useSequence?: (
     pageId: string,
-    requests: KnowledgeExplorerTimelineRequest[],
-  ) => Array<KnowledgeExplorerQueryState<KnowledgeExplorerTimeline>>;
+    requests: KnowledgeExplorerSequenceRequest[],
+  ) => Array<KnowledgeExplorerQueryState<KnowledgeExplorerSequence>>;
 }
 
 export interface KnowledgePageExplorerProps {
@@ -759,9 +759,9 @@ function SelectedPage({
       mentionedBy={detail.data.mentionedBy}
       links={links}
       activity={activity.data?.events}
-      timeline={
-        detail.data.timeline && source.useTimeline ? (
-          <KnowledgeTimelineEntries key={pageId} pageId={pageId} useTimeline={source.useTimeline} />
+      sequence={
+        detail.data.sequence && source.useSequence ? (
+          <KnowledgeSequenceItems key={pageId} pageId={pageId} useSequence={source.useSequence} />
         ) : undefined
       }
       childPages={

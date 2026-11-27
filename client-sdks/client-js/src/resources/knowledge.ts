@@ -7,7 +7,7 @@ import type {
 import type {
   KnowledgePageActivityEvent,
   KnowledgePageSearchHit,
-  KnowledgeTimelineEntryRecord,
+  KnowledgeSequenceItemRecord,
 } from '@mastra/core/storage';
 import type { ClientOptions, Serialized } from '../types';
 import { createSseJsonTransform } from '../utils/stream-transforms';
@@ -16,8 +16,8 @@ import { BaseResource } from './base';
 
 export type KnowledgeTreeResponse = Serialized<KnowledgeTreeChildren>;
 export type KnowledgePageResponse = Serialized<KnowledgePageView> & {
-  /** True when the page is a timeline; read its entries with `timeline()`. Absent from older servers. */
-  timeline?: boolean;
+  /** True when the page is a sequence; read its items with `sequence()`. Absent from older servers. */
+  sequence?: boolean;
 };
 export type KnowledgeGraphResponse = Serialized<KnowledgePageGraph> & {
   /** Declared access grants onto the scopes shown; absent from servers on an older core. */
@@ -40,9 +40,9 @@ export interface KnowledgeActivityResponse {
   events: Serialized<KnowledgePageActivityEvent>[];
   nextCursor?: string;
 }
-export interface KnowledgeTimelineResponse {
-  entries: Serialized<KnowledgeTimelineEntryRecord>[];
-  /** Null when there are no more entries, and always null for a keyword search. */
+export interface KnowledgeSequenceResponse {
+  items: Serialized<KnowledgeSequenceItemRecord>[];
+  /** Null when there are no more items, and always null for a keyword search. */
   nextCursor: string | null;
 }
 
@@ -128,11 +128,11 @@ export class Knowledge extends BaseResource {
   }
 
   /**
-   * A timeline page's entries: newest first by default, paged with `cursor`, within `since`/`until` (ISO date-times)
-   * or one `thread`. With `q`, the entries matching those keywords instead, best first and not paged. Rejects with
-   * 404 when the page is not a timeline, and 501 where the store has no timelines.
+   * A sequence page's items: newest first by default, paged with `cursor`, within `since`/`until` (ISO date-times)
+   * or one `thread`. With `q`, the items matching those keywords instead, best first and not paged. Rejects with
+   * 404 when the page is not a sequence, and 501 where the store has no sequences.
    */
-  timeline(
+  sequence(
     pageId: string,
     params: {
       since?: string;
@@ -143,8 +143,8 @@ export class Knowledge extends BaseResource {
       cursor?: string;
       limit?: number;
     } = {},
-  ): Promise<KnowledgeTimelineResponse> {
-    return this.request(`${this.base}/pages/${encodeURIComponent(pageId)}/timeline${query(params)}`);
+  ): Promise<KnowledgeSequenceResponse> {
+    return this.request(`${this.base}/pages/${encodeURIComponent(pageId)}/sequence${query(params)}`);
   }
 
   /**

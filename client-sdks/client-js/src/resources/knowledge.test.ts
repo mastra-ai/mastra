@@ -44,24 +44,24 @@ describe('Knowledge resource', () => {
     expect(url(fetchMock, 1)).toBe('http://localhost:4111/api/knowledge/kb/activity?pageId=p1&cursor=c1&limit=10');
   });
 
-  it("reads a timeline page's entries by range, thread and keywords", async () => {
-    const fetchMock = mockFetch({ entries: [], nextCursor: null });
+  it("reads a sequence page's items by range, thread and keywords", async () => {
+    const fetchMock = mockFetch({ items: [], nextCursor: null });
     const kb = client.getKnowledge('kb');
-    await kb.timeline('p/1');
-    await kb.timeline('p/1', {
+    await kb.sequence('p/1');
+    await kb.sequence('p/1', {
       since: '2026-11-01T00:00:00.000Z',
       until: '2026-11-02T00:00:00.000Z',
       order: 'asc',
       cursor: 'c1',
       limit: 10,
     });
-    await kb.timeline('p/1', { thread: '1700000000.000100' });
-    await kb.timeline('p/1', { q: 'deploy' });
+    await kb.sequence('p/1', { thread: '1700000000.000100' });
+    await kb.sequence('p/1', { q: 'deploy' });
     expect(fetchMock.mock.calls.map(call => call[0])).toEqual([
-      'http://localhost:4111/api/knowledge/kb/pages/p%2F1/timeline',
-      'http://localhost:4111/api/knowledge/kb/pages/p%2F1/timeline?since=2026-11-01T00%3A00%3A00.000Z&until=2026-11-02T00%3A00%3A00.000Z&order=asc&cursor=c1&limit=10',
-      'http://localhost:4111/api/knowledge/kb/pages/p%2F1/timeline?thread=1700000000.000100',
-      'http://localhost:4111/api/knowledge/kb/pages/p%2F1/timeline?q=deploy',
+      'http://localhost:4111/api/knowledge/kb/pages/p%2F1/sequence',
+      'http://localhost:4111/api/knowledge/kb/pages/p%2F1/sequence?since=2026-11-01T00%3A00%3A00.000Z&until=2026-11-02T00%3A00%3A00.000Z&order=asc&cursor=c1&limit=10',
+      'http://localhost:4111/api/knowledge/kb/pages/p%2F1/sequence?thread=1700000000.000100',
+      'http://localhost:4111/api/knowledge/kb/pages/p%2F1/sequence?q=deploy',
     ]);
   });
 

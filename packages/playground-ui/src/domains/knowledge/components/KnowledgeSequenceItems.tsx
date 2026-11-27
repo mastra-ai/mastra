@@ -3,8 +3,8 @@ import { useMemo, useState } from 'react';
 import { KnowledgeDetailSection } from './KnowledgePageDetail';
 import type {
   KnowledgeExplorerSource,
-  KnowledgeExplorerTimelineEntry,
-  KnowledgeExplorerTimelineRequest,
+  KnowledgeExplorerSequenceItem,
+  KnowledgeExplorerSequenceRequest,
 } from './KnowledgePageExplorer';
 
 import { Badge } from '@/ds/components/Badge';
@@ -14,7 +14,7 @@ import { SearchInput } from '@/ds/components/SearchInput';
 import { SkeletonText } from '@/ds/components/Skeleton';
 import { Txt } from '@/ds/components/Txt';
 
-type Filters = Omit<KnowledgeExplorerTimelineRequest, 'cursor'>;
+type Filters = Omit<KnowledgeExplorerSequenceRequest, 'cursor'>;
 
 /** A `datetime-local` value is local time without a zone; the server wants an ISO time with one. */
 function isoFromLocal(value: string): string | undefined {
@@ -25,8 +25,8 @@ function isoFromLocal(value: string): string | undefined {
 
 const timeFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 
-function EntryItem({ entry, onOpenThread }: { entry: KnowledgeExplorerTimelineEntry; onOpenThread?: () => void }) {
-  const author = entry.author?.name ?? entry.author?.sourceId ?? entry.writtenBy;
+function ItemItem({ item, onOpenThread }: { item: KnowledgeExplorerSequenceItem; onOpenThread?: () => void }) {
+  const author = item.author?.name ?? item.author?.sourceId ?? item.writtenBy;
   return (
     <li className="flex flex-col gap-1 border-b border-border pb-3 last:border-b-0 last:pb-0">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -34,26 +34,26 @@ function EntryItem({ entry, onOpenThread }: { entry: KnowledgeExplorerTimelineEn
           {author}
         </Txt>
         <Txt as="span" variant="caption" tone="muted" className="tabular-nums">
-          <time dateTime={entry.occurredAt}>{timeFormat.format(new Date(entry.occurredAt))}</time>
+          <time dateTime={item.occurredAt}>{timeFormat.format(new Date(item.occurredAt))}</time>
         </Txt>
-        {entry.editedAt && !entry.deletedAt ? (
+        {item.editedAt && !item.deletedAt ? (
           <Txt as="span" variant="caption" tone="muted">
             (edited)
           </Txt>
         ) : null}
-        {entry.threadExternalId ? (
+        {item.externalParentId ? (
           <Badge variant="neutral" size="sm">
             Reply
           </Badge>
         ) : null}
       </div>
-      {entry.deletedAt ? (
+      {item.deletedAt ? (
         <Txt variant="body-sm" tone="muted" className="italic">
           Deleted
         </Txt>
       ) : (
         <Txt variant="body-sm" className="wrap-anywhere whitespace-pre-wrap">
-          {entry.body}
+          {item.body}
         </Txt>
       )}
       {onOpenThread ? (
@@ -66,15 +66,15 @@ function EntryItem({ entry, onOpenThread }: { entry: KnowledgeExplorerTimelineEn
 }
 
 /**
- * A timeline page's entries: newest first, paged older with a cursor, narrowed to a date range or one
- * thread, or searched by keyword. Data comes from the host's `useTimeline`, one result per request.
+ * A sequence page's items: newest first, paged older with a cursor, narrowed to a date range or one
+ * thread, or searched by keyword. Data comes from the host's `useSequence`, one result per request.
  */
-export function KnowledgeTimelineEntries({
+export function KnowledgeSequenceItems({
   pageId,
-  useTimeline,
+  useSequence,
 }: {
   pageId: string;
-  useTimeline: NonNullable<KnowledgeExplorerSource['useTimeline']>;
+  useSequence: NonNullable<KnowledgeExplorerSource['useSequence']>;
 }) {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -96,7 +96,7 @@ export function KnowledgeTimelineEntries({
     return next;
   }, [from, to, ascending, thread, query]);
   const requests = useMemo(() => [filters, ...cursors.map(cursor => ({ ...filters, cursor }))], [filters, cursors]);
-  const results = useTimeline(pageId, requests);
+  const results = useSequence(pageId, requests);
   // Polling can move the boundary of any loaded page. Reanchor the following request before
   // displaying it, then rebuild later pages from that response rather than keeping stale cursors.
   for (let index = 0; index < cursors.length; index++) {
@@ -111,7 +111,7 @@ export function KnowledgeTimelineEntries({
       break;
     }
   }
-  const entries = results.flatMap(result => result.data?.entries ?? []);
+  const items = results.flatMap(result => result.data?.items ?? []);
   const next = results[results.length - 1]?.data?.nextCursor;
 
   // Any filter change starts the list again from its first page.
@@ -123,7 +123,7 @@ export function KnowledgeTimelineEntries({
     };
 
   return (
-    <KnowledgeDetailSection label="Entries">
+    <KnowledgeDetailSection label="Items">
       <div className="flex flex-wrap items-end gap-2">
         <form
           className="min-w-48 flex-1"
@@ -134,8 +134,8 @@ export function KnowledgeTimelineEntries({
           }}
         >
           <SearchInput
-            label="Search entries"
-            placeholder="Search entries"
+            label="Search items"
+            placeholder="Search items"
             size="sm"
             value={draft}
             onValueChange={value => {
@@ -180,37 +180,37 @@ export function KnowledgeTimelineEntries({
             Thread {thread}
           </Txt>
           <Button variant="ghost" size="sm" onClick={() => refilter(setThread)(null)}>
-            All entries
+            All items
           </Button>
         </div>
       ) : null}
       {results[0]?.isPending ? (
-        <div aria-label="Loading entries" className="flex flex-col gap-2">
+        <div aria-label="Loading items" className="flex flex-col gap-2">
           <SkeletonText className="w-3/4" />
           <SkeletonText className="w-1/2" />
           <SkeletonText className="w-2/3" />
         </div>
       ) : results[0]?.isError ? (
         <Txt variant="body-sm" tone="muted">
-          {results[0].error?.message ?? 'Failed to load the entries'}
+          {results[0].error?.message ?? 'Failed to load the items'}
         </Txt>
-      ) : entries.length === 0 ? (
+      ) : items.length === 0 ? (
         <Txt variant="body-sm" tone="muted">
-          {query ? 'No entries match.' : 'No entries here yet.'}
+          {query ? 'No items match.' : 'No items here yet.'}
         </Txt>
       ) : (
-        <ol aria-label="Timeline entries" className="flex flex-col gap-3">
-          {entries.map(entry => (
-            <EntryItem
-              key={entry.id}
-              entry={entry}
+        <ol aria-label="Sequence items" className="flex flex-col gap-3">
+          {items.map(item => (
+            <ItemItem
+              key={item.id}
+              item={item}
               onOpenThread={
-                thread || entry.deletedAt
+                thread || item.deletedAt
                   ? undefined
                   : () => {
                       setQuery('');
                       setDraft('');
-                      refilter(setThread)(entry.threadExternalId ?? entry.externalId);
+                      refilter(setThread)(item.externalParentId ?? item.externalId);
                     }
               }
             />
@@ -224,7 +224,7 @@ export function KnowledgeTimelineEntries({
           className="self-start"
           onClick={() => setCursors(current => [...current, next])}
         >
-          {filters.order === 'asc' ? 'Load newer entries' : 'Load older entries'}
+          {filters.order === 'asc' ? 'Load newer items' : 'Load older items'}
         </Button>
       ) : null}
     </KnowledgeDetailSection>

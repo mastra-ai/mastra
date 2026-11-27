@@ -25,7 +25,7 @@ export type {
   KnowledgePageLinksResponse,
   KnowledgePageResponse,
   KnowledgeSearchResponse,
-  KnowledgeTimelineResponse,
+  KnowledgeSequenceResponse,
   KnowledgeTreeResponse,
 } from './resources/knowledge';
 export { agentControllerMessageText, isKnownAgentControllerEvent } from './resources/agent-controller';

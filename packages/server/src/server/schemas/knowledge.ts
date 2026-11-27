@@ -39,21 +39,21 @@ export const knowledgeSearchQuerySchema = z.object({
   limit,
 });
 
-const timelineTime = z.iso.datetime({ offset: true });
+const sequenceTime = z.iso.datetime({ offset: true });
 
-export const knowledgeTimelineQuerySchema = z.object({
-  since: timelineTime.optional().describe('Entries that happened at or after this ISO 8601 date-time'),
-  until: timelineTime.optional().describe('Entries that happened before this ISO 8601 date-time'),
+export const knowledgeSequenceQuerySchema = z.object({
+  since: sequenceTime.optional().describe('Items that happened at or after this ISO 8601 date-time'),
+  until: sequenceTime.optional().describe('Items that happened before this ISO 8601 date-time'),
   order: z.enum(['desc', 'asc']).optional().describe('Newest first (default) or oldest first'),
-  thread: z.string().min(1).max(512).optional().describe("One thread: its root entry's externalId"),
-  q: z.string().min(1).max(200).optional().describe('Keywords to match in entry bodies; results are ranked, not paged'),
+  thread: z.string().min(1).max(512).optional().describe("One thread: its root item's externalId"),
+  q: z.string().min(1).max(200).optional().describe('Keywords to match in item bodies; results are ranked, not paged'),
   cursor: z
     .string()
     .refine(value => {
       // Reject malformed cursors at the HTTP boundary without requiring a newer Core value export.
       const match = /^t(-?\d+)_(.+)$/.exec(value);
       return match !== null && Number.isSafeInteger(Number(match[1]));
-    }, 'Invalid timeline cursor')
+    }, 'Invalid sequence cursor')
     .optional(),
   limit,
 });
@@ -99,8 +99,8 @@ export const knowledgePageLinksResponseSchema = z.object({
   truncated: z.boolean(),
 });
 export const knowledgeActivityResponseSchema = payload;
-export const knowledgeTimelineResponseSchema = z.object({
-  entries: z.array(payload),
+export const knowledgeSequenceResponseSchema = z.object({
+  items: z.array(payload),
   nextCursor: z.string().nullable(),
 });
 export const knowledgeEventsResponseSchema = z.object({

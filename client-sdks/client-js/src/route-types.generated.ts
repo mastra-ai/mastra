@@ -13779,50 +13779,50 @@ export interface GetKnowledgeKnowledgeKeyActivity_RouteContract {
 }
 
 // ============================================================================
-// Route: GET /knowledge/:knowledgeKey/pages/:pageId/timeline
+// Route: GET /knowledge/:knowledgeKey/pages/:pageId/sequence
 // ============================================================================
-export type GetKnowledgeKnowledgeKeyPagesPageIdTimeline_PathParams = GetKnowledgeKnowledgeKeyPagesPageId_PathParams;
+export type GetKnowledgeKnowledgeKeyPagesPageIdSequence_PathParams = GetKnowledgeKnowledgeKeyPagesPageId_PathParams;
 
-export type GetKnowledgeKnowledgeKeyPagesPageIdTimeline_QueryParams = {
-  /** Entries that happened at or after this ISO 8601 date-time */
+export type GetKnowledgeKnowledgeKeyPagesPageIdSequence_QueryParams = {
+  /** Items that happened at or after this ISO 8601 date-time */
   since?: string | undefined;
-  /** Entries that happened before this ISO 8601 date-time */
+  /** Items that happened before this ISO 8601 date-time */
   until?: string | undefined;
   /** Newest first (default) or oldest first */
   order?: ('desc' | 'asc') | undefined;
-  /** One thread: its root entry's externalId */
+  /** One thread: its root item's externalId */
   thread?: string | undefined;
-  /** Keywords to match in entry bodies; results are ranked, not paged */
+  /** Keywords to match in item bodies; results are ranked, not paged */
   q?: string | undefined;
   cursor?: string | undefined;
   limit?: number | undefined;
 };
 
-export type GetKnowledgeKnowledgeKeyPagesPageIdTimeline_Response = {
-  entries: {
+export type GetKnowledgeKnowledgeKeyPagesPageIdSequence_Response = {
+  items: {
     [key: string]: unknown;
   }[];
   nextCursor: string | null;
 };
 
-export type GetKnowledgeKnowledgeKeyPagesPageIdTimeline_Request = Simplify<
-  (GetKnowledgeKnowledgeKeyPagesPageIdTimeline_PathParams extends never
+export type GetKnowledgeKnowledgeKeyPagesPageIdSequence_Request = Simplify<
+  (GetKnowledgeKnowledgeKeyPagesPageIdSequence_PathParams extends never
     ? {}
-    : { params: GetKnowledgeKnowledgeKeyPagesPageIdTimeline_PathParams }) &
-    (GetKnowledgeKnowledgeKeyPagesPageIdTimeline_QueryParams extends never
+    : { params: GetKnowledgeKnowledgeKeyPagesPageIdSequence_PathParams }) &
+    (GetKnowledgeKnowledgeKeyPagesPageIdSequence_QueryParams extends never
       ? {}
-      : {} extends GetKnowledgeKnowledgeKeyPagesPageIdTimeline_QueryParams
-        ? { query?: GetKnowledgeKnowledgeKeyPagesPageIdTimeline_QueryParams }
-        : { query: GetKnowledgeKnowledgeKeyPagesPageIdTimeline_QueryParams }) &
+      : {} extends GetKnowledgeKnowledgeKeyPagesPageIdSequence_QueryParams
+        ? { query?: GetKnowledgeKnowledgeKeyPagesPageIdSequence_QueryParams }
+        : { query: GetKnowledgeKnowledgeKeyPagesPageIdSequence_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface GetKnowledgeKnowledgeKeyPagesPageIdTimeline_RouteContract {
-  pathParams: GetKnowledgeKnowledgeKeyPagesPageIdTimeline_PathParams;
-  queryParams: GetKnowledgeKnowledgeKeyPagesPageIdTimeline_QueryParams;
+export interface GetKnowledgeKnowledgeKeyPagesPageIdSequence_RouteContract {
+  pathParams: GetKnowledgeKnowledgeKeyPagesPageIdSequence_PathParams;
+  queryParams: GetKnowledgeKnowledgeKeyPagesPageIdSequence_QueryParams;
   body: never;
-  request: GetKnowledgeKnowledgeKeyPagesPageIdTimeline_Request;
-  response: GetKnowledgeKnowledgeKeyPagesPageIdTimeline_Response;
+  request: GetKnowledgeKnowledgeKeyPagesPageIdSequence_Request;
+  response: GetKnowledgeKnowledgeKeyPagesPageIdSequence_Response;
   responseType: 'json';
 }
 
@@ -25854,7 +25854,7 @@ export interface RouteTypes {
   'GET /knowledge/:knowledgeKey/pages/:pageId/links': GetKnowledgeKnowledgeKeyPagesPageIdLinks_RouteContract;
   'GET /knowledge/:knowledgeKey/search': GetKnowledgeKnowledgeKeySearch_RouteContract;
   'GET /knowledge/:knowledgeKey/activity': GetKnowledgeKnowledgeKeyActivity_RouteContract;
-  'GET /knowledge/:knowledgeKey/pages/:pageId/timeline': GetKnowledgeKnowledgeKeyPagesPageIdTimeline_RouteContract;
+  'GET /knowledge/:knowledgeKey/pages/:pageId/sequence': GetKnowledgeKnowledgeKeyPagesPageIdSequence_RouteContract;
   'GET /knowledge/:knowledgeKey/events': GetKnowledgeKnowledgeKeyEvents_RouteContract;
   'GET /.well-known/:agentId/agent-card.json': GetWellKnownAgentIdAgentCardJson_RouteContract;
   'POST /a2a/:agentId': PostA2aAgentId_RouteContract;
@@ -26609,8 +26609,8 @@ export interface Client {
   '/knowledge/:knowledgeKey/pages/:pageId/links': {
     GET: GetKnowledgeKnowledgeKeyPagesPageIdLinks_RouteContract;
   };
-  '/knowledge/:knowledgeKey/pages/:pageId/timeline': {
-    GET: GetKnowledgeKnowledgeKeyPagesPageIdTimeline_RouteContract;
+  '/knowledge/:knowledgeKey/pages/:pageId/sequence': {
+    GET: GetKnowledgeKnowledgeKeyPagesPageIdSequence_RouteContract;
   };
   '/knowledge/:knowledgeKey/search': {
     GET: GetKnowledgeKnowledgeKeySearch_RouteContract;
