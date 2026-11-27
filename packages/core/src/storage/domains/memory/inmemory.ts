@@ -54,6 +54,8 @@ import {
 import {
   assertNotPendingSignalThreadId,
   isPendingSignalThreadId,
+  PENDING_SIGNAL_STATE,
+  pendingSignalStateAtEnqueue,
   pendingSignalThreadId,
   threadIdOfPendingSignalRow,
 } from './pending-signal-thread';
@@ -471,7 +473,15 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   protected parseStoredMessage(message: StorageMessageType): MastraDBMessage {
-    const { resourceId, content, role, thread_id, signalClaimedBy: _signalClaimedBy, ...rest } = message as MessageRow;
+    const {
+      resourceId,
+      content,
+      role,
+      thread_id,
+      signalClaimedBy: _signalClaimedBy,
+      signalState: _signalState,
+      ...rest
+    } = message as MessageRow;
 
     // Parse content using safelyParseJSON utility
     let parsedContent = safelyParseJSON(content);
@@ -531,6 +541,7 @@ export class InMemoryMemory extends MemoryStorage {
       // Saving a pending signal under its own thread moves the row into that thread, where it
       // is a message. The claimant stays until the run that took it closes, so a redelivered
       // step can claim the row again. A pending signal saved under another thread is left alone.
+      // The written row has no signal state, which marks a taken row as saved.
       const existing = this.db.messages.get(message.id);
       if (
         existing &&
@@ -893,6 +904,7 @@ export class InMemoryMemory extends MemoryStorage {
       thread_id: pendingSignalThreadId(message.threadId),
       resourceId: null,
       signalClaimedBy: null,
+      signalState: pendingSignalStateAtEnqueue(message),
     });
     return 'accepted';
   }
@@ -907,13 +919,21 @@ export class InMemoryMemory extends MemoryStorage {
     consumedIds: string[];
   }): Promise<MastraDBMessage[]> {
     assertNotPendingSignalThreadId(threadId, 'claimPendingSignals');
-    if (!this.db.threads.has(threadId) || this.db.signalRunIds.get(threadId) !== runId) return [];
+    const thread = this.db.threads.get(threadId);
+    if (!thread || this.db.signalRunIds.get(threadId) !== runId) return [];
 
     const pendingThreadId = pendingSignalThreadId(threadId);
     const consumed = new Set(consumedIds);
     const claimed: MessageRow[] = [];
     for (const row of this.signalRowsOf(threadId)) {
-      if (row.thread_id === pendingThreadId && row.signalClaimedBy == null) row.signalClaimedBy = runId;
+      if (row.thread_id === pendingThreadId && row.signalClaimedBy == null) {
+        row.signalClaimedBy = runId;
+        if (row.signalState !== PENDING_SIGNAL_STATE.transient) {
+          row.thread_id = threadId;
+          row.resourceId = thread.resourceId;
+          row.signalState = PENDING_SIGNAL_STATE.taken;
+        }
+      }
       if (row.signalClaimedBy === runId && !consumed.has(row.id)) claimed.push(row);
     }
     return this.toSignalMessages(threadId, claimed);
@@ -930,11 +950,21 @@ export class InMemoryMemory extends MemoryStorage {
   }): Promise<void> {
     assertNotPendingSignalThreadId(threadId, 'closeSignalRun');
     const consumed = new Set(consumedIds);
+    const pendingThreadId = pendingSignalThreadId(threadId);
     for (const row of this.signalRowsOf(threadId)) {
       if (row.signalClaimedBy !== runId) continue;
-      // A taken row still under the pending-signal id was never saved.
-      if (isPendingSignalThreadId(row.thread_id) && consumed.has(row.id)) this.db.messages.delete(row.id);
-      else row.signalClaimedBy = null;
+      const taken = row.signalState === PENDING_SIGNAL_STATE.taken;
+      // A taken row, or a row still under the pending-signal id, was never saved.
+      if ((taken || isPendingSignalThreadId(row.thread_id)) && consumed.has(row.id)) {
+        this.db.messages.delete(row.id);
+        continue;
+      }
+      if (taken) {
+        row.thread_id = pendingThreadId;
+        row.resourceId = null;
+        row.signalState = null;
+      }
+      row.signalClaimedBy = null;
     }
     if (this.db.signalRunIds.get(threadId) === runId) this.db.signalRunIds.delete(threadId);
   }
