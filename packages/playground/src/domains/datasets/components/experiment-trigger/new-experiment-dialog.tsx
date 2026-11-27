@@ -15,6 +15,7 @@ import type { KeyboardEvent } from 'react';
 import { toast } from 'sonner';
 import { AdvancedToggle } from './advanced-toggle';
 import { AgentModelField } from './agent-model-field';
+import { AgentVersionField } from './agent-version-field';
 import { DatasetField } from './dataset-field';
 import { DatasetVersionField } from './dataset-version-field';
 import { ExperimentDescriptionField } from './experiment-description-field';
@@ -57,6 +58,7 @@ export function NewExperimentDialog({
   initialScorerIds,
   initialTargetType,
   initialTargetId,
+  initialAgentVersion,
   initialName,
   initialDescription,
 }: NewExperimentDialogProps) {
@@ -73,7 +75,10 @@ export function NewExperimentDialog({
   const nameLabel = agentModel && target ? `${target.label} ${agentModel.modelId}` : target?.label;
   const experimentName = useExperimentName({ initialName, targetLabel: nameLabel });
   const [description, setDescription] = useState(initialDescription ?? '');
+  const [agentVersion, setAgentVersion] = useState(initialAgentVersion);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  // A version is only ever sent for an agent target, and a pick belongs to the agent it was made for.
+  const agentVersionToRun = isAgentTarget ? agentVersion : undefined;
   const { triggerExperiment } = useDatasetMutations();
 
   const { datasetId } = datasetChoice;
@@ -83,10 +88,11 @@ export function NewExperimentDialog({
   // Wait for the targets to load, so a rerun is named after the display name, not the raw id.
   const canRun = Boolean(datasetId && target) && !targetChoice.isLoading && !isRunning;
 
-  // A model picked for one agent means nothing for the next, which starts on its own model.
+  // A model or a version pinned for one agent means nothing for the next: it starts on its own.
   const handleTargetValueChange = (targetValue: string) => {
     targetChoice.setTargetValue(targetValue);
     agentModelChoice.reset();
+    setAgentVersion(undefined);
   };
 
   const handleDatasetChange = (nextDatasetId: string) => {
@@ -112,6 +118,7 @@ export function NewExperimentDialog({
         targetType: target.type,
         targetId: target.id,
         agentModel,
+        agentVersion: agentVersionToRun,
         scorerIds: optionalList(scorerChoice.scorerIds),
         version: datasetChoice.version,
         requestContext: requestContext.requestContext,
@@ -169,6 +176,14 @@ export function NewExperimentDialog({
                   />
                 )}
               </div>
+              {isAgentTarget && target && (
+                <AgentVersionField
+                  agentId={target.id}
+                  version={agentVersion}
+                  onVersionChange={setAgentVersion}
+                  container={contentRef}
+                />
+              )}
               <DatasetField
                 datasets={datasetChoice.datasets}
                 datasetId={datasetId}
