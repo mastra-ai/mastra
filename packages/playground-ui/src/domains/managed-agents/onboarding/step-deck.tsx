@@ -18,6 +18,12 @@ export interface StepDeckProps {
 
 const PEEK = [0, 40, 56];
 
+function cardHeight(active: boolean, ownHeight: number | undefined, currentHeight: number | undefined) {
+  if (currentHeight === undefined) return undefined;
+  if (active) return ownHeight;
+  return currentHeight;
+}
+
 function placement(offset: number) {
   if (offset < 0) return { transform: 'translateY(-24px) scale(0.98)', opacity: 0, filter: 'none', zIndex: 0 };
   if (offset === 0) return { transform: 'none', opacity: 1, filter: 'none', zIndex: 30 };
@@ -38,8 +44,8 @@ function placement(offset: number) {
 }
 
 export function StepDeck({ steps, current, label = 'Steps', actions }: StepDeckProps) {
-  const bodies = useRef<Array<HTMLDivElement | null>>([]);
-  const headings = useRef<Array<HTMLHeadingElement | null>>([]);
+  const bodies = useRef<Array<HTMLDivElement | undefined>>([]);
+  const headings = useRef<Array<HTMLHeadingElement | undefined>>([]);
   const [heights, setHeights] = useState<number[]>([]);
   const firstRender = useRef(true);
 
@@ -87,12 +93,12 @@ export function StepDeck({ steps, current, label = 'Steps', actions }: StepDeckP
             )}
             style={{
               ...placement(offset),
-              height: currentHeight === undefined ? undefined : active ? heights[index] : currentHeight,
+              height: cardHeight(active, heights[index], currentHeight),
             }}
           >
             <div
               ref={node => {
-                bodies.current[index] = node;
+                bodies.current[index] = node ?? undefined;
               }}
               className={cn(
                 'flex flex-col gap-5 p-6 transition-opacity duration-normal motion-reduce:transition-none',
@@ -106,7 +112,7 @@ export function StepDeck({ steps, current, label = 'Steps', actions }: StepDeckP
                   tone="ink"
                   tabIndex={-1}
                   ref={(node: HTMLHeadingElement | null) => {
-                    headings.current[index] = node;
+                    headings.current[index] = node ?? undefined;
                   }}
                   className="outline-none"
                 >

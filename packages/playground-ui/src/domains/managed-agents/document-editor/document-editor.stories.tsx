@@ -14,6 +14,7 @@ import { PageLayout } from '@/ds/components/PageLayout';
 import { SaveBar } from '@/ds/components/SaveBar';
 import { Txt } from '@/ds/components/Txt';
 import { VersionTimeline } from '@/ds/components/VersionTimeline';
+import type { VersionState } from '@/ds/components/VersionTimeline';
 import { IconArrowRotateCounterClockwise } from '@/ds/icons/central/IconArrowRotateCounterClockwise';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconFloppyDisk1 } from '@/ds/icons/central/IconFloppyDisk1';
@@ -197,6 +198,18 @@ function CompareBar() {
   );
 }
 
+const TIMELINE_STATE: Record<NonNullable<Version['state']> | 'past', VersionState> = {
+  draft: 'draft',
+  published: 'live',
+  past: 'past',
+};
+
+const TIMELINE_LABEL: Record<NonNullable<Version['state']> | 'past', string | undefined> = {
+  draft: 'Draft',
+  published: 'Live',
+  past: undefined,
+};
+
 const restoreActions = (
   <>
     <Button variant="ghost" size="sm">
@@ -217,9 +230,9 @@ function Timeline({ versions, unsaved, comparing }: { versions: Version[]; unsav
         return (
           <VersionTimeline.Item
             key={item.version}
-            state={item.state === 'published' ? 'live' : (item.state ?? 'past')}
+            state={TIMELINE_STATE[item.state ?? 'past']}
             title={item.version}
-            label={item.state === 'published' ? 'Live' : item.state === 'draft' ? 'Draft' : undefined}
+            label={TIMELINE_LABEL[item.state ?? 'past']}
             meta={isCompared ? 'Comparing' : item.when}
             actions={item.state || isCompared ? undefined : restoreActions}
             selected={isCompared}

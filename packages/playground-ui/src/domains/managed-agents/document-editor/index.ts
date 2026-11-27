@@ -1,12 +1,10 @@
-import {
-  DocumentEditorBodySkeleton,
-  DocumentEditorDetails,
-  DocumentEditorFact,
-  DocumentEditorHeader,
-  DocumentEditorMain,
-  DocumentEditorRoot,
-  DocumentEditorSection,
-} from './document-editor';
+import { DocumentEditorBodySkeleton } from './document-editor-body-skeleton';
+import { DocumentEditorDetails } from './document-editor-details';
+import { DocumentEditorFact } from './document-editor-fact';
+import { DocumentEditorHeader } from './document-editor-header';
+import { DocumentEditorMain } from './document-editor-main';
+import { DocumentEditorRoot } from './document-editor-root';
+import { DocumentEditorSection } from './document-editor-section';
 
 export const DocumentEditor = Object.assign(DocumentEditorRoot, {
   Main: DocumentEditorMain,
@@ -16,11 +14,9 @@ export const DocumentEditor = Object.assign(DocumentEditorRoot, {
   Section: DocumentEditorSection,
   Fact: DocumentEditorFact,
 });
-export type {
-  DocumentEditorDetailsProps,
-  DocumentEditorFactProps,
-  DocumentEditorHeaderProps,
-  DocumentEditorMainProps,
-  DocumentEditorProps,
-  DocumentEditorSectionProps,
-} from './document-editor';
+export type { DocumentEditorProps } from './document-editor-root';
+export type { DocumentEditorMainProps } from './document-editor-main';
+export type { DocumentEditorHeaderProps } from './document-editor-header';
+export type { DocumentEditorDetailsProps } from './document-editor-details';
+export type { DocumentEditorSectionProps } from './document-editor-section';
+export type { DocumentEditorFactProps } from './document-editor-fact';
