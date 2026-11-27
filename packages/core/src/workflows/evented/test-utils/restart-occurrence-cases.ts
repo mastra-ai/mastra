@@ -813,5 +813,44 @@ export function describeRestartOccurrenceCases({
         expect(steps.calls).toEqual({ a: 1 });
       });
     }, 20_000);
+
+    // A restart past an entry that had finished writes the run whole. When the run ended before that
+    // restart applied, it reopened the run and ran the next step again.
+    it('does not reopen a run that ended before a restart past a finished step applied', async () => {
+      const wf = chain();
+      await withHost({ [wf.workflow.id]: wf.workflow }, wf.releaseAll, async ({ driver }) => {
+        // a saved its result; its next step's event is held, so the run reads as stopped after a.
+        const held = holdPublishes(driver, event => isStepRun(event, wf.workflow.id, [1]) && !event.data.restart);
+        try {
+          const run = await wf.workflow.createRun();
+          const started = run.start({ inputData: { n: 0 } });
+          await held.count(1);
+          const { restarted, proceed } = await restartHeldAfterRead(wf.workflow, run.runId);
+
+          // The run goes on and ends before the restart applies.
+          await held.release(0);
+          expect(await started).toMatchObject({ status: 'success', result: { n: 3 } });
+          await drainHandlers();
+
+          const from = driver.events.length;
+          proceed();
+          const restartEvents = () =>
+            driver.events.slice(from).filter(event => event.type === 'workflow.start' && event.data.restart);
+          await expect.poll(() => restartEvents().length).toBe(1);
+          expect(restartEvents()[0]!.data.restart.isPreFirstStepRestart).toBe(false);
+          await settleDeliveries(restartEvents());
+          expect((await storedRun(wf.workflow.id, run.runId))?.status).toBe('success');
+          expect(driver.events.slice(from).filter(e => e.type === 'workflow.step.run')).toEqual([]);
+          expect(await within(restarted, 'the restart caller to settle')).toMatchObject({
+            status: 'success',
+            result: { n: 3 },
+          });
+          await drainHandlers();
+          expect(wf.calls).toEqual({ a: 1, b: 1, c: 1 });
+        } finally {
+          held.restore();
+        }
+      });
+    }, 20_000);
   });
 }

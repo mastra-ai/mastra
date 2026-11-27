@@ -1323,8 +1323,9 @@ export class WorkflowEventProcessor extends EventProcessor {
     // read would undo results saved since, and would reopen a run that ended since.
     const takesOver = guardsSteps && !!restart && !completed && !restart.isPreFirstStepRestart && !!header && !!eventId;
     // On stores with step guards, a restart leaves a run that ended or suspended since its caller read
-    // it as it is.
-    if (takesOver && !['running', 'waiting'].includes(header.status)) {
+    // it as it is, also where it writes the run whole. A nested run that has not started yet is still
+    // restartable.
+    if (guardsSteps && restart && eventId && header && !['running', 'waiting', 'pending'].includes(header.status)) {
       return this.#declineRestart({ workflowId, runId, eventId, requestContext, parentWorkflow });
     }
     if (takesOver && restart) {
