@@ -3,25 +3,68 @@ import { boardPath } from '../factory/boardCatalog';
 export interface BoardConfigLocation {
   factoryId: string;
   boardId: string;
-  /** The phase being configured; unset on the board's Overview page. */
+  /** The phase selected on the board's canvas. */
   phaseKey?: string;
-  /** The factory skills page or one of its skill pages, opened from this board's settings. Skills are factory-wide; the board only keeps the sidebar in place. */
+  /** The factory skills page or one of its skill pages, opened from this board's settings. Skills are factory-wide. */
   skills?: true;
-  /** The board's rules: what it takes when an item arrives and where its cards move. */
-  rules?: true;
-  /** The intake page, opened from this board's settings. Like skills, intake is not one board's. */
+  /** The routing page, opened from this board's settings. Like skills, routing is not one board's. */
   intake?: true;
 }
 
-/** A board's configuration: its Overview page, or one phase's page. */
-export function boardConfigPath(factoryId: string, boardId: string, phaseKey?: string): string {
+/** What the side panel shows besides the board or a phase: a rule, a new rule, or an item being tested. */
+export type CanvasFocus =
+  | { rule: string; test?: string }
+  | { newRule: { on?: string; into?: string; board?: string } }
+  | { test: string };
+
+const RULE_PARAM = 'rule';
+const NEW_RULE = 'new';
+const RULE_ON_PARAM = 'on';
+const RULE_INTO_PARAM = 'into';
+const RULE_BOARD_PARAM = 'board';
+const TEST_PARAM = 'test';
+
+function focusSearch(focus: CanvasFocus | undefined): string {
+  if (!focus) return '';
+  const params = new URLSearchParams();
+  if ('newRule' in focus) {
+    params.set(RULE_PARAM, NEW_RULE);
+    const { on, into, board } = focus.newRule;
+    if (on) params.set(RULE_ON_PARAM, on);
+    if (into) params.set(RULE_INTO_PARAM, into);
+    if (board) params.set(RULE_BOARD_PARAM, board);
+  } else {
+    if ('rule' in focus) params.set(RULE_PARAM, focus.rule);
+    if (focus.test) params.set(TEST_PARAM, focus.test);
+  }
+  return `?${params}`;
+}
+
+export function readCanvasFocus(params: URLSearchParams): CanvasFocus | undefined {
+  const rule = params.get(RULE_PARAM);
+  const test = params.get(TEST_PARAM) ?? undefined;
+  if (rule === NEW_RULE) {
+    return {
+      newRule: {
+        on: params.get(RULE_ON_PARAM) ?? undefined,
+        into: params.get(RULE_INTO_PARAM) ?? undefined,
+        board: params.get(RULE_BOARD_PARAM) ?? undefined,
+      },
+    };
+  }
+  if (rule) return { rule, test };
+  return test ? { test } : undefined;
+}
+
+/** A board's canvas, with a phase or something else selected in its side panel. */
+export function boardConfigPath(factoryId: string, boardId: string, phaseKey?: string, focus?: CanvasFocus): string {
   const path = `${boardPath(factoryId, boardId)}/config`;
-  return phaseKey ? `${path}/${encodeURIComponent(phaseKey)}` : path;
+  return `${phaseKey ? `${path}/${encodeURIComponent(phaseKey)}` : path}${focusSearch(focus)}`;
 }
 
 /**
- * The factory skills page, beside this board's settings in the sidebar. It sits outside `config/` because any
- * phase key, including `skills`, can name a phase page there.
+ * The factory skills page, opened from this board's settings. It sits outside `config/` because any phase key,
+ * including `skills`, can name a phase there.
  */
 export function boardSkillsPath(factoryId: string, boardId: string): string {
   return `${boardPath(factoryId, boardId)}/skills`;
@@ -36,35 +79,20 @@ export function newSkillPath(factoryId: string, boardId: string): string {
   return `${boardPath(factoryId, boardId)}/new-skill`;
 }
 
-/** Narrows the Rules page to the rules moving cards into one phase, or to those sending cards to other boards. */
-export type RulesFocus = { into: string } | 'leaving';
-
-export const RULES_INTO_PARAM = 'into';
-/** A param of its own, so no phase key can be mistaken for it. */
-export const RULES_LEAVING_PARAM = 'leaving';
-
-/** The board's rules. Outside `config/` for the same reason as the skills page. */
-export function boardRulesPath(factoryId: string, boardId: string, focus?: RulesFocus): string {
-  const path = `${boardPath(factoryId, boardId)}/rules`;
-  if (!focus) return path;
-  if (focus === 'leaving') return `${path}?${RULES_LEAVING_PARAM}`;
-  return `${path}?${new URLSearchParams({ [RULES_INTO_PARAM]: focus.into })}`;
-}
-
-/** The order intake asks boards to take a new item, on the intake page. */
+/** The order intake asks boards to take a new item, on the routing page. */
 export const INTAKE_ORDER_ANCHOR = 'intake-order';
 
-/** Items no board took, on the intake page. */
+/** Items no board took, on the routing page. */
 export const NOT_ROUTED_ANCHOR = 'not-routed';
 
-/** What comes in: sources, intake order and items no board took. Outside `config/` like the skills page. */
+/** Sources, the intake order and items no board took. Outside `config/` like the skills page. */
 export function boardIntakePath(
   factoryId: string,
   boardId: string,
-  anchor?: typeof INTAKE_ORDER_ANCHOR | typeof NOT_ROUTED_ANCHOR,
+  options: { anchor?: typeof INTAKE_ORDER_ANCHOR | typeof NOT_ROUTED_ANCHOR; focus?: CanvasFocus } = {},
 ): string {
-  const path = `${boardPath(factoryId, boardId)}/intake`;
-  return anchor ? `${path}#${anchor}` : path;
+  const path = `${boardPath(factoryId, boardId)}/intake${focusSearch(options.focus)}`;
+  return options.anchor ? `${path}#${options.anchor}` : path;
 }
 
 /** The form that creates a board. Not under `boards/`, where `new` could be a board key. */
@@ -73,13 +101,13 @@ export function newBoardPath(factoryId: string): string {
 }
 
 const BOARD_CONFIG_PATH =
-  /^\/factories\/([^/]+)\/(?:(work)|boards\/([^/]+))\/(?:config(?:\/([^/]+))?|(skills(?:\/[^/]+)?|new-skill)|(rules)|(intake))\/?$/;
+  /^\/factories\/([^/]+)\/(?:(work)|boards\/([^/]+))\/(?:config(?:\/([^/]+))?|(skills(?:\/[^/]+)?|new-skill)|(intake))\/?$/;
 
-/** Reads a board configuration path, so the sidebar outside the page outlet knows what is open. */
+/** Reads a board configuration path, so places outside the page outlet know what is open. */
 export function parseBoardConfigPath(pathname: string): BoardConfigLocation | undefined {
   const match = BOARD_CONFIG_PATH.exec(pathname);
   if (!match) return undefined;
-  const [, factoryId, builtinBoard, customBoard, phaseKey, skills, rules, intake] = match;
+  const [, factoryId, builtinBoard, customBoard, phaseKey, skills, intake] = match;
   // A hand-typed URL can carry a broken escape; it then names no board page.
   try {
     return {
@@ -87,7 +115,6 @@ export function parseBoardConfigPath(pathname: string): BoardConfigLocation | un
       boardId: builtinBoard ?? decodeURIComponent(customBoard ?? ''),
       ...(phaseKey ? { phaseKey: decodeURIComponent(phaseKey) } : {}),
       ...(skills ? { skills: true } : {}),
-      ...(rules ? { rules: true } : {}),
       ...(intake ? { intake: true } : {}),
     };
   } catch {

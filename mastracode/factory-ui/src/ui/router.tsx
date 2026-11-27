@@ -96,12 +96,13 @@ const FactorySkillPage = lazyPage(
   () => import('./pages/FactorySkillPage').then(module => module.FactorySkillPage),
   <AppPageLoader />,
 );
+// Board settings and Routing are tabs of one view: opening either loads the other, so switching tabs shows no loader.
 const BoardIntakePage = lazyPage(
-  () => import('./pages/BoardIntakePage').then(module => module.BoardIntakePage),
-  <AppPageLoader />,
-);
-const BoardRulesPage = lazyPage(
-  () => import('./pages/BoardRulesPage').then(module => module.BoardRulesPage),
+  () =>
+    import('./pages/BoardIntakePage').then(module => {
+      BoardConfigPage.preload().catch(() => undefined);
+      return module.BoardIntakePage;
+    }),
   <AppPageLoader />,
 );
 const NewBoardPage = lazyPage(
@@ -109,7 +110,11 @@ const NewBoardPage = lazyPage(
   <AppPageLoader />,
 );
 const BoardConfigPage = lazyPage(
-  () => import('./pages/BoardConfigPage').then(module => module.BoardConfigPage),
+  () =>
+    import('./pages/BoardConfigPage').then(module => {
+      BoardIntakePage.preload().catch(() => undefined);
+      return module.BoardConfigPage;
+    }),
   <AppPageLoader />,
 );
 const SlackConnectionPage = lazyPage(
@@ -227,6 +232,13 @@ function SkillsSettingsRedirect() {
   return <Navigate to={boardSkillsPath(factoryId, 'work')} replace />;
 }
 
+/** The board's Rules page (and Card moves before it) became the board's canvas; `?into=` opened one phase's rules. */
+function LegacyRulesRedirect() {
+  const { search } = useLocation();
+  const into = new URLSearchParams(search).get('into');
+  return <Navigate to={into ? `../config/${encodeURIComponent(into)}` : '../config'} relative="path" replace />;
+}
+
 function KnowledgeRoute() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const features = useServerFeatures();
@@ -325,13 +337,12 @@ export function createAppRoutes(services?: RouteLoaderServices, holdsNavigation?
                         { path: 'boards/:boardId/skills/:skillName', ...lazyRoute(FactorySkillPage) },
                         { path: 'work/new-skill', ...lazyRoute(FactorySkillPage) },
                         { path: 'boards/:boardId/new-skill', ...lazyRoute(FactorySkillPage) },
-                        { path: 'work/rules', ...lazyRoute(BoardRulesPage) },
-                        { path: 'boards/:boardId/rules', ...lazyRoute(BoardRulesPage) },
                         { path: 'work/intake', ...lazyRoute(BoardIntakePage) },
                         { path: 'boards/:boardId/intake', ...lazyRoute(BoardIntakePage) },
-                        // Card moves became the board's Rules page.
-                        { path: 'work/moves', element: <Navigate to="../rules" relative="path" replace /> },
-                        { path: 'boards/:boardId/moves', element: <Navigate to="../rules" relative="path" replace /> },
+                        { path: 'work/rules', element: <LegacyRulesRedirect /> },
+                        { path: 'boards/:boardId/rules', element: <LegacyRulesRedirect /> },
+                        { path: 'work/moves', element: <LegacyRulesRedirect /> },
+                        { path: 'boards/:boardId/moves', element: <LegacyRulesRedirect /> },
                         { path: 'activity', element: <FactoryHomeRedirect /> },
                         { path: 'overview', element: <FactoryHomeRedirect /> },
                         { path: 'attention', element: <FactoryHomeRedirect /> },

@@ -219,10 +219,6 @@ describe('Board phase setup', () => {
     expect(within(rules).getByText('Labels contains plan')).toBeVisible();
     expect(within(steps).getByText('Started by hand')).toBeVisible();
     expect(within(steps).getByText('Next')).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Rules into Planning' })).toHaveAttribute(
-      'href',
-      `/factories/${FACTORY_ID}/work/rules?into=planning`,
-    );
     expect(screen.getByRole('link', { name: 'Phase settings' })).toHaveAttribute(
       'href',
       `/factories/${FACTORY_ID}/work/config/planning`,
