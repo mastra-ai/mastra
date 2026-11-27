@@ -295,6 +295,8 @@ export class StepExecutor extends MastraBase {
       if (params.workflowId === DurableStepIds.AGENTIC_LOOP || params.workflowId === DurableStepIds.AGENTIC_EXECUTION) {
         const live = requestContext.get('controller') as { getState?: unknown } | undefined;
         const binding = requestContext.getRaw(CONTROLLER_RUN_BINDING_KEY);
+        // After a process handoff, `controller` can still be present as plain data, but its methods are gone.
+        // Use the serialized run binding to rebuild it only when this step doesn't already have a live controller.
         if (binding !== undefined && typeof live?.getState !== 'function') {
           const parsed = controllerRunBindingSchema.parse(binding);
           const initial = stepResults.input as { agentId?: string; runId?: string } | undefined;
