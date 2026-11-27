@@ -59,6 +59,8 @@ class ObservedMemory extends InMemoryMemory {
   failNextEnqueue = false;
   /** Runs before each claim reaches the store. */
   beforeClaim?: (args: { runId: string }) => Promise<void>;
+  /** Runs after each claim committed, before its rows reach the caller. */
+  afterClaim?: (rows: MastraDBMessage[]) => Promise<void>;
   /** The next claim that returns this id fails after claiming, as a claim whose answer was lost does. */
   failClaimOf?: string;
   /** Runs before each marker write, as preparation makes before the run starts. */
@@ -87,6 +89,7 @@ class ObservedMemory extends InMemoryMemory {
     await this.beforeClaim?.(args);
     const rows = await super.claimPendingSignals(args);
     this.calls.push({ op: 'claim', runId: args.runId, ids: rows.map(row => row.id) });
+    await this.afterClaim?.(rows);
     if (this.failClaimOf && rows.some(row => row.id === this.failClaimOf)) {
       this.failClaimOf = undefined;
       throw new Error('memory storage unavailable');
@@ -1209,6 +1212,118 @@ describe('drains of a storage-backed run', () => {
     expect(signalAt).toBeGreaterThan(toolCallAt);
     expect(toolCallAt).toBeGreaterThanOrEqual(0);
     expect(answerAt).toBeGreaterThan(signalAt);
+  });
+});
+
+describe("a signal a run took, in its thread's history", () => {
+  /** The thread's messages as a reader sees them right after the claim that first returns `id`. */
+  function readAtClaimOf(memoryStore: ObservedMemory, read: () => Promise<MastraDBMessage[]>, id: () => string) {
+    let seen: MastraDBMessage[] | undefined;
+    memoryStore.afterClaim = async rows => {
+      if (seen || !rows.some(row => row.id === id())) return;
+      seen = await read();
+    };
+    return () => seen;
+  }
+  const shape = (messages: MastraDBMessage[] | undefined) =>
+    messages?.map(message => ({ id: message.id, role: message.role, at: new Date(message.createdAt).getTime() }));
+
+  it('lists the signal from its claim on at its send time, and after the run where the transcript put it', async () => {
+    const memoryStore = new ObservedMemory();
+    const { agent, scope, toolGate, start, savedMessages } = setup({ memoryStore });
+    const { done } = await start();
+    const sent = agent.sendSignal({ type: 'user', contents: 'READ_DURING_THE_RUN' }, scope);
+    await sent.accepted;
+    const during = readAtClaimOf(memoryStore, savedMessages, () => sent.signal.id);
+    const [input] = await savedMessages();
+    expect(input).toMatchObject({ role: 'user' });
+    toolGate.release();
+    await done;
+
+    // During the run the transcript is not saved yet: the signal follows the input, at its send time,
+    // before the assistant message it was sent during.
+    expect(shape(during())).toEqual([
+      { id: input!.id, role: 'user', at: new Date(input!.createdAt).getTime() },
+      { id: sent.signal.id, role: 'signal', at: sent.signal.createdAt.getTime() },
+    ]);
+    // The transcript save puts it after that assistant message, at the time it joined the transcript.
+    const after = shape(await savedMessages())!;
+    expect(after.map(({ role }) => role)).toEqual(['user', 'assistant', 'signal', 'assistant']);
+    expect(after[2]!.id).toBe(sent.signal.id);
+    expect(after[2]!.at).toBeGreaterThan(after[1]!.at);
+    expect(after[1]!.at).toBeLessThanOrEqual(sent.signal.createdAt.getTime());
+  });
+
+  it('shows a subscriber that joins after the claim the signal once, in its initial history after the input', async () => {
+    type ThreadChunk = { type: string; runId?: string; payload?: { messages?: MastraDBMessage[] } };
+    const memoryStore = new ObservedMemory();
+    const { agent, scope, toolGate, start } = setup({ memoryStore });
+    const { stream, done } = await start();
+    const sent = agent.sendSignal({ type: 'user', contents: 'JOINED_AFTER_THE_CLAIM' }, scope);
+    await sent.accepted;
+    let joined: { stream: AsyncIterable<unknown>; unsubscribe: () => void } | undefined;
+    memoryStore.afterClaim = async rows => {
+      if (joined || !rows.some(row => row.id === sent.signal.id)) return;
+      joined = await agent.subscribeToThread({ ...scope, withInitialHistory: true });
+    };
+    toolGate.release();
+    await done;
+
+    const chunks: ThreadChunk[] = [];
+    for await (const chunk of joined!.stream as AsyncIterable<ThreadChunk>) {
+      chunks.push(chunk);
+      if (chunk.type === 'finish' && chunk.runId === stream.runId) break;
+    }
+    joined!.unsubscribe();
+    const history = chunks.find(chunk => chunk.type === 'thread-history');
+    expect(history?.payload?.messages?.map(message => message.role)).toEqual(['user', 'signal']);
+    // Nothing after the history repeats the signal.
+    expect(
+      signalChunksOf(
+        chunks.filter(chunk => chunk !== history),
+        'JOINED_AFTER_THE_CLAIM',
+      ),
+    ).toEqual([]);
+  });
+
+  it('never lists a transient signal, during the run or after it', async () => {
+    const memoryStore = new ObservedMemory();
+    const { agent, scope, prompts, toolGate, start, savedMessages } = setup({ memoryStore });
+    const { done } = await start();
+    const sent = agent.sendSignal({ type: 'user', contents: 'TRANSIENT_READ', transient: true }, scope);
+    await sent.accepted;
+    const during = readAtClaimOf(memoryStore, savedMessages, () => sent.signal.id);
+    toolGate.release();
+    await done;
+
+    expect(occurrences(prompts[1], 'TRANSIENT_READ')).toBe(1);
+    expect(shape(during())?.map(({ role }) => role)).toEqual(['user']);
+    expect((await savedMessages()).some(message => message.id === sent.signal.id)).toBe(false);
+    expect(await memoryStore.listMessagesById({ messageIds: [sent.signal.id] })).toEqual({ messages: [] });
+  });
+
+  it('lists the signal of a turn that then fails during the run, and drops it with the turn', async () => {
+    const memoryStore = new ObservedMemory();
+    const { agent, scope, toolGate, start, savedMessages } = setup({
+      memoryStore,
+      stopWhen: () => {
+        throw new Error('stop condition failed');
+      },
+    });
+    const { done } = await start();
+    const sent = agent.sendSignal({ type: 'user', contents: 'TAKEN_BEFORE_FAILURE' }, scope);
+    await sent.accepted;
+    const during = readAtClaimOf(memoryStore, savedMessages, () => sent.signal.id);
+    toolGate.release();
+    await expect(done).rejects.toThrow('stop condition failed');
+
+    expect(shape(during())?.map(({ id, role }) => ({ id, role }))).toEqual([
+      { id: expect.any(String), role: 'user' },
+      { id: sent.signal.id, role: 'signal' },
+    ]);
+    expect((await savedMessages()).some(message => message.id === sent.signal.id)).toBe(false);
+    expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
+    expect(await memoryStore.listMessagesById({ messageIds: [sent.signal.id] })).toEqual({ messages: [] });
   });
 });
 
