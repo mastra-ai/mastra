@@ -66,7 +66,7 @@ The schema definitions below cover the built-in database-backed tables documente
     name: 'thread_id',
     type: 'text',
     description:
-      'Parent thread reference (`threads.id`). Postgres and libSQL store `mastra-pending-signals:<threadId>` instead while the row is a [pending signal](/docs/server/pubsub#signals-sent-to-a-running-evented-agent), which no message read returns, so that value matches no thread.',
+      'Parent thread reference (`threads.id`). Postgres and libSQL store `mastra-queue:pending:<threadId>` or `mastra-queue:taken:<threadId>` instead while the row is a queued [pending signal](/docs/server/pubsub#signals-sent-to-a-running-evented-agent), which no read by thread or resource returns, so that value matches no thread.',
     constraints: [{ type: 'nullable', value: false }],
   },
   {
@@ -93,13 +93,6 @@ The schema definitions below cover the built-in database-backed tables documente
     type: 'timestamp',
     description: 'Used for thread message ordering',
     constraints: [{ type: 'nullable', value: false }],
-  },
-  {
-    name: 'signalClaimedBy',
-    type: 'text',
-    description:
-      'Postgres and libSQL only. ID of the run that took the pending signal, kept until that run ends. See the [PostgreSQL](/integrations/databases/postgresql#pending-signals) and [libSQL](/integrations/databases/libsql#pending-signals) pages for the migration.',
-    constraints: [{ type: 'nullable', value: true }],
   },
 ]}
     />
