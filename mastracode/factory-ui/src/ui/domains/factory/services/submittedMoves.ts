@@ -13,6 +13,8 @@ const KEPT_ANSWERS = 50;
 
 const waiting = new Map<string, (answer: MoveAnswer | undefined) => void>();
 const answered = new Map<string, MoveAnswer>();
+/** How many times the feed stream connected; a move asked under one count and answered `202` under another may have missed its answer. */
+let streamsSeen = 0;
 
 /** Reads a `move` frame's data; nothing for a frame this page can't make sense of. */
 export function parseMoveAnswer(data: string): MoveAnswer | undefined {
@@ -46,19 +48,31 @@ export function moveAnswered(answer: MoveAnswer): void {
  * stops waiting and the board is read instead.
  */
 export function moveAnswersMayBeMissed(): void {
+  streamsSeen += 1;
   for (const tell of [...waiting.values()]) tell(undefined);
+}
+
+/** Names the feed stream a move is asked under, for {@link awaitMoveAnswer} to tell a reconnect by. */
+export function moveAnswerStream(): number {
+  return streamsSeen;
 }
 
 /**
  * Waits for the answer to a submitted move. Nothing when none came within `waitMs` (the server
- * that took the move on may be gone) or the stream may have missed it.
+ * that took the move on may be gone) or the stream may have missed it: it reconnected while the
+ * move waits, or since `askedUnder`, before the `202` got here.
  */
-export function awaitMoveAnswer(inputId: string, waitMs: number): Promise<MoveAnswer | undefined> {
+export function awaitMoveAnswer(
+  inputId: string,
+  waitMs: number,
+  askedUnder = streamsSeen,
+): Promise<MoveAnswer | undefined> {
   const early = answered.get(inputId);
   if (early) {
     answered.delete(inputId);
     return Promise.resolve(early);
   }
+  if (askedUnder !== streamsSeen) return Promise.resolve(undefined);
   return new Promise(resolve => {
     const timer = setTimeout(() => tell(undefined), waitMs);
     const tell = (answer: MoveAnswer | undefined) => {

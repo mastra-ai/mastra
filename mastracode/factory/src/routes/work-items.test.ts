@@ -34,6 +34,8 @@ const deletedCards: string[] = [];
 let submitsMoves = false;
 let announcesMoves = true;
 let settlingFails = false;
+/** When set, a submitted move settles only once this does: a test holds it to look at the gap after the 202. */
+let settlingHeld: Promise<void> | undefined;
 const SUBMITTED_INPUT_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 /** What the routes told the project's open boards about moves answered `202`. */
 const announcedMoves: Array<{ scope: { orgId: string; factoryProjectId: string }; move: FeedMove }> = [];
@@ -132,6 +134,8 @@ function buildApp(
             if (settlingFails) {
               return { inputId: SUBMITTED_INPUT_ID, settled: Promise.reject(new Error('The board run is gone.')) };
             }
+            const held = settlingHeld;
+            if (held) return { inputId: SUBMITTED_INPUT_ID, settled: held.then(() => this.requestMove(input)) };
             return { inputId: SUBMITTED_INPUT_ID, settled: this.requestMove(input) };
           };
         },
@@ -931,6 +935,7 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
       submitsMoves = false;
       announcesMoves = true;
       settlingFails = false;
+      settlingHeld = undefined;
     });
 
     it('answers 202 with an input id, and tells the board when the move landed', async () => {
@@ -944,6 +949,25 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
         scope: { orgId: 'org1', factoryProjectId: PROJECT_ID },
         move: { inputId: SUBMITTED_INPUT_ID, status: 'accepted' },
       });
+      expect((await listItems())[0]?.stages).toEqual(['planning']);
+    });
+
+    it('answers 202 while the move is still settling, and tells the board only once it has', async () => {
+      let settle = () => {};
+      settlingHeld = new Promise<void>(resolve => {
+        settle = resolve;
+      });
+      const item = await createItem();
+      const res = await transition(item);
+      expect(res.status).toBe(202);
+      expect(await res.json()).toEqual({ inputId: SUBMITTED_INPUT_ID });
+      // The route answered with the move not made yet, and nothing told.
+      expect(announcedMoves).toEqual([]);
+      expect((await listItems())[0]?.stages).toEqual(['intake']);
+
+      settle();
+      await vi.waitFor(() => expect(announcedMoves).toHaveLength(1));
+      expect(announcedMoves[0]?.move).toEqual({ inputId: SUBMITTED_INPUT_ID, status: 'accepted' });
       expect((await listItems())[0]?.stages).toEqual(['planning']);
     });
 

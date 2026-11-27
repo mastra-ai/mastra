@@ -28,7 +28,7 @@ import {
   transitionWorkItem,
   updateWorkItem,
 } from '../ui/domains/factory/services/workItems';
-import { awaitMoveAnswer } from '../ui/domains/factory/services/submittedMoves';
+import { awaitMoveAnswer, moveAnswerStream } from '../ui/domains/factory/services/submittedMoves';
 import type {
   BoardSnapshot,
   CreateWorkItemInput,
@@ -494,6 +494,7 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
       cause = 'board_drag',
       reenter,
     }: TransitionWorkItemVariables): Promise<TransitionOutcome> => {
+      const askedUnder = moveAnswerStream();
       const answer = await transitionWorkItem(baseUrl, requireFactoryProjectId(factoryProjectId), item.id, {
         board,
         stage,
@@ -505,7 +506,7 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
       if (answer.status !== 'submitted') return answer;
       // The move stays pending, and its card "moving…", until the feed stream tells how it ended.
       const { inputId } = answer;
-      const ended = await awaitMoveAnswer(inputId, SUBMITTED_MOVE_WAIT_MS);
+      const ended = await awaitMoveAnswer(inputId, SUBMITTED_MOVE_WAIT_MS, askedUnder);
       if (!ended) return { status: 'unanswered', inputId };
       return ended.status === 'accepted' ? { status: 'landed', inputId } : ended;
     },

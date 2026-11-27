@@ -467,6 +467,42 @@ describe('FeedEventsProvider, on the board', () => {
       expect(rendered.result.current.cards.data?.[0]?.stages).toEqual(['review']);
     });
 
+    it('stops waiting at once when the stream dropped and came back before the 202 arrived', async () => {
+      const stream = pushableFeedStream(PROJECT_ID);
+      server.use(stream.handler);
+      const { board } = boardEndpoints();
+      let answer = () => {};
+      const answered = new Promise<void>(resolve => {
+        answer = resolve;
+      });
+      server.use(
+        http.post(`${BOARD_URL}/item-1/transition`, async () => {
+          await answered;
+          return HttpResponse.json({ inputId: 'input-1' }, { status: 202 });
+        }),
+      );
+      const rendered = await renderQuietBoard(stream);
+      const [item] = rendered.result.current.cards.data ?? [];
+      if (!item) throw new Error('the board never loaded its card');
+      act(() => rendered.result.current.move.mutate({ item, board: 'review', stage: 'review' }));
+      await waitFor(() => expect(rendered.result.current.cards.data?.[0]?.stages).toEqual(['review']));
+
+      // The move landed while the stream was down: its frame went by with nobody to read it.
+      board.stage = 'review';
+      const opened = stream.opens;
+      stream.close();
+      await act(() => vi.advanceTimersByTimeAsync(PAST_ONE_STREAM_RETRY_MS));
+      await waitFor(() => expect(stream.opens).toBeGreaterThan(opened));
+      expect(rendered.result.current.move.isPending).toBe(true);
+
+      answer();
+      await waitFor(() =>
+        expect(rendered.result.current.move.data).toEqual({ status: 'unanswered', inputId: 'input-1' }),
+      );
+      await waitForMutationsIdle(rendered.client);
+      expect(rendered.result.current.cards.data?.[0]?.stages).toEqual(['review']);
+    });
+
     it('puts the card back when the feed says it was refused', async () => {
       const stream = pushableFeedStream(PROJECT_ID);
       const { rendered, shownStages } = await submitMove(stream);
