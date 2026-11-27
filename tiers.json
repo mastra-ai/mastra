@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-11-26",
+  "updated": "2026-11-27",
   "scope": "all",
   "files": {
     ".github/scripts/ci-routing.test.ts": {
@@ -13473,8 +13473,8 @@
     },
     "packages/core/src/channels/__tests__/agent-channels.test.ts": {
       "tier": "in",
-      "since": "2026-11-26",
-      "last_failure": "2026-11-26",
+      "since": "2026-11-27",
+      "last_failure": "2026-11-27",
       "reason": "versioning-fail",
       "pr_failures": {
         "136587567948": {
@@ -21207,8 +21207,8 @@
     },
     "packages/mcp/src/server/server-tasks.test.ts": {
       "tier": "in",
-      "since": "2026-11-26",
-      "last_failure": "2026-11-26",
+      "since": "2026-11-27",
+      "last_failure": "2026-11-27",
       "reason": "versioning-fail",
       "pr_failures": {
         "135808600513": {
