@@ -749,15 +749,6 @@ export interface KnowledgePageStore {
   /** Readable live pages among `ids`, in no particular order; missing, deleted or unreadable ids are left out. */
   getPages(input: { ids: string[]; read: KnowledgeReadScope }): Promise<KnowledgePage[]>;
   /**
-   * The page `parentId` and its ancestors, nearest first: for each row what {@link getPage} would
-   * return with the same `read`, deleted rows included. Stops after the first scope page, before
-   * the first row `getPage` would return null for, or after {@link MAX_KNOWLEDGE_PAGE_DEPTH} + 1
-   * rows. Lets a caller holding a page walk its parents in one call instead of one per level.
-   *
-   * @experimental
-   */
-  getPageParents(input: { parentId: string; read: KnowledgeReadScope }): Promise<KnowledgePage[]>;
-  /**
    * Walks the scope's page tree key by key: `path[0]` is a live child of the scope page with that key,
    * `path[1]` a live child of that page, and so on. Returns the last page, or null when any step is
    * missing, deleted, or unreadable under `read`. An empty path returns null.

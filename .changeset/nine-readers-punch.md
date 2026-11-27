@@ -1,6 +1,5 @@
 ---
 '@mastra/core': minor
-'@mastra/platform': patch
 '@mastra/libsql': patch
 '@mastra/pg': patch
 ---

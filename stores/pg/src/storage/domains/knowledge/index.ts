@@ -312,8 +312,8 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   override getPageParents(
-    input: Parameters<KnowledgePageStore['getPageParents']>[0],
-  ): ReturnType<KnowledgePageStore['getPageParents']> {
+    input: Parameters<KnowledgeStorage['getPageParents']>[0],
+  ): ReturnType<KnowledgeStorage['getPageParents']> {
     return this.#pages.getPageParents(input);
   }
 
