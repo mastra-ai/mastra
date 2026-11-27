@@ -104,7 +104,13 @@ type CardRef = Pick<FactoryTransitionRequest, 'workItemId'>;
 
 /** The record a board run's stored snapshot holds for its card. */
 function recordOf(snapshot: unknown): FactoryCardRunRecord | undefined {
-  const state = typeof snapshot === 'string' ? (JSON.parse(snapshot) as unknown) : snapshot;
+  let state = snapshot;
+  try {
+    if (typeof snapshot === 'string') state = JSON.parse(snapshot) as unknown;
+  } catch {
+    // A snapshot that doesn't parse holds no record; the sweep goes on with the other cards.
+    return undefined;
+  }
   const phase = (state as { context?: { phase?: { payload?: FactoryCardRunRecord } } } | undefined)?.context?.phase;
   return phase?.payload;
 }
@@ -723,12 +729,13 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     const card = pending.deadline;
     const runs = this.#context.runs;
     if (previous.deadlineAt !== pending.deadlineAt || !RUN_STATES.has(previous.state) || !runs) return undefined;
-    if (!previous.phase || !previous.board) return undefined;
+    // A card the sweep can't settle now is looked at again later, not on every sweep.
+    const later = { ...previous, deadlineAt: Date.now() + this.#deadlines.probing };
+    if (!previous.phase || !previous.board) return later;
     const board = (await toBoardSource(this.#context.boards).load(card)).get(previous.board);
     const role = board?.roleForPhase(previous.phase);
     const binding = pending.bindings.find(seat => seat.role === role);
-    if (!binding) return undefined;
-    const later = { ...previous, deadlineAt: Date.now() + this.#deadlines.probing };
+    if (!binding) return later;
     if (await runs.inFlight(card)) {
       // A probe is the phase run once more, and gets as long as any run of the phase.
       if (previous.state === 'probing') return { ...previous, deadlineAt: Date.now() + this.#deadlines.running };
@@ -754,11 +761,12 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
       workItemId: binding.workItemId,
       // One name per expiry, so a run end told for it again counts nothing.
       runEnd: `deadline:${pending.deadlineAt}`,
-      runsAgain: true,
+      // Nothing is queued to run the phase again, and a sweep starts no run.
+      runsAgain: false,
     };
     const next = await this.#stateAfterRunEnd(ended, previous);
     if (next?.state === 'running' && next.lastOutcome !== undefined) answer.outcome = ended;
-    return next;
+    return next ?? later;
   }
 
   async #answeredWithoutCard(pending: PendingInput): Promise<boolean> {

@@ -700,7 +700,7 @@ describe('the workflow board engine', () => {
   }
   const HOUR = 3_600_000;
 
-  it('probes a running card whose run ended unseen once its deadline passed, and flags it once the probe is overdue', async () => {
+  it('flags a running card whose run ended unseen once its deadline passed, since nothing runs its phase again', async () => {
     const { runs } = sweptRuns({ inFlight: false });
     const { storage, engine, item, binding } = await setup({ runs });
     const card = { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role };
@@ -710,16 +710,29 @@ describe('the workflow board engine', () => {
     await engine.sweep(Date.now() + HOUR, engine);
     await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'running', probes: 0 });
 
+    // No run is going and none is queued: probing would wait on a run nobody starts.
     await engine.sweep(Date.now() + 7 * HOUR, engine);
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
-      state: 'probing',
-      deadlineAt: expect.any(Number),
+      state: 'needs_attention',
       phase: 'planning',
       probes: 1,
       attempts: 1,
+      reason: "The agent's run ended without reporting how the phase ended, and it will not be run again.",
     });
+    expect((await storage.get({ orgId: ORG, id: item.id }))!.stages).toEqual(['planning']);
+  });
 
-    await engine.sweep(Date.now() + 7 * HOUR, engine);
+  it('flags a probing card once its probe ended unseen', async () => {
+    const { runs } = sweptRuns({ inFlight: false });
+    const { engine, item, binding } = await setup({ runs });
+    await engine.runFailed(
+      { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role },
+      { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' },
+    );
+    await engine.runEnded({ ...binding, runEnd: 'end-1' }, engine);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'probing', probes: 1 });
+
+    await engine.sweep(Date.now() + HOUR, engine);
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
       state: 'needs_attention',
       phase: 'planning',
@@ -727,7 +740,24 @@ describe('the workflow board engine', () => {
       attempts: 1,
       reason: "The agent's run ended twice without reporting how the phase ended.",
     });
-    expect((await storage.get({ orgId: ORG, id: item.id }))!.stages).toEqual(['planning']);
+  });
+
+  it('looks again later at a card past its deadline that a sweep cannot settle, instead of on every sweep', async () => {
+    const { runs } = sweptRuns({ inFlight: false });
+    const { storage, engine, item, binding } = await setup({ runs });
+    await engine.runFailed(
+      { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role },
+      { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' },
+    );
+    const before = (await engine.describe({ workItemId: item.id }))!.deadlineAt!;
+    // The card left its phase without its run hearing of it: a run end says nothing there.
+    await storage.update({ orgId: ORG, id: item.id, userId: 'user-1', patch: { stages: ['intake'] } });
+
+    await engine.sweep(Date.now() + 7 * HOUR, engine);
+    const after = await engine.describe({ workItemId: item.id });
+    expect(after).toMatchObject({ state: 'running', phase: 'planning', probes: 0 });
+    expect(after!.deadlineAt).toBeGreaterThan(Date.now() + 29 * 60_000);
+    expect(after!.deadlineAt).not.toBe(before);
   });
 
   it('moves a running card past its deadline by the outcome its agent reported, through the engine Factory holds', async () => {
@@ -865,7 +895,11 @@ describe('the workflow board engine', () => {
     const now = Date.now() + 7 * HOUR;
     await Promise.all([engine.sweep(now, engine), other.sweep(now, other), engine.sweep(now, engine)]);
 
-    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'probing', probes: 1 });
+    // Counted twice, the run would read as having ended twice.
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({
+      state: 'needs_attention',
+      probes: 1,
+    });
   });
 
   it('counts a failed attempt once, however many times it is told', async () => {
