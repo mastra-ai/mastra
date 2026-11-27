@@ -1,6 +1,6 @@
 import type { BrowserCookie, MastraBrowser } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
-import { supportsNetworking } from '@mastra/core/workspace';
+import { createRecreateSandboxTool, supportsNetworking } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { z } from 'zod';
 
@@ -33,20 +33,9 @@ export function createFactorySandboxTools(
   scope: FactoryToolScope,
   deps: FactorySandboxToolDependencies,
 ): IntegrationTools {
-  const recreate = createTool({
+  const recreate = createRecreateSandboxTool({
     id: 'factory_recreate_sandbox',
-    description: [
-      'Destroy this session\'s sandbox and replace it with a fresh one. Use it only to recover when the sandbox stops working: commands that time out even for `echo ok`, or errors like "onStart hook failed".',
-      'This deletes the VM. Everything in it that is not committed and pushed is lost for good: uncommitted and unpushed changes, untracked files, installed dependencies, build output and running processes.',
-      "Push what you can first. If the sandbox can't run commands, call it anyway without waiting for anyone, and mention what was lost in your reply.",
-      'Your next command starts the new sandbox, which clones the repositories and runs setup again, so it takes a while. Check the branch and working tree before going on.',
-    ].join(' '),
-    inputSchema: z
-      .object({
-        reason: z.string().trim().min(1).max(500).describe('What went wrong with the sandbox.'),
-      })
-      .strict(),
-    execute: async ({ reason }) => {
+    reset: async ({ reason }) => {
       const sourceControl = await deps.sessions.getSourceControlBySessionId(scope.sessionId);
       if (!sourceControl) throw new Error('This session has no sandbox to recreate.');
       console.warn('[Mastra Factory] Session agent is recreating its sandbox', {
@@ -59,7 +48,6 @@ export function createFactorySandboxTools(
       if (outcome === 'not-here') {
         throw new Error('This session has no sandbox running yet. Run a command to start one.');
       }
-      return { recreated: true, next: 'Your next command starts a fresh sandbox.' };
     },
   });
 

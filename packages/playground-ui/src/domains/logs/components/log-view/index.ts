@@ -31,4 +31,4 @@ export type { LogViewRefreshProps } from './log-view-header';
 export type { LogViewFiltersProps } from './log-view-filters';
 export type { LogViewEmptyProps } from './log-view-fill';
 export { LOG_VIEW_SEARCH_FIELD, filterLogsByFields, logViewSearchText } from './log-view-filter-fields';
-export type { LogViewListHandle, LogViewListProps, LogViewOrder } from '../log-view-list';
+export type { LogViewListHandle, LogViewListProps, LogViewNextPage, LogViewOrder } from '../log-view-list';

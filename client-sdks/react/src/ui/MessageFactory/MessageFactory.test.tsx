@@ -112,6 +112,12 @@ const reasoningPart = (reasoning: string, state?: 'streaming' | 'done'): Accumul
   asPart({ type: 'reasoning', reasoning, state });
 const filePart = (): AccumulatorPart => asPart({ type: 'file', mimeType: 'image/png', data: 'AAAA' });
 const stepStartPart = (): AccumulatorPart => asPart({ type: 'step-start' });
+const customPart = (): AccumulatorPart =>
+  asPart({
+    type: 'custom',
+    kind: 'openai.compaction',
+    providerMetadata: { openai: { encryptedContent: 'opaque-state' } },
+  });
 const errorPart = (): AccumulatorPart =>
   asPart({ type: 'error', error: { name: 'Error', message: 'The model request failed.' } });
 const toolInvocationPart = (toolCallId: string, toolName: string): AccumulatorPart =>
@@ -190,6 +196,19 @@ describe('MessageFactory', () => {
     expect(screen.queryByTestId('fallback')).toBeNull();
     expect(fallback).not.toHaveBeenCalled();
     expect(calls.StepStart).not.toHaveBeenCalled();
+    expect(container.textContent).toBe('');
+  });
+
+  it('does not render provider continuation state or expose it to fallback', () => {
+    const { renderers } = makeSpyRenderers();
+    const fallback = vi.fn((part: AccumulatorPart | DynamicToolPart) => <div data-testid="fallback">{part.type}</div>);
+
+    const { container } = render(
+      <MessageFactory message={makeMessage([customPart()])} {...renderers} fallback={fallback} />,
+    );
+
+    expect(screen.queryByTestId('fallback')).toBeNull();
+    expect(fallback).not.toHaveBeenCalled();
     expect(container.textContent).toBe('');
   });
 

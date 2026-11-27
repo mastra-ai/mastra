@@ -112,26 +112,23 @@ describe('listProvidersAction', () => {
     expect(fetchOrgMembers).not.toHaveBeenCalled();
   });
 
-  it('falls back to "connected by <member name>" when the label is null', async () => {
+  it.each([
+    [
+      'falls back to "connected by <member name>" when the label is null',
+      'Charlie',
+      'Smith',
+      'connected by Charlie Smith',
+    ],
+    ['falls back to the member email when no name is set', null, null, 'connected by charlie@mastra.ai'],
+  ] as const)('%s', async (_title, firstName, lastName, expected) => {
     vi.mocked(fetchProjectConnections).mockResolvedValue([connection({})]);
     vi.mocked(fetchOrgMembers).mockResolvedValue([
-      { userId: 'user_1', email: 'charlie@mastra.ai', firstName: 'Charlie', lastName: 'Smith' },
+      { userId: 'user_1', email: 'charlie@mastra.ai', firstName, lastName },
     ]);
 
     await listProvidersAction();
 
-    expect(output.join('\n')).toContain('connected by Charlie Smith');
-  });
-
-  it('falls back to the member email when no name is set', async () => {
-    vi.mocked(fetchProjectConnections).mockResolvedValue([connection({})]);
-    vi.mocked(fetchOrgMembers).mockResolvedValue([
-      { userId: 'user_1', email: 'charlie@mastra.ai', firstName: null, lastName: null },
-    ]);
-
-    await listProvidersAction();
-
-    expect(output.join('\n')).toContain('connected by charlie@mastra.ai');
+    expect(output.join('\n')).toContain(expected);
   });
 
   it('still renders when the connecting member is unknown', async () => {

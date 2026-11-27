@@ -50,54 +50,7 @@
     "Qwen3.5-397B-A17B"
   ],
   "reasoning": {
-    "Hy4-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "MiniMax-M3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "GLM-5.1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen3.5-35B-A3B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen3.5-122B-A10B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen3.5-27B": [
-      {
-        "type": "toggle"
-      }
-    ],
     "Qwen3.5-397B-A17B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "GLM-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "DeepSeek-V4-Flash-0731": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Kimi-K2.5": [
       {
         "type": "toggle"
       }
@@ -108,14 +61,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "Kimi-K3": [
+    "Hy4-preview": [
       {
-        "type": "toggle"
-      }
-    ],
-    "DeepSeek-V4.1-Flash-1017": [
-      {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "GLM-5.2": [
@@ -123,7 +72,22 @@
         "type": "toggle"
       }
     ],
-    "DeepSeek-V4-Pro": [
+    "Qwen3.5-35B-A3B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "DeepSeek-V4-Flash-0731": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "DeepSeek-V4-Flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "GLM-5.1": [
       {
         "type": "toggle"
       }
@@ -133,7 +97,43 @@
         "type": "toggle"
       }
     ],
-    "DeepSeek-V4-Flash": [
+    "Qwen3.5-27B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "DeepSeek-V4-Pro": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Qwen3.5-122B-A10B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "MiniMax-M3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Kimi-K2.5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "DeepSeek-V4.1-Flash-1017": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Kimi-K3": [
       {
         "type": "toggle"
       }

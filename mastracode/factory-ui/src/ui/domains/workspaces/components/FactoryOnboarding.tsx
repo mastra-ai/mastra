@@ -4,7 +4,7 @@ import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { useEffect, useRef, useState } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
-import { connectLinear } from '../../factory/services/linear';
+import { useLinearConnect } from '../../../../hooks/useLinearConnect';
 import { useCompleteFactorySetup } from '../hooks/useCompleteFactorySetup';
 import type { OnboardingModelLane } from '../hooks/useOnboardingModelLane';
 import { useOnboardingModelSetup } from '../hooks/useOnboardingModelSetup';
@@ -66,6 +66,7 @@ export interface FactoryOnboardingProps {
  */
 export function FactoryOnboarding({ local, githubCallback, onDismissGithubCallback }: FactoryOnboardingProps) {
   const { baseUrl } = useApiConfig();
+  const linear = useLinearConnect();
   const complete = useCompleteFactorySetup({ local });
   const [draft, setDraft] = useState<OnboardingDraft>(() => {
     const saved = readOnboardingDraft();
@@ -131,10 +132,8 @@ export function FactoryOnboarding({ local, githubCallback, onDismissGithubCallba
     persistOnboardingStep('vcs');
     manageGithubConnection(baseUrl);
   };
-  const connectLinearFromOnboarding = () => {
-    persistOnboardingStep('project-management');
-    connectLinear(baseUrl);
-  };
+  const connectLinearFromOnboarding = () =>
+    void linear.connect({ beforeRedirect: () => persistOnboardingStep('project-management') });
   const createFactory = () => {
     if (complete.isPending) return;
     updateDraft({

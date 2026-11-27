@@ -33,29 +33,23 @@ describe('workspace_lsp_inspect', () => {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
 
-  it('should return error when no <<< marker found', async () => {
+  it.each([
+    ['should return error when no <<< marker found', 'const foo = 1', 'No <<< cursor marker found in match'],
+    [
+      'should return error when multiple <<< markers found',
+      '<<<const<<< foo = 1',
+      'Multiple <<< markers found (found 2, expected 1)',
+    ],
+  ] as const)('%s', async (_title, match, error) => {
     await fs.writeFile(path.join(tempDir, 'test.ts'), 'const foo = 1');
 
     const result = await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
-      { path: 'test.ts', line: 1, match: 'const foo = 1' },
+      { path: 'test.ts', line: 1, match },
       { workspace },
     );
 
     expect(result).toEqual({
-      error: 'No <<< cursor marker found in match',
-    });
-  });
-
-  it('should return error when multiple <<< markers found', async () => {
-    await fs.writeFile(path.join(tempDir, 'test.ts'), 'const foo = 1');
-
-    const result = await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
-      { path: 'test.ts', line: 1, match: '<<<const<<< foo = 1' },
-      { workspace },
-    );
-
-    expect(result).toEqual({
-      error: 'Multiple <<< markers found (found 2, expected 1)',
+      error,
     });
   });
 

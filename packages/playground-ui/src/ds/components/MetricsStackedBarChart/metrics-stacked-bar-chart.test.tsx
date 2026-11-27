@@ -62,6 +62,83 @@ describe('MetricsStackedBarChart tooltip', () => {
   });
 });
 
+describe('MetricsStackedBarChart zero buckets', () => {
+  useFixedChartSize(600, 300);
+
+  const HOUR = 3_600_000;
+  const now = Date.now();
+  const row = (values: Record<string, unknown>, i: number) => ({ label: `${i}`, ts: now - (10 - i) * HOUR, ...values });
+  const stubbed = (container: HTMLElement) =>
+    [...container.querySelectorAll('[data-slot="chart-zero-stub"]')].map(el => Number(el.getAttribute('data-bucket')));
+
+  it('marks a bucket that counted zero once, whatever the number of series', () => {
+    const { container } = renderChart({
+      data: [{ ok: 3, errors: 1 }, { ok: 0, errors: 0 }, { ok: 0, errors: 2 }, { errors: 0 }].map(row),
+    });
+
+    expect(stubbed(container)).toEqual([1, 3]);
+  });
+
+  it('leaves buckets without data empty', () => {
+    const { container } = renderChart({
+      data: [{}, { ok: null, errors: null }, { ok: Number.NaN }, { ok: 0, errors: 0 }].map(row),
+    });
+
+    expect(stubbed(container)).toEqual([3]);
+  });
+
+  it("leaves buckets that haven't started empty", () => {
+    const zero = { ok: 0, errors: 0 };
+    const { container } = renderChart({
+      data: [
+        { ...row(zero, 0), ts: now - HOUR },
+        { ...row(zero, 1), ts: now - 1 },
+        { ...row(zero, 2), ts: now + HOUR },
+      ],
+    });
+
+    expect(stubbed(container)).toEqual([0, 1]);
+  });
+
+  it('counts only the series on show', () => {
+    const { container } = renderChart({
+      data: [
+        { ok: 0, errors: 2 },
+        { ok: 1, errors: 0 },
+      ].map(row),
+      series: series.slice(0, 1),
+    });
+
+    expect(stubbed(container)).toEqual([0]);
+  });
+
+  it('stays the same height whatever the scale, and shorter than the smallest value', () => {
+    const heightAt = (peak: number) => {
+      const { container, unmount } = renderChart({ data: [{ ok: peak }, { ok: 0 }, { ok: peak / 1e6 }].map(row) });
+      const of = (selector: string) =>
+        Number(container.querySelector(selector)?.firstElementChild?.getAttribute('height'));
+      const heights = { stub: of('[data-slot="chart-zero-stub"]'), smallest: of('[data-bucket="2"]') };
+      unmount();
+      return heights;
+    };
+
+    expect(heightAt(1e6)).toEqual(heightAt(1e12));
+    expect(heightAt(1e6).stub).toBeGreaterThan(0);
+    expect(heightAt(1e6).stub).toBeLessThan(heightAt(1e6).smallest);
+  });
+
+  it('is decoration: hidden from assistive tech, and the tooltip still reads zero', async () => {
+    const { container, wrapper } = renderChart({ data: [{ ok: 2, errors: 1 }, { ok: 0, errors: 0 }, {}, {}].map(row) });
+    expect(container.querySelector('[data-slot="chart-zero-stub"]')?.getAttribute('aria-hidden')).toBe('true');
+
+    await moveTo(wrapper, 1);
+
+    const tooltip = document.body.querySelector('[data-slot="chart-tooltip-portal"]');
+    expect(tooltip?.textContent).toMatch(/Traces\s*0/);
+    expect(tooltip?.textContent).toMatch(/Total\s*0/);
+  });
+});
+
 describe('MetricsStackedBarChart zoom', () => {
   useFixedChartSize(600, 300);
 

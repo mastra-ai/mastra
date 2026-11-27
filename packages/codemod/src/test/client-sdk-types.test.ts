@@ -7,24 +7,24 @@ describe('client-sdk-types', () => {
     testTransform(transformer, 'client-sdk-types');
   });
 
-  it('does not transform types from other packages', () => {
-    const input = `
+  it.each([
+    [
+      'does not transform types from other packages',
+      `
 import type { GetWorkflowRunsParams } from '@some-other/package';
 
 const params: GetWorkflowRunsParams = {};
-    `.trim();
-
-    const output = applyTransform(transformer, input);
-
-    // Should remain unchanged
-    expect(output).toBe(input);
-  });
-
-  it('does not transform unrelated identifiers with similar names', () => {
-    const input = `
+    `,
+    ],
+    [
+      'does not transform unrelated identifiers with similar names',
+      `
 const GetWorkflowRunsParams = 'test';
 const value = GetWorkflowRunsParams;
-    `.trim();
+    `,
+    ],
+  ] as const)('%s', (_title, value) => {
+    const input = value.trim();
 
     const output = applyTransform(transformer, input);
 

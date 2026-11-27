@@ -1,3 +1,4 @@
+import '@/test/english-locale';
 import { describe, expect, it } from 'vitest';
 import type { BreakdownRow } from './breakdown';
 import { previousFigures } from './breakdown';

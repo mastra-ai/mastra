@@ -1,7 +1,16 @@
 import { openai } from '@ai-sdk/openai';
 import { tool } from 'ai';
+import type { ToolExecutionOptions } from 'ai';
 import { z } from 'zod';
 import { Agent } from '@mastra/core/agent';
+
+type RequestContextLike = { get: (key: string) => any };
+
+/** Mastra passes requestContext on the tool options object. AI SDK 6 types that slot as experimental_context. */
+function readRequestContext(options: ToolExecutionOptions): RequestContextLike | undefined {
+  const mastraOptions = options as ToolExecutionOptions & { requestContext?: RequestContextLike };
+  return mastraOptions.requestContext;
+}
 
 /**
  * Request Context Demo Agent
@@ -20,10 +29,11 @@ import { Agent } from '@mastra/core/agent';
 // Tool that simulates API calls with different endpoints
 const apiRequestTool = tool({
   description: 'Makes an API request to fetch data. The endpoint varies based on the environment.',
-  parameters: z.object({
+  inputSchema: z.object({
     resource: z.string().describe('The resource to fetch (e.g., "users", "orders", "products")'),
   }),
-  execute: async ({ resource }, { requestContext }) => {
+  execute: async ({ resource }, options) => {
+    const requestContext = readRequestContext(options);
     const apiEndpoint = requestContext?.get('apiEndpoint') || 'https://api.example.com';
     const environment = requestContext?.get('environment') || 'unknown';
     const userId = requestContext?.get('userId') || 'anonymous';
@@ -45,10 +55,11 @@ const apiRequestTool = tool({
 // Tool that requires specific permissions
 const adminActionTool = tool({
   description: 'Performs an admin action. Only available to users with admin permissions.',
-  parameters: z.object({
+  inputSchema: z.object({
     action: z.string().describe('The admin action to perform'),
   }),
-  execute: async ({ action }, { requestContext }) => {
+  execute: async ({ action }, options) => {
+    const requestContext = readRequestContext(options);
     const permissions = requestContext?.get('permissions') as string[] | undefined;
     const role = requestContext?.get('role') || 'guest';
 
@@ -72,10 +83,11 @@ const adminActionTool = tool({
 // Tool that uses analytics features
 const analyticsTool = tool({
   description: 'Retrieves analytics data. Availability depends on feature flags.',
-  parameters: z.object({
+  inputSchema: z.object({
     metric: z.string().describe('The metric to analyze (e.g., "user_engagement", "revenue", "conversion")'),
   }),
-  execute: async ({ metric }, { requestContext }) => {
+  execute: async ({ metric }, options) => {
+    const requestContext = readRequestContext(options);
     const features = requestContext?.get('features') as { analytics?: boolean; advancedTools?: boolean } | undefined;
 
     if (!features || !features.analytics) {

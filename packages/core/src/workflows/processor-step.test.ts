@@ -9,8 +9,8 @@ import type { Processor } from '../processors';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema, ProcessorStepSchema } from '../processors/step-schema';
 import { Tool } from '../tools';
 import { createWorkflow } from './create';
-import { createStep as createEventedStep } from './evented/workflow';
-import { createStep, isProcessor } from './workflow';
+import { cloneStep as cloneEventedStep, createStep as createEventedStep } from './evented/workflow';
+import { cloneStep, createStep, isProcessor } from './workflow';
 
 // Helper to create a mock MessageList
 function createMockMessageList(messages: MastraDBMessage[] = []): MessageList {
@@ -395,6 +395,20 @@ describe('createStep with Processor', () => {
     const step = createStep(processor);
 
     expect(step.id).toBe('processor:my-processor');
+  });
+
+  it('keeps the processor id on the step so it survives a step id rewrite', () => {
+    const processor: Processor = {
+      id: 'my-processor',
+      processInput: async ({ messages }) => messages,
+    };
+
+    for (const step of [createStep(processor), createEventedStep(processor)]) {
+      const renamed = { ...step, id: 'processor:graph-step-1' };
+      expect(renamed.processorId).toBe('my-processor');
+    }
+    expect(cloneStep(createStep(processor), { id: 'cloned' }).processorId).toBe('my-processor');
+    expect(cloneEventedStep(createEventedStep(processor), { id: 'cloned' }).processorId).toBe('my-processor');
   });
 
   it('should use processor name as description if available', () => {

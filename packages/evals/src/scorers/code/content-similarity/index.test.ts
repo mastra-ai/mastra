@@ -6,25 +6,22 @@ import { createContentSimilarityScorer } from './index';
 describe('ContentSimilarityMetric', () => {
   const scorer = createContentSimilarityScorer();
 
-  it('should return perfect similarity for identical strings', async () => {
-    const inputMessages = [createTestMessage({ content: 'The quick brown fox', role: 'user', id: 'test-input' })];
-    const output = [createTestMessage({ content: 'The quick brown fox', role: 'assistant', id: 'test-output' })];
+  it.each([
+    ['should return perfect similarity for identical strings', 'The quick brown fox', 'The quick brown fox', 1],
+    ['should handle case differences with default options', 'The Quick Brown Fox', 'the quick brown fox', 1],
+    [
+      'should handle whitespace differences with default options',
+      'The   quick\nbrown    fox',
+      'The quick brown fox',
+      1,
+    ],
+    ['should handle empty strings', '', '', 1],
+    ['should handle one empty string', 'The quick brown fox', '', 0],
+  ] as const)('%s', async (_title, content, contentValue, expected) => {
+    const inputMessages = [createTestMessage({ content, role: 'user', id: 'test-input' })];
+    const output = [createTestMessage({ content: contentValue, role: 'assistant', id: 'test-output' })];
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
-    expect(result.score).toBe(1);
-  });
-
-  it('should handle case differences with default options', async () => {
-    const inputMessages = [createTestMessage({ content: 'The Quick Brown Fox', role: 'user', id: 'test-input' })];
-    const output = [createTestMessage({ content: 'the quick brown fox', role: 'assistant', id: 'test-output' })];
-    const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
-    expect(result.score).toBe(1);
-  });
-
-  it('should handle whitespace differences with default options', async () => {
-    const inputMessages = [createTestMessage({ content: 'The   quick\nbrown    fox', role: 'user', id: 'test-input' })];
-    const output = [createTestMessage({ content: 'The quick brown fox', role: 'assistant', id: 'test-output' })];
-    const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
-    expect(result.score).toBe(1);
+    expect(result.score).toBe(expected);
   });
 
   it('should be case sensitive when ignoreCase is false', async () => {
@@ -85,20 +82,6 @@ describe('ContentSimilarityMetric', () => {
     const output = [createTestMessage({ content: 'Lorem ipsum dolor sit amet', role: 'assistant', id: 'test-output' })];
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeLessThan(0.3);
-  });
-
-  it('should handle empty strings', async () => {
-    const inputMessages = [createTestMessage({ content: '', role: 'user', id: 'test-input' })];
-    const output = [createTestMessage({ content: '', role: 'assistant', id: 'test-output' })];
-    const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
-    expect(result.score).toBe(1);
-  });
-
-  it('should handle one empty string', async () => {
-    const inputMessages = [createTestMessage({ content: 'The quick brown fox', role: 'user', id: 'test-input' })];
-    const output = [createTestMessage({ content: '', role: 'assistant', id: 'test-output' })];
-    const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
-    expect(result.score).toBe(0);
   });
 
   it('should count whitespace differences when ignoreWhitespace is false', async () => {

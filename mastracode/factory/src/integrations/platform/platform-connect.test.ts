@@ -1,12 +1,7 @@
 import { MastraConnectError } from '@mastra/connect';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  connectProxyFetch,
-  createPlatformConnectClient,
-  platformRedirectLocation,
-  platformRetryDelayMs,
-} from './platform-connect.js';
+import { connectProxyFetch, createPlatformConnectClient, platformRetryDelayMs } from './platform-connect.js';
 
 const accessToken = 'platform-secret-token';
 
@@ -52,8 +47,8 @@ describe('createPlatformConnectClient from the environment', () => {
     });
     expect(client.baseUrl).toBe('https://platform.example.com');
 
-    await client.request('GET', '/v1/server/linear/workspaces');
-    expect(sent(fetchImpl).url).toBe('https://platform.example.com/v1/server/linear/workspaces');
+    await client.request('GET', '/v2/integrations');
+    expect(sent(fetchImpl).url).toBe('https://platform.example.com/v2/integrations');
   });
 
   it('routes by MASTRA_PLATFORM_REGION and never by MASTRA_SHARED_API_URL', () => {
@@ -96,11 +91,11 @@ describe('createPlatformConnectClient from the environment', () => {
 
   it('sends x-organization-id only when MASTRA_ORG_ID is set, which Factory deployments do not set', async () => {
     const unset = fromEnv({ MASTRA_PLATFORM_ACCESS_TOKEN: accessToken });
-    await unset.client.request('GET', '/v1/server/linear/workspaces');
+    await unset.client.request('GET', '/v2/integrations');
     expect(new Headers(sent(unset.fetchImpl).init.headers).has('x-organization-id')).toBe(false);
 
     const set = fromEnv({ MASTRA_PLATFORM_ACCESS_TOKEN: accessToken, MASTRA_ORG_ID: 'org_123' });
-    await set.client.request('GET', '/v1/server/linear/workspaces');
+    await set.client.request('GET', '/v2/integrations');
     expect(new Headers(sent(set.fetchImpl).init.headers).get('x-organization-id')).toBe('org_123');
   });
 
@@ -161,44 +156,6 @@ describe('platform failure logging', () => {
     });
     expect(JSON.stringify(log.mock.calls)).not.toContain(accessToken);
     expect(JSON.stringify(log.mock.calls)).toContain('[REDACTED]');
-  });
-});
-
-describe('platformRedirectLocation', () => {
-  it('returns the redirect location without following it', async () => {
-    const log = stderr();
-    const fetchImpl = vi.fn<typeof fetch>(
-      async () => new Response(null, { status: 302, headers: { location: 'https://linear.app/oauth/authorize' } }),
-    );
-    const client = createPlatformConnectClient({
-      baseUrl: 'https://platform.example.com',
-      accessToken,
-      fetch: fetchImpl,
-    });
-
-    await expect(platformRedirectLocation(client, 'GET', '/v1/server/linear/authorize')).resolves.toBe(
-      'https://linear.app/oauth/authorize',
-    );
-    const { url, init } = sent(fetchImpl);
-    expect(url).toBe('https://platform.example.com/v1/server/linear/authorize');
-    expect(init).toMatchObject({ method: 'GET', redirect: 'manual' });
-    expect(new Headers(init.headers).get('authorization')).toBe(`Bearer ${accessToken}`);
-    expect(log).not.toHaveBeenCalled();
-  });
-
-  it('throws with the status when the route answers without a redirect', async () => {
-    stderr();
-    const client = createPlatformConnectClient({
-      baseUrl: 'https://platform.example.com',
-      accessToken,
-      fetch: async () => json({ detail: 'Not allowed' }, 403),
-    });
-
-    await expect(platformRedirectLocation(client, 'GET', '/v1/server/linear/authorize?x=1')).rejects.toMatchObject({
-      name: 'MastraConnectError',
-      status: 403,
-      source: 'platform',
-    });
   });
 });
 

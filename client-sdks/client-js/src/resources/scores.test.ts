@@ -17,14 +17,13 @@ describe('Scores Methods', () => {
 
   // Helper to mock successful API responses
   const mockSuccessfulResponse = () => {
-    const response = new Response(undefined, {
+    const response = new Response(JSON.stringify({}), {
       status: 200,
       statusText: 'OK',
       headers: new Headers({
         'Content-Type': 'application/json',
       }),
     });
-    response.json = () => Promise.resolve({});
     (global.fetch as any).mockResolvedValueOnce(response);
   };
 

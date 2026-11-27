@@ -1,7 +1,32 @@
+import type { LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import { MockMemory } from '../../memory/mock';
+import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { MockLanguageModelV2, convertArrayToReadableStream } from './mock-model';
+
+type ProviderCustomPart = {
+  type: 'custom';
+  kind: string;
+  providerOptions?: Record<string, unknown>;
+};
+
+function isProviderCustomPart(part: unknown): part is ProviderCustomPart {
+  return (
+    !!part &&
+    typeof part === 'object' &&
+    'type' in part &&
+    part.type === 'custom' &&
+    'kind' in part &&
+    typeof part.kind === 'string'
+  );
+}
+
+function providerRuntimeStream(parts: unknown[]): ReadableStream<LanguageModelV2StreamPart> {
+  // AI SDK v5's stream-part type predates provider custom parts, though providers emit them at runtime.
+  return convertArrayToReadableStream(parts) as unknown as ReadableStream<LanguageModelV2StreamPart>;
+}
 
 /**
  * Creates a mock model that simulates OpenAI reasoning model responses.
@@ -276,8 +301,7 @@ describe('Reasoning + Memory Integration', () => {
 
     // First request with reasoning
     const resp1 = await agent1.stream('What is 2+2?', {
-      threadId,
-      resourceId,
+      memory: { thread: threadId, resource: resourceId },
     });
 
     await resp1.consumeStream();
@@ -336,8 +360,7 @@ describe('Reasoning + Memory Integration', () => {
     });
 
     const resp = await agent.stream('What is 2+2?', {
-      threadId,
-      resourceId,
+      memory: { thread: threadId, resource: resourceId },
     });
 
     await resp.consumeStream();
@@ -396,8 +419,7 @@ describe('Reasoning + Memory Integration', () => {
 
     // First request with reasoning
     const resp1 = await agent1.stream('What is 2+2?', {
-      threadId,
-      resourceId,
+      memory: { thread: threadId, resource: resourceId },
     });
 
     await resp1.consumeStream();
@@ -472,8 +494,7 @@ describe('Reasoning + Memory Integration', () => {
 
     // First request with reasoning
     const resp1 = await agent1.stream('What is 2+2?', {
-      threadId,
-      resourceId,
+      memory: { thread: threadId, resource: resourceId },
     });
 
     await resp1.consumeStream();
@@ -539,8 +560,7 @@ describe('Reasoning + Memory Integration', () => {
 
     // First request with generate()
     const resp1 = await agent1.generate('What is 2+2?', {
-      threadId,
-      resourceId,
+      memory: { thread: threadId, resource: resourceId },
     });
 
     // Verify the text part has the correct providerMetadata
@@ -679,8 +699,7 @@ describe('Reasoning + Memory Integration', () => {
     });
 
     const resp = await agent.stream('Test message', {
-      threadId,
-      resourceId,
+      memory: { thread: threadId, resource: resourceId },
     });
 
     await resp.consumeStream();
@@ -834,8 +853,7 @@ describe('Reasoning + Memory Integration', () => {
     });
 
     const resp = await agent.stream('Test message', {
-      threadId,
-      resourceId,
+      memory: { thread: threadId, resource: resourceId },
     });
 
     await resp.consumeStream();
@@ -897,6 +915,171 @@ describe('Reasoning Data Spy: Response vs Request Comparison (Issue #12980)', ()
    * With v3 providers, reasoning items are serialized natively via item_reference
    * and OpenAI resolves them server-side. Reasoning and itemIds must be preserved.
    */
+  it('should replay provider-only OpenAI compaction state from memory', async () => {
+    const threadId = globalThis.crypto.randomUUID();
+    const resourceId = 'user-openai-compaction';
+    const providerMetadata = {
+      openai: {
+        type: 'compaction',
+        itemId: 'cmp_123',
+        encryptedContent: 'opaque-encrypted-state',
+      },
+    };
+
+    const compactionStream = providerRuntimeStream([
+      { type: 'stream-start', warnings: [] },
+      { type: 'response-metadata', id: 'response-1', modelId: 'gpt-5.1', timestamp: new Date(0) },
+      {
+        type: 'custom',
+        kind: 'openai.compaction',
+        providerMetadata,
+      },
+      {
+        type: 'finish',
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      },
+    ]);
+    const compactionModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: compactionStream,
+      }),
+    });
+    const spyModel = createSimpleMockModel();
+    Object.defineProperty(spyModel, 'provider', { value: 'openai.responses' });
+    const mockMemory = new MockMemory();
+
+    const agent1 = new Agent({
+      id: 'openai-compaction',
+      name: 'OpenAI Compaction',
+      instructions: 'You are a helpful assistant.',
+      model: compactionModel,
+      memory: mockMemory,
+    });
+    const resp1 = await agent1.stream('Compact this conversation', {
+      memory: { thread: threadId, resource: resourceId },
+    });
+    await resp1.consumeStream();
+
+    const recalledAfterFirstTurn = await mockMemory.recall({ threadId, resourceId });
+    const storedCompaction = recalledAfterFirstTurn.messages
+      .flatMap(message => message.content.parts)
+      .find(part => part.type === 'custom');
+    expect(storedCompaction).toMatchObject({
+      type: 'custom',
+      kind: 'openai.compaction',
+      providerMetadata,
+    });
+
+    const agent2 = new Agent({
+      id: 'openai-compaction',
+      name: 'OpenAI Compaction',
+      instructions: 'You are a helpful assistant.',
+      model: spyModel,
+      memory: mockMemory,
+    });
+    const resp2 = await agent2.stream('Continue', {
+      memory: { thread: threadId, resource: resourceId, options: { lastMessages: 10 } },
+    });
+    await resp2.consumeStream();
+
+    const replayPrompt = spyModel.doStreamCalls[0]!.prompt;
+    expect(replayPrompt.map(message => message.role)).toEqual(['system', 'assistant', 'user']);
+
+    const recalledAfterSecondTurn = await mockMemory.recall({ threadId, resourceId });
+    expect(recalledAfterSecondTurn.messages.map(message => message.role)).toEqual([
+      'user',
+      'assistant',
+      'user',
+      'assistant',
+    ]);
+
+    const replayedCompaction = replayPrompt
+      .filter(message => message.role === 'assistant')
+      .flatMap(message => message.content)
+      .find(isProviderCustomPart);
+    expect(replayedCompaction).toEqual({
+      type: 'custom',
+      kind: 'openai.compaction',
+      providerOptions: providerMetadata,
+    });
+  });
+
+  it('should preserve OpenAI compaction state across tool-loop steps', async () => {
+    const providerMetadata = {
+      openai: {
+        type: 'compaction',
+        itemId: 'cmp_tool_loop',
+        encryptedContent: 'opaque-tool-loop-state',
+      },
+    };
+    const prompts: unknown[] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        prompts.push(prompt);
+        const hasToolResult = prompt.some(message => message.role === 'tool');
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: providerRuntimeStream(
+            hasToolResult
+              ? [
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: 'done' },
+                  { type: 'text-end', id: 'text-1' },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                  },
+                ]
+              : [
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'custom', kind: 'openai.compaction', providerMetadata },
+                  { type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: '{"query":"Mastra"}' },
+                  {
+                    type: 'finish',
+                    finishReason: 'tool-calls',
+                    usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                  },
+                ],
+          ),
+        };
+      },
+    });
+    Object.defineProperty(model, 'provider', { value: 'openai.responses' });
+    const agent = new Agent({
+      id: 'openai-compaction-tool-loop',
+      name: 'OpenAI Compaction Tool Loop',
+      instructions: 'Use the lookup tool.',
+      model,
+      tools: {
+        lookup: createTool({
+          id: 'lookup',
+          description: 'Looks up a value.',
+          inputSchema: z.object({ query: z.string() }),
+          execute: async ({ query }) => ({ result: query }),
+        }),
+      },
+    });
+
+    const response = await agent.stream('Look up Mastra');
+    await response.consumeStream();
+
+    expect(prompts).toHaveLength(2);
+    const replayedCompaction = model.doStreamCalls[1]!.prompt.filter(message => message.role === 'assistant')
+      .flatMap(message => message.content)
+      .find(isProviderCustomPart);
+    expect(replayedCompaction).toEqual({
+      type: 'custom',
+      kind: 'openai.compaction',
+      providerOptions: providerMetadata,
+    });
+  });
+
   it('should preserve OpenAI reasoning and providerMetadata through round-trip', async () => {
     const threadId = globalThis.crypto.randomUUID();
     const resourceId = 'user-spy-openai';

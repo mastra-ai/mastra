@@ -1,4 +1,5 @@
 import { execFile } from 'child_process'
+import { createHash } from 'crypto'
 import fs from 'fs/promises'
 import path from 'path'
 import { promisify } from 'util'
@@ -19,6 +20,8 @@ import { GATEWAY_API_PAGES } from './pages'
  *    `markdown.ts` gives each page its slug, title, and guide from `pages.ts`.
  *
  * Generated files are gitignored. `pnpm build`, `pnpm dev`, and `pnpm check` run this first.
+ * When the spec and the generator inputs are unchanged, the existing pages are kept. Rewriting them makes a
+ * running dev server reload once per page.
  *
  * Usage:
  *   pnpm generate:gateway-api
@@ -31,6 +34,17 @@ const SNAPSHOT_PATH = path.join(DOCS_ROOT, 'scripts/gateway-api/openapi.snapshot
 
 /** Operations that don't belong in the API reference. */
 const EXCLUDED_OPERATIONS = new Set(['getOpenApi', 'getHealth', 'getReadiness'])
+
+/** Generator inputs besides the spec that change what the pages contain. */
+const FINGERPRINT_INPUTS = [
+  'scripts/gateway-api/constants.ts',
+  'scripts/gateway-api/generate.ts',
+  'scripts/gateway-api/markdown.ts',
+  'scripts/gateway-api/pages.ts',
+  'scripts/gateway-api/template.mustache',
+  'docusaurus.config.ts',
+  'node_modules/docusaurus-plugin-openapi-docs/package.json',
+]
 
 const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace']
 
@@ -169,9 +183,24 @@ export async function generate(): Promise<void> {
     )
   }
 
+  const specJson = `${JSON.stringify(spec, null, 2)}\n`
+  const operationCount = Object.values(spec.paths).reduce(
+    (count, pathItem) => count + Object.keys(pathItem).filter(key => HTTP_METHODS.includes(key)).length,
+    0,
+  )
+  const pagesDir = path.join(DOCS_ROOT, PAGES_DIR)
+  const fingerprintPath = path.join(DOCS_ROOT, path.dirname(SPEC_OUTPUT), 'fingerprint')
+  const fingerprint = await generationFingerprint(specJson)
+
+  if ((await readOptional(fingerprintPath)) === fingerprint && (await countPages(pagesDir)) === operationCount) {
+    console.log(`[gateway-api] ${operationCount} pages in ${PAGES_DIR} are up to date`)
+    return
+  }
+
   const specPath = path.join(DOCS_ROOT, SPEC_OUTPUT)
   await fs.mkdir(path.dirname(specPath), { recursive: true })
-  await fs.writeFile(specPath, `${JSON.stringify(spec, null, 2)}\n`)
+  await fs.rm(fingerprintPath, { force: true })
+  await fs.writeFile(specPath, specJson)
 
   // Like generation, cleanup logs failures instead of exiting non-zero, and the plugin skips pages that already exist.
   const cleanup = await runPluginCli('clean-api-docs')
@@ -180,20 +209,40 @@ export async function generate(): Promise<void> {
 
   // The plugin logs write failures instead of exiting non-zero, so check its output and the files it wrote.
   if (/Failed to (write|create)/.test(output)) throw new Error(`gen-api-docs reported failures:\n${output}`)
-  const pagesDir = path.join(DOCS_ROOT, PAGES_DIR)
   // The plugin always writes an overview page for the spec's `info`; the hand-written overview covers it.
   for (const file of await fs.readdir(pagesDir)) {
     if (file.endsWith('.info.mdx')) await fs.unlink(path.join(pagesDir, file))
   }
-  const pages = (await fs.readdir(pagesDir)).filter(file => file.endsWith('.api.mdx'))
-  const operationCount = Object.values(spec.paths).reduce(
-    (count, pathItem) => count + Object.keys(pathItem).filter(key => HTTP_METHODS.includes(key)).length,
-    0,
-  )
-  if (pages.length !== operationCount) {
-    throw new Error(`Expected ${operationCount} generated pages in ${PAGES_DIR}, found ${pages.length}`)
+  const pageCount = await countPages(pagesDir)
+  if (pageCount !== operationCount) {
+    throw new Error(`Expected ${operationCount} generated pages in ${PAGES_DIR}, found ${pageCount}`)
   }
-  console.log(`[gateway-api] Generated ${pages.length} pages in ${PAGES_DIR}`)
+  await fs.writeFile(fingerprintPath, fingerprint)
+  console.log(`[gateway-api] Generated ${pageCount} pages in ${PAGES_DIR}`)
+}
+
+async function generationFingerprint(specJson: string): Promise<string> {
+  const hash = createHash('sha256').update(specJson)
+  for (const input of FINGERPRINT_INPUTS) {
+    hash.update(`\0${input}\0${(await readOptional(path.join(DOCS_ROOT, input))) ?? ''}`)
+  }
+  return hash.digest('hex')
+}
+
+async function readOptional(file: string): Promise<string | undefined> {
+  try {
+    return await fs.readFile(file, 'utf-8')
+  } catch {
+    return undefined
+  }
+}
+
+async function countPages(pagesDir: string): Promise<number> {
+  try {
+    return (await fs.readdir(pagesDir)).filter(file => file.endsWith('.api.mdx')).length
+  } catch {
+    return 0
+  }
 }
 
 if (isDirectRun(import.meta.url)) {

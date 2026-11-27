@@ -35,7 +35,7 @@ import type {
 } from '@mastra/core/memory';
 import { SpanType, EntityType } from '@mastra/core/observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '@mastra/core/observability';
-import { TokenLimiterProcessor } from '@mastra/core/processors';
+import { isProcessorWorkflow, TokenLimiterProcessor } from '@mastra/core/processors';
 import type {
   ErrorProcessor,
   ErrorProcessorOrWorkflow,
@@ -496,6 +496,51 @@ const invalidMerge = (text: string) =>
     category: ErrorCategory.USER,
     text,
   });
+
+type ProcessorGraphEntry = { type: string; step?: unknown; steps?: ProcessorGraphEntry[] };
+
+/**
+ * Whether a processor with `id` is configured, either at the top level or as a step
+ * anywhere inside a processor workflow (sequential, branch, parallel, loop, foreach, nested workflow).
+ * Workflow steps built with `createStep(processor)` carry `processorId`, which survives step id
+ * rewrites (the Editor renames graph steps to `processor:<graph step id>`); older core versions
+ * only carry the id `processor:<id>`.
+ * A step inside a branch counts even though it only runs when that branch is taken.
+ */
+function hasConfiguredProcessorId(processors: readonly unknown[], id: string): boolean {
+  const seen = new Set<unknown>();
+
+  const matchesStep = (step: unknown): boolean => {
+    if (!step || typeof step !== 'object' || seen.has(step)) return false;
+    seen.add(step);
+    const {
+      processorId,
+      id: stepId,
+      stepGraph,
+    } = step as {
+      processorId?: unknown;
+      id?: unknown;
+      stepGraph?: ProcessorGraphEntry[];
+    };
+    // A workflow counts only through its steps; its own id names the workflow, not a processor.
+    if (Array.isArray(stepGraph)) return stepGraph.some(matchesEntry);
+    // `processorId` is authoritative; older core versions only carry the step id `processor:<id>`.
+    return processorId !== undefined ? processorId === id : stepId === `processor:${id}`;
+  };
+
+  // `loop` and `foreach` wrap a nested graph entry in `step` rather than a step.
+  const isEntry = (value: unknown): value is ProcessorGraphEntry =>
+    !!value && typeof value === 'object' && 'type' in value && 'step' in value;
+
+  const matchesEntry = (entry: ProcessorGraphEntry): boolean =>
+    (isEntry(entry.step) ? matchesEntry(entry.step) : matchesStep(entry.step)) ||
+    (entry.steps ?? []).some(matchesEntry);
+
+  return processors.some(processor =>
+    // A workflow's own id names the workflow, not a processor; only its steps count.
+    isProcessorWorkflow(processor) ? matchesStep(processor) : (processor as { id?: unknown }).id === id,
+  );
+}
 
 export class Memory extends MastraMemory {
   protected override createMemoryTokenCounter() {
@@ -4006,7 +4051,12 @@ Notes:
   ): Promise<ErrorProcessor[]> {
     const processors = await super.getErrorProcessors(configuredProcessors, context);
 
-    const om = await this.createOMProcessor(configuredProcessors, context);
+    // The error phase only calls `processAPIError`, which the runner skips for workflows,
+    // so an OM step inside an error workflow cannot stand in for Memory's OM here.
+    const om = await this.createOMProcessor(
+      configuredProcessors.filter(p => !isProcessorWorkflow(p)),
+      context,
+    );
     if (om) {
       processors.push(om as unknown as ErrorProcessor);
     }
@@ -4023,10 +4073,8 @@ Notes:
     configuredProcessors: (InputProcessorOrWorkflow | OutputProcessorOrWorkflow | ErrorProcessorOrWorkflow)[] = [],
     context?: RequestContext,
   ): Promise<InputProcessor | null> {
-    const hasObservationalMemory = configuredProcessors.some(
-      p => !('workflow' in p) && p.id === 'observational-memory',
-    );
-    if (hasObservationalMemory) return null;
+    // The user's OM processor wins wherever they placed it, including inside a processor workflow.
+    if (hasConfiguredProcessorId(configuredProcessors, 'observational-memory')) return null;
 
     // Note: attachment is intentionally permissive — `MastraMemory` may not be
     // populated in the request context at discovery time (or at all, for direct

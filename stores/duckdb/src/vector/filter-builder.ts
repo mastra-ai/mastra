@@ -93,8 +93,12 @@ export function buildFilterClause(filter: DuckDBVectorFilter): FilterResult {
       if (operatorResult) {
         conditions.push(operatorResult);
       }
+    } else if (isScalarValue(value)) {
+      // Direct equality - compare against the stored JSON type so that, e.g.,
+      // `false` does not match a stored 0 and `0` does not match a stored '0'.
+      conditions.push(buildScalarEquality(key, value));
     } else {
-      // Direct equality - for strings, compare directly; for others, use SQL literal
+      // Arrays and other non-scalar values keep the raw literal comparison.
       conditions.push(`${fieldPath} = ${toSqlLiteral(value)}`);
     }
   }
@@ -107,18 +111,55 @@ export function buildFilterClause(filter: DuckDBVectorFilter): FilterResult {
 }
 
 /**
- * Build a JSON path expression for accessing nested fields in metadata.
- * DuckDB uses json_extract_string for extracting string values from JSON.
+ * Build a JSON path literal (e.g. `$.user.role`) for a metadata field.
+ * Nested paths use dot notation; each segment is escaped for safe SQL use.
+ */
+function buildJsonPathLiteral(field: string): string {
+  const parts = field.split('.');
+  return '$.' + parts.map(p => escapeString(p)).join('.');
+}
+
+/**
+ * Build an expression that reads a field's value as text.
+ * DuckDB's json_extract_string returns SQL NULL for JSON null and for missing
+ * paths, and the raw text for every other JSON type.
  */
 function buildJsonPath(field: string): string {
-  // Handle nested paths with dot notation
-  const parts = field.split('.');
+  return `json_extract_string(metadata, '${buildJsonPathLiteral(field)}')`;
+}
 
-  // Build the JSON path with $ prefix for DuckDB
-  const jsonPath = '$.' + parts.map(p => escapeString(p)).join('.');
+/**
+ * Build an expression that reads a field's stored JSON type, e.g. `VARCHAR`,
+ * `BOOLEAN`, `UBIGINT`, `BIGINT`, `DOUBLE`, `ARRAY`, or `NULL`.
+ */
+function buildJsonTypePath(field: string): string {
+  return `json_type(metadata, '${buildJsonPathLiteral(field)}')`;
+}
 
-  // Use json_extract_string for proper string extraction in DuckDB
-  return `json_extract_string(metadata, '${jsonPath}')`;
+/** DuckDB JSON types that hold stored numbers (integers and reals). */
+const NUMERIC_JSON_TYPES = "('UBIGINT', 'BIGINT', 'DOUBLE')";
+
+/** Narrow a filter operand to the JSON scalar types that are compared by type. */
+function isScalarValue(value: unknown): value is string | number | boolean {
+  return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
+}
+
+/**
+ * Build a type-aware equality predicate for a scalar metadata value.
+ * The stored JSON type from json_type() is matched first, so booleans never
+ * compare equal to 0/1 and numeric strings never satisfy numeric comparisons.
+ */
+function buildScalarEquality(field: string, value: string | number | boolean): string {
+  const fieldPath = buildJsonPath(field);
+  const typePath = buildJsonTypePath(field);
+
+  if (typeof value === 'boolean') {
+    return `(${typePath} = 'BOOLEAN' AND ${fieldPath} = '${value ? 'true' : 'false'}')`;
+  }
+  if (typeof value === 'number') {
+    return `(${typePath} IN ${NUMERIC_JSON_TYPES} AND TRY_CAST(${fieldPath} AS DOUBLE) = ${toSqlLiteral(value)})`;
+  }
+  return `(${typePath} = 'VARCHAR' AND ${fieldPath} = '${escapeString(value)}')`;
 }
 
 /**
@@ -133,6 +174,8 @@ function buildOperatorCondition(field: string, operators: Record<string, unknown
       case '$eq':
         if (value === null) {
           conditions.push(`${fieldPath} IS NULL`);
+        } else if (isScalarValue(value)) {
+          conditions.push(buildScalarEquality(field, value));
         } else {
           conditions.push(`${fieldPath} = ${toSqlLiteral(value)}`);
         }
@@ -141,42 +184,55 @@ function buildOperatorCondition(field: string, operators: Record<string, unknown
       case '$ne':
         if (value === null) {
           conditions.push(`${fieldPath} IS NOT NULL`);
+        } else if (isScalarValue(value)) {
+          // Only present, non-null values are unequal to a scalar; a missing or
+          // explicit-null field must not satisfy $ne (three-valued logic).
+          conditions.push(`(${fieldPath} IS NOT NULL AND NOT ${buildScalarEquality(field, value)})`);
         } else {
           conditions.push(`${fieldPath} != ${toSqlLiteral(value)}`);
         }
         break;
 
       case '$gt':
-        conditions.push(`CAST(${fieldPath} AS DOUBLE) > ${toSqlLiteral(value)}`);
+        conditions.push(
+          `(${buildJsonTypePath(field)} IN ${NUMERIC_JSON_TYPES} AND TRY_CAST(${fieldPath} AS DOUBLE) > ${toSqlLiteral(value)})`,
+        );
         break;
 
       case '$gte':
-        conditions.push(`CAST(${fieldPath} AS DOUBLE) >= ${toSqlLiteral(value)}`);
+        conditions.push(
+          `(${buildJsonTypePath(field)} IN ${NUMERIC_JSON_TYPES} AND TRY_CAST(${fieldPath} AS DOUBLE) >= ${toSqlLiteral(value)})`,
+        );
         break;
 
       case '$lt':
-        conditions.push(`CAST(${fieldPath} AS DOUBLE) < ${toSqlLiteral(value)}`);
+        conditions.push(
+          `(${buildJsonTypePath(field)} IN ${NUMERIC_JSON_TYPES} AND TRY_CAST(${fieldPath} AS DOUBLE) < ${toSqlLiteral(value)})`,
+        );
         break;
 
       case '$lte':
-        conditions.push(`CAST(${fieldPath} AS DOUBLE) <= ${toSqlLiteral(value)}`);
+        conditions.push(
+          `(${buildJsonTypePath(field)} IN ${NUMERIC_JSON_TYPES} AND TRY_CAST(${fieldPath} AS DOUBLE) <= ${toSqlLiteral(value)})`,
+        );
         break;
 
       case '$in':
         if (Array.isArray(value) && value.length > 0) {
-          // Try to handle both scalar and array fields
-          // For array fields: check if any value in the array is in the specified list
-          // For scalar fields: check if the field value is in the specified list
+          // Handle both array and scalar fields.
+          // Array fields: match when any element is in the list.
+          // Scalar fields: match with the same type-aware equality used elsewhere,
+          // so `[0]` does not select a stored boolean and `['0']` does not select a number.
+          // Non-scalar operands (objects, null) fall back to a text comparison of the
+          // stored JSON, matching the pre-existing behaviour for those operands.
           const jsonPath = `json_extract(metadata, '$.${escapeString(field)}')`;
-          const literals = value.map(v => toSqlLiteral(v)).join(', ');
-          // For list_has_any, need to ensure types match - cast all to VARCHAR
           const stringLiterals = value.map(v => toSqlLiteral(String(v))).join(', ');
+          const equality = value
+            .map(v => (isScalarValue(v) ? buildScalarEquality(field, v) : `${fieldPath} = ${toSqlLiteral(v)}`))
+            .join(' OR ');
 
-          // Use list_has_any to check if array field contains any of the values
-          // TRY_CAST returns NULL if not an array, so we also check scalar field with IN
-          conditions.push(
-            `(list_has_any(TRY_CAST(${jsonPath} AS VARCHAR[]), [${stringLiterals}]) OR ${fieldPath} IN (${literals}))`,
-          );
+          // TRY_CAST returns NULL if not an array, so the equality clause covers non-arrays.
+          conditions.push(`(list_has_any(TRY_CAST(${jsonPath} AS VARCHAR[]), [${stringLiterals}]) OR (${equality}))`);
         } else {
           // Empty array - no matches
           conditions.push('1=0');
@@ -185,8 +241,16 @@ function buildOperatorCondition(field: string, operators: Record<string, unknown
 
       case '$nin':
         if (Array.isArray(value) && value.length > 0) {
-          const literals = value.map(v => toSqlLiteral(v)).join(', ');
-          conditions.push(`${fieldPath} NOT IN (${literals})`);
+          // A nonempty $nin must always constrain the result set: never let it
+          // compile to no predicate, which would match (and mutate) every row.
+          // Scalar operands use the type-aware equality; non-scalar operands
+          // (objects, null) fall back to the pre-existing text comparison.
+          const equality = value
+            .map(v => (isScalarValue(v) ? buildScalarEquality(field, v) : `${fieldPath} = ${toSqlLiteral(v)}`))
+            .join(' OR ');
+          // Same three-valued logic as $ne: missing and explicit-null values
+          // stay excluded rather than satisfying the negation.
+          conditions.push(`(${fieldPath} IS NOT NULL AND NOT (${equality}))`);
         }
         // Empty array - all matches (no condition added)
         break;
@@ -211,8 +275,11 @@ function buildOperatorCondition(field: string, operators: Record<string, unknown
             return `list_contains(TRY_CAST(${jsonPath} AS VARCHAR[]), ${toSqlLiteral(v)})`;
           });
           conditions.push(`(${arrayConditions.join(' AND ')})`);
+        } else if (isScalarValue(value)) {
+          // Fallback to the same type-aware equality used for scalar predicates
+          conditions.push(buildScalarEquality(field, value));
         } else {
-          // Fallback to equality
+          // Fallback to equality for non-scalar values
           conditions.push(`${fieldPath} = ${toSqlLiteral(value)}`);
         }
         break;

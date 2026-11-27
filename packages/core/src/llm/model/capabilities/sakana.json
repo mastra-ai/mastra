@@ -9,10 +9,9 @@
         "values": ["high", "xhigh"]
       }
     ],
-    "fugu": [
+    "sakana-namazu": [
       {
-        "type": "effort",
-        "values": ["high", "xhigh"]
+        "type": "toggle"
       }
     ],
     "fugu-ultra-20260615": [
@@ -21,9 +20,10 @@
         "values": ["high", "xhigh"]
       }
     ],
-    "sakana-namazu": [
+    "fugu": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["high", "xhigh"]
       }
     ]
   }

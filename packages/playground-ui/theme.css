@@ -64,12 +64,17 @@
   /* The clock a time field draws in place of the browser's picker icon (see `Input`). An image
      can't read CSS variables, so the stroke repeats `--muted-foreground` (`--gray-8`) per theme. */
   --time-field-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='oklch(0.7984 0 0)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 6v6l4 2'/%3E%3C/svg%3E");
+  /* The links between nodes on the Factory board canvas. Light lines on a dark page read brighter than dark ones on
+     a light page, so the dark theme blends its hint color halfway into the page. Solid, so crossing lines don't
+     darken. */
+  --canvas-link: color-mix(in oklab, var(--subtle-foreground) 50%, var(--background));
 }
 
 html.light {
   --nested: oklch(var(--fill-tint) 0 0 / 2.5%);
   --row: var(--background-2);
   --time-field-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='oklch(0.4568 0 0)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 6v6l4 2'/%3E%3C/svg%3E");
+  --canvas-link: var(--subtle-foreground);
 }
 
 /* Semantic aliases stay inline so utilities resolve var(--token) on the styled
@@ -78,6 +83,7 @@ html.light {
   --color-background: var(--background);
   --color-sidebar: var(--sidebar);
   --color-card: var(--card);
+  --color-canvas-link: var(--canvas-link);
   --color-nested: var(--nested);
   --color-row: var(--row);
   --color-field: var(--field);

@@ -7,10 +7,11 @@ import {
 } from '@mastra/react/hooks/workspace';
 import type { ReactNode } from 'react';
 import { useWorkspaceContext } from './use-workspace-context';
+import { WorkspaceCode } from './workspace-code';
 import { WorkspaceError } from './workspace-error';
-import { WorkspaceFileCode } from './workspace-file-code';
 import { WorkspaceFileSkeleton } from './workspace-file-skeleton';
 import { WorkspaceJsonPreview } from './workspace-json-preview';
+import { WorkspaceMarkdownImage } from './workspace-markdown-image';
 import { WorkspaceMarkdownPreview } from './workspace-markdown-preview';
 import { languageForPath } from '@/ds/components/CodeEditor/highlight';
 import { EmptyState } from '@/ds/components/EmptyState';
@@ -69,11 +70,11 @@ function DefaultPreview({ path, content, mimeType }: WorkspaceFilePreview) {
     );
   }
   if (isMarkdownFile(path)) {
-    return <WorkspaceMarkdownPreview content={content} />;
+    return <WorkspaceMarkdownPreview content={content} image={WorkspaceMarkdownImage} />;
   }
   const lang = languageForPath(path);
   if (lang === 'json') return <WorkspaceJsonPreview key={path} path={path} content={content} />;
-  return <WorkspaceFileCode code={content} lang={lang} />;
+  return <WorkspaceCode path={path} code={content} lang={lang} />;
 }
 
 export function WorkspaceActiveFileContent({ renderPreview }: { renderPreview?: WorkspacePreviewFactory }) {
@@ -87,7 +88,7 @@ export function WorkspaceActiveFileContent({ renderPreview }: { renderPreview?: 
   if (!activeFilePath) return null;
   if (isLoading) return <WorkspaceFileSkeleton />;
   // A failed background refetch keeps showing the last content.
-  if (!data) return <WorkspaceError error={error} fallback="Could not load file." className="m-4" />;
+  if (!data) return <WorkspaceError error={error ?? undefined} fallback="Could not load file." className="m-4" />;
 
   const file = { path: activeFilePath, content: data.content, mimeType: data.mimeType };
   return renderPreview?.(file) ?? <DefaultPreview {...file} />;

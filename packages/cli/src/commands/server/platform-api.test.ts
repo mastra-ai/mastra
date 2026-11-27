@@ -252,43 +252,15 @@ describe('restartServerProject', () => {
     );
   });
 
-  it('returns existing latestDeployId when restart omits id but deploy status is active', async () => {
+  it.each([
+    ['returns existing latestDeployId when restart omits id but deploy status is active', 'queued'],
+    ['returns same deploy id when API reports unknown status (in-progress family)', 'unknown'],
+  ] as const)('%s', async (_title, status) => {
     mockGET.mockImplementation(async (path: string) => {
       const p = String(path);
       if (p.includes('/deploys/') && !p.includes('/logs')) {
         return {
-          data: { id: 'dep-same', status: 'queued', instanceUrl: null, error: null },
-          error: undefined,
-          response: { status: 200 },
-        };
-      }
-      return {
-        data: {
-          project: {
-            latestDeployId: 'dep-same',
-            id: 'proj-1',
-            name: 'N',
-            slug: 'n',
-            organizationId: 'org-1',
-          },
-          deploys: [],
-        },
-        error: undefined,
-        response: { status: 200 },
-      };
-    });
-    mockPOST.mockResolvedValue({ data: {}, error: undefined, response: { status: 200 } });
-
-    const { restartServerProject } = await import('./platform-api.js');
-    await expect(restartServerProject('tok', 'org-1', 'proj-1')).resolves.toBe('dep-same');
-  });
-
-  it('returns same deploy id when API reports unknown status (in-progress family)', async () => {
-    mockGET.mockImplementation(async (path: string) => {
-      const p = String(path);
-      if (p.includes('/deploys/') && !p.includes('/logs')) {
-        return {
-          data: { id: 'dep-same', status: 'unknown', instanceUrl: null, error: null },
+          data: { id: 'dep-same', status, instanceUrl: null, error: null },
           error: undefined,
           response: { status: 200 },
         };

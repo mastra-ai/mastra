@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import '@/test/english-locale';
 import type { GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
 import { planTraceAggregate, traceAggregateRequestSchema } from '@mastra/core/storage';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';

@@ -4,7 +4,7 @@ Run these checks on every new or rewritten page, then run the checklist in the p
 
 ## Frontmatter
 
-- [ ] Does the frontmatter include `title`, `description`, and `packages`?
+- [ ] Does the frontmatter include `title`, `description`, and `packages` (omitted on Mastra platform pages about the hosted product, as `docs/CONTRIBUTING.md` says)?
 - [ ] Does `packages` follow `docs/CONTRIBUTING.md`: the package that owns the documented API, `@mastra/core` only for broader framework guides or core-owned APIs, the shared interface package on adapter overviews, and four entries or fewer?
 - [ ] Does the `description` summarize what readers will understand or accomplish, without repeating the title?
 - [ ] Does the title follow the template's title grammar and the established pattern of neighboring pages?

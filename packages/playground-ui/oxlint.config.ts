@@ -63,6 +63,7 @@ export default defineConfig({
       rules: {
         'mastra/sentence-case-labels': 'off',
         'playground-ui/placeholder-text': 'off',
+        'playground-ui/date-locale': 'off',
         'playground-ui/button-icon-prop': 'off',
       },
     },

@@ -29,12 +29,6 @@
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "deepseek-v4.1-flash": [
       {
         "type": "toggle"
@@ -44,9 +38,15 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "qwen3-30b-a3b-fp8": [
+    "qwen3.6-35b-a3b": [
       {
         "type": "toggle"
+      }
+    ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "gpt-5.4-nano": [
@@ -55,7 +55,7 @@
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "qwen3.6-35b-a3b": [
+    "qwen3-30b-a3b-fp8": [
       {
         "type": "toggle"
       }

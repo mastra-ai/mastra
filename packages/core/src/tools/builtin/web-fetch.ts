@@ -24,7 +24,7 @@ function parseHttpUrl(url: string): URL | undefined {
 }
 
 function isBlockedHostname(hostname: string): boolean {
-  const normalizedHostname = hostname.toLowerCase();
+  const normalizedHostname = hostname.toLowerCase().replace(/\.$/, '');
   return normalizedHostname === 'localhost' || normalizedHostname.endsWith('.localhost');
 }
 
@@ -181,10 +181,31 @@ async function readBody(response: http.IncomingMessage): Promise<{ content: stri
   return { content, truncated };
 }
 
-async function requestUrl(
-  url: URL,
-  redirectsRemaining = MAX_REDIRECTS,
-): Promise<{
+async function readFetchBody(response: Response): Promise<{ content: string; truncated: boolean }> {
+  if (!response.body) {
+    return { content: '', truncated: false };
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let content = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      return { content: content + decoder.decode(), truncated: false };
+    }
+
+    content += decoder.decode(value, { stream: true });
+
+    if (content.length > MAX_CONTENT_LENGTH) {
+      await reader.cancel();
+      return { content: content.slice(0, MAX_CONTENT_LENGTH), truncated: true };
+    }
+  }
+}
+
+type WebFetchResult = {
   content: string;
   truncated: boolean;
   status?: number;
@@ -192,57 +213,130 @@ async function requestUrl(
   contentType?: string | null;
   url?: string;
   ok?: boolean;
-}> {
+};
+
+const REQUEST_HEADERS = {
+  'user-agent': 'Mastra Web Fetch Tool/1.0',
+  accept: 'text/html,text/plain,application/json,application/xml;q=0.9,*/*;q=0.8',
+};
+
+function getRedirectUrl(location: string, url: URL, redirectsRemaining: number): URL {
+  if (redirectsRemaining <= 0) {
+    throw new WebFetchError(`Too many redirects. Maximum is ${MAX_REDIRECTS}.`);
+  }
+
+  const nextUrl = parseHttpUrl(new URL(location, url).toString());
+  if (!nextUrl) {
+    throw new WebFetchError('Redirect target must use HTTP or HTTPS.');
+  }
+
+  return nextUrl;
+}
+
+/**
+ * Runtimes such as Cloudflare Workers ship `node:http` but reject the custom DNS `lookup`
+ * option (or the whole request API) synchronously, before any connection is opened.
+ */
+function isNodeRequestUnavailable(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const code = (error as NodeJS.ErrnoException).code;
+  return (
+    code === 'ERR_OPTION_NOT_IMPLEMENTED' ||
+    code === 'ERR_METHOD_NOT_IMPLEMENTED' ||
+    /not implemented/i.test(error.message)
+  );
+}
+
+/**
+ * Fallback for runtimes without a usable `node:http`. The URL of every hop is checked before it is
+ * fetched, but `fetch` resolves DNS itself, so a public hostname that resolves to a private address
+ * is not blocked here.
+ */
+async function fetchUrl(url: URL, redirectsRemaining = MAX_REDIRECTS): Promise<WebFetchResult> {
+  assertAllowedUrl(url);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(new WebFetchError(`Request timed out after ${TIMEOUT_MS}ms.`)),
+    TIMEOUT_MS,
+  );
+
+  try {
+    const response = await fetch(url, { headers: REQUEST_HEADERS, redirect: 'manual', signal: controller.signal });
+    const location = response.headers.get('location');
+
+    if (location && response.status >= 300 && response.status < 400) {
+      await response.body?.cancel();
+      clearTimeout(timeout);
+      return await fetchUrl(getRedirectUrl(location, url, redirectsRemaining), redirectsRemaining - 1);
+    }
+
+    const { content, truncated } = await readFetchBody(response);
+
+    return {
+      content,
+      truncated,
+      status: response.status,
+      statusText: response.statusText,
+      contentType: response.headers.get('content-type'),
+      url: url.toString(),
+      ok: response.ok,
+    };
+  } catch (error) {
+    throw controller.signal.aborted ? controller.signal.reason : error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function requestUrl(url: URL, redirectsRemaining = MAX_REDIRECTS): Promise<WebFetchResult> {
   assertAllowedUrl(url);
 
   return new Promise((resolve, reject) => {
     const requestModule = url.protocol === 'https:' ? https : http;
-    const request = requestModule.request(
-      url,
-      {
-        headers: {
-          'user-agent': 'Mastra Web Fetch Tool/1.0',
-          accept: 'text/html,text/plain,application/json,application/xml;q=0.9,*/*;q=0.8',
+    let request: http.ClientRequest;
+
+    try {
+      request = requestModule.request(
+        url,
+        { headers: REQUEST_HEADERS, lookup: createLookup(), timeout: TIMEOUT_MS },
+        response => {
+          void (async () => {
+            const location = response.headers.location;
+
+            if (location && response.statusCode && response.statusCode >= 300 && response.statusCode < 400) {
+              response.resume();
+              resolve(await requestUrl(getRedirectUrl(location, url, redirectsRemaining), redirectsRemaining - 1));
+              return;
+            }
+
+            const { content, truncated } = await readBody(response);
+
+            resolve({
+              content,
+              truncated,
+              status: response.statusCode,
+              statusText: response.statusMessage,
+              contentType: Array.isArray(response.headers['content-type'])
+                ? response.headers['content-type'][0]
+                : (response.headers['content-type'] ?? null),
+              url: url.toString(),
+              ok: response.statusCode ? response.statusCode >= 200 && response.statusCode < 300 : false,
+            });
+          })().catch(reject);
         },
-        lookup: createLookup(),
-        timeout: TIMEOUT_MS,
-      },
-      response => {
-        void (async () => {
-          const location = response.headers.location;
-
-          if (location && response.statusCode && response.statusCode >= 300 && response.statusCode < 400) {
-            response.resume();
-
-            if (redirectsRemaining <= 0) {
-              throw new WebFetchError(`Too many redirects. Maximum is ${MAX_REDIRECTS}.`);
-            }
-
-            const nextUrl = parseHttpUrl(new URL(location, url).toString());
-            if (!nextUrl) {
-              throw new WebFetchError('Redirect target must use HTTP or HTTPS.');
-            }
-
-            resolve(await requestUrl(nextUrl, redirectsRemaining - 1));
-            return;
-          }
-
-          const { content, truncated } = await readBody(response);
-
-          resolve({
-            content,
-            truncated,
-            status: response.statusCode,
-            statusText: response.statusMessage,
-            contentType: Array.isArray(response.headers['content-type'])
-              ? response.headers['content-type'][0]
-              : (response.headers['content-type'] ?? null),
-            url: url.toString(),
-            ok: response.statusCode ? response.statusCode >= 200 && response.statusCode < 300 : false,
-          });
-        })().catch(reject);
-      },
-    );
+      );
+    } catch (error) {
+      if (isNodeRequestUnavailable(error)) {
+        resolve(fetchUrl(url, redirectsRemaining));
+      } else {
+        reject(error);
+      }
+      return;
+    }
 
     request.on('timeout', () => {
       request.destroy(new WebFetchError(`Request timed out after ${TIMEOUT_MS}ms.`));
