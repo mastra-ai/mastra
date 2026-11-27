@@ -233,6 +233,12 @@ export class InMemoryKnowledgeImportersStorage extends KnowledgeImportersStorage
     const node = this.#s.nodes.get(key(bindingId, sourceId));
     return node ? structuredClone(node) : null;
   }
+  async getNodes(bindingId: string, sourceIds: string[]) {
+    return [...new Set(sourceIds)].flatMap(sourceId => {
+      const node = this.#s.nodes.get(key(bindingId, sourceId));
+      return node ? [structuredClone(node)] : [];
+    });
+  }
   async getNodeByPage(pageId: string) {
     const node = [...this.#s.nodes.values()].find(n => n.pageId === pageId);
     return node ? structuredClone(node) : null;
