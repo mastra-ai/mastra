@@ -49,6 +49,15 @@
   height: 8px;
 }
 
+/* In the rail the icon and status fold away, so the amount carries the tone. */
+[data-slot='sidebar-meter'][data-state='collapsed'][data-tone='warning'] [data-meter-value] > * {
+  color: var(--badge-amber-foreground);
+}
+
+[data-slot='sidebar-meter'][data-state='collapsed'][data-tone='danger'] [data-meter-value] > * {
+  color: var(--badge-red-foreground);
+}
+
 /* With a rail amount (`railValue`), the card shows it in the rail instead of the full amount. */
 [data-slot='sidebar-meter'] [data-meter-rail],
 [data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-full] {
