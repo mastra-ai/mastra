@@ -447,37 +447,217 @@ export function describeFinishedOccurrenceCases({
       return { b, run, held, deliverStepEnd: () => deliverStepEnd.resolve() };
     }
 
-    it('does not run a step again when a restart read the run just before the step saved its result', async () => {
-      const executions: string[] = [];
-      const build = (replica: string) =>
-        createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
-          .then(work('first', async id => void executions.push(`${replica}:${id}`)))
-          .then(work('second', async id => void executions.push(`${replica}:${id}`)))
-          .commit();
-      const { b, run, held, deliverStepEnd } = await restartWhileStepEndQueued(
-        build,
-        [0],
-        event => !!event.data.restart,
-      );
+    // Without step guards a restart does not take the step over, so the old save still wins. With
+    // them, see the cases on `restartAroundStepSave` below.
+    it.runIf(!stepGuards)(
+      'does not run a step again when a restart read the run just before the step saved its result',
+      async () => {
+        const executions: string[] = [];
+        const build = (replica: string) =>
+          createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
+            .then(work('first', async id => void executions.push(`${replica}:${id}`)))
+            .then(work('second', async id => void executions.push(`${replica}:${id}`)))
+            .commit();
+        const { b, run, held, deliverStepEnd } = await restartWhileStepEndQueued(
+          build,
+          [0],
+          event => !!event.data.restart,
+        );
 
-      // A's step end is delivered and A finishes the run before B's message arrives.
-      deliverStepEnd();
-      await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
-      const before = b.published.length;
-      expect(await b.mastra.handleWorkflowEvent(held)).toEqual({ ok: true });
+        // A's step end is delivered and A finishes the run before B's message arrives.
+        deliverStepEnd();
+        await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
+        const before = b.published.length;
+        expect(await b.mastra.handleWorkflowEvent(held)).toEqual({ ok: true });
 
-      expect(executions).toEqual(['A:first', 'A:second']);
-      expect(stepEventsOf(b.published.slice(before), run.runId)).toEqual([]);
-    }, 20_000);
+        expect(executions).toEqual(['A:first', 'A:second']);
+        expect(stepEventsOf(b.published.slice(before), run.runId)).toEqual([]);
+      },
+      20_000,
+    );
 
-    it('does not run a branch again when a restart read it just before it saved its result and the run went on', async () => {
-      const executions: string[] = [];
+    it.runIf(!stepGuards)(
+      'does not run a branch again when a restart read it just before it saved its result and the run went on',
+      async () => {
+        const executions: string[] = [];
+        const dBlocked = deferred<void>();
+        const releaseD = deferred<void>();
+        const build = (replica: string) => {
+          const report: Report = async id => {
+            executions.push(`${replica}:${id}`);
+            if (id !== 'd') {
+              return;
+            }
+
+            dBlocked.resolve();
+            await releaseD.promise;
+          };
+          return createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: z.any() })
+            .parallel([work('a', report), work('b', report)])
+            .then(
+              createStep({
+                id: 'c',
+                inputSchema: z.any(),
+                outputSchema: Num,
+                execute: async () => {
+                  await report('c');
+                  return { n: 1 };
+                },
+              }),
+            )
+            .then(work('d', report))
+            .commit();
+        };
+        const { b, run, held, deliverStepEnd } = await restartWhileStepEndQueued(
+          build,
+          [0, 1],
+          event =>
+            !!(event.data.restart as { isParallelOrConditionalRestarted?: boolean } | undefined)
+              ?.isParallelOrConditionalRestarted,
+        );
+
+        // A's step end for b is delivered and the run ends the parallel, runs c and is in d when B's
+        // message arrives. B's restart read b as running, so its message for finished branch a leaves
+        // ending the parallel to b's step end.
+        deliverStepEnd();
+        await dBlocked.promise;
+        const before = b.published.length;
+        expect(await b.mastra.handleWorkflowEvent(held)).toEqual({ ok: true });
+
+        expect(executions.filter(e => e === 'B:a' || e === 'B:b')).toEqual([]);
+        expect(stepEventsOf(b.published.slice(before), run.runId)).toEqual([]);
+        releaseD.resolve();
+        await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
+        expect(executions.map(e => e.slice(2)).sort()).toEqual(['a', 'b', 'c', 'd']);
+      },
+      20_000,
+    );
+
+    /**
+     * With step guards, where a restart takes over the steps it restarts. Runs `build` on replica A
+     * until the step at `path` returned and its step end, which saves its result, is held. Then B
+     * restarts the run and reads that step as running. B hands its `workflows` events on only when
+     * the test says: `claim` has B handle its restart event, which claims the steps, and `pump`
+     * hands B's events to it one at a time until none is left. `saveOnA` delivers A's step end. A
+     * drops the events `stopA` picks, as when it stops after them.
+     */
+    async function restartAroundStepSave(
+      build: (replica: string) => Built,
+      path: number[],
+      {
+        beforeRestart,
+        stopA,
+      }: { beforeRestart?: (runId: string) => Promise<void>; stopA?: (event: Event) => boolean } = {},
+    ) {
+      // The id the broker gives a held event once it is published. `randomUUID()` repeats across tests.
+      let published = 0;
+      const asPublished = (event: Event): Event => ({
+        ...copyEvent(event),
+        id: `${uniqueRunId()}-${++published}`,
+        createdAt: new Date(),
+      });
+      let stepEnd: Event | undefined;
+      const stepEndHeld = deferred<void>();
+      const a = await startReplica(build('A'), event => {
+        if (!stepEnd && event.type === 'workflow.step.end' && samePath(event, path)) {
+          stepEnd = asPublished(event);
+          stepEndHeld.resolve();
+          return 'drop';
+        }
+        return stopA?.(event) ? 'drop' : undefined;
+      });
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      startInBackground(run, { n: 1 });
+      await stepEndHeld.promise;
+      await beforeRestart?.(run.runId);
+
+      const queue: Event[] = [];
+      const handled: Event[] = [];
+      const restartEvent = deferred<void>();
+      const b = await startReplica(build('B'), event => {
+        if (!['workflow.start', 'workflow.step.run', 'workflow.step.end'].includes(event.type)) {
+          return undefined;
+        }
+        queue.push(asPublished(event));
+        if (event.type === 'workflow.start') restartEvent.resolve();
+        return 'drop';
+      });
+      // B's own pubsub never sees the run end, so the restart only settles if it throws.
+      void (await b.workflow.createRun({ runId: run.runId })).restart().catch(restartEvent.reject);
+      await restartEvent.promise;
+      const handleNext = async () => {
+        const event = queue.shift()!;
+        handled.push(event);
+        expect(await b.mastra.handleWorkflowEvent(event)).toEqual({ ok: true });
+      };
+      return {
+        run,
+        handled,
+        claim: handleNext,
+        pump: async () => {
+          while (queue.length) await handleNext();
+        },
+        saveOnA: async () => expect(await a.mastra.handleWorkflowEvent(stepEnd!)).toEqual({ ok: true }),
+      };
+    }
+
+    // #30275 with step guards: A saved the step's result before B's restart claimed it, and stopped
+    // before the next step. The claim keeps the saved result, and B continues the run from it.
+    it.runIf(stepGuards)(
+      'continues from a step result saved just before a restart claimed the step',
+      async () => {
+        const executions: string[] = [];
+        const build = (replica: string) =>
+          createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
+            .then(work('first', async id => void executions.push(`${replica}:${id}`)))
+            .then(work('second', async id => void executions.push(`${replica}:${id}`)))
+            .commit();
+        const { run, pump, saveOnA } = await restartAroundStepSave(build, [0], {
+          stopA: event => event.type === 'workflow.step.run' && samePath(event, [1]),
+        });
+
+        await saveOnA();
+        await pump();
+        await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
+        expect(executions).toEqual(['A:first', 'B:second']);
+      },
+      20_000,
+    );
+
+    // A restart takes the step over: once it claimed the step, A's save of it is refused and B runs
+    // the step again. The default engine does the same after a takeover.
+    it.runIf(stepGuards)(
+      'runs a step again under a restart that claimed it before its result was saved',
+      async () => {
+        const executions: string[] = [];
+        const build = (replica: string) =>
+          createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
+            .then(work('first', async id => void executions.push(`${replica}:${id}`)))
+            .then(work('second', async id => void executions.push(`${replica}:${id}`)))
+            .commit();
+        const { run, claim, pump, saveOnA } = await restartAroundStepSave(build, [0]);
+
+        await claim();
+        await saveOnA();
+        expect((await storedRun(run.runId))?.context.first).toMatchObject({
+          status: 'running',
+          metadata: { __restartPending: true },
+        });
+        await pump();
+        await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
+        expect(executions).toEqual(['A:first', 'B:first', 'B:second']);
+      },
+      20_000,
+    );
+
+    /** parallel(a, b) -> c -> d, where A's d waits for `releaseD` once `dBlocked` resolved. */
+    function parallelThenTwo(executions: string[]) {
       const dBlocked = deferred<void>();
       const releaseD = deferred<void>();
       const build = (replica: string) => {
         const report: Report = async id => {
           executions.push(`${replica}:${id}`);
-          if (id !== 'd') {
+          if (id !== 'd' || replica !== 'A') {
             return;
           }
 
@@ -500,28 +680,60 @@ export function describeFinishedOccurrenceCases({
           .then(work('d', report))
           .commit();
       };
-      const { b, run, held, deliverStepEnd } = await restartWhileStepEndQueued(
-        build,
-        [0, 1],
-        event =>
-          !!(event.data.restart as { isParallelOrConditionalRestarted?: boolean } | undefined)
-            ?.isParallelOrConditionalRestarted,
-      );
+      const aSaved = async (runId: string) => {
+        await expect.poll(async () => (await storedRun(runId))?.context.a?.status).toBe('success');
+      };
+      return { build, dBlocked, releaseD, aSaved };
+    }
 
-      // A's step end for b is delivered and the run ends the parallel, runs c and is in d when B's
-      // message arrives. B's restart read b as running, so its message for finished branch a leaves
-      // ending the parallel to b's step end.
-      deliverStepEnd();
-      await dBlocked.promise;
-      const before = b.published.length;
-      expect(await b.mastra.handleWorkflowEvent(held)).toEqual({ ok: true });
+    // #30901 with step guards: A saved branch b's result before B's restart claimed it, and the run
+    // went on into d. Both branches had saved, so the restart claims nothing, leaves the run where
+    // it is, and its deliveries for the branches find the run past them.
+    it.runIf(stepGuards)(
+      'does not run a branch again when its result was saved before a restart claimed it and the run went on',
+      async () => {
+        const executions: string[] = [];
+        const { build, dBlocked, releaseD, aSaved } = parallelThenTwo(executions);
+        try {
+          const { run, handled, pump, saveOnA } = await restartAroundStepSave(build, [0, 1], { beforeRestart: aSaved });
 
-      expect(executions.filter(e => e === 'B:a' || e === 'B:b')).toEqual([]);
-      expect(stepEventsOf(b.published.slice(before), run.runId)).toEqual([]);
-      releaseD.resolve();
-      await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
-      expect(executions.map(e => e.slice(2)).sort()).toEqual(['a', 'b', 'c', 'd']);
-    }, 20_000);
+          await saveOnA();
+          await dBlocked.promise;
+          await pump();
+          expect(handled.filter(event => event.type === 'workflow.step.end')).toEqual([]);
+          expect(executions.filter(e => e.startsWith('B:'))).toEqual([]);
+          releaseD.resolve();
+          await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
+          expect(executions.map(e => e.slice(2)).sort()).toEqual(['a', 'b', 'c', 'd']);
+        } finally {
+          releaseD.resolve();
+        }
+      },
+      20_000,
+    );
+
+    // #30901 after the claim: A's save of branch b is refused, so B runs b again. Its delivery for
+    // finished branch a still leaves ending the parallel to b, and the run finishes on B.
+    it.runIf(stepGuards)(
+      'runs a branch again under a restart that claimed it before its result was saved',
+      async () => {
+        const executions: string[] = [];
+        const { build, releaseD, aSaved } = parallelThenTwo(executions);
+        try {
+          const { run, claim, pump, saveOnA } = await restartAroundStepSave(build, [0, 1], { beforeRestart: aSaved });
+
+          await claim();
+          await saveOnA();
+          await pump();
+          await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
+          expect(executions.slice(0, 2).sort()).toEqual(['A:a', 'A:b']);
+          expect(executions.slice(2)).toEqual(['B:b', 'B:c', 'B:d']);
+        } finally {
+          releaseD.resolve();
+        }
+      },
+      20_000,
+    );
 
     // Technical: A saved a's result and stopped before aggregating the entry, with b already
     // suspended. a started after b suspended, so the run's stored active steps name only a. On a
