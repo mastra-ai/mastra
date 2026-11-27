@@ -28,6 +28,9 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+// Locally children load source; CI loads the built dist.
+const workerExecArgv = process.env.MASTRA_TEST_DIST ? [] : ['--import', import.meta.resolve('tsx')];
+
 interface WorkerMessage {
   type: 'ready' | 'event-received' | 'status' | 'error';
   data?: any;
@@ -63,11 +66,14 @@ describe('UnixSocketPubSub - multi-process localOnly contract', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'mastra-local-only-mp-'));
     workerScript = join(tempDir, 'worker.mjs');
-    const distEventsPath = join(__dirname, '../../../dist/events/index.js').replace(/\\/g, '/');
+    const eventsPath = join(
+      __dirname,
+      process.env.MASTRA_TEST_DIST ? '../../../dist/events/index.js' : '../unix-socket-pubsub.ts',
+    ).replace(/\\/g, '/');
     await writeFile(
       workerScript,
       `
-import { UnixSocketPubSub } from '${distEventsPath}';
+import { UnixSocketPubSub } from '${eventsPath}';
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
@@ -138,6 +144,7 @@ process.send({ type: 'ready', data: { started: true } });
 
   function spawnWorker(socketPath: string): ChildProcess {
     const child = fork(workerScript, [socketPath], {
+      execArgv: workerExecArgv,
       stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
     });
     children.push(child);

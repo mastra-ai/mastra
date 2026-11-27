@@ -20,6 +20,9 @@ import { Worker } from 'node:worker_threads';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+// Locally children load source; CI loads the built dist.
+const workerExecArgv = process.env.MASTRA_TEST_DIST ? [] : ['--import', import.meta.resolve('tsx')];
+
 interface WorkerMessage {
   type: 'ready' | 'event-received' | 'status' | 'error';
   data?: any;
@@ -73,11 +76,14 @@ describe('UnixSocketPubSub - multi-process per-thread isolation', () => {
     // Write a worker script that uses UnixSocketPubSub directly with a given socket path.
     // This mirrors how mastracode routes each thread to its own socket.
     workerScript = join(tempDir, 'worker.mjs');
-    const distEventsPath = join(__dirname, '../../../dist/events/index.js').replace(/\\/g, '/');
+    const eventsPath = join(
+      __dirname,
+      process.env.MASTRA_TEST_DIST ? '../../../dist/events/index.js' : '../unix-socket-pubsub.ts',
+    ).replace(/\\/g, '/');
     await writeFile(
       workerScript,
       `
-import { UnixSocketPubSub } from '${distEventsPath}';
+import { UnixSocketPubSub } from '${eventsPath}';
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
@@ -137,7 +143,7 @@ process.send({ type: 'ready', data: { started: true } });
 import { parentPort, workerData } from 'node:worker_threads';
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { UnixSocketPubSub } from '${distEventsPath}';
+import { UnixSocketPubSub } from '${eventsPath}';
 
 const { socketPath, topic } = workerData;
 await mkdir(dirname(socketPath), { recursive: true });
@@ -187,6 +193,7 @@ parentPort.postMessage({ type: 'ready', data: { started: true } });
 
   function spawnWorker(socketPath: string): ChildProcess {
     const child = fork(workerScript, [socketPath], {
+      execArgv: workerExecArgv,
       stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
     });
     children.push(child);
@@ -194,7 +201,7 @@ parentPort.postMessage({ type: 'ready', data: { started: true } });
   }
 
   function spawnThreadWorker(socketPath: string, topic: string): Worker {
-    const worker = new Worker(threadWorkerScript, { workerData: { socketPath, topic } });
+    const worker = new Worker(threadWorkerScript, { execArgv: workerExecArgv, workerData: { socketPath, topic } });
     threadWorkers.push(worker);
     return worker;
   }

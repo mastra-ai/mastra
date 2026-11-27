@@ -1,8 +1,8 @@
 import { globSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, relative, resolve } from 'node:path';
+import type { TestProjectConfiguration, UserWorkspaceConfig } from '@internal/lint/vitest';
+import { configDefaults, defineConfig } from '@internal/lint/vitest';
 import { loadConfigFromFile } from 'vite';
-import type { TestProjectConfiguration, UserWorkspaceConfig } from 'vitest/config';
-import { configDefaults, defineConfig } from 'vitest/config';
 
 // Directories to exclude from project discovery
 const EXCLUDED_DIRS = new Set([
@@ -16,6 +16,25 @@ const EXCLUDED_DIRS = new Set([
   // are never installed and its suite cannot resolve them (e.g. `hono`).
   'mastracode/web',
 ]);
+
+// Suites that exercise build output (dist, bundles, CJS entry points, spawned CLIs), keyed by
+// repo-relative file or directory. Source-mode runs skip them; with MASTRA_TEST_DIST=1 (after a
+// build) they run like any other suite. CI runs them in the build-required job.
+const DIST_TESTS: Record<string, string> = JSON.parse(readFileSync('vitest.dist-tests.json', 'utf-8'));
+const SKIP_DIST_TESTS = !process.env.MASTRA_TEST_DIST;
+
+/** Globs, relative to the project directory, for the dist suites inside it; `true` when it is one. */
+function distTestExcludes(projectDir: string): string[] | true {
+  const excludes: string[] = [];
+  if (!SKIP_DIST_TESTS) return excludes;
+  for (const path of Object.keys(DIST_TESTS)) {
+    const rel = relative(projectDir, path);
+    if (rel === '') return true;
+    if (rel.startsWith('..')) continue;
+    excludes.push(/\.[cm]?[jt]sx?$/.test(rel) ? rel : `${rel}/**`);
+  }
+  return excludes;
+}
 
 // Directories to scan for vitest configs
 const PROJECT_GLOBS = [
@@ -66,6 +85,9 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
       continue;
     }
 
+    const distExcludes = distTestExcludes(projectDir);
+    if (distExcludes === true) continue;
+
     // Match workspace test:unit scripts; integration suites keep their package-local CI jobs.
     if (projectDir.startsWith('workspaces/')) {
       projects.push({
@@ -73,7 +95,7 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
         test: {
           name: `unit:${projectDir}`,
           root: resolve(projectDir),
-          exclude: [...configDefaults.exclude, '**/*.integration.test.ts'],
+          exclude: [...configDefaults.exclude, '**/*.integration.test.ts', ...distExcludes],
         },
       });
       continue;
@@ -83,9 +105,25 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
     const configContent = readFileSync(configPath, 'utf-8');
     const hasNestedProjects = /test:\s*\{[\s\S]*?projects:\s*\[/.test(configContent);
 
-    if (!hasNestedProjects) {
+    if (!hasNestedProjects && distExcludes.length === 0) {
       // Simple config - use directory path
       projects.push(projectDir);
+      continue;
+    }
+
+    if (!hasNestedProjects) {
+      // Simple config with dist suites: extend it to drop them. An extending project doesn't
+      // inherit the name, so read it from the config.
+      const loaded = await loadConfigFromFile({} as any, resolve(configPath));
+      const test = (loaded?.config as UserWorkspaceConfig | undefined)?.test;
+      projects.push({
+        extends: resolve(configPath),
+        test: {
+          name: test?.name,
+          root: resolve(projectDir),
+          exclude: [...(test?.exclude ?? configDefaults.exclude), ...distExcludes],
+        },
+      });
       continue;
     }
 
@@ -118,6 +156,9 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
             test: {
               ...projectConfig.test,
               root: `./${projectDir}`,
+              ...(distExcludes.length > 0 && {
+                exclude: [...(projectConfig.test?.exclude ?? configDefaults.exclude), ...distExcludes],
+              }),
             },
           });
         }

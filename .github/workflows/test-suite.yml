@@ -49,9 +49,6 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4]
     env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: ${{ secrets.TURBO_TOKEN == '' && 'local:rw' || 'remote:rw' }}
       NODE_OPTIONS: --max-old-space-size=8192
     permissions:
       contents: read
@@ -74,22 +71,12 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Cache turbo build setup
-        if: ${{ env.TURBO_TOKEN == '' }}
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: .turbo/cache
-          key: turbo-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            turbo-${{ runner.os }}-
-
-      - name: Build packages
-        run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
-
+      # No build: workspace packages resolve from source (@internal/lint/vitest). Suites that need
+      # build output run in the build-required job.
       - name: Run changed tests (Shard ${{ matrix.shard }}/4)
         run: |
           pnpm vitest run \
-            --project 'unit:*' --project 'typecheck:*' \
+            --project 'unit:*' \
             --reporter=blob \
             --reporter=verbose \
             --reporter=github-actions \
@@ -116,9 +103,6 @@ jobs:
       matrix:
         shard: ${{ fromJSON(inputs.unit_shards) }}
     env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: ${{ secrets.TURBO_TOKEN == '' && 'local:rw' || 'remote:rw' }}
       NODE_OPTIONS: --max-old-space-size=8192
     permissions:
       actions: read
@@ -141,18 +125,6 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Cache turbo build setup
-        if: ${{ env.TURBO_TOKEN == '' }}
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: .turbo/cache
-          key: turbo-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            turbo-${{ runner.os }}-
-
-      - name: Build packages
-        run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
-
       - name: Download affected tests
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
@@ -165,7 +137,7 @@ jobs:
         run: |
           mapfile -t test_files < /tmp/affected-outputs/unit_test_files.txt
           pnpm vitest run \
-            --project 'unit:*' --project 'typecheck:*' \
+            --project 'unit:*' \
             --reporter=blob \
             --reporter=verbose \
             --reporter=github-actions \
@@ -183,17 +155,13 @@ jobs:
           include-hidden-files: true
           retention-days: 1
 
-  # Package and client-SDK E2E share one build: each project is its own step, and the second
-  # runs even when the first failed. The name keeps "E2E Test (" for the tier updater.
+  # Package and client-SDK E2E run from source in one job: each project is its own step, and the
+  # second runs even when the first failed. The name keeps "E2E Test (" for the tier updater.
   e2e-test:
     name: E2E Test (packages/*, client-sdks/*)
     if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.e2e_test_files != '')
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 50
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: ${{ secrets.TURBO_TOKEN == '' && 'local:rw' || 'remote:rw' }}
     permissions:
       contents: read
       id-token: write
@@ -214,23 +182,8 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Cache turbo build setup
-        if: ${{ env.TURBO_TOKEN == '' }}
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: .turbo/cache
-          key: turbo-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            turbo-${{ runner.os }}-
-
-      - name: Build packages
-        id: build
-        run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
-        env:
-          NODE_OPTIONS: '--max_old_space_size=8192'
-
       - name: Run changed tests (packages/*)
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        if: ${{ !cancelled() }}
         timeout-minutes: 25
         env:
           E2E_TEST_FILES: ${{ inputs.e2e_test_files }}
@@ -253,7 +206,7 @@ jobs:
             --passWithNoTests
 
       - name: Run changed tests (client-sdks/*)
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        if: ${{ !cancelled() }}
         timeout-minutes: 25
         env:
           E2E_TEST_FILES: ${{ inputs.e2e_test_files }}
@@ -284,6 +237,115 @@ jobs:
           include-hidden-files: true
           retention-days: 1
 
+  # Suites that need build output: the typecheck projects (tsc reads the built .d.ts files) and the
+  # suites listed in vitest.dist-tests.json (bundles, CJS entry points, spawned CLIs). Runs in
+  # parallel with the source jobs above; the name keeps "UNIT Test" for the tier updater.
+  build-required-test:
+    name: Build-required UNIT Test
+    if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true')
+    runs-on: starsling-ubuntu-26.04
+    timeout-minutes: 45
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: ${{ secrets.TURBO_TOKEN == '' && 'local:rw' || 'remote:rw' }}
+      NODE_OPTIONS: --max-old-space-size=8192
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          ref: ${{ inputs.head_sha }}
+          fetch-depth: 2
+
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Cache turbo build setup
+        if: ${{ env.TURBO_TOKEN == '' }}
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
+      - name: Download affected tests
+        if: inputs.run_full == 'false'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: affected-tests-outputs
+          path: /tmp/affected-outputs
+
+      # Full runs take every dist suite. Affected runs take the affected test files that are dist
+      # suites or sit in one, and the affected typecheck files.
+      - name: Select tests
+        id: select
+        run: |
+          jq -r 'keys[]' vitest.dist-tests.json > /tmp/dist-paths.txt
+          if [ "${{ inputs.run_full }}" = "false" ]; then
+            cp /tmp/affected-outputs/unit_test_files.txt /tmp/typecheck-files.txt
+            : > /tmp/dist-files.txt
+            while read -r file; do
+              while read -r dist; do
+                case "$file" in "$dist" | "$dist"/*) echo "$file" >> /tmp/dist-files.txt; break ;; esac
+              done < /tmp/dist-paths.txt
+            done < /tmp/affected-outputs/unit_test_files.txt
+          else
+            : > /tmp/typecheck-files.txt
+            cp /tmp/dist-paths.txt /tmp/dist-files.txt
+          fi
+          echo "run_dist=$([ -s /tmp/dist-files.txt ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Build packages
+        run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
+
+      - name: Run typecheck tests
+        run: |
+          mapfile -t test_files < /tmp/typecheck-files.txt
+          pnpm vitest run \
+            --project 'typecheck:*' \
+            --reporter=blob \
+            --reporter=verbose \
+            --reporter=github-actions \
+            --outputFile.blob=.vitest-reports/blob-typecheck.json \
+            --passWithNoTests \
+            "${test_files[@]}"
+
+      - name: Run dist tests
+        if: ${{ !cancelled() && steps.select.outputs.run_dist == 'true' }}
+        env:
+          MASTRA_TEST_DIST: '1'
+        run: |
+          mapfile -t test_files < /tmp/dist-files.txt
+          pnpm vitest run \
+            --project 'unit:*' \
+            --reporter=blob \
+            --reporter=verbose \
+            --reporter=github-actions \
+            --outputFile.blob=.vitest-reports/blob-dist.json \
+            --passWithNoTests \
+            "${test_files[@]}"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: vitest-blob-build-required
+          path: .vitest-reports/
+          include-hidden-files: true
+          retention-days: 1
+
   # Durable takeover runs against real Redis and Postgres. It reports as its own check and is
   # deliberately kept out of merge-reports: it is a multi-process SIGTERM/SIGKILL suite whose
   # flake rate has not been measured, so a red run must not block a merge.
@@ -304,7 +366,7 @@ jobs:
   merge-reports:
     name: Merge Test Reports
     runs-on: starsling-ubuntu-26.04
-    needs: [unit-test, affected-unit-test, e2e-test]
+    needs: [unit-test, affected-unit-test, e2e-test, build-required-test]
     # Required check: stays always() so a run cancelled mid-tests still reaches the
     # "Require every test job to finish" step and fails. A skipped required job counts
     # as a pass. The implicit success() guard does not skip the heavy steps below once the
@@ -356,9 +418,10 @@ jobs:
           UNIT: ${{ needs.unit-test.result }}
           AFFECTED_UNIT: ${{ needs.affected-unit-test.result }}
           E2E: ${{ needs.e2e-test.result }}
+          BUILD_REQUIRED: ${{ needs.build-required-test.result }}
         run: |
           status=0
-          for job in UNIT AFFECTED_UNIT E2E; do
+          for job in UNIT AFFECTED_UNIT E2E BUILD_REQUIRED; do
             result="${!job}"
             echo "$job: $result"
             if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then

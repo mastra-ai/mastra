@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from '@internal/lint/vitest';
 
 const exclude = ['src/**/*.performance.test.ts', 'src/**/performance-indexes/*.test.ts', 'src/**/*.pooler.test.ts'];
 

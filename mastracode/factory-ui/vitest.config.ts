@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from '@internal/lint/vitest';
 
 /**
  * Unit and MSW UI projects share this entrypoint so targeted test runs can

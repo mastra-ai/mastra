@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from '@internal/lint/vitest';
 
 export default defineConfig({
   // Test files sit outside tsconfig's include, so vite won't pick up

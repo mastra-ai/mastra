@@ -10,12 +10,19 @@ vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 
 describe('MCPServer over stdio (2026-07-28)', () => {
   const tsxCli = path.join(path.dirname(require.resolve('tsx/package.json')), 'dist', 'cli.mjs');
+  // Stdio servers inherit only a curated env; forward NODE_OPTIONS so fixtures resolve workspace packages like this test does.
+  const fixtureEnv = { NODE_OPTIONS: process.env.NODE_OPTIONS ?? '' };
   const fixturePath = path.join(__dirname, '..', '__fixtures__/notification-server.ts');
 
   let client: Client | undefined;
 
   const transport = () => {
-    const t = new StdioClientTransport({ command: process.execPath, args: [tsxCli, fixturePath], stderr: 'pipe' });
+    const t = new StdioClientTransport({
+      command: process.execPath,
+      args: [tsxCli, fixturePath],
+      env: fixtureEnv,
+      stderr: 'pipe',
+    });
     t.stderr?.on('data', (chunk: Buffer) => process.stderr.write(chunk));
     return t;
   };
@@ -71,6 +78,7 @@ describe('MCPServer over stdio (2026-07-28)', () => {
     const t = new StdioClientTransport({
       command: process.execPath,
       args: [tsxCli, path.join(__dirname, '__tests__', 'tasks-stdio-server.fixture.ts')],
+      env: fixtureEnv,
       stderr: 'pipe',
     });
     t.stderr?.on('data', (chunk: Buffer) => process.stderr.write(chunk));
