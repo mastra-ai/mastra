@@ -328,7 +328,7 @@ export function FilterBarProvider({
     return (field: FilterBarField, place?: FilterBarPlace) => {
       const all = ofField(field);
       if (!place || !operatorsFor) return all;
-      const key = `${place.negated}:${place.scope?.id ?? ''}:${place.scope?.quantifierId ?? ''}`;
+      const key = `${place.groupId ?? ''}:${place.negated}:${place.scope?.id ?? ''}:${place.scope?.quantifierId ?? ''}`;
       let byPlace = placed.get(field);
       if (!byPlace) placed.set(field, (byPlace = new Map()));
       let result = byPlace.get(key);

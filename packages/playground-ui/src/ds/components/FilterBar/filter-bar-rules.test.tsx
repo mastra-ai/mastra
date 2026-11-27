@@ -467,6 +467,33 @@ describe('FilterBar rules', () => {
       expect(chip.getAttribute('aria-invalid')).toBe('true');
       expect(chip.getAttribute('aria-description')).toBe('"contains" is not available here');
     });
+
+    it('asks again for each group a condition sits in', async () => {
+      // Same negation and scope in both groups: only the group tells them apart.
+      const byGroup: NonNullable<FilterBarProps['operatorsFor']> = (_field, place) =>
+        place.groupId === 'strict' ? ['is'] : undefined;
+      const nested = (id: string, value: string): FilterBarGroup => ({
+        id,
+        kind: 'group',
+        logic: 'and',
+        nodes: [trace(`${id}-item`, { operatorId: 'contains', value })],
+      });
+      render(
+        <ExpressionHarness
+          operatorsFor={byGroup}
+          initial={expressionOf({
+            id: 'g',
+            kind: 'group',
+            logic: 'and',
+            nodes: [nested('loose', 'one'), nested('strict', 'two')],
+          })}
+        />,
+      );
+      await openAdvanced();
+
+      expect(getChip(/Trace ID contains one/).hasAttribute('aria-invalid')).toBe(false);
+      expect(getChip(/Trace ID contains two/).getAttribute('aria-invalid')).toBe('true');
+    });
   });
 
   describe('root logic', () => {
