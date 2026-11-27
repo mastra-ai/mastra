@@ -1280,7 +1280,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     const resourceId = (await runStorage.loadResourceId()) ?? eventResourceId;
     // The process that started the run saved its resume tracing context with the run record. This
     // worker may have no live span for the run, so a suspend here can only save what it carries over.
-    const tracingContext = (await runStorage.loadHeader())?.tracingContext;
+    const header = await runStorage.loadHeader();
+    const tracingContext = header?.tracingContext;
 
     // Check shouldPersistSnapshot option - default to true if not specified
     // This is particularly important for resume: if shouldPersist returns false for 'running',
@@ -1294,9 +1295,10 @@ export class WorkflowEventProcessor extends EventProcessor {
       }) ?? true;
     const shouldPersist = currentStorageVersion() === 2 || persistRequested;
 
-    // Guarded execution requires a durable run row even when optional snapshots are disabled.
+    // Guarded execution requires a durable run row even when optional snapshots are disabled. A
+    // resume keeps the row it resumes; a nested run started after one inherits the resume and has none.
     const guardsSteps = this.#guardsSteps(await this.mastra.getStorage()?.getStore('workflows'));
-    const requiresGuardedSnapshot = guardsSteps && !restart && !timeTravel && !resumeSteps?.length;
+    const requiresGuardedSnapshot = guardsSteps && !restart && (!header || (!timeTravel && !resumeSteps?.length));
     // Time travel rewrites the run's history, so its reset step results are stored even when running
     // snapshots are declined. Otherwise the old results stay stored and replayed steps merge into them.
     if (shouldPersist || requiresGuardedSnapshot || timeTravel) {
@@ -1932,19 +1934,17 @@ export class WorkflowEventProcessor extends EventProcessor {
       data: { ...args, workflow: undefined, state: finalState },
     });
 
-    if (!restart && !timeTravel && !resumeSteps?.length) {
-      try {
-        const runStorage = this.#runStorage(args.workflowId, runId);
-        const header = await runStorage.loadHeader();
-        // Retain recovery records until suspend propagation succeeds, but never delete resumable snapshots.
-        if (header?.guardedOnlySnapshot && header.status === 'running') {
-          await runStorage.delete();
-        }
-      } catch (error) {
-        this.mastra
-          .getLogger()
-          ?.warn('Failed to clean up workflow snapshot', { workflowId: args.workflowId, runId, error });
+    try {
+      const runStorage = this.#runStorage(args.workflowId, runId);
+      const header = await runStorage.loadHeader();
+      // Retain recovery records until suspend propagation succeeds, but never delete resumable snapshots.
+      if (header?.guardedOnlySnapshot && header.status === 'running') {
+        await runStorage.delete();
       }
+    } catch (error) {
+      this.mastra
+        .getLogger()
+        ?.warn('Failed to clean up workflow snapshot', { workflowId: args.workflowId, runId, error });
     }
 
     // Clean up run-scoped internal workflow registrations (e.g. execution-workflow)

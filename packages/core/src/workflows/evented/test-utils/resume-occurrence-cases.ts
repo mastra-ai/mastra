@@ -355,6 +355,45 @@ export function describeResumeOccurrenceCases({
       20_000,
     );
 
+    // T8. A nested run started after a parent resume inherits the resume. When it declines
+    // snapshots it had no stored run, so its first guarded step failed the run as `missing`.
+    // Storage v2 always stores a running run, so there the case passes whatever the guards do.
+    it('finishes a nested workflow that declines snapshots and starts after a parent resume', async () => {
+      const inner = createStep({
+        id: 'inner',
+        inputSchema: Num,
+        outputSchema: Num,
+        execute: async ({ inputData }) => ({ n: inputData.n + 1 }),
+      });
+      const child = createWorkflow({
+        id: `declining-child-${randomUUID()}`,
+        inputSchema: Num,
+        outputSchema: Num,
+        options: { shouldPersistSnapshot: () => false },
+      })
+        .then(inner)
+        .commit();
+      const gate = createStep({
+        id: 'gate',
+        inputSchema: Num,
+        outputSchema: Num,
+        resumeSchema: Approval,
+        execute: async ({ inputData, resumeData, suspend }) => (resumeData ? inputData : suspend({})),
+      });
+      const parent = createWorkflow({ id: `declining-parent-${randomUUID()}`, inputSchema: Num, outputSchema: Num })
+        .then(gate)
+        .then(child)
+        .commit();
+      await withHost({ [child.id]: child, [parent.id]: parent }, async () => {
+        const run = await parent.createRun();
+        expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'suspended' });
+        expect(await run.resume({ step: 'gate', resumeData: { ok: true } })).toMatchObject({
+          status: 'success',
+          result: { n: 1 },
+        });
+      });
+    }, 20_000);
+
     // T9. A resumed run still finishes through the other entry types once its steps are guarded.
     it('finishes a resumed run through a loop, a nested workflow, a parallel, a branch and a sleep', async () => {
       const add = (id: string) =>
