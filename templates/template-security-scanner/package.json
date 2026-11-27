@@ -42,7 +42,7 @@
     "test:advisories": "npm run build:console && vitest run tests/advisory-owner.integration.test.ts tests/advisory.browser.test.ts --reporter=verbose --maxWorkers=1 --no-file-parallelism"
   },
   "dependencies": {
-    "@hono/node-server": "^1.19.11",
+    "@hono/node-server": "^2.1.6",
     "@libsql/client": "^0.18.0",
     "@mastra/core": "latest",
     "@mastra/docker": "latest",

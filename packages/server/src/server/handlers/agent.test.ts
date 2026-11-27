@@ -1329,5 +1329,113 @@ describe('Agent Handlers', () => {
         }
       }
     });
+
+    // An agent built with an explicit AI SDK model instance (e.g. `openai('gpt-4o')`)
+    // carries its credentials on the instance, not in the provider's env var. The
+    // enhance endpoint must not require that env var for such agents. (#31608)
+    it('should enhance instructions for an explicit AI SDK model without a provider env var', async () => {
+      const originalEnv = process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      onTestFinished(() => {
+        if (originalEnv === undefined) {
+          delete process.env.OPENAI_API_KEY;
+        } else {
+          process.env.OPENAI_API_KEY = originalEnv;
+        }
+      });
+
+      const mockEnhancedResult = {
+        object: {
+          explanation: 'Clarified the tone.',
+          new_prompt: 'You are a concise, friendly assistant.',
+        },
+      };
+
+      const generateSpy = vi.spyOn(Agent.prototype, 'generate').mockResolvedValue(mockEnhancedResult as any);
+      onTestFinished(() => generateSpy.mockRestore());
+
+      // Use a v2+ SDK instance (`@ai-sdk/openai-v5`) so the chosen model is one
+      // generate() actually accepts; the default 1.x fixture is a v1 model that
+      // generate() rejects, which would make this success path depend on the spy.
+      const explicitAgent = makeMockAgent({ name: 'test-explicit-model-agent', model: openaiV5('gpt-4o') });
+      const explicitMastra = makeMastraMock({ agents: { 'test-explicit-model-agent': explicitAgent } });
+      const result = await ENHANCE_INSTRUCTIONS_ROUTE.handler({
+        ...createTestServerContext({ mastra: explicitMastra }),
+        agentId: 'test-explicit-model-agent',
+        instructions: 'You are a helpful assistant.',
+      });
+
+      expect(result).toEqual({
+        explanation: 'Clarified the tone.',
+        new_prompt: 'You are a concise, friendly assistant.',
+      });
+      expect(generateSpy).toHaveBeenCalledOnce();
+    });
+
+    // A model list can mix router ids (which need the provider env var) with explicit
+    // SDK instances (which do not). The enhancer must skip a router model whose provider
+    // is not connected and fall through to the explicit instance. (#31608)
+    it('should fall back to an explicit AI SDK model when an earlier router model has no env var', async () => {
+      const originalEnv = process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      onTestFinished(() => {
+        if (originalEnv === undefined) {
+          delete process.env.OPENAI_API_KEY;
+        } else {
+          process.env.OPENAI_API_KEY = originalEnv;
+        }
+      });
+
+      const mixedAgent = makeMockAgent({
+        name: 'test-mixed-model-agent',
+        model: [{ model: 'openai/gpt-4o' }, { model: openaiV5('gpt-4o-mini') }],
+      });
+      const mixedMastra = makeMastraMock({ agents: { 'test-mixed-model-agent': mixedAgent } });
+
+      let usedProvider: string | undefined;
+      const generateSpy = vi.spyOn(Agent.prototype, 'generate').mockImplementation(function (this: Agent) {
+        usedProvider = (this.model as { provider?: string }).provider;
+        return Promise.resolve({ object: { explanation: 'x', new_prompt: 'y' } } as any);
+      });
+      onTestFinished(() => generateSpy.mockRestore());
+
+      const result = await ENHANCE_INSTRUCTIONS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mixedMastra }),
+        agentId: 'test-mixed-model-agent',
+        instructions: 'You are a helpful assistant.',
+      });
+
+      expect(result).toEqual({ explanation: 'x', new_prompt: 'y' });
+      // The explicit `@ai-sdk/openai-v5` instance was chosen, not the router entry.
+      expect(usedProvider).toBe('openai.responses');
+    });
+
+    // Control case: an agent whose only model is a router id still requires its provider
+    // env var, so the endpoint keeps returning a 400 when nothing is connected. (#31608)
+    it('should reject when the only model is a router id with no configured provider', async () => {
+      const originalEnv = process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      onTestFinished(() => {
+        if (originalEnv === undefined) {
+          delete process.env.OPENAI_API_KEY;
+        } else {
+          process.env.OPENAI_API_KEY = originalEnv;
+        }
+      });
+
+      const routerAgent = makeMockAgent({
+        name: 'test-router-model-agent',
+        model: 'openai/gpt-4o',
+      });
+      const routerMastra = makeMastraMock({ agents: { 'test-router-model-agent': routerAgent } });
+
+      await expect(
+        ENHANCE_INSTRUCTIONS_ROUTE.handler({
+          ...createTestServerContext({ mastra: routerMastra }),
+          agentId: 'test-router-model-agent',
+          instructions: 'You are a helpful assistant.',
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+    });
   });
 });

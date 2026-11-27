@@ -5042,6 +5042,7 @@ export class Agent<
         messageList,
         agentId: this.id,
         agentName: this.name,
+        resultType: 'title_generation',
       });
 
       text = await result.text;
@@ -5049,6 +5050,7 @@ export class Agent<
       const result = await (llm as MastraLLMV1).__text({
         requestContext,
         ...observabilityContext,
+        resultType: 'title_generation',
         messages: [
           {
             role: 'system',

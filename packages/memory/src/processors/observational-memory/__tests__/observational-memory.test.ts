@@ -3213,9 +3213,12 @@ describe('Observer Agent Helpers', () => {
         expect(joined).toContain('[File #1: floorplan.pdf]');
       });
 
-      it('honors a mimeType allowlist with glob patterns', () => {
+      it.each([
+        ['honors a mimeType allowlist with glob patterns', 'image/*', false],
+        ['treats a bare "*" allowlist as allow-all', '*', true],
+      ] as const)('%s', (_title, value, expected) => {
         const historyMessage = buildObserverHistoryMessage([buildMessageWithAttachments()], {
-          attachmentFilter: ['image/*'],
+          attachmentFilter: [value],
         });
         const content = historyMessage.content as any[];
 
@@ -3223,7 +3226,7 @@ describe('Observer Agent Helpers', () => {
           true,
         );
         expect(content.some(part => part.type === 'file' && part.data === 'https://example.com/floorplan.pdf')).toBe(
-          false,
+          expected,
         );
 
         const joined = content
@@ -3241,27 +3244,6 @@ describe('Observer Agent Helpers', () => {
         const content = historyMessage.content as any[];
 
         expect(content.some(part => part.type === 'image' || part.type === 'file')).toBe(false);
-
-        const joined = content
-          .filter(part => part.type === 'text')
-          .map(part => part.text)
-          .join('\n');
-        expect(joined).toContain('[Image #1: diagram.png]');
-        expect(joined).toContain('[File #1: floorplan.pdf]');
-      });
-
-      it('treats a bare "*" allowlist as allow-all', () => {
-        const historyMessage = buildObserverHistoryMessage([buildMessageWithAttachments()], {
-          attachmentFilter: ['*'],
-        });
-        const content = historyMessage.content as any[];
-
-        expect(content.some(part => part.type === 'image' && part.image === 'https://example.com/diagram.png')).toBe(
-          true,
-        );
-        expect(content.some(part => part.type === 'file' && part.data === 'https://example.com/floorplan.pdf')).toBe(
-          true,
-        );
 
         const joined = content
           .filter(part => part.type === 'text')
@@ -3824,13 +3806,20 @@ describe('Observer Agent Helpers', () => {
       ).resolves.toMatchObject({ model: 'google/gemini-2.5-flash' });
     });
 
-    it('preserves the exact actor model for unknown and custom providers', async () => {
+    it.each([
+      ['preserves the exact actor model for unknown and custom providers', 'custom-gateway', 'custom-model'],
+      [
+        'preserves a built-in actor model instance whose sibling route is not known to be usable',
+        'anthropic',
+        'claude-opus-4-6',
+      ],
+    ] as const)('%s', async (_title, provider, modelId) => {
       vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
-      const actorModel = new MockLanguageModelV2({ provider: 'custom-gateway', modelId: 'custom-model' });
+      const actorModel = new MockLanguageModelV2({ provider, modelId });
       const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
 
       const resolved = await (om as any).resolveObservationModel(1, {
-        currentModel: { provider: 'custom-gateway', modelId: 'custom-model', model: actorModel },
+        currentModel: { provider, modelId, model: actorModel },
       });
 
       expect(resolved.model).toBe(actorModel);
@@ -3846,18 +3835,6 @@ describe('Observer Agent Helpers', () => {
 
       expect(mainAgent.getModel).toHaveBeenCalledOnce();
       expect(resolved.model).toBe(fallbackModel);
-    });
-
-    it('preserves a built-in actor model instance whose sibling route is not known to be usable', async () => {
-      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
-      const actorModel = new MockLanguageModelV2({ provider: 'anthropic', modelId: 'claude-opus-4-6' });
-      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
-
-      const resolved = await (om as any).resolveObservationModel(1, {
-        currentModel: { provider: 'anthropic', modelId: 'claude-opus-4-6', model: actorModel },
-      });
-
-      expect(resolved.model).toBe(actorModel);
     });
 
     it('maps a plain string-backed router captured by the processor path to its provider low-cost model', async () => {
@@ -5107,15 +5084,17 @@ _range: \`ignored-by-reconciler\`_
       expect(result.observations).not.toContain('[O1-N1]');
     });
 
-    it('should reconcile reflected markdown groups back to canonical grouped observations', () => {
-      const sourceObservations = `<observation-group id="group-a" range="m1:m2">
+    it.each([
+      [
+        'should reconcile reflected markdown groups back to canonical grouped observations',
+        `<observation-group id="group-a" range="m1:m2">
 - 🔴 User is building a React app
 </observation-group>
 
 <observation-group id="group-b" range="m3:m4">
 - 🟡 Needs help with auth flow
-</observation-group>`;
-      const output = `
+</observation-group>`,
+        `
 <observations>
 ## Group \`merged-project\`
 _range: \`ignored-by-reconciler\`_
@@ -5123,45 +5102,39 @@ _range: \`ignored-by-reconciler\`_
 [O1] - 🔴 User is building a React app
 [O2] - 🟡 Needs help with auth flow
 </observations>
-      `;
-
-      const result = parseReflectorOutput(output, sourceObservations);
-
-      expect(result.observations).toBe(`<observation-group id="merged-project" range="m1:m4" kind="reflection">
+      `,
+        `<observation-group id="merged-project" range="m1:m4" kind="reflection">
 - 🔴 User is building a React app
 - 🟡 Needs help with auth flow
-</observation-group>`);
-    });
-
-    it('should keep original group ids for unchanged reflected sections', () => {
-      const sourceObservations = `<observation-group id="group-a" range="m1:m2">
+</observation-group>`,
+      ],
+      [
+        'should keep original group ids for unchanged reflected sections',
+        `<observation-group id="group-a" range="m1:m2">
 - 🔴 User is building a React app
-</observation-group>`;
-      const output = `
+</observation-group>`,
+        `
 <observations>
 ## Group \`group-a\`
 _range: \`ignored-by-reconciler\`_
 
 [O1] - 🔴 User is building a React app
 </observations>
-      `;
-
-      const result = parseReflectorOutput(output, sourceObservations);
-
-      expect(result.observations).toBe(`<observation-group id="group-a" range="m1:m2" kind="reflection">
+      `,
+        `<observation-group id="group-a" range="m1:m2" kind="reflection">
 - 🔴 User is building a React app
-</observation-group>`);
-    });
-
-    it('should compact merged ranges across already-merged source groups', () => {
-      const sourceObservations = `<observation-group id="group-a" range="m1:m2">
+</observation-group>`,
+      ],
+      [
+        'should compact merged ranges across already-merged source groups',
+        `<observation-group id="group-a" range="m1:m2">
 - 🔴 User is building a React app
 </observation-group>
 
 <observation-group id="group-c" range="m3:m4" kind="reflection">
 - 🟡 Needs help with auth flow
-</observation-group>`;
-      const output = `
+</observation-group>`,
+        `
 <observations>
 ## Group \`merged-project\`
 _range: \`ignored-by-reconciler\`_
@@ -5169,14 +5142,19 @@ _range: \`ignored-by-reconciler\`_
 [O1] - 🔴 User is building a React app
 [O2] - 🟡 Needs help with auth flow
 </observations>
-      `;
+      `,
+        `<observation-group id="merged-project" range="m1:m4" kind="reflection">
+- 🔴 User is building a React app
+- 🟡 Needs help with auth flow
+</observation-group>`,
+      ],
+    ] as const)('%s', (_title, sourceObservationsValue, outputValue, expected) => {
+      const sourceObservations = sourceObservationsValue;
+      const output = outputValue;
 
       const result = parseReflectorOutput(output, sourceObservations);
 
-      expect(result.observations).toBe(`<observation-group id="merged-project" range="m1:m4" kind="reflection">
-- 🔴 User is building a React app
-- 🟡 Needs help with auth flow
-</observation-group>`);
+      expect(result.observations).toBe(expected);
     });
 
     it('should compact a real reflected group with bloated legacy reflection metadata', () => {
@@ -6787,33 +6765,37 @@ describe('Scenario: Reflection Creates New Generation', () => {
 
 describe('Current Task Validation', () => {
   describe('hasCurrentTaskSection', () => {
-    it('should detect <current-task> XML tag', () => {
-      const observations = `<observations>
+    it.each([
+      [
+        'should detect <current-task> XML tag',
+        `<observations>
 - 🔴 User preference
 - 🟡 Some task
 </observations>
 
 <current-task>
 Implement the login feature
-</current-task>`;
-
-      expect(hasCurrentTaskSection(observations)).toBe(true);
-    });
-
-    it('should detect <current-task> tag case-insensitively', () => {
-      const observations = `<Current-Task>
+</current-task>`,
+        true,
+      ],
+      [
+        'should detect <current-task> tag case-insensitively',
+        `<Current-Task>
 The user wants to refactor the API
-</Current-Task>`;
-
-      expect(hasCurrentTaskSection(observations)).toBe(true);
-    });
-
-    it('should return false when missing', () => {
-      const observations = `- 🔴 User preference
+</Current-Task>`,
+        true,
+      ],
+      [
+        'should return false when missing',
+        `- 🔴 User preference
 - 🟡 Some observation
-- ������ Minor note`;
+- ������ Minor note`,
+        false,
+      ],
+    ] as const)('%s', (_title, observationsValue, expected) => {
+      const observations = observationsValue;
 
-      expect(hasCurrentTaskSection(observations)).toBe(false);
+      expect(hasCurrentTaskSection(observations)).toBe(expected);
     });
   });
 
@@ -10905,17 +10887,20 @@ describe('Async Buffering Config Validation', () => {
 // =============================================================================
 
 describe('Async Buffering Defaults & Disabling', () => {
-  it('should enable async buffering by default (no explicit config)', () => {
+  it.each([
+    ['should enable async buffering by default (no explicit config)', 'thread', true],
+    ['should disable async buffering by default for resource scope', 'resource', false],
+  ] as const)('%s', (_title, scope, expected) => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
-      scope: 'thread',
+      scope,
       model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 50000 },
       reflection: { observationTokens: 20000 },
     });
 
-    expect(om.buffering.isAsyncObservationEnabled()).toBe(true);
-    expect(om.buffering.isAsyncReflectionEnabled()).toBe(true);
+    expect(om.buffering.isAsyncObservationEnabled()).toBe(expected);
+    expect(om.buffering.isAsyncReflectionEnabled()).toBe(expected);
   });
 
   it('should apply correct default values for async buffering', () => {
@@ -10962,19 +10947,6 @@ describe('Async Buffering Defaults & Disabling', () => {
     expect(obsConfig.blockAfter).toBeUndefined();
     expect(reflConfig.bufferActivation).toBeUndefined();
     expect(reflConfig.blockAfter).toBeUndefined();
-  });
-
-  it('should disable async buffering by default for resource scope', () => {
-    const om = new ObservationalMemory({
-      storage: createInMemoryStorage(),
-      scope: 'resource',
-      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
-      observation: { messageTokens: 50000 },
-      reflection: { observationTokens: 20000 },
-    });
-
-    expect(om.buffering.isAsyncObservationEnabled()).toBe(false);
-    expect(om.buffering.isAsyncReflectionEnabled()).toBe(false);
   });
 
   it('should throw when resource scope has explicit async config', () => {

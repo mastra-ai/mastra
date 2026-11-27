@@ -668,4 +668,61 @@ describe('tracing when a tool call suspends', () => {
     expect(started(SpanType.MODEL_INFERENCE)).toHaveLength(1);
     expect(exporter.getIncompleteSpans().map(entry => entry.span?.name)).toEqual([]);
   });
+
+  // The first tool to suspend takes the usage of the step. When its own transform delays it, the
+  // other suspension ends the run before the chunk with the usage arrives.
+  it('keeps the response of a call whose tools suspend together and report out of order', async () => {
+    const exporter = new TestExporter();
+    const askAfter = (id: string, delayMs: number) =>
+      createTool({
+        id,
+        description: 'Ask a person',
+        inputSchema: z.object({}),
+        execute: async (_input, { agent }) => agent!.suspend({ question: 'which one?' }),
+        transform: {
+          display: {
+            suspend: async context => {
+              await new Promise(resolve => setTimeout(resolve, delayMs));
+              return context?.suspendPayload;
+            },
+          },
+        },
+      });
+    const agent = new Agent({
+      id: 'usage-agent',
+      name: 'usage-agent',
+      instructions: 'use the tools',
+      model: new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'tool-call', toolCallId: 'call-1', toolName: 'slow', input: '{}', providerExecuted: false },
+            { type: 'tool-call', toolCallId: 'call-2', toolName: 'fast', input: '{}', providerExecuted: false },
+            { type: 'finish', finishReason: 'tool-calls', usage: SUSPENDED_STEP_USAGE },
+          ]),
+        }),
+      }),
+      tools: { slow: askAfter('slow', 60), fast: askAfter('fast', 0) },
+    });
+    observability = new Observability({
+      configs: { default: { serviceName: 'suspended-usage', exporters: [exporter] } },
+    });
+    new Mastra({ logger: false, agents: { agent }, storage: new InMemoryStore(), observability });
+
+    const output = await agent.stream('Hello');
+    await output.consumeStream();
+    expect(output.status).toBe('suspended');
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    const inferences = exporter
+      .getByEventType(TracingEventType.SPAN_ENDED)
+      .filter(event => event.exportedSpan.type === SpanType.MODEL_INFERENCE);
+    expect(inferences).toHaveLength(1);
+    expect(inferences[0]!.exportedSpan.output?.toolCalls?.map((call: { toolName: string }) => call.toolName)).toEqual([
+      'slow',
+      'fast',
+    ]);
+  });
 });

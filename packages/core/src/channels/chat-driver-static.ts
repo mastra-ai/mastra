@@ -6,6 +6,7 @@ import type { PendingApprovalRecord } from './stream-helpers';
 import {
   ToolTracker,
   chunkToFallbackMessage,
+  cleanBufferedText,
   editOrPostMessage,
   postFileAttachment,
   postStreamError,
@@ -127,9 +128,9 @@ export async function runStaticDriver({
   const toolMessageIds = new Map<string, string | undefined>();
 
   const flushText = async () => {
-    // Strip zero-width chars (U+200B, U+200C, U+200D, U+FEFF) that LLMs
-    // sometimes emit, then post the accumulated text as a single message.
-    const cleaned = textBuffer.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+    // `cleanBufferedText` removes U+200B/U+FEFF everywhere and trims
+    // whitespace/ZWNJ/ZWJ only at the edges, so internal joiners survive.
+    const cleaned = cleanBufferedText(textBuffer);
     if (cleaned) {
       try {
         await chatThread.post(textFormat === 'plain' ? cleaned : { markdown: cleaned });

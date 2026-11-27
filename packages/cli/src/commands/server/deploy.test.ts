@@ -555,7 +555,15 @@ describe('serverDeployAction', () => {
     exitSpy.mockRestore();
   });
 
-  it('--project <slug> bypasses the selector when it matches an existing project', async () => {
+  it.each([
+    ['--project <slug> bypasses the selector when it matches an existing project', 'Daniel', 'daniel', 'daniel'],
+    [
+      '--project <name> bypasses the selector when it matches an existing project by name',
+      'My App',
+      'my-app-slug',
+      'My App',
+    ],
+  ] as const)('%s', async (_title, name, slug, project) => {
     vi.resetModules();
 
     const { loadProjectConfig } = await import('../studio/project-config.js');
@@ -563,7 +571,7 @@ describe('serverDeployAction', () => {
 
     const platform = await import('./platform-api.js');
     vi.mocked(platform.fetchServerProjects).mockResolvedValue([
-      { id: 'proj-a', name: 'Daniel', slug: 'daniel', organizationId: 'org-1' } as never,
+      { id: 'proj-a', name, slug, organizationId: 'org-1' } as never,
       { id: 'proj-b', name: 'Other', slug: 'other', organizationId: 'org-1' } as never,
     ]);
 
@@ -575,35 +583,7 @@ describe('serverDeployAction', () => {
     });
 
     const { serverDeployAction } = await import('./deploy.js');
-    await expect(serverDeployAction(undefined, { project: 'daniel' })).rejects.toThrow();
-
-    expect(prompts.select).not.toHaveBeenCalled();
-    expect(platform.createServerProject).not.toHaveBeenCalled();
-
-    exitSpy.mockRestore();
-  });
-
-  it('--project <name> bypasses the selector when it matches an existing project by name', async () => {
-    vi.resetModules();
-
-    const { loadProjectConfig } = await import('../studio/project-config.js');
-    vi.mocked(loadProjectConfig).mockResolvedValue(null);
-
-    const platform = await import('./platform-api.js');
-    vi.mocked(platform.fetchServerProjects).mockResolvedValue([
-      { id: 'proj-a', name: 'My App', slug: 'my-app-slug', organizationId: 'org-1' } as never,
-      { id: 'proj-b', name: 'Other', slug: 'other', organizationId: 'org-1' } as never,
-    ]);
-
-    const prompts = await import('@clack/prompts');
-    vi.mocked(prompts.confirm).mockResolvedValueOnce(false as never);
-
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('__exit__');
-    });
-
-    const { serverDeployAction } = await import('./deploy.js');
-    await expect(serverDeployAction(undefined, { project: 'My App' })).rejects.toThrow();
+    await expect(serverDeployAction(undefined, { project })).rejects.toThrow();
 
     expect(prompts.select).not.toHaveBeenCalled();
     expect(platform.createServerProject).not.toHaveBeenCalled();

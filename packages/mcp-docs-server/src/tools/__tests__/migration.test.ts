@@ -85,23 +85,16 @@ describe('migrationTool', () => {
       expect(result).toContain('# migrations');
     });
 
-    it('should list sections for root-level migrations', async () => {
+    it.each([
+      ['should list sections for root-level migrations', 'agentnetwork', '# agentnetwork - Section Headers'],
+      ['should list sections for nested migrations', 'upgrade-to-v1/tools', '# upgrade-to-v1/tools - Section Headers'],
+    ] as const)('%s', async (_title, path, expected) => {
       const result = await callTool(tools.mastra_mastraMigration, {
-        path: 'agentnetwork',
+        path,
         listSections: true,
       });
 
-      expect(result).toContain('# agentnetwork - Section Headers');
-      expect(result).toContain('Available sections in this migration guide:');
-    });
-
-    it('should list sections for nested migrations', async () => {
-      const result = await callTool(tools.mastra_mastraMigration, {
-        path: 'upgrade-to-v1/tools',
-        listSections: true,
-      });
-
-      expect(result).toContain('# upgrade-to-v1/tools - Section Headers');
+      expect(result).toContain(expected);
       expect(result).toContain('Available sections in this migration guide:');
     });
   });

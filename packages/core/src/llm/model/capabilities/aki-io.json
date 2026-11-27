@@ -19,22 +19,22 @@
     "qwen3.8-27b"
   ],
   "reasoning": {
-    "glm5.3-754b": [
+    "qwen3.8-27b": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-v4.1-flash-552b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
     "deepseek-v4.1-flash-1017-tl5": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "kolibri-1-tl5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "mistral4-119b": [
@@ -49,10 +49,10 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "qwen3.8-27b": [
+    "glm5.3-754b": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "values": ["low", "high", "max"]
       }
     ],
     "gemma4-26b": [
@@ -61,10 +61,10 @@
         "values": ["none", "high"]
       }
     ],
-    "kolibri-1-tl5": [
+    "deepseek-v4.1-flash-552b": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["none", "low", "medium", "high", "max"]
       }
     ]
   }

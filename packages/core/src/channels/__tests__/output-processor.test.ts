@@ -322,6 +322,144 @@ describe('ChatChannelOutputProcessor', () => {
     });
   });
 
+  describe('Unicode joiners (ZWNJ/ZWJ) in buffered replies', () => {
+    // Content matrix — each entry carries a meaningful internal U+200C (ZWNJ)
+    // or U+200D (ZWJ) that must survive the buffered cleanup.
+    const SURFER = '\u{1F3C4}\u{1F3FC}\u200D\u2642\uFE0F'; // 🏄🏼‍♂️ surfer + skin tone + ZWJ + male sign
+    const FAMILY = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}'; // 👨‍👩‍👧 man + ZWJ + woman + ZWJ + girl
+    const HEART_ON_FIRE = '\u2764\uFE0F\u200D\u{1F525}'; // ❤️‍🔥 heart + VS16 + ZWJ + fire
+    const RAINBOW_FLAG = '\u{1F3F3}\uFE0F\u200D\u{1F308}'; // 🏳️‍🌈 flag + VS16 + ZWJ + rainbow
+    const PERSIAN = 'می\u200Cخواهم'; // internal ZWNJ
+    const COMPOUND = SURFER + FAMILY + HEART_ON_FIRE + RAINBOW_FLAG + PERSIAN;
+
+    // The surfer's ZWJ arrives in its own delta, so a joiner split across
+    // chunks is exercised by both buffered paths.
+    const COMPOUND_DELTAS = [
+      '\u{1F3C4}\u{1F3FC}', // surfer + skin tone
+      '\u200D', // ZWJ alone
+      '\u2642\uFE0F', // male sign + VS16
+      FAMILY,
+      HEART_ON_FIRE,
+      RAINBOW_FLAG,
+      PERSIAN,
+    ];
+
+    const deltas = (...pieces: string[]) => pieces.map(text => ({ type: 'text-delta', payload: { text } }));
+    const stepFinish = { type: 'step-finish', payload: {} };
+    const finish = { type: 'finish', payload: {} };
+    const formats: Array<{ label: string; textFormat: 'markdown' | 'plain' | undefined }> = [
+      { label: 'markdown', textFormat: undefined },
+      { label: 'plain', textFormat: 'plain' },
+    ];
+    const expectedPost = (cleaned: string, textFormat: 'markdown' | 'plain' | undefined) =>
+      textFormat === 'plain' ? cleaned : { markdown: cleaned };
+    const onlyPosts = (calls: Call[]) => calls.filter(c => c.kind === 'post');
+
+    // Make the initial StreamingPlan post reject so the buffered fallback runs.
+    const rejectStreamingPost = async (chatThread: any, calls: Call[]) => {
+      const { StreamingPlan } = await getChatModule();
+      chatThread.post.mockImplementation(async (content: unknown) => {
+        if (content instanceof StreamingPlan) throw new Error('streaming unsupported');
+        calls.push({ kind: 'post', arg: content });
+        return { id: 'fallback-1', text: '' };
+      });
+    };
+
+    it.each(formats)('static buffered reply preserves internal ZWJ/ZWNJ ($label)', async ({ textFormat }) => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false, textFormat });
+      await drive(channels, [...deltas(...COMPOUND_DELTAS), stepFinish, finish], chatThread);
+
+      expect(onlyPosts(calls)).toEqual([{ kind: 'post', arg: expectedPost(COMPOUND, textFormat) }]);
+    });
+
+    it.each(formats)(
+      'static buffered reply trims edge ZWNJ/ZWJ but keeps internal ones ($label)',
+      async ({ textFormat }) => {
+        const { channels, calls, chatThread } = makeChannels({ streaming: false, textFormat });
+        await drive(
+          channels,
+          [...deltas('\u200D\u200C', 'Hello\u200D ', '\u200Cworld', '\u200C\u200D'), stepFinish, finish],
+          chatThread,
+        );
+
+        expect(onlyPosts(calls)).toEqual([{ kind: 'post', arg: expectedPost('Hello\u200D \u200Cworld', textFormat) }]);
+      },
+    );
+
+    it.each(formats)('static buffered reply still removes U+200B/U+FEFF padding ($label)', async ({ textFormat }) => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false, textFormat });
+      await drive(channels, [...deltas('\u200BHi', '\uFEFF there', '\u200B'), stepFinish, finish], chatThread);
+
+      expect(onlyPosts(calls)).toEqual([{ kind: 'post', arg: expectedPost('Hi there', textFormat) }]);
+    });
+
+    it.each(formats)(
+      'static buffered reply trims whitespace around a single-codepoint emoji ($label)',
+      async ({ textFormat }) => {
+        const { channels, calls, chatThread } = makeChannels({ streaming: false, textFormat });
+        await drive(channels, [...deltas('  \u{1F600}  '), stepFinish, finish], chatThread);
+
+        expect(onlyPosts(calls)).toEqual([{ kind: 'post', arg: expectedPost('\u{1F600}', textFormat) }]);
+      },
+    );
+
+    it.each(formats)(
+      'static buffered reply posts nothing for joiner/zero-width-only input ($label)',
+      async ({ textFormat }) => {
+        const { channels, calls, chatThread } = makeChannels({ streaming: false, textFormat });
+        await drive(channels, [...deltas('\u200B', '\u200C\u200D \n ', '\uFEFF'), stepFinish, finish], chatThread);
+
+        expect(onlyPosts(calls)).toEqual([]);
+      },
+    );
+
+    it.each(formats)('failed-stream buffered fallback preserves internal ZWJ/ZWNJ ($label)', async ({ textFormat }) => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, textFormat });
+      await rejectStreamingPost(chatThread, calls);
+      await drive(channels, [...deltas(...COMPOUND_DELTAS), stepFinish, finish], chatThread);
+
+      expect(onlyPosts(calls)).toEqual([{ kind: 'post', arg: expectedPost(COMPOUND, textFormat) }]);
+    });
+
+    it.each(formats)(
+      'failed-stream buffered fallback trims edge ZWNJ/ZWJ but keeps internal ones ($label)',
+      async ({ textFormat }) => {
+        const { channels, calls, chatThread } = makeChannels({ streaming: true, textFormat });
+        await rejectStreamingPost(chatThread, calls);
+        await drive(
+          channels,
+          [...deltas('\u200D\u200C', 'Hello\u200D ', '\u200Cworld', '\u200C\u200D'), stepFinish, finish],
+          chatThread,
+        );
+
+        expect(onlyPosts(calls)).toEqual([{ kind: 'post', arg: expectedPost('Hello\u200D \u200Cworld', textFormat) }]);
+      },
+    );
+
+    it('live streaming forwards compound-emoji deltas unchanged', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: true });
+      await drive(channels, [...deltas(...COMPOUND_DELTAS), stepFinish, finish], chatThread);
+
+      const posts = onlyPosts(calls);
+      expect(posts).toHaveLength(1);
+      const plan = (posts[0] as Extract<Call, { kind: 'post' }>).arg as any;
+      expect(plan).toBeInstanceOf((await getChatModule()).StreamingPlan);
+      expect(await drainStreamingPlan(plan)).toEqual(COMPOUND_DELTAS);
+    });
+
+    // Guard: the buffered cleanup must stay linear. An anchored-alternation
+    // edge trim backtracks quadratically over a long interior run of the
+    // padding class, so a 200k-char interior run would take tens of seconds and
+    // blow this timeout; the single-pass scan completes in well under a second.
+    it('static buffered cleanup stays linear over a long interior run', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
+      const text = `a${' '.repeat(200_000)}b`;
+      await drive(channels, [...deltas(text), stepFinish, finish], chatThread);
+
+      expect(onlyPosts(calls)).toEqual([{ kind: 'post', arg: { markdown: text } }]);
+    }, 3000);
+  });
+
   describe("textDisplay: 'hidden'", () => {
     const reply = [
       { type: 'text-start', payload: { id: 'x' } },
@@ -2860,5 +2998,71 @@ describe('ChatChannelOutputProcessor fallback render context', () => {
 
     const posts = calls.filter(c => c.kind === 'post');
     expect(posts).toEqual([{ kind: 'post', arg: { markdown: 'inbound message' } }]);
+  });
+
+  it('rebuilds the render context when the requestContext entry is a serialized husk (#31310)', async () => {
+    const { channels, calls, chatThread } = await makeFallbackChannels();
+
+    // What a replica restores from a durable/evented snapshot: the live render
+    // context round-tripped through JSON, so `wrapStream` and every other method
+    // is gone. It must not be used as-is -- calling `husk.wrapStream` is the
+    // `render.wrapStream is not a function` failure from the issue.
+    const live = (channels as any)._buildRenderContext(chatThread, 'test');
+    const husk = JSON.parse(JSON.stringify(live));
+    expect(typeof husk.wrapStream).toBe('undefined');
+
+    const requestContext = new Map<string, unknown>();
+    requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, husk);
+
+    const rebuild = vi.spyOn(channels as any, 'buildRenderContextForThread');
+
+    await driveFallback(channels, [{ type: 'text-delta', payload: { text: 'resumed on replica' } }], {
+      threadId: FALLBACK_THREAD_ID,
+      requestContext,
+    });
+
+    // The husk was rejected and the run rebuilt a working context from its thread.
+    expect(rebuild).toHaveBeenCalledWith(FALLBACK_THREAD_ID);
+    const posts = calls.filter(c => c.kind === 'post');
+    expect(posts).toEqual([{ kind: 'post', arg: { markdown: 'resumed on replica' } }]);
+  });
+
+  it('falls through to the non-channel path when a serialized husk has no thread to rebuild from (#31310)', async () => {
+    const { channels, calls, chatThread } = await makeFallbackChannels();
+
+    const live = (channels as any)._buildRenderContext(chatThread, 'test');
+    const husk = JSON.parse(JSON.stringify(live));
+
+    const requestContext = new Map<string, unknown>();
+    requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, husk);
+
+    // No `MastraMemory` thread id and no live render: there is nothing to rebuild
+    // from, so the run must answer into memory rather than call `husk.wrapStream`.
+    await expect(
+      driveFallback(channels, [{ type: 'text-delta', payload: { text: 'no thread to rebuild from' } }], {
+        requestContext,
+      }),
+    ).resolves.toBeUndefined();
+    expect(calls.filter(c => c.kind === 'post')).toHaveLength(0);
+  });
+
+  it('uses a live requestContext render context without rebuilding (#31310)', async () => {
+    const { channels, calls, chatThread } = await makeFallbackChannels();
+
+    const live = (channels as any)._buildRenderContext(chatThread, 'test');
+    expect(typeof live.wrapStream).toBe('function');
+
+    const requestContext = new Map<string, unknown>();
+    requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, live);
+
+    const rebuild = vi.spyOn(channels as any, 'buildRenderContextForThread');
+
+    await driveFallback(channels, [{ type: 'text-delta', payload: { text: 'live path' } }], {
+      threadId: FALLBACK_THREAD_ID,
+      requestContext,
+    });
+
+    expect(rebuild).not.toHaveBeenCalled();
+    expect(calls.filter(c => c.kind === 'post')).toEqual([{ kind: 'post', arg: { markdown: 'live path' } }]);
   });
 });
