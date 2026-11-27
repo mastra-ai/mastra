@@ -553,6 +553,7 @@ describe('AgentChannels', () => {
       mockAgent.getMastraInstance = () => ({
         getStorage: () => ({ getStore: () => memoryStore }),
         getServer: () => null,
+        getLogger: () => noopLogger,
       });
     });
 

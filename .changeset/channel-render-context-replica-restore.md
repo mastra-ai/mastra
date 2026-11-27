@@ -6,4 +6,4 @@ Fixed channel runs crashing on a replica with `render.wrapStream is not a functi
 
 A restored run also keeps the reply behaviour of the thread it was started on: how the thread displays the agent's text (posted, hidden, or replaced by tool output) is read back from the thread, so a hidden-text conversation resumed on a replica no longer tells the model to answer in text nobody sees, and a new conversation still gets the link back to its thread.
 
-Approval cards such a run posts are still answered only by the person whose message triggered the tool: the requester is read back from the thread when the restored run no longer remembers it, instead of leaving any channel member able to approve or deny.
+Approval cards such a run posts are still answered only by the person whose message triggered the tool, unless the adapter sets `toolApprovers: 'anyone'`: the requester is read back from the thread when the restored run no longer remembers it, instead of leaving any channel member able to approve or deny.
