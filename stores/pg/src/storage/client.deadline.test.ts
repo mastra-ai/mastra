@@ -1,5 +1,5 @@
 import type { Pool, PoolClient, QueryResult } from 'pg';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { PinnedClientAdapter, PoolAdapter, TransactionDeadlineError } from './client';
 import type { TransactionClient } from './client';
@@ -129,14 +129,18 @@ describe('transaction deadline: timeout headroom', () => {
 
   it('installs the whole time left, and keeps no record, within twice the headroom of the deadline', async () => {
     const { client, sent } = recordingClient();
+    // A fixed clock, so the time left is exactly 1,500 ms whenever the process is scheduled.
+    const now = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(now);
+    onTestFinished(() => vi.restoreAllMocks());
     await new PoolAdapter(poolOf(client), undefined, { timeoutHeadroomMs: 1_000 }).tx(
       async t => {
         for (let i = 0; i < 3; i++) await t.query(`SELECT ${i}`);
       },
-      { deadlineAt: Date.now() + 1_500 },
+      { deadlineAt: now + 1_500 },
     );
     expect(setCalls(sent)).toHaveLength(3);
-    for (const sql of setCalls(sent)) expect(installed(sql)).toBeGreaterThan(1_400);
+    for (const sql of setCalls(sent)) expect(installed(sql)).toBe(1_500);
   });
 
   it('refreshes after a timeout refresh that failed', async () => {
@@ -187,5 +191,41 @@ describe('transaction deadline: timeout headroom', () => {
     const after = sent.indexOf('SELECT after');
     expect(sent[after - 1]).toMatch(/^SET LOCAL statement_timeout/);
     expect(sent.slice(0, after)).toContain('ROLLBACK TO SAVEPOINT sp_1');
+  });
+
+  it.each([
+    ['a raw rollback', 'ROLLBACK TO SAVEPOINT sp_raw'],
+    ['a lowercase rollback after a comment', '/* undo */ rollback to sp_raw'],
+    ['a multi-statement string ending in a rollback', 'SELECT 1; ROLLBACK TO SAVEPOINT sp_raw'],
+    ['a caller setting its own statement timeout', "SELECT set_config('statement_timeout', '0', true)"],
+    ['a caller SET with a comment before the name', 'SET LOCAL /* mine */ lock_timeout = 0'],
+    ['a reset', 'RESET ALL'],
+  ])('refreshes after %s sent through query()', async (_label, raw) => {
+    const { client, sent } = recordingClient();
+    await new PoolAdapter(poolOf(client), undefined, { timeoutHeadroomMs: 1_000 }).tx(
+      async t => {
+        await t.query('SAVEPOINT sp_raw');
+        await t.query('SELECT inner');
+        await t.query(raw);
+        await t.query('SELECT after');
+      },
+      { deadlineAt: Date.now() + 45_000 },
+    );
+    const after = sent.indexOf('SELECT after');
+    expect(sent[after - 1]).toMatch(/^SET LOCAL statement_timeout/);
+  });
+
+  it('still reuses the timeouts across ordinary statements, UPDATE ... SET and reading the setting included', async () => {
+    const { client, sent } = recordingClient();
+    await new PoolAdapter(poolOf(client), undefined, { timeoutHeadroomMs: 1_000 }).tx(
+      async t => {
+        await t.query('SELECT 1');
+        await t.query('UPDATE pages SET name = $1', ['x']);
+        await t.query("SELECT current_setting('statement_timeout')");
+        await t.query('SELECT 2');
+      },
+      { deadlineAt: Date.now() + 45_000 },
+    );
+    expect(setCalls(sent)).toHaveLength(1);
   });
 });

@@ -114,7 +114,11 @@ describe('PG transaction timeout headroom', () => {
 
   it('exceeds the time left by no more than the refresh round trip minus the headroom when the network is slow', async () => {
     const proxy = await lagProxy(Number((TEST_CONFIG as { port: number }).port), 10);
-    const slowPool = new Pool({ connectionString: connectionString.replace(/:\d+\//, `:${proxy.port}/`), max: 1 });
+    // The proxy listens on 127.0.0.1, whatever host the database itself is on.
+    const viaProxy = new URL(connectionString);
+    viaProxy.hostname = '127.0.0.1';
+    viaProxy.port = String(proxy.port);
+    const slowPool = new Pool({ connectionString: viaProxy.toString(), max: 1 });
     try {
       const deadlineAt = Date.now() + 45_000;
       await new PoolAdapter(slowPool, undefined, { timeoutHeadroomMs: 10 }).tx(
@@ -163,6 +167,32 @@ describe('PG transaction timeout headroom', () => {
       .catch((error: unknown) => error);
 
     expect((innerError as { code?: string }).code).toBe('22012');
+    expect(afterRollback!.excess).toBeLessThanOrEqual(-1_000 + TOLERANCE_MS);
+    expect(outcome).toBeInstanceOf(TransactionDeadlineError);
+    expect(Date.now() - started).toBeLessThan(8_000 + 500);
+  }, 15_000);
+
+  it('refreshes after a caller rolls back to its own savepoint through query()', async () => {
+    const started = Date.now();
+    const deadlineAt = started + 8_000;
+    let afterRollback: Awaited<ReturnType<typeof installed>> | undefined;
+    const outcome = await withHeadroom(1_000)
+      .tx(
+        async t => {
+          // Outer refresh: installs about 7,000 and records it; the savepoint keeps that setting.
+          await t.query('SAVEPOINT sp_raw');
+          await t.query('SELECT pg_sleep(3)');
+          // The record has expired: refreshes to about 4,000 inside the savepoint.
+          await t.query('SELECT 1');
+          // Puts the server back at about 7,000 with about 5,000 left.
+          await t.query('/* caller cleanup */ rollback to savepoint sp_raw');
+          afterRollback = await installed(t, deadlineAt);
+          await t.query('SELECT pg_sleep(30)');
+        },
+        { deadlineAt },
+      )
+      .catch((error: unknown) => error);
+
     expect(afterRollback!.excess).toBeLessThanOrEqual(-1_000 + TOLERANCE_MS);
     expect(outcome).toBeInstanceOf(TransactionDeadlineError);
     expect(Date.now() - started).toBeLessThan(8_000 + 500);

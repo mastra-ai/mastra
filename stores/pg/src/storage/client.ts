@@ -96,7 +96,8 @@ export interface TransactionTimeoutOptions {
    * never gives a statement more time than is left; a statement may be stopped up to this much
    * earlier than with `0`. A setting is reused only within this long of reading the clock for it,
    * never after a refresh that took this long or failed, and never after `ROLLBACK TO SAVEPOINT`
-   * (which restores the earlier setting). `0` (the default) sets them before every statement.
+   * (which restores the earlier setting) or a caller's own SQL that may change the timeouts
+   * (`RESET`, `SET ... statement_timeout`, `set_config`). `0` (the default) sets them before every statement.
    */
   timeoutHeadroomMs?: number;
 }
@@ -112,6 +113,12 @@ export class TransactionDeadlineError extends Error {
 
 /** `query_canceled` (statement_timeout) and `lock_not_available` (lock_timeout). */
 const DEADLINE_SQLSTATES = new Set(['57014', '55P03']);
+
+/**
+ * SQL that may restore or change `statement_timeout`/`lock_timeout`. Matched anywhere in the text,
+ * so comments and multi-statement strings can't hide it; a false match only costs one more refresh.
+ */
+const MAY_CHANGE_TIMEOUTS = /rollback|\breset\b|set_config|\bset\b[\s\S]*\b(statement_timeout|lock_timeout)\b/i;
 
 function remainingMs(deadlineAt: number): number {
   return Math.ceil(deadlineAt - Date.now());
@@ -337,6 +344,10 @@ export class TransactionClient implements TxClient {
       if (typeof code === 'string' && DEADLINE_SQLSTATES.has(code))
         throw new TransactionDeadlineError({ cause: error });
       throw error;
+    } finally {
+      // A caller's own SQL may restore or change the timeouts (`ROLLBACK TO SAVEPOINT`, `RESET`,
+      // `SET statement_timeout`), anywhere in a multi-statement string or after a comment.
+      if (MAY_CHANGE_TIMEOUTS.test(query)) this.#timeoutsReadAt = undefined;
     }
   }
 
