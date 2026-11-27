@@ -95,7 +95,7 @@ export class PlatformBrowserSessions {
     const { body, ...rest } = options;
     const response = await this.client.requestProject(`/browsers${path}`, {
       ...rest,
-      ...(body !== undefined && { body, headers: { 'content-type': 'application/json' } }),
+      ...(body !== undefined && { body, headers: { ...(rest.headers ?? {}), 'content-type': 'application/json' } }),
     });
     return (await response.json()) as T;
   }
