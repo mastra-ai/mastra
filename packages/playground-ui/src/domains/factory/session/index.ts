@@ -3,3 +3,6 @@ export * from './session-panel';
 export * from './card-stage-bar';
 export * from './moves-graph';
 export * from './moves-graph-model';
+export * from './description-markdown';
+export * from './card-description';
+export * from './card-overview';
