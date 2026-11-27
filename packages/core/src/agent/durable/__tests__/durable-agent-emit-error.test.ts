@@ -37,9 +37,9 @@ describe('DurableAgent settleExecution error emission', () => {
 
 describe('EventedAgent.executeWorkflow terminal error emission', () => {
   it('logs instead of rejecting when the run rejects and the pubsub refuses the publish', async () => {
-    // executeWorkflow() fires the run without awaiting it and routes a rejected
-    // run through settleExecution() in its `.catch`. A publish failure
-    // during shutdown must not become an unhandledRejection (#24071).
+    // executeWorkflow() settles a rejected run through settleExecution(). A
+    // publish failure during shutdown must not become an unhandledRejection
+    // (#24071).
     const pubsub = new EventEmitterPubSub();
     vi.spyOn(pubsub, 'publish').mockRejectedValue(new Error('cannot publish on closed client'));
     const warn = vi.fn();
@@ -51,8 +51,7 @@ describe('EventedAgent.executeWorkflow terminal error emission', () => {
     });
     const eventedAgent = createEventedAgent({ agent: baseAgent, pubsub });
     vi.spyOn(eventedAgent as any, 'logger', 'get').mockReturnValue({ warn });
-    // Drive the fire-and-forget run so start() rejects, exercising the `.catch`
-    // handler that this fix routes through settleExecution().
+    // Make start() reject so executeWorkflow() settles the failed run.
     vi.spyOn(eventedAgent as any, 'getWorkflow').mockReturnValue({
       createRun: async () => ({
         start: () => Promise.reject(new Error('run failed')),

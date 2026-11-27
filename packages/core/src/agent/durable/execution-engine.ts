@@ -36,6 +36,7 @@ import {
   resolveLeaseProvider,
   supportsRunFencing,
   RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID,
+  setExecutionClaim,
 } from './execution-fence';
 import { withExecutionStreamProducer } from './execution-stream-publisher';
 import type { ExtendedRunRegistry } from './run-registry';
@@ -62,6 +63,17 @@ export type DurableWorkflow = ReturnType<typeof createDurableAgenticWorkflow>;
 type DurableRun = Awaited<ReturnType<DurableWorkflow['createRun']>>;
 export type ExecutionCompletion = { result: Awaited<ReturnType<DurableRun['start']>> } | { error: unknown };
 export type ExecutionOutcome = { owner: 'agent'; status?: string; error?: Error } | { owner: 'workers'; error?: Error };
+
+/** What an engine needs to set up a run segment it is about to start. */
+export interface ExecutionStart {
+  runId: string;
+  pubsub: PubSub | undefined;
+  executionFence: ExecutionFence | undefined;
+  requestContext: RequestContext | undefined;
+  threadId: string | undefined;
+  resourceId: string | undefined;
+  sharedExecution: boolean;
+}
 
 /** Recoveries in progress in this process, keyed by agent and run. */
 const localRecoveryClaims = new Map<string, string>();
@@ -146,10 +158,6 @@ export class DefaultAgentExecutionEngine extends AgentExecutionEngine {
 
   get workflow(): DurableWorkflow | null {
     return this.#workflow;
-  }
-
-  get executionMode(): 'blocking' | 'background' {
-    return 'blocking';
   }
 
   /** Whether execution returns a suspended result only after its snapshot is persisted. */
@@ -1058,9 +1066,12 @@ export class DefaultAgentExecutionEngine extends AgentExecutionEngine {
     _fence: ExecutionFence | undefined,
     _logger: IMastraLogger,
     _guardrailLogger: IMastraLogger | undefined,
-  ): { sharedExecution: boolean; usesRunPubSub: boolean } {
-    return { sharedExecution: false, usesRunPubSub: true };
+  ): { sharedExecution: boolean; usesRunPubSub: boolean; returnsResult: boolean } {
+    return { sharedExecution: false, usesRunPubSub: true, returnsResult: true };
   }
+
+  /** Runs after the workflow is resolved, before its run is created. The default engine needs nothing. */
+  async beforeStart(_start: ExecutionStart, _logger: IMastraLogger): Promise<void> {}
 }
 
 /**
@@ -1071,10 +1082,6 @@ export class DefaultAgentExecutionEngine extends AgentExecutionEngine {
 export class EventedAgentExecutionEngine extends DefaultAgentExecutionEngine {
   #warnedUnfencedSharedExecution = false;
   #resolvedWorkflowEngine: 'default' | 'evented' | null = null;
-
-  override get executionMode(): 'blocking' | 'background' {
-    return 'background';
-  }
 
   // Evented execution can return before the suspended snapshot lands.
   override get suspendPersistedOnReturn(): boolean {
@@ -1185,7 +1192,7 @@ export class EventedAgentExecutionEngine extends DefaultAgentExecutionEngine {
     fence: ExecutionFence | undefined,
     logger: IMastraLogger,
     guardrailLogger: IMastraLogger | undefined,
-  ): { sharedExecution: boolean; usesRunPubSub: boolean } {
+  ): { sharedExecution: boolean; usesRunPubSub: boolean; returnsResult: boolean } {
     const engine = this.resolveWorkflowEngine(logger);
     const sharedTransport = engine === 'evented' && pubsub !== undefined && reachesOtherProcesses(pubsub);
     if (sharedTransport && this.mastra) {
@@ -1205,8 +1212,56 @@ export class EventedAgentExecutionEngine extends DefaultAgentExecutionEngine {
           'to keep workers running independently of the API process.',
       );
     }
-    return { sharedExecution, usesRunPubSub: engine === 'default' };
+    return { sharedExecution, usesRunPubSub: engine === 'default', returnsResult: false };
   }
+
+  /**
+   * Starts this process's workers and, for a shared execution, claims the
+   * thread lease and records the execution claim.
+   */
+  override async beforeStart(start: ExecutionStart, logger: IMastraLogger): Promise<void> {
+    await this.ensureEngineWorkersStarted(logger);
+    const { runId, pubsub, executionFence, requestContext, threadId, resourceId } = start;
+    if (!start.sharedExecution || !pubsub || !requestContext || !executionFence || !threadId) return;
+    await agentThreadStreamRuntime.claimDurableThreadLease(
+      pubsub,
+      runId,
+      threadId,
+      resourceId,
+      executionFence.generation,
+      executionFence.executionId,
+      true,
+    );
+    // A takeover can supersede this execution while the thread lease is contended.
+    try {
+      await executionFence.verify();
+    } catch (error) {
+      await agentThreadStreamRuntime
+        .abandonDurableThreadLease(
+          pubsub,
+          runId,
+          threadId,
+          resourceId,
+          executionFence.generation,
+          executionFence.executionId,
+        )
+        .catch(releaseError =>
+          logger.warn('Failed to release thread lease after losing execution ownership', {
+            runId,
+            error: releaseError,
+          }),
+        );
+      throw error;
+    }
+    setExecutionClaim(requestContext, runId, {
+      ...executionFence.claim,
+      threadId,
+      resourceId,
+    });
+  }
+
+  /** Evented runs are left to the workflow's own cleanup. */
+  override releaseRun(): void {}
 
   override finishExecution(
     runId: string,

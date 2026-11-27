@@ -228,6 +228,7 @@ import {
 import type { DurableAgent } from './durable/durable-agent';
 import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable/durable-stream-until-idle';
 import { DefaultAgentExecutionEngine, EventedAgentExecutionEngine } from './durable/execution-engine';
+import type { ExecutionCompletion } from './durable/execution-engine';
 import type { ExecutionFence, UntrackedRunLiveness } from './durable/execution-fence';
 import {
   assertExecutionOwned,
@@ -14129,27 +14130,30 @@ export class Agent<
   }
 
   /**
-   * Execute the durable workflow.
-   *
-   * Engines select the blocking or background execution path.
-   * Subclasses such as InngestAgent may override execution for an external backend.
+   * Execute the durable workflow on the agent's execution engine, then settle
+   * the run unless the engine hands settlement to its workers.
    *
    * @param runId - The unique run ID
    * @param workflowInput - The serialized workflow input
+   * @returns The workflow result, for engines that return it
    * @internal
    */
   protected async executeWorkflow(
     runId: string,
     workflowInput: DurableAgenticWorkflowInput,
   ): Promise<{ status?: string } | void> {
-    if (this.executionEngine.executionMode === 'background') {
-      return this.#executeBackgroundWorkflow(runId, workflowInput);
-    }
-    const workflow = this.getWorkflow();
+    // Captured now: a later resume() replaces the registry's fence before this
+    // segment settles.
     const entry = getRunRegistryEntry(runId, this.#mastra);
-    const requestContext = entry?.requestContext;
-    // Captured now: a later resume() replaces the registry's fence.
     const executionFence = entry?.executionFence;
+    const pubsub = this.#mastra?.pubsub ?? this.getPubSub();
+    const { sharedExecution, usesRunPubSub, returnsResult } = this.executionEngine.prepareExecution(
+      pubsub,
+      executionFence,
+      this.logger,
+      this.guardrailLogger,
+    );
+    if (entry) entry.eventedExecution = sharedExecution;
 
     // Populate the run row's resourceId column so storage-level resource
     // filters (listSuspendedRuns / listActiveRuns) can narrow the query,
@@ -14157,126 +14161,51 @@ export class Agent<
     const memoryInfo = (
       workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
     )?.memoryInfo;
+    const threadId = workflowInput.state?.threadId ?? memoryInfo?.threadId;
     const resourceId = workflowInput.state?.resourceId ?? memoryInfo?.resourceId;
 
+    const workflow = this.getWorkflow();
+    await this.executionEngine.beforeStart(
+      { runId, pubsub, executionFence, requestContext: entry?.requestContext, threadId, resourceId, sharedExecution },
+      this.logger,
+    );
+    // Evented workers publish on the host bus. A default-engine fallback must
+    // instead publish on this run's transport or the caller's stream hangs.
     const run = await this.executionEngine.createRun(workflow, {
       runId,
       resourceId,
-      pubsub: this.fenceRunPubSub(executionFence, entry?.abortController),
+      ...(usesRunPubSub ? { pubsub: this.fenceRunPubSub(executionFence, entry?.abortController) } : {}),
     });
-    // Parent the workflow run under the AGENT_RUN span so the trace exports under it.
     let result;
     try {
-      result = await this.#withSuspensionAfterPersist(runId, () =>
-        this.executionEngine.startRun(
-          run,
-          workflowInput,
-          requestContext,
-          createObservabilityContext({ currentSpan: entry?.agentSpan }),
-        ),
-      );
-      const outcome = this.executionEngine.finishExecution(runId, executionFence, false, { result });
-      if (outcome.owner === 'agent') await this.settleExecution(runId, executionFence, outcome);
-      return result;
+      let completion: ExecutionCompletion;
+      try {
+        // Parent the workflow run under the AGENT_RUN span so the trace exports under it.
+        result = await this.#withSuspensionAfterPersist(runId, () =>
+          this.executionEngine.startRun(
+            run,
+            workflowInput,
+            entry?.requestContext,
+            createObservabilityContext({ currentSpan: entry?.agentSpan }),
+          ),
+        );
+        completion = { result };
+      } catch (error) {
+        await this.#discardRestartableStart(runId, workflowInput.agentId);
+        completion = { error };
+      }
+      const outcome = this.executionEngine.finishExecution(runId, executionFence, sharedExecution, completion);
+      if (outcome.owner === 'agent') {
+        await this.settleExecution(runId, executionFence, outcome);
+      } else if (outcome.error) {
+        await this.emitError(runId, outcome.error, executionFence?.generation).catch(publishError =>
+          this.logger.warn(`Failed to publish error event for run ${runId}`, { runId, error: publishError }),
+        );
+      }
     } finally {
       this.executionEngine.releaseRun(workflow, runId, run, result?.status);
     }
-  }
-
-  async #executeBackgroundWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
-    // Captured now: a later resume() replaces the registry's fence before this
-    // segment's background promise settles.
-    const entry = getRunRegistryEntry(runId, this.#mastra);
-    const executionFence = entry?.executionFence;
-    const pubsub = this.#mastra?.pubsub ?? this.getPubSub();
-    const { sharedExecution, usesRunPubSub } = this.executionEngine.prepareExecution(
-      pubsub,
-      executionFence,
-      this.logger,
-      this.guardrailLogger,
-    );
-    if (entry) entry.eventedExecution = sharedExecution;
-    try {
-      const workflow = this.getWorkflow();
-      await this.executionEngine.ensureEngineWorkersStarted(this.logger);
-      const memoryInfo = (
-        workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
-      )?.memoryInfo;
-      const threadId = workflowInput.state?.threadId ?? memoryInfo?.threadId;
-      const resourceId = workflowInput.state?.resourceId ?? memoryInfo?.resourceId;
-      if (sharedExecution && pubsub && entry?.requestContext && executionFence && threadId) {
-        await agentThreadStreamRuntime.claimDurableThreadLease(
-          pubsub,
-          runId,
-          threadId,
-          resourceId,
-          executionFence.generation,
-          executionFence.executionId,
-          true,
-        );
-        // A takeover can supersede this execution while the thread lease is contended.
-        try {
-          await executionFence.verify();
-        } catch (error) {
-          await agentThreadStreamRuntime
-            .abandonDurableThreadLease(
-              pubsub,
-              runId,
-              threadId,
-              resourceId,
-              executionFence.generation,
-              executionFence.executionId,
-            )
-            .catch(releaseError =>
-              this.logger.warn('Failed to release thread lease after losing execution ownership', {
-                runId,
-                error: releaseError,
-              }),
-            );
-          throw error;
-        }
-        setExecutionClaim(entry.requestContext, runId, {
-          ...executionFence.claim,
-          threadId,
-          resourceId,
-        });
-      }
-      // Evented workers publish on the host bus. A default-engine fallback must
-      // instead publish on this run's transport or the caller's stream hangs.
-      const run = await this.executionEngine.createRun(workflow, {
-        runId,
-        resourceId,
-        ...(usesRunPubSub ? { pubsub: this.fenceRunPubSub(executionFence, entry?.abortController) } : {}),
-      });
-      // Track completion so an immediate resume waits for suspension persistence.
-      await this.executionEngine
-        .startRun(
-          run,
-          workflowInput,
-          entry?.requestContext,
-          createObservabilityContext({ currentSpan: entry?.agentSpan }),
-        )
-        .then(
-          result => this.executionEngine.finishExecution(runId, executionFence, sharedExecution, { result }),
-          async error => {
-            await this.#discardRestartableStart(runId, workflowInput.agentId);
-            return this.executionEngine.finishExecution(runId, executionFence, sharedExecution, { error });
-          },
-        )
-        .then(outcome => {
-          if (outcome.owner === 'agent') return this.settleExecution(runId, executionFence, outcome);
-          if (outcome.error) {
-            return this.emitError(runId, outcome.error, executionFence?.generation).catch(publishError =>
-              this.logger.warn(`Failed to publish error event for run ${runId}`, { runId, error: publishError }),
-            );
-          }
-        });
-    } catch (error) {
-      await this.#discardRestartableStart(runId, workflowInput.agentId);
-      await this.settleExecution(runId, executionFence, {
-        error: this.executionEngine.workflowExecutionError(error, 'Workflow execution failed'),
-      });
-    }
+    return returnsResult ? result : undefined;
   }
 
   /**
