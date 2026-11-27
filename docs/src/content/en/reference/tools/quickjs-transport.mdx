@@ -33,6 +33,26 @@ const { tool, instructions } = createCodeMode(
 )
 ```
 
+### Hosted runtimes
+
+Importing `@mastra/quickjs` doesn't initialize the default TypeScript stripper. The stripper ([ts-blank-space](https://github.com/bloomberg/ts-blank-space)) loads lazily, on the first run that needs it, so the import is safe on hosts that don't provide Node.js globals such as `__filename` — including Cloudflare Workers. Pass your own `stripTypes` to keep even that load off the host, and a preloaded `module` when you want to control when the WebAssembly module loads:
+
+```typescript
+import { createCodeMode } from '@mastra/core/tools'
+import { QuickJsCodeModeTransport } from '@mastra/quickjs'
+import { getQuickJS } from 'quickjs-emscripten'
+import stripTypes from 'ts-blank-space'
+
+const module = await getQuickJS()
+
+const { tool, instructions } = createCodeMode(
+  { tools },
+  new QuickJsCodeModeTransport({ module, stripTypes }),
+)
+```
+
+If the program is already plain JavaScript, an identity function is enough: `stripTypes: (code) => code`.
+
 ## Constructor parameters
 
 <PropertiesTable
@@ -69,6 +89,27 @@ const { tool, instructions } = createCodeMode(
               'A preloaded QuickJS WebAssembly module. Supply one to control when the module is loaded, or to share a single module across transports. Loaded on first run when omitted.',
             isOptional: true,
           },
+          {
+            name: 'stripTypes',
+            type: '(code: string) => string',
+            description:
+              "Function that removes TypeScript type syntax from the program before it runs. Supply one to control stripping, for example on a host that can't load the default stripper. Defaults to ts-blank-space, loaded lazily on the first run that needs it.",
+            isOptional: true,
+          },
+          {
+            name: 'maxInterruptTicks',
+            type: 'number',
+            description:
+              'Number of runtime interrupt checks allowed for a single program. When the count reaches the limit the program is stopped and the tool returns an `ExecutionLimitError` result. Unset by default.',
+            isOptional: true,
+          },
+          {
+            name: 'shouldInterrupt',
+            type: '() => boolean',
+            description:
+              "Called on each interrupt check. When it returns `true` the program is stopped and the tool returns an `InterruptError` result. Use it to enforce a budget that doesn't depend on the guest clock. Unset by default.",
+            isOptional: true,
+          },
         ],
       },
     ],
@@ -95,11 +136,15 @@ The speed difference is in the program body, not the tool calls. QuickJS interpr
 
 ## How it works
 
-Each run creates a fresh QuickJS runtime with its own heap. TypeScript is stripped on the host with [ts-blank-space](https://github.com/bloomberg/ts-blank-space), which erases type annotations without a native compiler, then the program is evaluated inside the runtime. Every `external_*` call crosses the boundary as JSON strings in both directions, so no host object references leak into model-authored code.
+Each run creates a fresh QuickJS runtime with its own heap. TypeScript is stripped on the host, by default with [ts-blank-space](https://github.com/bloomberg/ts-blank-space) or with a supplied `stripTypes` function, which erases type annotations without a native compiler; the program is then evaluated inside the runtime. Every `external_*` call crosses the boundary as JSON strings in both directions, so no host object references leak into model-authored code.
 
 An `external_*` call returns a pending promise to the program and hands control straight back to the host, so many calls can be in flight at once and `Promise.all` behaves as expected.
 
 The `timeout` configured on `createCodeMode()` applies to both asynchronous hangs and synchronous infinite loops, and the runtime is disposed after every run.
+
+TypeScript stripping, when no `stripTypes` is supplied, is deferred until the first run, so importing the package has no side effects on hosts without Node.js globals.
+
+`maxInterruptTicks` and `shouldInterrupt` enforce a budget that doesn't depend on the wall-clock `timeout`. A tick is one QuickJS interrupt-handler check, not a millisecond or a count of interpreted operations, so a fixed tick budget isn't a portable upper bound on run time; the two controls are complementary. The wall-clock timeout stays useful for ordinary runtime variation and host-side waits, while a tick budget and a predicate let a multi-tenant host cap CPU-heavy guest loops on runtimes where the guest clock is frozen. Multi-tenant hosts should configure an interrupt budget for this reason.
 
 ## Related
 

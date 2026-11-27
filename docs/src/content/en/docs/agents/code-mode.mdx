@@ -183,6 +183,24 @@ const { tool, instructions } = createCodeMode(
 )
 ```
 
+Importing `@mastra/quickjs` doesn't initialize the default TypeScript stripper, so the import is safe on runtimes without Node.js globals such as Cloudflare Workers. On those runtimes, pass your own `stripTypes`, and a preloaded `module` when you also want to control when the WebAssembly module loads. The transport then never loads the default stripper:
+
+```typescript
+import { createCodeMode } from '@mastra/core/tools'
+import { QuickJsCodeModeTransport } from '@mastra/quickjs'
+import { getQuickJS } from 'quickjs-emscripten'
+import stripTypes from 'ts-blank-space'
+
+const module = await getQuickJS()
+
+const { tool, instructions } = createCodeMode(
+  { tools },
+  new QuickJsCodeModeTransport({ module, stripTypes }),
+)
+```
+
+If the program is already plain JavaScript, `stripTypes: (code) => code` is enough. To cap CPU-heavy programs on a host with a frozen clock, set `maxInterruptTicks` or `shouldInterrupt`; see the [QuickJsCodeModeTransport reference](/reference/tools/quickjs-transport#constructor-parameters).
+
 See [Choosing a transport](/reference/tools/quickjs-transport#choosing-a-transport) for a side-by-side comparison.
 
 ## Related
