@@ -35,12 +35,6 @@ const slot = (name: string) => document.querySelector(`[data-slot="${name}"]`);
 /** The value in the labelled row, e.g. `valueOf('Executor')` → `'Workflow'`. */
 const valueOf = (label: string) => screen.getByText(label).nextElementSibling?.textContent;
 
-const section = (title: string) => {
-  const found = screen.getByText(title).closest('[data-slot="span-payload-section"]');
-  if (!(found instanceof HTMLElement)) throw new Error(`Missing ${title} section`);
-  return found;
-};
-
 describe('SpanPayloadProcessor', () => {
   it('shows system and user messages as one list tagged by role', () => {
     render(<SpanInputRenderer span={processorRequestErrorSpan} />);
