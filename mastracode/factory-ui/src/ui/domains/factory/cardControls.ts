@@ -34,6 +34,8 @@ interface CardControlsInput {
   sessionStatus?: SessionRowStatus;
   /** One of the card's sessions is coming up, running, or parked on a person. */
   sessionHolds?: boolean;
+  /** Why the card's board run gave up on it, when it did. */
+  attentionReason?: string;
   onApproveProposal: (decisionId: string) => void;
   onRetryDecision: (decisionId: string) => void;
   onMove: (toStage: string) => void;
@@ -53,6 +55,7 @@ export function cardControls({
   retryingDecisionId,
   sessionStatus,
   sessionHolds,
+  attentionReason,
   onApproveProposal,
   onRetryDecision,
   onMove,
@@ -74,6 +77,7 @@ export function cardControls({
     sessionStatus,
     sessionHolds,
     held: awaitsTriageDecision(item, columnStage, definition),
+    attentionReason,
   });
   const { status } = state;
   const run = cardPrimaryAction({

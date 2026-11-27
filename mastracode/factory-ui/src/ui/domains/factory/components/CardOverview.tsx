@@ -17,6 +17,7 @@ import type { WorkItem } from '../services/workItems';
 import { toMinute } from '../stageStays';
 import { SourceDescriptionLines } from './BoardCardDetails';
 import { CardDescription } from './CardDescription';
+import { CardRunState } from './CardRunState';
 import { CardSourceRow } from './CardSourceRow';
 import { ChangeRequestBadge } from './ChangeRequestBadge';
 import { ChangeRequestLink } from './ChangeRequestLink';
@@ -95,6 +96,7 @@ export function CardOverview({
           repositoryFailed={repositoryFailed}
         />
       </section>
+      <CardRunState item={item} factoryId={factoryId} boards={boards} />
       {workspace?.({
         repository: repository && { slug: repository.slug, provider },
         changeRequest: ownRequest && {

@@ -593,6 +593,32 @@ describe('Board work-item activity', () => {
     expect(row).toHaveAttribute('title', `Move to Review rejected: ${reason}\n\nWhy it was asked: ${rationale}`);
   });
 
+  it('says when and why a card needed attention, under Factory or the person who stopped it', async () => {
+    stubBoardEndpoints();
+    const flagged = {
+      id: 'event-needs-attention',
+      orgId: 'org-1',
+      actorId: 'user-ada',
+      actorType: 'human',
+      action: 'factory.work_item.needs_attention',
+      targets: [{ type: 'work_item', id: workItem.id, name: workItem.title }],
+      metadata: { phase: 'execute', reason: 'Stopped by a person.', probes: 0 },
+      githubProjectId: FACTORY_ID,
+      context: {},
+      occurredAt: '2026-08-05T11:00:00.000Z',
+    };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/audit`, () =>
+        HttpResponse.json({ events: [flagged, ...events], actors }),
+      ),
+    );
+    renderBoard('work');
+
+    await expectActivity('Ada Lovelace', 'Needed attention: Stopped by a person.');
+    const row = within(screen.getByLabelText('Work item activity')).getByText('Needed attention: Stopped by a person.');
+    expect(row).toHaveAttribute('title', 'Needed attention: Stopped by a person.');
+  });
+
   it("names a rejected move's phase from the card's own board when another board uses the same phase id", async () => {
     stubBoardEndpoints();
     const rejected = {

@@ -6,6 +6,8 @@ import { moveCardToBoard } from '../boards/relocate.js';
 import { applyPhaseOutcome } from '../rules/phase-outcome-move.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRuleRejectionCode, FactoryTransitionResult } from '../rules/types.js';
+import type { AuditActorProfileInput, AuditContext } from '../storage/domains/audit/base.js';
+import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type {
   FactoryDispatchFailureCode,
   FactoryRunBindingRecord,
@@ -43,6 +45,13 @@ export type FactoryRunEndedBinding = Pick<
 
 /** A card and the role whose runs work it: the seat a run of the card's phase sits in, bound or not yet. */
 export type FactoryCardSeat = Pick<FactoryRunEndedBinding, 'role' | 'orgId' | 'factoryProjectId' | 'workItemId'>;
+
+/** The person who stopped a card's run, and where from, for the card's audit trail only. */
+export interface FactoryStoppedBy {
+  userId: string;
+  actorProfile?: AuditActorProfileInput;
+  context?: AuditContext;
+}
 
 /** One failed attempt at running a card's phase: its failure code, never its error text. */
 export interface FactoryRunFailure {
@@ -105,8 +114,9 @@ export interface FactoryBoardEngine {
   /**
    * Tells the engine that a person stopped the run of a session bound to a card, for an engine
    * that keeps what a card is doing. The card stays in its phase until someone starts it again.
+   * `by` is the person who stopped it, for the card's audit trail.
    */
-  runStopped?(seat: FactoryCardSeat): Promise<void>;
+  runStopped?(seat: FactoryCardSeat, by?: FactoryStoppedBy): Promise<void>;
   /**
    * Looks at the cards whose automation is past its deadline at `now`, for an engine that keeps
    * deadlines; Factory calls it about once a minute in every process. Moves it makes go through
@@ -147,6 +157,8 @@ export interface FactoryBoardEngineContext {
   boards: BoardRegistry | ProjectBoardSource;
   /** The runs on a card's sessions, for an engine that stops them when a person moves the card. */
   runs?: FactoryCardRuns;
+  /** The audit trail, for an engine that records when a card comes to need attention. */
+  audit?: AuditRecorder;
 }
 
 type CardAddress = Pick<FactoryTransitionRequest, 'orgId' | 'factoryProjectId' | 'workItemId'>;

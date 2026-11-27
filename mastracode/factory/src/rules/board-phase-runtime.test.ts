@@ -961,6 +961,13 @@ describe.each([
             reason: 'Stopped by a person.',
           }),
         );
+        // The card's details show the same, as the board reads them.
+        const shown = await send(
+          'GET',
+          `/web/factory/projects/${project.id}/work-items/${feature.id}/run-state`,
+          undefined,
+        );
+        expect(await shown.json()).toEqual({ runState: await engine.describe!({ workItemId: feature.id }) });
         expect((await read(feature)).stages).toEqual(['planning']);
         // The stopped run isn't run again.
         await new Promise(resolve => setTimeout(resolve, 1_500));

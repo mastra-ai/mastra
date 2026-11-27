@@ -1637,6 +1637,7 @@ export class MastraFactory {
           transitionService,
           workItems: workItemsStorage,
           boards,
+          audit: auditDomain,
           // `this.#dispatcher` is created with the runtime below; before it, no run can be in flight.
           runs: {
             inFlight: async card => (await this.#dispatcher?.hasRunInFlightOnCard(card)) ?? false,

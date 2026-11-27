@@ -58,6 +58,8 @@ export const server = setupServer(
     }),
   ),
   http.get('*/web/factory/projects/:id/intake/skipped', () => HttpResponse.json({ skipped: [] })),
+  // Ambient board engine: the default one records nothing about a card. Run-state tests override it with `server.use(...)`.
+  http.get('*/web/factory/projects/:id/work-items/:workItemId/run-state', () => HttpResponse.json({})),
   http.get('*/web/factory/projects/:id/intake/not-routed', () =>
     HttpResponse.json({ notRouted: [], nextCursor: null, canEdit: false }),
   ),

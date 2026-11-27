@@ -3,6 +3,7 @@ import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { validateSkillContent } from '@mastra/core/skills';
 import { z } from 'zod';
 
+import type { FactoryCardRunState } from '../board-engine/board-workflow.js';
 import {
   CLOSE_REASONS,
   INTAKE_ROUTE_RULE_FIELDS,
@@ -902,6 +903,40 @@ export const workItemActivityQuerySchema = z.object({
 });
 
 /** When the project's cards were created and completed since an instant, and how many cards it has in all. */
+/** What a card is doing, as its board's engine last recorded it. Literal here, so the contracts stay free of workflow code. */
+const CARD_RUN_STATES = [
+  'resting',
+  'awaiting_start',
+  'running',
+  'probing',
+  'awaiting_approval',
+  'needs_attention',
+  'terminal',
+] as const satisfies readonly FactoryCardRunState['state'][];
+
+export const cardRunStateSchema = z.object({
+  state: z.enum(CARD_RUN_STATES),
+  /** The phase the state was recorded in. */
+  phase: z.string().optional(),
+  /** Runs that ended in this phase without reporting how it ended. */
+  probes: z.number().int().nonnegative().optional(),
+  /** The outcome the last phase ended with. */
+  lastOutcome: z.string().optional(),
+  /** Why the card needs attention, in a fixed wording. */
+  reason: z.string().optional(),
+  /** The last failed attempt at the phase's run. */
+  attempts: z.number().int().nonnegative().optional(),
+  /** The code of the failure that left the card needing attention. */
+  failure: z.string().optional(),
+  /** When a running or probing card is looked at again (epoch ms). */
+  deadlineAt: z.number().int().nonnegative().optional(),
+});
+
+export const workItemRunStateResponseSchema = z.object({
+  /** Absent on a board engine that keeps no record, and for a card it hasn't recorded yet. */
+  runState: cardRunStateSchema.optional(),
+});
+
 export const workItemActivityResponseSchema = z.object({
   total: countSchema,
   createdAt: z.array(z.string()),
@@ -1848,6 +1883,14 @@ export const FACTORY_ROUTE_CONTRACTS = {
     description: 'Count the cards behind each new-session starter on the default board',
     pathSchema: projectPathSchema,
     responseSchema: workItemStartersResponseSchema,
+  },
+  workItemRunState: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/:workItemId/run-state',
+    description:
+      "Show what a card is doing as its board's engine recorded it: phase, step state, probes, attempts, last outcome and why it needs attention",
+    pathSchema: transitionPathSchema,
+    responseSchema: workItemRunStateResponseSchema,
   },
   workItemActivity: {
     method: 'GET',

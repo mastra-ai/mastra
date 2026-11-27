@@ -742,6 +742,10 @@ export function registerApiCommand(program: CommanderCommand): void {
       },
     ],
   });
+  addAction(factoryWorkItem, 'run-state', FACTORY_API_ROUTE_CATALOG.workItemRunState, {
+    description: "Show what a card's board run records it doing, and why it needs attention when it does",
+    routePlacement: 'origin',
+  });
   addAction(factoryWorkItem, 'session-repository', FACTORY_API_ROUTE_CATALOG.workItemSessionRepository, {
     description: "Show which repository a card's session starts in, or why none can",
     routePlacement: 'origin',

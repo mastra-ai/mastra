@@ -1,6 +1,6 @@
 import type { FactoryTransitionResultRejected } from '@mastra/factory/rules/types';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
 import { createMemoryRouter, matchRoutes, RouterProvider } from 'react-router';
@@ -436,6 +436,64 @@ describe('Board card pending states', () => {
 
     await waitFor(() => expect(retried).toEqual(['decision-1']));
     await waitForMutationsIdle(client);
+  });
+
+  it("says why a card's board run gave up on it in place of the generic failure, and the generic one where no run records it", async () => {
+    stubBoardEndpoints();
+    const failed = {
+      id: 'decision-1',
+      evaluationId: 'evaluation-1',
+      workItemId: ITEM_ID,
+      type: 'invokeSkill',
+      status: 'failed',
+      attempts: 5,
+      failureOccurrence: 1,
+      source: null,
+      failureCode: 'run_failed',
+      canRetry: true,
+      lastError: 'The model broke.',
+      createdAt: '2026-07-18T00:00:00.000Z',
+      updatedAt: '2026-07-18T00:01:00.000Z',
+      completedAt: null,
+    };
+    let runState: Record<string, unknown> | undefined;
+    let decision: Record<string, unknown> = failed;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
+        HttpResponse.json({ decisions: [decision] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/${ITEM_ID}/run-state`, () =>
+        HttpResponse.json(runState ? { runState } : {}),
+      ),
+    );
+
+    // The default engine records no run state: the card keeps the generic failure.
+    const first = renderWorkBoard();
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+    expect(await within(card).findByText('Automated run could not start')).toBeVisible();
+    first.unmount();
+
+    runState = {
+      state: 'needs_attention',
+      phase: 'execute',
+      probes: 0,
+      attempts: 5,
+      failure: 'run_failed',
+      reason: 'Agent run ended in error',
+    };
+    renderWorkBoard();
+    const flagged = await screen.findByRole('article', { name: 'Fix login bug' });
+    expect(await within(flagged).findByText('Agent run ended in error')).toBeVisible();
+    expect(within(flagged).queryByText('Automated run could not start')).not.toBeInTheDocument();
+    expect(within(flagged).getByRole('button', { name: 'Retry' })).toBeVisible();
+    cleanup();
+
+    // A failed automatic move is not the run's to explain, whatever the run records.
+    decision = { ...failed, id: 'decision-2', type: 'transition', failureCode: 'stale' };
+    renderWorkBoard();
+    const moved = await screen.findByRole('article', { name: 'Fix login bug' });
+    expect(await within(moved).findByText('Automatic move failed')).toBeVisible();
+    expect(within(moved).queryByText('Agent run ended in error')).not.toBeInTheDocument();
   });
 
   it('opens the session a card shows from the card itself', async () => {

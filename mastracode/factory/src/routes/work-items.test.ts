@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 
+import type { FactoryCardRunState } from '../board-engine/board-workflow.js';
 import { DispatcherBoardEngine } from '../board-engine/engine.js';
 import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
@@ -30,6 +31,8 @@ let committedHook: Array<{ workItemId: string; fromStage?: string; toStage: stri
 /** Every input the routes hand the board engine, in order. */
 let engineInputs: FactoryTransitionRequest[] = [];
 const deletedCards: string[] = [];
+/** When set, the routes' board engine records what cards do, as the workflow engine does; keyed by card id. */
+let describedCards: Map<string, FactoryCardRunState> | undefined;
 /** Whether the routes' board engine takes moves on to settle later, as an engine with `submitMove` does. */
 let submitsMoves = false;
 let announcesMoves = true;
@@ -124,6 +127,12 @@ function buildApp(
       },
       boardEngine: {
         cardDeleted: async card => void deletedCards.push(card.workItemId),
+        // Absent unless a test turns it on: the default engine records nothing about a card.
+        get describe() {
+          const described = describedCards;
+          if (!described) return undefined;
+          return async (card: { workItemId: string }) => described.get(card.workItemId);
+        },
         // Absent unless a test turns it on: the default engine has no `submitMove`.
         get submitMove() {
           if (!submitsMoves) return undefined;
@@ -1640,6 +1649,58 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
 });
 
 // ── Delete ───────────────────────────────────────────────────────────────
+describe('GET /web/factory/projects/:id/work-items/:workItemId/run-state', () => {
+  afterEach(() => {
+    describedCards = undefined;
+  });
+
+  async function createItem() {
+    const res = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    return (await res.json()).workItem as { id: string };
+  }
+  const runState = (id: string, user: typeof orgUser | null = orgUser) =>
+    json('GET', `/web/factory/projects/${PROJECT_ID}/work-items/${id}/run-state`, undefined, user);
+
+  it("answers what the card's board engine recorded it doing", async () => {
+    const item = await createItem();
+    const recorded: FactoryCardRunState = {
+      state: 'needs_attention',
+      phase: 'planning',
+      probes: 0,
+      attempts: 5,
+      failure: 'run_failed',
+      reason: 'Agent run ended in error',
+    };
+    describedCards = new Map([[item.id, recorded]]);
+
+    const res = await runState(item.id);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ runState: recorded });
+    expect(FACTORY_ROUTE_CONTRACTS.workItemRunState.responseSchema.parse(body)).toEqual(body);
+  });
+
+  it('answers no run state on an engine that records none, or for a card it has not recorded', async () => {
+    const item = await createItem();
+    expect(await (await runState(item.id)).json()).toEqual({});
+    describedCards = new Map();
+    expect(await (await runState(item.id)).json()).toEqual({});
+  });
+
+  it('answers 404 for a card of another organization or project, without asking the engine', async () => {
+    const item = await createItem();
+    const asked: string[] = [];
+    describedCards = new Map([[item.id, { state: 'running', phase: 'planning', probes: 0 }]]);
+    const get = describedCards.get.bind(describedCards);
+    describedCards.get = id => (asked.push(id), get(id));
+
+    expect((await runState(item.id, { workosId: 'u9', organizationId: 'org2' })).status).toBe(404);
+    expect((await runState('00000000-0000-4000-8000-000000000000')).status).toBe(404);
+    expect((await runState('not-a-card')).status).toBe(404);
+    expect(asked).toEqual([]);
+  });
+});
+
 describe('DELETE /web/factory/work-items/:id', () => {
   it('removes the item for the org', async () => {
     const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());

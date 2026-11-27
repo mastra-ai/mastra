@@ -114,7 +114,7 @@ describe('createRunStopMarker', () => {
     expect(aborted).toEqual(['session-1']);
   });
 
-  it('tells the board engine of the stop once the abort succeeded, for each card the session was running', async () => {
+  it('tells the board engine of the stop once the abort succeeded, for each card the session was running, and who stopped it', async () => {
     const { workItems, binding } = await setupWithBinding();
     const heard: unknown[] = [];
     let running = false;
@@ -124,7 +124,7 @@ describe('createRunStopMarker', () => {
       createRunStopMarker({
         auth: signedInToOrg1,
         workItems: () => workItems,
-        boardEngine: () => ({ runStopped: async seat => void heard.push(seat) }),
+        boardEngine: () => ({ runStopped: async (seat, by) => void heard.push({ seat, by }) }),
         runInFlight: async sessionId => running && sessionId === 'session-1',
       }),
     );
@@ -137,10 +137,16 @@ describe('createRunStopMarker', () => {
     expect(heard).toEqual([]);
 
     running = true;
-    await app.request('/api/agent-controller/code/sessions/session-1/abort', { method: 'POST' });
+    await app.request('/api/agent-controller/code/sessions/session-1/abort', {
+      method: 'POST',
+      headers: { 'user-agent': 'test-browser' },
+    });
     await vi.waitFor(() =>
       expect(heard).toEqual([
-        { orgId: ORG_ID, factoryProjectId: 'project-1', workItemId: binding.workItemId, role: 'work' },
+        {
+          seat: { orgId: ORG_ID, factoryProjectId: 'project-1', workItemId: binding.workItemId, role: 'work' },
+          by: { userId: 'user-1', actorProfile: undefined, context: { userAgent: 'test-browser' } },
+        },
       ]),
     );
 

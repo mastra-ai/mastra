@@ -39,6 +39,8 @@ export interface BoardCardStateInput {
   sessionHolds?: boolean;
   /** Triage left the card in Intake for a person to decide on. */
   held?: boolean;
+  /** Why the card's board run gave up on it, said in place of the generic failure. */
+  attentionReason?: string;
 }
 
 const FREE: BoardCardOwner = { kind: 'free' };
@@ -62,7 +64,7 @@ export function boardCardState(input: BoardCardStateInput): BoardCardState {
   }
   const automation =
     decision !== undefined
-      ? automationOnCard(decision, sessionStatus, input.queuePosition)
+      ? automationOnCard(decision, sessionStatus, input.queuePosition, input.attentionReason)
       : input.queuePosition !== undefined
         ? queuedOnCard(input.queuePosition)
         : undefined;
@@ -108,6 +110,7 @@ function automationOnCard(
   decision: FactoryDecisionSummary,
   sessionStatus: SessionRowStatus | undefined,
   queuePosition: number | undefined,
+  attentionReason: string | undefined,
 ): { status?: BoardCardStatus; owner: BoardCardOwner } {
   const copy = automationCopy(decision);
   const detail = decision.lastError ?? undefined;
@@ -115,7 +118,7 @@ function automationOnCard(
     return {
       status: {
         kind: 'error',
-        label: copy.failed,
+        label: (decision.type === 'invokeSkill' ? attentionReason : undefined) ?? copy.failed,
         ...(decision.canRetry ? { retryDecisionId: decision.id } : {}),
         detail,
       },

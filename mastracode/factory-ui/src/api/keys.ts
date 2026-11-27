@@ -145,6 +145,9 @@ export const queryKeys = {
   boardFacts: (factoryProjectId: string | undefined) => ['factory', 'board-facts', factoryProjectId ?? null] as const,
   workItemStarters: (factoryProjectId: string | undefined) =>
     [...queryKeys.boardFacts(factoryProjectId), 'starters'] as const,
+  // Under the board's facts: every feed frame re-reads it, and no rewrite of the cached cards reaches it.
+  workItemRunState: (factoryProjectId: string | undefined, workItemId: string | undefined) =>
+    [...queryKeys.boardFacts(factoryProjectId), 'run-state', workItemId ?? null] as const,
   workItemActivity: (factoryProjectId: string | undefined, depth: string) =>
     [...queryKeys.boardFacts(factoryProjectId), 'activity', depth] as const,
   workItemFilterOptions: (factoryProjectId: string | undefined) =>
