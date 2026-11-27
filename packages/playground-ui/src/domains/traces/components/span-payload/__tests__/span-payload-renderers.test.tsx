@@ -1,16 +1,13 @@
 // @vitest-environment jsdom
-import { EditorView } from '@codemirror/view';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { SpanRecord } from '../../../types';
 
 import { SpanDataPanelView } from '../../span-data-panel-view';
-import { SpanDetailsView } from '../../span-details-view';
-import { SpanErrorRenderer } from '../span-error-renderer';
+import { SpanErrorDetails } from '../span-error-renderer';
 import { SpanInputRenderer } from '../span-input-renderers';
 import { SpanOutputRenderer } from '../span-output-renderers';
-import { SpanPayloadSection } from '../span-payload-section';
 import {
   agentRunAbortedSpan,
   agentRunInterruptedSpan,
@@ -51,23 +48,6 @@ describe('Span metadata JSON sections', () => {
       expect(section.textContent).not.toContain(`${title.toLowerCase().replace(/s$/, '')}-value`);
       expect(section.querySelector('[data-slot="collapsible-box"]')).toBeNull();
     }
-  });
-
-  it('show them collapsed, and as JSON only once opened, in the details layout', () => {
-    render(<SpanDetailsView span={span} spanId={span.spanId} traceId={span.traceId} onClose={() => {}} />);
-    expect(document.body.textContent).not.toContain('metadata-value');
-    expect(document.body.textContent).not.toContain('attribute-value');
-
-    for (const title of ['Metadata', 'Attributes']) {
-      const trigger = screen.getByRole('button', { name: title });
-      fireEvent.click(trigger);
-      const section = trigger.closest('[data-slot="span-payload-section"]');
-      expect(section?.querySelector('[data-slot="span-payload-json"] .cm-foldGutter')).not.toBeNull();
-      expect(section?.querySelector('[data-slot="span-payload-view-toggle"]')).toBeNull();
-      expect(section?.querySelector('[data-slot="collapsible-box"]')).toBeNull();
-    }
-    expect(document.body.textContent).toContain('metadata-value');
-    expect(document.body.textContent).toContain('attribute-value');
   });
 });
 
@@ -155,72 +135,16 @@ describe('SpanOutputRenderer', () => {
   });
 });
 
-describe('SpanErrorRenderer', () => {
+describe('SpanErrorDetails', () => {
   it('renders the error message and metadata', () => {
-    render(<SpanErrorRenderer span={errorSpan} />);
+    render(<SpanErrorDetails span={errorSpan} />);
     expect(slot('span-error')).not.toBeNull();
     expect(screen.getByText('City not found: Atlantis')).toBeTruthy();
   });
 
   it('renders nothing without an error', () => {
-    const { container } = render(<SpanErrorRenderer span={toolCallSpan} />);
+    const { container } = render(<SpanErrorDetails span={toolCallSpan} />);
     expect(container.innerHTML).toBe('');
-  });
-});
-
-describe.each(['panel', 'details'] as const)('SpanPayloadSection (%s)', layout => {
-  it('toggles to the original JSON using the same renderer as tool payloads', () => {
-    render(
-      <SpanPayloadSection title="Input" raw={agentRunMessagesSpan.input} layout={layout}>
-        <SpanInputRenderer span={agentRunMessagesSpan} />
-      </SpanPayloadSection>,
-    );
-    expect(slot('span-payload-messages')).not.toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: 'JSON' }));
-    expect(slot('span-payload-messages')).toBeNull();
-    const editor = slot('span-payload-json')?.querySelector<HTMLElement>('.cm-editor');
-    const view = editor ? EditorView.findFromDOM(editor) : null;
-    expect(view?.state.doc.toString()).toBe(JSON.stringify(agentRunMessagesSpan.input, null, 2));
-    expect(view?.state.readOnly).toBe(true);
-    expect(screen.queryByRole('button', { name: 'Expand JSON' })).toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
-    expect(slot('span-payload-messages')).not.toBeNull();
-  });
-
-  it('renders nothing when raw is null', () => {
-    const { container } = render(
-      <SpanPayloadSection title="Input" raw={null}>
-        <span>rich</span>
-      </SpanPayloadSection>,
-    );
-    expect(container.innerHTML).toBe('');
-  });
-});
-
-describe('Span details view', () => {
-  describe('when an error has a formatted preview', () => {
-    it('shows the original error JSON and restores the preview independently of other sections', () => {
-      const original = JSON.stringify(errorSpan);
-      render(<SpanDetailsView spanId={errorSpan.spanId} span={errorSpan} onClose={() => {}} />);
-      expect(slot('span-error')).not.toBeNull();
-      const toggles = screen.getAllByRole('button', { name: 'JSON' });
-      expect(toggles).toHaveLength(1);
-      expect(slot('span-payload-json')).not.toBeNull();
-      const jsonToggle = toggles[0];
-      if (!jsonToggle) throw new Error('Missing error JSON toggle');
-      fireEvent.click(jsonToggle);
-      expect(slot('span-error')).toBeNull();
-      expect(document.body.textContent).toContain('"message": "City not found: Atlantis"');
-      expect(screen.getAllByRole('button', { name: 'JSON' })[0]?.getAttribute('aria-pressed')).toBe('true');
-      expect(screen.getAllByRole('button', { name: 'JSON' })).toHaveLength(1);
-      const previewToggle = screen.getAllByRole('button', { name: 'Preview' })[0];
-      if (!previewToggle) throw new Error('Missing error Preview toggle');
-      fireEvent.click(previewToggle);
-      expect(slot('span-error')).not.toBeNull();
-      expect(JSON.stringify(errorSpan)).toBe(original);
-    });
   });
 });
 

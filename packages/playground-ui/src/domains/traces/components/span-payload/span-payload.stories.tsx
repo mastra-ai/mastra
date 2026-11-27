@@ -1,19 +1,13 @@
-import { describeProcessorPipeline, describeSpanInput, describeSpanOutput } from '@mastra/core/observability';
+import { describeSpanInput, describeSpanOutput } from '@mastra/core/observability';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ReactNode } from 'react';
 import { SpanDataPanelView } from '../span-data-panel-view';
-import { SpanDetailsView } from '../span-details-view';
-import { getSpanChanges } from '../span-outcome.utils';
 import { ALL_SPAN_FIXTURES } from './__tests__/fixtures/span-payloads';
 import type { SpanRecord } from './__tests__/fixtures/span-payloads';
-import { SpanErrorRenderer } from './span-error-renderer';
+import { SpanErrorDetails } from './span-error-renderer';
 import { SpanInputRenderer } from './span-input-renderers';
 import { SpanOutputRenderer } from './span-output-renderers';
 import { asCoreSpan } from './span-payload-registry';
-import { SpanPayloadSection } from './span-payload-section';
-import { SpanProcessorMutations } from './span-processor-mutations';
-import { IconFileArrowRightIn } from '@/ds/icons/central/IconFileArrowRightIn';
-import { IconFileArrowRightOut } from '@/ds/icons/central/IconFileArrowRightOut';
 import { cn } from '@/lib/utils';
 
 type FixtureName = keyof typeof ALL_SPAN_FIXTURES;
@@ -49,14 +43,7 @@ export const InputRenderers: StoryObj = {
         const span = ALL_SPAN_FIXTURES[name];
         return (
           <Cell key={name} title={name} tag={describeSpanInput(asCoreSpan(span))?.type}>
-            <SpanPayloadSection
-              title="Input"
-              icon={<IconFileArrowRightIn />}
-              raw={span.input}
-              hasPreview={describeSpanInput(asCoreSpan(span))?.type !== 'json'}
-            >
-              <SpanInputRenderer span={span} />
-            </SpanPayloadSection>
+            <SpanInputRenderer span={span} />
           </Cell>
         );
       })}
@@ -71,14 +58,7 @@ export const OutputRenderers: StoryObj = {
         const span = ALL_SPAN_FIXTURES[name];
         return (
           <Cell key={name} title={name} tag={describeSpanOutput(asCoreSpan(span))?.type}>
-            <SpanPayloadSection
-              title="Output"
-              icon={<IconFileArrowRightOut />}
-              raw={span.output}
-              hasPreview={describeSpanOutput(asCoreSpan(span))?.type !== 'json'}
-            >
-              <SpanOutputRenderer span={span} />
-            </SpanPayloadSection>
+            <SpanOutputRenderer span={span} />
           </Cell>
         );
       })}
@@ -86,16 +66,14 @@ export const OutputRenderers: StoryObj = {
   ),
 };
 
-export const ErrorRenderer: StoryObj = {
+export const ErrorDetails: StoryObj = {
   render: () => (
     <Grid>
       <Cell title="errorSpan" tag="error">
-        <SpanPayloadSection title="Error" raw={ALL_SPAN_FIXTURES.errorSpan.error} framed={false}>
-          <SpanErrorRenderer span={ALL_SPAN_FIXTURES.errorSpan} />
-        </SpanPayloadSection>
+        <SpanErrorDetails span={ALL_SPAN_FIXTURES.errorSpan} />
       </Cell>
       <Cell title="toolCallSpan (no error)" tag={undefined}>
-        <SpanErrorRenderer span={ALL_SPAN_FIXTURES.toolCallSpan} />
+        <SpanErrorDetails span={ALL_SPAN_FIXTURES.toolCallSpan} />
       </Cell>
     </Grid>
   ),
@@ -104,25 +82,9 @@ export const ErrorRenderer: StoryObj = {
 function Both({ span }: { span: SpanRecord }) {
   return (
     <div className="flex max-w-3xl flex-col gap-3">
-      <SpanPayloadSection
-        title="Input"
-        icon={<IconFileArrowRightIn />}
-        raw={span.input}
-        hasPreview={describeSpanInput(asCoreSpan(span))?.type !== 'json'}
-      >
-        <SpanInputRenderer span={span} />
-      </SpanPayloadSection>
-      <SpanPayloadSection
-        title="Output"
-        icon={<IconFileArrowRightOut />}
-        raw={span.output}
-        hasPreview={describeSpanOutput(asCoreSpan(span))?.type !== 'json'}
-      >
-        <SpanOutputRenderer span={span} />
-      </SpanPayloadSection>
-      <SpanPayloadSection title="Error" raw={span.error}>
-        <SpanErrorRenderer span={span} />
-      </SpanPayloadSection>
+      <SpanInputRenderer span={span} />
+      <SpanOutputRenderer span={span} />
+      <SpanErrorDetails span={span} />
     </div>
   );
 }
@@ -182,19 +144,6 @@ export const FullSpanPanel: StoryObj<FixtureArgs> = {
   },
 };
 
-export const CompactSpanDetails: StoryObj<FixtureArgs> = {
-  args: { fixture: 'agentRunMessagesSpan' },
-  argTypes: { fixture: { control: 'select', options: FIXTURE_NAMES } },
-  render: ({ fixture }) => {
-    const span = ALL_SPAN_FIXTURES[fixture];
-    return (
-      <div className="h-[80vh] max-w-xl">
-        <SpanDetailsView spanId={span.spanId} span={span} onClose={() => {}} />
-      </div>
-    );
-  },
-};
-
 const PROCESSOR_FIXTURES = [
   'processorInputSpan',
   'processorSystemMutationSpan',
@@ -214,24 +163,6 @@ const PANEL_WIDTHS = [
   { label: 'Tablet', className: 'w-160' },
   { label: 'Desktop', className: 'w-240' },
 ];
-
-export const ProcessorChanges: StoryObj = {
-  render: () => (
-    <Grid>
-      {PROCESSOR_FIXTURES.map(name => {
-        const span = ALL_SPAN_FIXTURES[name];
-        const changes = getSpanChanges(span);
-        return (
-          <Cell key={name} title={name} tag={changes.length > 0 ? 'changes' : 'none'}>
-            <SpanPayloadSection title="Changes" raw={changes}>
-              <SpanProcessorMutations span={span} />
-            </SpanPayloadSection>
-          </Cell>
-        );
-      })}
-    </Grid>
-  ),
-};
 
 export const ProcessorSpanAtPanelWidths: StoryObj<FixtureArgs> = {
   args: { fixture: 'processorInputSpan' },
