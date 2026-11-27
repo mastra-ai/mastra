@@ -807,6 +807,62 @@ export function describeRestartOccurrenceCases({
       });
     }, 20_000);
 
+    // A parallel block with one branch suspended and the other still running is restarted. The claim
+    // leaves the suspended branch as stored, and the restart's delivery runs it again, so it
+    // suspends again with the same payload. The running branch is taken over. The run then suspends
+    // on the branch, and a resume finishes it.
+    it('keeps a suspended branch suspended and takes the running one over when a parallel block is restarted', async () => {
+      const steps = holdableSteps();
+      const ask = createStep({
+        id: 'ask',
+        inputSchema: Num,
+        outputSchema: Num,
+        resumeSchema: z.object({ ok: z.boolean() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          steps.calls.ask = (steps.calls.ask ?? 0) + 1;
+          if (!resumeData) return suspend({ reason: 'approval' });
+          return { n: inputData.n + 1 };
+        },
+      });
+      const workflow = createWorkflow({
+        id: `restart-suspended-branch-${randomUUID()}`,
+        inputSchema: Num,
+        outputSchema: z.any(),
+      })
+        .parallel([ask, steps.step('work')])
+        .commit();
+      await withHost({ [workflow.id]: workflow }, steps.releaseAll, async ({ driver }) => {
+        const run = await workflow.createRun();
+        const oldWork = steps.holdAt('work');
+        const started = run.start({ inputData: { n: 0 } });
+        await oldWork.entered;
+        await expect.poll(async () => (await storedRun(workflow.id, run.runId))?.context.ask?.status).toBe('suspended');
+        const oldDelivery = stepRuns(driver, run.runId, workflow.id, [0, 1])[0]!;
+
+        const restarted = await restartRun(workflow, run.runId);
+        expect(restarted).toMatchObject({ status: 'suspended' });
+        const restartDelivery = stepRuns(driver, run.runId, workflow.id, [0, 1]).at(-1)!;
+        oldWork.release();
+        await settleDeliveries([oldDelivery]);
+        await drainHandlers();
+        expect(await storedRun(workflow.id, run.runId)).toMatchObject({
+          status: 'suspended',
+          suspendedPaths: { ask: [0, 0] },
+          context: {
+            ask: { status: 'suspended', suspendPayload: { reason: 'approval' } },
+            work: { status: 'success', metadata: { startedBy: restartDelivery.id } },
+          },
+        });
+        expect(steps.calls).toEqual({ ask: 2, work: 2 });
+
+        expect(
+          await (await workflow.createRun({ runId: run.runId })).resume({ step: 'ask', resumeData: { ok: true } }),
+        ).toMatchObject({ status: 'success', result: { ask: { n: 1 }, work: { n: 1 } } });
+        expect(await started).toMatchObject({ status: 'suspended' });
+        expect(steps.calls).toEqual({ ask: 3, work: 2 });
+      });
+    }, 20_000);
+
     // R4. A branch that saved its result after the restart's caller read the run, but before the
     // restart applied, was overwritten with the running record the caller read, and ran again.
     it('keeps a branch result saved between the restart read and the restart', async () => {
