@@ -64,6 +64,7 @@ import {
   untilIdleHandlesBackgroundTask,
 } from '../loop/shared/stream-until-idle-helpers';
 import { TOOL_ABORT_GRACE_MS, TOOL_SETTLE_MARGIN_MS } from '../loop/shared/tool-abort-grace';
+import { findLatestSuspendedAutoResume } from '../loop/suspended-run-auto-resume';
 import {
   DEADLINE_SAVE_CLAIM_HOLD_MS,
   DEADLINE_SAVE_WAIT_MS,
@@ -263,7 +264,7 @@ import {
   markResumeInFlight,
   deleteRunRegistryEntry,
 } from './durable/run-registry';
-import { carrySegmentSpans, openedSegment } from './durable/segment-spans';
+import { carrySegmentAutoResume, carrySegmentSpans, openedSegment } from './durable/segment-spans';
 import type { SegmentSpanData } from './durable/segment-spans';
 import type { DurableStreamAdapterResult, DurableStreamAdapterOptions } from './durable/stream-adapter';
 import {
@@ -11965,7 +11966,15 @@ export class Agent<
   ): Promise<MastraModelOutput<OUTPUT> | MastraModelOutput<TOutput>> {
     if (this.#resolveExecutionEngine())
       return this.#resumeDurableStream(resumeData, streamOptions as DurableAgentResumeOptions<TOutput>);
-    return this.#resumeStream<OUTPUT>(resumeData, streamOptions, false);
+    const releaseResumeHold = agentThreadStreamRuntime.holdParkedRunForResume(
+      streamOptions?.runId ?? '',
+      this.getPubSub(),
+    );
+    try {
+      return await this.#resumeStream<OUTPUT>(resumeData, streamOptions, false);
+    } finally {
+      releaseResumeHold();
+    }
   }
 
   async #resumeDurableStream(
@@ -12022,7 +12031,12 @@ export class Agent<
     // per-call options OR defaultOptions). Strip `untilIdle` before passing
     // to the wrapper so its internal agent.stream() call doesn't recurse.
     if (mergedStreamOptions.untilIdle) {
-      const { untilIdle, ...rest } = mergedStreamOptions ?? {};
+      // The inner resume reads the run's own `autoResumeSuspendedTools` back unless this call passed one: the agent
+      // default merged in above would read as the call's own and replace the run's (#30190).
+      const { untilIdle, ...rest } = {
+        ...mergedStreamOptions,
+        autoResumeSuspendedTools: streamOptions?.autoResumeSuspendedTools,
+      };
       const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
       return runResumeStreamUntilIdle<OUTPUT>(
         this,
@@ -12047,6 +12061,11 @@ export class Agent<
       streamOptions?.returnScorerData === undefined ? this.#getSnapshotReturnScorerData(existingSnapshot) : undefined;
     if (persistedReturnScorerData !== undefined) {
       mergedStreamOptions.returnScorerData = loopStreamOptions.returnScorerData = persistedReturnScorerData;
+    }
+    // Same precedence. The resume's own value, or else the run's, is also what the thread runtime keeps for the run.
+    const runAutoResume = streamOptions?.autoResumeSuspendedTools ?? findLatestSuspendedAutoResume(existingSnapshot);
+    if (runAutoResume !== undefined) {
+      mergedStreamOptions.autoResumeSuspendedTools = loopStreamOptions.autoResumeSuspendedTools = runAutoResume;
     }
 
     if (snapshotMemoryInfo?.threadId) {
@@ -12184,7 +12203,12 @@ export class Agent<
       await agentThreadStreamRuntime.registerRun(
         this as Agent<any, any, any, any>,
         result.result as unknown as MastraModelOutput<OUTPUT>,
-        preparedOptions as AgentExecutionOptions<OUTPUT>,
+        // The resume's own value or the run's, not the default merged in: the thread runtime keeps the run's when
+        // this is left out, as for a snapshot written before the run's value was persisted (#30190).
+        {
+          ...preparedOptions,
+          autoResumeSuspendedTools: runAutoResume,
+        } as AgentExecutionOptions<OUTPUT>,
         threadStreamPubSub,
       );
 
@@ -12277,6 +12301,30 @@ export class Agent<
   ): Promise<FullOutput<OUTPUT> | FullOutput<TOutput>> {
     if (this.#resolveExecutionEngine()) return this.#resumeDurableGenerate(args);
     const [resumeData, options] = args;
+    // The resumed run doesn't register with the thread runtime, so its parked record is held until the run settles:
+    // a follow-up sent meanwhile would otherwise start a turn beside the resumed tool. That record still shows the
+    // first suspension, so only a run that completed lets queued input start a turn; one that parked again or failed
+    // leaves it queued. (#30190)
+    const releaseResumeHold = agentThreadStreamRuntime.holdParkedRunForResume(options?.runId ?? '', this.getPubSub());
+    let completed = false;
+    try {
+      const output = await this.#resumePlainGenerate<OUTPUT>(resumeData, options);
+      completed = output.finishReason !== 'suspended';
+      return output;
+    } finally {
+      releaseResumeHold({ startQueuedTurn: completed });
+    }
+  }
+
+  async #resumePlainGenerate<OUTPUT>(
+    resumeData: any,
+    options:
+      | (AgentExecutionOptionsBase<any> & {
+          structuredOutput?: PublicStructuredOutputOptions<any>;
+          toolCallId?: string;
+        } & { model?: DynamicArgument<MastraModelConfig> })
+      | undefined,
+  ): Promise<FullOutput<OUTPUT>> {
     const defaultOptions = await this.getDefaultOptions({
       requestContext: options?.requestContext,
     });
@@ -12297,6 +12345,11 @@ export class Agent<
       options?.returnScorerData === undefined ? this.#getSnapshotReturnScorerData(existingSnapshot) : undefined;
     if (persistedReturnScorerData !== undefined) {
       mergedOptions.returnScorerData = loopOptions.returnScorerData = persistedReturnScorerData;
+    }
+    const persistedAutoResume =
+      options?.autoResumeSuspendedTools === undefined ? findLatestSuspendedAutoResume(existingSnapshot) : undefined;
+    if (persistedAutoResume !== undefined) {
+      mergedOptions.autoResumeSuspendedTools = loopOptions.autoResumeSuspendedTools = persistedAutoResume;
     }
     const { options: scopedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(mergedOptions, {
       callScopes: options?.scopes,
@@ -12464,7 +12517,12 @@ export class Agent<
         text: `Agent "${this.name}" recoverResume() is not supported when the agent runs on a durable or evented execution engine. Use recover(runId) to continue an interrupted run.`,
         details: { agentName: this.name, runId: options.runId },
       });
-    return this.#resumeStream<OUTPUT>(undefined, options, true);
+    const releaseResumeHold = agentThreadStreamRuntime.holdParkedRunForResume(options.runId, this.getPubSub());
+    try {
+      return await this.#resumeStream<OUTPUT>(undefined, options, true);
+    } finally {
+      releaseResumeHold();
+    }
   }
 
   /**
@@ -15309,6 +15367,7 @@ export class Agent<
       }
       releaseResumeMarker = release;
     }
+    const releaseResumeHold = agentThreadStreamRuntime.holdParkedRunForResume(runId, this.getPubSub());
     try {
       // An abort on another server leaves the run canceled in storage.
       if (await this.#isRunCanceledInStorage(runId)) throw abortedRunError();
@@ -15316,6 +15375,8 @@ export class Agent<
     } catch (error) {
       releaseResumeMarker();
       throw error;
+    } finally {
+      releaseResumeHold();
     }
   }
 
@@ -15362,6 +15423,8 @@ export class Agent<
     // the caller passes its own request context.
     let rehydratedScopes: unknown;
     let coldSnapshot: WorkflowRunState | undefined;
+    // The run's latest `autoResumeSuspendedTools`, read back from storage when this process holds no record of it.
+    let coldRunAutoResume: boolean | undefined;
     if (!entry) {
       // A persisted durable run can outlive this process (or the registry TTL).
       // Rebuild the non-serializable runtime state before resuming the stored
@@ -15493,6 +15556,8 @@ export class Agent<
       // Absent (vs recorded []) marks a run suspended before the scopes upgrade; the resume
       // adopts the supplied scopes with the same trust posture as a fresh run.
       rehydratedScopes = persistedScopes;
+      // A resume can override the value the run started with, so the one persisted with its latest suspension comes first.
+      coldRunAutoResume = findLatestSuspendedAutoResume(snapshot) ?? workflowInput.options?.autoResumeSuspendedTools;
       const memory = threadId
         ? {
             ...options?.memory,
@@ -15591,12 +15656,17 @@ export class Agent<
     const resumeTracingOptions = { ...resolvedOptions.tracingOptions, hideInput, hideOutput, requestContextKeys };
     // Scoped runs execute on a run-scoped copy of the request context.
     resumeRequestContext = (resolvedOptions.requestContext as typeof resumeRequestContext) ?? resumeRequestContext;
+    // The segment's `autoResumeSuspendedTools`: the resume's own value, else the run's latest, never the agent default
+    // merged into `resolvedOptions`. Its next suspension persists it, and the thread runtime keeps it for the run.
+    // Left unset, the run keeps the value in its workflow input. (#30190)
+    const runAutoResume =
+      options?.autoResumeSuspendedTools ?? (coldSnapshot ? coldRunAutoResume : entry.autoResumeSuspendedTools);
 
     // Delegate to the idle-loop wrapper when `untilIdle` is set. Strip
     // `untilIdle` before passing to the wrapper so the inner agent.resume()
     // call (and subsequent agent.stream([]) continuations) don't recurse.
     if (resolvedOptions.untilIdle) {
-      const { untilIdle, ...rest } = resolvedOptions;
+      const { untilIdle, ...rest } = { ...resolvedOptions, autoResumeSuspendedTools: runAutoResume };
       const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
       // The idle-loop wrapper re-enters resume() for this same tool call.
       releaseResumeMarker();
@@ -15708,6 +15778,9 @@ export class Agent<
       if (globalEntryForContext) {
         globalEntryForContext.requestContext = resumeRequestContext;
         globalEntryForContext.requestContextRebuilt = false;
+      }
+      for (const reg of new Set([entry, globalEntryForContext])) {
+        if (reg && runAutoResume !== undefined) reg.autoResumeSuspendedTools = runAutoResume;
       }
       await this.loadRecalledMessages(runId, coldSnapshot, resumeRequestContext);
     } catch (error) {
@@ -15916,6 +15989,7 @@ export class Agent<
       }
     }
     carrySegmentSpans(resumeRequestContext, runId, resumeSegment);
+    if (runAutoResume !== undefined) carrySegmentAutoResume(resumeRequestContext, runId, runAutoResume);
     const resumeSegmentSpan = entry.resumeAgentSpan ?? entry.agentSpan;
 
     // Same default-false semantics as the initial stream() path.
@@ -16087,6 +16161,7 @@ export class Agent<
     const resumeStreamOptions: AgentExecutionOptions<TOutput> = {
       ...resolvedOptions,
       runId,
+      autoResumeSuspendedTools: runAutoResume,
     } as AgentExecutionOptions<TOutput>;
     const continued = agentThreadStreamRuntime.continueRun(
       this as unknown as Agent<any, any, any, any>,

@@ -15,7 +15,7 @@ import type { Mastra } from '../../mastra';
 import { resolveExportedSpanId } from '../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, Span, SpanType } from '../../observability';
 import type { RequestContext } from '../../request-context';
-import { MASTRA_DURABLE_SEGMENTS_KEY } from '../request-context-snapshot';
+import { MASTRA_DURABLE_AUTO_RESUME_KEY, MASTRA_DURABLE_SEGMENTS_KEY } from '../request-context-snapshot';
 import { DurableStepIds, MAP_FINAL_OUTPUT_STEP_ID } from './constants';
 import { getExecutionClaim, resolveLeaseProvider } from './execution-fence';
 import type { RunRegistryEntry } from './types';
@@ -76,6 +76,28 @@ export function carrySegmentSpans(target: CarrierTarget, runId: string, segment:
   const next = { ...(current && typeof current === 'object' ? current : {}), [runId]: segment };
   if (hasRawAccess(target)) target.setRaw(MASTRA_DURABLE_SEGMENTS_KEY, next);
   else target[MASTRA_DURABLE_SEGMENTS_KEY] = next;
+}
+
+/**
+ * Record the `autoResumeSuspendedTools` a resumed execution of `runId` runs with on the request context it hands the
+ * engine, which carries it to every step of the segment wherever it runs. (#30190)
+ */
+export function carrySegmentAutoResume(requestContext: RequestContext, runId: string, value: boolean): void {
+  const current = requestContext.getRaw(MASTRA_DURABLE_AUTO_RESUME_KEY);
+  requestContext.setRaw(MASTRA_DURABLE_AUTO_RESUME_KEY, {
+    ...(current && typeof current === 'object' ? current : {}),
+    [runId]: value,
+  });
+}
+
+/** The `autoResumeSuspendedTools` a resume carried for the current execution of `runId`, if any. */
+export function segmentAutoResume(
+  requestContext: Pick<RequestContext, 'getRaw'> | undefined,
+  runId: string,
+): boolean | undefined {
+  const all = requestContext?.getRaw?.(MASTRA_DURABLE_AUTO_RESUME_KEY);
+  const value = all && typeof all === 'object' ? (all as Record<string, unknown>)[runId] : undefined;
+  return typeof value === 'boolean' ? value : undefined;
 }
 
 /**

@@ -803,6 +803,12 @@ export interface RunRegistryEntry {
    */
   isPlaceholder?: boolean;
   /**
+   * The `autoResumeSuspendedTools` the run's current segment executes with, set when a resume runs it. Absent until
+   * then: the run executes with the value in its workflow input. Each suspension persists it, so a resume in another
+   * process that leaves the option out keeps the latest one. (#30190)
+   */
+  autoResumeSuspendedTools?: boolean;
+  /**
    * Resolved tools with execute functions.
    *
    * After a durable LLM step runs input processors this holds the per-step
