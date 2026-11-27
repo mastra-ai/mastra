@@ -230,6 +230,13 @@ function runErrorFailure(label: string, error: unknown): RunEndedInError {
   return new RunEndedInError(runErrorCode(error, cause), `${label} ended in error: ${cause}`, { cause: error });
 }
 
+/** The phase run a decision starts, with the role that runs it. */
+function invokedSkill(decision: unknown): { role: string } | undefined {
+  if (!decision || typeof decision !== 'object') return undefined;
+  const value = decision as { type?: unknown; role?: unknown };
+  return value.type === 'invokeSkill' && typeof value.role === 'string' ? { role: value.role } : undefined;
+}
+
 /** A run in the review seat: a pull request review, unless it is the card's board's self-review. */
 function reviewSeatSkill(decision: unknown): { skillName?: unknown } | undefined {
   if (!decision || typeof decision !== 'object') return undefined;
@@ -1330,6 +1337,7 @@ export class FactoryDecisionDispatcher {
         advanceDeliveryGeneration: !executionCompleted,
       });
       if (terminal && failed) await this.#supersedeFailureOnSettledCard(failed);
+      await this.#reportRunFailed(record, error, failureCode, terminal);
       // A re-claim that failed before proving its kickoff never landed may be racing
       // an earlier attempt's live run; only a terminal failure may speak over it.
       if (terminal || this.#reviewQueued.has(record)) {
@@ -1340,6 +1348,41 @@ export class FactoryDecisionDispatcher {
           session: this.#reviewSessions.get(record),
         });
       }
+    }
+  }
+
+  /**
+   * Tells the board engine that an attempt at running a card's phase failed. A run that ended
+   * without completing its phase isn't told again: the engine heard that end as a probe.
+   */
+  async #reportRunFailed(
+    record: FactoryDeferredDecisionRecord,
+    error: unknown,
+    failureCode: FactoryDispatchFailureCode,
+    terminal: boolean,
+  ): Promise<void> {
+    const run = invokedSkill(record.decision);
+    if (!this.#boardEngine.runFailed || !run || !record.workItemId || failureCode === 'run_incomplete') return;
+    try {
+      await this.#boardEngine.runFailed(
+        {
+          orgId: record.orgId,
+          factoryProjectId: record.factoryProjectId,
+          workItemId: record.workItemId,
+          role: run.role,
+        },
+        {
+          code: error instanceof FactoryRuleRejectedError ? error.code : failureCode,
+          attempt: record.attempts,
+          terminal,
+          decisionId: record.id,
+        },
+      );
+    } catch (reportError) {
+      console.error(
+        `Factory could not tell the board engine that decision ${record.id} failed`,
+        sanitizeDispatchError(reportError),
+      );
     }
   }
 

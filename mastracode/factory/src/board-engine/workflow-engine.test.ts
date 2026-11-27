@@ -568,6 +568,92 @@ describe('the workflow board engine', () => {
     });
   });
 
+  it('counts failed attempts at the phase, and flags the card with the last failure’s label', async () => {
+    const { storage, engine, mastra, item, binding } = await setup();
+    const card = { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role };
+
+    await engine.runFailed(card, { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' });
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'running',
+      phase: 'planning',
+      probes: 0,
+      attempts: 1,
+    });
+
+    // The run that ran again ended without an outcome: probing keeps the attempts counted.
+    await engine.runEnded({ ...binding, runEnd: 'run-2' }, engine);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'probing', attempts: 1 });
+
+    await engine.runFailed(card, { code: 'run_failed', attempt: 2, terminal: true, decisionId: 'decision-1' });
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'needs_attention',
+      phase: 'planning',
+      probes: 1,
+      attempts: 2,
+      failure: 'run_failed',
+      reason: 'Agent run ended in error',
+    });
+    expect((await storage.get({ orgId: ORG, id: item.id }))!.stages).toEqual(['planning']);
+    // The failure's code and label are all the run keeps of it.
+    const stored = JSON.stringify(await mastra.getWorkflow('factory-board').getWorkflowRunById(boardRunId(item.id)));
+    expect(stored).not.toContain('user-1');
+    expect(stored).not.toContain(ORG);
+  });
+
+  it("flags the card on a board rule's refusal with the refusal's wording", async () => {
+    const { engine, item, binding } = await setup();
+    const card = { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role };
+
+    await engine.runFailed(card, { code: 'forbidden', attempt: 1, terminal: true, decisionId: 'decision-1' });
+
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({
+      state: 'needs_attention',
+      attempts: 1,
+      failure: 'forbidden',
+      reason: "A board rule refused the run's move: the board refused the move",
+    });
+  });
+
+  it('counts a failed attempt once, however many times it is told', async () => {
+    const { engine, item, binding } = await setup();
+    const card = { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role };
+    await engine.runFailed(card, { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' });
+    await engine.runEnded({ ...binding, runEnd: 'run-2' }, engine);
+    const probing = await engine.describe({ workItemId: item.id });
+
+    await engine.runFailed(card, { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' });
+
+    expect(probing).toMatchObject({ state: 'probing', attempts: 1 });
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual(probing);
+  });
+
+  it("starts the attempt count over in the card's next phase, and counts nothing for a session that doesn't work it", async () => {
+    const { storage, engine, item, binding } = await setup();
+    const card = { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role };
+    await engine.runFailed(card, { code: 'run_failed', attempt: 2, terminal: false, decisionId: 'decision-1' });
+
+    await engine.requestMove(await personMove(storage, item.id, 'intake', 'drag-1')());
+    const byRule = await personMove(storage, item.id, 'planning', 'rule-1')();
+    await engine.requestMove({
+      ...byRule,
+      actor: { type: 'system', id: 'rule' },
+      ingress: { type: 'rule', identity: 'rule-1' },
+    });
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'awaiting_start',
+      phase: 'planning',
+      probes: 0,
+    });
+
+    const other = { ...card, role: 'review' };
+    await engine.runFailed(other, { code: 'run_failed', attempt: 1, terminal: true, decisionId: 'decision-2' });
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'awaiting_start',
+      phase: 'planning',
+      probes: 0,
+    });
+  });
+
   it('counts a run end once, however many times it is told', async () => {
     const { engine, item, binding } = await setup();
 

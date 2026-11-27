@@ -152,6 +152,17 @@ function publicDetail(error: unknown): string | undefined {
 }
 
 /**
+ * What a failure code says to a person, from fixed wording: a dispatch failure's label, or for a
+ * board rule's refusal, which refusal it was.
+ */
+export function failureLabel(code: FactoryDispatchFailureCode | FactoryRuleRejectionCode): string {
+  if (Object.hasOwn(RULE_REJECTION_DETAIL, code)) {
+    return `A board rule refused the run's move: ${RULE_REJECTION_DETAIL[code as FactoryRuleRejectionCode]}`;
+  }
+  return factoryDispatchFailureMetadata(code as FactoryDispatchFailureCode).label;
+}
+
+/**
  * Why a run failed, safe to show on a public pull request: the failure code's label,
  * plus a detail drawn from a fixed vocabulary when the error can be classified.
  * Error messages are never included; operators read those from the decision's stored error.

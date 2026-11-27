@@ -468,6 +468,102 @@ it("flags a card on the workflow engine when its phase's agent ends two runs wit
   }
 }, 90_000);
 
+it("flags a card on the workflow engine with its failure's label once every attempt at its phase errored", async () => {
+  // The provider call fails every time the agent's run asks it.
+  let failures = 0;
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+    const url = input instanceof Request ? input.url : String(input);
+    if (!url.endsWith('/responses')) throw new Error(`Unexpected external request: ${url}`);
+    failures += 1;
+    throw new Error('The model broke.');
+  });
+  let engine: FactoryBoardEngine | undefined;
+  const runtime = await startFactory(release, 'build', [publishSkill], {
+    boardEngine: context => (engine = createWorkflowBoardEngine(context)),
+  });
+  try {
+    const { card, read } = runtime;
+    const quick = await card('quick fix', ['effort:low']);
+
+    await vi.waitFor(
+      async () =>
+        expect(await engine!.describe!({ workItemId: quick.id })).toEqual({
+          state: 'needs_attention',
+          phase: 'build',
+          probes: 0,
+          attempts: 5,
+          failure: 'run_failed',
+          reason: 'Agent run ended in error',
+        }),
+      { timeout: 60_000, interval: 250 },
+    );
+    expect((await read(quick)).stages).toEqual(['build']);
+    expect(failures).toBeGreaterThanOrEqual(5);
+  } finally {
+    await runtime.close();
+  }
+}, 90_000);
+
+/** Delivery, but its board refuses every move out of Planning. */
+const guardedDelivery = defineBoard({
+  id: 'guarded-delivery',
+  name: 'Guarded delivery',
+  initialPhase: 'backlog',
+  phases: {
+    backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['planning'] },
+    planning: {
+      name: 'Planning',
+      kind: 'working',
+      runner: { context: 'builder', skill: 'plan-feature' },
+      autoStart: true,
+      nextPhases: ['building'],
+    },
+    building: {
+      name: 'Building',
+      kind: 'working',
+      runner: { context: 'builder', skill: 'build-feature' },
+      nextPhases: ['delivered'],
+    },
+    delivered: { name: 'Delivered', kind: 'terminal' },
+  },
+  transitionPolicy: ({ fromStage }) =>
+    fromStage === 'planning' ? { type: 'reject', code: 'forbidden', reason: 'Plans wait here.' } : undefined,
+});
+
+it('flags a card on the workflow engine on its first attempt when a board rule refuses the outcome its agent reported', async () => {
+  const requests: string[] = [];
+  fakeModel(requests, builder());
+  let engine: FactoryBoardEngine | undefined;
+  const runtime = await startFactory(guardedDelivery, 'planning', deliverySkills, {
+    boardEngine: context => (engine = createWorkflowBoardEngine(context)),
+  });
+  try {
+    const { card, read, decisionsFor } = runtime;
+    const feature = await card('a feature', []);
+
+    await vi.waitFor(
+      async () =>
+        expect(await engine!.describe!({ workItemId: feature.id })).toEqual({
+          state: 'needs_attention',
+          phase: 'planning',
+          probes: 0,
+          attempts: 1,
+          lastOutcome: 'building',
+          failure: 'forbidden',
+          reason: "A board rule refused the run's move: the board refused the move",
+        }),
+      { timeout: 45_000, interval: 250 },
+    );
+    expect((await read(feature)).stages).toEqual(['planning']);
+    // Every retry would replay the refusal, so the phase ran once.
+    expect((await decisionsFor(feature)).map(record => [record.decision.type, record.status, record.attempts])).toEqual(
+      [['invokeSkill', 'failed', 1]],
+    );
+  } finally {
+    await runtime.close();
+  }
+}, 90_000);
+
 describe.each([
   ['dispatcher', undefined],
   ['workflow', createWorkflowBoardEngine],

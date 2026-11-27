@@ -7,12 +7,14 @@ import { pendingPhaseOutcome } from '../boards/phase-outcomes.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import { moveCardToBoard } from '../boards/relocate.js';
 import { applyPhaseOutcome } from '../rules/phase-outcome-move.js';
+import { failureLabel } from '../rules/public-failure-reason.js';
 import { markRunInterrupted } from '../rules/transition-service.js';
 import type { FactoryTransitionRequest } from '../rules/transition-service.js';
 import type { FactoryTransitionResult } from '../rules/types.js';
 import {
   boardRunId,
   APPLIED_MOVES,
+  COUNTED_FAILURES,
   COUNTED_RUN_ENDS,
   createFactoryBoardWorkflow,
   FACTORY_BOARD_WORKFLOW_ID,
@@ -25,6 +27,8 @@ import type {
   FactoryCardPlacement,
   FactoryCardPlacementResult,
   FactoryRunEndedBinding,
+  FactoryRunFailedCard,
+  FactoryRunFailure,
   FactorySubmittedMove,
 } from './engine.js';
 
@@ -64,6 +68,11 @@ type PendingInput =
       board: string;
       phase: string;
       answer?: { paused: true } | { error: unknown };
+    }
+  | {
+      runFailed: FactoryRunFailedCard;
+      failure: FactoryRunFailure;
+      answer?: { heard: true } | { error: unknown };
     };
 
 type CardRef = Pick<FactoryTransitionRequest, 'workItemId'>;
@@ -79,7 +88,13 @@ function carried(previous: FactoryCardRunRecord): Partial<FactoryCardRunRecord> 
     ...(previous.lastOutcome ? { lastOutcome: previous.lastOutcome } : {}),
     ...(previous.countedRunEnds ? { countedRunEnds: previous.countedRunEnds } : {}),
     ...(previous.appliedMoves ? { appliedMoves: previous.appliedMoves } : {}),
+    ...(previous.countedFailures ? { countedFailures: previous.countedFailures } : {}),
   };
+}
+
+/** The failed attempts counted in this visit of the phase; a phase entered anew starts with none. */
+function attemptsIn(previous: FactoryCardRunRecord, board: string, phase: string): Partial<FactoryCardRunRecord> {
+  return sameVisit(previous, board, phase) && previous.attempts !== undefined ? { attempts: previous.attempts } : {};
 }
 
 /**
@@ -116,6 +131,17 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
           try {
             const next = await this.#stateAfterRunEnd(pending.runEnded, state);
             pending.answer = { outcome: next?.state === 'running' && next.lastOutcome !== undefined };
+            return next;
+          } catch (error) {
+            pending.answer = { error };
+            return undefined;
+          }
+        }
+        if ('runFailed' in pending) {
+          if (pending.runFailed.workItemId !== workItemId) return undefined;
+          try {
+            const next = await this.#stateAfterRunFailure(pending.runFailed, pending.failure, state);
+            pending.answer = { heard: true };
             return next;
           } catch (error) {
             pending.answer = { error };
@@ -267,13 +293,32 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     if (pending.answer && 'error' in pending.answer) throw pending.answer.error;
   }
 
+  /**
+   * Tells the card's run that an attempt at running its phase failed: it counts the attempt, and
+   * the last one leaves the card needing attention, with the failure's label as the reason.
+   */
+  async runFailed(card: FactoryRunFailedCard, failure: FactoryRunFailure): Promise<void> {
+    const pending = { runFailed: card, failure } satisfies PendingInput as Extract<
+      PendingInput,
+      { runFailed: unknown }
+    >;
+    await this.#ask(card, pending);
+    if (pending.answer && 'error' in pending.answer) throw pending.answer.error;
+  }
+
   /** What the card's run last recorded the card doing; nothing for a card no input was asked of. */
   async describe(card: CardRef): Promise<FactoryCardRunState | undefined> {
     if (!this.workflow.mastra) return undefined;
     const run = await this.workflow.getWorkflowRunById(boardRunId(card.workItemId), { withNestedWorkflows: false });
     const recorded = (run?.steps?.phase as { payload?: FactoryCardRunRecord } | undefined)?.payload;
     if (!recorded?.state) return undefined;
-    const { countedRunEnds: _counted, appliedMoves: _applied, board: _board, ...state } = recorded;
+    const {
+      countedRunEnds: _counted,
+      appliedMoves: _applied,
+      countedFailures: _failures,
+      board: _board,
+      ...state
+    } = recorded;
     return state;
   }
 
@@ -342,6 +387,8 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     const moves = previous.appliedMoves ? { appliedMoves: previous.appliedMoves } : {};
     const counted = {
       ...moves,
+      ...(previous.countedFailures ? { countedFailures: previous.countedFailures } : {}),
+      ...attemptsIn(previous, board.id, phase),
       ...(binding.runEnd && !heard.includes(binding.runEnd)
         ? { countedRunEnds: [...heard, binding.runEnd].slice(-COUNTED_RUN_ENDS) }
         : previous.countedRunEnds
@@ -397,7 +444,39 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
       phase,
       board: board.id,
       probes: sameVisit(previous, board.id, phase) ? (previous.probes ?? 0) : 0,
+      ...attemptsIn(previous, board.id, phase),
       ...carried(previous),
+    };
+  }
+
+  /**
+   * What the card is doing once an attempt at running its phase failed. A failure of a session
+   * that doesn't work the card's phase, or one already counted, changes nothing.
+   */
+  async #stateAfterRunFailure(
+    card: FactoryRunFailedCard,
+    failure: FactoryRunFailure,
+    previous: FactoryCardRunRecord,
+  ): Promise<FactoryCardRunRecord | undefined> {
+    const item = await this.#context.workItems.get({ orgId: card.orgId, id: card.workItemId });
+    const phase = item?.stages.length === 1 ? item.stages[0] : undefined;
+    if (!item || !phase) return undefined;
+    const board = (await toBoardSource(this.#context.boards).load(card)).get(boardForWorkItem(item));
+    if (!board || board.phaseKind(phase) !== 'working' || board.roleForPhase(phase) !== card.role) return undefined;
+    const key = `${failure.decisionId}:${failure.attempt}`;
+    const heard = previous.countedFailures ?? [];
+    if (heard.includes(key)) return undefined;
+    return {
+      phase,
+      board: board.id,
+      probes: sameVisit(previous, board.id, phase) ? (previous.probes ?? 0) : 0,
+      ...carried(previous),
+      countedFailures: [...heard, key].slice(-COUNTED_FAILURES),
+      attempts: failure.attempt,
+      // Not the last attempt: the dispatcher runs the phase again.
+      ...(failure.terminal
+        ? { state: 'needs_attention' as const, failure: failure.code, reason: failureLabel(failure.code) }
+        : { state: 'running' as const }),
     };
   }
 
@@ -441,10 +520,17 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
    */
   async #answeredWithoutCard(pending: PendingInput): Promise<boolean> {
     const asked =
-      'runEnded' in pending ? pending.runEnded : 'runPaused' in pending ? pending.runPaused : pending.request;
+      'runEnded' in pending
+        ? pending.runEnded
+        : 'runPaused' in pending
+          ? pending.runPaused
+          : 'runFailed' in pending
+            ? pending.runFailed
+            : pending.request;
     if (await this.#context.workItems.get({ orgId: asked.orgId, id: asked.workItemId })) return false;
     if ('runEnded' in pending) pending.answer = { outcome: false };
     else if ('runPaused' in pending) pending.answer = { paused: true };
+    else if ('runFailed' in pending) pending.answer = { heard: true };
     else pending.answer = { result: await this.#context.transitionService.transition(pending.request) };
     return true;
   }

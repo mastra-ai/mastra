@@ -26,6 +26,9 @@ export const COUNTED_RUN_ENDS = 8;
 /** How many moves a card's run remembers applying, so a move answered again isn't read as a new one. */
 export const APPLIED_MOVES = 8;
 
+/** How many failed attempts a card's run remembers, so an attempt told of again counts once. */
+export const COUNTED_FAILURES = 8;
+
 const runStateSchema = z.object({
   state: z.enum(FACTORY_CARD_STEP_STATES).optional(),
   phase: z.string().optional(),
@@ -34,6 +37,12 @@ const runStateSchema = z.object({
   probes: z.number().int().nonnegative().optional(),
   lastOutcome: z.string().optional(),
   reason: z.string().optional(),
+  /** Which attempt at running this phase failed last; a phase starts with none. */
+  attempts: z.number().int().nonnegative().optional(),
+  /** The failure code that left the card needing attention, never its error text. */
+  failure: z.string().optional(),
+  /** The latest failed attempts heard (decision id and attempt), so telling of one again counts nothing. */
+  countedFailures: z.array(z.string()).max(COUNTED_FAILURES).optional(),
   /** The latest run ends heard, so telling of one again counts nothing. */
   countedRunEnds: z.array(z.string()).max(COUNTED_RUN_ENDS).optional(),
   /** Ids of the latest transitions applied: the transition service answers a repeated request with the first one's result. */
@@ -44,7 +53,10 @@ const runStateSchema = z.object({
  * What a card is doing, as its board run last recorded it: phase keys, counts and short reasons,
  * never a request or who made it. Empty until the run applied its first input.
  */
-export type FactoryCardRunState = Omit<FactoryCardRunRecord, 'countedRunEnds' | 'appliedMoves' | 'board'>;
+export type FactoryCardRunState = Omit<
+  FactoryCardRunRecord,
+  'countedRunEnds' | 'appliedMoves' | 'countedFailures' | 'board'
+>;
 
 /** Everything the run carries from one input to the next. */
 export type FactoryCardRunRecord = z.infer<typeof runStateSchema>;
