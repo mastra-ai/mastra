@@ -294,22 +294,34 @@ export class StepExecutor extends MastraBase {
       }
       if (params.workflowId === DurableStepIds.AGENTIC_LOOP || params.workflowId === DurableStepIds.AGENTIC_EXECUTION) {
         const live = requestContext.get('controller') as { getState?: unknown } | undefined;
-        const binding = requestContext.getRaw(CONTROLLER_RUN_BINDING_KEY);
-        // After a process handoff, `controller` can still be present as plain data, but its methods are gone.
-        // Use the serialized run binding to rebuild it only when this step doesn't already have a live controller.
-        if (binding !== undefined && typeof live?.getState !== 'function') {
+        const initial = stepResults.input as
+          | {
+              agentId?: string;
+              runId?: string;
+              state?: { threadId?: string; resourceId?: string };
+              requestContextEntries?: Record<string, unknown>;
+            }
+          | undefined;
+        // After a handoff, the controller can arrive without its methods. Use the binding captured at run
+        // preparation, not the incoming step context, to restore it for the same agent and thread.
+        const binding = initial?.requestContextEntries?.[CONTROLLER_RUN_BINDING_KEY];
+        if (initial && binding !== undefined && typeof live?.getState !== 'function') {
           const parsed = controllerRunBindingSchema.parse(binding);
-          const initial = stepResults.input as { agentId?: string; runId?: string } | undefined;
-          if (initial?.agentId === parsed.agentId) {
-            const controller = this.mastra?.getAgentControllerById(parsed.controllerId);
-            if (!controller) throw new Error('Controller is not registered on this worker');
-            requestContext = await controller.__restoreWorkerRequestContext(
-              requestContext,
-              parsed,
-              abortController.signal,
-              initial.runId,
-            );
+          if (
+            initial.agentId !== parsed.agentId ||
+            initial.state?.threadId !== parsed.threadId ||
+            initial.state.resourceId !== parsed.resourceId
+          ) {
+            throw new Error('Controller binding does not match this durable run');
           }
+          const controller = this.mastra?.getAgentControllerById(parsed.controllerId);
+          if (!controller) throw new Error('Controller is not registered on this worker');
+          requestContext = await controller.__restoreWorkerRequestContext(
+            requestContext,
+            parsed,
+            abortController.signal,
+            initial.runId,
+          );
         }
       }
 
