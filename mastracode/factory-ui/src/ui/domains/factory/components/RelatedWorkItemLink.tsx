@@ -1,7 +1,7 @@
 import { cardChangeRequest, isPullRequestSource } from '@internal/factory-contract';
 import { RelatedItemLink } from '@mastra/playground-ui/domains/factory';
 
-import type { BoardNavigation } from '../boardNavigation';
+import type { BoardNavigation } from '@mastra/playground-ui/domains/factory';
 import { CARD_SOURCES } from '../cardSources';
 import { changeRequestStatus, changeRequestStatusLabel } from '../changeRequestState';
 import type { PullRequestSubscription } from '../services/githubSubscriptions';

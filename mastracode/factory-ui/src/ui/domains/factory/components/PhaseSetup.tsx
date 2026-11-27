@@ -1,8 +1,7 @@
-import { PhaseSetup as SharedPhaseSetup } from '@mastra/playground-ui/domains/factory';
+import { PhaseSetup as SharedPhaseSetup, useBoardNavigation } from '@mastra/playground-ui/domains/factory';
 import type { PhaseSetupHandle } from '@mastra/playground-ui/domains/factory';
 
 import type { InstalledPhaseInfo } from '../../../../api/types';
-import { useBoardNavigation } from '../boardNavigation';
 import { approvalText, startsText } from '../../boardConfig/phaseSummary';
 import { ruleCount } from '../../boardRules/ruleLanes';
 import { usePhaseArrivals } from '../hooks/usePhaseArrivals';

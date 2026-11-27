@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { AnchorHTMLAttributes, ElementType, ReactNode } from 'react';
+import type { LinkComponent } from '@/ds/types/link-component';
 
 /** A thread a card's session runs in; the host decides where it lives. */
 export interface BoardSessionLocation {
@@ -12,7 +12,7 @@ export interface BoardSessionLocation {
  * The board never touches a router: each host app (Factory, Platform) supplies this.
  */
 export interface BoardNavigation {
-  LinkComponent: ElementType<AnchorHTMLAttributes<HTMLAnchorElement>>;
+  LinkComponent: LinkComponent;
   navigate: (href: string) => void;
   /** The card's page, or its session's thread when the card is working in one. */
   cardHref: (cardId: string, session: BoardSessionLocation | undefined) => string;
@@ -33,11 +33,7 @@ export interface BoardNavigation {
   replaceSearchParams: (params: URLSearchParams) => void;
 }
 
-const BoardNavigationContext = createContext<BoardNavigation | null>(null);
-
-export function BoardNavigationProvider({ value, children }: { value: BoardNavigation; children: ReactNode }) {
-  return <BoardNavigationContext.Provider value={value}>{children}</BoardNavigationContext.Provider>;
-}
+export const BoardNavigationContext = createContext<BoardNavigation | null>(null);
 
 export function useBoardNavigation(): BoardNavigation {
   const navigation = useContext(BoardNavigationContext);

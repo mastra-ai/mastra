@@ -6,10 +6,9 @@ import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
 import type { InstalledBoardInfo, InstalledPhaseInfo, IntakeRouteInfo } from '../../../../api/types';
-import { useBoardNavigation } from '../boardNavigation';
+import { useBoardNavigation, PhaseSetupCard as SharedPhaseSetupCard } from '@mastra/playground-ui/domains/factory';
 import { Muted } from '../../boardConfig/components/PhaseTimeline';
 import { outlineOfInstalled, sharedOutline } from '../../boardConfig/components/PhaseWalkthrough';
-import { PhaseSetupCard as SharedPhaseSetupCard } from '@mastra/playground-ui/domains/factory';
 import { RuleRow } from '../../boardConfig/components/RuleRow';
 import { AutoStartSwitch } from './AutoStartSwitch';
 

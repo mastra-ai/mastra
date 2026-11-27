@@ -8,7 +8,7 @@ import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHead
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import type { BoardKind } from '../domains/factory/boardStages';
 import type { FactoryProject } from '../domains/workspaces/services/github';
-import { BoardNavigationProvider } from '../domains/factory/boardNavigation';
+import { BoardNavigationProvider } from '@mastra/playground-ui/domains/factory';
 import { BoardContent } from './board/BoardContent';
 import { useRouterBoardNavigation } from './board/useRouterBoardNavigation';
 import { BoardLoadingSkeleton } from '../domains/factory/components/BoardLoadingSkeleton';

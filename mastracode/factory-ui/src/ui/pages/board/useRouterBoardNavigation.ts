@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { boardConfigPath } from '../../domains/boardConfig/boardConfigPaths';
-import type { BoardNavigation } from '../../domains/factory/boardNavigation';
+import type { BoardNavigation } from '@mastra/playground-ui/domains/factory';
 import { factoryAttentionTargetPath } from '../../domains/factory/services/attention';
 import { rememberedBoardPath } from '../../domains/factory/services/boardViews';
 import { settingsSectionPath } from '../../domains/settings/settingsSections';

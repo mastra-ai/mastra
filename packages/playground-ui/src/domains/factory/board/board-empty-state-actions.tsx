@@ -1,7 +1,7 @@
-import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
+import type { IntakeSetup } from './board-column-empty-state';
 
-import { useBoardNavigation } from '../boardNavigation';
-import type { IntakeSetup } from './BoardColumnEmptyState';
+import { useBoardNavigation } from './board-navigation';
+import { Button, buttonVariants } from '@/ds/components/Button';
 
 export function BoardEmptyStateActions({
   boardId,

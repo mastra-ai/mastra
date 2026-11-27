@@ -9,7 +9,7 @@ import {
   clearOpenCard,
 } from '../boardFilters';
 import type { BoardFilterState } from '../boardFilters';
-import { useBoardNavigation } from '../boardNavigation';
+import { useBoardNavigation } from '@mastra/playground-ui/domains/factory';
 import { boardLayoutFromParams, boardLayoutParams } from '../boardLayout';
 import type { BoardLayout } from '../boardLayout';
 import { withPeopleFolded, withPeopleUnfolded } from '../boardPeople';

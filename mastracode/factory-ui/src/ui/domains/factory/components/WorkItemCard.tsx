@@ -1,4 +1,4 @@
-import { BoardCard } from '@mastra/playground-ui/domains/factory';
+import { BoardCard, useBoardNavigation } from '@mastra/playground-ui/domains/factory';
 import { cardThreadSession, itemThreadSession } from '@internal/factory-contract';
 import type { SessionRowStatus, WorkItem, FactoryDecisionSummary } from '@internal/factory-contract';
 import { Button } from '@mastra/playground-ui/components/Button';
@@ -6,7 +6,6 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import type { ReactElement } from 'react';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { useBoardNavigation } from '../boardNavigation';
 import type { BoardCardOwner } from '../boardCardState';
 import type { DragPayload } from '../boardDrag';
 import { reworkReason } from '../reworkReason';

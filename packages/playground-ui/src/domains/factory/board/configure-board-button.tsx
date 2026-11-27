@@ -1,7 +1,6 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-
-import { useBoardNavigation } from '../../factory/boardNavigation';
-import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
+import { useBoardNavigation } from './board-navigation';
+import { Button } from '@/ds/components/Button';
+import { IconSettingsSliderHor } from '@/ds/icons/central/IconSettingsSliderHor';
 
 /** Opens the board's configuration: its phases and, on built-in boards, the factory's automation. */
 export function ConfigureBoardButton({ boardId }: { boardId: string }) {
