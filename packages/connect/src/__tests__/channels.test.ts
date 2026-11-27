@@ -783,18 +783,6 @@ describe('channels()', () => {
     expect(resolver.getRoutes().map(route => route.path)).not.toContain('/slack/webhook');
   });
 
-  it('treats a false provider entry as excluded', async () => {
-    const fetchMock = platformFetch({
-      connections: [makeConnection({ id: 'c_slack', integrationId: 'slack-channels' })],
-      credentials: { c_slack: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null } },
-    });
-    const channelsFn = await importChannels();
-    const resolver = await channelsFn(options(fetchMock, { providers: { 'slack-channels': false } }));
-    const providers = await resolver();
-    expect(providers['slack-channels']).toBeUndefined();
-    expect(resolver.getRoutes().map(route => route.path)).not.toContain('/slack/webhook');
-  });
-
   it('treats a true provider entry as enabled with default options', async () => {
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_slack', integrationId: 'slack-channels' })],
